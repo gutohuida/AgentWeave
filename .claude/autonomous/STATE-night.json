@@ -1,40 +1,158 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-12-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "eac213c",
-    "stop_at":  "2026-09-13T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-12-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+  "playbook": ".claude/loops/night-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-12-daily",
+  "parent_branch": "master",
+  "parent_sha": "eac213c",
+  "stop_at": "2026-09-13T07:00:00+01:00",
+  "iteration": 1,
+  "log_file": ".claude/autonomous/2026-09-12-night-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "changes": [
+    "openspec/changes/a-url-is-not-a-path",
+    "openspec/changes/a-refused-review-leaves-nothing-behind"
+  ],
+  "prefix_sha": "c12a7d3",
+  "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
+  "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
+  "current": "u1-pin",
+  "next_action": "Queue item u1-pin: implement tasks.md S1 (1.1-1.5) of openspec/changes/a-url-is-not-a-path. Read proposal.md and design.md D1, D2 (the whole table), D4, D5 and D11 first; testbed/scratch/r2f300/table.py prints today's answer for every D2 row (cd testbed/scratch/r2f300 && py -3.11 -B table.py). Add the table as one parametrized test in hub/tests/test_permission_approver.py against the UNMODIFIED _decide, with xfail(strict=True) on exactly the rows 1.4 names; any other failure means the table is wrong - re-measure and record, do not bend the test. Run the file, then the baseline_chunk, green. Commit S1 alone and push. Do NOT touch hub/hub/mcp_server.py this firing.",
+  "queue": [
+    {
+      "id": "compose",
+      "status": "done",
+      "title": "Compose this window's queue from the playbook",
+      "detail": "DONE iteration 1. APPROVALS.md 2026-09-12: APPROVED a-url-is-not-a-path (F300+F312+F321+F323, 46 tasks) and a-refused-review-leaves-nothing-behind (F319+F320, 52 tasks), with ORDER: a-url-is-not-a-path, a-refused-review-leaves-nothing-behind. The ORDER is the queue; the default backlog is ignored tonight. Baseline chunk green (153 passed, 1 skipped). CI reds on the branch (34711633220, 34716889283) carry the F292 and F314 signatures exactly - known intermittents, not those commits'."
+    },
+    {
+      "id": "u1-pin",
+      "status": "open",
+      "title": "a-url-is-not-a-path S1: pin D2's table against the unmodified _decide",
+      "detail": "1.1 table (R, W, H, N, G, X, E, J, S rows + R3's Z1-Z3, Windows-only rows platform-scoped; fixture workspace dir is named 'work', has sub/; HUB_URL=http://127.0.0.1:8016 via monkeypatch; ids= are D2's labels). 1.2 N8 WebFetch allowed. 1.3 H12 HUB_URL deleted -> H1-H4 refused. 1.4 strict xfail on exactly the rows it lists (answer-moving rows + new-reason rows); every E row except E7/E14 passes its answer today. 1.5 commit S1 alone, green. We are on Windows, so the Windows-only rows run here; CI's Linux runs the POSIX pins."
+    },
+    {
+      "id": "u2-reader",
+      "status": "open",
+      "title": "a-url-is-not-a-path S2: the reader (lexer + words + six rules + backstop), own-Hub test, refusal texts, bound, totality",
+      "detail": "2.1-2.7 in hub/hub/mcp_server.py (stdlib + fastmcp ONLY; approve_tool_call gains NO return annotation; test_response_carries_no_structured_content must still pass). Windows backstop is backslash-aware (R3). shlex NOT used. 2.3 D5 texts verbatim from design.md. 2.4 cap constant beside MIN_WAITING_SECONDS; test reads PermissionDecisionCreate.model_fields['reason'].metadata MaxLen. 2.5 NUL-byte totality test. 2.6 docstring rewrite, delete the 'Relative paths are left alone' sentence. 2.7 every S1.4 xfail removed - grep shows none. testbed/scratch/r2f300/reader.py is a design aid, not the implementation: the table is the authority. If the firing runs short, stop at a green point where the remaining strict xfails still hold, commit, and split this item in the log."
+    },
+    {
+      "id": "u3-wire-docs",
+      "status": "open",
+      "title": "a-url-is-not-a-path S3 wire shape + S4 docs",
+      "detail": "3.1 two cases through a REAL spawn of mcp_server.py beside _call_tool_over_stdio (AW_WORKSPACE_DIR + HUB_URL in the child env): curl example.com denied with 'Denied: 'https://example.com/x' is a network address' prefix; curl \"$HUB_URL/api/v1/agent-actions/tasks\" allowed; neither carries structuredContent. 4.1 docs/reference/permission-postures.md paragraph. 8.3 openspec validate --strict a-url-is-not-a-path."
+    },
+    {
+      "id": "u4-mutations",
+      "status": "open",
+      "title": "a-url-is-not-a-path S5: sixteen mutation checks, each killed by a NAMED row",
+      "detail": "5.1-5.16, one firing, from a clean committed tree. After EACH restore, git status --short must be empty (or show only the scratch log). Record which named row failed for each into the log as a table. If a row survives its mutation, fix the test (commit), never weaken the claim. Windows-only legs (5.8, 5.12, 5.16) run here. If the firing runs short, stop BEFORE a mutation and record which remain."
+    },
+    {
+      "id": "u5-gate",
+      "status": "open",
+      "title": "a-url-is-not-a-path S8 gate: CI lint set + whole Hub suite + no migration/API/UI diff",
+      "detail": "8.1 ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/. 8.2 whole Hub suite from hub/ (py -3.11 -m pytest tests/ -q), backgrounded to testbed/scratch/night0912/ (15-47 min). F292 (database is locked setup ERROR) and F314 (test_a_wide_flows_state_is_still_one_call, event-loop lock) are known intermittents: re-run in isolation before attributing, and write the attribution down. 8.4 git diff c12a7d3.. -- hub/hub/migrations hub/hub/api hub/ui empty."
+    },
+    {
+      "id": "u6-drive-prefix",
+      "status": "open",
+      "title": "a-url-is-not-a-path S6.1: reproduce on the PRE-FIX tree (git worktree, never stash)",
+      "detail": "git worktree add ../aw-url-prefix <prefix_sha or u1's commit>. Hub from that worktree's hub/ via py -3.11 -m uvicorn, fresh profile drive0913u (AW_BOOTSTRAP_API_KEY set, aw_live_+32hex, recorded in the log), on a port shown free by netstat (never 8000/8010). Fresh git fixture project with sub/hello.py (prints 'hello from sub') and notes.md, one agent on the DEFAULT posture, Haiku runner. First turn told the HTTP form. Asks: 1 curl create-task, 2 python sub/hello.py, 3 curl -s https://example.com/, 4 echo hi > \"..\\stray.txt\" (Bash tool), 5 sort -o\"..\\out.txt\" notes.md (Bash tool). Pre-fix: 1-3 refused for filesystem reasons, 4 and 5 ALLOWED with the stray files in the fixture's parent. If any does not hold, this is not a reproduction - say so and stop. Record tool_name of every permission_denied row. Delete the stray files, stop the Hub, git worktree remove. Export AW_HUB/AW_KEY for every scripts/drive harness run."
+    },
+    {
+      "id": "u7-drive-fixed",
+      "status": "open",
+      "title": "a-url-is-not-a-path S6.2-6.4: the fixed tree, the agent's next move, Haiku/jobs check",
+      "detail": "Hub restarted from the implementing checkout, no .py under hub/hub or src newer than the process. Fresh project + agent, same fixture. 6.2: ask 1 creates the task (read tasks, no permission_denied for it), ask 2 prints hello from sub, ask 3 refused with D5's network text verbatim, ask 4 refused as '..\\\\stray.txt' outside and no stray file, ask 5 refused as '\\\\out.txt' outside and no out.txt; event_logs holds each refusal as permission_denied with the same reason; record tool_name of every permission_denied row (D10 item 5). 6.3 record verbatim what the agent did after ask 3's refusal, ungraded. 6.4 every run joined to claude-haiku-4-5-20251001, GET /jobs empty or all disabled, stop the Hub. Results into FINDINGS.md."
+    },
+    {
+      "id": "u8-close",
+      "status": "open",
+      "title": "a-url-is-not-a-path S9 + S10: four Status lines, corrections, archive",
+      "detail": "9.1 F300, F312, F321, F323 each fixed <sha>, naming the task and quoting 6.2's evidence; dated in-place corrections to F312 ('No agent on the default posture can make any network request...' - curl example.com with no / was always allowed, D2 N4) and F300 ('any URL in any shell command is denied'). 9.2 F322, F299, F301 stay open - say so in the commit. 9.3 do NOT edit DECISIONS.md; put D6's correction to 1c/1d in decisions_for_user unless tonight's review page carried it. 9.4 validate --strict, compare MODIFIED block with main agent-capability-plane (every scenario survives, F301 clause verbatim), archive via openspec-archive-change. 10.1 test-guide true to what shipped. S7 (7.1-7.3) is human-only and stays open (precedent: archived changes 2026-08-21-task-dependencies, 2026-08-24-a-reviewer-can-see-the-work). Re-run scripts/classify_findings.py after and check exactly F300/F312/F321/F323 moved OPEN->RESOLVED. After this item: start a-refused-review-leaves-nothing-behind ONLY if at least 3 hours remain before stop_at (operator's rule); otherwise go to w-final."
+    },
+    {
+      "id": "r1-pin",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S1: the new test file against the unmodified tree",
+      "detail": "GATE: start only if >= 3h remain before stop_at. File isolation: never touch hub/hub/mcp_server.py, hub/tests/test_permission_approver.py, docs/reference/permission-postures.md. 1.1-1.9 in hub/tests/test_a_refused_review_leaves_nothing_behind.py. An xfail marks a WHOLE test, never one assertion: pin + xfail pairs as each task says. 1.6's mock raises RuntimeError('test guard') past its expected call count (pytest-timeout not installed). 1.8a builds the divergence through the product (bind_run_to_task + evaluate_run_end), not by insert. 1.9: every xfail xfails, every pin passes; otherwise the test is wrong - re-measure with testbed/scratch/r1f319/test_zz_r1f319_scratch.py. Commit S1 alone, green."
+    },
+    {
+      "id": "r2-rollback",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S2: the rollback (F319) - a green, coherent stopping point",
+      "detail": "2.1 hub/hub/turn_scheduler.py: capture selected_ids + conversation_id before trigger_agent_directly; await db.rollback() FIRST in except TriggerAgentError; re-read selected by id AND state=='queued' in captured order; re-read entries via queued_entries; use captured conversation_id. 2.2 rewrite the branch's opening comment (keep F97's paragraph, add). 2.3 comment-only edit at api/v1/agent_trigger.py:788-793. 2.4 remove S2 xfails (1.2-1.5, 1.8a, 1.8b). 2.5 two docstrings in test_the_evidence_names_the_author.py, no assertion changes. Commit."
+    },
+    {
+      "id": "r3-mut-a",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S4.1-4.4c: rollback mutations",
+      "detail": "4.1, 4.2, 4.3, 4.4 (exactly three MissingGreenlet tests named in tasks), 4.4b, 4.4c (the five of design D3). Clean tree after every restore. Table into the log."
+    },
+    {
+      "id": "r4-loop",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S3: the pass goes on (F320)",
+      "detail": "3.1 _attempt_turn returning a frozen dataclass (result, attempted, gave_up, nothing_queued); loop bounded at len(initial queued)+1 with D4's argument in a comment. 3.1a once-per-pass counted-id set. 3.2 result rule keyed on nothing_queued, not the string. 3.3 comment rewrites. 3.4 the ONLY existing assertion that changes: test_a_blocked_workspace_counts_where_input_could_run.py:227 -> [('withdrawn', LIMIT), ('queued', 1)]; a second failing existing assertion means stop and record in design D6. 3.5 remove S3 xfails. Commit."
+    },
+    {
+      "id": "r5-mut-b",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S4.5-4.10: loop mutations",
+      "detail": "4.5 (1.6(b) and 1.6(g) fail on their guard RuntimeError), 4.6, 4.7, 4.8, 4.9, 4.10. Clean tree after every restore. Table into the log."
+    },
+    {
+      "id": "r6-gate",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S7 gate",
+      "detail": "7.1 CI lint set. 7.2 whole Hub suite, backgrounded (F292/F314 classified by signature, re-run in isolation). 7.3 validate --strict. 7.4 git diff <r1's parent>.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py hub/hub/task_transition_service.py hub/hub/scheduler.py hub/hub/run_divergence.py empty; hub/hub/api diff is 2.3's comment hunk only. NOTE the base: a-url-is-not-a-path legitimately changes mcp_server.py, so diff from r1-pin's parent, not from c12a7d3."
+    },
+    {
+      "id": "r7-drive-prefix",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S5.1-5.2: harness + pre-fix reproduction",
+      "detail": "GATE: do not start the drive with < 75 min before stop_at. 5.1 extend scripts/drive/t_d1_0912_f319_reach.py (AW_EXPECT=prefix|fixed, D9 assertion, leg F). 5.2 worktree at r1-pin's commit (never stash), fresh profile drive0913r on its own free port, legs B, A, F with AW_EXPECT=prefix; B1/B2 under_review held by the refused reviewer with a new transition row, D9 refusal of a 2nd reviewer, A ('completed', X), F: H withdrawn and M queued at 0 with no run. Not reproduced -> say so and stop. Stop Hub, remove worktree."
+    },
+    {
+      "id": "r8-drive-fixed",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S5.3-5.5: fixed tree + UI in Chromium + Haiku/jobs",
+      "detail": "5.3 fresh project/agents, AW_EXPECT=fixed, all legs per tasks. 5.4 scripts/drive/t_d1_0912_f319_ui.py against the served bundle. 5.5 runs joined to a Haiku runner, jobs empty/disabled, Hub stopped, worktrees removed."
+    },
+    {
+      "id": "r9-close",
+      "status": "open",
+      "title": "a-refused-review-leaves-nothing-behind S8 + S9: close out, archive",
+      "detail": "NEVER without the S5 drive. 8.1 F319 fixed, 8.2 F320 fixed, separately. 8.3 F326 open, 8.4 F327 open unless brought in (say which), 8.5 file the escaped run_divergence_resolved broadcast as severity D with 1.8a as repro, 8.5a F328 stays OPEN - one dated line naming the narrowing commit. 8.6 validate --strict, archive; the main 'Dispatching a review staffs the task, whichever path dispatched it' requirement byte-identical after sync. 9.1 test guide. S6 is human-only and stays open."
+    },
+    {
+      "id": "w-final",
+      "status": "open",
+      "title": "Final log entry for the morning, then next_action null",
+      "detail": "Per night-window.md 'Ending the window': what changed (product vs doc commits), what was proven vs inferred (driven vs tested), what is open, decisions for the operator, what to distrust. If a change is mid-flight, say exactly where so the next night resumes it. Then set next_action to null."
+    }
+  ],
+  "notes_for_tomorrow": [
+    "Open severity-A findings with no proposal (measured by scripts/classify_findings.py at compose): F299, F301, F325. The playbook routes these to the day window. DECISIONS.md 1c/1d rests on a false python -c measurement - re-derive F301's notice before proposing it (from the 2026-09-12 review page).",
+    "Classifier CONFLICT verdicts at compose: F52 (A), F292 (B). Hand-check them.",
+    "CI reds on this branch today are the two known intermittents (F292 at 34711633220, F314 at 34716889283). Both are open; F314 is B, F292 is B/CONFLICT."
+  ],
+  "decisions_for_user": [],
+  "limits": [
+    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ]
 }
