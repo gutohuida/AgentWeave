@@ -25889,3 +25889,123 @@ gone, so the next pass selects the next entry); or have the abandonment branch f
 next conversation's entries in the same pass.
 
 ---
+
+## F321 (A) — under the default posture, a shell command naming a file in a subdirectory of its own workspace is refused as outside the workspace
+
+**Status:** open. Filed 2026-09-12 by the day window's D-2, while writing R1 of
+`openspec/changes/a-url-is-not-a-path`, which proposes to close it along with F300 and F312. It is
+**measured live**, not inferred.
+
+**The claim.** Under `workspace` (`DEFAULT_CLAUDE_PERMISSION_MODE`, `runner_commands.py:66`), a
+`claude` run cannot run a shell command that names a path in a subdirectory of its own workspace.
+`python sub/hello.py`, `git add src/x.py`, `pytest tests/test_x.py::test_a` and
+`git diff origin/main...HEAD` are all refused. The reason given names a path the command never
+wrote, and it says that path is outside the workspace.
+
+**Live, one Haiku turn, no Hub.** The argv came from `runner_commands.build_command`, the Hub's own
+builder, so the flags are the ones a default-posture run gets: `--mcp-config` naming
+`hub/hub/mcp_server.py`, `--permission-prompt-tool mcp__agentweave__approve_tool_call`, and
+`--permission-mode manual`. The model was `claude-haiku-4-5-20251001` on `claude` **2.1.269**.
+`AW_WORKSPACE_DIR` was a scratch directory holding `sub/hello.py`. The harness is
+`testbed/scratch/r1f300/live_probe.py` (scratch, uncommitted), and the raw stream is beside it in
+`live_probe.jsonl`.
+
+| command, one tool call each | tool result |
+|---|---|
+| `ls sub/` | `hello.py` |
+| `python sub/hello.py` | **`Denied: '/hello.py' is outside your workspace.`** |
+| `python -c "print(2)"` | `2` |
+
+`_decide` would have refused `ls sub/` too, because the regex reads `/` out of it, and that resolves
+to the drive root. So its result shows that the harness does not ask the approver about a command it
+classes as read-only. **Reading works. Running, staging and testing a named file do not.**
+
+**The mechanism.** `_ABSOLUTE_PATH_RE` (`hub/hub/mcp_server.py:936`) begins a candidate at *any*
+`/`, including one in the middle of a word. `sub/hello.py` yields `/hello.py`, and `os.path.realpath`
+resolves that against the drive root, so the path is outside the workspace. The comment above the
+call says the opposite: *"Relative paths are left alone: they resolve against the run's cwd, which is
+the workspace"* (`:969-971`). That holds only for a relative path with no `/` in it.
+
+**Measured at `_decide` directly**, with `AW_WORKSPACE_DIR` a real directory:
+
+| command | `_decide` today | reason |
+|---|---|---|
+| `git add sub/hello.py` | deny | `'/hello.py' is outside your workspace` |
+| `pytest sub/test_x.py::test_a` | deny | `'/test_x.py::test_a' is outside your workspace` |
+| `git diff origin/main...HEAD` | deny | `'/main...HEAD' is outside your workspace` |
+| `python sub/../hello.py` (resolves inside) | deny | `'/../hello.py' is outside your workspace` |
+| `curl … -H "Content-Type: application/json" …` | deny | `'/json' is outside your workspace` |
+
+The last row matters most, because it is F300's instructed request. FastAPI 0.136.3 parses a body
+as JSON only when the content type is `application/json` or absent (`fastapi/routing.py`, read
+2026-09-12), and `curl -d` sends `application/x-www-form-urlencoded`. So the ordinary form of the
+request needs that header, and **that header alone is enough to refuse the command**, whatever is
+done about the URL.
+
+**It breaches a shipped requirement.** `agent-run-sandboxing`, *"A posture exists in which the
+workspace boundary is enforced per tool call"*, scenario *"Work inside the workspace proceeds"*. It
+also undercuts the reason `workspace` became the default (`runner_commands.py:62-65`): it *"permits
+the execution an agent needs to produce evidence about its own work."*
+
+**Why it is not a separate change.** F300 and F312 are about where in a word the regex may begin.
+Any reading that stops it matching inside `https://…` and `$HUB_URL/…` also stops it matching inside
+`sub/hello.py`. So this row changes answer whether anyone decides it or not. And a fix that removes
+only URLs cannot deliver F300's verdict, because the `Content-Type` header is still refused (row 5).
+R1 therefore folds it in and decides it. See the change's `design.md`.
+
+**Not measured:** how many past default-posture runs were refused this way. `F10`'s recorded
+reason, `'/builder' is outside your workspace`, has the shape this mechanism produces, but the
+command that produced it is not recorded there. Nothing here says it was this.
+
+**Reproduce**, with no Hub, no network and no credential:
+
+```bash
+cd hub && py -3.11 -B -c "
+import os, importlib.util
+os.environ['AW_WORKSPACE_DIR'] = os.getcwd()
+spec = importlib.util.spec_from_file_location('m', 'hub/mcp_server.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+print(m._decide('Bash', {'command': 'python hub/mcp_server.py'}))
+"
+```
+
+---
+
+## F322 (B) — on Codex, "Workspace only" decides a command's network access by its working directory, so the same posture will answer a URL oppositely on the two runners
+
+**Status:** open. Filed 2026-09-12 by the day window's D-2 (R1 of `a-url-is-not-a-path`). **Read,
+not run:** live reproduction is not possible, because Codex is undrivable (the plan was cancelled on
+2026-08-29). No proposal.
+
+**The claim.** `a-url-is-not-a-path` proposes that, under "Workspace only", a Claude shell command
+naming any network address other than the run's own Hub is refused, and that the refusal gives a
+reason about network access. On Codex the same posture decides a command approval by where the
+command runs, and by nothing else:
+
+```python
+# hub/hub/codex_appserver.py:280-283
+if posture == WORKSPACE_PERMISSION_MODE:
+    subject = approval_subject(method, params)
+    inside = _within(subject.get("cwd") or subject.get("grantRoot"), workspace)
+    return {"decision": "accept"} if inside else {"decision": "decline"}
+```
+
+F98 measured this acceptance in passing (`FINDINGS.md:6704-6706`, 2026-08-28): *"accepting an
+escalated command purely because it ran from inside the workspace"*. It was never filed on its own.
+
+**What the request carries, and the Hub ignores.** This is from the research routine's
+2026-09-12 schema read (`spec-queue/research/2026-09-12.md` §2). It is **unverified here**: this
+window did not regenerate the schema. `CommandExecutionRequestApprovalParams` in `codex-cli`
+0.146.0 carries `networkApprovalContext {host, protocol}` and `proposedNetworkPolicyAmendments`.
+`grep -n network hub/hub/codex_appserver.py` returns one line (`:118`), the full-access grant.
+Whether Codex 0.146.0 raises a network need as a command approval with that field populated has not
+been observed.
+
+**Why it is filed and not fixed alongside.** The F312 verdict names *"the regex-and-`_decide`
+path"*, and `DIRECTION.md` measured the change's blast radius on that path alone. Bringing Codex
+under the same rule would widen the change past what was decided, for a runner nobody can drive.
+The alternative is a proposal that closes F312 on one runner and leaves the other doing the opposite
+with nothing recorded, and that is how the ledger gets entries nobody can resolve. So this entry
+exists.
+
+---
