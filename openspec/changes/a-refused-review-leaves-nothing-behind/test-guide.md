@@ -9,8 +9,10 @@ from the database and the API, and tasks §1 and §5 do:
   repository, a reviewer that became the author while its request waited, and a deferral.
 - The refusal's own sentence is still recorded: as the `409` answer, as the waiting input's reason,
   and in the give-up notice.
-- A second reviewer is no longer refused as *"already under review"* after the first was refused.
-- When the system gives up on refused input, the input queued behind it starts in the same pass.
+- A second reviewer is no longer refused as *"already under review"* after the first was refused,
+  where you dispatched the first. A review a flow staffed still is (F327, below).
+- When the system gives up on refused input, the input queued behind it starts in the same pass,
+  unless that input is refused too. Then it waits, as input behind any refused request does.
 
 **What only you can judge (human-only)** is whether the board and the dispatch control tell you the
 truth where you actually look. Checks 1 and 3 below are those. Check 2 is a quick confirmation of

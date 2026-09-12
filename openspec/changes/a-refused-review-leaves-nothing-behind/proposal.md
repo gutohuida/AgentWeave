@@ -38,6 +38,22 @@
 >
 > **Why (a).** It is the only option that ships tonight without skipping rounds. It records the
 > verdict's intent as an open finding, F327, instead of defining it away.
+>
+> **R3's evidence on the question (added by R3, `design.md` D13).**
+> - **(a)'s claim was false as R2 left it, and R3 made it true.** The delta's scenario *"A refused
+>   review does not stop another reviewer being sent"* covered every refused dispatch, flows
+>   included. On R2's prototype of the fix, a flow-staffed review refused by B1 or B2 still answers
+>   a different reviewer `409` *"already under review by 'critic'"* (measured). So the delta
+>   contradicted its own product. That scenario now covers a dispatch that found the task awaiting
+>   review. The requirement says it governs what the dispatch itself records, and does not decide
+>   the flow's earlier record.
+> - **The fix leaves no new stuck state on the flow path (measured).** Every row of F327's table
+>   is the same on the prototype as on the unmodified tree.
+> - **(b) is not smaller than R2 says (read, inferred).** Besides the two firing sites in
+>   `scheduler.py` and the pool query, a divergence restaff has a different shape: its task is
+>   already `under_review`, so not staging early does not apply, and moving its assignee write into
+>   the dispatch meets D9's holder check. (b) needs its own spec loop.
+> - **R3 recommends (a).**
 
 > **File isolation from `a-url-is-not-a-path` (approved for the same night).** This change does
 > **not** touch `hub/hub/mcp_server.py`, `hub/tests/test_permission_approver.py` or
@@ -175,11 +191,46 @@ R1's argument, and in both the facts were right.**
 - **D9, read.** The delta stays ADDED, and with the flow paragraph removed it contradicts no main
   scenario.
 
+### What R3 found, and what it changed
+
+R3 started again from the code and the verdict, on `895aad9`. The scratch is in
+`testbed/scratch/r3f319/`, and `design.md` D13 records the re-derivation. R3 reached R1's and R2's
+mechanism independently: the rollback first, then going on only after giving up, with one count
+per pass. **It found six defects in the text around that mechanism, and one gap in it.**
+
+- **The D9 scenario reached flows (measured).** On R2's prototype, a flow-staffed review refused by
+  B1 or B2 still refuses a different reviewer as *"already under review"*. The scenario promised
+  the opposite for every refused dispatch. It is now scoped to a dispatch that found the task
+  awaiting review, and the requirement says the flow's earlier record is not decided here (F327).
+  This is what makes option (a)'s claim true.
+- **R2's once-per-pass rule added a stop case the stop list did not name (measured).** A pass that
+  gives up on H1 and is then refused on the rider M alone stops, and N, in another conversation,
+  waits. That is not F320, because M was not given up on. But the first scenario promised N's
+  delivery. It now requires that nothing rode with the given-up input and that the next turn is not
+  refused. The stop list names the case, and task 1.6(g) pins it.
+- **Mutation 4.4 named five failures, and three happen (measured).** The other two need the
+  captured conversation id to be dropped as well, which is now 4.4c.
+- **The `selected` re-read was not load-bearing (measured), and a race sat beside it (F328,
+  D).** An entry the operator withdraws while its turn is being dispatched is counted and
+  announced as given up by the Hub, on both trees. Task 2.1 now re-reads only rows still `queued`,
+  and task 1.8b pins it. **This is R3's one addition to the mechanism.** Attack it hardest.
+- **Mutation 4.5's reason could not happen once 3.1a exists.** It is reworded: the guard is what
+  fails.
+- **The request-answer sentence promised more than D5 builds (read).** It now says the answer comes
+  from the attempt that ended the pass.
+- **1.8a's fixture now has a recipe built through the product (measured).** R2's reach was right:
+  the prototype keeps the divergence open, and the broadcast still escapes.
+
+**What R3 attacked and found standing:** D1's rollback and its placement; D8's residual, measured
+against *"the operator is told"*; the rollback's expired-attribute hazards; the flow path, which is
+not made worse (measured); D5's route behaviour; the drive plan; and file isolation. Tasks number
+52, up from 50 (1.8b and 8.5a). The scenario counts are unchanged, at 8 and 7.
+
 ## What Changes
 
 - **`turn_scheduler.schedule_agent`, refusal branch.** On `TriggerAgentError`, first
-  `await db.rollback()`. Then re-read the selected entries by the ids captured before the call, and
-  re-read the agent's queued entries. Use the conversation id captured before the call. Then record
+  `await db.rollback()`. Then re-read the selected entries by the ids captured before the call,
+  taking only those still `queued` (R3, F328), and re-read the agent's queued entries. Use the conversation id captured before the call. Then record
   `waiting_reason`, count and abandon, and emit exactly as today. A rollback expires every loaded row.
   Without the re-read, five tests of the workspace-counting branch fail with `MissingGreenlet`
   (measured, D3).
@@ -249,5 +300,5 @@ R1's argument, and in both the facts were right.**
 - **Harness:** `scripts/drive/t_d1_0912_f319_reach.py` gains a fixed-tree mode, and an F320 leg that
   uses only operator routes.
 - **No** migration, no API or schema change, no UI change.
-- **Findings:** closes F319 and F320 when built and driven. F326 (D, R1) and F327 (B, R2) stay
-  open, F327 unless the operator's answer brings it in.
+- **Findings:** closes F319 and F320 when built and driven, and F328 (D, R3) with task 2.1's
+  filter. F326 (D, R1) and F327 (B, R2) stay open, F327 unless the operator's answer brings it in.

@@ -227,7 +227,9 @@ cover a rollback.
 So the implementation does not rely on the incidental reload.
 - It captures `selected_ids` and `conversation_id` **before** the call.
 - After the rollback, it re-reads `selected` with `InboundQueueEntry.id.in_(selected_ids)`, in
-  the captured order.
+  the captured order, **taking only rows still `queued`** (R3, D13 item 4: without that filter this
+  re-read is not load-bearing, and with it an entry withdrawn during the dispatch is not counted,
+  F328).
 - It re-reads `entries` with `queued_entries(db, project_id, agent)`.
 - It passes `conversation_id` wherever `conversation.id` was read.
 
@@ -421,6 +423,9 @@ forbids, and needs an edge the lifecycle lacks. That is the operator question at
   - **What the operator reads.** The live activity feed renders it as *"1 open divergence on T
     resolved"* (`hub/ui/src/lib/eventSummary.ts:142`, through `ActivityLog`). That line is false
     after the rollback, and a reload drops it, because its `EventLog` row was rolled back.
+  - **Reproduced (R3, D13).** A completed task with an open divergence was built through
+    `bind_run_to_task` and `evaluate_run_end`. After a B1-refused review on R2's prototype the
+    divergence is still open and no row was written, and the broadcast was still sent.
   - **Why it is accepted.** It is the price of the one-line mechanism. Before this change the same
     broadcast was true only because the defective staging was committed with it. A fix would defer
     the broadcast to after the commit, which is a change to `run_divergence.py`, out of this
@@ -557,3 +562,118 @@ up on its head goes on. Leg A may not be closed by weakening the §3.4 guard.
    the product, and not only by inserting a row.
 4. F327's claim that the flow path reports *in flight* on a quiet project for as long as nothing
    re-drains. R2 measured `decide_firing` between passes and did not run a real timer.
+
+## D13 — What R3 re-derived, and what it changed
+
+R3 began from the verdict and the code on `895aad9`, before reading R1's and R2's argument
+closely. Scratch is under `testbed/scratch/r3f319/`: `test_zz_r3f319.py` (legs DIV, RIDER and WD),
+the variant prototypes `turn_scheduler.r3filter.py` and `turn_scheduler.r3noselected.py`, and a
+detached worktree `wt/` at `895aad9` carrying R2's prototype. Every "on the prototype" result below
+was run from `wt/`, where `hub` resolves to `wt/hub/hub`. Every test copied into a `hub/tests` was
+deleted after its run.
+
+**Derived independently, and agreeing with R1 and R2.**
+- The only writes a refused dispatch leaves pending are the staging (`scheduler.py:816`, `:828`)
+  and, through `apply_transition` (`task_transition_service.py:698-703`), the divergence closure.
+  Read: over `agent_trigger.py:580-1240` the only commit, `persist_event` or session factory is the
+  `:1235` commit, after the last raise. The rollback as the first statement of the branch is the
+  least mechanism that reaches every refusal kind. D1 stands.
+- Giving up is the only outcome that changes the next selection, and the once-per-pass rule keeps
+  one pass's effect on any entry's count to what one attempt does today. D4 stands.
+
+**Defects R3 found, and what changed.**
+1. **The delta's D9 scenario reached flows, so option (a)'s *"the delta says nothing about
+   flows"* was false as written.** *"A refused review does not stop another reviewer being sent"*
+   was quantified over every refused review dispatch. **Measured** on R2's prototype with R2's own
+   `test_zz_r2f319_flow.py`: after the fix, a flow-staffed review refused by B1 or B2 still answers
+   a different reviewer `409` *"Task task-1 is already under review by 'critic' … or let the review
+   in flight finish"*, and every other row of F327's table is unchanged. The fixed tree would have
+   shipped a scenario its own product contradicts. The scenario now requires that the refused
+   dispatch found the task awaiting review, held by no reviewer. The requirement gains a paragraph
+   saying it governs what the dispatch itself records, and does not decide whether a refused
+   dispatch should undo what a flow firing or a restaff recorded before it. That is a scope
+   statement, not R1's compliance claim: it says the question is open (F327).
+2. **R2's once-per-pass rule added a stop case the requirement's stop list did not name.** The list
+   said the pass stops *"where a delivery attempt was counted and the input was not given up on"*.
+   With the rule, an attempt can be refused, count nothing (everything it carried was counted
+   earlier in the pass), and give up on nothing. The first line (*"SHALL go on only after giving
+   up"*) already stops it, but the list read as complete and missed it. **Measured** (leg RIDER,
+   prototype): C1 holds H1 (review, `LIMIT - 1`) and M (plain, 0), C2 holds N (plain, 0), and the
+   mock refuses whatever carries H1 or M and starts N alone. The calls are `[['H1', 'M'], ['M']]`,
+   then the pass stops: H1 `('withdrawn', 3)`, M `('queued', 1)`, N `('queued', 0)`, no turn. The
+   unmodified tree makes one call, `[['H1', 'M']]`.
+   - **Is that F320 again?** No. N waits behind M, a refused head below its limit, which is exactly
+     where input waits today and where the verdict (*"abandons a refused queue head"*) does not
+     reach. R1's loop reaches N here only by counting M three times in one pass and destroying it,
+     the F114 loss R2's rule exists to prevent. R3 agrees with R2's trade.
+   - **But the first scenario promised N.** *"The input behind given-up input is delivered in the
+     same pass"* took any input *"queued behind it, in another conversation"*. N is such input and
+     was not delivered. The scenario now requires that nothing rode with the given-up input and
+     that the turn built from the next input is not refused. The stop list names the new case and
+     says input behind it waits for the next pass. Task 1.6(g) pins the shape.
+3. **Mutation 4.4's expected failures were wrong.** **Measured** on the prototype with the
+   `entries` re-read dropped: three of the five named tests fail with `MissingGreenlet`
+   (`…inherited_from_the_thread…`, `…second_unbound_conversation…` and
+   `…task_bound_entry_waiting_elsewhere…`). `…holds_the_operators_message` and
+   `…vanished_task_does_not_count` pass. They fail only when the branch reads `conversation.id`
+   after the rollback instead of the captured id, which R3 also ran: six failures, the five of D3
+   plus D6's test, which fails on the prototype anyway. Task 4.4 now names three, and 4.4c the
+   five.
+4. **The `selected` re-read was not load-bearing, and a race sat beside it.** Dropping the
+   `selected` re-read from the prototype and keeping the `entries` re-read changed no result in 41
+   tests across the five files that exercise the branch (only D6's known failure). Inferred
+   mechanism: `queued_entries` returns the same identity-mapped rows and refreshes them, and the
+   flush reloads a dirty expired row. **Leg WD measured a race both trees share.** An entry the
+   operator withdraws through `DELETE …/queue/entries/{id}` while the dispatch runs is counted to
+   the limit, given the reason *"the Hub stopped retrying"*, and announced with
+   `queue_entry_abandoned`, on the unmodified tree and the prototype alike. Filtering the re-read to
+   `state == "queued"` (`turn_scheduler.r3filter.py`) leaves it at `LIMIT - 1` with no reason and
+   no event. Filed as **F328 (D)**. Task 2.1 now filters, 1.8b pins it, and mutation 4.4b drops the
+   filter. **This is R3's one addition to the mechanism, and so the one part of this change only
+   one pair of eyes has seen.**
+5. **Mutation 4.5's stated reason could not be the failure.** With 3.1a in place no entry is counted
+   twice in a pass, so *"B is counted more than once"* cannot happen. What the mutation costs is the
+   same refusal repeated to the loop bound, and the guard `RuntimeError` is what fails. Reworded.
+6. **The request-answer sentence said more than D5 builds.** *"From the attempt that carried that
+   input"* promised a refusal to input that an earlier attempt of the pass refused. D5 reports the
+   attempt that ended the pass, and the route (`agent_trigger.py:1511-1581`, read) answers from
+   that. Read: where the route's own input rides with an older entry that is given up, and the pass
+   then starts a turn in another conversation, the route answers *queued*, and its input carries
+   the earlier refusal as `waiting_reason`. That is true, because the input is still queued and will
+   be tried again. So the sentence now says what the design does.
+
+**What R3 attacked and found standing.**
+- **1.8a's fixture can be built through the product (measured, leg DIV).** `bind_run_to_task`
+  moves a `pending` task to `in_progress`. The operator completes it while the run is running.
+  `evaluate_run_end` then opens a divergence with `task_status_at_end='completed'` and
+  `outcome='surfaced'`. A B1-refused review follows. On the unmodified tree the task becomes
+  `('under_review', 'r3-reviewer')`, the divergence gets `resolved_at`, and there is one
+  `run_divergence_resolved` row and one broadcast. On the prototype the task stays
+  `('completed', 'r3-worker')` at 2 transitions, the divergence stays open, there is no row, **and
+  the broadcast is still sent**. D8's residual is real, exactly as R2 read it. 1.8a now gives the
+  recipe.
+- **D8's residual, measured against the verdict's *"and the operator is told"*.** That clause is
+  about the refusal, and the operator is still told it: the `409`, the entry's reason, the give-up
+  notice. The false activity line is a second, transient message about a different object. A reload
+  drops it, because its row is rolled back. It was true before only because the defect committed
+  it. Accepting it for tonight is sound, and filing it at §8.5 is right.
+- **The rollback's other hazards.** After `rollback()` the branch touches `exc.*` (not ORM state),
+  the re-read rows, the captured `conversation_id`, and plain locals (`hop_budget`, `agent`,
+  `project_id`). The loop's next attempt re-queries everything. Read, and consistent with the
+  41-test run above.
+- **The flow path is not made worse (measured).** R2's flow legs on the prototype reproduce F327's
+  table row for row: firing 1 fails its `JobRun`; `decide_firing` answers `in_flight` until the
+  entry is given up at pass 3, then `stalled`; then `review_unstaffed`. The loop does not reach it,
+  because its entry is not given up until pass 3. The rollback discards nothing on it, because the
+  dispatch staged nothing new. A B- or T-refused dispatch on the scheduler path now leaves the task
+  `completed` with its input queued. That is the state of any accepted, undelivered review request
+  today, not a new one (inferred).
+- **Night-executability.** §1, §2 and §3 each leave a green, coherent commit, and §4 changes no
+  code. The drive uses `git worktree` for pre-fix (`../aw-f319-prefix`) and never `git stash`, with
+  a fresh `profiles/drive<MMDD>`, a port that is never 8000 or 8010, and Haiku only. Tasks number
+  52: R3 added 1.8b and 8.5a, and 1.6(g), 4.4b and 4.4c are sub-items. With `a-url-is-not-a-path`'s
+  46 that is 98 in one night, about twice last night's 43 in ~2.5 h. It fits an 8 h window only if
+  both drives go cleanly, so the night should build this change second and stop at a section
+  boundary if time runs short.
+- **File isolation.** `a-url-is-not-a-path` cites `agent_trigger.py` only by line number, and
+  neither change touches a file the other edits (grep over both changes).

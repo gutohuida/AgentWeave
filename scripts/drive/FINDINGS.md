@@ -26303,3 +26303,30 @@ keeping it out of the reviewable pool by the pending entry rather than by the st
 edge the lifecycle does not declare and leaves two transition rows.
 
 ---
+
+## F328 (D) — input the operator withdraws while its turn is being dispatched is counted, given up on, and announced as dropped by the Hub
+
+**Status:** open. Filed 2026-09-12 by R3 of `a-refused-review-leaves-nothing-behind`, measured at unit level on `895aad9`. That change's task 2.1 (as R3 amended it) closes it: the re-read after the rollback takes only entries that are still `queued`.
+
+**The claim.** `schedule_agent` loads the entries of a turn, calls `trigger_agent_directly`, and on
+a refusal writes `waiting_reason`, counts the attempt and gives up at the limit
+(`turn_scheduler.py:347-492`). It never asks whether each entry is still `queued`. An entry the
+operator withdraws through `DELETE …/queue/entries/{entry_id}` (`api/v1/inbound_queue.py:257-265`,
+calling `withdraw_entry`, `inbound_queue.py:297-306`) while the dispatch runs (a review checkout's `git worktree add` takes
+seconds) is then counted, and at the limit gets `abandoned_reason` *"delivery failed 3 times (…); the
+Hub stopped retrying"* and a `queue_entry_abandoned` event. The operator withdrew it, and the record
+and the event both say the Hub gave up on it.
+
+**Measured.** `testbed/scratch/r3f319/test_zz_r3f319.py::test_withdrawn_during_dispatch`, copied
+into `hub/tests`, run once and deleted. One entry at `DELIVERY_ATTEMPT_LIMIT - 1`; the patched
+trigger withdraws it through `withdraw_entry` in a session of its own, then raises a request-level
+refusal. Unmodified tree: `state=withdrawn attempts=3 abandoned_reason='delivery failed 3 times
+(refused); the Hub stopped…' queue_entry_abandoned=1`. R2's prototype of that change (rollback,
+re-read by id): the same. The prototype with the re-read filtered to `state == "queued"`:
+`attempts=2 abandoned_reason='' queue_entry_abandoned=0`.
+
+**Why D.** It needs the operator to withdraw input in the seconds its turn is being dispatched, and
+that turn to be refused. What it costs is one false event and a wrong reason on input the operator
+already chose to drop. Nothing is lost that was wanted.
+
+---

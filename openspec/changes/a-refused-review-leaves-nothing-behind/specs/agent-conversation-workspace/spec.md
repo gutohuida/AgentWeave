@@ -15,10 +15,13 @@ shows the review in progress and nothing is working on it.
 
 The pass SHALL go on only where it gave up on input. It SHALL stop, as it does without this
 requirement, where the attempt started a turn, where the refusal is one that clears on its own,
-where the refusal prevents the agent from running at all, where a delivery attempt was counted and
-the input was not given up on, and where there was nothing to attempt. Going on after any of those
-would repeat the same refusal, or would spend the allowance of input nobody gave up on. Spending
-that allowance in one pass destroys the input that the allowance exists to protect.
+where the refusal prevents the agent from running at all, where the attempt was refused and gave up
+on nothing (whether it counted an attempt, or every input it carried had already been counted in
+this pass), and where there was nothing to attempt. Going on after any of those would repeat the
+same refusal, or would spend the allowance of input nobody gave up on. Spending that allowance in
+one pass destroys the input that the allowance exists to protect. Input queued behind input that
+was refused and not given up on waits for the next pass, exactly as it does without this
+requirement.
 
 Going on only after giving up is not, by itself, enough to protect the input behind. Input rides in
 a turn built from other input, so input that rode in the turn the system gave up on can be carried
@@ -33,16 +36,21 @@ already queued when the pass began. Input that arrives during the pass has had n
 cannot be given up on in its first.
 
 Where the pass goes on, a request SHALL be answered about the input it submitted, from the attempt
-that carried that input: started where that attempt started it, refused where that attempt refused
-it for what it asked, and waiting where it is still queued. Where going on found nothing left to
-attempt, what the pass reports SHALL be the attempt that gave up, not the empty queue.
+that ended the pass: started where that attempt started a turn carrying it, refused where that
+attempt refused it for what it asked, and waiting otherwise. Input that an earlier attempt of the
+same pass carried and refused, and did not give up on, is still queued, so it is answered as
+waiting, and the refusal's words are what it is recorded as waiting for. Where going on found
+nothing left to attempt, what the pass reports SHALL be the attempt that gave up, not the empty
+queue.
 
 #### Scenario: The input behind given-up input is delivered in the same pass
 
 - **WHEN** the input at the head of an agent's queue is refused for the last time its limit allows,
   and the system gives up on it
-- **AND** other input for the same agent is queued behind it, in another conversation
-- **THEN** the input behind it is delivered in a turn started by the same pass
+- **AND** no other input rode in the turn the system gave up on
+- **AND** the next input queued for the same agent is in another conversation, and nothing refuses
+  the turn built from it
+- **THEN** that input is delivered in a turn started by the same pass
 - **AND** no other event was needed to start it
 
 #### Scenario: Going on does not spend the next input's allowance

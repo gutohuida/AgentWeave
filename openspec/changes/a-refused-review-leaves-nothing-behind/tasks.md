@@ -115,6 +115,15 @@ that must fail it.
     reached and withdrawn too, which (d) already covers, so (f) does not assert H6. Against R1's
     loop without the once-per-pass rule (f) fails: R2 measured M carried
     by `[H1, M]`, `[M, H6]` and `[M]` and `withdrawn` at 3 in one pass.
+  - (g) **The pass stops at a rider refused alone (R3, `design.md` D13).** Default cap. In C1: H1, a
+    review entry at `LIMIT - 1`, then M, a plain message at 0. In C2: N, a plain message at 0. The
+    mock refuses any call that carries H1 or M, request-level, and returns a started response for a
+    call carrying only N; it allows two calls. Expect exactly two calls, `[H1, M]` then `[M]`; H1
+    `withdrawn`; M `queued` at **1**; N `queued` at **0** with no turn (xfail §3: today the pass makes
+    one call). This is the case the requirement's stop list names as *"refused and gave up on
+    nothing"*: N waits behind M as it waits behind any refused head below its limit. Measured on R2's
+    prototype: calls `[['H1', 'M'], ['M']]`, rows `H1 ('withdrawn', 3)`, `M ('queued', 1)`,
+    `N ('queued', 0)`.
 - [ ] 1.7 **F320 through the route.** Seed H as in 1.6. Then `POST /agent/trigger` a plain message
   to the same agent, which opens a new conversation. The mock refuses H and returns a started
   response for the route's own entry. The answer reports that conversation as started, with
@@ -128,13 +137,25 @@ that must fail it.
   docstring says why: `design.md` D2(e), where the rollback lives in the one caller. This passes
   today.
 - [ ] 1.8a **An open divergence is not closed by a refused review (R2, `design.md` D8).** Give the
-  B1 task an open `RunDivergence` row before the dispatch (a completed task can carry one: a run bound
-  to it that ends without moving it opens one, and R2 read no status filter on that in
-  `run_divergence.py`; read, not measured). After the refused
+  B1 task an open `RunDivergence` row before the dispatch, **built through the product, not
+  inserted** (R3 measured this recipe, `design.md` D13): create the task `pending` and a
+  `Run(status="running")` for a third agent, call `bind_run_to_task` (it moves the task to
+  `in_progress`, origin `runtime`), apply `completed` as `operator()` while the run is still
+  running, set the run `completed`, and call `evaluate_run_end(run_id)`. That returns a divergence
+  with `task_status_at_end == "completed"`, `outcome == "surfaced"` and `resolved_at` NULL. Take the
+  snapshot after that. After the refused
   `schedule_agent`, the row's `resolved_at` is still `NULL` and no `run_divergence_resolved`
   `EventLog` row exists (xfail §2: today the committed staging closes it). Capture
   `sse_manager.broadcast` and record in the docstring, without asserting it, that the broadcast
   still escapes. That is D8's accepted residual, and §8.5 files it.
+- [ ] 1.8b **Input withdrawn while its turn is dispatched is not counted (R3, F328, `design.md`
+  D13).** One plain entry at `LIMIT - 1`. The patched trigger withdraws it through
+  `inbound_queue.withdraw_entry` in a session of its own, then raises a request-level refusal; it
+  allows one call. Assert the entry is `withdrawn` with `delivery_attempts == LIMIT - 1`, an empty
+  `abandoned_reason`, and no `queue_entry_abandoned` row (xfail §2). Measured today and on R2's
+  prototype: `attempts=3`, `abandoned_reason` *"delivery failed 3 times (refused); the Hub stopped
+  retrying"*, one `queue_entry_abandoned`. With 2.1's `state == "queued"` filter: `attempts=2`, no
+  reason, no event.
 - [ ] 1.9 Run §1 against the unmodified tree. Every xfail must xfail and every pin must pass.
   **Any other outcome means the test is wrong, not the code.** Stop, re-measure with
   `testbed/scratch/r1f319/test_zz_r1f319_scratch.py`, and record what differed here. Commit §1 alone,
@@ -145,7 +166,11 @@ that must fail it.
 - [ ] 2.1 In `hub/hub/turn_scheduler.py`, capture `selected_ids` and `conversation_id` immediately
   before the `trigger_agent_directly` call. Make `await db.rollback()` the **first** statement of
   `except TriggerAgentError`. Then:
-  - re-read `selected` with `InboundQueueEntry.id.in_(selected_ids)`, in the captured order;
+  - re-read `selected` with `InboundQueueEntry.id.in_(selected_ids)` **and
+    `InboundQueueEntry.state == "queued"`**, in the captured order (R3). An entry the operator
+    withdrew while the dispatch ran is then neither counted nor given up on, and the branch records
+    a refusal only on input that is still waiting (F328, 1.8b). Without the filter the re-read is
+    not load-bearing at all: R3 dropped it from R2's prototype and no test changed (`design.md` D13);
   - re-read `entries` with `queued_entries(db, project_id, agent)`;
   - pass `conversation_id` wherever `conversation.id` was read in the branch.
 
@@ -159,7 +184,7 @@ that must fail it.
   staging because `turn_scheduler.schedule_agent`, the one caller, rolls back before it records the
   refusal. Name this change, and name the one-caller test (§1.8). **Comment only. No code in this
   file changes.**
-- [ ] 2.4 Remove the §2 xfail markers from 1.2 to 1.5.
+- [ ] 2.4 Remove the §2 xfail markers from 1.2 to 1.5, 1.8a and 1.8b.
 - [ ] 2.5 Update the docstrings of `test_dispatching_the_evidence_author_as_reviewer_is_refused_before_the_turn`
   (`test_the_evidence_names_the_author.py:474-480`) and
   `test_the_direct_dispatch_refuses_the_evidence_author_before_the_checkout` (`:517-520`). Each
@@ -211,17 +236,27 @@ named test must fail. Record which test failed, then restore.
   assertions of 1.2 and 1.4 must fail, because the write is rolled back with the staging.
 - [ ] 4.4 Keep the rollback and drop the re-read of `entries` (keep the `selected` re-read and the
   captured `conversation_id`, so the mutation isolates the one row set only the workspace branch
-  reads). These five tests must fail with `MissingGreenlet`:
-  - `test_a_blocked_agent_workspace_holds_the_operators_message`
+  reads). **Three** tests must fail with `MissingGreenlet` (R3 ran this mutation on R2's
+  prototype, `design.md` D13):
   - `test_a_binding_inherited_from_the_thread_spends_the_heads_attempts`
   - `test_a_second_unbound_conversation_does_not_make_the_head_expendable`
   - `test_a_task_bound_entry_waiting_elsewhere_spends_the_heads_attempts`
-  - `test_an_entry_in_the_refused_batch_naming_a_vanished_task_does_not_count`
 
-  R1 measured exactly these five (D3), with a rollback that re-read nothing. R2 did not run this
-  narrower mutation. If one of the five passes under it, record which, and why, in `design.md` D3.
+  `test_a_blocked_agent_workspace_holds_the_operators_message` and
+  `test_an_entry_in_the_refused_batch_naming_a_vanished_task_does_not_count` **pass** under it:
+  they fail only when the captured conversation id is not used (4.4c). R1's five came from a
+  rollback that re-read nothing, which is 4.4 and 4.4c at once.
+  - **4.4b** Drop 2.1's `state == "queued"` filter, keeping the re-read by id. 1.8b must fail, with
+    the entry counted to `LIMIT` and `queue_entry_abandoned` emitted.
+  - **4.4c** Keep both re-reads and read `conversation.id` in the branch instead of the captured
+    `conversation_id`. All five tests named in `design.md` D3 must fail with `MissingGreenlet`
+    (measured by R3 on R2's prototype: those five, plus D6's test, which already fails there before
+    3.4 changes its expectation).
 - [ ] 4.5 Make the loop continue after **any** non-transient refusal, not only after giving up.
-  1.6(b) must fail, because B is counted more than once.
+  1.6(b) and 1.6(g) must fail **on their guard `RuntimeError`** (R3). The reason R1 gave, *"because
+  B is counted more than once"*, cannot be the failure once 3.1a is in place: 3.1a stops any entry
+  being counted twice in a pass, so this mutation's cost is the same refusal repeated until the loop
+  bound, and the guard is what catches it.
 - [ ] 4.6 Also continue after a transient refusal. 1.6(c) must fail, on its guard `RuntimeError`.
 - [ ] 4.7 Remove the loop. 1.6(a), 1.6(b), 1.6(d) and 1.7 must fail.
 - [ ] 4.8 Return the last attempt's result unconditionally. 1.6(d) must fail, because it reports
@@ -229,7 +264,8 @@ named test must fail. Record which test failed, then restore.
 - [ ] 4.9 With the loop in place, restore §3.4's old expectation `("queued", 0)`. That test must
   fail. This confirms that D6's change is caused by the loop and by nothing else.
 - [ ] 4.10 Remove 3.1a's once-per-pass guard, keeping the loop. 1.6(f) must fail, with M
-  `withdrawn` at 3 (R2 measured exactly this against R1's prototype).
+  `withdrawn` at 3 (R2 measured exactly this against R1's prototype). 1.6(g) must fail too, with M
+  `queued` at 2 instead of 1 (inferred from the prototype's counting loop, not run).
 
 ## 5. Drive it — the tests are an argument, and a drive is the product
 
@@ -315,6 +351,8 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
 - [ ] 8.5 File the escaped `run_divergence_resolved` broadcast (`design.md` D8, 1.8a) as a finding,
   severity D, with 1.8a as its reproduction. It exists only once §2 has landed, which is why it is
   filed here and not earlier.
+- [ ] 8.5a Set F328's `**Status:**` line to `fixed <sha>`, naming 2.1's `state == "queued"` filter
+  and 1.8b (R3).
 - [ ] 8.6 `openspec validate --strict a-refused-review-leaves-nothing-behind`, then archive with the
   `openspec-archive-change` skill. After syncing, confirm that the main requirement *"Dispatching a
   review staffs the task, whichever path dispatched it"* is **byte-identical** to before. This

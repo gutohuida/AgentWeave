@@ -26,6 +26,12 @@ Discarding the staffing SHALL NOT discard the explanation of why it was discarde
 Each further attempt to deliver the same refused request SHALL leave the task as it was. A refusal
 repeated on every attempt SHALL NOT accumulate a record of the task entering review.
 
+This requirement governs what the dispatch itself records. Some paths record the reviewer before
+the dispatch, in a commit of their own, as the path that queues the review turn: a flow's firing,
+and a failed review's restaffing. Such a dispatch finds the task already in review and already held
+by the reviewer it names, and it records nothing new to discard. Whether a refused dispatch should
+also undo what such a path recorded earlier is not decided by this requirement.
+
 #### Scenario: A review whose commit is gone from the repository is refused and changes nothing
 
 - **WHEN** the operator dispatches a review of a completed task whose evidence names a commit the
@@ -78,6 +84,7 @@ repeated on every attempt SHALL NOT accumulate a record of the task entering rev
 #### Scenario: A refused review does not stop another reviewer being sent
 
 - **WHEN** a review dispatch naming one reviewer has been refused
+- **AND** that dispatch found the task awaiting review, held by no reviewer
 - **AND** the operator then requests a review of the same task naming a different reviewer
 - **THEN** that request is not refused on the ground that the task is already under review
 
