@@ -164,6 +164,12 @@ answered. An error in place of an answer is not a decision.
   passes on with either of them resolves outside the workspace
 - **THEN** the command is refused
 
+#### Scenario: A traversal joined to an option is refused with either separator
+
+- **WHEN** a relative path that resolves outside the workspace is joined to an option, using any
+  path separator the platform accepts
+- **THEN** the command is refused
+
 #### Scenario: A backslash the shell removes is not a separator
 
 - **WHEN** the shell that runs a command treats a backslash as an escape and removes it, and the

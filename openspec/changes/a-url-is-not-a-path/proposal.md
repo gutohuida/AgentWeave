@@ -139,6 +139,22 @@ change answer on Windows.
 R1's version of this list counted 12 refused-to-allowed and 16 in total. That was an arithmetic
 slip: its own rows W1–W5 are five, not four, so it was 13, and 16 in total.
 
+### What R3 found, and what it changed
+
+R3 re-derived the design against the shells and against its own reader (`design.md` D11). It found
+**one real defect in R2's version: rule 6's backstop kept today's regex, which knows `\` only after
+a drive letter, so a backslash traversal glued to an option escaped on Windows.** Measured live in
+Git Bash: `sort -o"..\stray.txt" notes.md` wrote a file in the workspace's parent, and R2's reader
+**allows** it (Z1). `curl -o"..\out" http://<hub>/api` is refused *today* — for the URL's `//`, a
+false reason — and R2 **opens** it (Z2, a regression). R3's fix: on Windows the backstop opens a
+candidate at a bare `\`, symmetric with `/`. It is the sole divergence from R2 (78 rows re-measured,
+no other change), and it inherits G3's known residual: an inside path glued to an option,
+`gcc -I"sub\include" x.c`, is now over-refused (Z3), the Windows twin of `-I../include`. This adds
+one delta scenario and one mutation check. Everything else R2 built — the lexer, the continuing-word
+rule, the own-Hub-as-path rule, the rendered bound — R3 attacked and left standing. R3 also recorded,
+and left as a residual, that a single-quoted literal `$` is over-refused by rule 3 (`design.md` D10
+item 7). After R3, **28 rows move on Windows** (21 to allowed, 7 to refused).
+
 ## Non-goals
 
 - **Containing network access.** The verdict says so, and this change claims nothing more. After
@@ -162,9 +178,10 @@ slip: its own rows W1–W5 are five, not four, so it was 13, and 16 in total.
 
 ### Modified Capabilities
 
-- `agent-run-sandboxing`: three ADDED requirements. A network address in a shell command is decided
-  as a network address. A path in a shell command is judged by where it resolves, as the shell will
-  read it. A refusal's reason fits the record that carries it.
+- `agent-run-sandboxing`: three ADDED requirements (19 scenarios: R2 grew 13 to 18, R3 added one for
+  a traversal glued to an option with either separator). A network address in a shell command is
+  decided as a network address. A path in a shell command is judged by where it resolves, as the
+  shell will read it. A refusal's reason fits the record that carries it.
 - `agent-capability-plane`: *"A run whose harness cannot use MCP is told how to reach the plane"* is
   MODIFIED, in its F300 clause only.
 

@@ -37,15 +37,20 @@ its rule exists.
   Rows are platform-scoped where D2 says so. X1b, X1c, X2p, X3p, E3 and X9 run on Windows only.
   On POSIX, every X row is pinned at today's answer, because `\` is not a separator there. The
   `ids=` are D2's labels, so a failure names its row.
+
+  **R3's backstop rows Z1, Z2, Z3 (Windows only).** Z1 `sort -o"..\stray.txt" notes.md` and Z3
+  `gcc -I"sub\include" x.c` are `deny` after, `'\stray.txt'`/`'\include'` outside; Z2
+  `curl -o"..\out" http://127.0.0.1:8016/api` is `deny` after, `'\out'` outside. On POSIX all three
+  keep today's answer (`\` is not a separator). Z1's write-outside is the drive's §6 witness.
 - [ ] 1.2 Add N8 as its own test: `_decide("WebFetch", {"url": "https://example.com/x", "prompt":
   "p"})` is **allowed**. It pins D7's statement that the rule governs shell text only. A future
   change that brings fetch under the rule must flip this deliberately.
 - [ ] 1.3 Add H12: with `HUB_URL` deleted from the environment, H1–H4 are refused.
 - [ ] 1.4 Run §1's tests against the unmodified `_decide`. Mark `xfail(strict=True, reason="a-url-
   is-not-a-path §2")` on exactly the rows D2 says move: W1–W5, H1–H4, H15, H16, R11, N3, J1–J4, J7,
-  J8, H2p, E14, E7, and (on Windows) X1b, X1c, X2p and X3p. Also mark every row whose **reason**
-  assertion is new: R1–R5, R10, N1, N2, N7, G5, G6, X7, H5–H10, H13–H14, E1, E2, E4–E6b, E9, E13, E15
-  and E16. **Any other failure means the table is wrong, not the code.** Stop, re-measure the row
+  J8, H2p, E14, E7, and (on Windows) X1b, X1c, X2p, X3p, **Z1 and Z3**. Also mark every row whose
+  **reason** assertion is new: R1–R5, R10, N1, N2, N7, G5, G6, X7, H5–H10, H13–H14, E1, E2, E4–E6b,
+  E9, E13, E15, E16, and (on Windows) **Z2** (refused today, but for the URL's path, not `'\out'`). **Any other failure means the table is wrong, not the code.** Stop, re-measure the row
   with `testbed/scratch/r2f300/table.py`, and record what differed here. **Every E row except E7
   and E14 must pass its answer today**: each is refused by the unmodified `_decide`, and the pin
   is what makes a reader that lets it through fail CI.
@@ -63,9 +68,11 @@ its rule exists.
     record whether each word continues.
 
   Then add the six rules in their order. Keep `_ABSOLUTE_PATH_RE` as rule 6's backstop, applied to
-  one word at a time, and rewrite its comment to say that is now its only use. `_decide`'s
-  `command` branch calls the reader with `tool_name`. The `_PATH_KEYS` branch for file tools is
-  **unchanged**. `shlex` is not used (D8(c)).
+  one word at a time, and rewrite its comment to say that is now its only use. **On Windows the
+  backstop opens a candidate at a bare `\`, not only after a drive letter** (R3, D1): use a
+  `\`-aware pattern where `os.sep == "\\"`, and today's exact regex on POSIX. Without this, Z1 (an
+  escape today) and Z2 (a regression) pass. `_decide`'s `command` branch calls the reader with
+  `tool_name`. The `_PATH_KEYS` branch for file tools is **unchanged**. `shlex` is not used (D8(c)).
 - [ ] 2.2 The run's-own-Hub test of D4. For a URL: `urllib.parse.urlsplit`, schemes compared
   ignoring case, `hostname` equal, effective ports equal (80 and 443 by default), `username` and
   `password` both `None`, and any `ValueError` treated as "not own". For a reference, all of these
@@ -151,6 +158,9 @@ named row must fail. Record which row failed, then restore.
   be checked*.
 - [ ] 5.14 Stop recursing into substitutions. S2 must fail.
 - [ ] 5.15 Allow an expansion after a reference. E13 must fail.
+- [ ] 5.16 On Windows, drop the bare `\` from rule 6's backstop (use today's drive-letter-only
+  regex there). **Z1 and Z2 must fail.** This is the R3 gap: a backslash traversal glued to an
+  option reaches the backstop, and the drive-letter-only regex lets it through.
 
 ## 6. Drive it — the table is an argument, and a drive is the product
 
@@ -180,6 +190,11 @@ and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010
   - Ask 4 (Windows) is refused as `'..\\stray.txt' is outside your workspace` (the reason renders
     the word with `repr`, so the backslash is doubled), and no
     `stray.txt` appears in the parent.
+  - **Ask 5 (Windows, R3): the glued-option form.** Ask it to run `sort -o"..\out.txt" notes.md`
+    (its Bash tool). Pre-fix (§6.1) this **must be allowed** and `out.txt` must appear in the
+    parent — an escape today. Fixed, it is refused as `'\\out.txt' is outside your workspace`, and
+    no `out.txt` appears in the parent. This is the R3 backstop finding, and a drive is what checks
+    it rather than the table (D11).
   - Record the `tool_name` of every `permission_denied` row the drive produced. D1 chooses the
     lexing dialect by that name, and that the approver receives `Bash` and `PowerShell` as those
     names is unverified (D10 item 5).

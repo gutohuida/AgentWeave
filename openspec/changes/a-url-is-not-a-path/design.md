@@ -90,7 +90,7 @@ will use. A word that ends its argument is judged as it stands. So is a word wit
 | 3 | contains an expansion **anywhere** (a `$`, a command substitution, a leading `~`, or `%NAME%`) **and** contains a separator | **refused**: where it points is decided by the shell at run time and cannot be checked |
 | 4 | contains no separator | not a path; nothing to check (unchanged from today) |
 | 5 | is absolute (`os.path.isabs`), or is **plain relative**: word characters, `.`, `+`, `-` and separators, not beginning with `-`, with `:` permitted only after the first separator | **resolved** against the workspace (a relative word joined to it), refused if outside; the reason names the word, or its whole argument when the word continues |
-| 6 | anything else containing a separator | **the backstop**: today's `_ABSOLUTE_PATH_RE` applied to this word alone, each candidate checked as today, a candidate that ends the word inheriting the word's "continues" |
+| 6 | anything else containing a separator | **the backstop**: `_ABSOLUTE_PATH_RE` applied to this word alone, each candidate checked as today, a candidate that ends the word inheriting the word's "continues". On Windows the backstop regex also opens a candidate at a bare `\` (R3), not only after a drive letter — see below |
 
 **Why rule 3 looks anywhere in the word, not only at its start.** R1's rule 3 looked at the
 first character. `$(echo .)./stray.txt` lexes to one argument with an expansion at its start, but
@@ -119,6 +119,21 @@ regex refuses all of them, because it matches inside the word. Rule 6 hands any 
 rules cannot account for back to today's reading, confined to that word. **A word therefore changes
 answer only when rules 1, 2, 3 or 5 positively account for it.** That property is what lets D2's
 table be complete: the only rows that can move are rows in those four classes.
+
+**The backstop's regex must know `\` as a separator on Windows (R3).** `_ABSOLUTE_PATH_RE`
+(`(?:[A-Za-z]:[\\/]|/)…`) opens a candidate at `/`, or at `\` only *after a drive letter*. A bare
+`\stray.txt` opens no candidate. Rule 5 catches a *plain* relative `..\stray.txt`, but a backslash
+traversal **glued to an option** is not plain — it begins with `-` — so it falls to rule 6, and R2's
+backstop, being today's regex, let it through. Measured on this machine: `sort -o"..\stray.txt"
+notes.md` in Git Bash wrote `stray.txt` in the workspace's parent, rc=0, and R2's reader **allows**
+it (Z1). So does today's `_decide` (its whole-command regex finds no `/`). Worse,
+`curl -o"..\out" http://127.0.0.1:8016/api` is **refused today** — the URL's `//` gives today's
+regex a false candidate — and R2's reader **allows** it: a regression the reader introduces (Z2).
+So on Windows the backstop opens a candidate at a bare `\` too. This is the exact mirror of rule 6's
+POSIX behaviour, and it inherits the same known residual: `gcc -I"sub\include" x.c`, an inside path
+glued to an option, is now refused as `'\include'` outside, the Windows twin of G3 (`-I../include`,
+already a residual over-refusal today). No row in D2 outside the Windows-`\` class moves; POSIX is
+untouched, because `\` is not `os.sep` there.
 
 **Why `:` only after the first separator in rule 5.** `sub/test_x.py::test_a` (a pytest node id)
 must be plain relative. `host:/x` (scp), `127.0.0.1:9/x` (a schemeless address) and
@@ -237,6 +252,17 @@ R1 decided X1–X3 as *deny* without a tool column. That was right for PowerShel
 refused X1a, which writes inside. R1's prototype also refuses X1b, but D2 did not record that X1b
 is an escape today. On POSIX, `\` is not a separator, so every X row keeps today's answer there.
 
+**R3's rows: a backslash traversal glued to an option reaches the backstop, which R2's regex did
+not catch.** X1b is a *bare* word, so rule 5 catches it. Glue the same traversal to an option and it
+is no longer plain, so it falls to rule 6. R2's backstop (today's regex) missed the bare `\`. Both
+rows run through the **Bash** tool on Windows; on POSIX both keep today's answer.
+
+| row | tool | command | today | R2 | after (R3) |
+|---|---|---|---|---|---|
+| Z1 | Bash | `sort -o"..\stray.txt" notes.md` | **allow** | **allow** | **deny**, `'\stray.txt' is outside…`. **An escape today**, measured writing outside in Git Bash |
+| Z2 | Bash | `curl -o"..\out" http://127.0.0.1:8016/api` | deny (false, the URL's `//`) | **allow** | **deny**, `'\out' is outside…`. R2 opened it: a regression the reader introduced |
+| Z3 | Bash | `gcc -I"sub\include" x.c` | allow | allow | **deny**, `'\include' is outside…`. A residual over-refusal, the Windows twin of G3 |
+
 **R2's rows: what R1's reader let through, and what it refused (R2, measured).** Every E row except
 E7 is refused today, and R1's prototype **allows every one of them**. The R1 column was measured
 by `testbed/scratch/r2f300/attack.py` and `r1col.py`, which run R1's prototype as the subject.
@@ -305,6 +331,13 @@ S and L rows. On Windows, **26 move**.
   the Bash tool, and was measured writing outside in Git Bash. E7 is the joined `$HUB_URL@host`.
 - On R1's own 56 rows, with X1–X3 read as PowerShell, the same 16 move as R1 counted. With X1–X3
   read as Bash, 13 move.
+
+**R3's count.** R3 changes the backstop only, so its reader agrees with R2 on all of D2's earlier
+rows (re-measured: `testbed/scratch/r3f300/table3.py`, 78 rows, no divergence). It adds two
+allowed→refused moves on Windows, both backstop-`\` cases: Z1 (an escape today) and Z3 (a residual
+over-refusal, G3's twin). Z2 is refused *today* — for a false reason — so it is not a move against
+today, but it is a fix against R2, which allowed it. So after R3, **28 move on Windows**: 21 to
+allowed, and 7 to refused (R2's five plus Z1 and Z3).
 
 ## D3 — A network address written without a scheme is a relative path, and N3 is the one widening that follows
 
@@ -542,3 +575,40 @@ both show is false. The rewrite states the resolution rule and this limit instea
    **not** re-read the argument of `sh -c`, `bash -c` or `powershell -Command` as a command. A
    quote in the middle of such an argument keeps the word out of rule 5 (E11), so the backstop
    still sees what today's regex sees. That is the design's only defence there, and it is today's.
+7. **A single-quoted literal `$` is over-refused (R3, decided: stays a residual).** Rule 3 refuses
+   any word that holds a `$` and a separator. The lexer already knows a `$` inside single quotes is
+   literal, not an expansion, so in principle rule 3 could ask "an *active* expansion", and let
+   `curl -d '{"price":"$5/mo"}' $HUB_URL/api` through. R3 measured this: it is a false refusal
+   (Z3-body class). **It is refused today too** — today's regex reads `/mo` as a path — so this
+   change is no regression, and the shape has a one-line workaround (drop the `/`, or ask the
+   operator). R3 leaves it as a residual rather than teaching the lexer to mark active-vs-literal
+   `$` in a final verification round, which would add an unreviewed rule. Recorded here and in
+   `decisions_for_user`; the clean fix (sentinel every active expansion at lex time, and make rule 3
+   test the sentinel, not the character) is a small follow-up, not this change.
+
+## D11 — What R3 re-derived, and the one thing it changed
+
+R3 re-derived the argument against the code and the shells, not against R2's reasoning. It wrote its
+own reader from the design's prose (`testbed/scratch/r3f300/reader3.py`, every R3 change behind a
+switch), ran the shells directly (Git Bash 5.2.37 and Windows PowerShell 5.1), and compared all
+three readers over 78 of D2's rows plus six attack rows (`table3.py`).
+
+**What R3 confirmed against real shells.** Bash keeps a `\` before an ordinary character inside
+double quotes (so X1b escapes) and removes it bare (so X1a stays inside). PowerShell's `''`→`'`,
+`""`→`"`, and `$env:HUB_URL` is the environment variable while a bare `$HUB_URL` is a PowerShell
+variable that expands to nothing (so a reference's dialect matters, D4). PowerShell 5.1 also splits
+`"a"b` into *two* arguments where R2's lexer joins them — a curiosity that only ever refuses more,
+never less (measured: Z6 denies under both readers), so it is not a defect.
+
+**The one change: the backstop's `\` gap** (the paragraph under "Why rule 6 exists", the D2 Z rows,
+and the count above). It is a real escape R2's reader passes and a real regression it introduces,
+both Windows-only, both fixed by making rule 6's backstop open a candidate at a bare `\` on Windows.
+R3 verified this is the *sole* divergence from R2: with every other switch off, only Z1–Z3 move.
+
+**What R3 attacked and left standing.** The lexer's dialect rules (measured, correct). The
+continuing-word rule and its "a prefix can only keep the path further in" argument (E15/E16 refuse
+under both readers; a prefix lands inside a word's first name, which is then neither `.` nor `..`).
+The trim set. D3's N3 widening (re-derived: every byte N3 sends leaves today without the `/x`).
+D4's own-Hub test, D6's `python -c` refusal, and the rendered bound. The delta's requirement
+scenarios were correct; the defect was in the design's rule 6, not in what the spec requires — and
+R3 adds one scenario so a test pins the glued-backslash case.
