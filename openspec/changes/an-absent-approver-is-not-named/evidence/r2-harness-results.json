@@ -1,0 +1,418 @@
+{
+ "round": "R2 (d3-r2), 2026-09-13",
+ "claude_version": "2.1.269 (Claude Code)",
+ "1_r1_A_rows_made_a_model_call": {
+  "A_hub__inherit": {
+   "assistant_lines": 2,
+   "tool_uses": [
+    "Write"
+   ],
+   "result_lines": 0,
+   "approver_not_found_line": true,
+   "mtime_local": "10:08:28"
+  },
+  "A_repro__inherit": {
+   "assistant_lines": 2,
+   "tool_uses": [
+    "Write"
+   ],
+   "result_lines": 0,
+   "approver_not_found_line": true,
+   "mtime_local": "10:08:35"
+  },
+  "A_repro__plain": {
+   "assistant_lines": 2,
+   "tool_uses": [
+    "Write"
+   ],
+   "result_lines": 0,
+   "approver_not_found_line": true,
+   "mtime_local": "10:09:31"
+  },
+  "A_hub__plain": {
+   "assistant_lines": 2,
+   "tool_uses": [
+    "Write"
+   ],
+   "result_lines": 0,
+   "approver_not_found_line": true,
+   "mtime_local": "10:25:50"
+  }
+ },
+ "1_note": "A_hub__inherit, A_repro__* are R1's own captures (10:08-10:09); A_hub__plain is R2's rerun (10:25). Every one has assistant lines and a Write tool_use and no result line: a model call, then death at the approver lookup.",
+ "2_rerun_B_1b_A_hub_plain": [
+  {
+   "cond": "B_1b",
+   "env": "plain",
+   "rc": 0,
+   "secs": 9.0,
+   "init_emitted": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.0082264,
+   "denials": [
+    "Write"
+   ],
+   "result": "I need your permission to write the file. Please approve the Write tool to create written_A.txt in your working directory."
+  },
+  {
+   "cond": "A_hub",
+   "env": "plain",
+   "rc": 1,
+   "secs": 8.2,
+   "init_emitted": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-prompt-tool",
+    "mcp__agentweave__approve_tool_call",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave",
+    "Error: MCP tool mcp__agentweave__approve_tool_call (passed via --permission-prompt-tool) not found. Available MCP tools: none"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default"
+  }
+ ],
+ "3_A_hub_no_tool_turn": "rc 0, init emitted, agentweave ABSENT from init, 'Warning: MCP server blocked by enterprise policy: agentweave', subtype success, 1 turn, result 'ok' (prompt: 'Reply with just the word ok. Do not use any tools.')",
+ "4_early_exit_permitted_harness": {
+  "claude_version": "2.1.269 (Claude Code)",
+  "runs": [
+   {
+    "cond": "E_ok",
+    "env": "plain",
+    "rc": 0,
+    "secs": 6.4,
+    "init_emitted": true,
+    "flags": [
+     "--output-format",
+     "stream-json",
+     "--verbose",
+     "--model",
+     "claude-haiku-4-5-20251001",
+     "--mcp-config",
+     "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+     "--allowedTools",
+     "mcp__agentweave__*",
+     "--permission-prompt-tool",
+     "mcp__agentweave__approve_tool_call",
+     "--permission-mode",
+     "manual"
+    ],
+    "non_json_lines": [],
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "connected"
+    },
+    "init_mcp_server_errors": null,
+    "init_permissionMode": "default",
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.0184395,
+    "denials": [],
+    "result": "ok",
+    "server_started": true,
+    "server_started_secs_before_end": 2.7
+   },
+   {
+    "cond": "E_badflag",
+    "env": "plain",
+    "rc": 1,
+    "secs": 3.3,
+    "init_emitted": false,
+    "flags": [
+     "--output-format",
+     "stream-json",
+     "--verbose",
+     "--model",
+     "claude-haiku-4-5-20251001",
+     "--mcp-config",
+     "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+     "--allowedTools",
+     "mcp__agentweave__*",
+     "--permission-prompt-tool",
+     "mcp__agentweave__approve_tool_call",
+     "--permission-mode",
+     "manual",
+     "--no-such-flag-0913"
+    ],
+    "non_json_lines": [
+     "error: unknown option '--no-such-flag-0913'"
+    ],
+    "server_started": false
+   },
+   {
+    "cond": "E_badmodel",
+    "env": "plain",
+    "rc": 1,
+    "secs": 5.8,
+    "init_emitted": true,
+    "flags": [
+     "--output-format",
+     "stream-json",
+     "--verbose",
+     "--model",
+     "claude-no-such-model-0913",
+     "--mcp-config",
+     "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+     "--allowedTools",
+     "mcp__agentweave__*",
+     "--permission-prompt-tool",
+     "mcp__agentweave__approve_tool_call",
+     "--permission-mode",
+     "manual"
+    ],
+    "non_json_lines": [
+     "[claude-code:unrecognized_model] {\"model\":\"claude-no-such-model-0913\",\"query_source\":\"sdk\"}"
+    ],
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "connected"
+    },
+    "init_mcp_server_errors": null,
+    "init_permissionMode": "default",
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.000954,
+    "denials": [],
+    "result": "There's an issue with the selected model (claude-no-such-model-0913). It may not exist or you may not have access to it. Run --model to pick a different model.",
+    "server_started": true,
+    "server_started_secs_before_end": 2.2
+   },
+   {
+    "cond": "E_resume",
+    "env": "plain",
+    "rc": 1,
+    "secs": 4.8,
+    "init_emitted": false,
+    "flags": [
+     "--output-format",
+     "stream-json",
+     "--verbose",
+     "--model",
+     "claude-haiku-4-5-20251001",
+     "--mcp-config",
+     "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+     "--allowedTools",
+     "mcp__agentweave__*",
+     "--permission-prompt-tool",
+     "mcp__agentweave__approve_tool_call",
+     "--permission-mode",
+     "manual",
+     "--resume",
+     "6d8a501a-5bd3-4820-8502-a33cb4b03658"
+    ],
+    "non_json_lines": [
+     "No conversation found with session ID: 6d8a501a-5bd3-4820-8502-a33cb4b03658"
+    ],
+    "subtype": "error_during_execution",
+    "num_turns": 0,
+    "cost": 0,
+    "denials": [],
+    "result": "",
+    "server_started": true,
+    "server_started_secs_before_end": 1.2
+   },
+   {
+    "cond": "E_badkey",
+    "env": "plain",
+    "rc": 1,
+    "secs": 181.9,
+    "init_emitted": true,
+    "flags": [
+     "--output-format",
+     "stream-json",
+     "--verbose",
+     "--model",
+     "claude-haiku-4-5-20251001",
+     "--mcp-config",
+     "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+     "--allowedTools",
+     "mcp__agentweave__*",
+     "--permission-prompt-tool",
+     "mcp__agentweave__approve_tool_call",
+     "--permission-mode",
+     "manual"
+    ],
+    "non_json_lines": [
+     "\u26a0 claude.ai connectors are disabled because ANTHROPIC_API_KEY or another auth source is set and takes precedence over your claude.ai login \u00b7 Unset it to load your organization's connectors"
+    ],
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "connected"
+    },
+    "init_mcp_server_errors": null,
+    "init_permissionMode": "default",
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0,
+    "denials": [],
+    "result": "Failed to authenticate. API Error: 401 API key is invalid.",
+    "server_started": true,
+    "server_started_secs_before_end": 177.9
+   }
+  ]
+ },
+ "5_hub_read_loop_sees_init": {
+  "rc": 1,
+  "lines": [
+   {
+    "kind": "NOT-JSON",
+    "head_repr": "'Warning: MCP server blocked by enterprise policy: agentweave'",
+    "parsed_session_id": null,
+    "parsed_events": [
+     "text"
+    ]
+   },
+   {
+    "kind": "json:system/init",
+    "head_repr": "'{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"C:\\\\\\\\Users\\\\\\\\huida\\\\\\\\A'",
+    "parsed_session_id": "6a7b0b64-f29c-46a6-a65b-62d20e87998b",
+    "parsed_events": []
+   },
+   {
+    "kind": "json:rate_limit_event/None",
+    "head_repr": "'{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"allo'",
+    "parsed_session_id": "6a7b0b64-f29c-46a6-a65b-62d20e87998b",
+    "parsed_events": []
+   },
+   {
+    "kind": "json:system/thinking_tokens",
+    "head_repr": "'{\"type\":\"system\",\"subtype\":\"thinking_tokens\",\"estimated_toke'",
+    "parsed_session_id": "6a7b0b64-f29c-46a6-a65b-62d20e87998b",
+    "parsed_events": []
+   },
+   {
+    "kind": "json:system/thinking_tokens",
+    "head_repr": "'{\"type\":\"system\",\"subtype\":\"thinking_tokens\",\"estimated_toke'",
+    "parsed_session_id": "6a7b0b64-f29c-46a6-a65b-62d20e87998b",
+    "parsed_events": []
+   },
+   {
+    "kind": "json:assistant/None",
+    "head_repr": "'{\"type\":\"assistant\",\"message\":{\"model\":\"claude-haiku-4-5-202'",
+    "parsed_session_id": "6a7b0b64-f29c-46a6-a65b-62d20e87998b",
+    "parsed_events": []
+   },
+   {
+    "kind": "json:assistant/None",
+    "head_repr": "'{\"type\":\"assistant\",\"message\":{\"model\":\"claude-haiku-4-5-202'",
+    "parsed_session_id": "6a7b0b64-f29c-46a6-a65b-62d20e87998b",
+    "parsed_events": [
+     "tool_use"
+    ]
+   },
+   {
+    "kind": "NOT-JSON",
+    "head_repr": "'Error: MCP tool mcp__agentweave__approve_tool_call (passed v'",
+    "parsed_session_id": null,
+    "parsed_events": [
+     "text"
+    ]
+   },
+   {
+    "kind": "json:user/None",
+    "head_repr": "'{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"'",
+    "parsed_session_id": "6a7b0b64-f29c-46a6-a65b-62d20e87998b",
+    "parsed_events": [
+     "tool_result"
+    ]
+   }
+  ]
+ },
+ "6_approver_denials_in_result_line": {
+  "cond": "D_approver_denies",
+  "env": "plain",
+  "rc": 0,
+  "secs": 11.6,
+  "init_emitted": true,
+  "flags": [
+   "--output-format",
+   "stream-json",
+   "--verbose",
+   "--model",
+   "claude-haiku-4-5-20251001",
+   "--mcp-config",
+   "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+   "--allowedTools",
+   "mcp__agentweave__*",
+   "--permission-prompt-tool",
+   "mcp__agentweave__approve_tool_call",
+   "--permission-mode",
+   "manual"
+  ],
+  "non_json_lines": [],
+  "file_written": false,
+  "init_agentweave": {
+   "name": "agentweave",
+   "status": "connected"
+  },
+  "init_mcp_server_errors": null,
+  "init_permissionMode": "default",
+  "subtype": "success",
+  "num_turns": 2,
+  "cost": 0.009485200000000001,
+  "denials": [
+   "Write"
+  ],
+  "result": "The Write tool call was denied by the permission system (\"r2 stand-in refuses everything\"). This suggests there's a restriction preventing file writes in this environment.\n\nWould you like to grant permission for file write operations, or would you prefer to handle this differently?",
+  "permission_denials_full": [
+   {
+    "tool_name": "Write",
+    "tool_use_id": "toolu_01JdB4Nifa35ffd5FE1yM4iP",
+    "tool_input": {
+     "file_path": "C:\\Users\\huida\\AppData\\Local\\Temp\\d2_0913_f299\\D_approver_denies__plain\\ws\\written_A.txt",
+     "content": "ok"
+    }
+   }
+  ],
+  "tool_uses": [
+   [
+    "Write",
+    "toolu_01JdB4Nifa35ffd5FE1yM4iP"
+   ]
+  ],
+  "approver_received": [
+   {
+    "tool_name": "Write",
+    "tool_use_id": "toolu_01JdB4Nifa35ffd5FE1yM4iP"
+   }
+  ]
+ }
+}

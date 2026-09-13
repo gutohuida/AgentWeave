@@ -24276,6 +24276,20 @@ a broken approval system."* It is **substantially right, and sharper than it say
 > that is unmeasured. Specced as `openspec/changes/an-absent-approver-is-not-named`, whose
 > `proposal.md` puts this to the operator before `DECISIONS.md` 1b is built. **Status unchanged:
 > open.**
+>
+> **Corrected the same day** (`d3-r2`, round 2 of that change, `claude` 2.1.269 read at 10:25 and
+> 10:38). **"Exit 1 before any model call" is wrong.** Each of `d2-r1`'s own A transcripts, and
+> R2's rerun, holds a model call and a `Write` tool_use, and no result line. R1 had read the missing
+> result line as a missing model call. What 2.1.269 does with condition A:
+> - a turn needing no approval **completes** (measured: exit 0, `ok`);
+> - the first approval-needing call gets the `not found` error as its result, and the process dies
+>   there, exit 1, with no result line. The Hub therefore records the turn's usage as
+>   *unavailable*.
+>
+> The two harness lines and exit 1 stand as recorded. F299's 2026-09-09 run differed in carrying on
+> after each refusal, not in failing to start. Evidence:
+> `openspec/changes/an-absent-approver-is-not-named/evidence/r2-harness-results.json`. **Status
+> unchanged: open.**
 
 **The configuration this is about is the ordinary one.** Runner `claude`, `hub_client` unset, a
 harness whose company policy blocks MCP servers. The Hub emits `--mcp-config` (which that harness
@@ -26838,3 +26852,31 @@ should hand-dispatch reviews in the app at all. It is not a wording fix.
 Screenshot: `%TEMP%\d1_0913\render\shots\d-094433-5-start-work-menu.png`.
 
 **Related:** F319, F327, F335 (the route's `409` never stages, above).
+
+## F337 (C) — a refusal's path or command is recorded and never shown, and its activity line says the agent did the refusing
+
+**Status:** open. Filed 2026-09-13 by the day window's `d3-r2` (F299's round 2). **Read from the
+source. Not rendered in a browser.**
+
+**The claim.** Every `permission_denied` row reaches the activity through `EventRow`, which shows
+the event type and `summaryForEvent`'s sentence (`hub/ui/src/components/activity/EventRow.tsx:56`).
+For this kind that sentence is `` `${agent} refused ${tool_name}: ${reason}` ``
+(`hub/ui/src/lib/eventSummary.ts:114`). It never reads `detail`.
+
+- **The path or command is recorded and not shown.** Codex's refusals put the path or command in
+  `detail` (`hub/hub/api/v1/agent_trigger.py:2771-2786`). Their `reason` is often only *"outside
+  `<agent>`'s workspace"*. So the operator reads that `Write` was refused, and not what it was
+  aimed at. The only way to see the path is the row's copy button, which copies the JSON.
+- **The sentence names the wrong actor.** *"`<agent>` refused Write"* reads as the agent refusing
+  something. The runtime, the Hub or the operator refused the agent.
+
+**Why now.** `openspec/changes/an-absent-approver-is-not-named` (D6) records Claude's
+harness-decided refusals in the same shape, so every refusal it adds inherits both problems. That
+change is Python-only and does not fix them. Its D7 and test guide now say what the line shows.
+
+**A possible repair, not proposed.** Append `detail`, bounded, to the sentence, and reword it to
+*"`<agent>` was refused `<tool>`"*. This touches `hub/ui` and the committed bundle. The sentence
+wording has a test (`hub/ui/src/__tests__/eventSummary.test.ts:30-45`).
+
+**Reproduce:** read the two lines cited above. Or trigger any Codex refusal outside a workspace and
+compare the activity line with the row's copied JSON.
