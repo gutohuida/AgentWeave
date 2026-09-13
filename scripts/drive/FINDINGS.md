@@ -27565,3 +27565,53 @@ of 800 — so header plus composer alone exceed what is left, and the panel's `o
 no way to scroll to it. F345's inline question adds at most its 72px floor on top of that. The
 repair is in the narrow layout, not the tray: the rail collapsing to a drawer or header control
 below the breakpoint would return that height to the conversation.
+
+## F351 (A) — the scheduler's job store shares the SQLite file and is driven synchronously on the event loop, so one lock collision loses a new job — or stops every job for good
+
+**Status:** open, root cause reproduced. Reported by the operator 2026-09-13: *"An agent created a
+flow with a loop it should fire every 5 minutes but it didn't fire at all. I had to manually run
+it."*
+
+**The live state (operator's Hub, port 8000, read-only).** `job-79fdadb95db9` (`loopengine-build`,
+`*/5 * * * *`, enabled, created by agent `dev` in `run-113f7e6b75f7` via `create_flow`) at
+16:38:02.92 UTC with loop `loop-103ecb8aeb89`. Its first slot, 16:40, produced nothing; the only
+`job_runs` row is the operator's manual run at 16:44:56. **`apscheduler_jobs` holds 0 rows** — the
+job never reached the scheduler. The tell is in `event_logs`: `job_created`, persisted immediately
+after `_hand_job_to_scheduler`, landed at **16:38:09.21 — 6.3 s** after the row, and pysqlite's
+default busy timeout is 5 s. The Hub's stdout goes to `DEVNULL`, so the error it logged is gone.
+
+**Mechanism.** `JobScheduler` uses APScheduler's `SQLAlchemyJobStore` on a *second, synchronous*
+engine pointed at the same file (journal mode `delete`), and calls it on the event loop:
+`JobScheduler.add_job` → `AsyncIOScheduler.add_job` → an INSERT. If any other coroutine has a write
+transaction open at that instant — it inserted, and needs one more `await` to commit — that commit
+can never run, because the loop is blocked inside the INSERT waiting for its lock. The INSERT gives
+up after 5 s with `database is locked`; `add_job` logs and returns `False`; the job stays `enabled`
+in `ai_jobs` and absent from the scheduler until a restart. `_hand_job_to_scheduler`'s commit-first
+fix (`0757be5`, 2026-08-28) removed the request deadlocking *itself*; it cannot help when another
+session holds the lock, which an agent streaming its turn — the very agent calling `create_flow` —
+makes likely.
+
+**The worse half.** APScheduler 3.11.2's `_process_jobs` also writes the store on every firing
+(`jobstore.update_job(job)`, unguarded, `schedulers/base.py` ~L1227). A collision there raises out
+of `AsyncIOScheduler.wakeup`, `_start_timer` is never re-armed, and **the scheduler stops waking for
+every job** until something else calls `wakeup()`.
+
+**Reproduced** (`scratchpad/f351/`, throwaway databases, the Hub's own code):
+
+| experiment | result |
+|---|---|
+| `_hand_job_to_scheduler` while another async session holds an uncommitted insert (1 s, and even 0 s) | 5.49 s / 5.52 s, `database is locked`, `apscheduler_jobs` empty |
+| same, no concurrent writer (control) | 0.01 s, row present |
+| `AsyncIOScheduler` + `SQLAlchemyJobStore`, 2 s interval, one writer across one firing | fired **once**, then `Exception in callback AsyncIOScheduler.wakeup` — never again in 20 s |
+| same with `MemoryJobStore` | fired every 2 s, 10/10 |
+
+**Proposed repair, not yet built.** Replace the SQLAlchemy job store with APScheduler's
+`MemoryJobStore`. The persistent store is redundant: `ai_jobs` is already the source of truth and
+`JobScheduler.start` re-registers every enabled job from it at startup, so nothing is lost but
+APScheduler's own catch-up of a firing missed while the Hub was down (≤ `misfire_grace_time`, 60 s).
+It takes every scheduler read and write off the database, so neither half can recur, and removes
+`_get_sync_engine` with it. No test depends on `apscheduler_jobs`.
+
+**Workaround meanwhile:** restarting the Hub registers the job (`start()` runs before any agent turn
+can contend) — at the cost of the in-flight run — but leaves the scheduler exposed to the second
+half.
