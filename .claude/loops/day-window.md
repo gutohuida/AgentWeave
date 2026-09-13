@@ -51,6 +51,24 @@ Only the first firing of the window does this. It ends by writing a full `queue`
      `success` conclusion for the CI workflow at `HEAD`'s sha. Queued, in progress, failed, or
      absent for that sha is **not** a pass — leave it for a later firing rather than accepting a
      stale green from an earlier commit.
+
+     **Write nothing until that run concludes.** Any commit, even a log line, moves `HEAD` to a sha
+     whose CI has not started, and the gate then waits another ~13 minutes on nothing. The
+     2026-09-12 window opened the gate by waiting; 2026-09-13's measured the same wait twice.
+
+     **One re-run of a known intermittent is allowed (operator, 2026-09-13).** If the run concluded
+     `failure` and **every** failed or errored test in its `gh run view <id> --log-failed` carries
+     one of these two signatures and nothing else, run `gh run rerun <id> --failed` **once for that
+     sha**, wait for it, and take its conclusion as the verdict:
+     - **F292:** `sqlite3.OperationalError: database is locked` on `BEGIN IMMEDIATE`;
+     - **F314:** `RuntimeError: <asyncio.locks.Lock …> is bound to a different event loop`.
+
+     Classify from the `FAILED`/`ERROR` lines, never from `grep -i failed`, which matches passing
+     tests with "failed" in their names (`DEAD-ENDS.md`). Any other failure, a failed non-test job,
+     or a second red on the re-run means the gate does not open, as before. Record the run id,
+     the signature and the re-run's conclusion in the log. This exists because on 2026-09-13 the
+     branch's CI was red 8 times in 20, every red one of these two flakes, and the gate failed twice
+     on commits that changed no code.
    - `spec-queue/DIRECTION.md`'s newest dated section contains no line-initial `HOLD MERGE`. That
      token is the operator's veto and needs no explanation from them.
 

@@ -1,3 +1,10 @@
+> **REJECTED 2026-09-13 by the operator, archived unbuilt.** The OPERATOR QUESTION below was
+> answered **(b), hand 1b back** (`spec-queue/DECISIONS.md`, `### 2026-09-13 afternoon`). F339
+> reproduced `acceptEdits` as path-confined, which removes 1b's stated reason for rejecting it. So the
+> access path on a harness that blocks MCP is re-decided as one question with F301, F339 and F340.
+> Nothing here was implemented, and no delta was synced into `openspec/specs/`. The three
+> rounds' measurements (`design.md`, `evidence/`) are kept as inputs to that question.
+
 > **OPERATOR QUESTION — answer before this is approved. The measurement changes what the verdict
 > replaces.** `DECISIONS.md` 1b was decided against F299's 2026-09-09 drive. In that drive the Hub's
 > configuration started a turn, read, was refused every write, carried on, and blamed the operator's

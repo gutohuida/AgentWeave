@@ -36,6 +36,16 @@ of today's page walks the default queue: nothing to archive, and of the four ope
 findings, `F299`'s change is unapproved while `F301`, `F332` and `F325` (Codex, undrivable) have no
 proposal. **An unapproved night lands no feature.**
 
+**Operator, in a DECIDE session, 2026-09-13 ~14:20.** `master` was fast-forwarded to `ab7cf72` at
+14:25, after all four gate conditions were re-measured, so the cycle above is landed. F299's question
+is answered **(b)**, and the change is rejected:
+
+- REJECTED  an-absent-approver-is-not-named   Option (b): 1b is handed back (DECISIONS.md, 2026-09-13 afternoon). F339 reproduced 1b's reason for rejecting acceptEdits as false, so the access path is re-decided as one question with F301, F339 and F340. The change is archived unbuilt, and its measurements are kept.
+
+A spec loop for **F332** is running in this session for tonight. If it passes the Opus review, its
+`APPROVED` row and an `ORDER:` line are added below this paragraph. If neither appears, the night
+lands no feature.
+
 `an-absent-approver-is-not-named` — F299 (A), verdict `DECISIONS.md` 1b. **Answer the OPERATOR
 QUESTION at the top of its `proposal.md` first, in one line.** Re-measured on `claude` 2.1.269
 through the Hub's own argv and PTY: F299's configuration works until its first approval-needing call,

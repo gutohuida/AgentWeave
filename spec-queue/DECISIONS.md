@@ -578,6 +578,67 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-13 afternoon — F299's 1b handed back, the roadmap widened, and the gate may re-run a flake
+
+**DECIDED 2026-09-13 ~14:20, by the operator, in session.** Each was put with a recommendation, and
+the operator took all four recommendations.
+
+- DECIDED   F299-1b  **Option (b): 1b is handed back, and `an-absent-approver-is-not-named` is
+  `REJECTED` and archived unbuilt.** This answers the OPERATOR QUESTION at the top of that change's
+  `proposal.md`. On `claude` 2.1.269 the run already ends at its first approval-needing call, and
+  what it shows is the harness's own true error naming the blocked server. As written, 1b swaps that
+  for a turn that survives the refusal, and whose model asks the operator to approve a prompt no
+  surface shows. Option (a) repairs the wording, but still leaves a run that cannot write, and pays a
+  migration and 24 tasks for it. **The deciding input is F339.** 1b rejected `acceptEdits` on no
+  grounds *"by removing the path check entirely"* (1b above, *"Rejected: also drop to
+  `acceptEdits`"*). The 2026-09-13 day window reproduced that claim as false on 2.1.269: `acceptEdits`
+  confines writes to the workspace, and the harness refuses the rest. A mechanism built on 1b would
+  be built on a reason that no longer holds. Rejected: **(a)**, and **1b as written**. The rounds'
+  measurements are kept in the archived change's `design.md` and `evidence/`, and they are inputs to
+  the question below.
+- DECIDED   roadmap  **The second daily spec loop takes release/usability work, and the first keeps
+  draining.** Loop 1 drains decided A and B findings, in `DIRECTION.md`'s order. Loop 2 takes the
+  work-lands arc of `openspec/explorations/2026-08-30-release-roadmap.md`: **F215 first** (the
+  evidence screen, over an API that already works), **then F124** (a loop's work never reaches
+  `main`). Neither has a verdict, so R1 for each writes the options into an OPERATOR QUESTION rather
+  than choosing one. The operator also takes the recommendation to use AgentWeave day to day **on
+  another project**, as the best source of usability findings. This widens `### The scope of the
+  drain` below and does not replace it. The reasoning and the capability assessment are in
+  `ROADMAP.md` `## 2026-09-13 — the objective widens`. **Still open:** bringing the `:8000` live
+  instance (PyPI 1.1.0, migration head `0081`) up to date, from source or through a release. That
+  is outward-facing and was not asked.
+- DECIDED   gate-rerun  **The day window's merge gate may re-run a failed CI run once, when every
+  failure is F292's or F314's signature and nothing else.** The exact rule is in
+  `.claude/loops/day-window.md` step 1, condition 3, with the requirement to write nothing until
+  `HEAD`'s run concludes. This answers the night's `decisions_for_user` item 4 and the day window's
+  item 1 of 2026-09-13. Rejected: **raising F292/F314 into `DIRECTION.md`'s order now**, which is
+  still open as a separate priority call; and **accepting about two mornings in five that do not
+  land**.
+- DONE   merge  `master` was fast-forwarded to `ab7cf72` by the DECIDE session, with the operator's
+  agreement, 2026-09-13 14:25. All four gate conditions were re-measured immediately before the
+  push. That landed the 2026-09-12 and 2026-09-13 cycles, 54 commits.
+
+**OPEN, not decided: the access path on a harness that blocks MCP (F299, F301, F339, F340), as one
+question.** What should a `claude` run do when its harness refuses the Hub's tool server? The four
+findings are one mechanism seen from four sides:
+- **F299** is a run killed at its first write.
+- **F301** is the `cli` path with nothing to answer an approval (1c).
+- **F339** is `acceptEdits` confined after all.
+- **F340** is grounds that are positive-only and permanent, while `init` reports the server's state
+  on every run.
+
+Shapes already on the table, none chosen:
+- **(i)** today's behaviour, plus a Hub-authored sentence in place of the harness's two raw lines
+  (F340, research candidate 3);
+- **(ii)** on refuted grounds, spawn with no approver under `acceptEdits`, so the run can edit inside
+  its workspace, and record the harness's `permission_denials`;
+- **(iii)** 1b's shape with option (a)'s flag.
+
+(ii) trades the operator's approval of each command for the harness's own workspace check. That
+trade is the operator's, per `agent-capability-plane`, and it is the question. It needs an
+exploration that lays the shapes against the archived change's measurements before anyone proposes.
+`DIRECTION.md` queues that exploration.
+
 ### F319 + F320, decided 2026-09-12 afternoon — a refused review leaves nothing behind
 
 **DECIDED 2026-09-12 ~15:30, by the operator, in session.** The session recommended it and the
@@ -743,6 +804,11 @@ request execute. The 2026-09-09 constraint still binds: **not permissive about U
 run's *own* Hub base URL only.
 
 #### 1b. F299 — no grounds, no approver flag
+
+> **HANDED BACK 2026-09-13 by the operator.** See `### 2026-09-13 afternoon` under `## Decided`. The
+> spec loop that took this verdict found that the installed harness no longer behaves as this
+> section's drive recorded. Its *"Rejected: also drop to `acceptEdits`"* rests on a claim F339
+> reproduced false. This section is kept as history, and is no longer an instruction.
 
 **DECIDED: when there are no grounds that the harness honours MCP, do not emit
 `--permission-prompt-tool`.**

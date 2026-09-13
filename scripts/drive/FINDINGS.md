@@ -24263,6 +24263,12 @@ tested was the repository's own, written at `hub/hub/runner_commands.py:245-248`
 *"naming an approver that will not be there makes every tool call fail, which the model reports as
 a broken approval system."* It is **substantially right, and sharper than it says.**
 
+> **2026-09-13, DECIDE session.** The operator answered the spec loop's question with **(b)**. 1b is
+> handed back, and `an-absent-approver-is-not-named` is REJECTED and archived unbuilt as
+> `openspec/changes/archive/2026-09-13-an-absent-approver-is-not-named/`. F299 stays **open** and
+> will be re-decided as one question with F301, F339 and F340 (`spec-queue/DECISIONS.md`, `### 2026-09-13
+> afternoon`, the OPEN block).
+
 > **Re-measured 2026-09-13** (day window, `d2-r1`, `claude` **2.1.269**,
 > `scripts/drive/t_d2_0913_f299_harness.py`, which uses `build_command`'s own argv and spawns through
 > `PtySession` as the Hub does, once with the inherited `CLAUDE*` environment and once without).
