@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 9,
+  "iteration": 10,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r1-pin",
-  "next_action": "Queue item r1-pin: a-refused-review-leaves-nothing-behind S1. Read the r1-pin queue detail and openspec/changes/a-refused-review-leaves-nothing-behind/tasks.md S1 (1.1-1.9) and design in full first. Write hub/tests/test_a_refused_review_leaves_nothing_behind.py against the UNMODIFIED tree (no product edit). An xfail marks a WHOLE test, never one assertion; pin + xfail pairs exactly as each task says. 1.6's mock raises RuntimeError('test guard') past its expected call count. 1.8a builds the divergence through the product (bind_run_to_task + evaluate_run_end), not by insert. 1.9: every xfail xfails (strict), every pin passes; otherwise the test is wrong - re-measure with testbed/scratch/r1f319/test_zz_r1f319_scratch.py. Never touch hub/hub/mcp_server.py, test_permission_approver.py, docs/reference/permission-postures.md. Run the new file + baseline_chunk from hub/ under py -3.11. Tick 1.1-1.9 with actuals, log, commit S1 alone (green), push. Then r2-rollback.",
+  "current": "r2-rollback",
+  "next_action": "Queue item r2-rollback: a-refused-review-leaves-nothing-behind S2 (2.1-2.5). Read tasks.md S2 and design D1/D3 first; the reference prototype with the queued filter is testbed/scratch/r3f319/turn_scheduler.r3filter.py (a design aid, NOT the implementation - write the code and comments properly). 2.1 in hub/hub/turn_scheduler.py: capture selected_ids + conversation_id before trigger_agent_directly; `await db.rollback()` FIRST in except TriggerAgentError; re-read selected by id AND state=='queued' in captured order; re-read entries via queued_entries; use captured conversation_id wherever conversation.id was read in the branch. 2.2 rewrite the branch's opening comment (keep F97's paragraph, add F319). 2.3 comment-only at api/v1/agent_trigger.py:788-793 naming this change and the one-caller test. 2.4 remove MOVES_IN_2 from the 1.2-1.5, 1.8a, 1.8b tests in hub/tests/test_a_refused_review_leaves_nothing_behind.py (8 tests; the MOVES_IN_3 ones stay). 2.5 docstrings only in test_the_evidence_names_the_author.py:474-480 and :517-520. Run the new file (expect 19 passed, 5 xfailed = the MOVES_IN_3 ones) + baseline chunk from hub/ under py -3.11 (test_a_blocked_workspace_counts_where_input_could_run.py must stay GREEN in S2 - D6's change is S3's). ruff+black(py311) on touched files. Tick 2.1-2.5, log, commit S2 alone (green), push. Then r3-mut-a.",
   "queue": [
     {
       "id": "compose",
@@ -78,9 +78,9 @@
     },
     {
       "id": "r1-pin",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S1: the new test file against the unmodified tree",
-      "detail": "GATE: start only if >= 3h remain before stop_at. File isolation: never touch hub/hub/mcp_server.py, hub/tests/test_permission_approver.py, docs/reference/permission-postures.md. 1.1-1.9 in hub/tests/test_a_refused_review_leaves_nothing_behind.py. An xfail marks a WHOLE test, never one assertion: pin + xfail pairs as each task says. 1.6's mock raises RuntimeError('test guard') past its expected call count (pytest-timeout not installed). 1.8a builds the divergence through the product (bind_run_to_task + evaluate_run_end), not by insert. 1.9: every xfail xfails, every pin passes; otherwise the test is wrong - re-measure with testbed/scratch/r1f319/test_zz_r1f319_scratch.py. Commit S1 alone, green."
+      "detail": "DONE iteration 10 (commit 'pin(F319,F320)' - its parent ab49909 is r7's/r6's <base>; the pin commit itself is the pre-fix worktree sha for 5.2). hub/tests/test_a_refused_review_leaves_nothing_behind.py: 11 pins + 13 strict xfails, every marker raises=AssertionError. File alone 11 passed/13 xfailed; with baseline chunk 298 passed/1 skipped/13 xfailed 1m38s. --runxfail: each xfail fails on the design's measured value (B/T ('under_review','rr-reviewer',3) vs ('completed',None,2); A ('completed','rr-reviewer',2) each pass; 1.6 a/b/d/g one call; 1.7 queued; 1.8a resolved_at set; 1.8b ('withdrawn',3)). Departures under tasks 1.9 (additive). RunDivergence PK is sequence - select by id."
     },
     {
       "id": "r2-rollback",

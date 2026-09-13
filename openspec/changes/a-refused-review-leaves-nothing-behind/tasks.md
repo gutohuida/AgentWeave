@@ -29,7 +29,7 @@ All in a new `hub/tests/test_a_refused_review_leaves_nothing_behind.py`. The mod
 F319, F320 and this change's `design.md` D1 and D4. Each test's docstring names the mutation in §4
 that must fail it.
 
-- [ ] 1.1 **Fixtures.** Reuse `_roster` (`test_a_flow_names_what_it_cannot_staff.py`) and
+- [x] 1.1 **Fixtures.** Reuse `_roster` (`test_a_flow_names_what_it_cannot_staff.py`) and
   `_init_repo` (`test_agent_trigger.py`). Capture the real `worktrees.ensure_review_checkout` at
   import time, as `test_review_turn.py:35` does, and restore it with `monkeypatch` where a leg needs
   the real one. Patch `hub.launchability.shutil.which` so the probe finds `claude`.
@@ -41,7 +41,7 @@ that must fail it.
   - **Every leg asserts the snapshot after equals the snapshot taken before the dispatch**, not a
     hard-coded `("completed", None)`. The requirement is *as it was*, and a fixture change must not
     turn this into a test of a constant.
-- [ ] 1.2 **B0, B1, B2 on the scheduler path**, parametrized. Queue an operator review entry
+- [x] 1.2 **B0, B1, B2 on the scheduler path**, parametrized. Queue an operator review entry
   (`review_task_id` set) for a reviewer that recorded nothing, then `schedule_agent` once.
   - B0: `tmp_path` is not a repository.
   - B1: a repository whose evidence names `"e" * 40`, with the real `ensure_review_checkout`.
@@ -55,7 +55,7 @@ that must fail it.
   per leg: `…_records_the_refusal` holds everything but the snapshot and passes today (measured,
   `design.md` D0); `…_leaves_the_task_as_it_was` holds the snapshot and the absence of a `Run`, and
   is xfail(§2).
-- [ ] 1.3 **B1 through the route.** `POST /agent/trigger` names the reviewer and `review_task_id`.
+- [x] 1.3 **B1 through the route.** `POST /agent/trigger` names the reviewer and `review_task_id`.
   Assert all of these:
   - The answer is `409`, and its `detail` names the commit.
   - The snapshot is unchanged (xfail §2).
@@ -67,7 +67,7 @@ that must fail it.
 
   As two tests: the `409`, its `detail` and the withdrawn entry with its event are a pin; the
   snapshot and the second reviewer's answer are xfail(§2).
-- [ ] 1.4 **Leg A, the timing gap, through the route.**
+- [x] 1.4 **Leg A, the timing gap, through the route.**
   1. Register agent X with a runner.
   2. Insert a `Run(status="running")` row for X.
   3. `POST /agent/trigger` naming X as reviewer. It answers `200` and `queued`, because the
@@ -83,12 +83,12 @@ that must fail it.
 
   As two tests sharing one fixture: the `waiting_reason` after each pass, the withdrawal and the
   event are a pin; the snapshot after each pass is xfail(§2).
-- [ ] 1.5 **Leg T, a deferral after the staging.** Delete `HUB_URL` from the environment and make
+- [x] 1.5 **Leg T, a deferral after the staging.** Delete `HUB_URL` from the environment and make
   `agent_trigger.bound_address.get` return `None`. The default `ensure_review_checkout` stub is
   fine. Queue the review and call `schedule_agent` once. The snapshot is unchanged (xfail §2). The
   entry is `queued` with `delivery_attempts == 0`. `terminal_failure is False`, and `refusal is None`
   (a pin: these pass today).
-- [ ] 1.6 **F320 at the scheduler**, with `trigger_agent_directly` patched (as
+- [x] 1.6 **F320 at the scheduler**, with `trigger_agent_directly` patched (as
   `test_a_delivery_attempt_means_a_delivery.py:29` does). The mock records the entry ids it is
   called with. **It raises `RuntimeError("test guard")` on any call past the number the case
   expects**, so a loop that fails to stop fails the test instead of hanging it: `pytest-timeout` is
@@ -124,11 +124,11 @@ that must fail it.
     nothing"*: N waits behind M as it waits behind any refused head below its limit. Measured on R2's
     prototype: calls `[['H1', 'M'], ['M']]`, rows `H1 ('withdrawn', 3)`, `M ('queued', 1)`,
     `N ('queued', 0)`.
-- [ ] 1.7 **F320 through the route.** Seed H as in 1.6. Then `POST /agent/trigger` a plain message
+- [x] 1.7 **F320 through the route.** Seed H as in 1.6. Then `POST /agent/trigger` a plain message
   to the same agent, which opens a new conversation. The mock refuses H and returns a started
   response for the route's own entry. The answer reports that conversation as started, with
   `status == "running"` (xfail §3). Today it answers `queued`, *"queued behind other input"*.
-- [ ] 1.8 **The one-caller pin.** Parse every `hub/hub/**/*.py` with `ast` and collect each `Name`
+- [x] 1.8 **The one-caller pin.** Parse every `hub/hub/**/*.py` with `ast` and collect each `Name`
   node, `Attribute` node and import `alias` spelled `trigger_agent_directly`. That covers a call, a
   module-qualified call, an import under another name, and a reference passed as a callable, and it
   ignores the docstrings and comments that name the function. Outside `agent_trigger.py` (the `def`
@@ -136,7 +136,7 @@ that must fail it.
   misses `partial(trigger_agent_directly, …)` and anything imported `as` another name. The test's
   docstring says why: `design.md` D2(e), where the rollback lives in the one caller. This passes
   today.
-- [ ] 1.8a **An open divergence is not closed by a refused review (R2, `design.md` D8).** Give the
+- [x] 1.8a **An open divergence is not closed by a refused review (R2, `design.md` D8).** Give the
   B1 task an open `RunDivergence` row before the dispatch, **built through the product, not
   inserted** (R3 measured this recipe, `design.md` D13): create the task `pending` and a
   `Run(status="running")` for a third agent, call `bind_run_to_task` (it moves the task to
@@ -148,7 +148,7 @@ that must fail it.
   `EventLog` row exists (xfail §2: today the committed staging closes it). Capture
   `sse_manager.broadcast` and record in the docstring, without asserting it, that the broadcast
   still escapes. That is D8's accepted residual, and §8.5 files it.
-- [ ] 1.8b **Input withdrawn while its turn is dispatched is not counted (R3, F328, `design.md`
+- [x] 1.8b **Input withdrawn while its turn is dispatched is not counted (R3, F328, `design.md`
   D13).** One plain entry at `LIMIT - 1`. The patched trigger withdraws it through
   `inbound_queue.withdraw_entry` in a session of its own, then raises a request-level refusal; it
   allows one call. Assert the entry is `withdrawn` with `delivery_attempts == LIMIT - 1`, an empty
@@ -159,10 +159,36 @@ that must fail it.
   lock.** A real review dispatch holds the write lock while it records the reviewer, so a
   withdrawal lands after the re-read and is still counted (pre-approval review, test O2). F328 is
   narrowed, not closed (8.5a).
-- [ ] 1.9 Run §1 against the unmodified tree. Every xfail must xfail and every pin must pass.
+- [x] 1.9 Run §1 against the unmodified tree. Every xfail must xfail and every pin must pass.
   **Any other outcome means the test is wrong, not the code.** Stop, re-measure with
   `testbed/scratch/r1f319/test_zz_r1f319_scratch.py`, and record what differed here. Commit §1 alone,
   green.
+
+  **Actual (night r1-pin, 2026-09-13, Windows, `py -3.11`, on `ab49909`'s product code).** The file
+  is 11 pins and 13 strict xfails: 11 passed, 13 xfailed, 20 s. With the baseline chunk: 298
+  passed, 1 skipped, 13 xfailed, 1m38s. Under `--runxfail` every xfail fails on the value the
+  design measured and on nothing else:
+  - B0, B1, B2, 1.3 and T: `('under_review', 'rr-reviewer', 3)` against `('completed', None, 2)`;
+  - A: `('completed', 'rr-reviewer', 2)` after each of the three passes;
+  - 1.6(a), (b), (d) and (g): one call where two or three are expected;
+  - 1.7: `status == "queued"`;
+  - 1.8a: `resolved_at` set;
+  - 1.8b: `('withdrawn', 3)` against `('withdrawn', 2)`.
+
+  Nothing differed from the scratch measurements, so the scratch was not re-run. Departures, all
+  additive:
+  - Every marker carries `raises=AssertionError`, so a fixture that fails to build, or a guard
+    `RuntimeError`, is a failure and not the expected one.
+  - 1.8a's fixture has its own pin, `test_the_divergence_fixture_is_built_through_the_product`, so
+    the xfail can fail only on what it asserts. `RunDivergence` is read by `id` with a `select`,
+    because its primary key is `sequence`.
+  - 1.8's scanner is checked first against an import `as`, a `partial(...)` and an attribute
+    call, and against a docstring and a comment, so that the pin is not vacuous.
+  - 1.1 read: leg A's commit-naming evidence row is operator-kind, as for B and T. The route's
+    `commit_for_task_review` needs it at step 3. The agent-kind row by the reviewer is the one 1.4
+    adds at step 4.
+  - B1, B2, T and 1.8a use `_init_repo(tmp_path / "repo")` with `bind_project_workspace`, as
+    `test_review_turn.py` does. B0 keeps the default `tmp_path` root, which is not a repository.
 
 ## 2. The rollback (F319)
 
