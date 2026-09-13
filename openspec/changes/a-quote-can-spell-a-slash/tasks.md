@@ -21,7 +21,9 @@ point: a row may not change answer before the decode exists.
 ## 1. Pin the table before the lexer moves
 
 - [ ] 1.1 In `hub/tests/test_permission_approver.py`, add D2's table as one parametrized test over
-  `_decide("Bash", {"command": …})`. Every row goes in: G1–G10, D1, I1, L1, N1, OK1, OK2. Use the
+  `_decide("Bash", {"command": …})`. Every row goes in: G1–G10, D1, I1, L1, N1, **N2, N3**, OK1,
+  OK2 (N2 = `echo hi > $'..\x'`, a digitless `\x`; N3 = `echo hi > $'\Uffffffffx'`, an overrange
+  `\U` — the two rows R2 added to close R1's decoder defects). Use the
   existing `workspace` fixture (it has `sub/` and the workspace directory is named `work`, so write
   the escapes against `../work`-relative paths as D2 does) and set `HUB_URL=http://127.0.0.1:8016`
   with `monkeypatch`. For each row assert `allow`, and where D2 names a reason assert a
@@ -41,6 +43,20 @@ point: a row may not change answer before the decode exists.
     **reason** assertion (outside, resp. still cannot-be-checked for D1) xfail on Windows. **I1**
     flips deny→allow on Windows, so mark its answer xfail on Windows. **N1** flips allow→deny on
     Windows (mark its answer xfail on Windows); on POSIX N1 is allowed today and after (no mark).
+  - **N2 (digitless `\x`, R2 finding 1):** POSIX allow today and after (backslash is not a
+    separator; filename written inside) — no mark. Windows: today the reader refuses it *cannot be
+    checked* (`$..\x` has a `$` and a `\`); after the fix it refuses it *outside* (`..\x` is a
+    traversal). It is **refused on Windows today and after**, so its *answer* needs no mark on
+    Windows; mark only its **reason** assertion xfail on Windows (the reason improves from
+    *cannot be checked* to *outside*). A decoder that drops the backslash would flip the Windows
+    answer to allow — that is what §4.6's mutation must catch.
+  - **N3 (overrange `\U`, R2 finding 2):** measured today — **Windows deny** *cannot be checked*
+    (`$\Uffffffffx` holds a `$` and a `\`), **POSIX allow** (no separator on POSIX, so rule 4 lets
+    it stand). After the fix both **allow** *inside* (bash writes a file named `x`). So N3 flips
+    **deny→allow on Windows only**; POSIX is allow today and after. Mark its **answer** xfail on
+    **Windows** (deny→allow); no mark on POSIX. Note the unmodified tree has **no decoder**, so §1
+    sees a plain deny/allow, never a raise — the raise R2 found is R1's *decoder* on an unguarded
+    `chr()`, which §4.7's mutation forces once the decode exists.
   - **Unmarked on both**: L1 (allow POSIX / deny Win, unchanged), OK1, OK2, and I1 on POSIX
     (allowed today and after).
   Verify every mark on both platforms before §2: run the file on Windows (`py -3.11`) and under WSL
@@ -61,11 +77,22 @@ point: a row may not change answer before the decode exists.
 - [ ] 2.2 Add the decoder helper beside `_lex`: given the text and the index of a `\`, return the
   decoded string and the next index. Decode exactly what bash decodes:
   - simple: `\a \b \e \E \f \n \r \t \v \\ \' \" \?`;
-  - `\NNN` octal (1–3 digits), `\xHH` hex (1–2), `\uHHHH` (1–4), `\UHHHHHHHH` (1–8);
-  - `\cX` control;
+  - `\NNN` octal (1–3 digits, value taken mod 256 — `\457` is `/`), `\xHH` hex (1–2), `\uHHHH`
+    (1–4), `\UHHHHHHHH` (1–8);
+  - `\cX` control (`\c@` is a NUL);
   - unrecognized escape keeps its backslash; a trailing `\` is literal.
-  It MUST NOT raise on any input. `testbed/scratch/r1f332/prototype.py` has a working reference; the
-  implementation is held to D2's table, not to it.
+  **Two rules R2 measured that R1's prototype gets wrong — implement bash, not the prototype:**
+  - **A digitless `\x`/`\u`/`\U` (no hex digit follows) keeps its backslash** — bash `$'\x'` is
+    `\x` (backslash, x), not `x`. R1's prototype returns just the letter, which drops a separator
+    on Windows (`$'..\x'` → `..\x`, a traversal there) and would **allow an escape refused today**
+    (R2 finding 1, design D1). Return `"\\" + letter`, not the letter.
+  - **A codepoint above `0x10FFFF` produces no character and MUST NOT call `chr()`** — `\U110000`,
+    `\Uffffffff` are valid 8-hex escapes bash accepts but `chr()` rejects with
+    ValueError/OverflowError, which would break `_decide`'s totality (R2 finding 2, design D5).
+    Guard the hex-to-char step: `if value > 0x10FFFF: return "", j`.
+  It MUST NOT raise on any input. `testbed/scratch/r1f332/prototype.py` is a reference **with both
+  defects still in it** (`testbed/scratch/r2f332/fix_probe.py` holds the fixed decoder beside it);
+  the implementation is held to D2's table — which now pins N2 and N3 — not to the R1 prototype.
 - [ ] 2.3 Leave everything after the lexer unchanged: the six rules, `_is_own_hub`, the refusal
   wordings, the reason bound. Confirm **no new reason string** is introduced (`grep` the refusal
   constants; the diff is `_lex` plus a helper).
@@ -100,6 +127,16 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
 - [ ] 4.5 Apply the decode in the PowerShell dialect too. A PowerShell row with `$'…'` (which
   PowerShell does not decode) must change answer — pin `_decide("PowerShell", {"command": ...})` on
   a `$'…'` traversal as unchanged from today, and assert it fails under this mutation.
+- [ ] 4.6 **Drop the backslash on a digitless `\x`/`\u`/`\U`** (R1's prototype behavior — return
+  the letter, not `"\\" + letter`). **On Windows, N2 must fail** (`$'..\x'` flips from deny to
+  allow — the escape R2 finding 1 caught). On POSIX N2 is allow either way, so run this mutation's
+  assertion on Windows (or assert the Windows *reason* under WSL by forcing `os.sep`). A mutation
+  that leaves N2 green means the backslash is not actually load-bearing.
+- [ ] 4.7 **Remove the `> 0x10FFFF` guard** (call `chr()` unguarded, R1's prototype). **N3 must
+  fail by raising** — `_decide` on `$'\Uffffffffx'` raises instead of returning a decision, which
+  the parametrized test surfaces as an error, not an xfail. Assert `_decide(...)` returns a dict
+  (does not raise) unmutated, and errors mutated. This pins totality, which no outcome-only
+  assertion would catch.
 
 ## 5. Drive it — the reason a real operator reads (Windows), POSIX proven on CI
 
@@ -121,6 +158,13 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
     per `a-url-is-not-a-path` §6.1).
   - `cat $'sub\x2fhello.py'` (I1) — **allowed**, prints the file. This is the over-refusal the fix
     corrects on Windows; confirm it reads the file rather than being refused.
+  - `echo hi > $'..\x'` (N2, R2 finding 1) — **refused** as `'..\x' is outside your workspace` on
+    Windows (a digitless `\x` keeps its backslash, and `\` is a separator there). Confirm the
+    reason names `..\x` and no file appears in the worktrees directory. This is a Windows answer
+    the fix changes — the reason improves from *cannot be checked* to *outside*.
+  - `echo hi > $'\Uffffffffx'` (N3, R2 finding 2) — **allowed**, writes a file named `x` inside
+    (bash discards the overrange codepoint). Confirm the decision returns rather than the turn
+    erroring; this is the over-refusal the totality guard corrects on Windows.
   - `python sub/hello.py` — allowed. `curl "$HUB_URL/api/v1/agent-actions/tasks"` — allowed.
   Record every `permission_denied` row's reason and `tool_name`; confirm `event_logs` holds the
   refusal with the same reason. Stop the Hub, confirm every run bound `claude-haiku-4-5-*` and no

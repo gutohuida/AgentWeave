@@ -26737,6 +26737,23 @@ corrects a Windows over-refusal of an inside ANSI-C path (`cat $'sub\x2fhello.py
 route is CI's Linux `hub-test` (strict XFAIL→PASS) plus WSL, per the change's design D4; the night
 drive is Windows and cannot show the flip. R2 and R3 to follow.
 
+**R2 note (2026-09-13, spec loop, reviewed `a-quote-can-spell-a-slash`).** Re-derived the decode
+set against bash 5.2.21 (WSL) and re-ran R1's prototype decoder on both Windows and POSIX
+(`testbed/scratch/r2f332/`). R1's *mechanism* is sound (decode `$'…'`, judge the decoded word) and
+its quote-state guard, `_LITERAL_DOLLAR` sentinel, command-sub recursion, `$"…"` non-decoding,
+octal wrap and branch placement all check out. But R1's **decoder** had two defects, both measured
+and both fixed in the proposal (not shipped): (1) it dropped the backslash on a *digitless*
+`\x`/`\u`/`\U`, so `$'..\x'` — which bash keeps as `..\x`, a traversal on Windows — would flip from
+*deny* (today) to *allow* on Windows, opening an escape; the fix keeps the backslash, matching
+bash. (2) it called `chr()` unguarded on `\uHHHH`/`\UHHHHHHHH`, so an overrange codepoint
+(`$'\U110000'`, `$'\Uffffffff'`) raised `ValueError`/`OverflowError` out of `_decide`, breaking its
+*pure and total* contract on both platforms; the fix produces no character above `U+10FFFF` (never a
+separator) and never raises. Added table rows **N2** and **N3**, tasks §2.2 decode rules, mutations
+§4.6/§4.7, and drive §5.2 steps. These are defects in the proposed fix, in scope, so fixed in the
+proposal — no separate finding filed. Design D1's claim that a digitless escape's rendering "does
+not affect the decision" was the wrong argument (true on POSIX, false on Windows), and D5's
+totality argument omitted overrange codepoints — both corrected. R3 to follow.
+
 ## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
 
 **Status:** open. **Rendered 2026-09-13 by the day window's `d1-drive`**, in Chromium against the

@@ -69,11 +69,16 @@ Every one is allowed on POSIX today. On Windows every one is refused today — f
 ## What Changes
 
 - `_lex` (`hub/hub/mcp_server.py`) decodes bash ANSI-C `$'…'` quoting **in the bash dialect only**,
-  when the `$'` is not already inside another quote. The `$` is consumed; each escape is decoded as
-  bash decodes it; the decoded characters join the current word like any other lexed text. A
-  literal `$` the decoding produces becomes the `_LITERAL_DOLLAR` sentinel, exactly as a `$` inside
-  ordinary single quotes already does — so an ANSI-C-spelled `$HUB_URL` is not read as a reference
-  (the ANSI-C analog of D11a item 1, `$'\x24HUB_URL…'`).
+  when the `$'` is not already inside another quote. The `$` is consumed; each escape is decoded
+  **exactly as bash decodes it** (R2 found two places a "close enough" decoder is wrong — see
+  design "What round 2 changed"); the decoded characters join the current word like any other lexed
+  text. A literal `$` the decoding produces becomes the `_LITERAL_DOLLAR` sentinel, exactly as a
+  `$` inside ordinary single quotes already does — so an ANSI-C-spelled `$HUB_URL` is not read as a
+  reference (the ANSI-C analog of D11a item 1, `$'\x24HUB_URL…'`).
+- **Two faithfulness rules the decode must honour (R2):** a *digitless* `\x`/`\u`/`\U` keeps its
+  backslash (bash `$'\x'` is `\x`, not `x`) — dropping it opens a Windows escape that is refused
+  today; and a codepoint **above U+10FFFF** (a valid 8-hex escape bash accepts) produces no
+  character and must not reach `chr()`, which would raise and break `_decide`'s totality.
 - Nothing else changes. The six rules, the own-Hub test, the refusal wordings, and the reason bound
   are untouched. After the fix, `$'..\x2fstray.txt'` is the word `../stray.txt`, which rule 5
   already refuses as `'../stray.txt' is outside your workspace`; the literal-`$` form falls to rule
@@ -137,8 +142,10 @@ one delta scenario. No migration, no API or schema change, no UI change, no new 
 - **Code:** `hub/hub/mcp_server.py`, `_lex` only (a decoder helper and one branch). Standard library
   plus fastmcp only.
 - **Tests:** `hub/tests/test_permission_approver.py` gains the table above as pinned `_decide`
-  cases, written **before** the reader changes (tasks §1) and their `xfail` markers removed as the
-  decode lands (tasks §2), plus a mutation per rule and a wire-shape case.
+  cases (including R2's rows **N2** digitless `\x` and **N3** overrange `\U`), written **before**
+  the reader changes (tasks §1) and their `xfail` markers removed as the decode lands (tasks §2),
+  plus a mutation per rule — including R2's §4.6 (drop the digitless backslash → N2 fails on
+  Windows) and §4.7 (drop the `chr()` guard → N3 raises) — and a wire-shape case.
 - **Docs:** none required; the reader comment is code, and the posture page already describes the
   reader in general terms.
 - **Findings:** closes **F332** when built and driven (POSIX proven on CI's Linux job and WSL, per

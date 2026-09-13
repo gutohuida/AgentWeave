@@ -28,6 +28,14 @@ These need no operator; a test or CI settles each.
   D4). WSL runs of `testbed/scratch/r1f332/forms.sh` and `reader_forms.py` reproduce it locally.
 - **Legitimate work and the own-Hub request are unchanged.** `python sub/hello.py` and
   `curl "$HUB_URL/api/v1/agent-actions/tasks"` are allowed (rows OK1, OK2).
+- **A digitless `\x` is a Windows separator, not a dropped byte (row N2, R2 finding 1).**
+  `echo hi > $'..\x'` — bash keeps the backslash (`..\x`), which is a traversal on Windows — is
+  refused as outside on Windows. Pinned in `test_permission_approver.py` (row N2). If the decoder
+  dropped the backslash it would allow this on Windows; §4.6's mutation guards that.
+- **An overrange `\U` does not crash the checker (row N3, R2 finding 2).**
+  `echo hi > $'\Uffffffffx'` — a valid 8-hex escape above Unicode's max — is *allowed* (bash writes
+  a file named `x` inside) and, above all, returns a decision rather than raising. Pinned as row
+  N3; §4.7's mutation proves the totality guard is load-bearing.
 
 ## Human-only (you judge these)
 
