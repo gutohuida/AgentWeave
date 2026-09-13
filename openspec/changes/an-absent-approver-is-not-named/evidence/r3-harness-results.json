@@ -1,0 +1,253 @@
+{
+ "round": "R3, day 2026-09-13 d4-r3",
+ "claude_version": "2.1.269 (Claude Code)",
+ "1_slow_or_dead_server_on_a_permitted_harness": {
+  "script": "scripts/drive/t_d4_0913_f299_slow_server.py (S_0 S_8 S_45, then S_8_nb, then S_crash; each a separate invocation)",
+  "method": "stand-in server writes <m>.start, sleeps DELAY, writes <m>.serving, then serves; argv from build_command; PtySession; plain env; Haiku; prompt 'Reply with just the word ok.'; times are seconds from spawn",
+  "runs": [
+   {
+    "cond": "S_0",
+    "delay": 0.0,
+    "rc": 0,
+    "secs": 6.7,
+    "server_start_at": 3.7,
+    "server_serving_at": 3.7,
+    "init_at": 4.3,
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "connected"
+    },
+    "result_at": 6.0,
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.0184445,
+    "result": "ok"
+   },
+   {
+    "cond": "S_8",
+    "delay": 8.0,
+    "rc": 0,
+    "secs": 14.3,
+    "server_start_at": 3.6,
+    "server_serving_at": 11.6,
+    "init_at": 12.6,
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "connected"
+    },
+    "result_at": 13.7,
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.0184695,
+    "result": "ok"
+   },
+   {
+    "cond": "S_45",
+    "delay": 45.0,
+    "rc": 0,
+    "secs": 35.3,
+    "server_start_at": 3.6,
+    "server_serving_at": null,
+    "init_at": 33.6,
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "failed"
+    },
+    "result_at": 34.9,
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.018815500000000002,
+    "result": "ok"
+   },
+   {
+    "cond": "S_8_nb",
+    "delay": 8.0,
+    "rc": 0,
+    "secs": 14.4,
+    "server_start_at": 3.6,
+    "server_serving_at": 11.6,
+    "init_at": 12.7,
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "connected"
+    },
+    "result_at": 13.8,
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.0184425,
+    "result": "ok"
+   },
+   {
+    "cond": "S_crash",
+    "delay": -1.0,
+    "rc": 0,
+    "secs": 6.4,
+    "server_start_at": 3.6,
+    "server_serving_at": null,
+    "init_at": 4.3,
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "failed"
+    },
+    "result_at": 5.9,
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.0038703,
+    "result": "ok"
+   }
+  ],
+  "reading": "the harness waits for a slow server before init (S_8: serving 11.6, init 12.6, connected), gives up at ~30 s and lists it failed, then completes the turn rc 0 (S_45: init 33.6); a server that exits at start is listed failed and the turn completes (S_crash); MCP_CONNECTION_NONBLOCKING=true changes nothing on this build (S_8_nb), so no 'pending' status was observed"
+ },
+ "2_rerun_R2_early_exit": {
+  "script": "scripts/drive/t_d3_0913_f299_early_exit.py E_badflag E_ok",
+  "claude_version": "2.1.269 (Claude Code)",
+  "runs": [
+   {
+    "cond": "E_badflag",
+    "env": "plain",
+    "rc": 1,
+    "secs": 3.4,
+    "init_emitted": false,
+    "flags": [
+     "--output-format",
+     "stream-json",
+     "--verbose",
+     "--model",
+     "claude-haiku-4-5-20251001",
+     "--mcp-config",
+     "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+     "--allowedTools",
+     "mcp__agentweave__*",
+     "--permission-prompt-tool",
+     "mcp__agentweave__approve_tool_call",
+     "--permission-mode",
+     "manual",
+     "--no-such-flag-0913"
+    ],
+    "non_json_lines": [
+     "error: unknown option '--no-such-flag-0913'"
+    ],
+    "server_started": false
+   },
+   {
+    "cond": "E_ok",
+    "env": "plain",
+    "rc": 0,
+    "secs": 6.7,
+    "init_emitted": true,
+    "flags": [
+     "--output-format",
+     "stream-json",
+     "--verbose",
+     "--model",
+     "claude-haiku-4-5-20251001",
+     "--mcp-config",
+     "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+     "--allowedTools",
+     "mcp__agentweave__*",
+     "--permission-prompt-tool",
+     "mcp__agentweave__approve_tool_call",
+     "--permission-mode",
+     "manual"
+    ],
+    "non_json_lines": [],
+    "init_agentweave": {
+     "name": "agentweave",
+     "status": "connected"
+    },
+    "init_mcp_server_errors": null,
+    "init_permissionMode": "default",
+    "subtype": "success",
+    "num_turns": 1,
+    "cost": 0.0038954999999999997,
+    "denials": [],
+    "result": "ok",
+    "server_started": true,
+    "server_started_secs_before_end": 3.1
+   }
+  ]
+ },
+ "3_real_adapter_import_secs_warm": [
+  0.99,
+  0.96,
+  0.95
+ ],
+ "3_note": "hub/hub/mcp_server.py exec'd as a module under py -3.11, three times; its announce then waits at most 10 s (_hub_request urlopen timeout, mcp_server.py:184)",
+ "4_init_mcp_servers_by_case": {
+  "policy_blocked_A_hub_raw_capture": [
+   {
+    "name": "claude.ai Google Drive",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Google Calendar",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Gmail",
+    "status": "needs-auth"
+   }
+  ],
+  "policy_blocked_claude_code_version": "2.1.269",
+  "connected_S_0": [
+   {
+    "name": "agentweave",
+    "status": "connected"
+   },
+   {
+    "name": "claude.ai Google Drive",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Google Calendar",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Gmail",
+    "status": "needs-auth"
+   }
+  ],
+  "failed_timeout_S_45": [
+   {
+    "name": "agentweave",
+    "status": "failed"
+   },
+   {
+    "name": "claude.ai Google Drive",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Google Calendar",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Gmail",
+    "status": "needs-auth"
+   }
+  ],
+  "failed_crash_S_crash": [
+   {
+    "name": "agentweave",
+    "status": "failed"
+   },
+   {
+    "name": "claude.ai Google Drive",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Google Calendar",
+    "status": "needs-auth"
+   },
+   {
+    "name": "claude.ai Gmail",
+    "status": "needs-auth"
+   }
+  ]
+ },
+ "5_verbatim_init_lines_for_fixtures": {
+  "connected_S_0": "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"C:\\\\Users\\\\huida\\\\AppData\\\\Local\\\\Temp\\\\d4_0913_f299_slow\\\\S_0\\\\ws\",\"session_id\":\"b51c0d00-86f2-4a83-8014-9f24a7985b53\",\"tools\":[\"Task\",\"AskUserQuestion\",\"Bash\",\"CronCreate\",\"CronDelete\",\"CronList\",\"DesignSync\",\"Edit\",\"EnterPlanMode\",\"EnterWorktree\",\"ExitPlanMode\",\"ExitWorktree\",\"Glob\",\"Grep\",\"ListAgents\",\"ListMcpResourcesTool\",\"Monitor\",\"NotebookEdit\",\"PowerShell\",\"PushNotification\",\"Read\",\"ReadMcpResourceDirTool\",\"ReadMcpResourceTool\",\"RemoteTrigger\",\"ReportFindings\",\"ScheduleWakeup\",\"SendMessage\",\"Skill\",\"TaskCreate\",\"TaskGet\",\"TaskList\",\"TaskOutput\",\"TaskStop\",\"TaskUpdate\",\"ToolSearch\",\"WebFetch\",\"WebSearch\",\"Workflow\",\"Write\",\"mcp__agentweave__ping\"],\"mcp_servers\":[{\"name\":\"agentweave\",\"status\":\"connected\"},{\"name\":\"claude.ai Google Drive\",\"status\":\"needs-auth\"},{\"name\":\"claude.ai Google Calendar\",\"status\":\"needs-auth\"},{\"name\":\"claude.ai Gmail\",\"status\":\"needs-auth\"}],\"model\":\"claude-haiku-4-5-20251001\",\"permissionMode\":\"default\",\"slash_commands\":[\"e2e-loop\",\"handoff\",\"harness-audit\",\"harness-refresh\",\"resume\",\"deep-research\",\"design\",\"design-sync\",\"dataviz\",\"update-config\",\"verify\",\"debug\",\"code-review\",\"simplify\",\"batch\",\"fewer-permission-prompts\",\"doctor\",\"loop\",\"schedule\",\"claude-api\",\"workflow-authoring\",\"run\",\"run-skill-generator\",\"advisor\",\"agents\",\"auto-mode-setup\",\"autocompact\",\"clear\",\"color\",\"compact\",\"config\",\"output-style\",\"context\",\"effort\",\"fast\",\"heapdump\",\"init\",\"mcp\",\"import\",\"model\",\"__remote-workflow\",\"workflow-launch-exec\",\"reload-plugins\",\"reload-skills\",\"rename\",\"ultrareview\",\"security-review\",\"usage-credits\",\"extra-usage\",\"usage\",\"insights\",\"recap\",\"skill-doctor\",\"goal\",\"design-consent\",\"design-revoke\",\"list-agents\",\"team-onboarding\"],\"terminal_slash_commands\":[\"doctor\",\"color\",\"reload-plugins\"],\"apiKeySource\":\"none\",\"claude_code_version\":\"2.1.269\",\"output_style\":\"default\",\"agents\":[\"claude\",\"Explore\",\"general-purpose\",\"Plan\",\"statusline-setup\"],\"skills\":[\"e2e-loop\",\"handoff\",\"harness-audit\",\"harness-refresh\",\"resume\",\"deep-research\",\"design\",\"design-sync\",\"dataviz\",\"update-config\",\"verify\",\"debug\",\"code-review\",\"simplify\",\"batch\",\"fewer-permission-prompts\",\"doctor\",\"loop\",\"schedule\",\"claude-api\",\"workflow-authoring\",\"run\",\"run-skill-generator\"],\"plugins\":[],\"capabilities\":[\"interrupt_receipt_v1\",\"interrupt_cancel_queued_v1\",\"msg_lifecycle_v1\"],\"analytics_disabled\":false,\"product_feedback_disabled\":false,\"uuid\":\"6156b6a9-03b2-47b9-8a04-5a408c00394b\",\"memory_paths\":{\"auto\":\"C:\\\\Users\\\\huida\\\\.claude\\\\projects\\\\C--Users-huida-AppData-Local-Temp-d4-0913-f299-slow-S-0-ws\\\\memory\\\\\"},\"messaging_socket_path\":\"\\\\\\\\.\\\\pipe\\\\LOCAL\\\\cc-msg-9b0f76231caababd31d00b06c88b8c9e\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"powershell_path\":\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\"}",
+  "failed_timeout_S_45": "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"C:\\\\Users\\\\huida\\\\AppData\\\\Local\\\\Temp\\\\d4_0913_f299_slow\\\\S_45\\\\ws\",\"session_id\":\"e20e4d70-57b9-48fd-ae14-ad833aa23884\",\"tools\":[\"Task\",\"AskUserQuestion\",\"Bash\",\"CronCreate\",\"CronDelete\",\"CronList\",\"DesignSync\",\"Edit\",\"EnterPlanMode\",\"EnterWorktree\",\"ExitPlanMode\",\"ExitWorktree\",\"Glob\",\"Grep\",\"ListAgents\",\"Monitor\",\"NotebookEdit\",\"PowerShell\",\"PushNotification\",\"Read\",\"RemoteTrigger\",\"ReportFindings\",\"ScheduleWakeup\",\"SendMessage\",\"Skill\",\"TaskCreate\",\"TaskGet\",\"TaskList\",\"TaskOutput\",\"TaskStop\",\"TaskUpdate\",\"ToolSearch\",\"WebFetch\",\"WebSearch\",\"Workflow\",\"Write\"],\"mcp_servers\":[{\"name\":\"agentweave\",\"status\":\"failed\"},{\"name\":\"claude.ai Google Drive\",\"status\":\"needs-auth\"},{\"name\":\"claude.ai Google Calendar\",\"status\":\"needs-auth\"},{\"name\":\"claude.ai Gmail\",\"status\":\"needs-auth\"}],\"model\":\"claude-haiku-4-5-20251001\",\"permissionMode\":\"default\",\"slash_commands\":[\"e2e-loop\",\"handoff\",\"harness-audit\",\"harness-refresh\",\"resume\",\"deep-research\",\"design\",\"design-sync\",\"dataviz\",\"update-config\",\"verify\",\"debug\",\"code-review\",\"simplify\",\"batch\",\"fewer-permission-prompts\",\"doctor\",\"loop\",\"schedule\",\"claude-api\",\"workflow-authoring\",\"run\",\"run-skill-generator\",\"advisor\",\"agents\",\"auto-mode-setup\",\"autocompact\",\"clear\",\"color\",\"compact\",\"config\",\"output-style\",\"context\",\"effort\",\"fast\",\"heapdump\",\"init\",\"mcp\",\"import\",\"model\",\"__remote-workflow\",\"workflow-launch-exec\",\"reload-plugins\",\"reload-skills\",\"rename\",\"ultrareview\",\"security-review\",\"usage-credits\",\"extra-usage\",\"usage\",\"insights\",\"recap\",\"skill-doctor\",\"goal\",\"design-consent\",\"design-revoke\",\"list-agents\",\"team-onboarding\"],\"terminal_slash_commands\":[\"doctor\",\"color\",\"reload-plugins\"],\"apiKeySource\":\"none\",\"claude_code_version\":\"2.1.269\",\"output_style\":\"default\",\"agents\":[\"claude\",\"Explore\",\"general-purpose\",\"Plan\",\"statusline-setup\"],\"skills\":[\"e2e-loop\",\"handoff\",\"harness-audit\",\"harness-refresh\",\"resume\",\"deep-research\",\"design\",\"design-sync\",\"dataviz\",\"update-config\",\"verify\",\"debug\",\"code-review\",\"simplify\",\"batch\",\"fewer-permission-prompts\",\"doctor\",\"loop\",\"schedule\",\"claude-api\",\"workflow-authoring\",\"run\",\"run-skill-generator\"],\"plugins\":[],\"capabilities\":[\"interrupt_receipt_v1\",\"interrupt_cancel_queued_v1\",\"msg_lifecycle_v1\"],\"analytics_disabled\":false,\"product_feedback_disabled\":false,\"uuid\":\"326bdaa5-5c44-4717-99d0-5767edad63c7\",\"memory_paths\":{\"auto\":\"C:\\\\Users\\\\huida\\\\.claude\\\\projects\\\\C--Users-huida-AppData-Local-Temp-d4-0913-f299-slow-S-45-ws\\\\memory\\\\\"},\"messaging_socket_path\":\"\\\\\\\\.\\\\pipe\\\\LOCAL\\\\cc-msg-661b51f2791c076567f2043f8d5f9396\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"powershell_path\":\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\"}",
+  "failed_crash_S_crash": "{\"type\":\"system\",\"subtype\":\"init\",\"cwd\":\"C:\\\\Users\\\\huida\\\\AppData\\\\Local\\\\Temp\\\\d4_0913_f299_slow\\\\S_crash\\\\ws\",\"session_id\":\"75044f27-037b-469b-abdb-d100bc9d4729\",\"tools\":[\"Task\",\"AskUserQuestion\",\"Bash\",\"CronCreate\",\"CronDelete\",\"CronList\",\"DesignSync\",\"Edit\",\"EnterPlanMode\",\"EnterWorktree\",\"ExitPlanMode\",\"ExitWorktree\",\"Glob\",\"Grep\",\"ListAgents\",\"Monitor\",\"NotebookEdit\",\"PowerShell\",\"PushNotification\",\"Read\",\"RemoteTrigger\",\"ReportFindings\",\"ScheduleWakeup\",\"SendMessage\",\"Skill\",\"TaskCreate\",\"TaskGet\",\"TaskList\",\"TaskOutput\",\"TaskStop\",\"TaskUpdate\",\"ToolSearch\",\"WebFetch\",\"WebSearch\",\"Workflow\",\"Write\"],\"mcp_servers\":[{\"name\":\"agentweave\",\"status\":\"failed\"},{\"name\":\"claude.ai Google Drive\",\"status\":\"needs-auth\"},{\"name\":\"claude.ai Google Calendar\",\"status\":\"needs-auth\"},{\"name\":\"claude.ai Gmail\",\"status\":\"needs-auth\"}],\"model\":\"claude-haiku-4-5-20251001\",\"permissionMode\":\"default\",\"slash_commands\":[\"e2e-loop\",\"handoff\",\"harness-audit\",\"harness-refresh\",\"resume\",\"deep-research\",\"design\",\"design-sync\",\"dataviz\",\"update-config\",\"verify\",\"debug\",\"code-review\",\"simplify\",\"batch\",\"fewer-permission-prompts\",\"doctor\",\"loop\",\"schedule\",\"claude-api\",\"workflow-authoring\",\"run\",\"run-skill-generator\",\"advisor\",\"agents\",\"auto-mode-setup\",\"autocompact\",\"clear\",\"color\",\"compact\",\"config\",\"output-style\",\"context\",\"effort\",\"fast\",\"heapdump\",\"init\",\"mcp\",\"import\",\"model\",\"__remote-workflow\",\"workflow-launch-exec\",\"reload-plugins\",\"reload-skills\",\"rename\",\"ultrareview\",\"security-review\",\"usage-credits\",\"extra-usage\",\"usage\",\"insights\",\"recap\",\"skill-doctor\",\"goal\",\"design-consent\",\"design-revoke\",\"list-agents\",\"team-onboarding\"],\"terminal_slash_commands\":[\"doctor\",\"color\",\"reload-plugins\"],\"apiKeySource\":\"none\",\"claude_code_version\":\"2.1.269\",\"output_style\":\"default\",\"agents\":[\"claude\",\"Explore\",\"general-purpose\",\"Plan\",\"statusline-setup\"],\"skills\":[\"e2e-loop\",\"handoff\",\"harness-audit\",\"harness-refresh\",\"resume\",\"deep-research\",\"design\",\"design-sync\",\"dataviz\",\"update-config\",\"verify\",\"debug\",\"code-review\",\"simplify\",\"batch\",\"fewer-permission-prompts\",\"doctor\",\"loop\",\"schedule\",\"claude-api\",\"workflow-authoring\",\"run\",\"run-skill-generator\"],\"plugins\":[],\"capabilities\":[\"interrupt_receipt_v1\",\"interrupt_cancel_queued_v1\",\"msg_lifecycle_v1\"],\"analytics_disabled\":false,\"product_feedback_disabled\":false,\"uuid\":\"af0d8e96-3680-4923-958c-a935e6ced420\",\"memory_paths\":{\"auto\":\"C:\\\\Users\\\\huida\\\\.claude\\\\projects\\\\C--Users-huida-AppData-Local-Temp-d4-0913-f299-slow-S-crash-ws\\\\memory\\\\\"},\"messaging_socket_path\":\"\\\\\\\\.\\\\pipe\\\\LOCAL\\\\cc-msg-e2d938927983667203bb763fbb86151f\",\"fast_mode_state\":\"off\",\"fast_mode_disabled_reason\":\"sdk_opt_in_required\",\"powershell_path\":\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\"}",
+  "note": "ANSI-stripped by the script's own regex; the JSON is verbatim. The raw, escape-laden capture for the blocked case is a-hub-plain-raw-pty.txt."
+ }
+}

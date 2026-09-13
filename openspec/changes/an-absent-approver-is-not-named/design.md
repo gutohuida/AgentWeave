@@ -67,8 +67,10 @@ What this settles:
    process that dies mid-turn never writes. Every A row's transcript holds `assistant` lines and a
    `Write` tool_use (round 2, `evidence/r2-harness-results.json` §1). The
    `agentweave` entry is absent from `init.mcp_servers` whenever the policy applies, with or without
-   the approver. Research candidate 3 builds on this. This change reads only that the line arrived
-   (D3), not what it lists.
+   the approver. Research candidate 3 builds on this. *(R2 wrote here that this change reads only
+   that the line arrived. Since round 3 it also reads what the line says of the Hub's server, and
+   uses that only to decide what counts as a test (D3). It does not use it to take grounds away,
+   which is candidate 3's decision.)*
 5. The denied `Write` was **inside** the run's workspace, so 1b's shape refuses in-workspace work.
 
 ## What round 2 changed (2026-09-13, `claude` 2.1.269, read at 10:25 and again at 10:38)
@@ -99,6 +101,58 @@ Three more things R2 found by reading the code rather than the harness:
   `cmd`, so task 6.1's *"read from the run's recorded command or a debug log"* had no source. The
   live process's command line does, and 6.1 now reads that.
 
+## What round 3 changed (2026-09-13, `claude` 2.1.269, read at 10:50)
+
+R3 re-ran R2's `t_d3_0913_f299_early_exit.py E_badflag E_ok`, and both reproduce: an unknown
+option exits 1 with no `init` and no server, and the control completes `ok` with the server
+`connected`. R3 then measured what R2's D3 argument rested on and R2 had not measured: a server
+that is **slow** to become ready, or that dies. All runs used Haiku, `PtySession`, the `plain`
+environment, a permitted harness, and a turn that needs no approval
+(`scripts/drive/t_d4_0913_f299_slow_server.py`, `evidence/r3-harness-results.json`). Times are
+seconds from spawn.
+
+| cond | server | `init` at | `init` says of `agentweave` | turn |
+|---|---|---|---|---|
+| S_0 | serves at 3.7 | 4.3 | `connected` | `success`, rc 0 |
+| S_8 | serves at 11.6 | 12.6 | `connected` | `success`, rc 0 |
+| S_45 | still asleep when the harness exits | **33.6** | **`failed`** | **`success`, rc 0** |
+| S_8_nb | S_8 with `MCP_CONNECTION_NONBLOCKING=true` | 12.7 | `connected` | `success`, rc 0 |
+| S_crash | exits 1 at start | 4.3 | **`failed`** | **`success`, rc 0** |
+
+Also measured: the real adapter module imports in 0.95 to 0.99 s from a warm start, three runs.
+And R2's raw A_hub capture was re-read with the Hub's own `strip_ansi_escapes`: its `init` lists the
+other configured servers and **no `agentweave` entry**, and it carries `claude_code_version:
+2.1.269`.
+
+What that changed:
+
+1. **R2's D3 argument was wrong, and its outcomes were right.** R2 wrote that, given the `init`
+   line, *"that leaves one way for a test on a permitted harness to show no report: a lost
+   announce"*. On 2.1.269 there are two more, S_45 and S_crash. In both the turn completes, `init`
+   is seen, and no announce arrives. R2's four measured failure modes all used a server that
+   started at once, so the argument was never tested where it failed. D3 now records what `init`
+   says of the Hub's server (`Run.harness_mcp_status`, replacing R2's `harness_init_at`), and a
+   run counts as a test only when that is not `connected`. That also removes the lost announce,
+   R1's own D9 risk. What remains on a permitted harness is S_45, and D9 states it.
+2. **D11's paragraph promised more than the change delivers.** It said refusals are recorded,
+   asserted a claim that research candidate 2 disputes, and gave an ambiguous way out. Its
+   qualified scenario also dropped the agents that are given no server. See D11, *"What round 3
+   changed in D11"*.
+3. **Option (a) of the operator question overstated its cost.** It said the Hub would need *"a
+   version probe"*. A *refuted* agent has, by construction, an earlier run whose `init` line was
+   seen, and that line carries the build. The option's text now says so. The option is not picked.
+
+R3 attacked D6's join and found it holds. Both existing refusal writers store `run_id` and
+`tool_use_id` in `EventLog.data` (`agent_actions.py:897-905`, `permissions.py:113-126`). The
+approver reports before it answers (`mcp_server.py:1470-1473`), so 4.3(b)'s ordering is the order
+the real path produces. The Hub runs on SQLite only, so `EventLog.data["run_id"].as_string()`
+compiles to `json_extract`. **It is the codebase's first JSON-path filter.** 4.3(b) and 4.3(d) go
+through the real routes, so a query that silently matched nothing would fail them. `_flush_line`
+is a closure inside `_execute_run`, whose `cmd` parameter (`agent_trigger.py:1963`) is in scope for
+the reason's choice. The join is also self-deduplicating: the rows D6 writes carry `run_id` and
+`tool_use_id` too, so a second result line in one process would not record a refusal twice. The
+exception is an entry whose `tool_use_id` is empty. Every entry measured on 2.1.269 carried one.
+
 ## Decisions
 
 ### D1. Three states, not two
@@ -128,7 +182,8 @@ for every new agent on every permitted machine, which is the ordinary case.
 So the grounds stay exactly as they are, and the verdict's *"second run"* needs two more facts.
 The Hub does not record whether it *gave* a run its server, and `resolve_access_path` depends on
 `hub_client`, which can change between runs. Nor does it record whether the harness got as far as
-its servers at all. An exit code does not say so (round 2, measurement 3). D3 records both.
+its servers at all, or what it then said of the Hub's. An exit code does not say so (round 2,
+measurement 3), and a completed turn does not either (round 3). D3 records both.
 
 ### D3. What counts as a test of the harness
 
@@ -138,28 +193,51 @@ That follows `0096`, `0101` and `0102`, and has the same guard for a missing `ru
 - **`Run.mcp_server_injected`** (Boolean) is written in the `Run(...)` construction
   (`agent_trigger.py:1190`) as `mcp_command is not None`. `mcp_command` is computed earlier in the
   same function (`:1084-1087`), from the access path resolved at `:1000`.
-- **`Run.harness_init_at`** (timestamp) is written once, the first time the Claude read loop
-  (`_flush_line`, `:2140`) parses a line whose `type` is `system` and whose `subtype` is `init`.
-  `ParsedLine` gains a `harness_init: bool` for it. `parse_claude_line` today returns such a line
-  with only its `session_id` (`runner_parsing.py:241`), and no other parser sets the flag, so the
-  column is Claude-only by construction. `Run.session_id` cannot stand in for it, because the
-  constructor seeds it from `resume_session_id` (`:1194`).
+- **`Run.harness_mcp_status`** (a short string) is written once, the first time the Claude read
+  loop (`_flush_line`, `:2140`) parses a line whose `type` is `system` and whose `subtype` is
+  `init` **and** which carries an `mcp_servers` list. It is what that list says of the Hub's
+  server: that entry's `status`, verbatim, or `"absent"` when the list has no entry of that name.
+  `ParsedLine` gains a `harness_mcp_status: Optional[str]` for it. `parse_claude_line` today
+  returns such a line with only its `session_id` (`runner_parsing.py:241`), and no other parser
+  sets the field, so the column is Claude-only by construction. An `init` line with no
+  `mcp_servers` list records nothing, because it says nothing. `Run.session_id` cannot stand in
+  for it, because the constructor seeds it from `resume_session_id` (`:1194`). The server's name
+  becomes one constant in `runner_commands.py`, used by `_build_claude_command`'s `--mcp-config`
+  and imported by `runner_parsing.py`. Neither module imports the other today, so this adds no
+  cycle.
+
+  *(Round 2 specified `Run.harness_init_at`, a timestamp of the `init` line. Round 3 replaced it,
+  because it did not carry the argument made for it. See "What round 3 changed".)*
 
 An earlier run **counts as a test** when all of the following hold:
 
 - the same `project_id` and `agent`;
 - `mcp_server_injected IS TRUE`. NULL means *not recorded*, from before `0103`. Counting it would
   move every upgraded agent into *refuted* on the strength of rows that never measured anything.
-- `harness_init_at IS NOT NULL`, **so the harness got as far as its servers** (round 2). The
-  harness writes `init` after it has dealt with its MCP servers: in A_hub the line lists the
-  servers and leaves the blocked one out. And the adapter announces itself synchronously before it
-  serves (`mcp_server.py:1825-1827`). So on a permitted harness, a server that `init` reports
-  `connected` has already made its announce while the run's credential was live
-  (`agent_auth.py:55` accepts only a `running` run). That leaves one way for a test on a permitted
-  harness to show no report: a lost announce (D9). Measured cases this excludes: an unknown option
-  in the runner's flags (no `init`, server never started), and `--resume` of an unseen session (no
-  `init`, server started 1.2 s before exit, which races the announce). Both were on a harness where
-  the approver works.
+- `harness_mcp_status IS NOT NULL AND harness_mcp_status <> 'connected'`. **The harness got as far
+  as its servers, and did not report the Hub's server started.** The harness writes `init` only
+  after it has dealt with its MCP servers. Round 3 measured this on 2.1.269: it waits for a slow
+  server (8 s, then `connected`), and it waits about 30 s for one that never becomes ready (then
+  `failed`, and it goes on to complete the turn). A server blocked by policy is left out of the
+  list, so it reads `absent`. A server that exits at start reads `failed`. The adapter announces
+  itself synchronously before it serves (`mcp_server.py:1825-1827`), so a server that `init`
+  reports `connected` has already made its announce while the run's credential was live
+  (`agent_auth.py:55` accepts only a `running` run). **Such a run is never a test, whether or not
+  its announce arrived.** Its approver was there to answer.
+
+  What this excludes, all measured on a harness where the approver works:
+
+  - an unknown option in the runner's flags: no `init`, and the server never started;
+  - `--resume` of an unseen session: no `init`, and the server started 1.2 s before exit;
+  - a lost announce: `init` reports `connected`, so the status rule excludes it.
+
+  What it still admits on a permitted harness is a server the harness gave up on (D9).
+
+  Every status other than `connected` counts, not only `absent` and `failed`. The build F299 was
+  driven on is unmeasured, and it may name a blocked server differently. `pending` was not
+  observed, even with `MCP_CONNECTION_NONBLOCKING=true`. On a build that reports it, a server
+  that connected later in the run would have announced then, while the run was live, and earned
+  grounds.
 - `mcp_adapter_online_at IS NULL`;
 - `exit_code IS NOT NULL`, so the harness process existed and exited. A spawn that raised
   (`agent_trigger.py:2050-2056`) and the unexpected-error handler (`:1907`) both set
@@ -173,7 +251,7 @@ An earlier run **counts as a test** when all of the following hold:
 
 **Codex is excluded by construction.** Its app-server path writes a synthetic `exit_code` of 0 or 1
 (`agent_trigger.py:2897-2906`), which would otherwise have passed the exit-code condition. Its
-parser never sets `harness_init`, so a Codex run is never a test. That matters only for an agent
+parser never sets `harness_mcp_status`, so a Codex run is never a test. That matters only for an agent
 re-bound from Codex to Claude, and the flag the test governs is Claude-only anyway.
 
 The read is one `EXISTS` query beside `harness_has_honoured_mcp`, in `launchability.py`. It is made
@@ -310,28 +388,51 @@ requirement is about widening, so D8 stands. The narrowing is the default-postur
 concern, and D11 covers it. R3 should check that D3's `init` condition leaves only the lost announce
 able to cause it.
 
+**R3: it did not.** On 2.1.269 a server the harness gave up on also reads as a test: one that timed
+out after about 30 s, or one that exited at start. Both runs complete, report `init`, and leave no
+announce. The lost announce was itself still a cause. D3 now reads what `init` says of the server,
+not only that `init` arrived. That removes the lost announce and leaves the timeout (D9). A crash is
+admitted too, but it is not a false refutation: its approver was absent as well. D8's conclusion is
+unaffected. The two shapes still allow the same things.
+
 ### D9. Risks, stated rather than fixed
 
-- **A failed announce now costs one turn, not one description.** `mcp_server.py`'s
-  `_announce_adapter_online` is best-effort and suppresses every error (`:1817-1822`). Before this
-  change, a lost announce meant the next run read the HTTP form, which is the docstring's *"which
-  works"*. After it, a lost announce on a permitted harness counts as a test (D3), so the next run
-  gets no approver and its writes are refused. The server is still injected, so that run's own
-  announce restores grounds, and the run after it is whole again. It corrects itself after one bad
-  turn, and the operator is not told.
+- **A server the harness gave up on costs one turn.** On 2.1.269 the harness waits about 30 s for
+  a server to become ready. Then it lists it `failed` and completes the turn (round 3, S_45). That
+  run counts as a test (D3), so the next run gets no approver and its writes are refused. The
+  server is still injected, so if that run's server starts, its announce restores grounds and the
+  run after it is whole again. It corrects itself after one bad turn, and the operator is not told.
+  The real adapter reaches its announce in about 1 s from a warm start (round 3, three runs of
+  0.95 to 0.99 s), and the announce waits at most 10 s (`mcp_server.py:184`). So this needs a start
+  roughly 20 s slower than measured, for example a cold interpreter under an antivirus scan. It is
+  stated, not fixed.
+- **A server that exits at start is a true refutation, not a risk.** The harness lists it `failed`
+  (round 3, S_crash). Its approver was as absent as a blocked one's, so withholding it on the next
+  run is correct. That run completes with its refusals recorded, instead of dying at its first
+  write. If the crash was transient, the next run's announce restores grounds.
+- **A lost announce no longer costs anything new (round 3).** `_announce_adapter_online` is
+  best-effort and suppresses every error (`mcp_server.py:1817-1822`). Round 2's D3 counted a run
+  whose announce was lost as a test, because nothing but the announce told the Hub the server had
+  started. Round 3's D3 reads `connected` from `init`, so that run is not a test. The next run is
+  *untested* and keeps its approver, which is today's behaviour. It is still described the HTTP
+  form, which is the docstring's *"which works"*.
 - **Grounds are permanent (research candidate 3).** An agent that ever had grounds keeps the
   approver after a policy arrives, and on 2.1.269 every later run dies at its first
   approval-needing call. This change
   inherits that unchanged. 1b says *"same signal"*, and a negative signal is a new decision. D-7 of
   today's window files it.
-- **A test on a permitted harness that shows no report.** With D3's `init` condition, the only
-  measured way to get one is D9's first bullet. R1's D3, without that condition, also admitted any
-  harness exit before `init`, and round 2 measured two of those on a permitted harness (an unknown
-  runner flag, and `--resume` of an unseen session).
+- **A test on a permitted harness that shows no report.** With round 3's D3, the only measured way
+  to get one is the first bullet: a server the harness gave up on. R1's D3 also admitted any
+  harness exit before `init`. Round 2 measured two of those on a permitted harness: an unknown
+  runner flag, and `--resume` of an unseen session. Round 2's D3 still admitted the lost announce
+  and the timeout.
 - **The first run in F299's configuration is unchanged.** Every agent on a blocking machine still
   has one *untested* run. On H-2.1.269 it dies at its first approval-needing call. On
   H-2026-09-09 it misattributes, and its refusals are now at least recorded (D6).
 - **The Hub still records no harness build**, so nothing in the product can tell which H it is on.
+  The read loop already receives the build: the `init` line carries `claude_code_version`
+  (`2.1.269` in R2's raw A_hub capture). Recording it belongs to option (a) of the operator
+  question, not to this change.
 
 ### D11. The default-posture requirement states the exception 1b decided (round 2)
 
@@ -361,6 +462,44 @@ containment and capability, and this verdict does not pretend otherwise."* And i
 
 The requirement's other text is kept word for word. The *untested* first run on a blocking harness
 falls under the same exception. It breaches the clause today, and this change does not alter it.
+
+**What round 3 changed in D11.** Round 3 found three defects in R2's paragraph and fixed each. None
+of them changes what 1b decided.
+
+1. **It said the exception's refusals *"are recorded"*, without qualification.** The exception is
+   stated per harness, so it covers three kinds of run:
+   - the *refuted* run, which is this change;
+   - the *untested* first run, which 1b leaves as it is;
+   - an agent with grounds whose harness blocks the server later, which is research candidate 3.
+
+   On H-2.1.269 the second and third die at their first approval-needing call. They write no result
+   line, so D6 records nothing for them. The paragraph now says what is recorded: each refusal the
+   harness reports. The exception scenario is unaffected, because it names only the *refuted* run,
+   and that run completes.
+2. **It asserted that *"no posture gives that run both a workspace check and the ability to
+   work"*.** 1b said only that there **may be** none. Research candidate 2, which today's D-7 files
+   as a finding, measured that `acceptEdits` is confined to the workspace on headless runs, for
+   edits. The requirement would have made the disputed claim normative. The paragraph now gives
+   1b's own reason: the Hub does not substitute a posture that accepts requests without asking,
+   because that trade is the operator's. That reason stands whatever candidate 2 settles.
+3. **Its way out was ambiguous, and its qualified scenario narrowed too far.**
+   - *"state the agent's access path"*: stating the tool-protocol path gives grounds, the approver
+     comes back, and on 2.1.269 the run dies at its first write. The paragraph now names the path
+     that does not use the tool protocol.
+   - *"and that agent's harness starts the Hub's tool server"* dropped, from the *"newly created
+     agent"* scenario, every agent whose runs are given no server. Those agents were never part of
+     the exception. It now reads *"is given no Hub tool server, or its harness starts the one it is
+     given"*.
+
+**Does the exception quietly license the untested first run?** It licenses it openly, and that is
+within 1b. 1b changes only *"the second run"*. Its *"What it does not do"* is about the harness:
+*"On a harness that blocks MCP there may be no posture that gives both containment and
+capability"*. The spec would contradict itself if it excepted the refuted run and not the first run,
+which breaches the same clause today.
+
+The agent with grounds (the third kind) is also covered by the text, and 1b did not decide it. D11
+names it here, so the coverage is not silent. Whether it should keep an absent approver named is
+candidate 3's decision (D9).
 
 **Related, cited rather than modified.** *"Introducing an enforced posture does not change existing
 runs"* says the enforced posture's flags are emitted *"only where the mechanism answering them is

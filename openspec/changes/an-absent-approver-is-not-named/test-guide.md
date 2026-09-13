@@ -76,7 +76,9 @@ starting the Hub's server, so it says nothing about whether this machine allows 
 
 ## 3. Lifting the policy
 
-Go back to the agent from check 1, remove its `--settings` flags, and send the message twice.
+Go back to the agent from check 1 and send the message twice. Its runner's `--settings` flags were
+already removed in check 2. That runner is shared, and the check 1 agent has not run since, so the
+Hub still holds only the old evidence for it.
 
 **Expect the first of the two to be refused the write**, because the Hub still has only the old
 evidence. **Expect the second to write the file**, because the server reported in during the first,

@@ -13,21 +13,24 @@ required (§7).
 seeds `Run` rows the way `trigger_agent_directly` and `_execute_run` write them:
 
 - `mcp_server_injected` is set at construction;
-- `harness_init_at` is set by the read loop, from an `init` line;
+- `harness_mcp_status` is set by the read loop, from an `init` line;
 - `mcp_adapter_online_at` is set by `POST /agent-actions/mcp-adapter-online`, which comes *before*
   that `init` line on a permitted harness (`design.md` D3);
 - `exit_code` and `status` are set at finalize.
 
-Some fixtures describe states the path never produces, and they are not evidence. Three examples: a
+Some fixtures describe states the path never produces, and they are not evidence. Four examples: a
 row with `mcp_adapter_online_at` set and `mcp_server_injected` NULL; a spawn-failure row carrying
-`exit_code`; and a Codex row carrying `harness_init_at`.
+`exit_code`; a Codex row carrying `harness_mcp_status`; and a row with `mcp_adapter_online_at` set
+and `harness_mcp_status` `absent`. A server that announced was started, and a started server is not
+left out of `init`.
 
 ## 1. Record what the Hub gave the run, and whether its harness started
 
 - [ ] 1.1 `hub/hub/db/models.py`: add two nullable columns, with no defaults, beside
   `mcp_adapter_online_at`:
   - `Run.mcp_server_injected: Mapped[Optional[bool]]`;
-  - `Run.harness_init_at: Mapped[Optional[datetime]]` (`UTCDateTime()`).
+  - `Run.harness_mcp_status: Mapped[Optional[str]]` (`String(32)`). This is what the harness's
+    `init` line said of the Hub's server: its `status` verbatim, or `"absent"`.
 
   Each comment says NULL means *not recorded*, and why nothing reads NULL as either answer
   (`design.md` D3).
@@ -42,42 +45,59 @@ row with `mcp_adapter_online_at` set and `mcp_server_injected` NULL; a spawn-fai
   `mcp_server_injected=mcp_command is not None`. Test through `trigger_agent_directly`, not by
   constructing a `Run`: a `claude` agent with `hub_client` unset gets `True`, and one with
   `hub_client: "cli"` gets `False`.
-- [ ] 1.5 `hub/hub/runner_parsing.py`: `ParsedLine.harness_init: bool = False`, set by
-  `parse_claude_line` for a line whose `type` is `system` and whose `subtype` is `init`. Nothing
-  else about that line's handling changes: it still yields no event, and still carries its
-  `session_id`. `agent_trigger.py` `_flush_line` (`:2140`) sets `Run.harness_init_at` the first
-  time `parsed.harness_init` is true, and never overwrites it. Test the parser with the `init` line
-  from `evidence/a-hub-plain-raw-pty.txt`. That is R2's raw PTY capture of A_hub on 2.1.269,
-  escape sequences included, and it can be re-captured with
-  `scripts/drive/t_d3_0913_f299_init_line.py`. Copy it into `hub/tests/` as a fixture. Its line
-  endings may carry an extra `\r` from a Windows text-mode write, which `_flush_line`'s
-  `rstrip("\r")` tolerates. The escapes are what matter. Test `_flush_line` through `_execute_run`,
-  with a stub session replaying that capture **unstripped**. A test fed pre-stripped JSON cannot
-  fail on the thing that could break this in production, which is `strip_ansi_escapes`.
+- [ ] 1.5 `hub/hub/runner_commands.py`: one constant for the server's name (`"agentweave"`), used
+  by `_build_claude_command`'s `--mcp-config`. `hub/hub/runner_parsing.py` imports it; neither
+  module imports the other today. `ParsedLine.harness_mcp_status: Optional[str] = None`, set by
+  `parse_claude_line` for a line whose `type` is `system`, whose `subtype` is `init`, and which
+  carries an `mcp_servers` list. The value is the Hub server's entry's `status` verbatim, or
+  `"absent"` when the list has no such entry. An `init` line without the list leaves it `None`.
+  Nothing else about that line's handling changes: it still yields no event, and still carries its
+  `session_id`. `agent_trigger.py` `_flush_line` (`:2140`) sets `Run.harness_mcp_status` the first
+  time `parsed.harness_mcp_status` is not `None`, and never overwrites it.
+
+  Test the parser with three captured `init` lines, one per value:
+  - `absent`: from `evidence/a-hub-plain-raw-pty.txt`. That is R2's raw PTY capture of A_hub on
+    2.1.269, escape sequences included, and it can be re-captured with
+    `scripts/drive/t_d3_0913_f299_init_line.py`.
+  - `connected` and `failed`: R3's S_0 and S_45 lines, verbatim JSON, in
+    `evidence/r3-harness-results.json` §5.
+
+  Copy them into `hub/tests/` as fixtures. Do not hand-write one. The raw capture's line endings may
+  carry an extra `\r` from a Windows text-mode write, which `_flush_line`'s `rstrip("\r")`
+  tolerates. The escapes are what matter.
+
+  Test `_flush_line` through `_execute_run`, with a stub session replaying the raw capture
+  **unstripped**. A test fed pre-stripped JSON cannot fail on the thing that could break this in
+  production, which is `strip_ansi_escapes`.
 
 ## 2. The third state
 
 - [ ] 2.1 `hub/hub/launchability.py`: add `async def harness_refused_mcp(db, project_id, agent) ->
-  bool`, one `EXISTS` query over D3's six conditions. Its docstring states what it is not: it does
-  not read what the `init` line *says*, it does not outrank grounds, and it is per agent like
+  bool`, one `EXISTS` query over D3's six conditions. Its docstring states what it is not: it
+  reads the `init` line's report only to decide what counts as a test, never to take grounds away
+  (research candidate 3); it does not outrank grounds; and it is per agent like
   `harness_has_honoured_mcp`.
 - [ ] 2.2 Tests in `hub/tests/` for 2.1, one row each, seeded as the path writes them:
   - no rows → `False`;
-  - one injected, `init`-seen, finalized, unreported row, `completed` → `True` (a turn needing no
-    approval, round 2 measurement 2);
+  - one injected, `harness_mcp_status="absent"`, finalized, unreported row, `completed` → `True`
+    (a turn needing no approval, round 2 measurement 2);
   - the same with `failed` and `exit_code=1` → `True` (H-2.1.269's first run, dead at its first
     write);
-  - **injected, `failed`, `exit_code=1`, `harness_init_at` NULL → `False`** (an unknown runner flag,
-    round 2 measurement 3; this is the row R1's D3 got wrong);
+  - `harness_mcp_status="failed"`, `completed`, `exit_code=0` → `True` (round 3's S_45 and S_crash);
+  - **`harness_mcp_status="connected"`, `completed`, `exit_code=0`, unreported → `False`** (a lost
+    announce; this is the row R2's D3 got wrong);
+  - **injected, `failed`, `exit_code=1`, `harness_mcp_status` NULL → `False`** (an unknown runner
+    flag, round 2 measurement 3; this is the row R1's D3 got wrong);
   - `stopped` → `False`;
   - `interrupted` → `False` (crash recovery, `run_reconciliation.py:65`);
   - `running` → `False`;
-  - a spawn failure (`status="failed"`, `exit_code` NULL, `harness_init_at` NULL) → `False`;
+  - a spawn failure (`status="failed"`, `exit_code` NULL, `harness_mcp_status` NULL) → `False`;
   - `mcp_server_injected` NULL → `False`;
   - `mcp_server_injected` False → `False`;
   - another agent's refuting row → `False`;
   - another project's refuting row → `False`.
-  - Mutation-check the `init` row: drop the `harness_init_at` condition, and confirm it goes red.
+  - Mutation-check both bold rows. Drop the `IS NOT NULL` half of the status condition and confirm
+    the NULL row goes red. Drop the `<> 'connected'` half and confirm the `connected` row goes red.
 - [ ] 2.3 `agent_trigger.py:1000-1005`: compute `approver_available`. It is `True` when
   `access_path != "mcp"` (no server, so the flag is never emitted anyway), when `hub_client ==
   "mcp"`, or when `harness_has_honoured_mcp` is true. Otherwise it is `not await
@@ -107,6 +127,9 @@ row with `mcp_adapter_online_at` set and `mcp_server_injected` NULL; a spawn-fai
     finalizes `failed`, `exit_code=1`, never reported (H-2.1.269), the second run does not;
   - (ii-b) after a first run whose stub session emits only `error: unknown option '…'` and exits
     1, the second run **does** name the approver (round 2);
+  - (ii-c) after a first run whose stub session replays R3's S_0 `init` line (`connected`) and a
+    `success` result, exits 0, and whose adapter never reports, the second run **does** name the
+    approver (round 3, a lost announce);
   - (iii) after an adapter report on any run, the approver is named again.
 
   Drive the report through `POST /api/v1/agent-actions/mcp-adapter-online` with that run's
@@ -166,7 +189,7 @@ result.
   agent's runner flags as `--settings …`. That is the R1 method. A managed-settings file would need
   an administrator path on this machine, so say so if it is used instead. Send a turn:
   - Expect run 1, on H-2.1.269, to make a model call, attempt `Write`, and end `failed` with the
-    two harness lines, usage *unavailable*, and `harness_init_at` set.
+    two harness lines, usage *unavailable*, and `harness_mcp_status` = `absent`.
   - Send a second turn. Read its argv from the **live process**, while the run is in flight:
     `Get-CimInstance Win32_Process -Filter "Name='claude.exe'" | Select-Object CommandLine`. The
     Hub neither logs nor stores `cmd`, so there is no other source, and inferring it from behaviour
@@ -175,11 +198,11 @@ result.
   - Screenshot the conversation and the activity. Record what the activity line shows, and say
     that it does not show the path (`design.md` D7), rather than implying it does.
 - [ ] 6.2 **Permitted harness, a fresh agent.** Its first run has the approver and writes a file in
-  its workspace. That is the D2 regression, driven, not only tested. Its adapter reports in, and its
-  second run also has the approver.
+  its workspace. That is the D2 regression, driven, not only tested. Its `harness_mcp_status` is
+  `connected`, its adapter reports in, and its second run also has the approver.
 - [ ] 6.2b **A typo is not a refutation.** A fresh agent on a permitted harness, with
   `--no-such-flag` in its runner's flags. Run 1 fails with `error: unknown option`, and its
-  `harness_init_at` is NULL. Remove the flag. Run 2's live argv **names** the approver, and its write
+  `harness_mcp_status` is NULL. Remove the flag. Run 2's live argv **names** the approver, and its write
   succeeds.
 - [ ] 6.3 **Lifting the policy.** Remove the `--settings` flag from 6.1's agent. The next run
   (*refuted*, so no approver) still has the server injected, the adapter reports in, and the run

@@ -2,7 +2,7 @@
 
 ### Requirement: An approver the harness has been seen not to start is not named
 
-The Hub SHALL NOT name its own approver on a run's command line once an earlier run of the same agent was given the Hub's tool server, had its harness report its own start, and ended without that server reporting in, unless the operator has stated the run's access path or some run of that agent has seen the server report in.
+The Hub SHALL NOT name its own approver on a run's command line once an earlier run of the same agent was given the Hub's tool server, had its harness report its own start without reporting that server started, and ended without that server reporting in, unless the operator has stated the run's access path or some run of that agent has seen the server report in.
 
 An approver that the harness will not start answers nothing. Naming it anyway makes every
 approval-needing call fail in a way the model has, on at least one harness, reported to the operator
@@ -15,12 +15,13 @@ refuse the ordinary first turn of every new agent on every machine where the app
 
 A run counts as that evidence only if all of the following hold. The system recorded that it gave
 that run its server. The harness reported its own start, which it does only after it has dealt
-with its servers. The harness process exited. And the run completed or failed. A harness that exits
-before reporting its start never reached its servers, so it says nothing about them. An unknown
-option on the command line is one way to cause that, on a machine where the server would have
-worked. The following are not evidence either: a run from before that record existed, a spawn that
-never started a process, a stopped run, a run the system lost track of, and a run still in
-progress.
+with its servers, and in that report did not say the Hub's server had started. The harness process
+exited. And the run completed or failed. A harness that exits before reporting its start never
+reached its servers, so it says nothing about them. An unknown option on the command line is one way
+to cause that, on a machine where the server would have worked. A harness that reported the Hub's
+server started had the approver there to answer, even if the server's own report was lost. The
+following are not evidence either: a run from before that record existed, a spawn that never
+started a process, a stopped run, a run the system lost track of, and a run still in progress.
 
 This is how *"only where the mechanism answering them is present"* (*"Introducing an enforced
 posture does not change existing runs"*) is judged for a run that is given the Hub's tool server.
@@ -28,8 +29,8 @@ posture does not change existing runs"*) is judged for a run that is given the H
 Withholding the approver changes nothing else about the run. It keeps the permission mode it would
 otherwise have had, and it is still given the tool server, so that a harness that later starts the
 server earns the approver back without anyone acting. It is not moved to a mode that accepts
-requests without asking. Such a run has every approval-needing call refused, and those refusals are
-recorded (*"A refusal is recorded wherever it is decided"*). With an approver named and absent, the
+requests without asking. Such a run has every approval-needing call refused, and each refusal its
+harness reports is recorded (*"A refusal is recorded wherever it is decided"*). With an approver named and absent, the
 same calls were not allowed either. That is the one case the default posture cannot serve, and
 *"The default posture lets an agent work inside its own workspace"* states it.
 
@@ -42,7 +43,8 @@ same calls were not allowed either. That is the one case the default posture can
 #### Scenario: A run after a completed test without a report is not
 
 - **WHEN** an earlier run of the agent was given the Hub's tool server, its harness reported its own
-  start and exited, it completed or failed, and the server never reported in
+  start without reporting that server started, and exited, it completed or failed, and the server
+  never reported in
 - **AND** no run of the agent has seen the server report in, and the operator has not stated the
   access path
 - **THEN** the next run's command does not name the Hub's approver
@@ -71,13 +73,20 @@ same calls were not allowed either. That is the one case the default posture can
 
 - **WHEN** every earlier run of the agent either predates the record of whether it was given the
   server, was not given the server, never started a harness process, had a harness that exited
-  before reporting its start, was stopped, was lost track of, or is still running
+  before reporting its start, had a harness that reported the Hub's server started, was stopped,
+  was lost track of, or is still running
 - **THEN** the next run's command names the approver wherever its posture asks for one
 
 #### Scenario: A harness that never reached its servers is not evidence
 
 - **WHEN** an agent's only earlier run was given the Hub's tool server, and its harness exited
   before reporting its start because of an option it did not recognise
+- **THEN** the next run's command names the approver wherever its posture asks for one
+
+#### Scenario: A server the harness reported started is not evidence against it
+
+- **WHEN** an agent's only earlier run was given the Hub's tool server, its harness reported that
+  server started, the run completed, and the server's own report never reached the Hub
 - **THEN** the next run's command names the approver wherever its posture asks for one
 
 #### Scenario: Nothing is widened
@@ -170,17 +179,19 @@ Isolation SHALL continue to be carried by the agent's workspace boundary, not by
 permission inside it.
 
 One case is excepted, by the operator's decision rather than by oversight. On a harness that does
-not start the Hub's tool server, the default posture has no answerer, and no posture gives that run
-both a workspace check and the ability to work. The Hub does not substitute a posture that accepts
-requests without asking, because that would remove the check rather than supply an answer. Such a
-run has its approval-needing calls refused, including writes inside its own workspace, and those
-refusals are recorded. The operator can instead state the agent's access path. That choice, and
-what it trades, is theirs to make.
+not start the Hub's tool server, the default posture has no answerer. The Hub does not substitute a
+posture that accepts requests without asking, because what such a run gives up in exchange for
+working is the operator's to trade, not the Hub's. Such a run has its approval-needing calls
+refused, including writes inside its own workspace. Each refusal its harness reports is recorded
+(*"A refusal is recorded wherever it is decided"*). A harness that dies at the first such call
+reports none. The operator can instead set the agent's access path to the one that does not use the
+tool protocol, which gives its runs a posture that accepts file edits without asking. That choice,
+and what it trades, is theirs to make.
 
 #### Scenario: A newly created agent can edit files in its own workspace
 
 - **WHEN** the Hub spawns a non-yolo agent that has been given no permission configuration
-- **AND** that agent's harness starts the Hub's tool server
+- **AND** that agent's runs are given no Hub tool server, or its harness starts the one it is given
 - **AND** that agent writes a file inside its own workspace
 - **THEN** the write succeeds
 - **AND** no approval was required from an operator

@@ -23,9 +23,10 @@
 > to *"approve the request"*, which no surface can show. Answer in one line, with one of:
 >
 > - **(a)** 1b, plus `--permission-prompts none` on the approver-less spawn, gated on a known harness
->   build. The Hub records no build today, so this adds a version probe. Measured once per
->   environment: the model then says *"no approval surface"* (4 of 4), and it still retried through
->   another tool in 1 of those 4.
+>   build. The Hub records no build today. The refuting run's `init` line carries one
+>   (`claude_code_version`), so (a) would record it from there rather than add a probe. A harness
+>   downgraded since would make it stale. Measured once per environment: the model then says *"no
+>   approval surface"* (4 of 4), and it still retried through another tool in 1 of those 4.
 > - **(b)** Hand 1b back. On current builds the run already ends at its first write, with the
 >   harness's own error naming the blocked server. What the operator lacks is a Hub-authored
 >   sentence in place of two raw harness lines, which is the day's research candidate 3 and a new
@@ -60,13 +61,22 @@ grounds, no flag"* would drop the approver from the first turn of every new agen
 agents on harnesses that honour MCP perfectly well. Those turns would run under Claude's `manual`
 with no answerer, and every write would be refused, which breaches the shipped scenario *"A newly
 created agent can edit files in its own workspace"* (`agent-run-sandboxing`). The verdict's
-*"second run"* needs two facts the Hub does not record today: that an earlier run was given the
-server, and that its harness got as far as reporting its own start. Round 2 measured why the second
-fact is needed. On a harness that honours MCP perfectly well, an unknown option in the runner's
-flags makes the harness exit 1 before it starts any server. Without the second fact, that one typo
-would take away a working approver on the next run. This change records both facts. The first is
-the Hub's own record of what it gave. The second is the harness's `init` line, which the Hub's read
-loop already receives and does not keep.
+*"second run"* needs two facts the Hub does not record today:
+
+- that an earlier run was given the server;
+- what that run's harness said of the server when it reported its own start.
+
+Round 2 measured why the second fact is needed. On a harness that honours MCP perfectly well, an
+unknown option in the runner's flags makes the harness exit 1 before it starts any server. Without
+the second fact, that one typo would take away a working approver on the next run.
+
+Round 3 measured why the second fact is *what the harness said*, not only *that it spoke*. A
+harness that gives up on a slow or crashed server says so (`failed`) and completes the turn. A
+harness whose server started says `connected`, whether or not the server's own report reached the
+Hub.
+
+This change records both facts. The first is the Hub's own record of what it gave. The second comes
+from the harness's `init` line, which the Hub's read loop already receives and does not keep.
 
 **Round 1 also found that the verdict, as written, would newly breach a second shipped
 requirement.** A Claude run's refusals reach the Hub's record only through `approve_tool_call`, the
@@ -95,11 +105,14 @@ contradicts itself. This change states the exception in that requirement instead
   - *untested*: no grounds, and no earlier run of this agent was a test of the harness. **The
     approver is named, exactly as today.** The first spawn is the test.
   - *refuted*: no grounds, and at least one earlier run was given the Hub's server, had its harness
-    report its own start, and ended without the adapter reporting in. **The approver is not named.**
+    report its own start without reporting that server `connected`, and ended without the adapter
+    reporting in. **The approver is not named.**
 - **The Hub records two facts per run, in two new nullable columns (migration `0103`):**
   - whether it injected its server (`Run.mcp_server_injected`);
-  - when the harness reported its own start (`Run.harness_init_at`), which is the first
-    `system/init` line the read loop parses.
+  - what the harness said of that server when it reported its own start
+    (`Run.harness_mcp_status`), taken from the first `system/init` line the read loop parses.
+    On 2.1.269 that is `connected`, `failed` (timed out or crashed), or `absent` (blocked by
+    policy).
 
   Rows from before the migration are NULL, and NULL is never counted as a test, so an upgrade moves
   no agent into *refuted*.
@@ -113,9 +126,11 @@ contradicts itself. This change states the exception in that requirement instead
   operator recorded it. That covers every Claude run, with or without an approver. It includes the
   refusals an approver-named run could not record, because its approver never answered or its
   report was lost (`design.md` D6).
-- **The default-posture requirement states its one exception**: a run whose harness has been seen
-  not to start the Hub's server gets no posture that needs no answer, as 1b decided (`design.md`
-  D11).
+- **The default-posture requirement states its one exception**: a run on a harness that does not
+  start the Hub's server is not given a posture that accepts requests without asking, as 1b
+  decided. The exception records only the refusals the harness reports, names the access path that
+  is the operator's way out, and does not claim that no posture could serve such a run
+  (`design.md` D11, round 3).
 - **The operator page states the new case**: a *Workspace only* run on a harness that has been seen
   not to start the Hub's server gets no approver, has every approval-needing call refused, and has
   those refusals recorded.
@@ -150,7 +165,8 @@ permission"* holds, because the flag's removal changes no answer (`design.md` D8
 This change touches `hub/hub/runner_commands.py`, `hub/hub/launchability.py`,
 `hub/hub/api/v1/agent_trigger.py` (the access-path block, the `Run(...)` construction and the
 Claude read loop), `hub/hub/runner_parsing.py`, `hub/hub/db/models.py`, a new migration `0103`,
-`hub/tests/test_migrations.py`, and `docs/reference/permission-postures.md`. Round 2 added no file.
+`hub/tests/test_migrations.py`, and `docs/reference/permission-postures.md`. Rounds 2 and 3 added
+no file.
 `test_project_persistence.py` upgrades to `"head"` and has no literal to bump. **`agent_trigger.py` is also
 F327's review-dispatch path** (`review_dispatch_refusal`, `:452`, called at `:1461`). The regions
 differ, but the rule is *"shares no file"*, so the second loop does not run today.

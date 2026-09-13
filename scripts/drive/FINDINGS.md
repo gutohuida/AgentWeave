@@ -24290,6 +24290,12 @@ a broken approval system."* It is **substantially right, and sharper than it say
 > after each refusal, not in failing to start. Evidence:
 > `openspec/changes/an-absent-approver-is-not-named/evidence/r2-harness-results.json`. **Status
 > unchanged: open.**
+>
+> **Round 3 the same day** (`d4-r3`, `claude` 2.1.269). Nothing above changes. One fact bears on
+> this finding directly: under the policy, the harness's `init` line **leaves the blocked server
+> out** of `mcp_servers`, which is different from how it reports a server that timed out or crashed
+> (`failed`). The change now uses that difference to decide which earlier run counts as evidence
+> against the harness. Evidence: `…/evidence/r3-harness-results.json`. **Status unchanged: open.**
 
 **The configuration this is about is the ordinary one.** Runner `claude`, `hub_client` unset, a
 harness whose company policy blocks MCP servers. The Hub emits `--mcp-config` (which that harness
