@@ -90,17 +90,66 @@ was refused before the change too, but only by accident, and the change's first 
 through. It is here so that a regression shows up as a file you can see.
 
 **On Windows**, also try `echo hi > "..\stray.txt"`, with the double quotes. It was **allowed**
-before this change, and the file landed next to the workspace. It is refused now. Without the
-quotes, `echo hi > ..\stray.txt` in the agent's Bash tool is allowed, and that is correct: Git
-Bash removes the backslash and writes a file called `..stray.txt` *inside* the workspace.
+before this change, and the file landed next to the workspace. It is refused now, as
+`'..\\stray.txt' is outside your workspace` (the reason renders the word with `repr`, so the
+backslash is doubled). Without the quotes, `echo hi > ..\stray.txt` in the agent's Bash tool is
+allowed, and that is correct: Git Bash removes the backslash and writes a file called
+`..stray.txt` *inside* the workspace.
 
-**It has gone wrong if** any of these succeeds and a `stray.txt` appears next to the workspace.
+Then, on Windows, the same escape glued to an option:
+
+> Run `sort -o"..\out.txt" notes.md` with your shell tool.
+
+**You should see** it refused as `'\\out.txt' is outside your workspace`. Before this change it
+was allowed, and `out.txt` appeared next to the workspace (task 6.1, measured).
+
+**Where "next to the workspace" is.** An agent that writes, in a project that is a git repository,
+works in its own worktree, `<project>\.agentweave\worktrees\<agent>`, and that is its workspace.
+So a stray from `..` lands in `<project>\.agentweave\worktrees\`, not beside the project folder.
+That is where the pre-fix drive found both files. Look there.
+
+**It has gone wrong if** any of these succeeds and a `stray.txt` or `out.txt` appears next to the
+workspace.
+
+## 6. A `$HUB_URL` the shell will not expand is not the Hub
+
+These rows were added while the change was being built (`design.md` D11a). The approved design's
+reader would have allowed all four, and the old whole-command regex refused them. They matter only
+to an agent working hard to escape, and they are pinned in the suite. Try them if you want to see
+the rule hold.
+
+> Run `echo hi > '$HUB_URL'/../../x` with your shell tool. (**E20**)
+
+The single quotes make `$HUB_URL` a directory name to the shell, not the Hub's address, so the two
+`..` really do leave the workspace. **You should see** it refused as `'$HUB_URL/../../x' contains a
+variable, '~' or a command substitution that the shell expands when it runs, so where it points
+cannot be checked against your workspace; write a path relative to your workspace instead`.
+`echo hi > \$HUB_URL/../../x` (**E21**) and `echo hi > "\$HUB_URL/../../x"` (**E22**) get the same
+answer.
+
+The reason says the word holds an expansion, and here it does not: the `$` is literal. The answer
+is right and the reason is about the rule, not the word. That is a recorded residual (D11a item 1),
+not a defect to file.
+
+> Through the agent's **PowerShell** tool, run `echo hi > $HUB_URL/x`. (**H17**)
+
+PowerShell does not read a bare `$HUB_URL` as the environment variable; only `$env:HUB_URL` is. So
+this is not the Hub's address, and **you should see** the same *cannot be checked* refusal. Under
+the Bash tool, `$HUB_URL` and `${HUB_URL}` are the references.
+
+**It has gone wrong if** any of the four is allowed.
 
 ## What this does not show
 
 - **That the agent cannot reach the network.** It can: `curl example.com` without a path, `pip
   install`, `git push`, and the fetch tool all still work under this posture. That is recorded, not
-  hidden (`design.md` D3 and D7).
+  hidden (`design.md` D3 and D7). One of these is new: `curl -s example.com/x`, an address with a
+  path and no scheme, was refused before (`'/x'`) and is allowed now. That is D2's row N3, the one
+  widening, and whether to keep it is your decision, task 7.3.
+- **Anything on Linux or macOS through a live run.** Both drives were on Windows. The POSIX half
+  (F331, `curl -T x file:///…`) is proven by the suite on CI's Linux job, not by a drive. On POSIX,
+  bash's `$'..\x2fstray.txt'` still writes outside the workspace. That is **F332**, and this change
+  does not close it.
 - **Anything about Codex agents.** On Codex, "Workspace only" decides a command by the directory it
   runs in. That is recorded as F322 and not changed here.
 - **`cd ..` followed by a write.** It is still allowed, as before. The approver does not track the

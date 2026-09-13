@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 8,
+  "iteration": 9,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "u8-close",
-  "next_action": "Queue item u8-close: a-url-is-not-a-path S9 + S10. Read the u8-close queue detail in full first. 9.1: in scripts/drive/FINDINGS.md set F300, F312, F321, F323 each 'fixed <sha>' (the sha of S2's feat commit 612b9c9, plus the drive commit that proved it), naming the task and quoting u7's 6.2 evidence (log iteration 8 / tasks.md 6.2 italic note); F331 fixed with the CI Linux job's evidence if a green CI Linux run on this branch covers 612b9c9+ (check gh run list for the branch; if none green, say tested-not-driven on POSIX and cite the WSL run from u2). Dated in-place corrections to F312 and F300 per the detail, citing F331 (URL claims hold on Windows only pre-fix). 9.2: F322, F299, F301, F332 stay OPEN - say so in the commit. 9.3: do NOT edit DECISIONS.md; D6's correction to 1c/1d goes to decisions_for_user unless the review page carried it. 9.4: openspec validate --strict, compare the MODIFIED block against main agent-capability-plane (every scenario survives, F301 clause verbatim), then archive via the openspec-archive-change skill. 10.1: test guide true to what shipped, mentioning E20-E22 and H17 as D11a rows. S7 stays open (human-only). Then run scripts/classify_findings.py and check exactly F300/F312/F321/F323/F331 moved OPEN->RESOLVED. Commit, push. After u8: r1-pin only if >= 3h remain before stop_at (07:00+01:00), else w-final.",
+  "current": "r1-pin",
+  "next_action": "Queue item r1-pin: a-refused-review-leaves-nothing-behind S1. Read the r1-pin queue detail and openspec/changes/a-refused-review-leaves-nothing-behind/tasks.md S1 (1.1-1.9) and design in full first. Write hub/tests/test_a_refused_review_leaves_nothing_behind.py against the UNMODIFIED tree (no product edit). An xfail marks a WHOLE test, never one assertion; pin + xfail pairs exactly as each task says. 1.6's mock raises RuntimeError('test guard') past its expected call count. 1.8a builds the divergence through the product (bind_run_to_task + evaluate_run_end), not by insert. 1.9: every xfail xfails (strict), every pin passes; otherwise the test is wrong - re-measure with testbed/scratch/r1f319/test_zz_r1f319_scratch.py. Never touch hub/hub/mcp_server.py, test_permission_approver.py, docs/reference/permission-postures.md. Run the new file + baseline_chunk from hub/ under py -3.11. Tick 1.1-1.9 with actuals, log, commit S1 alone (green), push. Then r2-rollback.",
   "queue": [
     {
       "id": "compose",
@@ -72,9 +72,9 @@
     },
     {
       "id": "u8-close",
-      "status": "open",
+      "status": "done",
       "title": "a-url-is-not-a-path S9 + S10: four Status lines, corrections, archive",
-      "detail": "9.1 F300, F312, F321, F323 each fixed <sha>, naming the task and quoting 6.2's evidence; dated in-place corrections to F312 ('No agent on the default posture can make any network request...' - curl example.com with no / was always allowed, D2 N4) and F300 ('any URL in any shell command is denied'). 9.2 F322, F299, F301 stay open - say so in the commit. 9.3 do NOT edit DECISIONS.md; put D6's correction to 1c/1d in decisions_for_user unless tonight's review page carried it. 9.4 validate --strict, compare MODIFIED block with main agent-capability-plane (every scenario survives, F301 clause verbatim), archive via openspec-archive-change. 10.1 test-guide true to what shipped. S7 (7.1-7.3) is human-only and stays open (precedent: archived changes 2026-08-21-task-dependencies, 2026-08-24-a-reviewer-can-see-the-work). Re-run scripts/classify_findings.py after and check exactly F300/F312/F321/F323 moved OPEN->RESOLVED. After this item: start a-refused-review-leaves-nothing-behind ONLY if at least 3 hours remain before stop_at (operator's rule); otherwise go to w-final. FROM u1: F331 (A) is also closed by this change - set it fixed <sha> with the CI Linux job's evidence (the F331/N7/R10 rows passing on Linux) plus, if the drive Hub cannot be Linux, say the fix is tested-not-driven on POSIX. classify_findings.py should then show F300/F312/F321/F323/F331 OPEN->RESOLVED. F300/F312's in-place corrections cite F331: their URL claims hold on Windows only. FROM u2: F332 (A, POSIX ANSI-C quoting) stays OPEN - it is not this change's; say so in the commit beside F322/F299/F301. The test guide should mention E20-E22 and H17 as D11a rows."
+      "detail": "DONE iteration 9. F300/F312/F321/F323 fixed 612b9c9 driven f492261, each quoting its 6.2 ask and 6.1 pre-fix run; F331 fixed 612b9c9 tested-not-driven on POSIX (CI hub-test ubuntu-24.04: rows XFAIL at 00a5569 run 34722726736, PASSED at 612b9c9 run 34723993806). Dated corrections in F312 and F300 (N4, F331; F300's candidate is s://, not //). Index paragraph revised: open A = F299 F301 F319 F325 F332. classify_findings: exactly the five moved OPEN->RESOLVED, B/C/D/? identical. F322/F299/F301/F332 stay open. DECISIONS.md untouched; review page carried 1c/1d (html:200-203). Archived as openspec/changes/archive/2026-09-13-a-url-is-not-a-path (44/47, S7 human-only open); 4 blocks verbatim in main; validate --specs --strict 43/43. Test guide checked command-by-command against shipped _decide; D11a rows E20-E22/H17 added. APPROVALS BUILT note added."
     },
     {
       "id": "r1-pin",
@@ -142,7 +142,8 @@
     "Classifier CONFLICT verdicts at compose: F52 (A), F292 (B). Hand-check them.",
     "CI reds on this branch today are the two known intermittents (F292 at 34711633220, F314 at 34716889283). Both are open; F314 is B, F292 is B/CONFLICT.",
     "F332 (A) filed in u2-reader: on POSIX, bash's ANSI-C quoting ($'..\\x2fx') writes a traversal no reader of the command text sees; measured writing outside under WSL bash 5.2.21. No proposal. Repair sketched in the finding (decode $'...' in the lexer, own rows).",
-    "Lost firing 2026-09-13 00:20-00:31: claude -p killed a backgrounded whole-suite run 600s after the turn ended ('Background tasks still running after 600s; terminating. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0'). Setting that variable in the driver's environment would remove the trap; not done - driver configuration is the operator's."
+    "Lost firing 2026-09-13 00:20-00:31: claude -p killed a backgrounded whole-suite run 600s after the turn ended ('Background tasks still running after 600s; terminating. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0'). Setting that variable in the driver's environment would remove the trap; not done - driver configuration is the operator's.",
+    "a-url-is-not-a-path archived 2026-09-13 (night u8-close). Human-only S7 open: 7.1 refusal legibility in the served UI, 7.2 D5 wording vs the one observed Haiku turn (stopped, asked in prose not ask_user, named WebFetch), 7.3 N3 and /dev/null (X4) for DECISIONS.md. The PowerShell tool_name was never exercised in either drive (D10 item 5 half-unverified)."
   ],
   "decisions_for_user": [
     "a-url-is-not-a-path's implementation departs from R2's reader in four places, recorded in design D11a. One closes an escape the approved design would have opened (E20-E22: a quoted '$HUB_URL' read as a reference). None widens an answer beyond D2's table. Worth a look on the next review page; no action needed unless you disagree."

@@ -462,6 +462,23 @@ refused reviewer holding the task. It has no proposal. Its worst leg, a refusal 
 is staged, has not been verified, and if that leg holds the finding is an A. That makes it the day
 window's first spec-loop candidate, not a night build.
 
+**Revised 2026-09-13 (night window, `u8-close`): the open severity-A set is five: `F299`, `F301`,
+`F319`, `F325`, `F332`.** Computed with `py -3.11 scripts/classify_findings.py` after the edit.
+Before the edit it printed ten. Six of those ten were filed after the paragraph above:
+- `F319`, raised to A;
+- `F321`, `F323`, `F325`, `F331` and `F332`, filed as A.
+
+Five leave the set together, closed by one change, `a-url-is-not-a-path` (fix `612b9c9`, driven
+`f492261`): `F300`, `F312`, `F321`, `F323` and `F331`. Each entry carries its own Status line and
+its own evidence. `F331` is the POSIX half. It is tested on CI's Linux job and not driven, and its
+entry says so. `F312` and `F300` carry dated corrections: their URL claims held on Windows only.
+`F332` is the same class of POSIX escape and is **not** closed by that change.
+
+**Written under `F313`'s rule, and the rule held.** Every verdict was captured before a word here
+was edited and recomputed after. The requirement was that exactly those five move from `OPEN` to
+`RESOLVED`, and nothing else. Stripped of line offsets, the B, C, D and `?` verdict lists match
+across the two runs. The only severity-A `CONFLICT` is still `F52`.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -24274,7 +24291,17 @@ claude -p --model haiku --permission-mode manual \
 
 ## F300 (A) — the Hub's own workspace approver denies every shell command containing a URL, including the one its own notice instructs
 
-**Status:** open. Driven 2026-09-09 by the night window, tasks §6.3/§6.4 of
+**Status:** fixed `612b9c9` by `a-url-is-not-a-path` (tasks §2: the reader, and D4's run's-own-Hub
+test), driven `f492261` (tasks §6.2, ask 1; night 2026-09-12, Windows, Haiku, default posture, Hub
+from source at `39b6be3`). The instructed request now goes through: *"Ask 1 (`run-cb819f7613b4`)
+created `task-03dd81bf6fec` with `created_by_run_id` = `run-cb819f7613b4`, and no
+`permission_denied` for that run."* Its tool input was
+`curl -s -X POST "$HUB_URL/api/v1/agent-actions/tasks" -H "Authorization: Bearer $AW_RUN_TOKEN" …`.
+The pre-fix tree, driven the same night (§6.1, `run-826a458f6bc6`), still answered
+`Denied: '/api/v1/agent-actions/tasks' is outside your workspace.` Only the run's own Hub is
+recognised. Any other address is refused as a network address, as the verdict required (F312).
+
+Filed: driven 2026-09-09 by the night window, tasks §6.3/§6.4 of
 `openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, against the trial Hub
 on `127.0.0.1:8010` running from this checkout. Fixture `proj-08e61dec0192` at
 `C:\Users\huida\aw-c2verify`, agent `mcpagent`, runner `claude` / `claude-haiku-4-5-20251001`.
@@ -24308,6 +24335,19 @@ the posture this repository chose as its default (`DEFAULT_CLAUDE_PERMISSION_MOD
 `runner_commands.py:63`) cannot `curl` anything at all, and is told the reason in the vocabulary of
 the filesystem — which is why the model in the drive concluded *"the endpoint path is being blocked
 as outside the workspace security boundary"* and stopped.
+
+> **Corrected 2026-09-13** (night window, `a-url-is-not-a-path` §9.1). *"Any URL in any shell
+> command is denied"* was too wide in three ways, and the candidate was misread.
+> - A URL with no `/` in it was always allowed: `curl -s example.com` gives the regex nothing to
+>   match (`design.md` D2, row N4).
+> - On POSIX, a scheme URL was **allowed**, not denied. The regex's drive-letter arm matches
+>   `s://example.com/x`, which is relative there, so it resolved inside the workspace (**F331**,
+>   measured under WSL). The sentence held on Windows only.
+> - The candidate for `https://example.com/x` is `s://example.com/x`, not `//example.com/x`: the
+>   drive-letter arm matches first (F312's table, first row).
+>
+> The instructed request, `$HUB_URL/…`, was refused on both platforms, because its `/api/…` is
+> absolute everywhere. So this finding's own claim stands as measured.
 
 **Why the change did not find this and the tests could not.** `_decide` is tested with filesystem
 paths, which is what its docstring says it is for. Nothing tested it with a URL, because until §1 of
@@ -25146,7 +25186,18 @@ checked against it.
 
 ## F312 (A) — the default posture forbids every network request a shell command can make, and calls it a filesystem escape
 
-**Status:** open — filed 2026-09-10 by a RESUME session, **measured**, not inferred. Found while
+**Status:** fixed `612b9c9` by `a-url-is-not-a-path` (tasks §2: rule 1's network rule and D5's
+network text), driven `f492261` (tasks §6.2, ask 3; night 2026-09-12, Windows, Haiku, default
+posture). It is fixed by giving the refusal its true reason, not by permitting egress. Measured
+on `run-f729c2de5139`, whose tool input was `curl -s https://example.com/`: *"Ask 3 was answered
+`Denied: 'https://example.com/' is a network address. Under this posture a shell command may name
+only this run's own Hub ($HUB_URL); if the task needs another address, ask the operator with
+ask_user.`"* The `permission_denied` row `evt-12f9a4705b4a` carries the same reason, with
+`tool_name='Bash'`. Pre-fix (§6.1, `run-bb7c55057449`), the same ask was
+refused as `'s://example.com/' is outside your workspace`. The one widening, N3
+(`curl -s example.com/x`, now allowed), is the operator's open item in tasks §7.3.
+
+Filed 2026-09-10 by a RESUME session, **measured**, not inferred. Found while
 reading F299/F300/F301 together for an operator verdict; it is the general form of F300's mechanism
 and is deliberately **not** folded into it (see *"Why this is not F300"* below).
 
@@ -25154,6 +25205,17 @@ and is deliberately **not** folded into it (see *"Why this is not F300"* below).
 the posture this repository chose as its default and the one every ordinary run gets — a `claude`
 run cannot make **any** network request from a shell command. Not `curl`, not `pip install` from a
 URL, not `gh api`, not fetching a schema. And the reason it is given names the filesystem.
+
+> **Corrected 2026-09-13** (night window, `a-url-is-not-a-path` §9.1). *"Cannot make **any**
+> network request from a shell command"* was never true.
+> - `curl -s example.com`, which has no `/`, gives the regex nothing to match, and it was always
+>   allowed (`design.md` D2, row N4). So were `python -c` requests (this finding's own last row).
+> - On POSIX, every scheme URL in this finding's table was **allowed**. The `s://…` candidate is
+>   relative there, and it resolves inside the workspace (**F331**, measured under WSL). The
+>   Docker deployment and CI are Linux.
+>
+> So the claim held on Windows only, and only for an address written with a `/` or a scheme.
+> What stands is the defect this finding names: a refusal given for a false, filesystem reason.
 
 **The mechanism is one regex doing a job it was never given.** `_ABSOLUTE_PATH_RE`
 (`hub/hub/mcp_server.py:936`) reads absolute-looking paths out of a shell command's text so `_decide`
@@ -25915,7 +25977,14 @@ next conversation's entries in the same pass.
 
 ## F321 (A) — under the default posture, a shell command naming a file in a subdirectory of its own workspace is refused as outside the workspace
 
-**Status:** open. Filed 2026-09-12 by the day window's D-2, while writing R1 of
+**Status:** fixed `612b9c9` by `a-url-is-not-a-path` (tasks §2: the reader, rule 5, which joins
+a relative word to the workspace), driven `f492261` (tasks §6.2, ask 2; night 2026-09-12, Windows,
+Haiku, default posture). Measured: *"Ask 2 (`run-ec291fb33231`) returned `hello from sub`"*, for
+the tool input `python sub/hello.py`. The pre-fix tree, driven the same night (§6.1,
+`run-32066fa85347`), answered `Denied: '/hello.py' is outside your workspace.` The `Content-Type:
+application/json` header (row 5 below) is H1's, and ask 1 carried it through.
+
+Filed 2026-09-12 by the day window's D-2, while writing R1 of
 `openspec/changes/a-url-is-not-a-path`, which proposes to close it along with F300 and F312. It is
 **measured live**, not inferred.
 
@@ -26035,7 +26104,20 @@ exists.
 
 ## F323 (A) — on Windows, a traversal written in double quotes passes the default posture and writes outside the workspace
 
-**Status:** open. Filed 2026-09-12 by the day window's D-3, while writing R2 of
+**Status:** fixed `612b9c9` by `a-url-is-not-a-path` (tasks §2: the Bash tool's command is lexed
+as bash lexes it, so a `\` inside double quotes survives and is read as a Windows separator; and
+rule 6's backstop opens a candidate at a bare `\`, `design.md` R3), driven `f492261`
+(tasks §6.2, asks 4 and 5; night 2026-09-12, Windows, Haiku, default posture). Measured:
+*"Ask 4 (`run-7d9fd8579e1c`) was answered `Denied: '..\\stray.txt' is outside your workspace.`
+Ask 5 (`run-e1831f34f07d`) was answered `Denied: '\\out.txt' is outside your workspace.` No
+`stray.txt` or `out.txt` exists anywhere under the fixture, `.agentweave/worktrees/` included, or
+beside it."* The tool inputs were exactly `echo hi > "..\stray.txt"` and
+`sort -o"..\out.txt" notes.md`. The pre-fix tree, driven the same night (§6.1), **allowed** both
+(`run-c264a82f2819`, `run-7d8b1603f75b`), and wrote `stray.txt` and `out.txt` into
+`<fixture>\.agentweave\worktrees\`, the parent of the agent's workspace. The PowerShell tool's
+dialect (X1c) is tested, not driven.
+
+Filed 2026-09-12 by the day window's D-3, while writing R2 of
 `openspec/changes/a-url-is-not-a-path`, which now proposes to close it (`design.md` D1 and D2, row
 X1b). It is **measured live**, not inferred.
 
@@ -26357,7 +26439,21 @@ already chose to drop. Nothing is lost that was wanted.
 
 ## F331 (A) — on POSIX, the default posture allows any scheme URL in a shell command, and `curl -T x file:///…` writes outside the workspace
 
-**Status:** open. Filed 2026-09-12 by the night window, while pinning `a-url-is-not-a-path` §1 (queue
+**Status:** fixed `612b9c9` by `a-url-is-not-a-path` (tasks §2: rule 1 judges a `file:` URL's
+path as a path, and every other scheme under the network rule). **Tested on Linux, not driven
+on POSIX.** Both of the change's drives were on Windows. The evidence is CI's `hub-test` job on
+`ubuntu-24.04`:
+- **Pre-fix.** At `00a5569`, the pin, before §2, run `34722726736` reported
+  `test_the_decided_table[F331]`, `[N7]`, `[R10]` and `[N1]` **XFAIL**, each strict. That job's one
+  error was F292's `database is locked`, in `test_reviewer_is_not_the_author.py`.
+- **Fixed.** At `612b9c9`, run `34723993806` reported `[F331]`, `[N7]`, `[R10]`, `[N1]`, `[N2]`,
+  `[H5]`, `[H6]`, `[H7]`, `[H13]` and `[H14]` **PASSED**, with no xfail left in the file.
+  The job summary was `4187 passed, 18 skipped`.
+
+The Windows drive (`f492261`, §6.2 ask 3) shows the network rule's refusal text end to end. That
+it fires the same way on a POSIX host through a live run is inferred from the table, not driven.
+
+Filed 2026-09-12 by the night window, while pinning `a-url-is-not-a-path` §1 (queue
 item `u1-pin`). **Measured on Linux, not through a live run.** `_decide` was called directly, from
 `hub/hub/mcp_server.py` at `c12a7d3`, under WSL Ubuntu with Python 3.12.3. curl was run in the
 same shell.

@@ -111,6 +111,34 @@ about 5.7 of 8 hours at last night's pace, and only if both drives go cleanly.
 If the window ends mid-change, the next night resumes it, and the day window's drain count sees
 it and runs one spec loop instead of two.
 
+**BUILT — `a-url-is-not-a-path`, written by the FIX window at close-out, 2026-09-13, not by the
+operator.** **44 of 47 tasks are ticked** with actuals. That is the 46 approved plus 5.17, which
+S2 added for D11a's sentinel. The three left open are §7.1–7.3, which are human-only (see below).
+- **Commits.** Fix `612b9c9`. Pin `00a5569`: D2's table ran against the unmodified `_decide` with
+  strict xfails, so the fix is seen to flip them.
+- **Mutations.** Seventeen, each killed by the row its task names.
+- **Gate.** The whole Hub suite gave 4194 passed, 0 failed. CI's lint set is clean.
+- **Four findings, verified as four, plus a fifth.** `F300`, `F312`, `F321` and `F323` each carry
+  their own `fixed 612b9c9` line and their own quoted §6.2 evidence. `F331` (A, POSIX) was filed
+  by this window at §1. It is closed by the same fix and **tested, not driven**: CI's Linux job
+  turned its rows from XFAIL at `00a5569` to PASSED at `612b9c9`. `F322`, `F299`, `F301` and `F332`
+  stay open.
+- **`tool_name`, as the row demanded.** All six `permission_denied` rows across both drives are
+  `tool_name='Bash'`. The PowerShell name was never exercised.
+- **Both Windows escapes, driven on both trees.** Asks 4 and 5 were allowed pre-fix (`00a5569` in a
+  worktree), and `stray.txt` and `out.txt` were written into `.agentweave\worktrees\`. On the fixed
+  tree (`39b6be3`) both were refused, and nothing was written.
+
+The deltas were synced into `agent-capability-plane` (1 MODIFIED, whose scenarios and F301 clause
+are byte-identical) and `agent-run-sandboxing` (3 ADDED). Each block is verbatim against the delta,
+by script, and `validate --specs --strict` passes 43/43. The change is archived as
+`2026-09-13-a-url-is-not-a-path`.
+
+**Still yours:** §7.1, whether the refusal reads in the served UI. §7.2, whether D5's wording is the
+lever it needs to be. The one Haiku turn stopped and asked in prose, not through `ask_user`, and
+named `WebFetch` without calling it. §7.3, N3 and `/dev/null`, to decide in `DECISIONS.md`. And D11a's four
+departures from R2's reader.
+
 ---
 
 ## 2026-09-11

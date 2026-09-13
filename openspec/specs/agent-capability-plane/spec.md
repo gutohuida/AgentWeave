@@ -194,12 +194,16 @@ not try, and the operator saw a turn that declined to do reachable work for a st
 false.
 
 **Told is not the same as able, and only the first is required here.** Driven 2026-09-09, no
-permission posture on a Claude harness lets such a run make the request under its own power: the
-default `workspace` posture reads a URL's path out of the shell command and refuses it as outside
+permission posture on a Claude harness let such a run make the request under its own power: the
+default `workspace` posture read a URL's path out of the shell command and refused it as outside
 the workspace (F300), and the `cli` path's `acceptEdits` has no approver to overrule a harness that
-statically refuses an interpolated credential (F301). The plane is genuinely reachable from that
-process environment — the MCP adapter reaches it from exactly there — so the notice is true, and
-what it asks for cannot yet be carried out by the agent's own tools.
+statically refuses an interpolated credential (F301). The first of those no longer holds where the
+`workspace` posture's approver runs. A run is told this HTTP form on its first turn, before the
+system has grounds to describe MCP, while that posture is deciding its shell commands, and a shell
+command naming the run's own Hub address is now allowed there (`agent-run-sandboxing`, *"A network
+address in a shell command is decided as a network address"*). The plane is genuinely reachable
+from that process environment — the MCP adapter reaches it from exactly there — so the notice is
+true, and on the `cli` path what it asks for still cannot be carried out by the agent's own tools.
 
 This is the deployment the equal-capability requirement was written for: MCP forbidden by policy,
 ordinary local API calls permitted. Capability that exists and is unreachable because it was never

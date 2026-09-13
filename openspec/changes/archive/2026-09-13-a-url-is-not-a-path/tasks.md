@@ -398,22 +398,49 @@ and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010
 
 ## 9. Close it out
 
-- [ ] 9.1 Set `F300`, `F312`, `F321` and `F323` to `fixed <sha>` in `scripts/drive/FINDINGS.md`, each
+- [x] 9.1 Set `F300`, `F312`, `F321` and `F323` to `fixed <sha>` in `scripts/drive/FINDINGS.md`, each
   naming the task that closed it and quoting §6.2's evidence. In `F312`, correct in place, in a
   dated block, the claim *"No agent on the default posture can make any network request from a
   shell command"*: `curl example.com` (no `/`) was always allowed (D2 N4). In `F300`, correct
   *"any URL in any shell command is denied"* the same way.
-- [ ] 9.2 `F322` stays **open**, and so do `F299` and `F301`. Say so in the close-out commit, so
+  *Done (night 2026-09-13, `u8-close`). Each of the four is `fixed 612b9c9`, driven `f492261`, and
+  names its §2 mechanism and its §6.2 ask, quoted. `F331` is closed as well, with CI's Linux
+  evidence. That is run `34723993806` at `612b9c9`: `[F331]`, `[N7]`, `[R10]`, `[N1]`, `[N2]`,
+  `[H5]`–`[H7]`, `[H13]` and `[H14]` PASSED, where run `34722726736` at `00a5569` had them XFAIL.
+  It is labelled tested, not driven, on POSIX. The corrections to `F300` and `F312` are dated
+  2026-09-13. They cite N4, and they cite F331: the claims held on Windows only. `F300`'s
+  candidate was also misstated as `//example.com/x`; it is `s://example.com/x`.
+  `classify_findings.py`, before and after: exactly `F300`, `F312`, `F321`, `F323` and `F331`
+  moved from OPEN to RESOLVED. The open severity-A count went from 10 to 5. Stripped of line
+  offsets, the B, C, D and `?` lists are identical. The index paragraph was revised to match.*
+- [x] 9.2 `F322` stays **open**, and so do `F299` and `F301`. Say so in the close-out commit, so
   that nobody reads this change as closing them.
-- [ ] 9.3 Do **not** edit `spec-queue/DECISIONS.md`. D6's correction to 1c/1d is the operator's to
+  *Done. The commit says so, for `F332` too, and the classifier still prints all four as OPEN.*
+- [x] 9.3 Do **not** edit `spec-queue/DECISIONS.md`. D6's correction to 1c/1d is the operator's to
   record. If the review page for the night has not already carried it, put it in
   `decisions_for_user`.
-- [ ] 9.4 `openspec validate --strict a-url-is-not-a-path`, then archive with the
+  *Done. `DECISIONS.md` is not touched. The review page `spec-queue/review/review-2026-09-12.html`
+  already carries the correction, at lines 200–203 (*"`DECISIONS.md` 1c/1d rest on a measurement
+  that is false"*), and `APPROVALS.md` 2026-09-12 records it among the items that want no row. So
+  nothing goes to `decisions_for_user`.*
+- [x] 9.4 `openspec validate --strict a-url-is-not-a-path`, then archive with the
   `openspec-archive-change` skill. Before syncing, compare the MODIFIED block with the main
   `agent-capability-plane` block. Every scenario must survive, and the F301 clause must be
   verbatim.
+  *Done. `validate --strict` reports valid. The comparison was done by script, against main as it
+  was before the sync. The only hunk is the *"Told is not the same as able"* paragraph. All three
+  scenarios are byte-identical. The F301 clause, *"the `cli` path's `acceptEdits` has no approver
+  to overrule a harness that statically refuses an interpolated credential (F301)"*, is verbatim.
+  `openspec archive` then applied the deltas.*
 
 ## 10. User test guide
 
-- [ ] 10.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
+- [x] 10.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
   shipped, and correct it if D5's wording changes.
+  *Done. D5's wording did not change. Every command in the guide was run through the shipped
+  `_decide` (Windows, `612b9c9`+), and each answer and reason matches what the guide states. Added:
+  - where a stray lands for a worktree agent (`.agentweave\worktrees\`, measured in §6.1);
+  - the glued-option ask (R3);
+  - a section for D11a's rows E20–E22 and H17;
+  - N3 as the one widening, pointing at 7.3;
+  - the POSIX limits: F331 is tested, not driven, and F332 is open.*
