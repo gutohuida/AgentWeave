@@ -27568,7 +27568,7 @@ below the breakpoint would return that height to the conversation.
 
 ## F351 (A) — the scheduler's job store shares the SQLite file and is driven synchronously on the event loop, so one lock collision loses a new job — or stops every job for good
 
-**Status:** open, root cause reproduced. Reported by the operator 2026-09-13: *"An agent created a
+**Status:** fixed — the job store is APScheduler's `MemoryJobStore` (`JobScheduler.start`), and driven. Reported by the operator 2026-09-13: *"An agent created a
 flow with a loop it should fire every 5 minutes but it didn't fire at all. I had to manually run
 it."*
 
@@ -27605,13 +27605,31 @@ every job** until something else calls `wakeup()`.
 | `AsyncIOScheduler` + `SQLAlchemyJobStore`, 2 s interval, one writer across one firing | fired **once**, then `Exception in callback AsyncIOScheduler.wakeup` — never again in 20 s |
 | same with `MemoryJobStore` | fired every 2 s, 10/10 |
 
-**Proposed repair, not yet built.** Replace the SQLAlchemy job store with APScheduler's
+**The repair.** Replace the SQLAlchemy job store with APScheduler's
 `MemoryJobStore`. The persistent store is redundant: `ai_jobs` is already the source of truth and
 `JobScheduler.start` re-registers every enabled job from it at startup, so nothing is lost but
 APScheduler's own catch-up of a firing missed while the Hub was down (≤ `misfire_grace_time`, 60 s).
 It takes every scheduler read and write off the database, so neither half can recur, and removes
 `_get_sync_engine` with it. No test depends on `apscheduler_jobs`.
 
-**Workaround meanwhile:** restarting the Hub registers the job (`start()` runs before any agent turn
-can contend) — at the cost of the in-flight run — but leaves the scheduler exposed to the second
-half.
+**Pinned** by `hub/tests/test_scheduler_store_is_in_memory.py`, which drives the real
+`JobScheduler.start()` against the suite's file-backed database with a real concurrent writer — the
+stand-in in `test_job_reaches_the_scheduler.py` takes no lock, which is how this got past it. With
+the old store put back, the lock test fails *"the job never reached the scheduler"* and the store
+test fails; with the fix, registration under the held lock takes < 1 s.
+
+**Driven** on the trial Hub (fixed code, stdout captured): Haiku `mcpagent`, mid-turn
+(`run-666b110563c2`), called `create_loop` for an every-minute loop. Job row → `job_created` event:
+**0.05 s** (the operator's Hub: 6.3 s). Scheduled firings at **17:37:00, 17:38:00, 17:39:00**, each a
+completed turn; nothing matching `Failed to add job` / `database is locked` in the Hub's log.
+Stopping the loop at 17:39:29 unregistered it — no firing at 17:40:00. Test project settings
+restored afterwards.
+
+**On the operator's Hub:** the job registers on the next restart, which also loads this fix.
+
+**Also seen:** one run of the job/loop/flow/scheduler subset had a single failure,
+`test_flow_holds_the_loop_requirements.py::test_one_turn_finishing_answers_for_itself_and_not_for_its_siblings`;
+it passed alone four times and in a full re-run of the subset (455 passed). Its output was not
+captured, so it is recorded as an intermittent rather than classified. The conftest's own note that
+"a test that leaves a live `JobScheduler`" can hold a connection into the next test's reset referred
+to the database store this removes; whether that thins the F292 flake is not measured.

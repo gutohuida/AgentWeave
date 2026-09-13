@@ -12,6 +12,12 @@ time; the same loop without them registered fine, because seeding the queue is w
 session mid-transaction. So the fact under test is not "the scheduler was called" — it always was —
 but **the state the session was in when it was called**, which is the only thing that decides
 whether the store can write.
+
+**What this file cannot see (F351, 2026-09-13).** The scheduler here is a recording stand-in that
+takes no lock, so everything below is about the *calling* session. The same failure came back from
+*another* session holding the lock — an agent mid-turn calling `create_flow` — and the store is now
+in memory. `test_scheduler_store_is_in_memory.py` drives the real scheduler against a real
+concurrent writer; the handoff contract pinned here (commit first, reconcile to the row) still holds.
 """
 
 import pytest

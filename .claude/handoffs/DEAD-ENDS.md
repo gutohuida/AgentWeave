@@ -320,6 +320,19 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   run alone and failed in the full suite**, which is the direction that gets a test deleted rather
   than fixed. Bound it with a fixture that clears the recorder and is **named before** the fixture
   under test in the signature; pytest sets fixtures up in signature order.
+- **A synchronous SQLite call on the event loop deadlocks against ANY open async write** *(measured
+  2026-09-13, F351)*. The Hub's async engine (aiosqlite) and anything synchronous on the same file —
+  APScheduler's old `SQLAlchemyJobStore`, a `create_engine("sqlite:///…")` — share SQLite's lock
+  (journal mode `delete`). If any coroutine has inserted and not yet committed, its commit needs the
+  event loop; a sync call made on the loop blocks it while waiting for that lock, so it waits out
+  the full 5 s busy timeout and fails `database is locked`. Even a writer that would have held the
+  lock for 0 s does it. The signature in a live database is a ~5–6 s gap between two writes a
+  request makes back to back. **Never touch the database synchronously from async code in the Hub**
+  — `await` it on the async engine, or keep the state off the database entirely.
+- **The operator's Hub (port 8000) logs to `DEVNULL`** *(2026-09-13)*: `_hub_native_start` sends
+  stdout and stderr nowhere, so a `logger.error` there is unrecoverable. Evidence has to come from
+  what the Hub persisted — `event_logs` timestamps, row states — read with
+  `sqlite3.connect("file:…?mode=ro", uri=True)`.
 - **`session.get(Conversation, "conv-…")` silently never matches** — the primary key is not what
   you think it is. Query explicitly.
 - **`session.delete()` refuses a never-flushed object.**

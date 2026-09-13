@@ -500,22 +500,22 @@ async def _hand_job_to_scheduler(
 ) -> None:
     """Register *job* with the running scheduler, or unregister it when `job` is None or disabled.
 
-    **Commits first, and that is the point.** APScheduler's job store is a *separate synchronous
-    engine* pointed at the same SQLite file (`JobScheduler._get_sync_engine`), so while this
-    request still holds a transaction open, the store's own INSERT cannot take the write lock and
-    raises `database is locked`. `add_job` catches that, logs it, and returns `False` — which no
-    caller read. The result was a job sitting `enabled = 1` in `ai_jobs` and absent from
-    `apscheduler_jobs`: enabled, scheduled-looking, and never firing until the Hub restarted and
-    `JobScheduler.start` loaded it from the database.
+    **Commits first.** A registered job can fire on the next cron tick, and a firing reads the job
+    and its loop back from the database — so the row has to be committed before the scheduler is
+    told about it, never after.
 
-    Measured on the trial Hub: creating an enabled loop with `initial_tasks` reproduced it every
-    time, while the same loop without them registered fine — the seeding leaves the session with
-    an open transaction that the bare path does not have.
+    History, because it explains the tests beside this route. The scheduler's job store used to be
+    a second, synchronous SQLite engine on this same file, and registering while *this* request
+    still held a transaction open failed with `database is locked`, leaving a job `enabled = 1` in
+    `ai_jobs` that never fired (`0757be5`). Committing first fixed that case and not its general
+    form: any *other* session holding the lock deadlocked the store against the blocked event loop
+    in the same way (F351). The store is in memory now (`JobScheduler.start`), so registration
+    touches no database at all.
 
     A failure is logged rather than raised. The row is the source of truth and `start()` reads it,
     so an enabled job that could not be registered now is picked up at the next restart; turning
     the operator's write into a 500 after the job exists would be a worse answer than a late one.
-    But it is no longer *silent*, which is what let this hide.
+    But it is not *silent*, which is what let the original hide.
     """
     await session.commit()
     try:

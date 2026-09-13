@@ -2305,7 +2305,8 @@ def get_scheduler() -> Optional["JobScheduler"]:
 
 
 async def _scheduled_job_runner(job_id: str) -> None:
-    """Module-level function so APScheduler can pickle it for the job store."""
+    """What every scheduled firing calls: it looks the job up again rather than closing over it,
+    so a firing always acts on the row as it stands, not as it stood when it was registered."""
     scheduler = get_scheduler()
     if scheduler:
         await scheduler._fire_job_by_id(job_id)
@@ -2319,18 +2320,31 @@ class JobScheduler:
         self._job_id_map: dict = {}  # job_id -> apscheduler_job_id
 
     async def start(self) -> None:
-        """Start the scheduler and load all enabled jobs from DB."""
-        from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+        """Start the scheduler and load all enabled jobs from DB.
+
+        **The job store is in memory, and must stay there (F351).** It used to be APScheduler's
+        `SQLAlchemyJobStore` on a second, synchronous engine pointed at this same SQLite file, and
+        APScheduler drives its store synchronously on the event loop — on `add_job`, and on every
+        firing (`_process_jobs` → `jobstore.update_job`). Any other session holding a write lock at
+        that instant needs one more `await` to commit, which the blocked loop can never give it, so
+        the store waited out SQLite's 5 s busy timeout and failed with `database is locked`:
+          - at registration, the job was lost — enabled in `ai_jobs`, absent from the scheduler,
+            never firing (an agent's `create_flow`, made mid-turn while its own output was being
+            written, measured live: 6.3 s between the job row and its `job_created` event);
+          - at a firing, the exception escaped `AsyncIOScheduler.wakeup` before `_start_timer`
+            re-armed, and the scheduler stopped waking **for every job** (reproduced: one
+            collision, then no firing in 20 s; the memory store fired 10/10).
+
+        Nothing is lost by keeping it in memory: `ai_jobs` is the source of truth, and this method
+        re-registers every enabled job from it on each start. The one thing the database store did
+        that this does not is catch up a firing missed while the Hub was down, within the 60 s
+        `misfire_grace_time` — and a restarted Hub fires at the next slot instead.
+        """
+        from apscheduler.jobstores.memory import MemoryJobStore
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-        # Create job store using our database
-        job_store = SQLAlchemyJobStore(
-            engine=self._get_sync_engine(),
-            tablename="apscheduler_jobs",
-        )
-
         self.scheduler = AsyncIOScheduler(
-            jobstores={"default": job_store},
+            jobstores={"default": MemoryJobStore()},
             job_defaults={
                 "misfire_grace_time": 60,
                 "coalesce": True,
@@ -2350,21 +2364,6 @@ class JobScheduler:
                 await self.add_job(job)
 
         logger.info(f"JobScheduler started with {len(jobs)} job(s)")
-
-    def _get_sync_engine(self) -> Any:
-        """Get a sync SQLAlchemy engine for APScheduler jobstore."""
-        from sqlalchemy import create_engine
-
-        from .config import settings
-
-        # Convert async URL to sync URL
-        url = settings.database_url
-        if url.startswith("sqlite+aiosqlite"):
-            url = url.replace("sqlite+aiosqlite", "sqlite")
-        elif url.startswith("postgresql+asyncpg"):
-            url = url.replace("postgresql+asyncpg", "postgresql")
-
-        return create_engine(url)
 
     async def shutdown(self) -> None:
         """Shutdown the scheduler."""
