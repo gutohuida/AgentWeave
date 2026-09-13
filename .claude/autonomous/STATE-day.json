@@ -1,40 +1,107 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-12-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "eac213c",
-    "stop_at":  "2026-09-13T17:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-13-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
+    "playbook": ".claude/loops/day-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-12-daily",
+    "parent_branch": "master",
+    "parent_sha": "eac213c",
+    "stop_at": "2026-09-13T17:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-13-day-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "gate-retry",
+    "next_action": "gate-retry: the merge gate's one retry this window. Read the queue item gate-retry's detail in full. Write NOTHING until CI for HEAD (iteration 1's commit) has concluded: find its run with gh run list --branch autonomous/2026-09-12-daily --limit 3 --json databaseId,headSha,status,conclusion, and wait with gh run watch <id> under a timeout below the 600s command cap (repeat once if needed). Then re-measure all four gate conditions in one command, land with git merge --ff-only only if all four pass, and log the outcome either way. Close the item after this single attempt.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "DONE iteration 1. The merge gate did NOT open. Condition 3 failed: CI run 34746396329 for 000fcbf (the arm) concluded failure, and hub-test's single error is F292 (database is locked on BEGIN IMMEDIATE in test_reviewer_is_not_the_author.py), on a commit with no product change. The failed job was not re-run; that is the operator's F292 priority call. Drain count is 0 (openspec/changes/ holds only archive/), so two spec loops run: F299, then F327, per DIRECTION.md ## 2026-09-13. The research was delivered at 07:33 and is copied to spec-queue/research/2026-09-13.md. The branch is unmerged and spans two days."
+        },
+        {
+            "id": "gate-retry",
+            "status": "open",
+            "title": "Merge gate, one retry: land the 2026-09-12 cycle if CI for iteration 1's commit is green",
+            "detail": "One attempt, then close it whatever happens. (1) Do not write or commit anything until CI for HEAD has concluded. HEAD is iteration 1's compose commit, which touches only the log, STATE-day.json and spec-queue/research/2026-09-13.md. Find the run with gh run list --branch autonomous/2026-09-12-daily --limit 3 --json databaseId,headSha,status,conclusion,workflowName, and wait with gh run watch <id> --interval 30 under timeout 580; hub-test takes ~13 min, so this may need two waits. (2) Measure all four conditions in ONE command: the branch is not master and git rev-list --count HEAD..master is 0 (git fetch first; HEAD..origin/master also 0); git status --short is empty and HEAD equals @{u}; the CI workflow concluded success for HEAD's exact sha; spec-queue/DIRECTION.md's newest section (## 2026-09-13) has no line-initial HOLD MERGE. (3) All four pass: git checkout master; git merge --ff-only autonomous/2026-09-12-daily; git push origin master. Then cut autonomous/2026-09-13-daily from the new master (stamp the date from PowerShell Get-Date, never Git Bash date), push it with -u, and rewrite STATE-day.json's branch to autonomous/2026-09-13-daily and parent_sha to the new master sha in this same firing, because run-iteration.ps1:124 stops the driver on a mismatch. Record in the log exactly what landed: the range, the commit count and the file count. (4) Any condition fails: log which one. If CI failed, classify the red from its own gh run view <id> --log-failed (F292 or not) and do NOT re-run it. Stay on the branch. (5) Either way, set this item done and move next_action to d1-drive. Do no other work this firing."
+        },
+        {
+            "id": "d1-drive",
+            "status": "open",
+            "title": "D-1 drive: the night's inferred-not-seen legs of both archived changes, live",
+            "detail": "Scope from DIRECTION.md ## 2026-09-13: what the night built, both changes. The night already drove the main legs (15/15 for a-url-is-not-a-path; 37 ok plus 6 UI for a-refused-review-leaves-nothing-behind), so do not repeat them. Take the gaps it named in 2026-09-12-night-log.md 'What was proven, and how'. Method: the .claude/loops/night-window.md 'Driving' recipe. Choose a free port after netstat -ano | grep LISTENING, never 8000 or 8010. Use a fresh ~/.agentweave/hub/profiles/drive0913d/agentweave.db and set AW_BOOTSTRAP_API_KEY at first launch. Export AW_HUB and AW_KEY, because scripts/drive/aw.py:14 defaults to 8010. Start from hub/ with py -3.11 -m uvicorn hub.main:app, from source. Use a fresh project, never proj-5e960453 or proj-18e5d4e0, and bind every agent to claude-haiku-4-5. Confirm no .py under hub/hub or src is newer than the process start. PRIORITY 1: the PowerShell tool_name path (a-url-is-not-a-path design.md D10 item 5: 'that a spawned run's approver receives PowerShell as tool_name, with its script in command, is unverified'). Run a workspace-posture Haiku agent on this Windows machine that is asked to use the PowerShell tool for (a) a write inside the workspace, (b) a write via ..\\ outside it, and (c) a URL fetch to a non-Hub host. Record the tool_name the approver actually receives for every approval, and read the verdicts from the run's permission records or events, not from what the model says. If the name differs from 'PowerShell', say which fallback fired (D8(g)). PRIORITY 2: render what the operator SEES, with scripts/uishot.py --url against the drive port. That covers F333's 'had nothing queued' line on a conversation whose review the pass gave up (FINDINGS '## F333 (B)'), F335's feed line (eventSummary.ts:142, '## F335 (D)'), and the 409 in the dispatch control (the archived change's human-only 6.1). Screenshots are evidence for the operator's S6/S7 checks. They do not tick those human-only boxes. PRIORITY 3, if time: classify r4's stall. Run hub/tests' file containing test_giving_up_lets_the_agent_accept_new_input (grep for it) 5 times under py -3.11 with a per-run timeout, and record the wall time of each run. Afterwards stop the Hub, keep the profile, and leave no job enabled. Findings go into FINDINGS.md with **Status:** open as the first body line, plus a severity, a file:line and a reproduction. Update F333/F335 Status lines only with what was measured."
+        },
+        {
+            "id": "d2-r1",
+            "status": "open",
+            "title": "D-2 spec R1: F299 - no grounds, no approver flag (DECISIONS.md 1b)",
+            "detail": "The verdict is binding: spec-queue/DECISIONS.md '#### 1b. F299 - no grounds, no approver flag' (:745-774). R1 writes the proposal and does not re-decide it. Finding: scripts/drive/FINDINGS.md '## F299 (A)' (~:24249), whose run output is in testbed/scratch/c2drive/ (drive_A2.json). Code: hub/hub/launchability.py harness_has_honoured_mcp (~:232-259, positive-only, .limit(1), no recency) and described_access_path; hub/hub/runner_commands.py _build_claude_command, the approver flag, and the comment at ~:245-248. RESEARCH INPUTS, treated as data (spec-queue/research/2026-09-13.md, candidates 1-3). They must be MEASURED, not trusted. FIRST re-drive P4, Q4b and Q5 (and Q3 if it applies) on the installed harness. Run claude --version and record the build beside each result; it was 2.1.269 at 09:10 today. The research reports that on 2.1.269, F299's configuration exits 1 at spawn, naming the policy, at zero tokens, so verdict 1b would swap that for a paid turn whose writes are all denied. The research also reports that --permission-prompts none (unknown before v2.1.259) fixes the message. Reproduce in a throwaway dir under %TEMP%, not under ~/.claude, which is protected; the research's first pass was invalidated by that. Use Haiku, and do not strip CLAUDE* variables blindly: the Hub's spawn does not strip them, so measure what the Hub's spawn would see. design.md MUST state which harness behaviour the proposal is designed for. If the measurement contradicts 1b's premise, write the proposal for 1b AS DECIDED, and put an OPERATOR QUESTION at the top of proposal.md naming the research's shapes (a) 1b plus --permission-prompts none on the flagless spawn, gated on a known build, or (b) hand it back. The precedent is F327-scope's R2 question. Add it to decisions_for_user. Do not pick between them. Candidate 2 (acceptEdits is path-confined by the harness; it contradicts DECISIONS.md:772-773, agent-capability-plane/spec.md:258-259, runner_commands.py:63-64 and docs/reference/permission-postures.md:33) goes to the operator as a measurement, not as a reversal. COLLISION CHECK, required by DIRECTION: list the files the change will touch, and state in the log whether any is shared with F327's expected radius (hub/hub/scheduler.py, hub/hub/run_divergence.py, the review staffing path). If one is, d2b/d3b/d4b are skipped and the log says so. Deliverable: openspec/changes/<name>/ with proposal.md, design.md, tasks.md (agent-verifiable vs human-only split plus a user test guide), and specs/<capability>/spec.md deltas. Grep openspec/specs for the capability that owns the approver flag (likely agent-capability-plane) before choosing. openspec new change refuses a leading digit, so check how the 2026-09-13 archived changes got their date prefix. openspec validate --strict must pass, with SHALL on each requirement's FIRST physical line."
+        },
+        {
+            "id": "d3-r2",
+            "status": "open",
+            "title": "D-3 spec R2: re-derive the F299 proposal against the code, independently",
+            "detail": "Do not re-read R1 as R1's reasoning. Compare every claim in proposal/design/tasks/deltas against what launchability.py, runner_commands.py and the spawn path (agent_trigger.py and pty_runner.py: how stderr is merged, pty_runner.py:357, and how a non-zero exit becomes final_status failed, ~agent_trigger.py:2271) actually do. Re-run at least one of R1's harness measurements yourself, and record the build. Ask the F108 question: what does the operator SEE, in the UI and in the run's events, for each condition? That covers the first run (flag named, server blocked), the second run (no flag), and the notice described_access_path gives. Ask whether 'from the second run' is true at the grain the code reads (per agent? per runner? what about an agent whose one earlier run predates the blocking policy? see research candidate 3). Check that every requirement header in the deltas matches openspec/specs character for character. Fix the proposal where the code disagrees. openspec validate --strict. If this round changes nothing, say so plainly."
+        },
+        {
+            "id": "d4-r3",
+            "status": "open",
+            "title": "D-4 spec R3: re-derive F299 again, independently of R2",
+            "detail": "Independent of both R1 and R2. Attack R2's own additions hardest, because they have had one pair of eyes. Re-derive the argument, not only the outcomes: an argument can be wrong while everything it argues about is right. Check in particular that the proposal's claim 'nothing is widened' holds on the harness build actually installed, and that no test the tasks prescribe could pass on a tree where the behaviour cannot fire (e.g. a test of _build_claude_command whose fixture sets mcp_adapter_online_at in an order or grain the real run path never writes). Check the operator question at the top of proposal.md, if present, is stated so the operator can answer it in one line. openspec validate --strict. If this round changes nothing, say so plainly in the log."
+        },
+        {
+            "id": "d2b-r1",
+            "status": "open",
+            "title": "D-2b spec R1 (second loop): F327 - a review a flow staffed and whose dispatch is refused",
+            "detail": "GUARDS FIRST. (1) If d2-r1 recorded that F299's files overlap F327's radius, skip d2b/d3b/d4b, log why, and go to d5-review. (2) If this item comes up later than 14:30 (PowerShell Get-Date), skip d2b/d3b/d4b as well, log why ('run one loop and say why in the log', day-window.md step 6), and go to d5-review so the day still ends with a review page. Otherwise: FINDINGS.md '## F327 (B)' (~:26407); DECISIONS.md F327-scope (~:612, option (a) shipped; (b) rejected only as unexamined; (c) and (d) stay rejected); DIRECTION.md ## 2026-09-13, which makes option (b) the starting point: the dispatch stages, and the flow stops staging first. Examine (b) properly, which is this loop's purpose. Start from R3-of-F319's warning that the divergence restaff's task is already under_review and collides with D9 (read openspec/changes/archive/2026-09-13-a-refused-review-leaves-nothing-behind design.md for D7 and D9). The change will MODIFY agent-flows ('in the same commit that queues the review turn', 'A dispatched review leaves the reviewable pool') and must reconcile task-lifecycle-governance 'Dispatching a review staffs the task, whichever path dispatched it'. Code: hub/hub/scheduler.py (~:2794 staging, ~:2891 commit), hub/hub/run_divergence.py, hub/hub/turn_scheduler.py (post-F319/F320, as of 997ff5d), and hub/hub/api/v1/agent_trigger.py. Re-measure F327's table on the current tree before designing. Consider F333/F334 (B, filed by the night) only to state whether this change touches them; do not absorb them without saying so, because that is the operator's open question. Deliverable, rules and validate --strict: as d2-r1."
+        },
+        {
+            "id": "d3b-r2",
+            "status": "open",
+            "title": "D-3b spec R2: re-derive the F327 proposal against the code, independently",
+            "detail": "Skip if d2b-r1 was skipped. As d3-r2, for F327. Re-measure the F327 table yourself on the current tree. Trace every path that stages a review before dispatch (flow firing, divergence restaff, any other; grep for the staging call rather than trusting R1's list) and check the proposal covers each or names it as out of scope. Ask the F108 question: what the operator sees when the dispatch refuses. Requirement headers must match openspec/specs character for character. openspec validate --strict. If this round changes nothing, say so."
+        },
+        {
+            "id": "d4b-r3",
+            "status": "open",
+            "title": "D-4b spec R3: re-derive F327 again, independently of R2",
+            "detail": "Skip if d2b-r1 was skipped. As d4-r3, for F327. Attack R2's additions hardest, especially the D9 interaction and whether the flow's reviewable-pool guarantee still holds in the window between queueing and dispatch (two flows firing on the same task). openspec validate --strict. If this round changes nothing, say so."
+        },
+        {
+            "id": "d5-review",
+            "status": "open",
+            "title": "D-5 review page review-2026-09-13.html + the APPROVALS rows",
+            "detail": "Per day-window.md D-5: self-contained, theme-aware HTML at spec-queue/review/review-2026-09-13.html (light on :root, dark under prefers-color-scheme, explicit body background, no external resources). Order: (1) THE BRANCH FIRST, unskimmable. autonomous/2026-09-12-daily spans two days (the name changes if gate-retry landed). The merge gate did NOT open at iteration 1: condition 3, CI failure at 000fcbf, F292 on BEGIN IMMEDIATE, on a state-only commit. Then say what gate-retry did. If the 2026-09-12 cycle is still unmerged, say so first, with its commit count. (2) What the night built: a-url-is-not-a-path (612b9c9) and a-refused-review-leaves-nothing-behind (6ebcd9f, 997ff5d), both archived; driven vs tested vs inferred, per the night log. (3) Today's drive findings, each with severity, one sentence and file:line. (4) One section per specced change (F299, and F327 if its loop ran, or why it did not): the problem, the argument in a paragraph, what R2 and R3 each changed (say so if nothing), the cost, and any OPERATOR QUESTION at the top of its proposal. (5) What the night does if nothing is approved. (6) The research, briefly, each candidate ending in what it means for AgentWeave. Also carry, as a clear list, the night's four decisions_for_user plus this window's. Then append a 2026-09-13 section to spec-queue/APPROVALS.md with a row per specced change and no status token."
+        },
+        {
+            "id": "d6-repair",
+            "status": "open",
+            "title": "D-6 repair, only if the day has room: F328 or F326, if the carve-out holds",
+            "detail": "DIRECTION.md ## 2026-09-13 names F328 (D, narrowed by a-refused-review-leaves-nothing-behind and not closed) and F326 (D) as candidates. Take one only if ALL of day-window.md D-6's conditions hold: it touches no requirement in openspec/specs (grep the capability first), there is no migration and no API/schema change, and it is fully described by a finding with a reproduction. Drive it before closing, run the CI lint set (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/), mutation-check any test you add, and set the finding's Status line to 'fixed <sha>'. If it turns out to want a spec, stop, log it, and leave it for tomorrow's loop. That is a good outcome."
+        },
+        {
+            "id": "d7-ledger",
+            "status": "open",
+            "title": "D-7 ledger: file research 2026-09-13 candidates 2 and 3 as findings, if F299's rounds did not",
+            "detail": "Reading plus local measurement only; no open web. Candidate 2: acceptEdits is path-confined by Claude Code on headless runs. Check the four repository claims against their current text: docs/reference/permission-postures.md:33, openspec/specs/agent-capability-plane/spec.md:258-259, hub/hub/runner_commands.py:63-64 and spec-queue/DECISIONS.md:772-773. Reproduce Q1 (Write ../outside.txt under --permission-mode acceptEdits on Haiku, in a %TEMP% dir) once and record the build. It touches a shipped requirement and a DECISIONS reason, so it is a finding plus an operator question, NOT a D-6 repair. Candidate 3: harness_has_honoured_mcp (launchability.py:232-259) is positive-only and permanent, while the harness reports connected/failed/absent in the stream-json system/init line, and runner_parsing.py has no branch for system messages. Verify both against the code. File each as FINDINGS.md entries with **Status:** open first, a severity, a file:line and a reproduction. If d2-r1..d4-r3 already filed or absorbed either one, note that and do not duplicate it."
+        }
+    ],
+    "decisions_for_user": [
+        "Merge gate, F292: the gate did NOT open this morning. CI for the arm commit 000fcbf (log and state files only) failed on F292, database is locked on BEGIN IMMEDIATE in test_reviewer_is_not_the_author.py, the eighth F292 red in the branch's last 19 runs. The window did not re-run the failed job to manufacture a green, because it has no precedent and it is your F292 priority call (the night's fourth item). Choose one: authorise 'gh run rerun --failed' for a red classified as F292 and nothing else; raise F292's priority into DIRECTION's order; or accept that roughly two mornings in five do not land. A gate-retry item tries once more on iteration 1's commit.",
+        "F299 has a research challenge to verdict 1b's premise, to be measured by R1 today: on claude 2.1.269, F299's configuration reportedly fails at spawn, truthfully and for zero tokens, rather than starting and blaming the machine. If R1's re-drive confirms that, 1b as decided trades that failure for a paid, all-denied turn unless --permission-prompts none (v2.1.259+) is added. Expect an OPERATOR QUESTION at the top of the F299 proposal; the window will not choose between (a) and (b)."
+    ],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
