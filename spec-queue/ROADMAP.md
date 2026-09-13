@@ -77,9 +77,12 @@ This is its first time on disk. It was code-read and route-mapped, **not driven*
 | F206 (B), F211 (C) | drift, reindex and retention have no screen | open. `GET /spec/drift` projects bare ids, so this needs an API shape change |
 
 **What this does not settle.**
-- **The `:8000` live instance runs PyPI 1.1.0**, at migration head `0081`, while this checkout is at
-  `0102`. Day-to-day use on another project will exercise last month's product unless it is updated,
-  from source or through a release. That is outward-facing and the operator's call. **Not asked yet.**
+- **~~The `:8000` live instance runs PyPI 1.1.0~~ — wrong, corrected the same afternoon.** The
+  operator's other session measured that PID 3488 on `:8000` is the system Python's **editable**
+  install of **this checkout**, on the default profile at head `0102` (DEAD-ENDS, 2026-09-13). So
+  day-to-day use already runs today's code: Python as of its last restart, and the UI bundle as
+  committed here. That leaves an open question for the operator: is this intended? CLAUDE.md's rule
+  says the opposite, *"No window may point that instance at this checkout."*
 - **The drain's own front is blocked on a question, not on capacity.** After F332, the open A
   findings are the access-path cluster (F299 and F301, re-decided with F339 and F340) and F325
   (Codex, undrivable). `DIRECTION.md` `## 2026-09-14` queues the exploration that frames that

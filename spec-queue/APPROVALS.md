@@ -42,9 +42,38 @@ is answered **(b)**, and the change is rejected:
 
 - REJECTED  an-absent-approver-is-not-named   Option (b): 1b is handed back (DECISIONS.md, 2026-09-13 afternoon). F339 reproduced 1b's reason for rejecting acceptEdits as false, so the access path is re-decided as one question with F301, F339 and F340. The change is archived unbuilt, and its measurements are kept.
 
-A spec loop for **F332** is running in this session for tonight. If it passes the Opus review, its
-`APPROVED` row and an `ORDER:` line are added below this paragraph. If neither appears, the night
-lands no feature.
+**F332 was specced in this session for tonight, and it passed the Opus pre-approval review.** R1
+`071354a`, R2 `26cb73d`, R3 `cbf6b49`, and the review `3628cc8` (verdict *approve after repairs*,
+with the repairs made). The operator approved it in advance, conditional on the review passing
+(*"approve it for tonight if the review passes"*, 2026-09-13 ~14:20).
+
+- APPROVED  a-quote-can-spell-a-slash   F332 (A). The approver's reader decodes bash's `$'…'` the way bash does, and judges the decoded word. Code is `hub/hub/mcp_server.py` only. 30 tasks, no migration, no API shape change, no UI.
+
+ORDER: a-quote-can-spell-a-slash
+
+**Sizing and rules for tonight:**
+- **One change.** Last night finished two changes by 04:25, so one leaves room. Spend the room on the drive and the POSIX evidence, not on a second change. There
+  is no second approved change.
+- **Every round changed the decoder.** R2 and R3 each found escapes the previous decoder opened,
+  and the review corrected R3's reason. **Build `tasks.md` §2.2's rules, not a prototype from
+  `testbed/scratch/r1f332/`, `r2f332/` or `r3f332/`.** §1 pins rows that R1's and R2's decoders
+  fail.
+- **The mutations in §4.3–§4.5 bite only on POSIX.** Verify them under WSL or on CI's Linux
+  `hub-test`, as the tasks say. A Windows run where they fail to bite is expected, not a pass.
+- **F332 is POSIX-only.** Its `fixed <sha>` Status needs CI Linux `hub-test` evidence (the strict
+  XFAIL at the pin, then PASS at the fix), as F331's did. A Windows drive shows only what
+  `test-guide.md` says it can.
+- **On Windows, N3/N4 (`\u` or `\U` above 0xFF) stay refused.** That is a deliberate, locale-safe
+  over-refusal. The review found that this machine's Git Bash would write those names *inside* the
+  workspace. The operator may revisit this; the night does not.
+- **Give the drive its own profile and port. Never 8000 or 8010.** Port 8000 is the operator's live
+  Hub, and it serves `hub/hub/static/ui` **from this checkout** (DEAD-ENDS, 2026-09-13). Tonight's
+  change has no UI diff, so commit no bundle.
+- **Never close out without the drive.**
+- **The operator's own session committed to this branch this afternoon** (`a3237be`, `55a95de`,
+  `e9f71c0` and `b7dce8a`: F341–F345, `pty_runner.py`, `subprocess_windows.py`, `cli.py`,
+  `hub/ui`). None of them touches `mcp_server.py`. If the head holds commits the night did not
+  make, do not revert them. Stage explicit paths only.
 
 `an-absent-approver-is-not-named` — F299 (A), verdict `DECISIONS.md` 1b. **Answer the OPERATOR
 QUESTION at the top of its `proposal.md` first, in one line.** Re-measured on `claude` 2.1.269

@@ -604,9 +604,9 @@ the operator took all four recommendations.
   than choosing one. The operator also takes the recommendation to use AgentWeave day to day **on
   another project**, as the best source of usability findings. This widens `### The scope of the
   drain` below and does not replace it. The reasoning and the capability assessment are in
-  `ROADMAP.md` `## 2026-09-13 — the objective widens`. **Still open:** bringing the `:8000` live
-  instance (PyPI 1.1.0, migration head `0081`) up to date, from source or through a release. That
-  is outward-facing and was not asked.
+  `ROADMAP.md` `## 2026-09-13 — the objective widens`. *(An earlier version of this row said the
+  `:8000` instance runs PyPI 1.1.0. That was wrong: it runs this checkout's editable install, per
+  DEAD-ENDS 2026-09-13. Whether that is intended is the open question, not an update.)*
 - DECIDED   gate-rerun  **The day window's merge gate may re-run a failed CI run once, when every
   failure is F292's or F314's signature and nothing else.** The exact rule is in
   `.claude/loops/day-window.md` step 1, condition 3, with the requirement to write nothing until

@@ -27401,3 +27401,29 @@ no tray for another agent, and the inset arithmetic: 600 − 208 − 120 − 24 
 
 **Not done:** the permission card is not foldable. It is the one with a timeout, its detail is
 already capped at 10rem, and the tray's cap and scroll bound a stack of them.
+
+## F346 (C) — the route-reachability instrument lets a sibling route's literal satisfy a `{param}` slot, so it undercounts clientless routes by one
+
+**Status:** open. Filed 2026-09-13 by a DECIDE session. The defect was first noticed in handoff 0120
+(2026-09-11) and carried unfiled through two handoffs. **Measured**, not only read.
+
+`segment_match` in `scripts/drive/n10_route_reachability.py:201-210` returns `"exact"` as soon as the
+**route** segment is a path parameter (`:202-203`), before it looks at the URL segment at all. So a
+client URL whose segment at that position is a *literal* (`…/runners/launchability`) is counted as
+reaching the parameterised sibling (`…/runners/{runner_id}`), and that route leaves the "no client
+anywhere" list even though nothing calls it.
+
+**Reproduction.** Run `py -3.11 scripts/drive/n10_route_reachability.py`. It reports **35** under
+*"no client anywhere in the repo"*. Import the module, replace `segment_match` with one that answers
+a `{param}` route segment only for a URL segment that is a whole placeholder (`*`) or equal text,
+and call `main()`. It then reports **36**, and the one route added is
+`GET /api/v1/projects/{project_id}/runners/{runner_id}`. Both lists were compared line by line
+(2026-09-13), and no other route moved.
+
+**Why it matters.** 35 is the figure quoted as R-1's *"35 clientless routes"* (`spec-queue/DECISIONS.md`
+R-1 and the scope verdict) and in handoff 0120's capability assessment (*"36 have no client
+anywhere"* was the corrected figure there). A ratchet built on this instrument would freeze a count
+that is one short, and would stay green while that route stays clientless.
+
+**Shape of a fix (a sketch, not verified beyond the measurement above):** a parameter segment
+matches a placeholder or `~`-glued URL segment, never a bare literal that a sibling route declares.

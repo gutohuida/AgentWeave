@@ -70,7 +70,10 @@ operator-plane route.
   screen needs an API shape change. Evidence acceptance may not need one. R1 measures which.
 - **It is a UI change.** The night drives it in Chromium against the served bundle, and commits
   `hub/ui/src` with `hub/hub/static/ui` through `scripts/refresh_ui_bundle.py`. The test guide must
-  say so.
+  say so. **The operator's `:8000` Hub serves that bundle from this checkout** (DEAD-ENDS
+  2026-09-13). A committed bundle changes the operator's live app on their next reload, running
+  against Python loaded at their last restart. The tasks must check that the two are compatible
+  before a bundle is committed.
 - **Collision check, as step 6 requires:** F327 is backend (`agent_trigger.py`, `scheduler.py`,
   `run_divergence.py`, the review staffing path). If F215's R1 lists any of them, run loop 1 alone
   and say why.
