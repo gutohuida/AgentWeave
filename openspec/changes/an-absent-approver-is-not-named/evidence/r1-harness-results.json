@@ -1,0 +1,384 @@
+{
+ "claude_version": "2.1.269 (Claude Code)",
+ "runs": [
+  {
+   "cond": "A_hub",
+   "env": "inherit",
+   "rc": 1,
+   "secs": 8.0,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-prompt-tool",
+    "mcp__agentweave__approve_tool_call",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave",
+    "Error: MCP tool mcp__agentweave__approve_tool_call (passed via --permission-prompt-tool) not found. Available MCP tools: none"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default"
+  },
+  {
+   "cond": "A_repro",
+   "env": "inherit",
+   "rc": 1,
+   "secs": 7.5,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--permission-mode",
+    "manual",
+    "--permission-prompt-tool",
+    "mcp__agentweave__approve_tool_call"
+   ],
+   "non_json_lines": [
+    "Error: MCP tool mcp__agentweave__approve_tool_call (passed via --permission-prompt-tool) not found. Available MCP tools: none"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default"
+  },
+  {
+   "cond": "B_1b",
+   "env": "inherit",
+   "rc": 0,
+   "secs": 9.4,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.0231587,
+   "denials": [
+    "Write"
+   ],
+   "result": "I need your permission to write the file. Please approve the request to create `written_A.txt`."
+  },
+  {
+   "cond": "B_q5",
+   "env": "inherit",
+   "rc": 0,
+   "secs": 9.2,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--permission-mode",
+    "manual"
+   ],
+   "non_json_lines": [],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.023213699999999997,
+   "denials": [
+    "Write"
+   ],
+   "result": "I need permission to write the file. Please approve the permission prompt to create `written_A.txt`."
+  },
+  {
+   "cond": "C_1b_none",
+   "env": "inherit",
+   "rc": 0,
+   "secs": 11.7,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}",
+    "--permission-prompts",
+    "none"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.0244701,
+   "denials": [
+    "Write"
+   ],
+   "result": "I wasn't able to create the file because this session is non-interactive and doesn't have approval to write files. \n\nTo create `written_A.txt`, you have a few options:\n\n1. **Use Claude Code interactively** \u2014 Open Claude Code in the desktop app, web app, or IDE extension where you can grant permission when prompted\n2. **Use a shell command** \u2014 If you'd like, I can use PowerShell or Bash to create the file with a command like `echo \"ok\" > written_A.txt`\n3. **Pre-authorize file writes** \u2014 Grant write permissions in your Claude Code settings\n\nWhich approach would you prefer?"
+  },
+  {
+   "cond": "C_q3",
+   "env": "inherit",
+   "rc": 0,
+   "secs": 10.7,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--permission-mode",
+    "manual",
+    "--permission-prompts",
+    "none"
+   ],
+   "non_json_lines": [],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.023689699999999998,
+   "denials": [
+    "Write"
+   ],
+   "result": "I need your permission to write the file. This session doesn't have an interactive approval surface, so you'll need to grant the Write tool permission in your Claude Code settings before I can create the file. Once you've allowed the Write tool, I can create `written_A.txt` with the content \"ok\"."
+  },
+  {
+   "cond": "A_hub",
+   "env": "plain",
+   "rc": 1,
+   "secs": 8.1,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-prompt-tool",
+    "mcp__agentweave__approve_tool_call",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave",
+    "Error: MCP tool mcp__agentweave__approve_tool_call (passed via --permission-prompt-tool) not found. Available MCP tools: none"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default"
+  },
+  {
+   "cond": "A_repro",
+   "env": "plain",
+   "rc": 1,
+   "secs": 7.2,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--permission-mode",
+    "manual",
+    "--permission-prompt-tool",
+    "mcp__agentweave__approve_tool_call"
+   ],
+   "non_json_lines": [
+    "Error: MCP tool mcp__agentweave__approve_tool_call (passed via --permission-prompt-tool) not found. Available MCP tools: none"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default"
+  },
+  {
+   "cond": "B_1b",
+   "env": "plain",
+   "rc": 0,
+   "secs": 10.2,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.0236287,
+   "denials": [
+    "Write"
+   ],
+   "result": "I need permission to write the file. You should see a permission dialog \u2014 please approve it so I can create written_A.txt with the content \"ok\"."
+  },
+  {
+   "cond": "B_q5",
+   "env": "plain",
+   "rc": 0,
+   "secs": 10.0,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--permission-mode",
+    "manual"
+   ],
+   "non_json_lines": [],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.0230827,
+   "denials": [
+    "Write"
+   ],
+   "result": "I need your permission to write the file. Please approve the write operation for `written_A.txt`."
+  },
+  {
+   "cond": "C_1b_none",
+   "env": "plain",
+   "rc": 0,
+   "secs": 13.6,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--mcp-config",
+    "{\"mcpServers\": {\"agentweave\": {\"type\": \"...",
+    "--allowedTools",
+    "mcp__agentweave__*",
+    "--permission-mode",
+    "manual",
+    "--settings",
+    "{\"deniedMcpServers\": [{\"serverName\": \"agentweave\"}]}",
+    "--permission-prompts",
+    "none"
+   ],
+   "non_json_lines": [
+    "Warning: MCP server blocked by enterprise policy: agentweave"
+   ],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 3,
+   "cost": 0.0295418,
+   "denials": [
+    "Write",
+    "PowerShell"
+   ],
+   "result": "I'm unable to complete this task because this is a non-interactive session without an approval surface. Both the Write tool and PowerShell write commands require permission approval to modify files, which cannot be granted in this context.\n\nTo create the file, you would need to:\n1. Run Claude Code in an interactive session (desktop app, web app, or IDE extension) where you can approve permission prompts\n2. Use another method to create the file directly (command line, text editor, etc.)"
+  },
+  {
+   "cond": "C_q3",
+   "env": "plain",
+   "rc": 0,
+   "secs": 10.0,
+   "started": true,
+   "flags": [
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--model",
+    "claude-haiku-4-5-20251001",
+    "--permission-mode",
+    "manual",
+    "--permission-prompts",
+    "none"
+   ],
+   "non_json_lines": [],
+   "file_written": false,
+   "init_agentweave": "ABSENT",
+   "init_mcp_server_errors": null,
+   "init_permissionMode": "default",
+   "subtype": "success",
+   "num_turns": 2,
+   "cost": 0.023681699999999997,
+   "denials": [
+    "Write"
+   ],
+   "result": "I need your permission to write files in this session. The Write tool was blocked because this is a non-interactive session with no approval surface.\n\nTo proceed, you'll need to grant write permissions in your Claude Code settings. You can do this by:\n1. Opening your Claude Code settings\n2. Adding write permissions for the working directory\n\nOnce you've granted the permission, I'll be able to create the written_A.txt file with the content \"ok\"."
+  }
+ ]
+}

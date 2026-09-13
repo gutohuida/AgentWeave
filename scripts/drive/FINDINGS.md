@@ -24263,6 +24263,20 @@ tested was the repository's own, written at `hub/hub/runner_commands.py:245-248`
 *"naming an approver that will not be there makes every tool call fail, which the model reports as
 a broken approval system."* It is **substantially right, and sharper than it says.**
 
+> **Re-measured 2026-09-13** (day window, `d2-r1`, `claude` **2.1.269**,
+> `scripts/drive/t_d2_0913_f299_harness.py`, which uses `build_command`'s own argv and spawns through
+> `PtySession` as the Hub does, once with the inherited `CLAUDE*` environment and once without).
+> **Condition A no longer starts.** Both F299's reproduction flags and the Hub's full configuration
+> with a policy-blocked server **exit 1 before any model call**. The harness prints its own reason:
+> `Warning: MCP server blocked by enterprise policy: agentweave` and then `Error: MCP tool
+> mcp__agentweave__approve_tool_call (passed via --permission-prompt-tool) not found`. Condition C
+> still behaves as recorded below: it completes, `Write` is denied, and the model says *"I need
+> permission to write the file"*. The environment made no difference. This finding does not record
+> the build it was driven on, so the change is most likely the harness (2.1.238 → 2.1.269), and
+> that is unmeasured. Specced as `openspec/changes/an-absent-approver-is-not-named`, whose
+> `proposal.md` puts this to the operator before `DECISIONS.md` 1b is built. **Status unchanged:
+> open.**
+
 **The configuration this is about is the ordinary one.** Runner `claude`, `hub_client` unset, a
 harness whose company policy blocks MCP servers. The Hub emits `--mcp-config` (which that harness
 ignores) and, because a server was configured, `--permission-prompt-tool
