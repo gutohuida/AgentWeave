@@ -27511,6 +27511,10 @@ send the agent any message. The entry stays `queued` with the reason above. **Wo
 2026-09-13:** one commit in the project (`4c56590 Initial commit`, `spec/` only). After it, `HEAD`
 resolves and `.agentweave/worktrees/` is empty, so the next attempt can provision the checkout.
 That the queued turns then delivered was **not yet observed** when this was filed.
+*Observed at 17:44 the same day, read-only from the live database:* entry 23 went `delivered`, and
+the Architect's newest run (`run-113f7e6b75f7`) `completed` with `workspace_dir` set to
+`.agentweave/worktrees/Architect`. The operator's own message about the error, entry 24, went
+`withdrawn`; this session did not withdraw it.
 
 **Shape of a fix (a sketch, not verified).** The choice between these is a product decision:
 - **(a)** Refuse with a sentence that names the repair: *"<project> is a git repository with no

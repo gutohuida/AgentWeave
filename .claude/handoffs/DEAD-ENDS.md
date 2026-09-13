@@ -68,6 +68,10 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **A piped run reports the last command's exit code.** Use `${PIPESTATUS[0]}` when piping through
   `tail`.
 - **`strings` is not available** in this Git Bash. Use `grep -ao`.
+- **`grep -P` cannot scan for non-ASCII here.** *(2026-09-13)* It fails with *"-P supports only
+  unibyte and UTF-8 locales"* and, in a loop, prints counts of 0 that look like a clean result.
+  Scan for Unicode in Python with `PYTHONIOENCODING=utf-8`. Without that variable, printing a
+  non-cp1252 character raises `UnicodeEncodeError`.
 - **This Git Bash (5.2.37, msys2) forces `LC_CTYPE=C.UTF-8` and cannot be put in a plain C locale.**
   *Measured 2026-09-13 by F332's pre-approval review:* `LC_ALL=C`, `LANG=C`, `LC_CTYPE=C` and
   `POSIX` all leave it in `C.UTF-8`, so the four-hex escape for U+0100 inside `$'…'`
@@ -460,6 +464,17 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   one operation per tool call, or the Bash tool's `rm`/`git` instead of PowerShell, or writing the
   file with the Write tool so the risky text never appears in a shell command. Do not read these as
   "the operation is forbidden" — the same operations succeeded individually and immediately.
+- **A four- or eight-hex escape written through Edit/Write, by this session or by a subagent, can be
+  stored as the character it names** *(measured 2026-09-13, F332's spec loop)*. The text meant was
+  backslash, `u`, `0100`, a bash escape being documented. Twice through the Edit tool, and in ten
+  places across the rounds' `design.md` and `FINDINGS.md` notes, the file received U+0100 itself.
+  That inverted the argument: *"bash keeps the escape literal"* came to read as an already-decoded
+  character. The `\x2f` and `\U0000002f` forms in the same files survived. The cause is
+  unverified: it may be the model's own output, or the tool path. **Detect it:** after a round
+  writes escape-heavy docs, scan them in Python for non-ASCII characters outside the usual
+  typography, and read each hit in context (`5775064` is the repair and shows the method). **Avoid
+  it:** spell such an escape in words, or build it with `chr(92) + "u0100"` in a script. Remember
+  that a heredoc halves doubled backslashes (see Shell, above).
 
 - **Driving `claude -p` from Python: pass the prompt on stdin, never as an argv element**
   *(2026-09-10, cost one full four-run measurement)*. `shutil.which("claude")` on this machine
