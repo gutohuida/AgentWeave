@@ -27238,3 +27238,58 @@ console-less child, Windows-only), `test_pty_runner.py` (console before spawn, e
 
 **Not yet on the operator's instance.** The live Hub loaded its Python at 2026-09-12 21:35; the fix
 reaches it on the operator's next restart. The 16 lingering windows are leftovers and can be closed.
+
+## F343 (B) — the desktop window has no right-click menu, so a misspelt word can be underlined and never corrected
+
+**Status:** fixed — `_enable_default_context_menus` (`src/agentweave/cli.py`). Reported by the
+operator 2026-09-13: *"The red underline appears showing that the word is wrong but the correct
+with right click does not work."*
+
+**Mechanism.** Not the composer. The operator uses the pywebview window the desktop shortcut opens
+(the live Hub's parent, PID 2800, is the CLI holding `webview.start()`), and pywebview 6.2.1's
+WebView2 backend writes `settings.AreDefaultContextMenusEnabled = _state['debug']`
+(`webview/platforms/edgechromium.py:288`). No debug, no context menu — and the context menu is the
+only route to a spelling suggestion. WebView2's spellchecker still runs, hence the underline. An
+investigation of the React composer found nothing, correctly: it is a plain controlled `<textarea>`.
+
+**The fix, and the measurement that changed it.** The first version set the menu on in
+`before_load`, which pywebview fires from `on_navigation_completed`. Measured with WebView2's own
+`ContextMenuRequested` event: the setting read back `True` and **no menu was ever requested** — a
+change after the first navigation does not reach the page, and a single-page app never navigates
+again. The shipped version subscribes to `CoreWebView2InitializationCompleted` from `before_show`
+(fired synchronously once the form exists, before initialisation completes), so it runs straight
+after pywebview's own handler and before the first `NavigationStarting`. `debug=True` was rejected:
+it also brings DevTools, "Inspect" and the browser accelerator keys.
+
+**Driven** with a real WebView2 window placed off-screen (`scratchpad` probe; a first on-screen
+attempt was abandoned), right-click synthesised over CDP and the menu read from
+`ContextMenuRequested` — the positive control (`debug=True`) is what showed the instrument can see a
+menu at all:
+
+| variant | menu requested | spelling items on a misspelt word | `inspectElement` |
+|---|---|---|---|
+| pywebview default | none | — | — |
+| `debug=True` (control) | yes | 3 | yes |
+| fixed, `before_load` (first attempt) | **none**, setting reads `True` | — | — |
+| fixed, shipped | yes | 3 | **no** |
+
+**Not driven:** *choosing* a suggestion. Executing the spellcheck command from inside
+`ContextMenuRequested` closed the CDP session. Replacement is Chromium's own `insertReplacementText`
+into a controlled textarea, which React's `onChange` receives like typing.
+
+**Also not covered:** a browser tab or `--app` window never had this — both give Chromium's own menu.
+
+## F344 (B) — nothing in the desktop window can be selected, so an agent's answer cannot be copied
+
+**Status:** fixed — `webview.create_window(..., text_select=True)`. Reported by the operator
+2026-09-13: *"I can't copy a text from the agent answer. I hover over and I can't select and copy
+anything."*
+
+**Mechanism.** pywebview's `text_select` defaults to `False`, and `webview/js/customize.js` then
+injects `body { user-select: none; cursor: default }` into every page it loads. So every non-input
+element in the app — the whole transcript — refused selection.
+
+**Driven** in a real WebView2 window: with pywebview's defaults `getComputedStyle(body).userSelect`
+is `none` and a mouse drag across a paragraph selects `""`; with `text_select=True` it is `auto` and
+the same drag selects the whole sentence. Pinned by `tests/test_cli.py`
+(`test_native_window_lets_text_be_selected`).

@@ -896,6 +896,40 @@ def _set_windows_app_user_model_id() -> None:
         pass
 
 
+def _enable_default_context_menus(window: Any) -> None:
+    """Give the native window back the right-click menu a browser would have.
+
+    pywebview's WebView2 backend sets `AreDefaultContextMenusEnabled` to its `debug` flag
+    (`webview/platforms/edgechromium.py`), so a normal start has no context menu at all — and
+    that menu is the only way to reach the spellchecker's suggestions. The red underline still
+    appeared under a misspelt word, and there was nothing to right-click to correct it (F343).
+    `debug=True` would bring the menu back along with DevTools, "Inspect" and the browser's
+    accelerator keys; this turns on the menu alone.
+
+    When matters, and was measured. Set after the first navigation completes, the setting reads
+    back `True` and no menu ever appears — the page keeps what it started with, and a single-page
+    app never navigates again. So it is set in WebView2's own `CoreWebView2InitializationCompleted`,
+    subscribed *after* pywebview's handler (which writes `False` and starts the first navigation)
+    and so run straight after it, before that navigation's `NavigationStarting`. pywebview's
+    `before_show` is the one hook early enough to subscribe from: it fires synchronously on the UI
+    thread once the form and its WebView2 control exist, while initialisation is still pending.
+
+    Every step is best-effort: another backend, or a pywebview whose internals have moved, keeps
+    today's window rather than failing to open one.
+    """
+
+    def _enable(sender: Any, _args: Any) -> None:
+        with contextlib.suppress(Exception):
+            sender.CoreWebView2.Settings.AreDefaultContextMenusEnabled = True
+
+    def _subscribe(window: Any) -> None:
+        with contextlib.suppress(Exception):
+            window.native.webview.CoreWebView2InitializationCompleted += _enable
+
+    with contextlib.suppress(AttributeError, TypeError):
+        window.events.before_show += _subscribe
+
+
 def _open_app_window_native(url: str) -> bool:
     """Open `url` in a native OS window via pywebview.
 
@@ -910,7 +944,11 @@ def _open_app_window_native(url: str) -> bool:
     _set_windows_app_user_model_id()
 
     try:
-        webview.create_window("AgentWeave", url)
+        # `text_select=True`: pywebview's default injects `body { user-select: none }` into every
+        # page, so nothing in the app could be selected or copied — an agent's answer included
+        # (F344). The app is a document as much as a control surface; it selects like a browser.
+        window = webview.create_window("AgentWeave", url, text_select=True)
+        _enable_default_context_menus(window)
         webview.start(icon=_app_icon_path())
         return True
     except Exception as exc:

@@ -304,7 +304,7 @@ class TestAppModeNativeWindow:
 
         calls = []
         fake_webview = types.SimpleNamespace(
-            create_window=lambda title, url: calls.append(("create_window", title, url)),
+            create_window=lambda title, url, **kwargs: calls.append(("create_window", title, url)),
             start=lambda **kwargs: calls.append(("start", kwargs.get("icon"))),
         )
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
@@ -334,7 +334,9 @@ class TestAppModeNativeWindow:
         def _boom(**kwargs):
             raise RuntimeError("no WebView2 runtime found")
 
-        fake_webview = types.SimpleNamespace(create_window=lambda title, url: None, start=_boom)
+        fake_webview = types.SimpleNamespace(
+            create_window=lambda title, url, **kwargs: None, start=_boom
+        )
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
 
         assert _open_app_window_native("http://127.0.0.1:8000") is False
@@ -358,13 +360,83 @@ class TestAppModeNativeWindow:
             lambda: calls.append("aumid"),
         )
         fake_webview = types.SimpleNamespace(
-            create_window=lambda title, url: calls.append("create_window"),
+            create_window=lambda title, url, **kwargs: calls.append("create_window"),
             start=lambda **kwargs: calls.append("start"),
         )
         monkeypatch.setitem(sys.modules, "webview", fake_webview)
 
         assert cli._open_app_window_native("http://127.0.0.1:8000") is True
         assert calls == ["aumid", "create_window", "start"]
+
+    def test_native_window_lets_text_be_selected(self, monkeypatch):
+        """F344: pywebview's `text_select` defaults to False, which injects
+        `body { user-select: none }` into every page — nothing in the app, an agent's answer
+        included, could be selected or copied. The window must ask for selection."""
+        import sys
+        import types
+
+        from agentweave import cli
+
+        seen = {}
+        fake_webview = types.SimpleNamespace(
+            create_window=lambda title, url, **kwargs: seen.update(kwargs),
+            start=lambda **kwargs: None,
+        )
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+
+        assert cli._open_app_window_native("http://127.0.0.1:8000") is True
+        assert seen.get("text_select") is True
+
+    def test_native_window_restores_the_default_context_menu(self, monkeypatch):
+        """F343: pywebview writes `AreDefaultContextMenusEnabled = debug`, so there was no
+        right-click menu and therefore no way to reach a spelling suggestion. The menu must be
+        switched on from WebView2's initialisation — measured: switched on after the first
+        navigation it reads back True and never appears — which means subscribing from
+        `before_show`, the one pywebview hook that runs before initialisation completes."""
+        import sys
+        import types
+
+        from agentweave import cli
+
+        class _Event:
+            def __init__(self):
+                self.handlers = []
+
+            def __iadd__(self, handler):
+                self.handlers.append(handler)
+                return self
+
+        window = types.SimpleNamespace(
+            events=types.SimpleNamespace(before_show=_Event()),
+            native=types.SimpleNamespace(
+                webview=types.SimpleNamespace(CoreWebView2InitializationCompleted=_Event())
+            ),
+        )
+        fake_webview = types.SimpleNamespace(
+            create_window=lambda title, url, **kwargs: window,
+            start=lambda **kwargs: None,
+        )
+        monkeypatch.setitem(sys.modules, "webview", fake_webview)
+
+        assert cli._open_app_window_native("http://127.0.0.1:8000") is True
+        # pywebview fires before_show with the window; that subscribes to initialisation...
+        (on_before_show,) = window.events.before_show.handlers
+        on_before_show(window)
+        (on_initialized,) = window.native.webview.CoreWebView2InitializationCompleted.handlers
+        # ...whose handler, run after pywebview's own, turns the menu back on.
+        settings = types.SimpleNamespace(AreDefaultContextMenusEnabled=False)
+        on_initialized(
+            types.SimpleNamespace(CoreWebView2=types.SimpleNamespace(Settings=settings)), None
+        )
+        assert settings.AreDefaultContextMenusEnabled is True
+
+    def test_context_menu_hook_never_breaks_opening_the_window(self, monkeypatch):
+        """Another backend, or a pywebview whose internals moved, must keep today's window:
+        the hook is convenience, the window is the product."""
+        from agentweave import cli
+
+        cli._enable_default_context_menus(None)
+        cli._enable_default_context_menus(object())
 
     def test_set_windows_app_user_model_id_noop_off_windows(self, monkeypatch):
         """The AUMID call is a ctypes.windll shell32 call, which only exists on
