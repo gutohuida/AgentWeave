@@ -27427,3 +27427,50 @@ that is one short, and would stay green while that route stays clientless.
 
 **Shape of a fix (a sketch, not verified beyond the measurement above):** a parameter segment
 matches a placeholder or `~`-glued URL segment, never a bare literal that a sibling route declares.
+
+## F347 (B) — a project whose repository has no commit yet refuses every agent turn with git's plumbing error, including the message asking the agent to fix it
+
+**Status:** open. Filed 2026-09-13 by a DECIDE session, from the operator's own day-to-day use on
+their `:8000` Hub (project `LoopEngine`, `proj-03b9c6a6c37a`). **Seen live, not driven by a
+harness.** The evidence was read from that Hub's database read-only, and the repository was
+inspected with `git`.
+
+**What happened.** A project that started as a plain directory had its Architect agent run
+`git init` in it at 16:42 on 2026-09-13, and nothing was committed. `main` was unborn. From the next
+turn on, every one of that agent's turns was refused before it spawned. The queue entry's waiting
+reason read:
+
+> Could not prepare Architect's own workspace: git worktree add -b agentweave/Architect
+> C:\Users\huida\Documents\projects\LoopEngine\.agentweave\worktrees\Architect HEAD failed (128):
+> fatal: invalid reference: HEAD
+
+The operator's message asking the agent to repair it (*"invalid reference (head) upon trying to
+create a git tree"*) queued behind the same refusal. The agent could not fix what blocked it, and
+the operator had to leave the product to make a first commit.
+
+**Where.** `ensure_worktree` (`hub/hub/worktrees.py:361-362`) runs `git worktree add -b <branch>
+<path> HEAD` with no check that `HEAD` resolves. `IsolationUnavailableError` carries git's own
+message (`worktrees.py:80`), and `agent_trigger.py:970` prefixes it with *"Could not prepare
+{agent}'s own workspace"*. No code path in `hub/hub` handles an unborn `HEAD`. A search for
+`unborn`, `no commits` and `invalid reference` finds nothing in `hub/hub` or this ledger.
+
+**Why B.** It is the ordinary first day of a project that becomes a repository. Every turn of every
+agent that needs isolation is refused. The sentence names git's plumbing rather than what the
+operator would change, which breaks the rule `worktrees.py`'s own docstring states: *"this module
+is where the operator-facing sentence is written."*
+
+**Reproduce.** Make a fresh directory and register it as a project. Run one agent turn, which runs
+un-isolated because there is no repository. Run `git init` in the directory without committing, then
+send the agent any message. The entry stays `queued` with the reason above. **Workaround, applied
+2026-09-13:** one commit in the project (`4c56590 Initial commit`, `spec/` only). After it, `HEAD`
+resolves and `.agentweave/worktrees/` is empty, so the next attempt can provision the checkout.
+That the queued turns then delivered was **not yet observed** when this was filed.
+
+**Shape of a fix (a sketch, not verified).** The choice between these is a product decision:
+- **(a)** Refuse with a sentence that names the repair: *"<project> is a git repository with no
+  commit yet. Make a first commit, and the turn will start."* This fits `repo_hygiene.py`'s stance
+  that the Hub does not create commits in the operator's repository.
+- **(b)** Provision the worktree on an orphan branch when `HEAD` is unborn.
+
+Either way, the pass that refuses should not hold the operator's message behind a condition only
+the operator can clear without saying so.
