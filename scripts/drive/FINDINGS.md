@@ -26973,3 +26973,180 @@ does what the operator had asked it to do in the first place.
 the write lock first (write the `Run` row) and read after it. Measure first. F328's drive
 (`scripts/drive/t_d6_0913_f328_withdraw_race.py`) is the pattern, with a plain turn in place of a
 refused review.
+
+---
+
+## F339 (B) — `acceptEdits` is path-confined by Claude Code on a headless run, and four places in the repository, one of them a binding verdict's reason, say it checks nothing
+
+**Status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
+candidate 2. **Measured twice on `claude` 2.1.269, Haiku, through the Hub's own argv and PTY.** An
+operator question goes with it (below), so this is not a repair.
+
+**The claim.** Under `--permission-mode acceptEdits`, headless, with nothing to answer a prompt,
+Claude Code writes inside its working directory and refuses a write outside it. The repository
+says the opposite in four places:
+
+| where | text today |
+|---|---|
+| `docs/reference/permission-postures.md:33` (the page `agent-run-sandboxing` requires), and `:39`, `:64` | *"**Edit files** \| `acceptEdits` \| **Not checked.** Edits are accepted with no path comparison at all."*; the no-server fallback *"falls back to **Edit files**, which checks nothing"*; *"Under the postures that check nothing, a shell redirect leaves no trace at all"* |
+| `openspec/specs/agent-capability-plane/spec.md:256-259`, a shipped requirement's reasoning | a run's requests are *"checked against its workspace or accepted without a path check"*, and a move *"from a checked posture to an unchecked one"* |
+| `hub/hub/runner_commands.py:63-64` | *"narrower than `acceptEdits`, which accepted every edit with no path check at all"* |
+| `spec-queue/DECISIONS.md:772-774`, 1b | *"**Rejected: also drop to `acceptEdits` on no grounds.** That restores capability by removing the path check entirely"* |
+
+The ledger repeats it: F299 at `:24342` (*"`acceptEdits`, which has **no path check at all**"*) and
+F281 at `:21078`, which lists `acceptEdits` among the postures where an outside write is
+*possible*. The research found no drive in the ledger that measured an outside write under
+Claude's `acceptEdits`, and neither did this entry's author.
+
+**The measurement.** `scripts/drive/t_d7_0913_accept_edits_confined.py`. argv is
+`build_command(runner="claude", mcp_command=None)`, the one case the Hub itself picks `acceptEdits`
+(`DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER`, `runner_commands.py:73`). The script asserts
+the flag is present and that no `--mcp-config` or approver is. The spawn is `PtySession`, every
+`CLAUDE*` variable is stripped, and the workspace is under `%TEMP%`. `init` reports
+`claude_code_version: 2.1.269` and `permissionMode: acceptEdits`. The turn ended `success`, 5
+turns, $0.028, rc 0. A second run, after a lint-only edit to the script, gave the same three
+denials and the same files ($0.015).
+
+| step | the CLI's `permission_denials` | on disk |
+|---|---|---|
+| `Write inside.txt` | — | **written** |
+| `Write ../outside.txt` | **Write** (`…\d7_0913_accept_edits\outside.txt`) | absent |
+| `Bash: echo hi > ../outside_bash.txt` | **Bash** | absent |
+| `Write <absolute path outside>` | **Write** (`…\d7_0913_accept_edits\outside_abs.txt`) | absent |
+
+This agrees with the research's pipe-spawned Q1, Q2, Q6 and Q7. Those runs also refused `cp` to
+`../`, a shell redirect to an absolute path outside, a `Read` and a `cat` of `../`, and
+`python -c`. The model said the writes were outside *"the allowed working directory"*. That is
+quoted only as what the model said. The refusals come from `permission_denials`, and the file
+outcomes from the disk.
+
+**What is true in the page and what is not.**
+- *"Not checked"*, *"no path comparison at all"* and *"checks nothing"*, said of `acceptEdits`,
+  are false on 2.1.269.
+- What stays true: **the Hub** checks nothing under `acceptEdits`, and it records none of the
+  harness's refusals. `grep -rn permission_denials hub/hub` returns nothing today. The shell redirect
+  also *"leaves no trace"* in the Hub, although it did not land either.
+- `bypassPermissions` (*"Full access"*) was not measured and is not disputed.
+
+**What is not established.**
+- n = 2 on one build and one model. The confinement is the harness's, and it is version-bound. The
+  Hub pins no build and records none.
+- A path a program builds at runtime never passes the harness's text check. Under `acceptEdits`,
+  `python -c` is refused (research Q6), which closes that route today only because execution is
+  refused outright.
+- The operator's own `~/.claude/settings.json` can widen the scope, through an `allow` rule or an
+  `additionalDirectories` entry. That is equally true under every posture.
+
+**Why B.** It is a wrong surface: an operator page and a spec's reasoning. It matters beyond the
+doc, because it is the stated reason 1b rejected the one option that lets an approver-less run do
+work. Measured, the choice on no grounds is not "contained but broken" against "working but
+unchecked":
+
+| on no grounds | outside the workspace | inside: edit | inside: run code |
+|---|---|---|---|
+| 1b as decided (`manual`, no approver) | refused | **refused** | refused |
+| the rejected option (`acceptEdits`) | **refused, by the harness** | allowed | refused |
+
+What the rejected option gives up is *who* checks. The Hub neither sees nor records the refusals,
+and the rule is Claude Code's, not the Hub's.
+
+**Relation to F299's change.** `openspec/changes/an-absent-approver-is-not-named` neither relies on
+this nor reintroduces the rejected option (design D10). Its D11 was already rewritten in round 3 so
+that it does not make the disputed claim normative. The operator question below is separate from
+that change's own operator question. It asks whether 1b's rejection still stands on its remaining
+reason.
+
+**Operator question.** Does 1b's *"Rejected: also drop to `acceptEdits` on no grounds"* stand on its
+remaining reason, that `agent-capability-plane` reserves containment to the operator and the Hub
+does not substitute a posture that accepts without asking? Its stated reason, *"removing the path
+check entirely"*, does not hold on 2.1.269. Either way, the four texts above need rewording. The
+page's row would read something like *"Checked by Claude Code, not by the Hub: in a headless run a
+path outside the run's working directory is refused (measured on 2.1.269), and the Hub neither sees
+nor records the refusal."* The spec's reasoning needs rounds.
+
+**Reproduce:** `py -3.11 scripts/drive/t_d7_0913_accept_edits_confined.py`. It makes one Haiku
+turn and writes `%TEMP%\d7_0913_accept_edits\results.json` and `transcript.txt`.
+
+---
+
+## F340 (B) — the Hub's MCP grounds are positive-only and permanent, while the harness reports the server's state on every run and the Hub parses none of it
+
+**Status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
+candidate 3. **The code half was read from the source, and the permanence was measured with a
+one-off test. The harness half is measured, from the F299 rounds' and the research's evidence.**
+Overlaps `openspec/changes/an-absent-approver-is-not-named` (design D3, D9, D11). That change does
+**not** absorb it (see below).
+
+**The claim.**
+- **Positive-only and permanent.** `harness_has_honoured_mcp` (`hub/hub/launchability.py:232-260`)
+  is true once **any** run of the agent carries an `mcp_adapter_online_at`:
+  `select(Run.id) … .limit(1)`, with no ordering, no recency, and no count of later runs.
+  - The only writer is the adapter's announce (`hub/hub/api/v1/agent_actions.py:441-442`), which
+    only ever sets the column.
+  - Its docstring gives the reason (`:246-247`): *"There is no negative form to record: a harness
+    that ignores the configuration is silent."*
+- **The harness is not silent.** It reports the server's state before any model call, on the first
+  stream-json line (`system`/`init`), in `mcp_servers`. `parse_claude_line` has no branch for
+  `system` (`hub/hub/runner_parsing.py:244-371`: `assistant`, `user`, `result`, `rate_limit_event`).
+  Such a line falls through to `return ParsedLine(session_id=session_id)` at `:371`. The harness's
+  stderr sentence *"Warning: MCP server blocked by enterprise policy: agentweave"* reaches the Hub
+  through the PTY and becomes a plain text event (`:235-238`). Nothing acts on it or records it.
+  `grep -rn mcp_servers hub/hub` finds only Codex config-building code.
+
+**What the harness says, measured on 2.1.269.**
+
+| condition | `init.mcp_servers` entry for `agentweave` | evidence |
+|---|---|---|
+| server started | `{"status": "connected"}` | R3 `S_0`/`S_8`, `evidence/r3-harness-results.json`; research I1 |
+| server exits at start | `{"status": "failed"}`, turn completes rc 0 | R3 `S_crash`; research I2 (binary missing) |
+| server never ready within ~30 s | `{"status": "failed"}`, turn completes rc 0 | R3 `S_45` |
+| server blocked by `deniedMcpServers` via `--settings` | **absent** from the list | R2 `"init_agentweave": "ABSENT"` (2 runs), `evidence/r2-harness-results.json`, `a-hub-plain-raw-pty.txt`; research I3 |
+
+The `evidence/` paths are under `openspec/changes/an-absent-approver-is-not-named/`.
+
+**Permanence, measured.** A one-off test, run once on `ae5766f` and deleted. It planted one run
+of agent `g` with `mcp_adapter_online_at = 2020-01-01`, followed by five later `failed` runs with no
+stamp. `harness_has_honoured_mcp(session, "proj-test", "g")` returned `True`: 1 passed. The
+existing tests (`hub/tests/test_mcp_adapter_online.py:98-129`) cover the positive case and the
+never-stamped case only.
+
+**What it gets wrong today, on this tree.** The grounds decide only what a run is *told*
+(`described_access_path`, called at `hub/hub/api/v1/agent_trigger.py:1001-1005`). What the run is
+*given* (the server, and with it the approver flag) comes from `resolve_access_path` alone.
+- **A policy that arrives after the first success.** The agent is told the MCP form of its tool
+  surface on every later turn, while its harness lists no `agentweave` server. The approver is
+  named anyway, grounds or not. On 2.1.269 each such run dies at its first approval-needing call,
+  which is F299, not this finding.
+- **The Hub's own server failing on an agent with grounds.** The harness says `failed`, the Hub
+  records nothing, and the run is told the MCP form. The operator's only sign is the harness's own
+  text. The research measured Q4c (a missing server binary, with the approver named, over a pipe)
+  as an exit 1 with *"MCP tool … not found. Available MCP tools: none"*. That shape under the PTY
+  is **not measured**.
+
+**What it would get wrong after F299's change.** That change gates the approver flag on the same
+grounds (1b: *"same signal, same grain"*). It reads `init`'s status only to decide what counts as
+a *test* of the harness (design D3), never to revoke grounds. D9 says so: *"Grounds are permanent
+(research candidate 3) … This change inherits that unchanged."* D11 names the grounded agent whose
+harness blocks the server later as the third kind of run its exception covers, and leaves it to
+this finding. So once that change ships, a grounded agent keeps its approver after a block, and on
+2.1.269 every later run dies at its first write. Deleting run history is the only way out.
+
+**Why B.** It is a misleading surface today, the notice and the harness's report shown as prose,
+plus an in-code claim that is false as measured. It would become A on the approver's side once
+F299's change ships, and that is why it is filed now.
+
+**What a repair would have to decide, not proposed.** Whether grounds should read the *latest*
+test rather than *any* success. F299's change already adds `Run.harness_mcp_status`, which is the
+signal a latest-test rule would need. A status string the Hub does not recognise must count as
+"no grounds", never as grounds. Whether to recognise the stderr sentence as well, which is a vendor
+shape the Hub does not version. And whether the Hub then names `hub_client: "cli"`
+(`src/agentweave/config.py:714`) as the way out. That is a new decision: 1b chose *"same signal,
+same grain"* (`DECISIONS.md:754`), and design D9 adds that *"a negative signal is a new decision"*. The "absent" row was measured with `--settings`,
+not a real managed-settings file, so it needs one run under real managed settings before anything
+depends on it.
+
+**Reproduce:**
+- Read `launchability.py:251-260` and `runner_parsing.py:242-371`.
+- For the harness side, `py -3.11 scripts/drive/t_d4_0913_f299_slow_server.py S_0 S_crash` (each a
+  separate invocation) and `py -3.11 scripts/drive/t_d2_0913_f299_harness.py A_hub --env plain`.
+  Read `init_agentweave` in each.

@@ -83,6 +83,13 @@ write only an entry that is still queued. Driven: 3 of 8 samples inconsistent be
 after. It wants no row and no token. `F326` was not taken, because it shares `agent_trigger.py`
 with the change above. `F338` (D, read only) is new: delivery's own check-then-write.
 
+**Added 2026-09-13 by `d7-ledger`:** research candidates 2 and 3 are filed as `F339` (B) and
+`F340` (B). Both are open, want no row and no token, and are not repairs. `F339` carries an
+operator question: does 1b's rejection of `acceptEdits` on no grounds stand on its remaining reason?
+Its stated reason, *"removing the path check entirely"*, was reproduced false on 2.1.269. That is
+separate from the one-line answer the change above asks for. `F340` stays with candidate 3's
+decision, which the change above does not make (its D9).
+
 ---
 
 ## 2026-09-12

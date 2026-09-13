@@ -688,6 +688,17 @@
     as its reproduction.
   </li>
 </ol>
+<p class="small">
+  <strong>Added 2026-09-13, after this page was written:</strong> D-7 filed both.
+  <code>F339</code> (<span class="sev b">B</span>) is item 2. It was reproduced twice through the
+  Hub's own argv and PTY on 2.1.269: the inside write landed; a <code>../</code> Write, a
+  <code>../</code> redirect and an absolute-path Write were refused by the harness, and the Hub
+  records none of it. It carries an operator question: does 1b's rejection of <code>acceptEdits</code>
+  stand on its remaining reason, now that <em>"removing the path check entirely"</em> does not hold?
+  <code>F340</code> (<span class="sev b">B</span>) is item 3. One old stamped run keeps the grounds
+  after five later unstamped runs (measured). It becomes A on the approver's side once §4's change
+  ships.
+</p>
 
 <footer class="page">
   Written by the FILL window at iteration 7, 2026-09-13 11:15 +01:00, at <code>f5f0091</code> on
