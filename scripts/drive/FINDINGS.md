@@ -27633,3 +27633,20 @@ it passed alone four times and in a full re-run of the subset (455 passed). Its 
 captured, so it is recorded as an intermittent rather than classified. The conftest's own note that
 "a test that leaves a live `JobScheduler`" can hold a connection into the next test's reset referred
 to the database store this removes; whether that thins the F292 flake is not measured.
+
+**The second half, caught live, and the restart that cleared it (2026-09-13, operator's Hub).** After
+the investigation the job did reach the scheduler once (a 17:25 scheduled firing, `dev`, working
+until 17:35:21); 17:30 and 17:35 were correctly silent with that turn in flight. Then nothing: no
+firing at 17:40 or 17:45 with nothing running — the operator's own manual firing at 17:46 started a
+review immediately, so a live scheduler would have too — nor at 18:05 or 18:10. The heartbeat
+settles it: `ai_jobs.next_run` advances on *every* scheduled firing, including the in-flight branch
+that records no `job_runs` row, and it stood at **17:50** (the manual run's value) from 17:46 until
+the restart. The scheduler's timer had died, most likely on the 17:30 or 17:35 firing's store write
+while `dev` was writing.
+
+Restarted at the operator's request at 18:15 UTC, via the desktop shortcut through Explorer (Hub PID
+12480 under `pythonw -m agentweave` 19512, parent `explorer`), with no run in flight. The 18:20 and
+18:25 slots fired on schedule and `next_run` moved to 18:25 then 18:30. The flow did no work because
+its first task is `under_review` with a reviewer whose turn ended undecided — it said so on each
+firing (`review_unstaffed`, and a `skipped` row naming the three ways out). That is the flow waiting
+on the operator, not this finding.
