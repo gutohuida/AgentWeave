@@ -27682,3 +27682,79 @@ Restarted at the operator's request at 18:15 UTC, via the desktop shortcut throu
 its first task is `under_review` with a reviewer whose turn ended undecided — it said so on each
 firing (`review_unstaffed`, and a `skipped` row naming the three ways out). That is the flow waiting
 on the operator, not this finding.
+
+## F352 (A) — a flow counts an agent busy for holding any live task anywhere in the project, so backlog outside the flow starves it of reviewers — and the reason it gives names nobody
+
+**Status:** open; the operator's flow was unblocked by hand. Reported by the operator 2026-09-13:
+*"The loop got stuck because of task assignment."*
+
+**Measured on the operator's Hub (LoopEngine, `loop-103ecb8aeb89`).** Fourteen firings, 21:20 to
+22:30 UTC, each recorded `review_unstaffed` for the two finished tasks the rest of the flow waited on
+(`task-611ae46fe0fb` by `dev`, `task-c8d4a3d70c19` by `Architect`): *"could not staff this step: no
+agent is free to take it. Every agent on the roster is either running a turn, already holding active
+work, or is the one that completed this task and so may not review it."* No turn was running. What
+held every agent, all of it outside the flow except the first:
+
+| agent | held |
+|---|---|
+| Architect | `task-9e89a55ccc84` `under_review` — a review waiting on an operator decision (Copilot) |
+| dev | two `in_progress` follow-ups with no turn running, one `pending` — `loop_id` NULL |
+| dev_2 | five `pending` follow-ups, three of them duplicates — `loop_id` NULL |
+| tester | `task-5420e60359c1` `in_progress` — superseded; its replacement says so in its description |
+
+**Mechanism.** `_agents_that_are_free` (`scheduler.py` ~L977) is *not running* **and** *not the
+assignee of any task in `LIVE_STATUSES`* (`pending`, `assigned`, `in_progress`, `revision_needed`,
+`under_review`) **project-wide**. Rung 2 of `resolve_reviewer` and every selection past the job's
+default agent draw only from it. A task outside the flow is never worked by the flow — `loop_id` is
+write-once — so an agent assigned one is withdrawn from the flow's pool until something else moves
+that task; a `pending` row is a reservation, not work, and an `in_progress` row with no turn is a
+record, not evidence of one (F154's own sentence). Agents create exactly these rows as follow-ups.
+
+**Why nobody could see it.** The sentence names no agent and no task. The reviewing agent,
+asked to diagnose, blamed finished tasks staying assigned to their authors — `completed` is not a
+live status and holds nobody — and told the operator to reassign, which the product does not offer
+(F353). An hour of a stalled flow, diagnosed wrongly by the agent and not at all by the product.
+
+**Unblocked at the operator's request (22:33 UTC):** `POST …/tasks/task-611ae46fe0fb/land` and
+`…/task-c8d4a3d70c19/land` (both approved; merged `166cc78`, `79296eb` into the project's `main`),
+and `task-5420e60359c1` → `rejected` as superseded, which freed tester. The 22:35 firing started
+`dev` on `task-49b0567ce119` and `tester` on `task-c9787d4be5e1` in parallel.
+
+**Still true, so it will recur:** Architect stays held by the Copilot review until the operator
+decides it, and dev_2 by five tasks nothing will start. With two agents in the pool, the flow can
+cross-review only while dev and tester finish at compatible times.
+
+**What a repair has to decide, not proposed.** Whether "free" is scoped to the flow (or to loops)
+rather than the project; whether `pending`-with-assignee counts as holding; whether an `in_progress`
+row with no running or queued turn does; and, whatever else changes, the unstaffed sentence has to
+name the holdings — agent → task — because it is the whole of what the operator is shown.
+
+## F353 (B) — the product tells the operator to "clear the assignee", and nothing in the app can; the one action that would work, "Land it", is never named
+
+**Status:** open. Found 2026-09-13 unblocking F352.
+
+The task drawer renders **Assignee** read-only (`TaskDetailDrawer.tsx` ~L380). The operator's
+`PATCH …/tasks/{id}` accepts `assignee` (F78), but no control sends it, and the agents'
+`update_task` tool has no assignee field. The review guard's refusal
+(`agent_trigger.py` ~L500) says *"Dispatch a different reviewer, or clear the assignee to review it
+yourself"* — the first also has no control (F336). Meanwhile F163's **Land it** button, which
+releases the author's hold and approves in one step, sits in that same drawer for `completed`
+tasks, and neither this refusal nor the flow's `review_unstaffed` sentence points to it. Measured:
+the operator asked the reviewing agent three times how to reassign; it concluded *"neither you nor
+any agent has a way to do that"* and handed the operator hand-written PowerShell against a path the
+Hub does not serve (`/tasks/<id>`, no project, no auth). One `land` call per task did it.
+
+## F354 (B) — the operator's live agents launch the MCP server from the development working tree, so an unattended loop's uncommitted edits reach them mid-edit
+
+**Status:** open. Found 2026-09-13 on the operator's Hub.
+
+Port 8000 runs this checkout (CLAUDE.md), and every agent turn spawns its tool server fresh from
+the working tree (`agent_trigger.py` ~L1086, `canonical_server = … / "mcp_server.py"`). CLAUDE.md
+lists what that arrangement costs — Python on restart, migrations on restart, the UI bundle on
+reload — and this is a fourth, worse than the bundle: **uncommitted** and with no restart in
+between. At 22:31 UTC the night window had uncommitted edits to `hub/hub/mcp_server.py` (and
+`test_permission_approver.py`) while the operator's flow was firing a turn every five minutes; they
+were gone from the tree minutes later. Nothing was measured to break, and no turn was checked
+against that window. A repair could pin the server the Hub loaded — copy `mcp_server.py` aside at
+startup and spawn the copy — so an agent's tool surface changes when the Hub restarts, like the rest
+of its Python.
