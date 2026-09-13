@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "eac213c",
     "stop_at": "2026-09-13T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-13-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "gate-retry",
-    "next_action": "gate-retry: the merge gate's one retry this window. Read the queue item gate-retry's detail in full. Write NOTHING until CI for HEAD (iteration 1's commit) has concluded: find its run with gh run list --branch autonomous/2026-09-12-daily --limit 3 --json databaseId,headSha,status,conclusion, and wait with gh run watch <id> under a timeout below the 600s command cap (repeat once if needed). Then re-measure all four gate conditions in one command, land with git merge --ff-only only if all four pass, and log the outcome either way. Close the item after this single attempt.",
+    "current": "d1-drive",
+    "next_action": "d1-drive: read the queue item d1-drive's detail in full and do it. It is a live drive on a fresh profile (drive0913d) and a free port, never 8000 or 8010, with Haiku agents. Priority 1 is the PowerShell tool_name path; priority 2 is the uishot renders of F333, F335 and the 409; priority 3, if time, is r4's stall. Stop the Hub afterwards, leave no job enabled, file findings with Status first, then log, rewrite state, commit and push.",
     "queue": [
         {
             "id": "compose",
@@ -23,9 +23,9 @@
         },
         {
             "id": "gate-retry",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate, one retry: land the 2026-09-12 cycle if CI for iteration 1's commit is green",
-            "detail": "One attempt, then close it whatever happens. (1) Do not write or commit anything until CI for HEAD has concluded. HEAD is iteration 1's compose commit, which touches only the log, STATE-day.json and spec-queue/research/2026-09-13.md. Find the run with gh run list --branch autonomous/2026-09-12-daily --limit 3 --json databaseId,headSha,status,conclusion,workflowName, and wait with gh run watch <id> --interval 30 under timeout 580; hub-test takes ~13 min, so this may need two waits. (2) Measure all four conditions in ONE command: the branch is not master and git rev-list --count HEAD..master is 0 (git fetch first; HEAD..origin/master also 0); git status --short is empty and HEAD equals @{u}; the CI workflow concluded success for HEAD's exact sha; spec-queue/DIRECTION.md's newest section (## 2026-09-13) has no line-initial HOLD MERGE. (3) All four pass: git checkout master; git merge --ff-only autonomous/2026-09-12-daily; git push origin master. Then cut autonomous/2026-09-13-daily from the new master (stamp the date from PowerShell Get-Date, never Git Bash date), push it with -u, and rewrite STATE-day.json's branch to autonomous/2026-09-13-daily and parent_sha to the new master sha in this same firing, because run-iteration.ps1:124 stops the driver on a mismatch. Record in the log exactly what landed: the range, the commit count and the file count. (4) Any condition fails: log which one. If CI failed, classify the red from its own gh run view <id> --log-failed (F292 or not) and do NOT re-run it. Stay on the branch. (5) Either way, set this item done and move next_action to d1-drive. Do no other work this firing."
+            "detail": "DONE iteration 2, did NOT land. CI run 34747152049 for b798ff6 (a state-only commit) concluded failure: hub-test 1 failed / 4212 passed / 18 skipped, the failure is F314 (test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call, 'asyncio.locks.Lock ... is bound to a different event loop'), not F292. Conditions 1, 2 and 4 passed. Not re-run. The branch stays autonomous/2026-09-12-daily, unmerged, 45 commits ahead of master. Branch CI, last 20 runs: 8 failure, 12 success. Every classified red is F292 or F314."
         },
         {
             "id": "d1-drive",
@@ -89,7 +89,7 @@
         }
     ],
     "decisions_for_user": [
-        "Merge gate, F292: the gate did NOT open this morning. CI for the arm commit 000fcbf (log and state files only) failed on F292, database is locked on BEGIN IMMEDIATE in test_reviewer_is_not_the_author.py, the eighth F292 red in the branch's last 19 runs. The window did not re-run the failed job to manufacture a green, because it has no precedent and it is your F292 priority call (the night's fourth item). Choose one: authorise 'gh run rerun --failed' for a red classified as F292 and nothing else; raise F292's priority into DIRECTION's order; or accept that roughly two mornings in five do not land. A gate-retry item tries once more on iteration 1's commit.",
+        "Merge gate, flaky CI (F292 and F314): the gate did NOT open this window, twice. Iteration 1: CI for the arm commit 000fcbf (state files only) failed on F292, database is locked on BEGIN IMMEDIATE in test_reviewer_is_not_the_author.py. Iteration 2 (gate-retry): CI for b798ff6 (state and research files only) failed on F314, test_a_wide_flows_state_is_still_one_call, 'asyncio Lock bound to a different event loop'. The branch's last 20 CI runs are 8 red and 12 green, and every classified red is one of these two intermittents. No window re-ran a failed job to manufacture a green: there is no precedent, and it is your call. Choose one: authorise 'gh run rerun --failed' for a red whose signature is F292 or F314 and nothing else; raise F292 and F314 into DIRECTION's order; or accept that roughly two mornings in five do not land. autonomous/2026-09-12-daily is unmerged and spans two days.",
         "F299 has a research challenge to verdict 1b's premise, to be measured by R1 today: on claude 2.1.269, F299's configuration reportedly fails at spawn, truthfully and for zero tokens, rather than starting and blaming the machine. If R1's re-drive confirms that, 1b as decided trades that failure for a paid, all-denied turn unless --permission-prompts none (v2.1.259+) is added. Expect an OPERATOR QUESTION at the top of the F299 proposal; the window will not choose between (a) and (b)."
     ],
     "limits": [
