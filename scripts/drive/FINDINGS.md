@@ -27525,6 +27525,10 @@ the Architect's newest run (`run-113f7e6b75f7`) `completed` with `workspace_dir`
 Either way, the pass that refuses should not hold the operator's message behind a condition only
 the operator can clear without saying so.
 
+**DECIDED 2026-09-13 ~22:45, by the operator, in session: option (a).** Refuse, with a sentence that
+names the repair, and create no commit and no orphan branch. See `spec-queue/DECISIONS.md`
+`### F347, decided 2026-09-13 evening`. It is now a decided B, and no spec loop has taken it yet.
+
 ## F348 (B) — following switches itself off during every running turn, so the newest text drifts below the fold (and under the question tray)
 
 **Status:** open. Found 2026-09-13 by the independent test pass over F341–F345; it predates them.

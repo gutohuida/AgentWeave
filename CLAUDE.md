@@ -56,11 +56,20 @@ Confirm which database a running instance actually serves before trusting any do
 included — these paths have moved before and will again, and this file has been wrong about them for
 a day at a time. The cheap check: hit the API, then compare mtimes across the candidates.
 
-There is also a **separate clean instance on port 8000** — the operator's real usage, installed from
-PyPI into `C:\Users\huida\agentweave-live` with its own `live` profile. It is not this Hub and shares
-no database with it. Drive it with `C:\Users\huida\agentweave-live\hub.ps1`, never with a bare
-`agentweave` (both `--profile live` and `--port 8000` are required or the CLI assumes Docker). **No
-window may point that instance at this checkout.**
+There is also the **operator's real instance on port 8000**, and it **runs this checkout, by
+intent** (operator, 2026-09-13). Their desktop shortcut starts the system Python 3.11's editable
+install (`Python311\pythonw.exe -m uvicorn hub.main:app --port 8000`) on the default profile,
+database `~/.agentweave/hub/data/agentweave.db`. It shares no database with the trial Hub, but it
+shares this code, and three consequences follow:
+
+- It runs without `--reload`, so a Python change reaches it only when the operator restarts it.
+- A restart runs this checkout's migrations **against the operator's real database**.
+- It serves `hub/hub/static/ui` straight from this checkout, so **a committed UI bundle reaches the
+  operator's live app on their next reload.** A broken bundle is a broken real app.
+
+Never restart it, migrate it, or write to its database. Read-only (`mode=ro`) SQLite reads have
+been fine. The PyPI install in `C:\Users\huida\agentweave-live` still exists, but it is not what
+serves `:8000`; earlier revisions of this file said it was.
 
 Start the trial Hub — **from `hub/`, not the repo root** (see the trap below), **from source, not the
 console script**:

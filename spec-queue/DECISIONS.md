@@ -578,6 +578,31 @@ serving four-day-old code.
 
 ## Decided
 
+### F347, decided 2026-09-13 evening — and `:8000` running this checkout is intended
+
+**DECIDED 2026-09-13 ~22:45, by the operator, in session**, on a RESUME session's recommendations.
+Both questions had been raised that afternoon and left unanswered.
+
+- DECIDED   F347  **Option (a): refuse the turn with a sentence that names the repair.** For
+  example: *"<project> is a git repository with no commit yet. Make a first commit, and the turn
+  will start."* The Hub creates no commit and provisions no orphan branch, which keeps
+  `repo_hygiene.py`'s stance that the Hub does not write commits into the operator's repository.
+  The sentence is written in `worktrees.py`, which that module's docstring names as the place
+  operator-facing sentences are written, and it replaces git's `fatal: invalid reference: HEAD`.
+  Rejected: **(b)**, an orphan worktree. The turn would run, but the Hub would then own a branch
+  with no shared history with anything the operator later commits, and nothing says how that work
+  lands. **Left to R1:** the finding's last sentence, that the refusing pass should not hold the
+  operator's own message silently behind a condition only the operator can clear.
+- DECIDED   port-8000  **The operator's `:8000` Hub runs this checkout's editable install on
+  purpose.** `CLAUDE.md`'s paragraph is rewritten to say so, with the consequences: a committed UI
+  bundle reaches the live app on reload, and a restart runs this checkout's migrations on the
+  operator's database. Rejected: repointing the shortcut at `agentweave-live` (PyPI 1.1.0, head
+  `0081`), which is far behind the database `:8000` now holds. **This does not widen what a window
+  may do.** `:8000`'s process, database and credential stay out of bounds, as the 2026-09-08
+  trial-key verdict below already says.
+- DECIDED   chain  Two items carried for 3 and 6 handoffs are dropped: whether the ledger's *"shape
+  of a fix"* lists are labelled as unverified sketches (new ones already are), and `continuity-kit`.
+
 ### 2026-09-13 afternoon — F299's 1b handed back, the roadmap widened, and the gate may re-run a flake
 
 **DECIDED 2026-09-13 ~14:20, by the operator, in session.** Each was put with a recommendation, and
