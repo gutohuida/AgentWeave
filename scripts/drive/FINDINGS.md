@@ -26754,6 +26754,41 @@ proposal — no separate finding filed. Design D1's claim that a digitless escap
 not affect the decision" was the wrong argument (true on POSIX, false on Windows), and D5's
 totality argument omitted overrange codepoints — both corrected. R3 to follow.
 
+**R3 note (2026-09-13, spec loop, reviewed `a-quote-can-spell-a-slash`).** Status unchanged (open;
+closed only when built and driven). Re-derived the decode against **real Git Bash 5.2.37 on Windows**
+(not only a Python model) and against WSL bash under several locales, and re-ran R1's, R2's and a
+corrected decoder through the real `_decide` on both platforms (`testbed/scratch/r3f332/`:
+`unicode_probe.sh`/`gen_probe.py` bash truth per locale, `quote_lexing.py` escaped-quote lexing,
+`three_decoders.py` R1 vs R2 vs R3 through `_decide`). R1's mechanism and R2's two fixes hold, but
+**two more escapes of the same class R2 opened were found — both Windows-only, both fixed in the
+proposal (not shipped), no separate finding filed:**
+- **Finding 1 (`\u`/`\U` above 0xFF).** bash's decode of a codepoint above 0xFF is *locale-dependent*:
+  the **C locale Git Bash uses by default for a non-login `bash -c`** keeps the escape literal,
+  backslash and all (`$'..Ā'` → `..Ā`), while a UTF-8 login shell decodes it. R1 and R2
+  both decode it to one character (R2 returns `""` above U+10FFFF), dropping the backslash; on Windows
+  that backslash is a separator, so `$'..Ā'`…`$'..\U00110000x'` would flip from *deny* (today) to
+  *allow* — an escape the change would introduce. Measured through `_decide` (R2 column allows; R3
+  column denies). R2's N3 argument ("bash emits high bytes, none a separator") was true of the bytes
+  but false about the literal backslash — an argument wrong while its Linux/UTF-8 outcome is right.
+- **Finding 2 (`\c` before the closing quote).** bash keeps `\c` literal when nothing follows it in
+  the body (`$'..\c'` → `..\c`); R1's and R2's one-phase decoders read the closing `'` as `\c`'s
+  control target, over-run the string and drop the backslash, flipping `$'..\c'` from *deny* to
+  *allow* on Windows. Measured through `_decide`.
+**Fix (one invariant, replacing the per-escape arguments):** decode an escape to a character only when
+it is determined and locale-independent (simple escapes; `\x`/octal byte escapes; `\u`/`\U` ≤ 0xFF;
+`\cX` with a real body char); otherwise keep the backslash literal. This closes both findings, and
+because `\u`/`\U` above 0xFF is never passed to `chr()` it also removes R2's overflow guard while
+keeping totality (a codepoint above U+10FFFF can no longer reach `chr()`). **Linux/Docker is sound
+with either decoder** — `\` is not a separator there and these escapes never decode to `/` — so this
+is a Windows-only regression the change would otherwise introduce, and finding 1 additionally depends
+on the agent Bash tool's (unguaranteed) locale; the decoder is made safe under both. Added table rows
+**N4**, **N5**, reshaped **N3** (Windows now *deny outside*, not allow), tasks §2.2 rules, mutations
+§4.7 (decode above 0xFF via `chr`) and §4.8 (consume the closing quote for `\c`), and drive §5.2 steps.
+Checks that found nothing: escaped-quote lexing (`\'`/`\\` match bash), `\x`/octal locale-independence,
+`\cX`-symbol mis-decode is separator-safe (cosmetic only), `_where` totality over every emittable char
+(now only U+0000–U+00FF), `\U`≥0x80000000 (benign over-refusal on Windows, not a regression),
+spec-delta integrity, PowerShell dialect untouched.
+
 ## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
 
 **Status:** open. **Rendered 2026-09-13 by the day window's `d1-drive`**, in Chromium against the

@@ -75,10 +75,19 @@ Every one is allowed on POSIX today. On Windows every one is refused today — f
   text. A literal `$` the decoding produces becomes the `_LITERAL_DOLLAR` sentinel, exactly as a
   `$` inside ordinary single quotes already does — so an ANSI-C-spelled `$HUB_URL` is not read as a
   reference (the ANSI-C analog of D11a item 1, `$'\x24HUB_URL…'`).
-- **Two faithfulness rules the decode must honour (R2):** a *digitless* `\x`/`\u`/`\U` keeps its
-  backslash (bash `$'\x'` is `\x`, not `x`) — dropping it opens a Windows escape that is refused
-  today; and a codepoint **above U+10FFFF** (a valid 8-hex escape bash accepts) produces no
-  character and must not reach `chr()`, which would raise and break `_decide`'s totality.
+- **The decode's safety rests on one invariant (R2 + R3):** an escape may be *decoded to a
+  character* — removing its backslash — only when that character is fully determined and
+  **locale-independent**: the simple escapes, `\xHH`/`\NNN` (byte escapes, ≤ 0xFF),
+  `\uHHHH`/`\UHHHHHHHH` whose value is **≤ 0xFF**, and `\cX` with a real body character `X`. In
+  every other case the backslash is **kept literal**, because bash may keep it and on Windows a
+  backslash is a path separator. Four such cases: a *digitless* `\x`/`\u`/`\U` (R2; bash `$'\x'` is
+  `\x`, not `x`); a `\u`/`\U` **above 0xFF** (R3; the C locale that Git Bash uses by default keeps
+  it literal, backslash and all); a `\c` with no body character before the closing quote (R3; bash
+  `$'..\c'` is `..\c`, and the decode must not consume the closing quote); and an unrecognized or
+  trailing escape (already kept). Because `\u`/`\U` above 0xFF is never passed to `chr()`, the
+  decoder cannot raise on a codepoint above U+10FFFF — totality holds without a separate guard.
+  Rounds 1 and 2 each argued a subset of this correct and left a Windows escape open; see design
+  "What round 3 changed".
 - Nothing else changes. The six rules, the own-Hub test, the refusal wordings, and the reason bound
   are untouched. After the fix, `$'..\x2fstray.txt'` is the word `../stray.txt`, which rule 5
   already refuses as `'../stray.txt' is outside your workspace`; the literal-`$` form falls to rule
@@ -142,10 +151,12 @@ one delta scenario. No migration, no API or schema change, no UI change, no new 
 - **Code:** `hub/hub/mcp_server.py`, `_lex` only (a decoder helper and one branch). Standard library
   plus fastmcp only.
 - **Tests:** `hub/tests/test_permission_approver.py` gains the table above as pinned `_decide`
-  cases (including R2's rows **N2** digitless `\x` and **N3** overrange `\U`), written **before**
-  the reader changes (tasks §1) and their `xfail` markers removed as the decode lands (tasks §2),
-  plus a mutation per rule — including R2's §4.6 (drop the digitless backslash → N2 fails on
-  Windows) and §4.7 (drop the `chr()` guard → N3 raises) — and a wire-shape case.
+  cases (including R2's row **N2** digitless `\x`, R2/R3's **N3** overrange `\U`, and R3's rows
+  **N4** `\u`/`\U` above 0xFF and **N5** `\c` before the closing quote), written **before** the
+  reader changes (tasks §1) and their `xfail` markers removed as the decode lands (tasks §2), plus a
+  mutation per rule — including §4.6 (drop the digitless backslash → N2 fails on Windows), §4.7
+  (decode `\u`/`\U` above 0xFF via `chr` → N3/N4 fail, and raise above U+10FFFF), and §4.8 (consume
+  the closing quote for `\c` → N5 fails on Windows) — and a wire-shape case.
 - **Docs:** none required; the reader comment is code, and the posture page already describes the
   reader in general terms.
 - **Findings:** closes **F332** when built and driven (POSIX proven on CI's Linux job and WSL, per

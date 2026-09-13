@@ -32,10 +32,18 @@ These need no operator; a test or CI settles each.
   `echo hi > $'..\x'` — bash keeps the backslash (`..\x`), which is a traversal on Windows — is
   refused as outside on Windows. Pinned in `test_permission_approver.py` (row N2). If the decoder
   dropped the backslash it would allow this on Windows; §4.6's mutation guards that.
-- **An overrange `\U` does not crash the checker (row N3, R2 finding 2).**
-  `echo hi > $'\Uffffffffx'` — a valid 8-hex escape above Unicode's max — is *allowed* (bash writes
-  a file named `x` inside) and, above all, returns a decision rather than raising. Pinned as row
-  N3; §4.7's mutation proves the totality guard is load-bearing.
+- **A `\u`/`\U` above 0xFF keeps its backslash on Windows (rows N3, N4, R3 finding 1).** bash's
+  decode of a codepoint above 0xFF is locale-dependent: the C locale Git Bash uses by default keeps
+  the escape literal, backslash and all. So `echo hi > $'..\u0100'` (a `\u` whose value 0x100 is
+  above 0xFF) and `echo hi > $'\Uffffffffx'` (an overrange `\U`) are refused as *outside* on
+  Windows, because the kept backslash is a separator there. The checker also **returns a decision
+  rather than raising** on the overrange escape — it never passes a value above 0xFF to `chr()`.
+  Pinned as rows N3 and N4; §4.7's mutation (decode above 0xFF via `chr`) flips both and raises on
+  N3, proving both the safety and the totality are load-bearing.
+- **A `\c` before the closing quote keeps its backslash (row N5, R3 finding 2).**
+  `echo hi > $'..\c'` — bash keeps `\c` literal (`..\c`) when nothing follows it before the closing
+  quote — is refused as *outside* on Windows. If the decoder consumed the closing quote as `\c`'s
+  control target it would allow this on Windows; §4.8's mutation guards that.
 
 ## Human-only (you judge these)
 

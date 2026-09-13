@@ -41,16 +41,24 @@ matters, because faithfulness to bash is the whole safety argument (R2 found two
 - the simple escapes `\a \b \e \E \f \n \r \t \v \\ \' \" \?`;
 - `\NNN` octal (1–3 digits, value taken mod 256 — bash `$'\457'` is `/`, measured), `\xHH` hex
   (1–2), `\uHHHH` (1–4), `\UHHHHHHHH` (1–8);
-- `\cX` a control character (`\c@` is a NUL — measured);
+- `\cX` a control character (`\c@` is a NUL — measured) — **but `\c` with no body character after
+  it, i.e. immediately before the closing quote, keeps its backslash literal** (bash `$'..\c'` is
+  `..\c` — measured, `testbed/scratch/r3f332/`), and the decode MUST NOT consume the closing quote
+  as the control target. R2's one-phase decoder did — see R3 finding 2;
 - an **unrecognized** escape keeps its backslash (`\/` decodes to backslash-slash, `\q` to
   backslash-q — measured, and bash rc=1 on `\/` because the resulting name has no such directory);
 - a **digitless** `\x`, `\u` or `\U` (a `\x` with no hex digit following, etc.) **keeps its
   backslash** — bash `$'\x'` is the two characters backslash-x, not `x` (measured,
   `testbed/scratch/r2f332/decode_b.sh`: `digitless x -> \\x`). This is security-relevant on
   Windows and R1 had it wrong — see R2 finding 1;
-- a codepoint **above U+10FFFF** (`\U110000`, `\Uffffffff`) is not a character Python `chr()` can
-  build; bash emits high bytes for it, none of which is a separator. The decoder produces **no
-  character** for it and **never raises** — see R2 finding 2;
+- `\uHHHH`/`\UHHHHHHHH` decode to a character **only when the value is ≤ 0xFF**; a value **above
+  0xFF keeps the backslash literal** (`$'..\u0100'` stays `..\u0100`). bash's decode of a
+  codepoint above 0xFF is *locale-dependent*: a UTF-8 locale emits multibyte UTF-8, but the **C
+  (non-UTF-8) locale that Git Bash uses by default for a non-login shell keeps the escape literal,
+  backslash and all** (measured, `testbed/scratch/r3f332/unicode_probe.sh`). On Windows that
+  backslash is a separator, so decoding it away opens an escape refused today — R1 and R2 both had
+  this wrong. See R3 finding 1. This rule also removes the need for a separate `chr()` overflow
+  guard: `chr()` is only ever called on a value ≤ 0xFF, so it cannot raise;
 - a non-backslash character is kept as itself (a literal `/` inside `$'…'` stays a `/`, a `$`
   becomes the sentinel).
 
@@ -67,20 +75,30 @@ and pass — while bash writes to a directory literally named `$HUB_URL` and cli
 D1). This is the ANSI-C analog of `a-url-is-not-a-path` D11a item 1 (E20–E22), and it reuses the
 same sentinel and the same `_quote` un-rendering.
 
-**Why the safety argument is complete.** After the decode, the word contains a separator (`/`
-always; `\` where `os.sep == "\\"`) **if and only if** the `$'…'` source contained a literal
-separator (passed through unchanged) or a numeric escape decoding to one (`\x2f`, `\057`, a 4- or
-8-hex unicode escape for `/`; and on Windows the `\`-producing `\x5c`, `\134`, etc.). Every numeric
-route is decoded, and every literal separator is preserved. So no separator bash produces is hidden
-from the rules, and none is fabricated that bash would not produce. A `\c` control and the simple
-escapes cannot produce a separator, so their exact rendering does not affect the decision.
+**The safety invariant (restated after R3).** The only characters that are path separators are `/`
+(always) and, where `os.sep == "\\"`, the backslash `\`. An escape can put a separator into the
+decoded word two ways: by decoding to the byte `/` (0x2F) or `\` (0x5C), or by **bash keeping the
+escape literal, which leaves a backslash in the word.** So the decoder is safe on both platforms
+**if and only if** it never emits fewer separators than bash emits under any locale the run's shell
+might use. Concretely: an escape may be **decoded to a character** (removing its backslash) only
+when that character is fully determined *and locale-independent* — the simple escapes, `\NNN`
+octal and `\xHH` hex (byte escapes, always ≤ 0xFF), `\uHHHH`/`\UHHHHHHHH` whose value is ≤ 0xFF, and
+`\cX` where `X` is a real body character. In **every other case the backslash is kept literal**:
+a digitless `\x`/`\u`/`\U` (R2 finding 1), a `\u`/`\U` above 0xFF (R3 finding 1), a `\c` with no
+body character after it (R3 finding 2), an unrecognized escape, and a trailing backslash. bash may
+keep any of these literal, and on Windows the kept backslash is a separator, so keeping it is the
+only safe rendering. Rounds 1 and 2 reasoned about individual escapes ("this one can't produce a
+separator"); R3 found that the correct unit of the argument is the invariant, because bash's
+keep-literal set is larger than either round enumerated. See "What round 3 changed".
 
-**But the digitless `\x`/`\u`/`\U` case is not free, and R1 got it wrong (R2 finding 1).** bash
-keeps the backslash: `$'..\x'` is `..\x` — and on Windows `\` *is* a separator, so bash (Git Bash)
-writes that outside the workspace. A decoder that drops the backslash (as R1's prototype does)
-produces `..x`, no separator, and **allows an escape on Windows that is refused today**. The
-backslash's rendering *is* security-relevant on Windows; the implementation MUST keep it, exactly
-as bash does. See "What round 2 changed" for the measurement.
+**Why "decode ≤ 0xFF, keep the rest literal" is exactly right for the numeric escapes.** `\xHH` and
+`\NNN` are *byte* escapes: bash emits the single byte HH/NNN mod 256 in every locale (measured:
+`\x80` is one byte 0x80 under both C and UTF-8), so `chr(value)` reproduces the separator faithfully
+(`\x2f` → `/`, `\x5c` → `\`) and never a spurious one. `\uHHHH`/`\UHHHHHHHH` are *codepoint* escapes
+and their rendering above 0xFF is locale-dependent (§D5); at or below 0xFF the only separators are
+`/`=0x2F and `\`=0x5C, both ASCII, decoded identically in every locale, so `chr(value)` is faithful
+there too. Above 0xFF the value can never *be* a separator byte, but the C-locale literal *contains*
+one, so keeping the backslash is both safe and matches C-locale bash.
 
 **Rejected: decode only `\x2f`/`\057` (the separators seen so far).** It would miss `\uHHHH`,
 `\UHHHHHHHH`, and the octal/hex spelling of `\` on Windows, and would need re-visiting the first
@@ -119,8 +137,10 @@ checked)**. The **after** answer is the same on both platforms except where note
 | I1 inside ansic | Bash | `cat $'sub\x2fhello.py'` | inside | allow | **deny, unchecked** | **allow** (inside) |
 | L1 `$"` locale | Bash | `echo hi > $"..\x2fx"` | inside (literal) | allow | deny, unchecked | **unchanged**: allow (POSIX), deny (Win) |
 | N1 bslash ansic | Bash | `echo hi > $'..\x5cx'` | POSIX: inside (name w/ `\`); Win: outside | allow | deny | POSIX allow; **Win deny outside** |
-| N2 digitless `\x` | Bash | `echo hi > $'..\x'` (no hex digit) | POSIX: inside (name `..\x`); Win: **outside** (`\`=sep) | POSIX allow / Win deny (unchecked) | — | POSIX allow; **Win deny outside**. R1's prototype wrongly **allows** on Win — R2 finding 1 |
-| N3 overrange `\U` | Bash | `echo hi > $'\Uffffffffx'` | inside (file `x`, high bytes) | deny, unchecked | deny, unchecked | **allow** (inside). R1's prototype **raises** — R2 finding 2 |
+| N2 digitless `\x` | Bash | `echo hi > $'..\x'` (no hex digit) | POSIX: inside (name `..\x`); Win: **outside** (`\`=sep) | POSIX allow / Win deny (unchecked) | Win deny (unchecked) | POSIX allow; **Win deny outside**. R1's prototype wrongly **allows** on Win — R2 finding 1 |
+| N3 overrange `\U` | Bash | `echo hi > $'\Uffffffffx'` | POSIX: inside (file `x`); Win: outside (C-locale literal `\Ufff…`) | POSIX allow / Win deny (unchecked) | POSIX allow / Win deny (unchecked) | POSIX allow (inside); **Win deny outside** (reason improves). R1 **raises**, R2 wrongly **allows on Win** — R3 finding 1 corrects both |
+| N4 `\u`>0xFF | Bash | `echo hi > $'..\u0100'` (value 0x100) | POSIX: inside; Win: **outside** (C-locale keeps literal `..\u0100`, `\`=sep) | POSIX allow / Win deny (unchecked) | POSIX allow / Win deny (unchecked) | POSIX allow; **Win deny outside**. R1 & R2 both wrongly **allow on Win** — R3 finding 1 |
+| N5 `\c` at close | Bash | `echo hi > $'..\c'` (`\c` before `'`) | POSIX: inside (name `..\c`); Win: **outside** (`..\c`, `\`=sep) | POSIX allow / Win deny (unchecked) | POSIX allow / Win deny (unchecked) | POSIX allow; **Win deny outside**. R1 & R2 both wrongly **allow on Win** (consume the closing quote) — R3 finding 2 |
 | OK1 inside | Bash | `python sub/hello.py` | inside | allow | allow | allow |
 | OK2 own-hub | Bash | `curl -s "$HUB_URL/api/v1/agent-actions/tasks"` | (request) | allow | allow | allow |
 
@@ -135,9 +155,19 @@ checked)**. The **after** answer is the same on both platforms except where note
 - **N2 (digitless `\x`, R2):** Windows stays **deny**, reason improving from *cannot be checked* to
   *outside* — but this only holds if the decoder keeps the backslash; R1's prototype would flip it
   to allow. POSIX allow, unchanged.
-- **N3 (overrange `\U`, R2):** Windows goes from deny to **allow** (over-refusal corrected, bash
-  writes a file named `x` inside) — but only if the decoder guards `chr()`; R1's prototype raises.
-  POSIX allow, unchanged.
+- **N3 (overrange `\U`, R2/R3):** Windows stays **deny**, reason improving from *cannot be checked*
+  to *outside*. R2's table had this flipping deny→allow; that was **wrong** — in the C locale bash
+  keeps `\U110000`…`\U7fffffff` literal (backslash present), a Windows traversal, so allowing it
+  would open an escape. Only `\U` ≥ 0x80000000 (`\Uffffffff`) truly produces nothing in bash on
+  every locale, so writing a file named `x` inside is bash's answer there; the R3 decoder declines
+  to correct that one over-refusal (keeps it deny, not a regression from today's deny) in exchange
+  for a single locale-independent rule. POSIX allow, unchanged.
+- **N4 (`\u`/`\U` above 0xFF, R3):** Windows stays **deny**, reason improving from *cannot be
+  checked* to *outside*. R1 and R2 both decode it to one character and would flip it to **allow** —
+  the escape R3 finding 1 caught. POSIX allow, unchanged.
+- **N5 (`\c` before the closing quote, R3):** Windows stays **deny**, reason improving from *cannot
+  be checked* to *outside*. R1 and R2 both consume the closing quote as `\c`'s control target and
+  would flip it to **allow** — R3 finding 2. POSIX allow, unchanged.
 - **L1, OK1, OK2 unchanged.**
 
 ## D3 — What does not escape, and stays out of scope
@@ -179,21 +209,25 @@ escape (`\x` with no hex digits, `\u` with none, a trailing `\` before the closi
 unterminated `$'…'` running to end of text) is decoded to a best-effort literal and never raises.
 A decoded NUL (`\x00`, `\0`, `\c@`) is kept as `\x00`; on POSIX `os.path.realpath` raises
 `ValueError` on an embedded NUL, which `_where` already catches and turns into *could not be
-resolved* (the existing §2.5 totality behavior). A lone surrogate (`\ud800`) is a valid Python
-`chr()` value and `_where` handles it without raising (measured, `os.sep=='\\'`). No new catch
-after the lexer is needed **for those**.
+resolved* (the existing §2.5 totality behavior). No new catch after the lexer is needed.
 
-**But the decoder itself must guard `chr()` (R2 finding 2).** `\uHHHH` and `\UHHHHHHHH` accept a
-value the shell allows but Python `chr()` rejects: any codepoint above U+10FFFF (`\U110000`,
-`\U7fffffff`, `\Uffffffff` — all valid 8-hex escapes) makes `chr()` raise `ValueError` or
-`OverflowError`. R1's prototype calls `chr(int(hex, 16))` unguarded, so `$'\U110000'` **raises
-inside the decoder**, propagating out through `_lex` → `_read_command` → `_decide`, which has no
-catch — breaking totality. Measured on both platforms (`testbed/scratch/r2f332/fix_probe.py`, R1
-decoder rows). The fix is in the decoder: a value above `0x10FFFF` produces no character (bash
-emits high bytes for it, none of which is a `/` or `\`, so omitting them changes no verdict) and
-never raises. The measurement confirms the guarded decoder answers `$'\Uffffffffx'` as *allow,
-inside* — the file bash actually writes is named `x`, inside the workspace, so this is also an
-over-refusal corrected (today it denies as *cannot be checked*).
+**Totality now holds structurally, without a `chr()` overflow guard (R3 revises R2 finding 2).**
+`chr()` is called **only for values ≤ 0xFF** — the byte escapes (`\xHH` ≤ 0xFF, `\NNN` mod 256) and
+`\uHHHH`/`\UHHHHHHHH` values ≤ 0xFF. Every codepoint escape **above 0xFF is kept literal** (§D1, R3
+finding 1), so the values R2 guarded against — anything above U+10FFFF (`\U110000`, `\Uffffffff`),
+which make `chr()` raise `ValueError`/`OverflowError` — are never passed to `chr()` at all. R2's
+separate `if value > 0x10FFFF: return ""` guard is therefore removed; the ≤ 0xFF cap subsumes it and
+is also *more correct on Windows*, because R2's guard returned an empty string and so dropped the
+backslash that C-locale bash keeps for `\U110000`…`\U7fffffff` (§D1). The one behavioural cost is
+that `\U` ≥ 0x80000000 (`\Uffffffff`), which bash renders as nothing in every locale, is judged from
+its kept-literal backslash and so **denied on Windows** rather than allowed — an over-refusal, not a
+regression (today it denies as *cannot be checked*), and the price of one locale-independent rule.
+
+Note the R3 rule also *narrows* what `chr()` can emit: because values above 0xFF are kept literal, a
+lone surrogate (`\ud800`, value 0xD800 > 0xFF) is now kept literal rather than passed to `chr()`, so
+the surrogate case R2 had to reason about cannot arise; every `chr()` output is a code point in
+U+0000…U+00FF, all of which `_where` resolves without raising (measured, both platforms,
+`testbed/scratch/r3f332/three_decoders.py`).
 
 ## What round 2 changed
 
@@ -262,7 +296,94 @@ and tasks §2.2/§4.
   MODIFIED requirement survive byte-for-byte; exactly one paragraph and one scenario are added; the
   requirement's first physical line carries SHALL. `openspec validate --strict` passes.
 
-## What R3 should attack
+## What round 3 changed
+
+R3 re-derived the decode set against **real Git Bash 5.2.37 on Windows** (not only a Python model
+of it) and against WSL bash 5.2.21, under several locales, and re-ran R1's and R2's decoders through
+the real `_decide` on both platforms. Scratch is in `testbed/scratch/r3f332/`
+(`unicode_probe.sh`/`gen_probe.py` = bash truth per locale; `quote_lexing.py` = escaped-quote
+lexing; `three_decoders.py` = R1 vs R2 vs R3 decoder through `_decide`). Two more escapes of the
+**same class R2 opened** — *bash keeps a literal backslash that the decoder drops, and on Windows a
+backslash is a separator* — were found, both Windows-only, both measured, both fixed here. R2 had
+patched two leaks of this class (digitless; `chr()` overflow); the class was larger than either
+round enumerated, which is why R3 replaced the per-escape arguments with the invariant in D1.
+
+**Finding 1 — `\u`/`\U` above 0xFF is locale-dependent, and R1/R2 open a Windows escape (security).**
+bash's rendering of a codepoint escape above 0xFF depends on the locale of the shell that runs the
+command: a UTF-8 locale emits multibyte UTF-8 (no backslash), but the **C (non-UTF-8) locale keeps
+the escape literal, backslash and all** — `$'..\u0100'` stays `..\u0100` (the six-character escape `\u0100`, backslash included, is not decoded), and
+`$'..\U00110000'` likewise (measured, `unicode_probe.sh`: `u0100 inh -> \ u 0 1 0 0`; and directly,
+`three_decoders.py` on Windows). Git Bash on this machine runs a non-login `bash -c` in the **C
+locale** (`LANG` empty; `\u0100` kept literal), while a login `bash -lc` inherits `en_GB.UTF-8` and
+decodes it — so which behaviour the agent's Bash tool gets is not guaranteed. On Windows `\` is a
+separator, so:
+- C-locale bash (Git Bash) writes `$'..\u0100'`, `$'..\U00000100'`, …, `$'..\U00110000x'`
+  **outside** the workspace (literal `..\…` traversal);
+- **today** the reader refuses them on Windows (`$..\u0100` has `$`+`\`, rule 3, *cannot be
+  checked*) — measured;
+- **R1's decoder** decodes `\u0100` to one character (U+0100, no backslash) → `..`+U+0100, no separator → **allow**
+  (measured, `three_decoders.py`, R1 column: `u0100 … allow=True [inside]`); and it **raises** on
+  `\U00110000`/`\Uffffffff` (`chr()` overflow), breaking totality;
+- **R2's decoder** decodes ≤ 0x10FFFF via `chr` (same allow for `\u0100`) and returns `""` for
+  > 0x10FFFF, so `$'..\U00110000x'` becomes `..x`, no separator → **allow** (measured, R2 column:
+  `U00110000 … allow=True [inside]`). R2's own argument for that row — *"bash emits high bytes, none
+  of which is a separator"* — is true of the bytes but **false about the literal backslash** bash
+  keeps in the C locale for 0x110000…0x7FFFFFFF. An argument wrong while its Linux/UTF-8 outcome is
+  right — exactly the failure the round discipline exists to catch.
+
+So R1 and R2 would **regress Windows from deny to allow** for every `\u`/`\U` above 0xFF (rows N3,
+N4). **Fix:** decode `\u`/`\U` to a character only for values ≤ 0xFF; keep the backslash literal
+above 0xFF (§D1). The R3 decoder then refuses N3/N4 on Windows (*outside*) and allows them on POSIX
+(a filename with a backslash, written inside — correct), and never calls `chr()` above 0xFF, so
+totality holds without a guard (§D5). Measured (`three_decoders.py`, R3 column, both platforms).
+**Linux is sound with either decoder** — `\` is not a separator there and a codepoint above 0xFF
+never decodes to `/` — so this finding does not touch F332's POSIX escape; it is a Windows-only
+regression the change would otherwise *introduce*.
+
+**Finding 2 — `\c` immediately before the closing quote opens a Windows escape (security).** bash
+keeps `\c` literal when no body character follows it: `$'..\c'` is `..\c` (measured,
+`testbed/scratch/r3f332`, both Git Bash and WSL). R1's and R2's one-phase decoders read the char
+*after* `\c` as the control target without checking whether it is the closing quote — so they
+consume the closing `'`, decode `\c'` to a control character, over-run the string, and produce a
+word with no backslash. On Windows:
+- bash writes `$'..\c'` **outside** (`..\c` traversal);
+- **today** the reader refuses it (`$..\c`, rule 3, *cannot be checked*);
+- **R1/R2** produce `..g` (control of `'`), no separator → **allow** (measured through `_decide`:
+  `R2-lex c-at-close … allow=True inside`).
+**Fix:** `\c` with no body character before the closing quote keeps its backslash literal, and the
+decode never consumes the closing quote as a `\c` target (§D1, row N5). The R3 decoder then refuses
+`$'..\c'` on Windows (*outside*) and allows it on POSIX (name `..\c`, inside). `\c` with a real
+target (`\c/` → 0x0F, the `/` consumed) is unaffected and produces no separator in bash or the
+decoder — no divergence. Linux-sound, as finding 1.
+
+**Checks that found nothing (R1/R2 were right, or the case is benign):**
+- **Escaped-quote lexing.** `\'` inside `$'…'` is an escaped literal quote that does **not** close
+  the string, and `\\` is a literal backslash; the one-phase loop consumes each `\X` pair
+  atomically, so both match bash (`quote_lexing.py`: `$'a\'b'` → `a'b`, `$'x\'\'y'` → `x''y`,
+  matching bash's `61 27 62` / `78 27 27 79`). The only `\`-escape that over-runs the quote is `\c`
+  (finding 2); every other escape is safe.
+- **`\x` and octal are locale-independent.** They are *byte* escapes: `\x80` is one byte 0x80 under
+  both C and UTF-8 (measured), so `chr(value)` is faithful and can produce a separator only for
+  `\x2f`/`\x5c`/`\057`/`\134` — the correct set. `\457` wraps mod 256 to `/`; the 3-digit cap holds.
+- **`\cX` for a symbol X is cosmetically wrong but separator-safe.** The prototype maps `\c/` to
+  `chr(ord('/') ^ 0x40)` = `o`, where bash gives `& 0x1f` = 0x0F (measured). Neither is a separator,
+  and `\cX` can never yield 0x2F or 0x5C by either formula, so no verdict changes. The impl need not
+  match bash's control byte exactly; the design's "exactly what bash decodes" is inexact here and
+  harmless. Not a finding.
+- **`_where` totality over every emittable char.** Under the R3 rule the decoder emits only
+  `chr(0x00…0xFF)`, literal ASCII escape text, and control bytes ≤ 0x1F — no code point above 0xFF,
+  hence no lone surrogate. `_where` resolves all of these without raising (a NUL is caught by
+  `realpath`'s `ValueError` → *could not be resolved*). Measured, both platforms.
+- **`\U` ≥ 0x80000000.** bash emits nothing in every locale, so `$'\Uffffffffx'` is `x` inside; the
+  R3 decoder keeps it literal and so denies on Windows (over-refusal, not a regression). Deliberate,
+  documented (§D5); one over-refusal traded for one rule.
+- **Spec-delta integrity.** Diffed against the shipped requirement (`agent-run-sandboxing/spec.md`
+  lines 595–697): exactly one paragraph and one scenario are added, no shipped line is removed, the
+  requirement's first physical line carries SHALL. `openspec validate --strict` passes.
+- **PowerShell dialect.** The decode fires only in the bash dialect (`quote is None and $ followed
+  by '` in `_lex`); PowerShell has no `$'…'`. Unchanged from R1/R2. Mutation §4.5 pins it.
+
+## What R3 should attack (R2's list — addressed by R3, see "What round 3 changed")
 
 1. **The two R2 fixes, adversarially.** Re-run `fix_probe.py` on both platforms and confirm the
    *fixed* decoder (keep backslash on digitless `\x`/`\u`/`\U`; no `chr()` above `0x10FFFF`) refuses
@@ -287,3 +408,34 @@ and tasks §2.2/§4.
 5. **Drive it.** A Windows drive cannot show the POSIX allow→deny flip, but it *can* now show N2
    (`$'..\x'` refused on Windows) and N3 (`$'\Uffffffffx'` allowed, not a crash) — both are Windows
    answers this change alters. Confirm §5.2's drive exercises N2 and N3, not only G1 and I1.
+   *(R3 note: N3's Windows answer is now **deny outside**, not allow — see finding 1.)*
+
+## What the pre-approval review should attack
+
+1. **The locale dependency is the load-bearing new fact — is it stated correctly and is the fix's
+   scope right?** R3's finding 1 rests on Git Bash rendering `\u`/`\U` above 0xFF *literally* in the
+   C locale and as UTF-8 bytes in a UTF-8 locale, and on the agent's Bash tool's locale being
+   unguaranteed (non-login `bash -c` is C here; `bash -lc` is UTF-8). The decoder is made safe under
+   **both** by keeping the backslash above 0xFF. Attack: is there any locale in which bash produces a
+   `/` (not just a `\`) from a `\u`/`\U` above 0xFF that the ≤ 0xFF rule would miss? (UTF-8 bytes of
+   any codepoint ≥ 0x80 are all ≥ 0x80, never 0x2F or 0x5C — but verify.) And is the Windows-only,
+   locale-conditional nature honestly reflected in the finding's severity — this is a regression the
+   change would *introduce* on Windows, not a pre-existing hole, and Linux is sound either way.
+2. **Is the keep-literal set now provably complete, or is there a fourth leak?** R3 replaced R1/R2's
+   per-escape arguments with an invariant (decode to a char only when it is a determined,
+   locale-independent non-separator; else keep the backslash). Attack the invariant, not the list:
+   find any input where bash leaves a backslash (or a `/`) in the word that the R3 decoder removes.
+   Candidates not yet exhausted: `\c` followed by `\'` or `\\`; `\u{...}`-style brace forms;
+   `$'…'` split across an adjacency with the backslash at the seam; a decoded byte in 0x80–0xFF that
+   `os.path` on Windows treats specially.
+3. **N3's changed answer.** R3 flips N3's *after* answer on Windows from R2's **allow** to **deny**
+   (and drops the `chr()` guard for a ≤ 0xFF cap). Confirm the tasks (§1 marks, §4 mutations) and
+   the test-guide were all updated to match, and that no artifact still asserts N3 allows on Windows.
+4. **The `\c`-before-quote fix must not consume the closing quote.** The impl must not read past the
+   body's closing `'` for any escape. Confirm tasks §2.2 forbids it explicitly and a mutation
+   (§4.8) that consumes the quote fails a named row (N5).
+5. **The drive can only reach one bash locale.** §5.2 runs on Windows and exercises N2/N4/N5 (all
+   *deny outside* answers). It cannot prove which locale the agent's Bash tool used, so it cannot by
+   itself show finding 1 is a *live* escape rather than a latent one. Decide whether that honesty is
+   stated, and whether the CI Linux job (which is sound regardless) plus the Windows deny-reason
+   drive is sufficient evidence, or whether a locale probe inside the drive is warranted.
