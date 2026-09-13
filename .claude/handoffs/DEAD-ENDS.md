@@ -68,6 +68,13 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **A piped run reports the last command's exit code.** Use `${PIPESTATUS[0]}` when piping through
   `tail`.
 - **`strings` is not available** in this Git Bash. Use `grep -ao`.
+- **This Git Bash (5.2.37, msys2) forces `LC_CTYPE=C.UTF-8` and cannot be put in a plain C locale.**
+  *Measured 2026-09-13 by F332's pre-approval review:* `LC_ALL=C`, `LANG=C`, `LC_CTYPE=C` and
+  `POSIX` all leave it in `C.UTF-8`, so `$'Ā'` decodes to UTF-8 bytes. A probe that runs
+  `LANG= LC_ALL=` in a hand-built environment shows the C-locale behaviour (the escape kept
+  literal) that a spawned agent's bash here does not have. R3 of `a-quote-can-spell-a-slash` drew
+  a false "Windows escape" from exactly that probe. Before arguing from bash locale behaviour on
+  this machine, check `locale` inside the shell the product actually spawns.
 - **`grep -rn ... hub/` times out** — it walks `hub/ui/node_modules`. Scope the path or use the
   Grep tool.
 
