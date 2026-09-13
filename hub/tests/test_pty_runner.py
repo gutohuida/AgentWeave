@@ -178,6 +178,46 @@ class TestPtySessionSpawn:
 
         assert order == ["console", "spawn"]
 
+    def test_no_console_to_borrow_is_logged_and_does_not_stop_the_spawn(self, monkeypatch, caplog):
+        """F341's guard must fail loudly in the log and quietly for the run: a turn that flashes a
+        window is better than one that cannot start, and a silent failure would leave the window
+        itself as the only sign the fix had stopped working."""
+        import ctypes
+        import logging
+
+        import hub.subprocess_windows as sw
+
+        monkeypatch.setattr(sw, "IS_WINDOWS", True)
+        monkeypatch.setattr(sw, "has_console", lambda: False)
+        monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+
+        # 1. The helper cannot even be started.
+        def _no_helper(*args, **kwargs):
+            raise FileNotFoundError("cmd.exe")
+
+        monkeypatch.setattr(sw.subprocess, "Popen", _no_helper)
+        with caplog.at_level(logging.WARNING, logger="hub.subprocess_windows"):
+            sw.ensure_windowless_console()
+        assert "could not start" in caplog.text and "F341" in caplog.text
+
+        # 2. The helper starts, but its console can never be attached to.
+        caplog.clear()
+        helper = MagicMock()
+        helper.pid = 4321
+        monkeypatch.setattr(sw.subprocess, "Popen", lambda *a, **k: helper)
+        monkeypatch.setattr(
+            ctypes,
+            "WinDLL",
+            lambda *a, **k: MagicMock(AttachConsole=MagicMock(return_value=0)),
+            raising=False,
+        )
+        monkeypatch.setattr(ctypes, "get_last_error", lambda: 5, raising=False)
+        monkeypatch.setattr(sw.time, "sleep", lambda _s: None)
+        with caplog.at_level(logging.WARNING, logger="hub.subprocess_windows"):
+            sw.ensure_windowless_console()
+        assert "AttachConsole to helper 4321 failed" in caplog.text
+        helper.stdin.close.assert_called_once()  # and the helper is still told to exit
+
     @pytest.mark.skipif(not IS_WINDOWS, reason="pywinpty socket polling is Windows-only")
     def test_delayed_output_is_not_mistaken_for_eof(self):
         session = PtySession.spawn(

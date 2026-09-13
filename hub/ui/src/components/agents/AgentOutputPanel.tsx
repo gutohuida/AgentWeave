@@ -124,6 +124,23 @@ const TAIL_BOTTOM_GAP_PX = 24
  *  inset it covers. Kept equal to the CSS by hand; it is one number. */
 const TRAY_BOTTOM_GAP_PX = 8
 
+/** Room the conversation needs for the tray to float over it. The floating column is capped at 60%
+ *  of the conversation's height, so below this it would show less of the question than the inline
+ *  placement's largest cap (INLINE_MAX_PX = 0.6 × 240) — measured before this existed: 41px of an
+ *  eight-option question at 560px wide, and nothing at all at 420×560, where the project rail
+ *  stacks above the panel and leaves the conversation about 68px. */
+const FLOAT_MIN_ROOM_PX = 240
+
+/** Inline, the question takes the conversation's room — never more, so the composer and its send
+ *  button (which is what confirms a chosen option) stay on screen — between these bounds. The floor
+ *  is its header row and the first line of the question: below it the card would show nothing
+ *  useful, and only then may it push the composer down, by at most the difference. */
+const INLINE_MIN_PX = 72
+const INLINE_MAX_PX = 144
+
+/** The composer column's `gap-2`, which an inline tray adds below itself. */
+const INLINE_GAP_PX = 8
+
 /** Titles are capped at 120 characters; the continuity line is one row of 11px text under the
  *  composer. Shortened here rather than at the source, because the rail wants the whole thing. */
 const CONTINUITY_LABEL_MAX = 44
@@ -215,12 +232,27 @@ export function AgentOutputPanel({
   const hasInterjection =
     !!pendingQuestion || openPermissionRequestsFor(permissionRequests, agent.name).length > 0
   const trayRef = useRef<HTMLDivElement>(null)
+  /** The panel, its header and its composer area: the room the conversation has is what the panel
+   *  leaves after the other two, read from natural sizes so it does not depend on where the tray
+   *  currently sits (see the placement effect). */
+  const panelRef = useRef<HTMLDivElement>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const composerAreaRef = useRef<HTMLDivElement>(null)
+  const [inlineCap, setInlineCap] = useState(INLINE_MAX_PX)
   /** How much of the conversation's foot the tray covers. Reserved below the newest entry, so
    *  the end of the conversation can still be scrolled into view above the tray — what a floating
    *  panel costs when it does not do this is the last messages. */
   const [trayInset, setTrayInset] = useState(0)
   const trayInsetRef = useRef(0)
   trayInsetRef.current = trayInset
+  /** Where the tray sits. `float` over the conversation's foot when there is room for that;
+   *  `inline` in the composer's column when the conversation is too short for a floating tray to
+   *  show a useful part of the question — a narrow window, where the project rail stacks above the
+   *  panel. Inline, the question takes the conversation's room (`inlineCap`), and pushes the
+   *  composer down only to keep its own minimum. */
+  const [trayPlacement, setTrayPlacement] = useState<'float' | 'inline'>('float')
+  const trayPlacementRef = useRef(trayPlacement)
+  trayPlacementRef.current = trayPlacement
   const { data: conversations = [] } = useAgentConversations(agent.name)
   // Read inside the effect below rather than as a dependency: useAgentConversations's
   // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
@@ -440,25 +472,52 @@ export function AgentOutputPanel({
     return () => observer.disconnect()
   }, [timelineEntries.length, isRunning, trayInset, measureTail])
 
-  /* The tray's height, measured whenever it changes — a question arriving, a batch stepping, the
-   * operator folding it. Mounted only while something is in it, so an idle conversation runs no
-   * observer for it. */
+  /* The tray's placement and height, measured whenever either can change — a question arriving, a
+   * batch stepping, the operator folding it, the window resizing. Mounted only while something is
+   * in it, so an idle conversation runs no observer for it.
+   *
+   * The room must not depend on the placement it decides, or the tray flips between the two or
+   * gets stuck in one. Reading the conversation body's height does depend on it — inline, the tray
+   * has taken its own height out of the body, and once the body bottoms out at its padding the
+   * shortfall is invisible. So the room is built from sizes that do not move with the tray: the
+   * panel's height, less the header, less the composer area's own height with the inline tray
+   * (and its gap) taken back out. */
   useLayoutEffect(() => {
     const tray = trayRef.current
-    if (!tray) {
+    const panel = panelRef.current
+    const header = headerRef.current
+    const composerArea = composerAreaRef.current
+    if (!tray || !panel || !header || !composerArea) {
       setTrayInset(0)
       return
     }
     const measure = () => {
-      const next = tray.offsetHeight + TRAY_BOTTOM_GAP_PX
+      // Not laid out (display:none, or no layout engine at all): nothing to decide from, so the
+      // placement stays as it is rather than reading "no room" off an element that has no size.
+      if (panel.getClientRects().length === 0) return
+      const column = tray.offsetHeight
+      const inline = trayPlacementRef.current === 'inline'
+      const composerOwn = composerArea.offsetHeight - (inline ? column + INLINE_GAP_PX : 0)
+      const room = panel.clientHeight - header.offsetHeight - composerOwn
+      const placement = room >= FLOAT_MIN_ROOM_PX ? 'float' : 'inline'
+      if (placement !== trayPlacementRef.current) {
+        // Re-measured from the new position, which re-runs this effect.
+        setTrayPlacement(placement)
+        return
+      }
+      if (placement === 'inline') {
+        const cap = Math.min(INLINE_MAX_PX, Math.max(INLINE_MIN_PX, Math.floor(room - INLINE_GAP_PX)))
+        setInlineCap((prev) => (prev === cap ? prev : cap))
+      }
+      const next = placement === 'float' ? column + TRAY_BOTTOM_GAP_PX : 0
       setTrayInset((prev) => (Math.abs(prev - next) > 1 ? next : prev))
     }
     measure()
     if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(measure)
-    observer.observe(tray)
+    for (const el of [tray, panel, header, composerArea]) observer.observe(el)
     return () => observer.disconnect()
-  }, [hasInterjection])
+  }, [hasInterjection, trayPlacement])
 
   // `isRunning` is a dependency because the working indicator renders at the foot of the timeline
   // and appears on that transition, not on a new entry. Following only `timelineEntries.length`
@@ -960,9 +1019,33 @@ export function AgentOutputPanel({
     }
   }
 
+  // Rendered in exactly one of two places — floating over the conversation, or inline in the
+  // composer's column — as `trayPlacement` decides.
+  const interjections = (
+    <>
+      <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
+      <AgentQuestionCard
+        questions={openQuestions}
+        agent={agent.name}
+        selected={questionSelection}
+        onToggle={handleQuestionToggle}
+        isResponding={answerQuestion.isPending}
+        isTyping={composerDraft.trim().length > 0}
+        onDecline={handleDeclineQuestion}
+        isDeclining={declineQuestion.isPending}
+      />
+    </>
+  )
+
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div
+      ref={panelRef}
+      className="flex flex-col h-full overflow-hidden"
+      style={{ background: 'var(--bg)' }}
+      data-testid="conversation-panel"
+    >
       <div
+        ref={headerRef}
         className="conversation-header-surface flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2.5"
         data-testid="conversation-header"
       >
@@ -1070,7 +1153,9 @@ export function AgentOutputPanel({
         onScroll={handleScroll}
         onClickCapture={handleTimelineClickCapture}
         data-testid="conversation-output"
-        className="flex-1 overflow-y-auto py-[22px]"
+        // Inline, the question is using the conversation's room, and 44px of padding around no
+        // visible content would only push the composer further down.
+        className={`flex-1 overflow-y-auto ${hasInterjection && trayPlacement === 'inline' ? '' : 'py-[22px]'}`}
         style={{ background: 'var(--bg)' }}
       >
         {isLoading || chat.isLoading ? (
@@ -1101,20 +1186,10 @@ export function AgentOutputPanel({
             instead of taking the composer column's height (F345): capped, scrolling inside
             itself, foldable, and with its height reserved below the newest entry so the end of
             the conversation still scrolls into view above it. */}
-        {hasInterjection && (
+        {hasInterjection && trayPlacement === 'float' && (
           <div className="conversation-interject-tray" data-testid="conversation-interject-tray">
             <div ref={trayRef} className="conversation-interject-tray-column">
-              <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
-              <AgentQuestionCard
-                questions={openQuestions}
-                agent={agent.name}
-                selected={questionSelection}
-                onToggle={handleQuestionToggle}
-                isResponding={answerQuestion.isPending}
-                isTyping={composerDraft.trim().length > 0}
-                onDecline={handleDeclineQuestion}
-                isDeclining={declineQuestion.isPending}
-              />
+              {interjections}
             </div>
           </div>
         )}
@@ -1147,7 +1222,7 @@ export function AgentOutputPanel({
         )}
       </div>
 
-      <div className="conversation-composer-fade shrink-0">
+      <div ref={composerAreaRef} className="conversation-composer-fade shrink-0" data-testid="conversation-composer-area">
         <div className="mx-auto flex w-full max-w-[820px] flex-col gap-2">
           <BannerStack banners={banners} />
 
@@ -1196,6 +1271,19 @@ export function AgentOutputPanel({
                 ? `Continuing ${continuityLabel(currentConversation)}`
                 : 'Continuing this conversation')}
           </span>
+
+          {/* Too little conversation for a floating tray to show the question: it sits here
+              instead, capped at the room the conversation had, so the composer stays put. */}
+          {hasInterjection && trayPlacement === 'inline' && (
+            <div
+              ref={trayRef}
+              className="conversation-interject-tray-column is-inline"
+              data-testid="conversation-interject-inline"
+              style={{ maxHeight: inlineCap }}
+            >
+              {interjections}
+            </div>
+          )}
 
           <div className="conversation-composer-surface">
             <Composer

@@ -202,6 +202,43 @@ def test_the_fingerprint_ignores_tests(checkout):
     assert ui_source_fingerprint(src) == before
 
 
+def test_a_new_file_counts_the_same_before_and_after_it_is_committed(checkout):
+    """The documented order is build, record the stamp, then `git add` and commit. A new source
+    file is in the bundle from the build onwards, so it has to be in the fingerprint from then on
+    too. Listing only tracked files left it out until the commit, and the stamp committed with it
+    was stale on arrival (2026-09-13: `pendingPermissions.ts` in `e9f71c0`)."""
+    root, src, _dist = checkout
+    (src / "lib.ts").write_text("export const x = 1\n", encoding="utf-8")
+    recorded_before_add = ui_source_fingerprint(src)
+
+    commit_at(root, "2026-02-01T00:00:00+00:00")
+
+    assert ui_source_fingerprint(src) == recorded_before_add
+
+
+def test_a_deleted_file_counts_the_same_before_and_after_the_deletion_is_committed(checkout):
+    root, src, _dist = checkout
+    (src / "old.ts").write_text("export const y = 2\n", encoding="utf-8")
+    commit_at(root, "2026-02-01T00:00:00+00:00")
+
+    (src / "old.ts").unlink()
+    recorded_before_commit = ui_source_fingerprint(src)
+    commit_at(root, "2026-03-01T00:00:00+00:00")
+
+    assert ui_source_fingerprint(src) == recorded_before_commit
+
+
+def test_an_ignored_file_does_not_count(checkout):
+    """Untracked is not the same as source: what `.gitignore` excludes stays out."""
+    root, src, _dist = checkout
+    before = ui_source_fingerprint(src)
+    (root / ".gitignore").write_text("*.log\n", encoding="utf-8")
+    commit_at(root, "2026-02-01T00:00:00+00:00")
+    (src / "debug.log").write_text("noise\n", encoding="utf-8")
+
+    assert ui_source_fingerprint(src) == before
+
+
 def test_the_warning_clears_within_the_ttl_without_a_restart(monkeypatch, checkout):
     """`lru_cache(maxsize=1)` meant a real rebuild needed a Hub restart before the warning cleared.
 

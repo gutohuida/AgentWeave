@@ -16,6 +16,7 @@ The ConPTY spawn in `pty_runner.PtySession` cannot take a creation flag — pywi
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 import sys
@@ -24,6 +25,8 @@ import time
 from typing import Any, Dict
 
 IS_WINDOWS = sys.platform == "win32"
+
+logger = logging.getLogger(__name__)
 
 _console_lock = threading.Lock()
 
@@ -73,6 +76,10 @@ def ensure_windowless_console() -> None:
 
     Idempotent and thread-safe, and a no-op off Windows or when a console is already attached
     (an interactive launch, or `agentweave` starting the Hub with `CREATE_NO_WINDOW`).
+
+    Never raises. If no console can be borrowed the spawn still goes ahead — a window flashing is
+    better than an agent turn that cannot start — but it says so in the log, because otherwise the
+    only sign that F341 has come back is the window it opens.
     """
     if not IS_WINDOWS:
         return
@@ -81,25 +88,43 @@ def ensure_windowless_console() -> None:
             return
         import ctypes
 
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         # `cmd.exe` because it is a console-subsystem program on every Windows install:
         # `sys.executable` may be `pythonw.exe`, a GUI program, for which `CREATE_NO_WINDOW` is
         # ignored and no console is created to borrow. `/k` with a piped stdin reads commands
         # until end of input, so closing the pipe is what lets it exit.
-        helper = subprocess.Popen(
-            [os.environ.get("COMSPEC") or "cmd.exe", "/d", "/q", "/k"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
+        comspec = os.environ.get("COMSPEC") or "cmd.exe"
+        try:
+            helper = subprocess.Popen(
+                [comspec, "/d", "/q", "/k"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
+        except OSError as exc:
+            logger.warning(
+                "No windowless console for ConPTY spawns: could not start %s (%s). Each agent "
+                "turn may open a terminal window (F341).",
+                comspec,
+                exc,
+            )
+            return
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        last_error = 0
         try:
             # The helper's console exists once `CreateProcess` returns, so the first attempt
             # normally succeeds; the retries only absorb a scheduler hiccup.
             for _ in range(20):
                 if kernel32.AttachConsole(helper.pid):
                     return
+                last_error = ctypes.get_last_error()
                 time.sleep(0.025)
+            logger.warning(
+                "No windowless console for ConPTY spawns: AttachConsole to helper %s failed "
+                "(Windows error %s). Each agent turn may open a terminal window (F341).",
+                helper.pid,
+                last_error,
+            )
         finally:
             if helper.stdin is not None:
                 helper.stdin.close()

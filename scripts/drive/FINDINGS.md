@@ -27274,6 +27274,19 @@ console-less child, Windows-only), `test_pty_runner.py` (console before spawn, e
 **Not yet on the operator's instance.** The live Hub loaded its Python at 2026-09-12 21:35; the fix
 reaches it on the operator's next restart. The 16 lingering windows are leftovers and can be closed.
 
+**Independent test (2026-09-13, separate Opus session, trial Hub): PASS.** Three launch shapes —
+`python` + `DETACHED_PROCESS` (the old CLI), `python` + `CREATE_NO_WINDOW` (the new CLI) and
+`pythonw` + `CREATE_NO_WINDOW` (the desktop shortcut) — across 8 real Haiku turns including two
+concurrent pairs: 0 `-Embedding` processes, 0 new visible windows, 0 new conhost children, the
+console never dropped between turns, and the agent's MCP tools worked in every turn. It measured
+one thing the builder had not: **for the `pythonw` shape the CLI change does nothing** —
+`CREATE_NO_WINDOW` is ignored for a GUI-subsystem program — so on the shortcut's path it is the
+Hub-side `ensure_windowless_console()` that fixes F341, which is why both halves are kept. It also
+found the guard failed silently: if `AttachConsole` never succeeded, or `cmd.exe` could not be
+started, it returned with no console and no trace. It now logs a warning naming F341 in both cases,
+and a helper that cannot start no longer propagates into the agent's spawn
+(`test_no_console_to_borrow_is_logged_and_does_not_stop_the_spawn`).
+
 ## F342 (B) — typing "..." in the composer shows the first dot vanish, while the message sends all three
 
 **Status:** fixed — `textarea, input, [contenteditable] { font-variant-ligatures: none; }` in
@@ -27402,6 +27415,39 @@ no tray for another agent, and the inset arithmetic: 600 − 208 − 120 − 24 
 **Not done:** the permission card is not foldable. It is the one with a timeout, its detail is
 already capped at 10rem, and the tray's cap and scroll bound a stack of them.
 
+**Independent test (2026-09-13, separate Opus session): PARTIAL — the first version hid the
+question in narrow windows.** At 768px wide and up it held (real two-question `ask_user` batch
+answered through the composer while folded; two real permission requests beside a long question;
+scrolled-up reader not moved; no gap after dismissal). Below 768px the project rail stacks above the
+panel and the conversation shrinks to tens of pixels, and the floating column's `60%` cap went with
+it: 26px at 700×720, 41px at 560×800, **0px at 420/500×560 with the fold control unreachable**.
+
+**Second version.** The tray floats only when the conversation has at least 240px (where 60% gives
+the 144px the inline placement tops out at); below that it sits inline in the composer column with
+its `max-height` set to the room the conversation had, between 72px (its header and first line)
+and 144px. Taking the conversation's room and not the composer's is the point: the send button is
+what confirms a chosen option, so a question that pushes it off the panel cannot be answered. The
+room is computed from sizes the tray does not move — panel height, less header, less the composer
+area with an inline tray taken back out — because reading the conversation body's own height
+either flips (floating measures room, inline measures less) or sticks (inline, the body bottoms
+out at its padding and the shortfall disappears); a mutation computing it from the body alone fails
+`floats again once the window gives the conversation room`. Driven on the rebuilt bundle:
+
+| viewport | placement | question visible | send on screen |
+|---|---|---|---|
+| 1280×800 / 1280×600 / 768×800 | float | 281 / 161 / 214 px | yes |
+| 700×720, 640×800, 560×800 | inline | 72 px, fold reachable | **yes** |
+| 500×560, 420×560 | inline | 72 px, fold reachable | no — nor with no question at all (F350) |
+
+A live page resized across the threshold five times settled on the first measurement each time.
+
+**The build stamp committed with `e9f71c0` was stale on arrival**, also found by the independent
+pass: `ui_source_fingerprint` enumerated tracked files only, and `pendingPermissions.ts` was stamped
+before it was `git add`ed. The fingerprint now lists what a build reads — tracked files still on
+disk plus untracked files `.gitignore` does not exclude — so a stamp recorded before `git add` of a
+new file, or of a deletion, still holds after the commit (three tests in
+`test_ui_build_stamp.py`). The bundle is re-stamped, and `AW_CHECK_UI_BUNDLE=1` passes.
+
 ## F346 (C) — the route-reachability instrument lets a sibling route's literal satisfy a `{param}` slot, so it undercounts clientless routes by one
 
 **Status:** open. Filed 2026-09-13 by a DECIDE session. The defect was first noticed in handoff 0120
@@ -27474,3 +27520,44 @@ That the queued turns then delivered was **not yet observed** when this was file
 
 Either way, the pass that refuses should not hold the operator's message behind a condition only
 the operator can clear without saying so.
+
+## F348 (B) — following switches itself off during every running turn, so the newest text drifts below the fold (and under the question tray)
+
+**Status:** open. Found 2026-09-13 by the independent test pass over F341–F345; it predates them.
+
+**Measured.** While a reply streams, the view settles 43–84px short of the bottom — over the 40px
+threshold in `handleScroll` (`AgentOutputPanel.tsx`, `atBottom = … < 40`) — so `autoscroll` turns
+itself off and "Jump to newest" appears: 13 of 17 samples during one streamed reply, with no tray
+at all. With the F345 tray open, the newest text then sits under the tray until the operator jumps;
+after a jump it is clear (indicator foot 357, tray top 377).
+
+**Suspected mechanism, not yet confirmed by a probe.** The working indicator renders at the foot
+of the timeline but outside `[data-turn-boundary]`, so `measureTail`'s arithmetic (viewport − newest
+turn − gap) does not count it: pinning the newest turn's top leaves the indicator's height of
+content below the bottom, which reads as "the operator scrolled up". A repair would either measure
+the indicator into the turn, or count it in the spacer; it has to keep the 2026-08-20/21
+"bouncing scroll" regressions in `conversationControls.test.tsx` green.
+
+## F349 (B) — two agent triggers at the same moment can answer 500 "database is locked" while the message is delivered anyway
+
+**Status:** open. Found 2026-09-13 by the independent test pass (trial Hub); it predates F341–F345.
+
+**Measured.** Two `POST …/agent/trigger` requests fired together: one returned **500** with
+`database is locked`, raised from the autoflushed `UPDATE projects SET last_seen_at`; the message
+was nonetheless delivered ten seconds later as `run-75e901d71e7c`. So the operator is told the send
+failed for a send that happened — the F108 shape (a route's status disagreeing with its effect). A
+repair needs to decide whether the `last_seen_at` write belongs inside the trigger's transaction at
+all, and must answer with what actually happened to the message. See DEAD-ENDS on the two
+`database is locked` mechanisms before assuming a holder exists.
+
+## F350 (C) — below ~560px of height in a narrow window, the composer's send button is off the panel even with nothing pending
+
+**Status:** open. Found 2026-09-13 while measuring F345's narrow fallback; it predates it.
+
+**Measured** (headless Chromium, trial Hub, no question pending): at 500×560 and 420×560 the send
+button sits at y 567–599 in a 560px viewport; at 560×800 it is on screen. Below 768px wide the
+project rail stacks *above* the conversation panel instead of beside or over it — 290px of 560, 368px
+of 800 — so header plus composer alone exceed what is left, and the panel's `overflow-hidden` gives
+no way to scroll to it. F345's inline question adds at most its 72px floor on top of that. The
+repair is in the narrow layout, not the tray: the rail collapsing to a drawer or header control
+below the breakpoint would return that height to the conversation.

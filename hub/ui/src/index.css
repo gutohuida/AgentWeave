@@ -1484,6 +1484,13 @@
     pointer-events: auto;
     border-radius: var(--radius-content);
   }
+  /* Inline, in the composer's column, when the conversation is too short for the tray to float
+     (a narrow window: the project rail stacks above the panel). Its max-height is set by
+     AgentOutputPanel from the room the conversation had (INLINE_MIN_PX..INLINE_MAX_PX), so it
+     takes that room and not the composer's; the question scrolls inside past it. */
+  .conversation-interject-tray-column.is-inline {
+    width: 100%;
+  }
   /* Cards over a transcript need an opaque face, and the tray scrolls under its header: the
      header row stays pinned so a long question never scrolls away what is being asked, and the
      fold and dismiss controls with it. */

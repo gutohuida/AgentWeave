@@ -108,11 +108,19 @@ def ui_source_fingerprint(
 
     `git hash-object` applies each path's own `.gitattributes`, so a genuine change to a binary
     asset still moves the hash — the normalisation is text-only, exactly as git decides it.
+
+    The same property applies to *which* files are counted, and that was a third false positive
+    (2026-09-13, `e9f71c0`): listing only tracked files meant a new source file, built into the
+    bundle but not yet `git add`ed when the stamp was recorded, joined the fingerprint only once
+    committed — so the stamp that was right when written was wrong the moment it was committed.
+    The listing is therefore what a build reads: tracked files that are still on disk, plus
+    untracked ones `.gitignore` does not exclude. A deletion is symmetric — the file stops counting
+    when it leaves the disk, not when the deletion is committed.
     """
     pathspec = [".", *(f":(exclude){p}" for p in exclude)]
     try:
         listing = subprocess.run(
-            ["git", "ls-files", "--", *pathspec],
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", *pathspec],
             cwd=ui_src,
             capture_output=True,
             text=True,
@@ -124,17 +132,21 @@ def ui_source_fingerprint(
     if listing.returncode != 0 or not listing.stdout.strip():
         return None
 
-    rel_paths = sorted(listing.stdout.splitlines())
+    # A tracked file deleted from disk is still in the index until the deletion is committed; it is
+    # not source a build can read, so it does not count (see the docstring's last paragraph).
+    rel_paths = sorted(set(listing.stdout.splitlines()))
     normalised = _git_normalised_hashes(ui_src, rel_paths)
     if normalised is None:
         return None
 
     digest = hashlib.sha256()
     for rel_path in rel_paths:
+        # Gone from disk -- deleted, or vanished mid-rename since the listing. Skipped, not marked:
+        # a marker would make the fingerprint depend on whether the deletion is committed yet.
+        if rel_path not in normalised:
+            continue
         digest.update(rel_path.encode("utf-8"))
-        # Listed by git but unreadable right now (mid-rename, deleted since the listing) -- fold in
-        # a marker rather than letting the health check crash over it.
-        digest.update(normalised.get(rel_path, "<unreadable>").encode("utf-8"))
+        digest.update(normalised[rel_path].encode("utf-8"))
     return digest.hexdigest()
 
 

@@ -9,7 +9,7 @@
  * off the panel. They now float over the conversation's foot in a tray, and the tray's height is
  * reserved below the newest entry so the conversation's end still scrolls into view above it.
  */
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSummary } from '@/api/agents'
 import type { AgentConversation, ChatHistoryResponse, TimelineEntry } from '@/api/agentChat'
@@ -133,17 +133,58 @@ function entry(id: string): TimelineEntry {
 }
 
 /** jsdom lays nothing out. Heights are read from the prototype so React's replacement of a node
- *  between renders cannot drop them. */
+ *  between renders cannot drop them. The panel is laid out as a browser would: a 50px header, a
+ *  composer area of 200px plus the tray and its 8px gap while the tray is inline, and whatever
+ *  `room` says is left for the conversation. */
 const originalOffsetHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
-function layOut({ tray, turn }: { tray: number; turn: number }) {
+const originalClientHeight = Object.getOwnPropertyDescriptor(Element.prototype, 'clientHeight')
+const originalGetClientRects = Element.prototype.getClientRects
+const HEADER_PX = 50
+const COMPOSER_PX = 200
+function layOut({ tray, turn, room = () => 600 }: { tray: number; turn: number; room?: () => number }) {
+  const is = (el: Element, id: string) => el.getAttribute?.('data-testid') === id
+  const inlineNow = () => document.querySelector('[data-testid="conversation-interject-inline"]') !== null
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
     configurable: true,
     get(this: HTMLElement) {
       if (this.classList?.contains('conversation-interject-tray-column')) return tray
       if (this.hasAttribute?.('data-turn-boundary')) return turn
+      if (is(this, 'conversation-header')) return HEADER_PX
+      if (is(this, 'conversation-composer-area')) return COMPOSER_PX + (inlineNow() ? tray + 8 : 0)
       return 0
     },
   })
+  Object.defineProperty(Element.prototype, 'clientHeight', {
+    configurable: true,
+    get(this: Element) {
+      return is(this, 'conversation-panel') ? room() + HEADER_PX + COMPOSER_PX : 0
+    },
+  })
+  // Laid out: the panel reads "no rects" as "not laid out yet" and decides nothing from it.
+  Element.prototype.getClientRects = function (this: Element) {
+    return (is(this, 'conversation-panel') ? [{}] : []) as unknown as DOMRectList
+  }
+}
+
+/** A ResizeObserver that can be fired by hand — the setup file's stub never calls back. */
+function recordResizeObservers() {
+  const callbacks: ResizeObserverCallback[] = []
+  const original = globalThis.ResizeObserver
+  class Recording {
+    constructor(callback: ResizeObserverCallback) {
+      callbacks.push(callback)
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  ;(globalThis as unknown as { ResizeObserver: typeof Recording }).ResizeObserver = Recording
+  return {
+    fire: () => act(() => callbacks.forEach((cb) => cb([], {} as ResizeObserver))),
+    restore: () => {
+      globalThis.ResizeObserver = original
+    },
+  }
 }
 
 function viewport(el: HTMLElement, clientHeight: number) {
@@ -164,6 +205,8 @@ describe('interjections float over the conversation', () => {
   afterEach(() => {
     if (originalOffsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight)
     else Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight')
+    if (originalClientHeight) Object.defineProperty(Element.prototype, 'clientHeight', originalClientHeight)
+    Element.prototype.getClientRects = originalGetClientRects
   })
 
   it('puts a pending question in the tray over the conversation, not in the composer column', () => {
@@ -231,5 +274,101 @@ describe('interjections float over the conversation', () => {
     // 600 viewport - 208 tray - 120 turn - 24 gap. Without the subtraction the turn would be
     // pinned with its foot under the tray.
     expect(screen.getByTestId('conversation-tail-spacer')).toHaveStyle({ height: '248px' })
+  })
+})
+
+describe('a conversation too short for the tray to float over it', () => {
+  // Measured by an independent test pass on the first version: at 560px wide the floating column
+  // showed 41px of an eight-option question, and at 420×560 — where the project rail stacks above
+  // the panel — nothing at all, with its fold control unreachable.
+  beforeEach(() => {
+    openQuestions = [askUser()]
+    permissionRequests = []
+    entries = [entry('1')]
+    useConfigStore.setState({ apiKey: 'aw_live_test', isConfigured: true, selectedProjectId: 'proj-test' })
+  })
+
+  afterEach(() => {
+    if (originalOffsetHeight) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', originalOffsetHeight)
+    else Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight')
+    if (originalClientHeight) Object.defineProperty(Element.prototype, 'clientHeight', originalClientHeight)
+    Element.prototype.getClientRects = originalGetClientRects
+  })
+
+  it('puts the question in the composer column instead, and reserves nothing over the conversation', () => {
+    layOut({ tray: 144, turn: 120, room: () => 150 })
+    const { container } = render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+
+    const inline = screen.getByTestId('conversation-interject-inline')
+    expect(inline).toContainElement(screen.getByTestId('agent-question-q-1'))
+    expect(container.querySelector('.conversation-composer-fade')).toContainElement(inline)
+    expect(screen.queryByTestId('conversation-interject-tray')).toBeNull()
+    expect(screen.getByTestId('conversation-tray-inset')).toHaveStyle({ height: '0px' })
+  })
+
+  it('takes the room the conversation had, not the composer’s', () => {
+    // The send button is what confirms a chosen option, so pushing the composer off the panel makes
+    // the question unanswerable. 100px of room: the question gets 100 - 8 (its gap) = 92px.
+    layOut({ tray: 300, turn: 120, room: () => 100 })
+    render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+
+    expect(screen.getByTestId('conversation-interject-inline')).toHaveStyle({ maxHeight: '92px' })
+    // The conversation's padding gives way too; around no visible content it only pushed.
+    expect(screen.getByTestId('conversation-output').className).not.toContain('py-[22px]')
+  })
+
+  it('keeps its header and first line even when there is no room at all', () => {
+    layOut({ tray: 300, turn: 120, room: () => 0 })
+    render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+
+    expect(screen.getByTestId('conversation-interject-inline')).toHaveStyle({ maxHeight: '72px' })
+  })
+
+  it('never asks for more than its largest inline height', () => {
+    layOut({ tray: 300, turn: 120, room: () => 230 })
+    render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+
+    expect(screen.getByTestId('conversation-interject-inline')).toHaveStyle({ maxHeight: '144px' })
+  })
+
+  it('stays put rather than flipping back and forth once it has moved', () => {
+    // Deciding from the conversation body's height flips or sticks: inline, the tray has taken
+    // its own height out of the body, and once the body bottoms out the shortfall is invisible.
+    // The room is read from sizes the tray does not move, so repeated measurement agrees.
+    const observers = recordResizeObservers()
+    try {
+      layOut({ tray: 144, turn: 120, room: () => 150 })
+      render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+      expect(screen.getByTestId('conversation-interject-inline')).toBeInTheDocument()
+
+      observers.fire()
+      observers.fire()
+      expect(screen.getByTestId('conversation-interject-inline')).toBeInTheDocument()
+      expect(screen.queryByTestId('conversation-interject-tray')).toBeNull()
+    } finally {
+      observers.restore()
+    }
+  })
+
+  it('floats again once the window gives the conversation room', () => {
+    const observers = recordResizeObservers()
+    try {
+      let room = 150
+      layOut({ tray: 144, turn: 120, room: () => room })
+      render(<AgentOutputPanel agent={agent} conversationId="conv-1" />)
+      expect(screen.getByTestId('conversation-interject-inline')).toBeInTheDocument()
+
+      // Enough to float (300 >= 240), though not once an inline tray's 152px is taken out of it.
+      room = 300
+      observers.fire()
+
+      expect(screen.getByTestId('conversation-interject-tray')).toContainElement(
+        screen.getByTestId('agent-question-q-1'),
+      )
+      expect(screen.queryByTestId('conversation-interject-inline')).toBeNull()
+      expect(screen.getByTestId('conversation-tray-inset')).toHaveStyle({ height: '152px' })
+    } finally {
+      observers.restore()
+    }
   })
 })
