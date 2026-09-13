@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "eac213c",
     "stop_at": "2026-09-13T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-13-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d5-review",
-    "next_action": "d5-review: read the queue item d5-review's detail in full and do it. Write spec-queue/review/review-2026-09-13.html (self-contained, theme-aware, no external resources) and append the 2026-09-13 section to spec-queue/APPROVALS.md with one row for an-absent-approver-is-not-named and no status token. The branch section goes first: autonomous/2026-09-12-daily is unmerged, the gate shut twice (F292 at iteration 1, F314 at gate-retry), count the commits ahead of master with git rev-list --count master..HEAD. For F299's section use the log's iterations 4-6: R1's findings, R2's corrections (R1's 'no model call' misreading, D3 admitting typos, D6's tool_use_id join, D11), and R3's (D3 now reads init's status because R2's argument missed a timed-out or crashed server, D11's three defects, option (a)'s cost). Quote the OPERATOR QUESTION from the top of proposal.md verbatim in substance. State that F327's loop did not run and why (the agent_trigger.py collision). Carry decisions_for_user as a list. Open the finished page in Chromium (scripts/uishot.py or playwright) in light and dark before committing, and look at it. Then log, rewrite state (next: d6-repair), commit and push.",
+    "current": "d6-repair",
+    "next_action": "d6-repair: read the queue item d6-repair's detail in full and do it. Candidates F328 (D) and F326 (D) per DIRECTION.md ## 2026-09-13. Before touching code, check ALL of day-window.md D-6's conditions for the candidate: no requirement in openspec/specs touched (grep the capability), no migration, no API/schema change, fully described by a finding with a reproduction. Also check the candidate's files against openspec/changes/an-absent-approver-is-not-named's blast radius (runner_commands.py, launchability.py, agent_trigger.py, runner_parsing.py, db/models.py) and say in the log whether they overlap; overlap is a reason to prefer the other candidate. If one qualifies: reproduce first, fix, add a test, mutation-check it, run the CI lint set (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/) and the touched test files under py -3.11, drive it, and set the finding's Status line to 'fixed <sha>'. If neither qualifies, or it turns out to want a spec, stop, log why, and leave it for tomorrow's loop. Then log, rewrite state (next: d7-ledger), commit and push. If the repair lands after the review page, add one dated line to the APPROVALS 2026-09-13 section and the page's section 5 saying so.",
     "queue": [
         {
             "id": "compose",
@@ -71,9 +71,9 @@
         },
         {
             "id": "d5-review",
-            "status": "open",
+            "status": "done",
             "title": "D-5 review page review-2026-09-13.html + the APPROVALS rows",
-            "detail": "Per day-window.md D-5: self-contained, theme-aware HTML at spec-queue/review/review-2026-09-13.html (light on :root, dark under prefers-color-scheme, explicit body background, no external resources). Order: (1) THE BRANCH FIRST, unskimmable. autonomous/2026-09-12-daily spans two days (the name changes if gate-retry landed). The merge gate did NOT open at iteration 1: condition 3, CI failure at 000fcbf, F292 on BEGIN IMMEDIATE, on a state-only commit. Then say what gate-retry did. If the 2026-09-12 cycle is still unmerged, say so first, with its commit count. (2) What the night built: a-url-is-not-a-path (612b9c9) and a-refused-review-leaves-nothing-behind (6ebcd9f, 997ff5d), both archived; driven vs tested vs inferred, per the night log. (3) Today's drive findings, each with severity, one sentence and file:line. (4) One section per specced change (F299, and F327 if its loop ran, or why it did not): the problem, the argument in a paragraph, what R2 and R3 each changed (say so if nothing), the cost, and any OPERATOR QUESTION at the top of its proposal. (5) What the night does if nothing is approved. (6) The research, briefly, each candidate ending in what it means for AgentWeave. Also carry, as a clear list, the night's four decisions_for_user plus this window's. Then append a 2026-09-13 section to spec-queue/APPROVALS.md with a row per specced change and no status token."
+            "detail": "DONE iteration 7. spec-queue/review/review-2026-09-13.html written (self-contained, theme-aware, 0 external requests, rendered in Chromium light and dark; the gate table's overflow was seen and fixed). Branch banner first: 50 commits ahead of master at f5f0091 (43 from the 2026-09-12 cycle, 7 today), gate shut on F292 (000fcbf) then F314 (b798ff6), condition 3 only. F299 section quotes the OPERATOR QUESTION in substance, per-round table (R1/R2/R3), cost 24 tasks (22 + H.1-H.2), migration 0103, round spend ~$0.19/$0.10/$0.09 excluding A spawns. F327's loop not run: agent_trigger.py collision. Seven decisions: this window's three plus the night's four. APPROVALS.md ## 2026-09-13 added at the top with one untokened paragraph for an-absent-approver-is-not-named, no ORDER line; grep confirms no token lines."
         },
         {
             "id": "d6-repair",

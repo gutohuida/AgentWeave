@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-13</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --alarm: #9c1f17;
+    --alarm-bg: #fceeec;
+    --alarm-rule: #c8372d;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --alarm: #ffb0a8;
+      --alarm-bg: #3b1a17;
+      --alarm-rule: #e0655a;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { overflow-wrap: anywhere; }
+  table.gate { table-layout: fixed; }
+  table.gate th:first-child { width: 22%; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .alarm { border: 2px solid var(--alarm-rule); background: var(--alarm-bg); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0 1.3rem; }
+  .alarm .big { display: block; color: var(--alarm); font-size: 1.12rem; font-weight: 700; margin-bottom: .35rem; letter-spacing: -0.005em; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); white-space: nowrap; }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .pill.fail { color: var(--alarm); background: var(--alarm-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  .ask h5 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); margin: 1rem 0 .2rem; }
+  blockquote { margin: .8rem 0; padding: .7rem 1rem; border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 0 6px 6px 0; }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; display: block; overflow-x: auto; }
+    table.gate { display: table; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Daily review — 2026-09-13</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-12-daily</code> · <strong>unmerged, spans two days,
+    50 commits ahead of <code>master</code></strong> · <strong>the merge gate stayed shut, twice</strong>,
+    once on each CI intermittent · <strong>one change specced</strong>, 24 tasks, 0 ticked, three
+    rounds, and <strong>R2 and R3 both changed it</strong> · an <strong>operator question</strong>
+    on it that you answer first · the second spec loop (<code>F327</code>) did not run
+  </div>
+</header>
+
+<div class="alarm">
+  <span class="big">The 2026-09-12 cycle is still not on <code>master</code>.</span>
+  <code>autonomous/2026-09-12-daily</code> was cut yesterday from <code>eac213c</code> and now spans
+  <strong>two days</strong>. At <code>f5f0091</code>, before this page's commit,
+  <code>git rev-list --count master..HEAD</code> was <strong>50</strong>: 43 commits from the
+  2026-09-12 cycle (<code>eac213c..4acebf4</code>) and 7 from today. That is 69 files, +18238
+  −383. Both of last night's archived product changes are in those 43 and are therefore
+  <strong>not on <code>master</code></strong>: <code>a-url-is-not-a-path</code>, which closes two live
+  Windows escapes from the workspace, and <code>a-refused-review-leaves-nothing-behind</code>.
+  <br><br>
+  <strong>The gate failed on condition 3 (CI green for this exact sha), and only on that.</strong>
+  At 09:00 it was CI for the arming commit <code>000fcbf</code>: 1 error, <code>F292</code>
+  (<code>database is locked</code> on <code>BEGIN IMMEDIATE</code>). At 09:28, on the one retry, it
+  was CI for <code>b798ff6</code>: 1 failure, <code>F314</code> (an asyncio lock bound to a
+  different event loop). Both commits change state files only, so neither red is the commit's own.
+  No failed job was re-run. That is decision 2 below.
+</div>
+
+<p class="lede">
+  What this page needs from you: <strong>an answer to one operator question, then approve, reject
+  or revise one change</strong>. The change is <code>an-absent-approver-is-not-named</code>
+  (<code>F299</code> <span class="sev a">A</span>, §4). Re-measured today on the installed Claude
+  Code, it shows that verdict 1b swaps a turn killed at its first write for a turn that survives the
+  refusal, so the question comes before the approval. There are <strong>seven decisions</strong> in
+  the box below: three from this window and four carried from last night. If you approve nothing,
+  tonight lands no feature and the branch above stays where it is (§5).
+</p>
+
+<!-- ============================== decisions ============================== -->
+<div class="ask">
+  <h4>Seven things only you can decide</h4>
+  <p class="small">Decisions 1 and 2 bear on tonight. Decisions 3–7 do not change what tonight builds.</p>
+
+  <h5>From today's window</h5>
+  <ol>
+    <li id="d1">
+      <strong>F299: the operator question at the top of <code>proposal.md</code>, then the change
+      itself.</strong> Answer in one line: <strong>(a)</strong> 1b plus
+      <code>--permission-prompts none</code> on the approver-less spawn, gated on a known harness
+      build; <strong>(b)</strong> hand 1b back, because what is missing is a Hub-authored sentence
+      (research candidate 3, a new decision); or <strong>1b as written</strong>, which is what the
+      proposal specifies. The window did not choose. The rounds also added three things to the
+      proposal that you are approving along with it:
+      <ul>
+        <li>a per-run record of the Hub injecting its server <em>and</em> of what the harness's
+          <code>init</code> line said about it. Without that, every new agent's first turn, or one
+          typo in a runner's flags, would lose a working approver;</li>
+        <li>harness-decided refusals recorded for <em>every</em> Claude run, once per tool call,
+          joined on <code>tool_use_id</code>;</li>
+        <li>the exception 1b decided, written into the shipped default-posture requirement (D11), so
+          the spec stops contradicting itself.</li>
+      </ul>
+      §4 has the argument.
+    </li>
+    <li id="d2">
+      <strong>The merge gate and the flaky CI (<code>F292</code>, <code>F314</code>).</strong> The
+      gate shut twice today, once per intermittent, both times on a commit with no Python in it. The
+      branch's last 20 CI runs are 8 red and 12 green, and every classified red is one of these two.
+      No window has re-run a failed job to manufacture a green; there is no precedent, and it is your
+      call. Choose one:
+      <ul>
+        <li>authorise <code>gh run rerun --failed</code> for a red whose only signature is
+          <code>F292</code> or <code>F314</code>;</li>
+        <li>move <code>F292</code> and <code>F314</code> into <code>DIRECTION.md</code>'s order;</li>
+        <li>or accept that roughly two mornings in five do not land.</li>
+      </ul>
+      Until one of those happens, the 50 commits above wait for a morning whose first CI run happens
+      to be green. Merging by hand is always open to you.
+    </li>
+    <li id="d3">
+      <strong><code>F336</code> <span class="sev c">C</span>: the app has no control that dispatches
+      a review.</strong> A turn is a review only when the trigger carries
+      <code>review_task_id</code>, and nothing in <code>hub/ui/src</code> sends it. The card's
+      <em>Start &lt;agent&gt; on this</em> starts a <em>work</em> turn on a completed task, with no
+      commit check and no <code>409</code>. So the archived change's human-only 6.1 and its
+      test-guide check 1 (<em>"dispatch a review from the UI"</em>) can only be done through the API.
+      Decide whether operators should hand-dispatch reviews in the app, which means a review item on
+      the card that renders the refusal, or whether reviews stay flow-staffed and the guide is
+      reworded to name the API.
+    </li>
+  </ol>
+
+  <h5>Carried from last night, as the night wrote them</h5>
+  <ol start="4">
+    <li id="d4">
+      <strong><code>a-url-is-not-a-path</code> departs from R2's reader in four places</strong>,
+      recorded in <code>design.md</code> D11a. One of them closes an escape the approved design would
+      have opened (E20–E22: a quoted <code>'$HUB_URL'</code> read as a reference). None widens an
+      answer beyond D2's table. No action unless you disagree.
+    </li>
+    <li id="d5">
+      <strong><code>F333</code> <span class="sev b">B</span> and <code>F334</code>
+      <span class="sev b">B</span>: one proposal, or fold <code>F334</code> into 6.2's wording
+      judgement.</strong> Both are interactions exposed by the <code>F320</code> fix, and both were
+      left out of it.
+      <ul>
+        <li><code>F333</code>: a <em>Continue</em> whose pass gives up the review says <em>"this
+          conversation had nothing queued"</em>. <strong>Rendered today</strong> (§3).</li>
+        <li><code>F334</code>: the author guard's sentence names an assignee the rollback discarded.</li>
+      </ul>
+      Both have repair sketches.
+    </li>
+    <li id="d6">
+      <strong>The human-only checks left open in the two archived changes.</strong>
+      <ul>
+        <li><code>a-refused-review-leaves-nothing-behind</code> 6.1: what the UI's dispatch control
+          shows for the <code>409</code>. Today's answer is that no UI control can produce it
+          (decision 3).</li>
+        <li>Its 6.2: whether <em>"queued, then a reason, then a give-up notice"</em> is enough, now
+          with <code>F334</code>'s wording in view.</li>
+        <li><code>a-url-is-not-a-path</code> 7.1–7.3: whether the refusal reads well in the served
+          UI, whether D5's wording is the lever it needs to be, and N3 and <code>/dev/null</code> in
+          <code>DECISIONS.md</code>.</li>
+      </ul>
+      <code>F335</code> <span class="sev d">D</span>, filed at close-out, was narrowed today (§3):
+      the false broadcast is real on the wire and rendered nowhere.
+    </li>
+    <li id="d7">
+      <strong><code>F292</code>'s priority.</strong> The night measured it reddening about 2 runs in 5
+      on the mitigated tree (7 of 18, all on <code>BEGIN IMMEDIATE</code>, 6 of 7 on commits with no
+      product change). Evidence is in <code>F292</code>'s w-final section. <em>Today's decision 2
+      widens this to <code>F314</code> as well; answering one answers both.</em>
+    </li>
+  </ol>
+</div>
+
+<!-- ============================== 1 ============================== -->
+<h2 id="s1"><span class="num">1</span>The branch, and the merge gate</h2>
+
+<dl class="kv">
+  <dt>Branch</dt><dd><code>autonomous/2026-09-12-daily</code>, cut 2026-09-12 from <code>eac213c</code>. No branch was cut today, because the gate did not open.</dd>
+  <dt>Spans</dt><dd><strong>Two days</strong>, 2026-09-12 and 2026-09-13.</dd>
+  <dt>Ahead of <code>master</code></dt><dd><strong>50 commits</strong> at <code>f5f0091</code> (43 from the 2026-09-12 cycle, 7 from today); this page's commit makes 51. <code>HEAD..master</code> is 0, so it is a clean fast-forward whenever it lands.</dd>
+  <dt>Gate</dt><dd><strong>Did not open.</strong> Two attempts, the second being the one retry compose allowed. Condition 3 failed both times; conditions 1, 2 and 4 passed both times.</dd>
+</dl>
+
+<table class="gate">
+  <thead><tr><th>Condition</th><th>09:00, <code>000fcbf</code> (arm)</th><th>09:28, <code>b798ff6</code> (retry)</th></tr></thead>
+  <tbody>
+    <tr><td>Not <code>master</code>, and <code>HEAD..master</code> is 0</td><td><span class="pill ok">pass</span> 44 ahead</td><td><span class="pill ok">pass</span> 45 ahead</td></tr>
+    <tr><td>Clean tree, and <code>HEAD</code> equals <code>@{u}</code></td><td><span class="pill ok">pass</span></td><td><span class="pill ok">pass</span></td></tr>
+    <tr><td>CI concluded <code>success</code> for this exact sha</td><td><span class="pill fail">fail</span> run 34746396329, <code>hub-test</code> 4212 passed, 18 skipped, <strong>1 error</strong>: <code>test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted</code>, <code>database is locked</code> on <code>BEGIN IMMEDIATE</code>. <strong><code>F292</code>.</strong></td><td><span class="pill fail">fail</span> run 34747152049, <code>hub-test</code> <strong>1 failed</strong>, 4212 passed, 18 skipped: <code>test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call</code>, <code>Lock … is bound to a different event loop</code>. <strong><code>F314</code>.</strong></td></tr>
+    <tr><td>Newest <code>DIRECTION.md</code> section has no line-initial <code>HOLD MERGE</code></td><td><span class="pill ok">pass</span> newest is <code>## 2026-09-13</code>; 0 matches in the file</td><td><span class="pill ok">pass</span> same</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Each red was classified from its own <code>--log-failed</code> output. Every other job in both runs
+  was green. Neither commit contains Python: the arm touches a log and state files, and the retry
+  touches those plus the research copy. So <strong>neither red belongs to the commit</strong>. The
+  gate is doing what it was written to do. What keeps it shut is two known intermittents, which is
+  decision 2.
+</p>
+
+<!-- ============================== 2 ============================== -->
+<h2 id="s2"><span class="num">2</span>What the night built</h2>
+
+<p>
+  Both approved changes were built and <strong>archived</strong>. Both are on this branch and not
+  on <code>master</code>.
+</p>
+<ul>
+  <li><code>a-url-is-not-a-path</code> closes <span class="fid">F300</span>,
+    <span class="fid">F312</span>, <span class="fid">F321</span> and <span class="fid">F323</span>, all
+    <span class="sev a">A</span>, plus <span class="fid">F331</span>
+    <span class="sev a">A</span>, filed and closed by the night. Pin <code>00a5569</code>, fix
+    <code>612b9c9</code>. It rewrites how <code>_decide</code> reads a shell command (about +410
+    lines in <code>mcp_server.py</code>). 44 of 47 tasks are ticked; the three left open, §7.1–7.3,
+    are human-only. There were 17 mutations, and the whole Hub suite gave 4194 passed, 0 failed.</li>
+  <li><code>a-refused-review-leaves-nothing-behind</code> closes <span class="fid">F319</span>
+    <span class="sev a">A</span> (<code>6ebcd9f</code>) and <span class="fid">F320</span>
+    <span class="sev b">B</span> (<code>997ff5d</code>), both in <code>turn_scheduler.py</code>.
+    49 of 52 tasks are ticked; §6.1–6.3 are human-only. There were 12 mutations, and the whole Hub
+    suite gave 4218 passed, 86 skipped, 0 failed. It filed <code>F333</code>, <code>F334</code> and
+    <code>F335</code>.</li>
+</ul>
+
+<table>
+  <thead><tr><th>Claim</th><th>How it is known</th><th></th></tr></thead>
+  <tbody>
+    <tr><td><code>F300</code>, <code>F312</code>, <code>F321</code>, <code>F323</code> fixed</td><td>Live, real Haiku agents, pre-fix worktree (<code>00a5569</code>) and fixed tree: 15/15. Both Windows escapes were allowed and <em>wrote outside</em> pre-fix, and were refused with nothing written on the fixed tree.</td><td><span class="pill driven">driven</span></td></tr>
+    <tr><td><code>F331</code> (POSIX) fixed</td><td>CI's Linux <code>hub-test</code> turned its rows from XFAIL at <code>00a5569</code> to PASSED at <code>612b9c9</code>. No POSIX drive.</td><td><span class="pill tested">tested only</span></td></tr>
+    <tr><td>The approver is handed <code>PowerShell</code> as <code>tool_name</code> (<code>a-url-is-not-a-path</code> D10 item 5)</td><td>The night's six refusal rows were all <code>Bash</code>, so it was inferred. <strong>Driven today, 19/19</strong> (§3): refusal rows and a manual request row carry <code>tool_name='PowerShell'</code>, and a discriminating command was allowed, which only an exact <code>PowerShell</code> reading allows.</td><td><span class="pill driven">driven today</span></td></tr>
+    <tr><td><code>F319</code>, <code>F320</code> fixed</td><td>Live: the pre-fix worktree (<code>73ae6c5</code>) reproduced all four legs, and the fixed tree left every task as it was. 37 ok, plus 6 ok in Chromium.</td><td><span class="pill driven">driven</span></td></tr>
+    <tr><td><code>F333</code>'s UI line</td><td>Predicted by the night and never rendered. <strong>Rendered today</strong>, exactly as predicted (§3).</td><td><span class="pill driven">driven today</span></td></tr>
+    <tr><td><code>F335</code>'s feed line (<code>eventSummary.ts:142</code>)</td><td>Measured at unit level by the night. <strong>Today:</strong> the broadcast is real on the wire and the feed drops it, so the predicted line cannot appear (§3).</td><td><span class="pill driven">narrowed today</span></td></tr>
+    <tr><td>r4's one-off 10m16s hang of <code>test_giving_up_lets_the_agent_accept_new_input</code></td><td>The night distrusted it. The file alone: 0 hangs in 5 today, 13 in 13 with the night's runs. Still unclassified.</td><td><span class="pill">unclassified</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ============================== 3 ============================== -->
+<h2 id="s3"><span class="num">3</span>What today's drive found</h2>
+
+<p>
+  A scoped drive, not a sweep: the night's inferred-not-seen legs, on a fresh Hub (port 8023,
+  profile <code>drive0913d</code>, source at <code>4521625</code>). It used Claude Code 2.1.269 and
+  Haiku on every turn. The Hub was stopped at 09:55, no job exists, and the profile is kept. The
+  screenshots are evidence for your human-only checks and <strong>tick none of them</strong>.
+</p>
+
+<table>
+  <thead><tr><th></th><th>Finding</th><th>What was measured</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="pill ok">verified</span></td>
+      <td>D10 item 5 of <code>a-url-is-not-a-path</code></td>
+      <td>The PowerShell path is read as PowerShell, 19/19. Five turns ran, all using the PowerShell tool. An inside write was allowed. <code>..\ps_stray.txt</code> and <code>Invoke-WebRequest</code> were refused with <code>tool_name='PowerShell'</code>. <code>Invoke-RestMethod "$env:HUB_URL/health"</code> was <strong>allowed</strong>, which no fallback reading allows. No fallback fired.</td>
+      <td class="loc">t_d1_0913_powershell_tool_name.py</td>
+    </tr>
+    <tr>
+      <td><span class="fid">F333</span> <span class="sev b">B</span></td>
+      <td>Rendered as predicted, and the screen contradicts itself</td>
+      <td>After <em>Continue</em> was pressed in the UI, the notice read <em>"Not started — this conversation had nothing queued. Reply with the single word pong. Call no tool. started instead."</em> One row above it, the same timeline says <strong>NOT DELIVERED — delivery failed 3 times</strong>.</td>
+      <td class="loc">AgentOutputPanel.tsx:759-769</td>
+    </tr>
+    <tr>
+      <td><span class="fid">F335</span> <span class="sev d">D</span></td>
+      <td>Narrowed: latent behind <code>F251</code></td>
+      <td>The operator route's <code>409</code> is refused before anything stages, so it never broadcasts. A review refused at <em>delivery</em> does broadcast a false <code>run_divergence_resolved</code> (captured with <code>curl -N</code>), but the feed's allowlist drops that kind (<span class="fid">F251</span> <span class="sev b">B</span>), so nothing renders. <strong>Fixing <code>F251</code> alone would make the false line appear.</strong> Both sections now say so.</td>
+      <td class="loc">agent_trigger.py:1461 · useSSE.ts:21-68</td>
+    </tr>
+    <tr>
+      <td><span class="fid">F336</span> <span class="sev c">C</span></td>
+      <td>New: no control in the app dispatches a review</td>
+      <td>No UI code sends <code>review_task_id</code> (0 matches in source and in the served bundle). The card's only agent control is <em>Start work</em>, which posts <code>task_id</code>. On a completed task it offered <em>Start &lt;agent&gt; on this</em> ×3, which by reading starts a work turn. Not pressed. This is decision 3.</td>
+      <td class="loc">TaskCard.tsx:259-280 · agent_trigger.py:769-772</td>
+    </tr>
+    <tr>
+      <td><span class="fid">F337</span> <span class="sev c">C</span></td>
+      <td>New, from F299's R2: a refusal's path is recorded and never shown</td>
+      <td>The activity line is <code>&lt;agent&gt; refused &lt;tool&gt;: &lt;reason&gt;</code>. It never reads <code>detail</code>, where the path or command is, and it names the agent as the one refusing. This predates F299's change, which will add more rows in the same shape. Read from source, not rendered.</td>
+      <td class="loc">eventSummary.ts:114 · EventRow.tsx:56</td>
+    </tr>
+  </tbody>
+</table>
+
+<p class="small">
+  <strong>Seen and not examined, not filed.</strong> H's conversation showed <em>"Working · 1s"</em>,
+  <strong>Stop turn</strong> and <em>"… is responding"</em> while the running turn was M's, in
+  another conversation. The status is per-agent by construction
+  (<code>AgentOutputPanel.tsx:306</code>). Whether <strong>Stop turn</strong> there stops another
+  conversation's turn was not tested.
+</p>
+
+<!-- ============================== 4 ============================== -->
+<h2 id="s4"><span class="num">4</span>What was specced: <code>an-absent-approver-is-not-named</code></h2>
+
+<p>
+  <span class="fid">F299</span> <span class="sev a">A</span>. The verdict is
+  <code>DECISIONS.md</code> 1b (2026-09-10): <em>"when there are no grounds that the harness honours
+  MCP, do not emit <code>--permission-prompt-tool</code>."</em> The change is written for 1b
+  <strong>as decided</strong>. <code>openspec validate --strict</code> passes.
+</p>
+
+<div class="ask">
+  <h4>The operator question at the top of <code>proposal.md</code>, in substance</h4>
+  <blockquote>
+    <p>
+      <strong>Answer before this is approved. The measurement changes what the verdict
+      replaces.</strong> 1b was decided against <code>F299</code>'s 2026-09-09 drive, in which the
+      Hub's configuration started a turn, read, was refused every write, carried on, and blamed the
+      operator's machine. Re-driven today on the installed <strong><code>claude</code>
+      2.1.269</strong>, with the argv <code>build_command</code> produces, through the Hub's own
+      <code>PtySession</code>, in both spawn environments:
+    </p>
+    <ul>
+      <li>That configuration <strong>still starts a turn and works until its first
+        approval-needing call</strong>. A turn that needs no approval completes normally.</li>
+      <li>At the first approval-needing call, <strong>the harness process dies</strong>: exit 1, no
+        result line. The conversation shows the harness's own two lines, <code>Warning: MCP server
+        blocked by enterprise policy: agentweave</code> and <code>Error: MCP tool
+        mcp__agentweave__approve_tool_call (passed via --permission-prompt-tool) not found</code>. The
+        model call before that was paid for, and the Hub records the turn's usage as
+        <em>unavailable</em>.</li>
+    </ul>
+    <p>
+      <strong>On this build, 1b as written swaps a turn killed at its first write for a turn that
+      survives the refusal.</strong> That turn is recorded, including its spend and refusals, and its
+      model asks the operator to <em>"approve the request"</em>, which no surface can show. Answer in
+      one line, with one of:
+    </p>
+    <ul>
+      <li><strong>(a)</strong> 1b, plus <code>--permission-prompts none</code> on the approver-less
+        spawn, gated on a known harness build. The Hub records no build today. The refuting run's
+        <code>init</code> line carries one (<code>claude_code_version</code>), so (a) would record it
+        from there rather than add a probe. A harness downgraded since would make it stale. Measured
+        once per environment: the model then says <em>"no approval surface"</em> (4 of 4), and it
+        still retried through another tool in 1 of those 4.</li>
+      <li><strong>(b)</strong> Hand 1b back. On current builds the run already ends at its first
+        write, with the harness's own error naming the blocked server. What the operator lacks is a
+        Hub-authored sentence in place of two raw harness lines. That is the day's research candidate
+        3, and a new decision, not 1b.</li>
+      <li><strong>1b as written</strong>, which is what this proposal specifies.</li>
+    </ul>
+    <p>This proposal is written for 1b as decided, and the window does not choose between them.</p>
+  </blockquote>
+</div>
+
+<h3>The problem</h3>
+<p>
+  A <code>claude</code> run on a harness whose policy blocks MCP servers cannot write. The Hub
+  injects its tool server with <code>--mcp-config</code>, and because a server is configured it also
+  names that server's <code>approve_tool_call</code> as the run's approver
+  (<code>runner_commands.py:250-254</code>). The harness ignores the server, so nothing answers. On
+  2026-09-09 the run then blamed the operator's machine. On 2.1.269 it dies at its first write,
+  showing the harness's raw lines and recording no usage.
+</p>
+
+<h3>The argument, in a paragraph</h3>
+<p>
+  The Hub already measures whether a harness honours MCP. <code>harness_has_honoured_mcp</code>
+  (<code>launchability.py:232-259</code>) decides what a run is <em>told</em>. 1b connects that
+  measurement to what a run is <em>given</em> (<code>_build_claude_command</code>). But that signal
+  is false for <strong>every agent's first run</strong>, not only for <code>F299</code>'s. A literal
+  <em>"no grounds, no flag"</em> would therefore refuse the first-turn writes of every new agent on
+  every machine, which breaches <em>"A newly created agent can edit files in its own
+  workspace"</em>. So the change gives each agent three states:
+</p>
+<ul>
+  <li><em>grounds</em>: the operator said <code>hub_client: "mcp"</code>, or an earlier run saw the
+    adapter report in. This is today's signal.</li>
+  <li><em>untested</em>: no grounds, and no earlier run was a test of the harness. The approver is
+    named, exactly as today. The first spawn is the test.</li>
+  <li><em>refuted</em>: no grounds, and an earlier run was given the Hub's server, and its harness
+    reported its own start without calling that server <code>connected</code>. The approver is
+    withheld.</li>
+</ul>
+<p>
+  Recording that needs two new nullable columns (migration <code>0103</code>):
+  <code>Run.mcp_server_injected</code>, and <code>Run.harness_mcp_status</code>, which is read from
+  the <code>init</code> line the read loop already receives. NULL never counts as a test, so an
+  upgrade moves no agent into <em>refuted</em>. Two shipped requirements needed changing as well:
+</p>
+<ul>
+  <li>A run with no approver would otherwise leave a clean record. So the harness's own
+    <code>permission_denials</code> are read from the result line and recorded, joined on
+    <code>tool_use_id</code>, for every Claude run.</li>
+  <li><em>"The default posture lets an agent work inside its own workspace"</em> contradicted 1b on a
+    blocking harness. It now states the exception 1b decided.</li>
+</ul>
+<p>
+  Nothing is widened. The permission mode stays <code>manual</code>, <code>--mcp-config</code> stays,
+  and a lifted policy earns grounds back on the next spawn without anyone acting.
+</p>
+
+<h3>What each round changed</h3>
+<table>
+  <thead><tr><th>Round</th><th>What it found and changed</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>R1</strong><br><span class="small">10:05–10:25</span></td>
+      <td>
+        It wrote the change for 1b as decided and re-drove the research's conditions through the
+        Hub's own argv and <code>PtySession</code>. The research had used pipes, and its citation
+        <code>pty_runner.py:357</code> is Codex's <code>PipeSession</code>. It found:
+        <ul>
+          <li>the verdict's signal cannot carry <em>"from the second run"</em>, so R1 added the
+            <em>untested</em> state and <code>Run.mcp_server_injected</code>;</li>
+          <li>1b as written newly breaches <em>"A refusal is recorded wherever it is decided"</em>,
+            so R1 added a MODIFIED requirement recording the harness's refusals;</li>
+          <li>the inherited <code>CLAUDE*</code> environment is ruled out as the cause of the
+            2026-09-09 behaviour.</li>
+        </ul>
+        It raised the operator question. It also wrote that the configuration <em>"exits 1 before
+        any model call, spending nothing"</em>, which <strong>was wrong</strong> (R2).
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R2</strong><br><span class="small">10:27–10:50</span></td>
+      <td>
+        <ul>
+          <li><strong>R1's argument was wrong while every outcome it recorded was right.</strong>
+            Every A transcript, R1's own included, has a model call and a <code>Write</code> attempt,
+            and no result line. R1 had read the missing result line as a missing model call. R2
+            rewrote the question's premise; the options are unchanged and none is picked.</li>
+          <li><strong>R1's D3 counted a typo as a refutation.</strong> On a <em>permitted</em>
+            harness, an unknown runner flag exits 1 before <code>init</code> and before any server
+            starts. R2 added the condition that <code>init</code> was seen.</li>
+          <li><strong>D6 now joins on <code>tool_use_id</code></strong>, not on argv. R2 measured
+            the approver's own refusals appearing in <code>permission_denials</code> under the same
+            id. R1's claim that approver-named runs already record every refusal was false.</li>
+          <li><strong>A third shipped requirement contradicted the new one.</strong> R2 modified the
+            default-posture requirement with the exception 1b decided (D11).</li>
+          <li>R2 filed <code>F337</code>, and made task 6.1 read the live
+            <code>Win32_Process.CommandLine</code>, because the Hub stores no argv.</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td><strong>R3</strong><br><span class="small">10:52–11:08</span></td>
+      <td>
+        <ul>
+          <li><strong>R2's D3 argument was wrong where it went unmeasured.</strong> With a stand-in
+            server that sleeps or dies, the harness waits about 30 s, lists a slow server
+            <code>failed</code>, and <strong>completes the turn</strong>, rc 0 (S_45). It lists a
+            crashed server <code>failed</code> and completes as well (S_crash).
+            <code>MCP_CONNECTION_NONBLOCKING=true</code> changes nothing.
+            <ul>
+              <li>So <code>Run.harness_init_at</code> became <code>Run.harness_mcp_status</code>,
+                which holds what <code>init</code> said. A test requires a value that is neither NULL
+                nor <code>connected</code>.</li>
+              <li>That also removes R1's lost-announce risk.</li>
+              <li>S_45 costs one bad turn, and only if the start is about 20 s slower than the
+                measured ~1 s. S_crash is a true refutation.</li>
+            </ul>
+          </li>
+          <li><strong>D11 had three defects</strong>, all fixed:
+            <ul>
+              <li>it promised that refusals are recorded for runs that die before a result line;</li>
+              <li>it asserted that <em>"no posture gives both"</em>, where 1b said <em>"may be"</em>
+                and research candidate 2 disputes it;</li>
+              <li>it named the way out ambiguously.</li>
+            </ul>
+            The <em>grounds</em>-agent case is named in D11 and left to candidate 3.</li>
+          <li><strong>Option (a) overstated its cost</strong>: the refuting run's <code>init</code>
+            line carries the build, so no probe is needed.</li>
+          <li>R3 attacked the <code>tool_use_id</code> join, and it holds.</li>
+        </ul>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>The cost</h3>
+<dl class="kv">
+  <dt>Tasks</dt><dd><strong>24</strong>, 0 ticked: 22 agent-verifiable in seven sections, and two human-only (H.1, H.2).</dd>
+  <dt>Code</dt><dd>Python only: <code>runner_commands.py</code>, <code>launchability.py</code>, <code>agent_trigger.py</code> (the access-path block, the <code>Run(...)</code> construction, and the Claude read loop), <code>runner_parsing.py</code>, <code>db/models.py</code>, and one docs page. <strong>No UI bundle.</strong></dd>
+  <dt>Schema</dt><dd><strong>One migration, <code>0103</code></strong>, with two nullable columns and no backfill. No API or route shape changes; <code>permission_denied</code> with <code>decided_by: "runtime"</code> is an existing event shape.</dd>
+  <dt>Specs</dt><dd><code>agent-run-sandboxing</code>: 1 ADDED, 2 MODIFIED. <code>agent-capability-plane</code> is not modified (D8, attacked by R2 and standing).</dd>
+  <dt>Visible to you</dt><dd><strong>New refusal rows on runs that exist today.</strong> Approver-less Claude runs, meaning the <code>cli</code> path and <em>Edit files</em>, will now record the refusals the harness decided, for example each headless <code>Bash</code> refusal under <code>acceptEdits</code>. That is the shipped requirement being met, and you will notice it.</dd>
+  <dt>Stated risk</dt><dd>A server the harness gave up on costs one bad turn, corrects itself, and nobody is told (D9). Grounds stay permanent (candidate 3, not absorbed).</dd>
+  <dt>Round spend</dt><dd>About $0.19 (R1), $0.10 (R2) and $0.09 (R3) of Haiku, from the result lines that exist. The A-condition spawns have no result line, so their spend is not in these figures.</dd>
+</dl>
+
+<h3>The second loop, <code>F327</code>, did not run</h3>
+<p>
+  The playbook allows a second loop only if its blast radius <em>"shares no file"</em> with the
+  first change's. <code>F299</code>'s change touches <code>hub/hub/api/v1/agent_trigger.py</code>,
+  which also holds <code>F327</code>'s review-dispatch path (<code>review_dispatch_refusal</code>
+  at <code>:452</code>, called at <code>:1461</code>). The regions differ, and the rule is still the
+  rule, so R1's collision check skipped D-2b, D-3b and D-4b. The next item in
+  <code>DIRECTION.md</code>, <code>F301</code>'s notice, collides as well
+  (<code>launchability.py</code> and the same access-path block). <strong><code>F327</code> stays
+  first in line for tomorrow's loop</strong>, starting from option (b) as today's DIRECTION set it.
+</p>
+
+<!-- ============================== 5 ============================== -->
+<h2 id="s5"><span class="num">5</span>What the night does if you approve nothing</h2>
+
+<p>
+  With no status token, the night falls to <code>night-window.md</code>'s default queue. Walked
+  against today's tree:
+</p>
+<ol>
+  <li><strong>Confirm the tree is green before building.</strong> This runs first on every night.
+    Given <code>F292</code> and <code>F314</code>, a red chunk that is not the night's own must be
+    classified before anything else.</li>
+  <li><strong>Unarchived changes that only need archiving: none.</strong>
+    <code>openspec/changes/</code> holds only <code>an-absent-approver-is-not-named</code>, at 0 of
+    24 tasks.</li>
+  <li><strong>Open findings, A first.</strong> <code>scripts/classify_findings.py</code> reads four
+    open A findings, plus one conflict (<code>F52</code>):
+    <ul>
+      <li><code>F299</code>: its change is unapproved, and an unapproved change is not built.</li>
+      <li><code>F301</code> and <code>F332</code>: no proposal, so each is a note to tomorrow's day
+        window, not night work.</li>
+      <li><code>F325</code>: Codex, which is undrivable.</li>
+    </ul>
+  </li>
+  <li><strong>Then open B, and <code>APPROVED</code> rows.</strong> There are no approved rows. What
+    remains is carve-out repairs that need no spec. Today's D-6 may take <code>F328</code> or
+    <code>F326</code> (both <span class="sev d">D</span>) first, so either may be gone by tonight.</li>
+</ol>
+<p>
+  <strong>So an unapproved night lands no feature, <code>F299</code> stays open, and the 50 commits
+  above stay off <code>master</code></strong> until a morning gate finds a green CI run.
+  <code>ORDER:</code> and <code>NOTHING TONIGHT</code> are both available.
+</p>
+
+<!-- ============================== 6 ============================== -->
+<h2 id="s6"><span class="num">6</span>The research, briefly</h2>
+
+<p class="small">
+  <code>spec-queue/research/2026-09-13.md</code> was delivered at 07:33, from fifteen headless
+  Claude Code processes on this machine (a bit over $0.26) plus vendor docs. Claude Code v2.1.270
+  shipped yesterday evening and is <strong>not installed</strong>. Every result is 2.1.269.
+</p>
+<ol>
+  <li>
+    <strong>Re-drive <code>F299</code> on the installed build before proposing.</strong> Done, and
+    it became the operator question in §4. R1 reproduced it, and R2 corrected the research's
+    <em>"exits 1 before any model call"</em>: the turn runs until its first approval-needing call.
+    <em>For AgentWeave:</em> 1b's premise describes a harness that is no longer installed, so the
+    verdict needs your one-line answer before the night can build it.
+  </li>
+  <li>
+    <strong><code>acceptEdits</code> is path-confined by Claude Code on headless runs.</strong>
+    Writes, redirects, <code>cp</code> and reads outside the working directory were refused; inside
+    ones were allowed. The repository says the opposite in four places:
+    <ul>
+      <li><code>docs/reference/permission-postures.md:33</code>;</li>
+      <li><code>agent-capability-plane/spec.md:258-259</code>;</li>
+      <li><code>runner_commands.py:63-64</code>;</li>
+      <li><code>DECISIONS.md:772-773</code>, which is 1b's own reason for rejecting that posture.</li>
+    </ul>
+    <em>For AgentWeave:</em> a shipped requirement and an operator page are wrong about the harness,
+    and one option 1b rejected may deserve re-weighing, which is your call. It is queued as D-7 to
+    file as a finding with a local reproduction. It is not a no-spec repair, because it touches a
+    shipped requirement and a <code>DECISIONS</code> reason.
+  </li>
+  <li>
+    <strong>The Hub's MCP grounds are positive-only and permanent</strong>
+    (<code>launchability.py:232-259</code>), yet the harness reports <code>connected</code>,
+    <code>failed</code> or <em>absent</em> in every run's <code>init</code> line, and
+    <code>runner_parsing.py</code> has no branch for system messages. <em>For AgentWeave:</em> an
+    agent that honoured MCP once keeps the approver after a policy arrives, and on 2.1.269 every
+    later run dies at its first write. <code>F299</code>'s change now reads <code>init</code>, but
+    only to decide what counts as a test, never to take grounds away. So this is <strong>not
+    absorbed</strong>. It is queued as D-7 to file, citing the overlap, with R3's measured statuses
+    as its reproduction.
+  </li>
+</ol>
+
+<footer class="page">
+  Written by the FILL window at iteration 7, 2026-09-13 11:15 +01:00, at <code>f5f0091</code> on
+  <code>autonomous/2026-09-12-daily</code>. Sources: <code>.claude/autonomous/2026-09-13-day-log.md</code>
+  iterations 1–6, <code>STATE-day.json</code>, <code>STATE-night.json</code>,
+  <code>spec-queue/APPROVALS.md</code> (2026-09-12 BUILT sections), and
+  <code>openspec/changes/an-absent-approver-is-not-named/</code>. The rows in <code>APPROVALS.md</code>
+  carry no status token; that is yours to write.
+</footer>
+
+</div>
+</body>
+</html>

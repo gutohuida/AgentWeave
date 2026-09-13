@@ -16,6 +16,69 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-13
+
+Written by the FILL window, 2026-09-13, from `review/review-2026-09-13.html`. **No status token is
+supplied below. That is the operator's to write.** A row with no token is not an approval, and the
+FIX window builds nothing from it.
+
+**The 2026-09-12 cycle is still not on `master`.** `autonomous/2026-09-12-daily` spans two days and
+was **50 commits** ahead of `master` at `f5f0091` (`git rev-list --count master..HEAD`): 43 from the
+2026-09-12 cycle, 7 from today. Both of last night's archived changes are among them. The merge
+gate failed condition 3 twice, on CI intermittents in state-only commits: `F292` at `000fcbf`, then
+`F314` at `b798ff6`. No failed job was re-run. That is decision 2 on the page.
+
+**Note for whoever reads this at 23:00:** this section is now the newest, so the 2026-09-12 section
+below is history. Both of its approved changes are built and archived
+(`2026-09-13-a-url-is-not-a-path`, `2026-09-13-a-refused-review-leaves-nothing-behind`), and its
+tokens and `ORDER:` are not instructions. There is deliberately **no `ORDER:` line** here. Section 5
+of today's page walks the default queue: nothing to archive, and of the four open severity-A
+findings, `F299`'s change is unapproved while `F301`, `F332` and `F325` (Codex, undrivable) have no
+proposal. **An unapproved night lands no feature.**
+
+`an-absent-approver-is-not-named` — F299 (A), verdict `DECISIONS.md` 1b. **Answer the OPERATOR
+QUESTION at the top of its `proposal.md` first, in one line.** Re-measured on `claude` 2.1.269
+through the Hub's own argv and PTY: F299's configuration works until its first approval-needing call,
+then the harness process dies (exit 1, no result line, usage recorded as unavailable). 1b as written
+turns that into a turn that survives the refusal, with its model asking you to approve a prompt no
+surface shows. The choices are:
+- **(a)** 1b plus `--permission-prompts none`, gated on the build read from the refuting run's `init`
+  line;
+- **(b)** hand 1b back, because the missing piece is a Hub-authored sentence (research candidate 3);
+- **1b as written**, which is what the change specifies.
+
+The change has **24 tasks, 0 ticked** (22 agent-verifiable, H.1–H.2 human-only). Python only:
+`runner_commands.py`, `launchability.py`, `agent_trigger.py`, `runner_parsing.py`, `db/models.py`,
+one docs page. It adds **one migration, `0103`** (two nullable columns, no backfill), with no API
+shape and **no UI bundle**. `agent-run-sandboxing` gets 1 ADDED and 2 MODIFIED requirements. The
+MODIFIED ones are the harness's refusals recorded for every Claude run, joined on `tool_use_id`, and
+the default-posture exception 1b decided (D11). `openspec validate --strict` passes.
+
+All three rounds changed it:
+- R2 found R1's *"no model call"* was a misreading, and made D3 exclude runs with no `init` line, so
+  that one typo in a runner's flags is not a refutation.
+- R3 found that a slow or crashed server also completes a turn, so D3 now reads the status `init`
+  gives the Hub's server, and a test is anything but `connected`.
+
+**Operator-visible:** approver-less Claude runs start recording harness-decided refusals.
+
+**The second loop (`F327`) did not run.** It shares `agent_trigger.py` with this change, and the
+playbook's rule is *"shares no file"*. It stays first in line for tomorrow's loop. Its row is absent
+because nothing was specced, not because anything was decided.
+
+The page carries **seven decisions**. Decision 1 is the row above. The other six are not work for
+tonight and want no row here:
+- the merge gate and `F292`/`F314`;
+- `F336` (no UI control dispatches a review);
+- the night's D11a departures;
+- `F333` with `F334`;
+- the archived changes' open human-only checks;
+- `F292`'s priority.
+
+`ORDER:` and `NOTHING TONIGHT` are both available.
+
+---
+
 ## 2026-09-12
 
 Written by the FILL window, 2026-09-12, from `review/review-2026-09-12.html`. **No status token is
