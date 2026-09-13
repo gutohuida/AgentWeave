@@ -271,13 +271,13 @@ that must fail it.
 No existing test fails for F319's absence (`design.md` D6), so each mechanism is mutated once. A
 named test must fail. Record which test failed, then restore.
 
-- [ ] 4.1 Delete the rollback line. The snapshot tests of 1.2, 1.3, 1.4 and 1.5 must fail, and so
+- [x] 4.1 Delete the rollback line. The snapshot tests of 1.2, 1.3, 1.4 and 1.5 must fail, and so
   must 1.8a.
-- [ ] 4.2 Move the rollback **below** the first `await db.commit()` of the branch. 1.2 must fail,
+- [x] 4.2 Move the rollback **below** the first `await db.commit()` of the branch. 1.2 must fail,
   because the first commit lands the staging.
-- [ ] 4.3 Keep the rollback, and do the `waiting_reason` write **before** it. The `waiting_reason`
+- [x] 4.3 Keep the rollback, and do the `waiting_reason` write **before** it. The `waiting_reason`
   assertions of 1.2 and 1.4 must fail, because the write is rolled back with the staging.
-- [ ] 4.4 Keep the rollback and drop the re-read of `entries` (keep the `selected` re-read and the
+- [x] 4.4 Keep the rollback and drop the re-read of `entries` (keep the `selected` re-read and the
   captured `conversation_id`, so the mutation isolates the one row set only the workspace branch
   reads). **Three** tests must fail with `MissingGreenlet` (R3 ran this mutation on R2's
   prototype, `design.md` D13):
@@ -289,12 +289,46 @@ named test must fail. Record which test failed, then restore.
   `test_an_entry_in_the_refused_batch_naming_a_vanished_task_does_not_count` **pass** under it:
   they fail only when the captured conversation id is not used (4.4c). R1's five came from a
   rollback that re-read nothing, which is 4.4 and 4.4c at once.
-  - **4.4b** Drop 2.1's `state == "queued"` filter, keeping the re-read by id. 1.8b must fail, with
+  - [x] **4.4b** Drop 2.1's `state == "queued"` filter, keeping the re-read by id. 1.8b must fail, with
     the entry counted to `LIMIT` and `queue_entry_abandoned` emitted.
-  - **4.4c** Keep both re-reads and read `conversation.id` in the branch instead of the captured
+  - [x] **4.4c** Keep both re-reads and read `conversation.id` in the branch instead of the captured
     `conversation_id`. All five tests named in `design.md` D3 must fail with `MissingGreenlet`
     (measured by R3 on R2's prototype: those five, plus D6's test, which already fails there before
     3.4 changes its expectation).
+
+  **Actual (night 2026-09-13, `r3-mut-a`, against `6ebcd9f`).** Each mutation was a single scripted
+  edit to `hub/hub/turn_scheduler.py`, each `old` asserted to occur exactly once, using
+  `testbed/scratch/night0913/r3/mutate.py`. The run covered four files, from `hub/` under
+  `py -3.11`: this change's file, `test_a_blocked_workspace_counts_where_input_could_run.py`,
+  `test_a_blocked_agent_workspace_holds_its_input.py` and `test_the_evidence_names_the_author.py`.
+  Unmutated they gave 50 passed and 5 xfailed. After every mutation the file was restored with
+  `git checkout`, and `git status --short` was empty. **Every named test failed. No named test
+  passed. No test was changed.**
+
+  | Mutation | Result | Failed (the named ones in bold) | Message |
+  |---|---|---|---|
+  | 4.1 rollback deleted | 7 failed | **1.2 `…leaves_the_task_as_it_was[B0,B1,B2]`**, **1.3 `…does_not_stop_another_reviewer`**, **1.5 `test_leg_t_leaves_the_task_as_it_was`** | `('under_review','rr-reviewer',3) == ('completed',None,2)` |
+  | | | **1.4 `test_leg_a_leaves_the_task_as_it_was_after_every_pass`** | `('completed','rr-reviewer',2) != ('completed',None,2)` |
+  | | | **1.8a `test_a_refused_review_does_not_close_an_open_divergence`** | `resolved_at` is a datetime, not `None` |
+  | 4.2 rollback below the first commit | 7 failed | **1.2 (B0, B1, B2)**, plus the same four as 4.1 | identical to 4.1: the first commit lands the staging, and the late rollback has nothing left to discard |
+  | 4.3 `waiting_reason` written before the rollback | 6 failed | **1.2 `…records_the_refusal[B0,B1,B2]`** | `None == <the refusal's words>` |
+  | | | **1.4 `test_leg_a_records_the_guards_refusal_and_gives_up_at_the_limit`** | `'recorded evidence for this task' in ''` (its per-pass `waiting_reason` assertion) |
+  | | | also: 1.8a's fixture pin `test_the_divergence_fixture_is_built_through_the_product`, and D3's `test_a_blocked_agent_workspace_holds_the_operators_message` | both on `waiting_reason` `None` |
+  | 4.4 `entries` re-read dropped | **exactly 3** failed | **`…inherited_from_the_thread…`**, **`…second_unbound_conversation…`**, **`…task_bound_entry_waiting_elsewhere…`** | `sqlalchemy.exc.MissingGreenlet` |
+  | | | `…holds_the_operators_message` and `…vanished_task_does_not_count` **pass**, as 4.4 says | |
+  | 4.4b `state == "queued"` filter dropped | 1 failed | **1.8b `test_input_withdrawn_during_its_dispatch_is_not_counted`** | `('withdrawn', 3) == ('withdrawn', 2)` |
+  | 4.4c `conversation.id` read in the branch | **exactly 5** failed | **the five of D3**: `…holds_the_operators_message`, `…inherited_from_the_thread…`, `…second_unbound_conversation…`, `…task_bound_entry_waiting_elsewhere…`, `…vanished_task_does_not_count` | `sqlalchemy.exc.MissingGreenlet` |
+
+  - **4.4b, the rest of its claim.** The test's first assertion stops it before its event
+    assertion. So the 1.8b scenario was re-run as an untracked probe that observes and asserts
+    nothing (`hub/tests/test__r3_probe_4_4b.py`, deleted afterwards).
+    - Under the mutation: `('withdrawn', 3)`, `abandoned_reason` *"delivery failed 3 times (refused
+      entry-…); the Hub stopped retrying"*, and one `queue_entry_abandoned`.
+    - On HEAD: `('withdrawn', 2)`, no reason, and no event.
+  - **4.4c, D6's test.** It **passes** under 4.4c on this tree. It is
+    `test_a_blocked_task_checkout_still_counts_with_nothing_waiting`, the `:227` assertion. R3's
+    sixth failure came from the prototype's loop, which D6 attributes to §3, and §3 is not applied
+    here. So 4.4c is exactly the five of D3.
 - [ ] 4.5 Make the loop continue after **any** non-transient refusal, not only after giving up.
   1.6(b) and 1.6(g) must fail **on their guard `RuntimeError`** (R3). The reason R1 gave, *"because
   B is counted more than once"*, cannot be the failure once 3.1a is in place: 3.1a stops any entry

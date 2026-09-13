@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 11,
+  "iteration": 12,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r3-mut-a",
-  "next_action": "Queue item r3-mut-a: a-refused-review-leaves-nothing-behind S4.1-4.4c, rollback mutations against the fix(F319) commit. No test and no product code changes; each mutation is a scripted single edit to hub/hub/turn_scheduler.py (utf-8, newline='', assert the edit applies exactly once), run the named tests from hub/ under py -3.11, restore with `git checkout -- hub/hub/turn_scheduler.py`, and `git status --short` clean after every one (pattern: testbed/scratch/night0912/u4/mutate.py). 4.1 delete `await db.rollback()`: 1.2 (B0/B1/B2 leaves_the_task_as_it_was), 1.3 (does_not_stop_another_reviewer), 1.4 (leg_a_leaves...), 1.5 (leg_t_leaves...) and 1.8a (does_not_close_an_open_divergence) must fail. 4.2 move the rollback below the first `await db.commit()` of the branch: 1.2 must fail. 4.3 keep the rollback, move the waiting_reason write before it: the waiting_reason assertions of 1.2 and 1.4 must fail. 4.4 drop only the `entries = await queued_entries(...)` re-read: EXACTLY three MissingGreenlet failures in test_a_blocked_workspace_counts_where_input_could_run.py (inherited_from_the_thread, second_unbound_conversation, task_bound_entry_waiting_elsewhere); holds_the_operators_message and vanished_task_does_not_count PASS. 4.4b drop the state=='queued' filter: 1.8b (test_input_withdrawn_during_its_dispatch_is_not_counted) fails with LIMIT + queue_entry_abandoned. 4.4c read conversation.id instead of captured conversation_id in the branch: the five D3 tests fail with MissingGreenlet (record whether D6's test also fails; on HEAD it is green before S3). Record each failing test and its message in a table under tasks 4.4c and in the log; a named test that PASSES under its mutation is a finding - stop, record it, do not change the test. Tick 4.1-4.4c, commit (docs only), push. Then r4-loop.",
+  "current": "r4-loop",
+  "next_action": "Queue item r4-loop: a-refused-review-leaves-nothing-behind S3 (F320), the pass goes on. Read tasks 3.1-3.5 and design D4/D5/D6 first. 3.1 schedule_agent's body becomes _attempt_turn(db, project_id, agent) returning a frozen dataclass (result, attempted, gave_up, nothing_queued); schedule_agent loops, bounded at len(initial queued)+1 with D4's argument in a comment, continuing ONLY after an attempt that gave up on something and was not transient. 3.1a a once-per-pass counted-id set so no entry is counted twice in one pass. 3.2 the pass's result rule keyed on nothing_queued, not on the 'queue is empty' string. 3.3 comment rewrites. 3.4 the ONLY existing assertion that changes: test_a_blocked_workspace_counts_where_input_could_run.py:227 (test_a_blocked_task_checkout_still_counts_with_nothing_waiting) -> [('withdrawn', LIMIT), ('queued', 1)]; a second failing existing assertion means STOP and record it in design D6 before changing it. 3.5 remove the MOVES_IN_3 xfail markers (5 tests: 1.6 a/b/d/g and 1.7) and the marker def. Verify: the new file all green (24 passed); baseline chunk + new file + test_a_blocked_agent_workspace_holds_its_input.py green; ruff/black(py311) clean; validate --strict. Commit 'fix(F320)', push. Then r5-mut-b.",
   "queue": [
     {
       "id": "compose",
@@ -90,9 +90,9 @@
     },
     {
       "id": "r3-mut-a",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S4.1-4.4c: rollback mutations",
-      "detail": "4.1, 4.2, 4.3, 4.4 (exactly three MissingGreenlet tests named in tasks), 4.4b, 4.4c (the five of design D3). Clean tree after every restore. Table into the log."
+      "detail": "DONE iteration 12 (docs only). testbed/scratch/night0913/r3/mutate.py, 4 files (new file + 2 D3 files + evidence_names_the_author; unmutated 50 passed/5 xfailed), tree clean after each restore. 4.1 7 failed (1.2 B0-B2, 1.3, 1.4 leaves, 1.5, 1.8a); 4.2 7 failed (same); 4.3 6 failed (1.2 records_the_refusal B0-B2 waiting_reason None, 1.4 pin '' + 1.8a fixture pin + D3 operators_message); 4.4 exactly the three MissingGreenlet, the other two pass; 4.4b 1.8b ('withdrawn',3) and a probe measured abandoned_reason set + queue_entry_abandoned=1 (HEAD: 2/None/0); 4.4c exactly the five of D3, D6's test PASSES on this tree. Table under tasks 4.4c. No finding."
     },
     {
       "id": "r4-loop",
