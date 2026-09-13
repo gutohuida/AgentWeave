@@ -247,6 +247,48 @@ describe('agent question panel', () => {
   })
 })
 
+describe('folding a question to read the conversation behind it (F345)', () => {
+  beforeEach(() => toggle.mockClear())
+
+  it('folds to its header line, keeping the question in view there', () => {
+    renderCard(question())
+    fireEvent.click(screen.getByTestId('agent-question-fold-q-1'))
+
+    expect(screen.queryByTestId('agent-question-option-q-1-0')).toBeNull()
+    expect(screen.getByTestId('agent-question-folded-text')).toHaveTextContent(
+      'Which database should I target?'
+    )
+    expect(screen.getByTestId('agent-question-fold-q-1')).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(screen.getByTestId('agent-question-fold-q-1'))
+    expect(screen.getByTestId('agent-question-option-q-1-0')).toBeInTheDocument()
+  })
+
+  it('takes no number keys while folded, since its options cannot be seen', () => {
+    renderCard(question())
+    fireEvent.click(screen.getByTestId('agent-question-fold-q-1'))
+    fireEvent.keyDown(document, { key: '1' })
+    expect(toggle).not.toHaveBeenCalled()
+  })
+
+  it('opens the next question unfolded, rather than hiding something new', () => {
+    const { rerender } = renderCard(question())
+    fireEvent.click(screen.getByTestId('agent-question-fold-q-1'))
+
+    rerender(
+      <AgentQuestionCard
+        questions={[question({ id: 'q-2', question: 'And the index?' })]}
+        agent="haiku-1"
+        selected={[]}
+        onToggle={toggle}
+        isResponding={false}
+        isTyping={false}
+      />
+    )
+    expect(screen.getByTestId('agent-question-option-q-2-0')).toBeInTheDocument()
+  })
+})
+
 describe('closing a question without answering it', () => {
   it('offers a dismiss control when one is wired up', () => {
     const decline = vi.fn()

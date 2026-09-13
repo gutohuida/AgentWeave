@@ -230,6 +230,16 @@
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
   }
 
+  /* No ligatures anywhere text is being typed (F342). JetBrains Mono's contextual alternates
+     draw `..` and `...` as a ligature spread across blank placeholder glyphs, and Chrome
+     re-shapes only the edited run of an editable field — so typing a third dot left stale
+     glyphs on screen: `Wait...` showed as `Wait ..`, the first dot apparently gone, while the
+     value (and the sent message) held all three. Measured in Chrome 153 against the bundled
+     woff2; static text shapes correctly, which is why read-only code keeps its ligatures. */
+  textarea, input, [contenteditable] {
+    font-variant-ligatures: none;
+  }
+
   /* Live numeric readouts must not shift horizontally as digits change. */
   .tabular, [data-tabular] {
     font-variant-numeric: tabular-nums;
@@ -1439,6 +1449,59 @@
     box-shadow: inset 0 1px var(--lift-hi), 0 1px 2px rgb(0 0 0 / 0.12);
   }
   .conversation-interject.is-stale { opacity: 0.68; }
+
+  /* Where interjections live (F345): floating over the foot of the conversation, directly above
+     the composer, instead of stacked in the composer's column. In the column an unbounded card
+     took the transcript's height — operator: "it eats the screen away with a big black
+     rectangle" — and could push the composer past the panel's bottom edge.
+
+     The outer layer spans the whole conversation area and takes no pointer events, so the
+     transcript beside and above the cards still scrolls and selects; the column carries the
+     cards, is capped at a share of that height, and scrolls inside itself past it. The panel
+     reserves the column's measured height below the newest entry, so the conversation's end can
+     still be scrolled into view above it — the part a floating panel usually gives up. */
+  .conversation-interject-tray {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    /* Kept equal to TRAY_BOTTOM_GAP_PX in AgentOutputPanel. The side gutters match the
+       composer's own, so the tray and the composer share one column. */
+    padding: 0 30px 8px;
+    pointer-events: none;
+  }
+  .conversation-interject-tray-column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(100%, 820px);
+    max-height: min(28rem, 60%);
+    margin-inline: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+    border-radius: var(--radius-content);
+  }
+  /* Cards over a transcript need an opaque face, and the tray scrolls under its header: the
+     header row stays pinned so a long question never scrolls away what is being asked, and the
+     fold and dismiss controls with it. */
+  .conversation-interject-tray-column .conversation-interject {
+    flex-shrink: 0;
+    width: 100%;
+  }
+  .conversation-interject-tray-column .interject-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    /* Out over the card's 12px padding, so a pinned header hides what scrolls beneath it edge to
+       edge rather than leaving it showing in the gutters beside. */
+    margin: -12px -12px 0;
+    padding: 12px 12px 0;
+    border-radius: var(--radius-content) var(--radius-content) 0 0;
+    background: var(--surface-2);
+  }
   @keyframes interject-in {
     from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }

@@ -1,4 +1,11 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+
+/** Undo the page-wide drag styling. A drag suspends text selection on the whole body, so any exit
+ *  that skips this leaves every page unselectable until the next drag happens to end cleanly. */
+function releaseBody() {
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+}
 
 interface PaneResizerProps {
   /** Current width of the pane this divider sizes, in px. */
@@ -47,6 +54,15 @@ export function PaneResizer({
 }: PaneResizerProps) {
   const dragging = useRef(false)
 
+  // A pane can close mid-drag — a keyboard shortcut, a navigation — and no pointerup ever reaches
+  // a divider that is no longer mounted.
+  useEffect(
+    () => () => {
+      if (dragging.current) releaseBody()
+    },
+    [],
+  )
+
   const clamp = useCallback(
     (value: number) => Math.min(max, Math.max(min, value)),
     [min, max],
@@ -91,8 +107,7 @@ export function PaneResizer({
     } catch {
       /* nothing to release */
     }
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
+    releaseBody()
   }
 
   // Keyboard resizing keeps the control operable without a pointer. The arrow keys move the
@@ -129,6 +144,9 @@ export function PaneResizer({
       onPointerMove={handlePointerMove}
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
+      // Capture can be taken away (the window loses focus, another element claims the pointer),
+      // after which the pointerup lands somewhere else and would never end the drag here.
+      onLostPointerCapture={endDrag}
       onDoubleClick={() => onChange(defaultWidth)}
       onKeyDown={handleKeyDown}
     >

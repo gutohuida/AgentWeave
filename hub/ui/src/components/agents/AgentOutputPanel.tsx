@@ -38,6 +38,7 @@ import { AgentTimeline } from './AgentTimeline'
 import { BannerStack, type ConversationBanner } from './BannerStack'
 import { Composer } from './Composer'
 import { PermissionRequestCard } from './PermissionRequestCard'
+import { openPermissionRequestsFor } from '@/lib/pendingPermissions'
 import { AgentQuestionCard } from './AgentQuestionCard'
 import { usePendingPermissionRequests } from '@/api/permissions'
 import { activeQuestionFor } from '@/lib/pendingQuestions'
@@ -118,6 +119,10 @@ const TAIL_TOP_PADDING_PX = 8
 
 /** Kept back from the tail spacer so the newest turn never sits flush against the composer. */
 const TAIL_BOTTOM_GAP_PX = 24
+
+/** The interjection tray's own bottom margin (`.conversation-interject-tray`), counted into the
+ *  inset it covers. Kept equal to the CSS by hand; it is one number. */
+const TRAY_BOTTOM_GAP_PX = 8
 
 /** Titles are capped at 120 characters; the continuity line is one row of 11px text under the
  *  composer. Shortened here rather than at the source, because the rail wants the whole thing. */
@@ -203,6 +208,19 @@ export function AgentOutputPanel({
   // question could be outstanding; with a batch the two could order differently, and the operator
   // would read one question while answering another.
   const pendingQuestion = activeQuestionFor(openQuestions, agent.name).question
+  /** Something the run is blocked on — a permission request or a question — is showing. They
+   *  float over the foot of the conversation in a tray (F345) rather than stacking in the
+   *  composer's own column, where an unbounded card squeezed the transcript to nothing and could
+   *  push the composer itself off the bottom of the panel. */
+  const hasInterjection =
+    !!pendingQuestion || openPermissionRequestsFor(permissionRequests, agent.name).length > 0
+  const trayRef = useRef<HTMLDivElement>(null)
+  /** How much of the conversation's foot the tray covers. Reserved below the newest entry, so
+   *  the end of the conversation can still be scrolled into view above the tray — what a floating
+   *  panel costs when it does not do this is the last messages. */
+  const [trayInset, setTrayInset] = useState(0)
+  const trayInsetRef = useRef(0)
+  trayInsetRef.current = trayInset
   const { data: conversations = [] } = useAgentConversations(agent.name)
   // Read inside the effect below rather than as a dependency: useAgentConversations's
   // mocked (and, across a react-query refetch, sometimes genuinely fresh) array
@@ -377,7 +395,12 @@ export function AgentOutputPanel({
       setTailSpacer(0)
       return
     }
-    const next = Math.max(0, el.clientHeight - newest.offsetHeight - TAIL_BOTTOM_GAP_PX)
+    // The tray's inset is reserved by its own spacer below this one, so the room that pins the
+    // newest turn to the top is what is left of the viewport *above* the tray.
+    const next = Math.max(
+      0,
+      el.clientHeight - trayInsetRef.current - newest.offsetHeight - TAIL_BOTTOM_GAP_PX,
+    )
     // Only commit a real change: this runs on every entry, and writing an equal value would
     // re-render forever.
     setTailSpacer((prev) => (Math.abs(prev - next) > 1 ? next : prev))
@@ -415,7 +438,27 @@ export function AgentOutputPanel({
     })
     observer.observe(newest)
     return () => observer.disconnect()
-  }, [timelineEntries.length, isRunning, measureTail])
+  }, [timelineEntries.length, isRunning, trayInset, measureTail])
+
+  /* The tray's height, measured whenever it changes — a question arriving, a batch stepping, the
+   * operator folding it. Mounted only while something is in it, so an idle conversation runs no
+   * observer for it. */
+  useLayoutEffect(() => {
+    const tray = trayRef.current
+    if (!tray) {
+      setTrayInset(0)
+      return
+    }
+    const measure = () => {
+      const next = tray.offsetHeight + TRAY_BOTTOM_GAP_PX
+      setTrayInset((prev) => (Math.abs(prev - next) > 1 ? next : prev))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(tray)
+    return () => observer.disconnect()
+  }, [hasInterjection])
 
   // `isRunning` is a dependency because the working indicator renders at the foot of the timeline
   // and appears on that transition, not on a new entry. Following only `timelineEntries.length`
@@ -433,6 +476,7 @@ export function AgentOutputPanel({
     isRunning,
     autoscroll,
     tailSpacer,
+    trayInset,
     disclosureResizeSignal,
     scrollToNewest,
   ])
@@ -1020,6 +1064,7 @@ export function AgentOutputPanel({
           landed on the run's completion line often enough to be reported. It is a row of its own
           now: it costs ~28px only while following is suspended, and overlaps nothing. */}
       <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -1046,7 +1091,33 @@ export function AgentOutputPanel({
           />
         )}
         <div aria-hidden="true" data-testid="conversation-tail-spacer" style={{ height: tailSpacer }} />
+        <div aria-hidden="true" data-testid="conversation-tray-inset" style={{ height: trayInset }} />
         <div ref={bottomRef} />
+      </div>
+
+        {/* Above the composer, not in the timeline: the agent is blocked right now and the
+            operator is answering under its timeout, so this must be where they already are
+            rather than somewhere they have to scroll to. It floats over the conversation's foot
+            instead of taking the composer column's height (F345): capped, scrolling inside
+            itself, foldable, and with its height reserved below the newest entry so the end of
+            the conversation still scrolls into view above it. */}
+        {hasInterjection && (
+          <div className="conversation-interject-tray" data-testid="conversation-interject-tray">
+            <div ref={trayRef} className="conversation-interject-tray-column">
+              <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
+              <AgentQuestionCard
+                questions={openQuestions}
+                agent={agent.name}
+                selected={questionSelection}
+                onToggle={handleQuestionToggle}
+                isResponding={answerQuestion.isPending}
+                isTyping={composerDraft.trim().length > 0}
+                onDecline={handleDeclineQuestion}
+                isDeclining={declineQuestion.isPending}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
         {/* Not a pause/resume toggle — the spec removed that, because scroll position already
@@ -1125,21 +1196,6 @@ export function AgentOutputPanel({
                 ? `Continuing ${continuityLabel(currentConversation)}`
                 : 'Continuing this conversation')}
           </span>
-
-          {/* Above the composer, not in the timeline: the agent is blocked right now and the
-              operator is answering under its timeout, so this must be where they already are
-              rather than somewhere they have to scroll to. */}
-          <PermissionRequestCard requests={permissionRequests} agent={agent.name} />
-          <AgentQuestionCard
-            questions={openQuestions}
-            agent={agent.name}
-            selected={questionSelection}
-            onToggle={handleQuestionToggle}
-            isResponding={answerQuestion.isPending}
-            isTyping={composerDraft.trim().length > 0}
-            onDecline={handleDeclineQuestion}
-            isDeclining={declineQuestion.isPending}
-          />
 
           <div className="conversation-composer-surface">
             <Composer

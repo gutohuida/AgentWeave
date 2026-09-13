@@ -6,6 +6,7 @@ import {
 } from '@/api/permissions'
 import { readableApiError } from '@/api/client'
 import { Icon } from '@/components/common/Icon'
+import { openPermissionRequestsFor } from '@/lib/pendingPermissions'
 
 interface PermissionRequestCardProps {
   requests: PermissionRequest[]
@@ -60,11 +61,7 @@ function requestKind(request: PermissionRequest): { label: string; impact: 'neut
 export function PermissionRequestCard({ requests, agent }: PermissionRequestCardProps) {
   const decide = useDecidePermissionRequest()
   const dismiss = useDismissPermissionRequest()
-  // Expired ones are kept alongside pending. Answered ones are not: those the operator dealt
-  // with, and re-showing them would bury the one they missed.
-  const open = requests.filter(
-    (r) => r.agent === agent && (r.status === 'pending' || r.status === 'expired')
-  )
+  const open = openPermissionRequestsFor(requests, agent)
   if (open.length === 0) return null
 
   return (

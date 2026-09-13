@@ -27274,6 +27274,24 @@ console-less child, Windows-only), `test_pty_runner.py` (console before spawn, e
 **Not yet on the operator's instance.** The live Hub loaded its Python at 2026-09-12 21:35; the fix
 reaches it on the operator's next restart. The 16 lingering windows are leftovers and can be closed.
 
+## F342 (B) — typing "..." in the composer shows the first dot vanish, while the message sends all three
+
+**Status:** fixed — `textarea, input, [contenteditable] { font-variant-ligatures: none; }` in
+`hub/ui/src/index.css`. Reported by the operator 2026-09-13: *"When I type '...' it behaves very
+weirdly. The third dot makes the first one disappears but when I hit enter it's on the message."*
+
+**Mechanism.** Not React: the composer is a plain controlled `<textarea>` and its value is always
+right. The field is set in JetBrains Mono (`@fontsource/jetbrains-mono`), whose contextual
+alternates draw `..` and `...` as a ligature spread over blank placeholder glyphs. Chrome re-shapes
+only the edited run of an editable field and reuses the rest, so the third dot left a mix of the
+old `..` shaping and the new `...` one on screen: `Wait...` rendered `Wait ..`, `x...y` rendered
+`x   .y`. Static text shapes correctly, and only a full re-shape (a zoom change) repaired a field.
+A `contenteditable` breaks the same way, so switching element would not have helped.
+
+**Driven** in the real composer (headless Chromium, typing with the keyboard): the committed bundle
+before the fix showed `Wait ..` with value `Wait...`; the rebuilt one shows `Wait...` and computes
+`font-variant-ligatures: none`. Read-only code keeps its ligatures.
+
 ## F343 (B) — the desktop window has no right-click menu, so a misspelt word can be underlined and never corrected
 
 **Status:** fixed — `_enable_default_context_menus` (`src/agentweave/cli.py`). Reported by the
@@ -27328,3 +27346,58 @@ element in the app — the whole transcript — refused selection.
 is `none` and a mouse drag across a paragraph selects `""`; with `text_select=True` it is `auto` and
 the same drag selects the whole sentence. Pinned by `tests/test_cli.py`
 (`test_native_window_lets_text_be_selected`).
+
+**Two more places selection failed, found in a browser, where the window's cause does not apply.**
+An investigation driving the bundles in headless Chromium found the answer text itself selectable,
+and two real blockers elsewhere — both fixed in the same commit as F342/F345:
+- *An expanded work row.* `WorkRow` (`AgentTimeline.tsx`) rendered its whole expanded body — the
+  command, the tool's output, a diff — **inside** the row's `<button>`. Chrome will not start a
+  selection inside a button, and the mouseup that ended the attempt clicked it and folded the row.
+  Only the header is the button now; pinned by `agentTimeline.test.tsx` ("keeps the command and its
+  output outside the button"), which fails on the old structure.
+- *A leaked drag style.* `PaneResizer` sets `body { user-select: none }` for a drag and cleared it
+  only in its own pointerup — so a divider unmounted mid-drag, or one whose capture was taken away,
+  left every page unselectable. It now clears on unmount and on `lostpointercapture`; pinned in
+  `PaneResizer.test.tsx`.
+
+## F345 (B) — a pending question grows without bound in the composer's column, squeezing the conversation to nothing and pushing the composer off screen
+
+**Status:** fixed — the question and permission cards float in a tray over the conversation's foot
+(`AgentOutputPanel.tsx`, `.conversation-interject-tray` in `index.css`). Reported by the operator
+2026-09-13: *"When I have a agent using ask user the question box is kind of hard stuck. It eats
+the screen away with a big black rectangle. It would be nice to have it floating on top of the
+agent conversation but we should be able also to scroll to the end of the conversations. I know
+that T3 has that model of floating on top but then you can't see the last messages."*
+
+**Mechanism.** Both cards were stacked inside `.conversation-composer-fade`, a `shrink-0` flex
+child, above the composer. `.conversation-interject` had no height limit, and `ask_user` puts no
+limit on a question's length or on eight options with descriptions. The conversation area
+(`min-h-0 flex-1`) gave up all its height to make room, and once the header plus that column
+exceeded the panel, the composer was pushed past the panel's `overflow-hidden` bottom edge. The
+"black rectangle" is the dark theme's `--surface-2`, drawn tall. Identical in 1.1.0.
+
+**The design, and the operator's T3 point.** The cards now sit in an absolutely positioned tray
+over the bottom of the conversation, directly above the composer: capped at
+`min(28rem, 60%)` of the conversation's height, scrolling inside itself with the question's header
+pinned, and foldable to one line that keeps the question's text (`AgentQuestionCard`, keyed by
+question so the next one arrives open; number-key shortcuts are off while folded). What answers
+the operator's objection to T3 is the inset: the tray's measured height is reserved by a spacer
+below the newest entry, and subtracted from the room that pins the newest turn to the top, so
+scrolled to the end the last message sits *above* the tray rather than under it.
+
+**Driven** against the trial Hub with a long 8-option question from `httpagent` over a 50-entry
+conversation, 1280x800, headless Chromium, before (committed bundle) and after (rebuilt bundle):
+
+| | before | after, open | after, folded |
+|---|---|---|---|
+| conversation height | **44 px** | 477 px | 477 px |
+| composer on screen | **no** (top at 828 of 800) | yes | yes |
+| newest turn's foot clear of the card | — | yes (298 < 319) | yes (535 < 557) |
+| card | 641 px in flow | capped, scrolls inside | 44 px |
+
+Light and dark both checked by screenshot. Pinned by `interjectTray.test.tsx` (tray placement,
+no tray for another agent, and the inset arithmetic: 600 − 208 − 120 − 24 = 248) and
+`agentQuestionCard.test.tsx` (folding).
+
+**Not done:** the permission card is not foldable. It is the one with a timeout, its detail is
+already capped at 10rem, and the tray's cap and scroll bound a stack of them.

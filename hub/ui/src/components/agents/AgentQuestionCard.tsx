@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Question } from '@/api/questions'
 import { activeQuestionFor } from '@/lib/pendingQuestions'
@@ -40,11 +40,16 @@ export function AgentQuestionCard({
   isDeclining = false,
 }: AgentQuestionCardProps) {
   const { question, step, total } = activeQuestionFor(questions, agent)
+  /** Folded to its header so the conversation behind it can be read (F345). Keyed by question,
+   *  so the next question in a batch — or the next one asked — arrives open rather than hidden. */
+  const [collapsedId, setCollapsedId] = useState<string | null>(null)
+  const collapsed = !!question && collapsedId === question.id
 
   // Number keys pick an option, as long as the operator is not writing in a field. The badges
-  // on each row are what make this discoverable; a shortcut nobody can see is not a feature.
+  // on each row are what make this discoverable; a shortcut nobody can see is not a feature —
+  // so a folded card, whose options are hidden, takes no number keys either.
   useEffect(() => {
-    if (!question || isResponding) return
+    if (!question || isResponding || collapsed) return
     const options = question.options ?? []
     const handler = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return
@@ -59,7 +64,7 @@ export function AgentQuestionCard({
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [question, isResponding, onToggle])
+  }, [question, isResponding, collapsed, onToggle])
 
   if (!question) return null
   const options = question.options ?? []
@@ -70,9 +75,15 @@ export function AgentQuestionCard({
   const nobodyWaiting = question.asker_waiting === false
 
   return (
-    <div className={`conversation-interject${nobodyWaiting ? ' is-stale' : ''}`} data-testid={`agent-question-${question.id}`}>
-      <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
-        <span className="interject-eyebrow">{question.header || `${agent} is asking`}</span>
+    <div
+      className={`conversation-interject${nobodyWaiting ? ' is-stale' : ''}`}
+      data-testid={`agent-question-${question.id}`}
+      data-collapsed={collapsed ? 'true' : undefined}
+    >
+      {/* Padding, not margin, below the header: in the tray it is pinned while the card scrolls
+          under it, and a margin is transparent — the text scrolling past showed through it. */}
+      <div className="interject-header flex items-center gap-2" style={{ paddingBottom: collapsed ? 0 : 6 }}>
+        <span className="interject-eyebrow shrink-0">{question.header || `${agent} is asking`}</span>
         {/* Position within this batch, not a count of everything outstanding. The old counter
             read like a step counter while being a queue depth, which said "1/2" to someone with
             one question in front of them and nothing else coming. */}
@@ -90,6 +101,29 @@ export function AgentQuestionCard({
             no longer waiting
           </span>
         )}
+        {/* Folded, the question itself stays in view on the header line — enough to know what is
+            being asked while reading the conversation behind it. */}
+        {collapsed && (
+          <span
+            className="min-w-0 flex-1 truncate"
+            data-testid="agent-question-folded-text"
+            style={{ fontSize: 12, color: 'var(--text-2)' }}
+          >
+            {question.question}
+          </span>
+        )}
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? 'Show the question' : 'Fold the question to read the conversation'}
+          title={collapsed ? 'Show the question' : 'Fold to read the conversation'}
+          data-testid={`agent-question-fold-${question.id}`}
+          onClick={() => setCollapsedId(collapsed ? null : question.id)}
+          className="ml-auto shrink-0 p-0.5 rounded"
+          style={{ color: 'var(--text-3)', background: 'transparent', border: 'none' }}
+        >
+          <Icon name={collapsed ? 'expand_less' : 'expand_more'} size={14} />
+        </button>
         {onDecline && (
           <button
             type="button"
@@ -98,7 +132,7 @@ export function AgentQuestionCard({
             data-testid={`agent-question-decline-${question.id}`}
             disabled={isResponding || isDeclining}
             onClick={() => onDecline(question.id)}
-            className="ml-auto shrink-0 p-0.5 rounded"
+            className="shrink-0 p-0.5 rounded"
             style={{ color: 'var(--text-3)', background: 'transparent', border: 'none' }}
           >
             <Icon name="x" size={14} />
@@ -106,63 +140,67 @@ export function AgentQuestionCard({
         )}
       </div>
 
-      <p style={{ fontSize: 13, color: 'var(--text)' }}>{question.question}</p>
-      {multi && (
-        <p style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
-          Select one or more options.
-        </p>
-      )}
+      {!collapsed && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{question.question}</p>
+          {multi && (
+            <p style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
+              Select one or more options.
+            </p>
+          )}
 
-      <div className="flex flex-col gap-1.5" style={{ marginTop: 10 }}>
-        {options.map((option, index) => {
-          const isSelected = !isTyping && selected.includes(option.label)
-          const shortcut = index < 9 ? index + 1 : null
-          return (
-            <button
-              key={`${question.id}-${index}`}
-              type="button"
-              className="interject-choice"
-              data-selected={isSelected ? 'true' : undefined}
-              data-testid={`agent-question-option-${question.id}-${index}`}
-              disabled={isResponding}
-              onClick={() => onToggle(option.label)}
+          <div className="flex flex-col gap-1.5" style={{ marginTop: 10 }}>
+            {options.map((option, index) => {
+              const isSelected = !isTyping && selected.includes(option.label)
+              const shortcut = index < 9 ? index + 1 : null
+              return (
+                <button
+                  key={`${question.id}-${index}`}
+                  type="button"
+                  className="interject-choice"
+                  data-selected={isSelected ? 'true' : undefined}
+                  data-testid={`agent-question-option-${question.id}-${index}`}
+                  disabled={isResponding}
+                  onClick={() => onToggle(option.label)}
+                >
+                  <span className="interject-choice-body">
+                    <span className="interject-choice-label">{option.label}</span>
+                    {option.description && option.description !== option.label && (
+                      <span className="interject-choice-desc">{option.description}</span>
+                    )}
+                  </span>
+                  {isSelected ? (
+                    <Icon name="check" size={14} className="interject-choice-check shrink-0" />
+                  ) : shortcut !== null ? (
+                    <kbd className="interject-kbd">{shortcut}</kbd>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
+            {multi
+              ? 'Pick what applies, then send. Or write your own answer below.'
+              : 'Pick one, or write your own answer below.'}
+            {/* Said once, here, rather than left for the operator to infer from the counter — an
+                answer they cannot take back is worth knowing about before they give it. */}
+            {step < total ? ` Then ${total - step} more.` : ''}
+          </p>
+
+          {/* Nothing reaches the agent until the batch is finished, so say so. Without it the operator
+              answers two of three, sees nothing happen, and cannot tell whether the agent is waiting on
+              the third or ignoring them — trading a visible annoyance for an invisible one. Distinct
+              from the counter above, which is about position rather than about what has been sent. */}
+          {nobodyWaiting && total > 1 && (
+            <p
+              data-testid="agent-question-held-batch"
+              style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}
             >
-              <span className="interject-choice-body">
-                <span className="interject-choice-label">{option.label}</span>
-                {option.description && option.description !== option.label && (
-                  <span className="interject-choice-desc">{option.description}</span>
-                )}
-              </span>
-              {isSelected ? (
-                <Icon name="check" size={14} className="interject-choice-check shrink-0" />
-              ) : shortcut !== null ? (
-                <kbd className="interject-kbd">{shortcut}</kbd>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
-
-      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
-        {multi
-          ? 'Pick what applies, then send. Or write your own answer below.'
-          : 'Pick one, or write your own answer below.'}
-        {/* Said once, here, rather than left for the operator to infer from the counter — an
-            answer they cannot take back is worth knowing about before they give it. */}
-        {step < total ? ` Then ${total - step} more.` : ''}
-      </p>
-
-      {/* Nothing reaches the agent until the batch is finished, so say so. Without it the operator
-          answers two of three, sees nothing happen, and cannot tell whether the agent is waiting on
-          the third or ignoring them — trading a visible annoyance for an invisible one. Distinct
-          from the counter above, which is about position rather than about what has been sent. */}
-      {nobodyWaiting && total > 1 && (
-        <p
-          data-testid="agent-question-held-batch"
-          style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}
-        >
-          {`Your answers reach ${agent} together once you have finished all ${total}. Dismiss the rest to send what you have.`}
-        </p>
+              {`Your answers reach ${agent} together once you have finished all ${total}. Dismiss the rest to send what you have.`}
+            </p>
+          )}
+        </>
       )}
     </div>
   )

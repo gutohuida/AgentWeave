@@ -768,6 +768,50 @@ describe('AgentTimeline — WorkRow tool icon and label (Q7 D2)', () => {
   })
 })
 
+describe('AgentTimeline — an expanded work row can be selected and copied (F344)', () => {
+  it('keeps the command and its output outside the button that folds the row', () => {
+    // Chrome will not start a text selection inside a <button>, and the mouseup that ends the
+    // attempt clicks it — so while the body lived inside the row's button, a tool's output could
+    // not be copied and trying folded it away.
+    render(
+      <AgentTimeline
+        agent={agent}
+        entries={[
+          entry({
+            id: 'tool_bash',
+            kind: 'agent_output',
+            output_kind: 'tool_use',
+            content: 'Called Bash',
+            payload: { call_id: 'c1', tool: 'Bash', input: JSON.stringify({ command: 'git log -1' }) },
+            run_id: 'run-sel',
+            timestamp: '2026-08-02T00:00:01Z',
+          }),
+          entry({
+            id: 'tool_bash_result',
+            kind: 'agent_output',
+            output_kind: 'tool_result',
+            content: 'a3237be fix(F341)',
+            payload: { call_id: 'c1' },
+            run_id: 'run-sel',
+            timestamp: '2026-08-02T00:00:02Z',
+          }),
+        ]}
+        roster={[agent]}
+        runs={{}}
+        isRunning={false}
+      />,
+    )
+    fireEvent.click(screen.getByText(/^Work · \d+ steps?/))
+    const header = screen.getByText('Bash').closest('button') as HTMLButtonElement
+    fireEvent.click(header)
+
+    expect(header).toHaveAttribute('aria-expanded', 'true')
+    const output = screen.getByText('a3237be fix(F341)')
+    expect(output.closest('button')).toBeNull()
+    expect(screen.getByText('git log -1').closest('button')).toBeNull()
+  })
+})
+
 describe('AgentTimeline — WorkRow edit diff view (Q7 D2 section 3)', () => {
   function editEntry(overrides: Partial<TimelineEntry> & { payload: Record<string, unknown> }) {
     return entry({

@@ -726,55 +726,63 @@ function WorkRow({ entry, paired }: { entry: TimelineEntry; paired?: TimelineEnt
   // A column, not a row. The expanded body used to be the fourth child of a `flex` row, so it
   // laid out to the RIGHT of the label instead of underneath it — a wide, unreadable column of
   // text beside the icon. The header keeps its own flex row; the body is its sibling below.
+  //
+  // Only the header is the button. The body used to sit inside it too, and Chrome will not start
+  // a text selection inside a button — so a tool's output, a command or a diff could not be
+  // selected or copied, and the mouseup that ended the attempt toggled the row shut (F344).
   return (
-    <button
-      onClick={() => setExpanded((v) => !v)}
-      className="flex flex-col w-full text-left font-mono text-[12px] py-[2.5px]"
-    >
-      <span className="flex gap-[.55rem] items-baseline w-full min-w-0">
-        <Icon name={iconName} size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-        <b style={{ color: 'var(--text)', fontWeight: 500 }}>{displayLabel}</b>
-        {/* The call's own subject, inline and truncated. Scanning a run of six `shell` calls is
-            impossible when every row says only "shell". */}
-        {detail && !expanded && (
-          <span className="truncate min-w-0 flex-1" style={{ color: 'var(--text-3)' }}>
-            {detail.split('\n')[0]}
+    <div className="flex flex-col w-full font-mono text-[12px] py-[2.5px]">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="flex w-full min-w-0 text-left"
+      >
+        <span className="flex gap-[.55rem] items-baseline w-full min-w-0">
+          <Icon name={iconName} size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          <b style={{ color: 'var(--text)', fontWeight: 500 }}>{displayLabel}</b>
+          {/* The call's own subject, inline and truncated. Scanning a run of six `shell` calls is
+              impossible when every row says only "shell". */}
+          {detail && !expanded && (
+            <span className="truncate min-w-0 flex-1" style={{ color: 'var(--text-3)' }}>
+              {detail.split('\n')[0]}
+            </span>
+          )}
+          {stat && (
+            <span className="flex-shrink-0 tabular-nums" title={`${stat.added} added, ${stat.removed} removed`}>
+              <span style={{ color: 'var(--green)' }}>+{stat.added}</span>{' '}
+              <span style={{ color: 'var(--red)' }}>−{stat.removed}</span>
+            </span>
+          )}
+          <span className="ml-auto flex-shrink-0" style={{ color: 'var(--text-3)' }}>
+            {statusSuffix.replace(' · ', '')}
           </span>
-        )}
-        {stat && (
-          <span className="flex-shrink-0 tabular-nums" title={`${stat.added} added, ${stat.removed} removed`}>
-            <span style={{ color: 'var(--green)' }}>+{stat.added}</span>{' '}
-            <span style={{ color: 'var(--red)' }}>−{stat.removed}</span>
-          </span>
-        )}
-        <span className="ml-auto flex-shrink-0" style={{ color: 'var(--text-3)' }}>
-          {statusSuffix.replace(' · ', '')}
         </span>
-      </span>
+      </button>
       {expanded &&
         (editDiff ?? (
-          <span className="block mt-1 ml-[1.15rem] space-y-1">
+          <div className="mt-1 ml-[1.15rem] space-y-1">
             {detail && (
-              <span
-                className="block whitespace-pre-wrap px-2 py-1 rounded"
+              <div
+                className="whitespace-pre-wrap px-2 py-1 rounded"
                 style={{ color: 'var(--text-2)', background: 'var(--surface-2, var(--surface))' }}
               >
                 {detail}
-              </span>
+              </div>
             )}
             {resultBody && (
-              <span className="block whitespace-pre-wrap" style={{ color: 'var(--text-3)' }}>
+              <div className="whitespace-pre-wrap" style={{ color: 'var(--text-3)' }}>
                 {resultBody}
-              </span>
+              </div>
             )}
             {!detail && !resultBody && (
-              <span className="block" style={{ color: 'var(--text-3)' }}>
+              <div style={{ color: 'var(--text-3)' }}>
                 No input or output was recorded for this call.
-              </span>
+              </div>
             )}
-          </span>
+          </div>
         ))}
-    </button>
+    </div>
   )
 }
 

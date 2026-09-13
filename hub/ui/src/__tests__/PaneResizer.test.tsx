@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PaneResizer } from '@/components/layout/PaneResizer'
 
@@ -72,6 +72,29 @@ describe('PaneResizer', () => {
 
     await user.dblClick(resizer)
     expect(onChange).toHaveBeenLastCalledWith(220)
+  })
+
+  it('gives text selection back to the page if it unmounts mid-drag', () => {
+    // A drag suspends selection on the whole body. A pane closed during one never receives the
+    // pointerup, and every page stayed unselectable after it.
+    const { unmount } = render(
+      <PaneResizer width={220} onChange={vi.fn()} defaultWidth={220} min={180} max={420} label="Other pane" />,
+    )
+    fireEvent.pointerDown(screen.getByRole('separator', { name: 'Other pane' }), { pointerId: 1 })
+    expect(document.body.style.userSelect).toBe('none')
+
+    unmount()
+    expect(document.body.style.userSelect).toBe('')
+    expect(document.body.style.cursor).toBe('')
+  })
+
+  it('ends the drag when pointer capture is taken away', () => {
+    const { resizer } = setup(220)
+    fireEvent.pointerDown(resizer, { pointerId: 1 })
+    expect(document.body.style.userSelect).toBe('none')
+
+    fireEvent(resizer, new Event('lostpointercapture', { bubbles: true }))
+    expect(document.body.style.userSelect).toBe('')
   })
 
   it('restores the default width from the keyboard too', async () => {
