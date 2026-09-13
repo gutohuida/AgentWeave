@@ -423,7 +423,7 @@ on a port chosen that night after `netstat -ano | grep LISTENING` shows it free,
 `hub/` with `py -3.11 -m uvicorn` **from source**. No `.py` under `hub/hub` or `src` may be newer than
 the process. Export `AW_HUB` and `AW_KEY` before every harness run.
 
-- [ ] 5.1 **The harness.** Extend `scripts/drive/t_d1_0912_f319_reach.py`.
+- [x] 5.1 **The harness.** Extend `scripts/drive/t_d1_0912_f319_reach.py`.
   - `AW_EXPECT=prefix` (the default) keeps today's "REACHED" assertions. `AW_EXPECT=fixed` asserts,
     for every leg, that the task row and its transition count equal a snapshot taken
     **immediately before** the dispatch, and that the refused reviewer has no run.
@@ -437,7 +437,29 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
     4. Wait for X's turn to end. The run-end re-drain makes attempt 1 on H.
     5. `POST /conversations/<H's conversation>/continue` twice, for attempts 2 and 3.
     6. Read `inbound_queue_entries` and `runs`.
-- [ ] 5.2 **Pre-fix, first.** Run `git worktree add ../aw-f319-prefix <sha>` at §1's commit.
+
+  **Actual (night r7-drive-prefix, 2026-09-13).** Done as written, plus four additions the first
+  drive showed were needed.
+  - **`AW_EXPECT=fixed`** asserts, for B1, B2, A and F, that `(task row, transition count)` equals
+    a snapshot taken immediately before the dispatch, and that the refused reviewer has no run. For
+    A it also asserts 5.3's items: the guard's sentence as `waiting_reason` on every queued pass,
+    `withdrawn` at 3 attempts with the guard's words in `abandoned_reason`, and a
+    `queue_entry_abandoned` row. For F it asserts that M was `queued` at 0 attempts before the
+    pass that gave H up, that the same `continue` answered `started_conversation_id` = M's
+    conversation, and that M is `delivered` into a real run. Both route sentences are printed, so
+    5.3 can compare them with this drive's.
+  - **D9 is asserted.** Under `prefix`, the second reviewer's answer contains *"already under
+    review"*. Under `fixed`, it must not.
+  - **Leg F** runs through operator routes only, with its own task on `fr-5` and its own agent
+    `authf<TAG>`. Leg A is also driven to its limit with two `continue`s, so that A's entry is
+    settled before F starts.
+  - **The long step is `python slow_step.py`, not `sleep 60`.** The harness commits the script into
+    the fixture. Claude Code 2.1.269 answered every standalone `sleep 60` and `Start-Sleep` with
+    *"Blocked: standalone sleep"*, so leg A's agent never became the author (DEAD-ENDS, *The Hub at
+    runtime*).
+  - **Both author turns must answer `status: running`.** F also waits until nothing is running in
+    the project, and F's "no run for M" reads M's conversation rather than counting runs.
+- [x] 5.2 **Pre-fix, first.** Run `git worktree add ../aw-f319-prefix <sha>` at §1's commit.
   **Never `git stash`.** Start the drive Hub from that worktree, on a fresh git fixture project, and
   run legs B, A and F with `AW_EXPECT=prefix`. These must reproduce:
   - B1 and B2: `under_review`, held by the refused reviewer, with a new transition row.
@@ -447,6 +469,50 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
 
   **If any of these does not hold, this is not a reproduction.** Say so and stop. Stop the Hub and
   remove the worktree afterwards.
+
+  **Actual (night r7-drive-prefix, 2026-09-13): reproduced, on the second attempt.**
+  - **Setup.** Worktree `../aw-f319-prefix` at `73ae6c5`. `git diff ab49909 73ae6c5 -- hub/hub src`
+    is empty. From the worktree's `hub/`, `import hub` resolved to the worktree, and
+    `turn_scheduler` had no `_Attempt`.
+  - **Hub.** Fresh profile `drive0913r`, migrated to `0102`. Port 8025, PID 19484, started by
+    `py -3.11 -m uvicorn` at 03:36:18. No `.py` in the worktree was newer. The key answered 200
+    and a wrong key 401.
+  - **Attempt 1 (`r7p`, `proj-d4c9ea1d16f1`): not a reproduction of A.** B1, B2, D9 and F's core
+    (H `withdrawn` at 3, M `queued` at 0 with no run in its conversation) all held. Leg A did not.
+    Its agent's Claude Code blocked `sleep 60` and `Start-Sleep -Seconds 60`, and the agent gave up
+    and recorded no evidence (`run-63cea161a1d6`, 30 s). So the review ran for real
+    (`run-6d9843b1ab59`) and ended without a verdict. The divergence restaffed TA to leg F's agent,
+    and F's "running turn" was that restaff. The harness was fixed (5.1), and the attempt was
+    re-run on a second fresh fixture project, so the runs could not re-drain into each other.
+  - **Attempt 2 (`r7q`, `proj-a9dad9b9fc33`): 32 ok, 0 fail.**
+    - B1 `task-a6c1743d81d3`: `409` *"commit d3a70740… is not present in this repository, so there
+      is nothing to check out for review"*. It went `("completed", None)` →
+      `("under_review", "revr7q")`, with a new `completed → under_review` row attributed to the
+      operator, and no run.
+    - D9: `revcr7q` was answered `409` *"Task task-a6c1743d81d3 is already under review by
+      'revr7q'. Reassign the task if 'revcr7q' should take it over, or let the review in flight
+      finish."*
+    - B2 `task-4704b6fc04d7`: `409` *"could not prepare revbr7q's review checkout: refusing
+      existing path …\.agentweave\reviews\revbr7q: it is not a detached git worktree registered
+      for revbr7q's reviews"*. It is left `("under_review", "revbr7q")` with a new row, and no run.
+    - A `task-1799a95e0375`: the author's own turn `run-dde40163ef36` ran 80 s and recorded
+      evidence. Entry `entry-9a583d9b13cf` was refused by the guard at attempts 1 (run-end
+      re-drain), 2 and 3 (`continue`s). It is `withdrawn` at 3 with one `queue_entry_abandoned`
+      row. The task reads **`("completed", "authr7q")`** after the first pass, and still after
+      the give-up.
+    - F `task-5eb6eb4c3c18`: X `authfr7q`'s own turn `run-69c68eed95aa` ran 76 s. H
+      `entry-66a52bdb22f2` and M `entry-f512a2aacfcd` were both answered `200 queued`, in
+      conversations `conv-9fabbde54112` and `conv-6586a3c65a94`. H was refused at 1 (re-drain),
+      then 2 and 3, and was withdrawn by the second `continue`. That `continue` answered
+      `started: false`, `started_conversation_id: null`, with the guard's sentence as its reason.
+      **M was `queued` at 0 attempts, with no run, and was still like that at 03:46**, a minute
+      later. Attempt 1's M was still like that seven minutes after its pass. TF went
+      `("completed", None)` → `("completed", "authfr7q")`, with no new transition row.
+  - **Teardown.** Six runs, all joined to `claude-haiku-4-5-20251001`. `GET /jobs` is `[]` for
+    both projects. Nothing was running. The Hub log has 0 tracebacks. The Hub was stopped (nothing
+    listens on 8025), and `git worktree remove` needed no `--force`. The drive outputs and the Hub
+    log are kept in `~/.agentweave/hub/profiles/drive0913r/r7-prefix-transcripts/`, and so is the
+    database. 8000 and 8010 were never touched.
 - [ ] 5.3 **Fixed tree.** Use a fresh project and fresh agents, and run the same legs with
   `AW_EXPECT=fixed`.
   - Every task equals its before-dispatch snapshot, and no refused reviewer has a run.

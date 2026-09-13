@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 15,
+  "iteration": 16,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r7-drive-prefix",
-  "next_action": "Queue item r7-drive-prefix: a-refused-review-leaves-nothing-behind S5.1-5.2. GATE: do not start the drive with < 75 min before stop_at 07:00 (i.e. start by 05:45; if later, skip r7/r8 and go to w-final, leaving r9 open - never close without the drive). Read tasks.md 5.1-5.2 in full first. 5.1 extend scripts/drive/t_d1_0912_f319_reach.py (AW_EXPECT=prefix|fixed, D9 assertion, leg F). 5.2 git worktree add at 73ae6c5 (r1-pin's commit; never stash), fresh profile drive0913r on its own free port (not 8000, not 8010), legs B, A, F with AW_EXPECT=prefix, Haiku runners only. Expected pre-fix: B1/B2 under_review held by the refused reviewer with a new transition row, D9 refusal of a 2nd reviewer, A ('completed', X), F: H withdrawn and M queued at 0 with no run. Not reproduced -> say so and stop. Stop the Hub, remove the worktree, tick 5.1-5.2 with measured ids, log, commit 'drive(a-refused-review-leaves-nothing-behind): S5.1-5.2 ...', push. Then r8-drive-fixed.",
+  "current": "r8-drive-fixed",
+  "next_action": "Queue item r8-drive-fixed: a-refused-review-leaves-nothing-behind S5.3-5.5. GATE: do not start the drive after 06:00 (stop_at 07:00); if later, skip to w-final leaving r8/r9 open - never close without the drive. Read tasks.md 5.3-5.5 and r7's 5.1-5.2 Actual first. Hub from THIS checkout's hub/ (HEAD has the fix; confirm `_Attempt` in hub.turn_scheduler from hub/), fresh profile drive0913s with AW_BOOTSTRAP_API_KEY (key to ~/.agentweave/hub/drive0913s-key.txt), its own free port (8026 if free; never 8000/8010), started via PowerShell Start-Process py -3.11 -m uvicorn hub.main:app from hub/ with DATABASE_URL=sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/drive0913s/agentweave.db. Do not edit any .py while it runs. Fresh fixture testbed/scratch/night0913/r8/fixture (git init -b main, README.md committed), POST /projects/open. 5.3: AW_EXPECT=fixed AW_RUN_TAG=r8f, legs B A F, run in background and wait inside the turn (py -c poll <=560s). Compare B1/B2 route sentences with r7's (only sha/tag differ). 5.4: scripts/drive/t_d1_0912_f319_ui.py hard-codes titles 'B1 b2','B2 b2','A a1','C a1' - parametrize by AW_RUN_TAG and assert B1/B2 cards not in Under Review and A's card does not name X; run against the served bundle; also confirm `git diff ab49909.. -- hub/hub/static hub/ui` is empty (bundle unchanged). 5.5: runs join Haiku, GET /jobs [] per project, stop Hub by the LISTENING PID, no worktree made. Tick 5.3-5.5 with measured ids, log, commit 'drive(a-refused-review-leaves-nothing-behind): S5.3-5.5 ...', push. Then r9-close.",
   "queue": [
     {
       "id": "compose",
@@ -114,9 +114,9 @@
     },
     {
       "id": "r7-drive-prefix",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S5.1-5.2: harness + pre-fix reproduction",
-      "detail": "GATE: do not start the drive with < 75 min before stop_at. 5.1 extend scripts/drive/t_d1_0912_f319_reach.py (AW_EXPECT=prefix|fixed, D9 assertion, leg F). 5.2 worktree at r1-pin's commit (never stash), fresh profile drive0913r on its own free port, legs B, A, F with AW_EXPECT=prefix; B1/B2 under_review held by the refused reviewer with a new transition row, D9 refusal of a 2nd reviewer, A ('completed', X), F: H withdrawn and M queued at 0 with no run. Not reproduced -> say so and stop. Stop Hub, remove worktree."
+      "detail": "DONE iteration 16. 5.1 harness: AW_EXPECT=prefix|fixed (fixed = (task row, transition count) equals the before-dispatch snapshot + refused reviewer has no run; A: guard sentence each queued pass, withdrawn at 3, queue_entry_abandoned; F: M queued at 0 before the give-up pass, same continue answers started_conversation_id=M's conv, M delivered into a real run), D9 asserted both ways, leg F (own task fr-5, own agent authf<TAG>), leg A driven to its limit with 2 continues. Long step is committed slow_step.py, NOT sleep 60: Claude Code 2.1.269 blocks standalone sleep (DEAD-ENDS). 5.2: worktree at 73ae6c5, Hub PID 19484 port 8025, profile drive0913r (key ~/.agentweave/hub/drive0913r-key.txt). Attempt 1 r7p proj-d4c9ea1d16f1 NOT a reproduction of A (sleep blocked, agent never became author; review ran, divergence restaffed TA to F's agent, contaminating F). Attempt 2 r7q proj-a9dad9b9fc33: 32 ok/0 fail, all four reproduced: B1 task-a6c1743d81d3 -> (under_review, revr7q) + row; D9 'already under review by revr7q'; B2 task-4704b6fc04d7 -> (under_review, revbr7q) + row; A task-1799a95e0375 (completed, authr7q), entry-9a583d9b13cf withdrawn at 3; F task-5eb6eb4c3c18 -> (completed, authfr7q), H entry-66a52bdb22f2 withdrawn by 2nd continue, M entry-f512a2aacfcd queued at 0 no run. 6 runs all Haiku, jobs [], 0 tracebacks, Hub stopped, worktree removed. Outputs in profiles/drive0913r/r7-prefix-transcripts/."
     },
     {
       "id": "r8-drive-fixed",
@@ -143,7 +143,8 @@
     "CI reds on this branch today are the two known intermittents (F292 at 34711633220, F314 at 34716889283). Both are open; F314 is B, F292 is B/CONFLICT.",
     "F332 (A) filed in u2-reader: on POSIX, bash's ANSI-C quoting ($'..\\x2fx') writes a traversal no reader of the command text sees; measured writing outside under WSL bash 5.2.21. No proposal. Repair sketched in the finding (decode $'...' in the lexer, own rows).",
     "Lost firing 2026-09-13 00:20-00:31: claude -p killed a backgrounded whole-suite run 600s after the turn ended ('Background tasks still running after 600s; terminating. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0'). Setting that variable in the driver's environment would remove the trap; not done - driver configuration is the operator's.",
-    "a-url-is-not-a-path archived 2026-09-13 (night u8-close). Human-only S7 open: 7.1 refusal legibility in the served UI, 7.2 D5 wording vs the one observed Haiku turn (stopped, asked in prose not ask_user, named WebFetch), 7.3 N3 and /dev/null (X4) for DECISIONS.md. The PowerShell tool_name was never exercised in either drive (D10 item 5 half-unverified)."
+    "a-url-is-not-a-path archived 2026-09-13 (night u8-close). Human-only S7 open: 7.1 refusal legibility in the served UI, 7.2 D5 wording vs the one observed Haiku turn (stopped, asked in prose not ask_user, named WebFetch), 7.3 N3 and /dev/null (X4) for DECISIONS.md. The PowerShell tool_name was never exercised in either drive (D10 item 5 half-unverified).",
+    "Drive harnesses that time a window with `sleep N` are broken under Claude Code 2.1.269 (standalone sleep blocked in the spawned agent). t_d1_0912_f319_reach.py now uses a committed slow_step.py. Other scripts/drive/ harnesses were not swept for the same pattern."
   ],
   "decisions_for_user": [
     "a-url-is-not-a-path's implementation departs from R2's reader in four places, recorded in design D11a. One closes an escape the approved design would have opened (E20-E22: a quoted '$HUB_URL' read as a reference). None widens an answer beyond D2's table. Worth a look on the next review page; no action needed unless you disagree."

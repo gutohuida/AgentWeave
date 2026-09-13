@@ -267,6 +267,16 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   `8ac12db` ("Adopt an orphaned project marker instead of refusing it") plus `fd3fea4`, which
   recreate the project reusing the marker's id and persist a `project_adopted` event — so this trap
   is specific to builds at or before PyPI 1.1.0. *(Confirmed 2026-09-07.)*
+- **A drive agent cannot be told to `sleep 60`.** Claude Code 2.1.269, spawned as a Hub runner,
+  answers a standalone `sleep 60` (Bash) and `Start-Sleep -Seconds 60` (PowerShell) with
+  `Blocked: standalone sleep 60`, even with `dangerouslyDisableSandbox`. One Haiku agent then gave
+  up on the turn; another skipped the step and went on, so the turn was 23–30 s instead of a
+  minute. `scripts/drive/t_d1_0912_f319_reach.py` leg A had worked with `sleep 60` on 2026-09-12
+  and silently lost its precondition on 2026-09-13: the agent never became the evidence author,
+  so the leg measured something else. **Give the agent a real command that takes the time.** The
+  harness commits `slow_step.py` (`time.sleep(60)`) into the fixture and says *run
+  `python slow_step.py`*. A harness whose timing rests on a `sleep` instruction should also assert
+  that the long step actually ran. *(Confirmed 2026-09-13, drive0913r, `run-63cea161a1d6`.)*
 
 ## SQLAlchemy and Hub test patterns
 
