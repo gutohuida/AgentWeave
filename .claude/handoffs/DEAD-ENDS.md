@@ -70,8 +70,10 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **`strings` is not available** in this Git Bash. Use `grep -ao`.
 - **This Git Bash (5.2.37, msys2) forces `LC_CTYPE=C.UTF-8` and cannot be put in a plain C locale.**
   *Measured 2026-09-13 by F332's pre-approval review:* `LC_ALL=C`, `LANG=C`, `LC_CTYPE=C` and
-  `POSIX` all leave it in `C.UTF-8`, so the escape `Ā` inside `$'…'` decodes to the UTF-8
-  bytes `c4 80`. A probe that runs
+  `POSIX` all leave it in `C.UTF-8`, so the four-hex escape for U+0100 inside `$'…'`
+  (backslash, `u`, `0100`) decodes to the UTF-8 bytes `c4 80`. *(Aside: writing that escape
+  through Claude Code's Edit tool stored the decoded character `Ā` instead, twice. Spell such
+  escapes out in words, or build them from bytes.)* A probe that runs
   `LANG= LC_ALL=` in a hand-built environment shows the C-locale behaviour (the escape kept
   literal) that a spawned agent's bash here does not have. R3 of `a-quote-can-spell-a-slash` drew
   a false "Windows escape" from exactly that probe. Before arguing from bash locale behaviour on
