@@ -308,6 +308,16 @@ backslash is a separator* — were found, both Windows-only, both measured, both
 patched two leaks of this class (digitless; `chr()` overflow); the class was larger than either
 round enumerated, which is why R3 replaced the per-escape arguments with the invariant in D1.
 
+> **Corrected by the pre-approval review (see "Pre-approval review" below).** The claim below that
+> Git Bash "uses the C locale by default" and therefore writes `Ā` **outside** on Windows is
+> **false on this machine's Git Bash** (msys2 5.2.37), which forces `LC_CTYPE=C.UTF-8` (even under
+> `LC_ALL=C`) and writes `Ā` as UTF-8 bytes `c4 80` *inside* the workspace. R3's
+> keep-the-backslash decoder is still the correct **safe** choice — it never under-counts
+> separators under any locale — but on the measured Git Bash its Windows deny of N3/N4 is a
+> conservative **over-refusal**, not the closing of a live escape. Read this finding as "a true C
+> (non-UTF-8) locale is *possible* (empty `LANG`, as R3's own probe had), and keeping the backslash
+> is safe for it", not as "Git Bash does this by default".
+
 **Finding 1 — `\u`/`\U` above 0xFF is locale-dependent, and R1/R2 open a Windows escape (security).**
 bash's rendering of a codepoint escape above 0xFF depends on the locale of the shell that runs the
 command: a UTF-8 locale emits multibyte UTF-8 (no backslash), but the **C (non-UTF-8) locale keeps
@@ -439,3 +449,92 @@ decoder — no divergence. Linux-sound, as finding 1.
    itself show finding 1 is a *live* escape rather than a latent one. Decide whether that honesty is
    stated, and whether the CI Linux job (which is sound regardless) plus the Windows deny-reason
    drive is sufficient evidence, or whether a locale probe inside the drive is warranted.
+
+## Pre-approval review (Opus, 2026-09-13)
+
+Adversarial review before approval. Everything below was measured on this machine against
+`autonomous/2026-09-12-daily`. Scratch: `testbed/scratch/opusf332/` (`decoder_check.py`,
+`check_43.py`) and `<scratchpad>/bashtruth.py`, `<scratchpad>/locale_probe.py`. **Verdict: approve
+after the three repairs below (all made in this commit); the R3 decoder, the D2 verdict table, the
+spec delta, and the POSIX F332 fix are sound.**
+
+**Finding A (major; the argument is wrong, the outcome is safe) — R3 finding 1's central factual
+claim about Git Bash is false on this machine, and its "security escape" severity is
+unsubstantiated.** Measured with `bashtruth.py` and `locale_probe.py`: Git Bash 5.2.37 (msys2) on
+this machine reports `LC_CTYPE=C.UTF-8` by default (`LANG=C.UTF-8`, not empty) and **cannot be put
+into a non-UTF-8 C locale** — `LC_ALL=C`, `LANG=C`, `LC_CTYPE=C`, `POSIX` all leave `LC_CTYPE` at
+`C.UTF-8`. In every one of those, `$'..Ā'` decodes to UTF-8 bytes `2e 2e c4 80` (no backslash),
+so on Windows Git Bash writes a file named `..Ā` **inside** the workspace, not a `..\…` traversal
+outside. R3's own recorded probe (`r3f332/unicode_probe.gitbash.txt`) shows it measured
+`LANG=[] LC_ALL=[]` — an **empty** environment that falls back to C and keeps `Ā` literal —
+which is not what a subprocess spawned on this machine inherits. Consequences:
+- The design's repeated claim (D1, D5, finding 1, and by implication N3/N4, the test-guide, and
+  drive §5.2) that "the C locale Git Bash uses by default keeps the escape literal, backslash and
+  all" and that R1/R2 therefore *open a Windows security escape* is **backwards on the measured Git
+  Bash**: there, R1/R2's decode of `Ā` to one character (word `..Ā`, no separator, judged
+  inside) *matches* what bash actually writes (inside), and it is the **R3 decoder that
+  over-refuses** it (keeps `..Ā`, whose `\` is a Windows separator → deny outside).
+- **The R3 decoder is nonetheless the correct choice, and safe.** Independently re-derived and
+  measured (`decoder_check.py`, both platforms; `bashtruth.py`, C and UTF-8, WSL and Git Bash):
+  **no `\u`/`\U`/UTF-8 codepoint ever produces byte 0x2F (`/`) or 0x5C (`\`)** — UTF-8 of any
+  codepoint ≥ 0x80 is all bytes ≥ 0x80, and a true C locale keeps a literal backslash the decoder
+  also keeps. So the decoder **never emits fewer separators than bash under any locale**; every
+  divergence is an over-refusal (safe). Keeping the backslash above 0xFF is right because a true C
+  (non-UTF-8) locale *is* reachable (empty `LANG`), and there is no measured platform where the
+  decode-to-char behaviour would let a real traversal through.
+- **Severity is therefore "over-refusal traded for locale-independence", not "security".** This is
+  the round discipline's named failure mode — an argument wrong while its Linux/UTF-8 outcome is
+  right. **Repair (this commit):** a correction banner above finding 1; this section; and the
+  test-guide's N3/N4 wording softened to "conservative over-refusal / locale-dependent" rather than
+  "bash writes outside". No code, table, or test assertion changes — the R3 decoder denies N3/N4 on
+  Windows, which every pinned row already asserts.
+
+**Finding B (moderate; a test hole) — mutation §4.3's chosen row does not catch the mutation on
+POSIX, and its assertion is false on Windows.** Measured (`check_43.py`, both platforms):
+`echo "x$'..\x2fy'"` decodes to `x../y`, which resolves **inside** the workspace. So with the
+"fire regardless of quote" mutation applied, on **POSIX** the answer is `allow` both with and
+without the guard — **no flip, the mutation leaves the table green** (the tasks' own "a mutation
+that leaves the table green is a hole"). On **Windows** the unmutated answer is `deny_unchecked`
+(the literal `$` and `\` trip rule 3), so §4.3's "assert it stays allowed unmutated" is false.
+**Repair (this commit):** §4.3 now specifies an *escaping* row `echo "$'..\x2f..\x2f..\x2fout'"`
+(measured allow→deny_outside flip on POSIX) and says to assert it on POSIX; §4.5 gets the same
+platform note.
+
+**Finding C (minor; task precision) — mutation §4.4 was not platform-scoped, but only flips on
+POSIX.** Dropping octal/`\u`/`\U` decoding leaves `$'..\057x'` as literal `..\057x`; on **Windows**
+the kept `\` is itself a separator, so G2/G3/G4 still resolve outside and stay `deny_outside` — the
+mutation does **not** make them fail there. The night runs on Windows. **Repair (this commit):**
+§4.4 now says to verify it under WSL/POSIX (like §4.1's POSIX rows).
+
+**Checks that found nothing (the change is sound here):**
+- **Decoder safety, both platforms, both locales (`decoder_check.py`, `bashtruth.py`).** Full D2
+  table + adversarial rows correct: POSIX G1–G10/D1 deny, I1/N1/OK allow; Windows G1–G10 deny,
+  N1–N5 deny, I1/OK allow. `\c` never yields a separator (`\c/`→0x0f, `\c\`→0x1c). `\u{2f}` brace
+  form is unsupported by bash and kept literal (matches). `\x`/octal are byte escapes, faithful and
+  locale-independent; `\457` wraps mod 256 to `/`.
+- **Totality (`decoder_check.py`, both platforms).** No input raises: `\U110000`/`\U7fffffff`/
+  `\Uffffffff` (kept literal, `chr()` never called above 0xFF), lone surrogate `\ud800` (>0xFF,
+  kept literal), embedded NUL (`_where` catches `ValueError`), unterminated `$'`, trailing
+  backslash, a 10 000-char input. R1 raises `ValueError`/`OverflowError` on the overrange escapes
+  (confirming §4.7's totality mutation bites); R3 does not.
+- **Mutations §4.6/§4.7/§4.8 bite (`decoder_check.py`, Windows).** R1 flips N2/N4/N5 to allow and
+  raises on N3; R2 flips N3/N4/N5 to allow. So each named row is killed by its mutation.
+- **Spec-delta integrity.** `comm` against the shipped requirement (`agent-run-sandboxing/spec.md`
+  lines 595–696): every shipped line survives byte-for-byte, exactly one prose paragraph and one
+  scenario (`A quote that spells a separator is judged by what it decodes to`) are added, SHALL is
+  on the first physical line, `openspec validate --strict a-quote-can-spell-a-slash` passes.
+- **No new reason string; import + annotation constraints intact.** Reasons are the existing
+  `_OUTSIDE`/`_UNCHECKED`; the decoder is a stdlib state machine (fastmcp+stdlib only preserved);
+  `approve_tool_call` is untouched and keeps no return annotation.
+- **Operator commits `a3237be` (F341) and `55a95de` (F343/F344).** Touch `pty_runner.py`,
+  `subprocess_windows.py`, `cli.py` and their tests — **not** `mcp_server.py` or
+  `test_permission_approver.py`, so no conflict with this change's product diff. F341 changes how
+  the agent's shell is spawned on Windows, which can alter the locale the Bash tool inherits — this
+  only reinforces finding A's "locale is unguaranteed", and the decision logic is locale-safe, so
+  the drive's assertions (refused as outside; no file appears) hold regardless.
+
+**Residual risk the night should know.** The drive (§5.2) runs on Windows and, for N4 (`$'..Ā'`),
+shows a **conservative over-refusal**: if allowed, the real Git Bash (C.UTF-8) would write `..Ā`
+*inside* the worktree, so an operator who reruns the command bare will see a file appear inside and
+may read the refusal as wrong. This is the same category as I1 (an over-/under-refusal corrected or
+kept), is safe, and is documented; it is a product judgement, not a defect.

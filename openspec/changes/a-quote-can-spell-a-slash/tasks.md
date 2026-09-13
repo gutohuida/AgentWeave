@@ -149,12 +149,30 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
 - [ ] 4.2 Decode the ANSI-C string but do **not** map a produced `$` to `_LITERAL_DOLLAR`. **D1 must
   fail** (it becomes a trusted reference and is allowed).
 - [ ] 4.3 Fire the ANSI-C branch regardless of quote state (drop the `quote is None` guard). A row
-  with `$'…'` inside `"…"` must change answer — add that row (`echo "x$'..\x2fy'"`, which bash keeps
-  literal) and assert it stays allowed unmutated and fails mutated.
-- [ ] 4.4 Decode only `\x` (drop octal, `\u`, `\U`). **G2, G3 and G4 must fail.**
+  with `$'…'` inside `"…"` must change answer. **Use a row that ESCAPES the workspace, not
+  `echo "x$'..\x2fy'"`** — the pre-approval review measured that `x$'..\x2fy'` decodes to `x../y`,
+  which resolves *inside* the workspace, so on POSIX it is `allow` both with and without the guard
+  (no flip → the mutation leaves the table green, a hole), and on Windows its unmutated answer is
+  `deny_unchecked` (the literal `$` and `\` trip rule 3), not `allow`. Use
+  `echo "$'..\x2f..\x2f..\x2fout'"` (three traversals): **on POSIX** the unmutated word `$'..\…'`
+  has no `/` and is **allowed**, and the mutation decodes it to `../../../out` and **refuses it
+  outside** — a clean allow→deny flip. Assert this row on **POSIX** (WSL / CI Linux), where
+  "allowed unmutated" holds; on Windows the same row is `deny_unchecked` unmutated and `deny_outside`
+  mutated (still a flip, but not the "allowed unmutated" shape). Measured
+  `testbed/scratch/opusf332/check_43.py`.
+- [ ] 4.4 Decode only `\x` (drop octal, `\u`, `\U`). **On POSIX, G2, G3 and G4 must fail** (the
+  kept-literal `\057`/`/`/`\U…` has no `/`, so the word is judged inside and the row flips
+  deny→allow). **On Windows they do NOT flip** — the kept backslash is itself a separator there, so
+  `..\057x` still resolves outside and stays `deny_outside`. So verify §4.4 under **WSL/POSIX** (or
+  with `os.sep` forced to `/`); the night runs on Windows, where this mutation is silently harmless.
+  Measured `testbed/scratch/opusf332/decoder_check.py` (R3 vs the drop-octal case).
 - [ ] 4.5 Apply the decode in the PowerShell dialect too. A PowerShell row with `$'…'` (which
   PowerShell does not decode) must change answer — pin `_decide("PowerShell", {"command": ...})` on
-  a `$'…'` traversal as unchanged from today, and assert it fails under this mutation.
+  a `$'…'` traversal as unchanged from today, and assert it fails under this mutation. Use an
+  **escaping** traversal (e.g. `$'..\x2f..\x2f..\x2fout'`) and verify on **POSIX** for the same
+  reason as §4.3/§4.4: on Windows the unmutated PowerShell word already denies (its literal `$`/`\`
+  trip rule 3), so the mutation's flip is observable only if the pin asserts the full reason;
+  on POSIX it is a clean allow→deny_outside flip.
 - [ ] 4.6 **Drop the backslash on a digitless `\x`/`\u`/`\U`** (R1's prototype behavior — return
   the letter, not `"\\" + letter`). **On Windows, N2 must fail** (`$'..\x'` flips from deny to
   allow — the escape R2 finding 1 caught). On POSIX N2 is allow either way, so run this mutation's
@@ -209,7 +227,9 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
     backslash-u-0-1-0-0 then `'` (N4, R3 finding 1) — **refused** as outside on Windows (a `\u`
     above 0xFF keeps its backslash). Confirm the reason names the `..\u0100` form and no file
     appears. This is a Windows answer the fix changes (reason improves *cannot be checked* →
-    *outside*); a decoder that decoded it to one character would have allowed it.
+    *outside*); a decoder that decoded it to one character would have allowed it. Note the deny is a
+    conservative over-refusal: on this machine's `C.UTF-8` Git Bash the command would write a file
+    *inside* if allowed (pre-approval review, design.md).
   - `echo hi > $'..\c'` (N5, R3 finding 2) — **refused** as outside on Windows (`\c` before the
     closing quote keeps its backslash `..\c`, a traversal). Confirm the reason names `..\c` and no
     file appears. A decoder that consumed the closing quote would have allowed it.

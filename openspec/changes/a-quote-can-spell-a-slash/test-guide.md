@@ -32,9 +32,13 @@ These need no operator; a test or CI settles each.
   `echo hi > $'..\x'` — bash keeps the backslash (`..\x`), which is a traversal on Windows — is
   refused as outside on Windows. Pinned in `test_permission_approver.py` (row N2). If the decoder
   dropped the backslash it would allow this on Windows; §4.6's mutation guards that.
-- **A `\u`/`\U` above 0xFF keeps its backslash on Windows (rows N3, N4, R3 finding 1).** bash's
-  decode of a codepoint above 0xFF is locale-dependent: the C locale Git Bash uses by default keeps
-  the escape literal, backslash and all. So `echo hi > $'..\u0100'` (a `\u` whose value 0x100 is
+- **A `\u`/`\U` above 0xFF keeps its backslash — a conservative, locale-safe deny on Windows (rows N3, N4, R3 finding 1).** bash's
+  decode of a codepoint above 0xFF is locale-dependent: a UTF-8 locale emits multibyte UTF-8
+  (no backslash), and a *true C (non-UTF-8) locale* keeps the escape literal, backslash and all;
+  the checker keeps the backslash so it is safe under both. **Honesty note (pre-approval
+  review):** on this machine's Git Bash, which runs `C.UTF-8`, these would actually write a file
+  *inside* the workspace (UTF-8 bytes) if allowed, so the Windows deny is a conservative
+  over-refusal that defends against the C-locale case, not the closing of a live escape. So `echo hi > $'..\u0100'` (a `\u` whose value 0x100 is
   above 0xFF) and `echo hi > $'\Uffffffffx'` (an overrange `\U`) are refused as *outside* on
   Windows, because the kept backslash is a separator there. The checker also **returns a decision
   rather than raising** on the overrange escape — it never passes a value above 0xFF to `chr()`.

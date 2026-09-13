@@ -81,8 +81,11 @@ Every one is allowed on POSIX today. On Windows every one is refused today — f
   `\uHHHH`/`\UHHHHHHHH` whose value is **≤ 0xFF**, and `\cX` with a real body character `X`. In
   every other case the backslash is **kept literal**, because bash may keep it and on Windows a
   backslash is a path separator. Four such cases: a *digitless* `\x`/`\u`/`\U` (R2; bash `$'\x'` is
-  `\x`, not `x`); a `\u`/`\U` **above 0xFF** (R3; the C locale that Git Bash uses by default keeps
-  it literal, backslash and all); a `\c` with no body character before the closing quote (R3; bash
+  `\x`, not `x`); a `\u`/`\U` **above 0xFF** (R3; a *true C (non-UTF-8) locale* keeps
+  it literal, backslash and all — keeping the backslash is safe under every locale. The
+  pre-approval review measured that this machine's Git Bash runs `C.UTF-8` and writes such an
+  escape *inside*, so the Windows deny is a conservative over-refusal, not a live escape; see
+  design.md "Pre-approval review"); a `\c` with no body character before the closing quote (R3; bash
   `$'..\c'` is `..\c`, and the decode must not consume the closing quote); and an unrecognized or
   trailing escape (already kept). Because `\u`/`\U` above 0xFF is never passed to `chr()`, the
   decoder cannot raise on a codepoint above U+10FFFF — totality holds without a separate guard.
