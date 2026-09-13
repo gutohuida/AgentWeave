@@ -18333,6 +18333,15 @@ with the wrong invalidation; here there is no event to answer.
 ## F251 (B) — the Hub broadcasts 17 event names the client discards before any listener, 9 of them into handling code written for them
 
 **Status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Re-measured 2026-09-13 (day `d1-drive`), and now coupled to F335.** A live Chromium session
+received `task_updated` and rendered it. It rendered nothing for the `run_divergence_resolved`
+the wire carried in the same instant (captured with `curl -N /api/v1/events`). A static diff of
+the Hub's literal `broadcast(…, "<kind>")` calls against `SSE_EVENT_TYPES` still finds 17 kinds
+dropped. Six have a feed sentence in `eventSummary.ts`: `queue_agent_paused`, `review_unstaffed`,
+`run_diverged`, `run_divergence_resolved`, `task_blocked` and `task_unblocked`. **Do not fix this
+without F335.** A refused review broadcasts a false `run_divergence_resolved` at staging time, so
+admitting that kind to the allowlist puts F335's false "1 open divergence on T resolved" line in
+the live feed.
 
 `useSSE.ts:335` is the whole of it:
 
@@ -26616,10 +26625,24 @@ which cleans up after itself.
 
 ## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
 
-**Status:** open. Filed 2026-09-13 by the night window, from the fixed-tree drive of
+**Status:** open. **Rendered 2026-09-13 by the day window's `d1-drive`**, in Chromium against the
+served bundle on a live Hub at `4521625`. The operator reads the sentence this finding predicts,
+beneath the conversation's own "NOT DELIVERED — delivery failed 3 times (…)" row, which says the
+opposite. Filed 2026-09-13 by the night window, from the fixed-tree drive of
 `a-refused-review-leaves-nothing-behind` (queue item `r8-drive-fixed`, §5.3, leg F). **Measured
-through the route on a live Hub. The UI's rendering was read, not driven.** This is a new
-interaction: the F320 fix is what made the pass go on, and it is out of that change's scope.
+through the route on a live Hub.** This is a new interaction: the F320 fix is what made the pass
+go on, and it is out of that change's scope.
+
+**Rendered (d1-drive, 2026-09-13).** Leg F rebuilt through real routes, with Haiku as X. H is
+queued at 2 attempts, refused by the author guard. Then **Continue was pressed in the UI** on H's
+conversation (`data-testid="conversation-continue"`). One `POST …/continue` returned 200. H went
+to `withdrawn` at 3, and M was delivered. `data-testid="session-continuity"` read, verbatim:
+*"Not started — this conversation had nothing queued. Reply with the single word pong. Call no
+tool. started instead."* The label is M's conversation title, which is its first message. That
+follows the "labelled by title" rule, and it reads badly here. The guard's sentence is not in the
+notice. It is in the conversation's timeline, one row above, as H's NOT DELIVERED line. So the
+screen contradicts itself. Screenshot: `%TEMP%\d1_0913\render\shots\f-094433-2-after-continue.png`.
+Harness: `scripts/drive/t_d1_0913_render.py F`.
 
 **The claim.** `POST /conversations/<H's>/continue` was sent while that conversation held
 review H (`entry-b087e9dc3dc9`, `queued` at 2 attempts, refused by the guard). Its pass gave H up
@@ -26692,9 +26715,40 @@ human judgement this finding feeds.
 
 ## F335 (D) — a review refused on dispatch still broadcasts that it resolved the task's open divergence
 
-**Status:** open. Filed 2026-09-13 by the night window (r9-close of
-`a-refused-review-leaves-nothing-behind`, task 8.5), as that change's `design.md` D8 said it
-would be once §2 landed. **Measured at unit level on the fixed tree at `1b3d52c`.** Not driven.
+**Status:** open, **narrowed by the 2026-09-13 day drive: the false broadcast is real on the wire,
+and no UI surface renders it today.** The live activity feed drops `run_divergence_resolved` before
+any listener (F251, `hub/ui/src/hooks/useSSE.ts:21-68`, checked at `:335`), so the feed line this
+finding predicts cannot appear in the served bundle. It is **latent behind F251**. Fixing F251
+alone would make the false line render. Fix this one first, or with it. Filed 2026-09-13 by the
+night window (r9-close of `a-refused-review-leaves-nothing-behind`, task 8.5), as that change's
+`design.md` D8 said it would be once §2 landed. Measured at unit level on the fixed tree at
+`1b3d52c`, then driven live (below).
+
+**Driven (d1-drive, 2026-09-13, live Hub at `4521625`, Chromium on the served bundle).** Harness:
+`scripts/drive/t_d1_0913_render.py D` and `Q`, then `scripts/drive/t_d1_0913_feed_probe.py`.
+- **The operator route never reaches it.** A review of a completed task carrying an open
+  divergence, whose evidence names a pruned commit, was dispatched to an idle reviewer. The answer
+  was `409` *"commit … is not present in this repository, so there is nothing to check out for
+  review"*. It came from `review_dispatch_refusal` (`api/v1/agent_trigger.py:1461`), **before
+  anything is staged**. No broadcast, no feed line, the divergence stayed open, and the task row
+  was unchanged.
+- **Delivery reaches it, and the broadcast is real.** A review queued behind the reviewer's own
+  running turn, while the commit still existed, was answered `200 queued`. The commit was then
+  pruned. The run-end re-drain staged it (`enter_selected_task`, `:845`), and then
+  `prepare_review_turn` refused it (`:856`): `waiting_reason` *"commit … is not present …"*. One
+  more `continue` re-staged it, with `curl -N` on `/api/v1/events`, the stream the UI reads. The
+  wire carried `event: run_divergence_resolved` /
+  `data: {"task_id":"task-1275228c05dd","count":1,"project_id":"proj-0ace0a0911e3"}`. The
+  divergence stayed open, and 0 `run_divergence_resolved` rows were written.
+- **The feed does not render it.** The Activity tab was open through the delivery, and it showed
+  no "open divergence … resolved" line (`q-…-1-activity-after-delivery-refusal.png`). Then a
+  **true** resolution: an operator `PATCH` of the same task to `under_review`, with the page open.
+  The feed rendered the live `task_updated … → under_review` line, and still no resolution line,
+  although the wire carried `run_divergence_resolved` for it too. So the kind is dropped, true or
+  false. The cause is F251's allowlist.
+- **Where F335 can reach an operator, then:** nowhere in the UI today. An SSE consumer other than
+  `useSSE` would see a false event. A review refused *at delivery* (queued behind a running turn,
+  or flow-staffed) is the only path that broadcasts one. A review refused *on the route* does not.
 
 **The claim.** Entering review resolves the task's open divergences: `apply_transition` calls
 `resolve_divergences_for_task` (`run_divergence.py:66`), which stages the `resolved_at` write and
@@ -26728,3 +26782,45 @@ kept out of its file set on purpose (its tasks 7.4).
 captures `broadcasts` for this record; assert `"run_divergence_resolved" in broadcasts` to see it.
 
 **Related:** F319 (the fix that made it real), F326 (the other thing a rollback cannot take back).
+
+## F336 (C) — no control in the app dispatches a review, so the check that asks the operator to "dispatch a review from the UI" cannot be done
+
+**Status:** open. Filed 2026-09-13 by the day window's `d1-drive`, priority 2. **Measured by search
+and in Chromium against the served bundle at `4521625`. What pressing the nearest control does
+was read, not driven.**
+
+**The claim.** A turn is a review only when the trigger carries `review_task_id`
+(`hub/hub/api/v1/agent_trigger.py:769-772`, and `:1442` on the route). No code in `hub/ui/src`, and
+none in the served `hub/hub/static/ui`, sends that field. A search for
+`review_task|reviewTask|review-task` gives 0 matches in each. The only control that dispatches an
+agent from a task is the card's **Start work** menu (`TaskCard.tsx:259-280`). Its items read
+`Start <agent> on this`, and it posts `task_id` (`api/tasks.ts:397-410`). In the drive, the menu on a
+completed task offered exactly `['Start au094433 on this', 'Start rv094433 on this', 'Start
+wk094433 on this']`.
+
+**Why it matters.** Two operator-facing documents tell a human to do this.
+`openspec/changes/archive/2026-09-13-a-refused-review-leaves-nothing-behind/test-guide.md` check 1
+says *"From the task's card, dispatch a review naming `critic`"*. Its `tasks.md` 6.1, human-only,
+says *"Dispatch a review from the UI … what the UI's own dispatch control shows for the `409`"*.
+F319's *"What the operator sees"* asks the same question. Those words can only be followed through
+the API. The nearest control does something else. By reading `bind_run_to_task`
+(`run_task_binding.py:441-443`, *"a task already `completed` binds and moves nowhere"*),
+**Start rv on this** on a completed task starts an ordinary work turn, *"Work on task …"*, bound to
+that task. It does not start a review. There is no commit check and no `409`. The operator is not
+told what they pressed was not a review.
+
+**The 409 itself is fine where it can be reached.** Over the API it reads *"commit <sha> is not
+present in this repository, so there is nothing to check out for review"*, and the board stays
+untouched. So 6.1's real answer is that **no UI surface shows it**: the operator cannot dispatch
+the thing that would produce it. The only UI-reachable path to a refused review is a flow
+(F327), which reports through the queue, not a `409`.
+
+**A possible repair, not proposed.** Either give the card a review item that posts `review_task_id`
+and renders the refusal in `task-status-refusal-<id>`, as start-work does, or reword the test
+guide and 6.1 to name the API. Choosing between them is a product decision: whether an operator
+should hand-dispatch reviews in the app at all. It is not a wording fix.
+
+**Reproduce:** `scripts/drive/t_d1_0913_render.py D`, the board leg, which prints the menu items.
+Screenshot: `%TEMP%\d1_0913\render\shots\d-094433-5-start-work-menu.png`.
+
+**Related:** F319, F327, F335 (the route's `409` never stages, above).
