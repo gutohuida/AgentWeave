@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ab7cf72",
     "stop_at": "2026-09-14T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-13-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "close-window",
-    "next_action": "Do queue item close-window: write the final log entry per .claude/loops/night-window.md 'Ending the window' (what changed: 1ebff15 is product-test only, iteration 3's commit is docs/ledger only; proven vs inferred; open; decisions waiting - F332-rule first; what to distrust), then set next_action to null, commit and push. Do NOT attempt f332-s4..s7: they are blocked on the REVISING of a-quote-can-spell-a-slash, which only the operator/day window can do. Under 'what to distrust', say: b1fbd5a's commit message reads 'the same holds for Ā' where it meant the backslash-u-0100 escape -- the tool layer decoded it; the committed files were checked byte-wise and are correct. Write backslash escapes into files via a placeholder replaced in Python with chr(92), never typed.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "close-window",
-            "status": "open",
+            "status": "done",
             "title": "Final log entry, then next_action null",
-            "detail": "Per the playbook's 'Ending the window': what changed (product vs docs commits), what was proven vs inferred, what is open, decisions waiting, what to distrust. Then next_action null."
+            "detail": "Done iteration 4. Final log entry written (decisions first; what changed, product vs docs; proven vs inferred; open; distrust). Collected 1ebff15's CI XFAIL run 34786122094 (hub-test job 103801807485, 11 xfailed = G1-G10 + D1, matching WSL) into DECISIONS.md F332-rule, with the $$ note. aa78021's red hub-test (run 34785230561) attributed to F292 + F314 signatures."
         }
     ],
     "decisions_for_user": [

@@ -50,6 +50,11 @@ where it depends on the locale*:
   level. Measured, then dropped.
 - New D2 rows pinning both escapes above (Windows deny *outside*), plus a mutation that keeps the
   backslash for `\U` ≥ 0x80000000 and one that renders only the C reading.
+- `$$'…'`: bash reads `$$` as a pair (the PID), so what follows is an ordinary `'` quote, not
+  ANSI-C, but the lexer as built opens ANSI-C at the second `$`. Worked by hand and **not
+  measured**: it can only over-refuse, because the extra `$` already sends any such word that
+  holds a separator to rule 3, *cannot be checked*. The revision should say which way it goes
+  and pin a row for it.
 
 The other option is to refuse every word holding a codepoint escape above 0xFF on Windows as
 *cannot be checked*. It is simpler, but the `_UNCHECKED` wording names variables, `~` and
@@ -57,7 +62,9 @@ substitutions, so it would need a new reason string, which §2.3 forbids.
 
 **What stays.** `1ebff15` (§1, tests only, green: 182 passed, 1 skipped, 16 xfailed on Windows)
 stays on the branch. Its N3 *after* answer on Windows is wrong under the correction; the revision
-changes that row. The night queue's f332-s4…s7 are blocked on this row.
+changes that row. The night queue's f332-s4…s7 are blocked on this row. Its CI XFAIL half of 7.1
+is collected: run `34786122094`, `hub-test` job `103801807485`, green with 11 xfailed. The 11 are
+G1–G10 and D1, the same set WSL measured.
 
 ---
 
