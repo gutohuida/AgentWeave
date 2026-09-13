@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from . import requirement_evidence
 from .conversations import get_conversation_by_id
@@ -421,9 +422,11 @@ async def _attempt_turn(
         # (`a-refused-review-leaves-nothing-behind`, design D1 and D3).
         #
         # `selected` is re-read by id **and** `state == "queued"`, in the order it was
-        # selected in, so input the operator withdrew while the dispatch ran is neither counted
-        # nor given up on here. That narrows F328 and does not close it: a withdrawal that
-        # waits on the dispatch's write lock commits after this read. `entries` is re-read
+        # selected in, so input the operator withdrew while the dispatch ran is dropped from it
+        # before anything below reads it. That alone does not decide what is counted: a
+        # withdrawal that waited on the
+        # dispatch's write lock commits after this read, so the counting write below carries
+        # the same condition in its own statement (F328). `entries` is re-read
         # because `other_input_would_have_run_elsewhere` reads the rows outside `selected`, and
         # an expired row there raises `MissingGreenlet` rather than reloading.
         await db.rollback()
@@ -582,14 +585,39 @@ async def _attempt_turn(
                 if entry.id in counted:
                     continue
                 counted.add(entry.id)
-                entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
-                if entry.delivery_attempts >= DELIVERY_ATTEMPT_LIMIT:
-                    entry.state = "withdrawn"
-                    entry.withdrawn_at = datetime.now(timezone.utc)
-                    entry.abandoned_reason = (
-                        f"delivery failed {entry.delivery_attempts} times "
-                        f"({exc.detail}); the Hub stopped retrying"
+                attempts = (entry.delivery_attempts or 0) + 1
+                gives_up = attempts >= DELIVERY_ATTEMPT_LIMIT
+                values: Dict[str, Any] = {"delivery_attempts": attempts}
+                if gives_up:
+                    values.update(
+                        state="withdrawn",
+                        withdrawn_at=datetime.now(timezone.utc),
+                        abandoned_reason=(
+                            f"delivery failed {attempts} times "
+                            f"({exc.detail}); the Hub stopped retrying"
+                        ),
                     )
+                # Conditioned on `queued` in the statement itself, which is what closes F328.
+                # The re-read above cannot: an operator's withdrawal that waited on the refused
+                # dispatch's write lock commits *after* it, and a write by primary key then
+                # counted that input, gave up on it and announced it as dropped by the Hub. Input
+                # withdrawn since the re-read matches no row here and is neither counted nor
+                # announced; the operator's withdrawal went first, and it stands. The same
+                # condition guards the withdrawals' side (`inbound_queue._withdraw_if_queued`).
+                written = await db.execute(
+                    update(InboundQueueEntry)
+                    .where(InboundQueueEntry.id == entry.id, InboundQueueEntry.state == "queued")
+                    .values(**values)
+                    .execution_options(synchronize_session=False)
+                )
+                if not written.rowcount:
+                    continue
+                # Onto this session's copy as well, as committed values so nothing writes them
+                # twice: a rider carried again by the next attempt's turn is read from it, and
+                # `format_turn_prompt` states its attempt count to the agent.
+                for key, value in values.items():
+                    set_committed_value(entry, key, value)
+                if gives_up:
                     abandoned.append(entry)
             await db.commit()
             # Same shape `_report_abandoned_entries` broadcasts for a spawned-and-failed run,

@@ -880,8 +880,9 @@ async def test_input_withdrawn_during_its_dispatch_is_not_counted(app, auth_head
 
     **This covers only a dispatch that holds no database lock**, which the patched trigger does
     not. A real review dispatch holds the write lock while it records the reviewer, so an operator's
-    withdrawal waits on it and commits after the re-read, and is still counted (pre-approval review,
-    test O2). F328 is narrowed by §2, not closed (8.5a).
+    withdrawal waits on it and commits after the re-read (pre-approval review, test O2). §2 narrowed
+    F328 and did not close it (8.5a); the conditional writes that close it are pinned in
+    `test_a_withdrawal_and_a_give_up_do_not_both_win.py`, where the lock-waiting case is driven.
     """
     agent = "rr-withdrawn"
     await _register(app, auth_headers, agent)

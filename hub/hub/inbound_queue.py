@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterable, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .conversations import get_conversation_by_id
@@ -294,17 +294,57 @@ async def release_entry(db: AsyncSession, project_id: str, entry_id: str) -> Rel
     return ReleaseOutcome(entry=entry, released_from_depth=released_from)
 
 
+async def _withdraw_if_queued(
+    db: AsyncSession, project_id: str, entry_id: str, **values: object
+) -> Optional[InboundQueueEntry]:
+    """Take a queued entry out of the queue, in one statement that asks whether it still is (F328).
+
+    Returns the row as written, or `None` where it was not queued -- absent, delivered, or already
+    withdrawn by somebody else.
+
+    Every writer that takes an entry out of `queued` without delivering it -- the operator's
+    withdrawal, a refused request's withdrawal, `schedule_agent` giving up -- used to read the row,
+    check `state`, and then write it by primary key. Two of them racing for one entry both passed
+    their checks, and whichever committed second overwrote the first: measured, an operator's
+    withdrawal that waited on a review dispatch's write lock was answered as a success while the
+    row and a `queue_entry_abandoned` event said the Hub had given up on it. The condition lives in
+    the `UPDATE` itself because SQLite takes the write lock at the write, not at the read, so no
+    read ahead of it can close that window. Whoever writes first wins; the other matches no row.
+
+    Committed on both branches. A statement that matched nothing still opened a write transaction,
+    and a rollback would expire every row the caller holds, which under `AsyncSession` turns the
+    caller's next attribute read into `MissingGreenlet`.
+    """
+    result = await db.execute(
+        update(InboundQueueEntry)
+        .where(
+            InboundQueueEntry.id == entry_id,
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.state == "queued",
+        )
+        .values(state="withdrawn", withdrawn_at=datetime.now(timezone.utc), **values)
+        .execution_options(synchronize_session=False)
+    )
+    await db.commit()
+    if not result.rowcount:
+        return None
+    # **`populate_existing=True` is load-bearing** (design D11 of the change that added
+    # `withdraw_refused_entry`). The `UPDATE` bypassed the identity map and the session factory is
+    # built with `expire_on_commit=False`, so a copy of this row the caller already holds -- which
+    # the refused-request path always does -- would otherwise be returned still reading `queued`.
+    return (
+        await db.execute(
+            select(InboundQueueEntry)
+            .where(InboundQueueEntry.id == entry_id)
+            .execution_options(populate_existing=True)
+        )
+    ).scalar_one()
+
+
 async def withdraw_entry(
     db: AsyncSession, project_id: str, entry_id: str
 ) -> Optional[InboundQueueEntry]:
-    result = await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id))
-    entry = result.scalar_one_or_none()
-    if entry is None or entry.project_id != project_id or entry.state != "queued":
-        return None
-    entry.state = "withdrawn"
-    entry.withdrawn_at = datetime.now(timezone.utc)
-    await db.commit()
-    return entry
+    return await _withdraw_if_queued(db, project_id, entry_id)
 
 
 async def withdraw_refused_entry(
@@ -316,23 +356,10 @@ async def withdraw_refused_entry(
     it. `False` means somebody got there first — `schedule_agent` withdraws at the delivery-attempt
     limit on the very path that raised the refusal, and it announces its own.
 
-    **`populate_existing=True` is load-bearing, not defensive** (design D11). The session factory
-    is built with `expire_on_commit=False`, and `schedule_agent` runs in a session of its own, so
-    the caller's copy of this row still reads `state="queued"` after the scheduler withdrew it.
-    An ordinary `select()` returns that identity-mapped object with its stale attributes intact —
-    the check would be correct, tested, and unable to fire, because a test whose fake scheduler
-    shares the caller's session sees the write it is supposed to have missed.
+    Design D11 of the change that added this found the check unable to fire: the caller's copy of
+    the row, identity-mapped and never expired, still read `state="queued"` after the scheduler's
+    own session withdrew it, and `populate_existing=True` on a read was the repair. The check is now
+    the `UPDATE`'s own condition, asked of the database rather than of any copy (F328), so a stale
+    copy can no longer satisfy it; the re-read that remains only brings that copy up to date.
     """
-    result = await db.execute(
-        select(InboundQueueEntry)
-        .where(InboundQueueEntry.id == entry_id)
-        .execution_options(populate_existing=True)
-    )
-    entry = result.scalar_one_or_none()
-    if entry is None or entry.project_id != project_id or entry.state != "queued":
-        return False
-    entry.state = "withdrawn"
-    entry.withdrawn_at = datetime.now(timezone.utc)
-    entry.abandoned_reason = reason
-    await db.commit()
-    return True
+    return await _withdraw_if_queued(db, project_id, entry_id, abandoned_reason=reason) is not None
