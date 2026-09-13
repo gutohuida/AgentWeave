@@ -371,6 +371,24 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 - **`scripts/uishot.py` cannot capture an authenticated page** — it has no session.
 - **`page.goto(..., wait_until="networkidle")` never settles** against the Hub (SSE keeps the
   connection open).
+- **Never verify a native window with a screen grab — the operator is using this machine**
+  *(2026-09-13, F343)*. `PIL.ImageGrab.grab()` taken to see a pywebview context menu captured the
+  operator's full-screen game instead; the probe window was behind it. The images were deleted.
+  What worked, and is better evidence anyway: open the window **off-screen and unfocused**
+  (`x=-6000, y=-6000, focus=False`; a `hidden=True` window builds no native menu and measures
+  nothing), drive it over CDP (`webview.settings["REMOTE_DEBUGGING_PORT"]` + Playwright
+  `connect_over_cdp`, which never moves the real cursor), and read the result from the component's
+  own event — WebView2's `ContextMenuRequested` lists every menu item, spelling suggestions
+  included. **Run a `debug=True` positive control first**: without it, "no menu" cannot be told
+  apart from "the instrument cannot see menus", and it was the control that showed a fix reading
+  back `True` still produced no menu. Page screenshots from headless Chromium are fine; they show
+  only the page.
+- **A "can't select / right-click does nothing" report may be the pywebview window, which a browser
+  cannot reproduce** *(2026-09-13, F343/F344)*. An investigation driving the bundle in headless
+  Chromium found the answer text selectable — correctly, for a browser. The operator's surface is
+  the desktop shortcut's pywebview window, whose defaults inject `body { user-select: none }` and
+  turn WebView2's context menu off. Ask which window, or check the live Hub's parent process for a
+  CLI holding `webview.start()`, before concluding a UI report does not reproduce.
 
 ## PowerShell (when driving it from the Bash tool)
 
@@ -489,6 +507,15 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   an `[OK]` line. Only **claude** and **codex** can actually be bound to a Runner and spawned —
   `RUNNER_CLIS = ("claude","codex")` in `hub/hub/db/models.py:300`, and the spawn path 501s for
   anything else. Detection is not support, and nothing on the `doctor` output says so.
+- **The operator's port-8000 Hub runs this checkout, not the `agentweave-live` PyPI install**
+  *(measured 2026-09-13)*. PID 3488's parent was `Python311\Scripts\agentweave.exe` — the system
+  Python's **editable** install — on the default profile (`~/.agentweave/hub/data/agentweave.db`,
+  head `0102`), while `hub-live-8000.pid` named a dead process and the `live` profile's database
+  was untouched since 2026-09-07. Consequences: it runs `uvicorn` without `--reload`, so Python
+  edits here reach it only on the operator's restart; but it serves `hub/hub/static/ui` from this
+  checkout, so **`refresh_ui_bundle.py` + commit changes the operator's live app on their next
+  reload** — check the bundle is compatible with the Python that process loaded (its start time vs
+  `git log -- hub/ui/src`) before committing one. CLAUDE.md's 8000 paragraph did not match.
 - **The pid the CLI reports at start is not the process holding the port** *(observed
   2026-09-07)*. Native start logs e.g. `Starting Hub (native, PID 17544)` and writes that pid to
   `~/.agentweave/hub/hub-<profile>-<port>.pid`, while a second python process (17208) is the one
