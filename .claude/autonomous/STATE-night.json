@@ -8,33 +8,75 @@
     "parent_branch":  "master",
     "parent_sha":  "ab7cf72",
     "stop_at":  "2026-09-14T07:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-13-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "current":  "f332-s1",
+    "next_action":  "Do queue item f332-s1: openspec/changes/a-quote-can-spell-a-slash/tasks.md section 1 (tasks 1.1-1.3) only. Add D2's table (design.md) as one parametrized test in hub/tests/test_permission_approver.py against the UNMODIFIED lexer, with the platform-scoped strict xfail marks 1.2 lists. Verify every mark on Windows (py -3.11) AND under WSL Ubuntu (python3 with testbed/scratch/night0912/posix_stubs.py); any failure a mark does not explain means the table is wrong - re-measure, do not bend the test. Commit section 1 alone, green, push, and record the sha in the log (section 5.1's pre-fix worktree and section 7.1's CI XFAIL evidence both need it). Do not touch hub/hub/mcp_server.py this iteration.",
     "queue":  [
                   {
                       "id":  "compose",
+                      "status":  "done",
+                      "title":  "Compose this window's queue from the playbook",
+                      "detail":  "Done iteration 1. APPROVALS 2026-09-13 carries ORDER: a-quote-can-spell-a-slash, so the queue is that one change, split by tasks.md section."
+                  },
+                  {
+                      "id":  "f332-s1",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "a-quote-can-spell-a-slash section 1: pin D2's table before the lexer moves",
+                      "detail":  "Tasks 1.1-1.3. Test file only. Strict xfail marks per 1.2, verified on Windows and WSL. Commit alone, green; its sha is the pre-fix base for 5.1 and the CI XFAIL half of 7.1's evidence."
+                  },
+                  {
+                      "id":  "f332-s2",
+                      "status":  "open",
+                      "title":  "section 2 + 3: the decode in _lex, and the real-spawn wire case",
+                      "detail":  "Tasks 2.1-2.6 and 3.1. Build tasks.md 2.2's rules, NOT a prototype from testbed/scratch/r1f332, r2f332 or r3f332. Every section-1 xfail removed; table green on Windows and WSL. mcp_server.py stays stdlib+fastmcp; approve_tool_call keeps no return annotation. Commit, push."
+                  },
+                  {
+                      "id":  "f332-s4",
+                      "status":  "open",
+                      "title":  "section 4: mutation checks 4.1-4.8",
+                      "detail":  "Each mutation alone, whole test_permission_approver.py, record the NAMED failing row, restore with git checkout. 4.3-4.5 bite only on POSIX (run under WSL); 4.6-4.8 bite on Windows. A Windows run where a POSIX-only mutation fails to bite is expected, not a pass. If a mutation leaves the table green, add the missing row and commit it."
+                  },
+                  {
+                      "id":  "f332-s5",
+                      "status":  "open",
+                      "title":  "section 5: drive it, pre-fix worktree then fixed tree",
+                      "detail":  "Pick a free port (never 8000, never 8010), fresh profile drive0914 (or drive0913), AW_BOOTSTRAP_API_KEY named, uvicorn from hub/ from source. 5.1 pre-fix in a worktree at f332-s1's sha; 5.2 fixed tree, fresh project + agent, Haiku, every command 5.2 lists. Record reasons verbatim and permission_denied rows in FINDINGS.md under F332. No job left enabled; stop the Hub."
+                  },
+                  {
+                      "id":  "f332-s6",
+                      "status":  "open",
+                      "title":  "section 6: the gate",
+                      "detail":  "ruff/black(--target-version py311)/mypy over CI's paths via py -3.11 -m; whole Hub suite in the background (15-47 min), attribute any red by signature (F292 database is locked, F314 event loop); openspec validate --strict; 6.4 diff check. Also collect the CI Linux hub-test run ids: XFAIL at f332-s1's sha, PASS at f332-s2's sha."
+                  },
+                  {
+                      "id":  "f332-s7",
+                      "status":  "open",
+                      "title":  "section 7 + 9: close out and archive",
+                      "detail":  "F332 -> fixed <sha> with 5.2's evidence and the CI XFAIL->PASS run ids, labelled tested on Linux, not driven on POSIX. F299, F301, F322 stay open - say so in the commit. Fix the ledger index's open severity-A list. 9.1 test-guide true to what shipped. Archive via openspec-archive-change, comparing the MODIFIED block byte-for-byte first. Section 8 (human-only) goes to decisions_for_user, not ticked."
+                  },
+                  {
+                      "id":  "close-window",
+                      "status":  "open",
+                      "title":  "Final log entry, then next_action null",
+                      "detail":  "Per the playbook's 'Ending the window': what changed (product vs docs commits), what was proven vs inferred, what is open, decisions waiting, what to distrust. Then next_action null."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
