@@ -1,11 +1,20 @@
 """D-1 2026-09-12, priority 3: what the operator SEES for a task F319 stranded.
 
 Opens the served bundle as an operator, goes to the task board, and reads what it says about the
-tasks `t_d1_0912_f319_reach.py` left behind: B1/B2 (`under_review`, held, no run), A (`completed`,
-held by the refused reviewer) and C (restaffed, entry never delivered -- F320).
+tasks `t_d1_0912_f319_reach.py` left behind for the same `AW_RUN_TAG`: B1/B2 (pre-fix:
+`under_review`, held, no run), A (pre-fix: `completed`, held by the agent that became its author)
+and C (restaffed, entry never delivered -- F320).
 
-    AW_HUB=http://127.0.0.1:8016 AW_KEY=... AW_PROJECT=proj-... SHOTDIR=... \
-        py -3.11 scripts/drive/t_d1_0912_f319_ui.py
+AW_EXPECT selects what is asserted (a-refused-review-leaves-nothing-behind 5.4):
+  prefix (default)  report only, as the original D-1 script did.
+  fixed             the B1 and B2 cards are not in the Under Review column, and A's card does not
+                    name `auth<TAG>` -- the refused dispatch left the board as it was.
+
+The column is read from the board's own markup (`.task-board-column[data-status=...]`), the card
+from its `Open <title>` label, so a card is placed by the column that renders it, not by text order.
+
+    AW_HUB=http://127.0.0.1:8016 AW_KEY=... AW_PROJECT=proj-... AW_RUN_TAG=r8f AW_EXPECT=fixed \
+        SHOTDIR=... py -3.11 scripts/drive/t_d1_0912_f319_ui.py
 """
 
 import os
@@ -21,6 +30,20 @@ HUB = os.environ["AW_HUB"]
 KEY = require_key()
 PROJ = os.environ["AW_PROJECT"]
 SHOTDIR = os.environ.get("SHOTDIR", ".")
+TAG = os.environ["AW_RUN_TAG"]
+EXPECT = os.environ.get("AW_EXPECT", "prefix")
+if EXPECT not in ("prefix", "fixed"):
+    raise SystemExit(f"AW_EXPECT must be prefix or fixed, not {EXPECT!r}")
+AUTH = f"auth{TAG}"
+TITLES = {"B1": f"B1 {TAG}", "B2": f"B2 {TAG}", "A": f"A {TAG}", "C": f"C {TAG}"}
+
+PASS, FAIL = [], []
+
+
+def ok(label, cond, detail=""):
+    (PASS if cond else FAIL).append(label)
+    print(("  ok   " if cond else "  FAIL ") + label + (f"  -- {detail}" if detail else ""))
+
 
 SEED = f"""
 sessionStorage.setItem('agentweave-session', JSON.stringify({{apiKey: {KEY!r}, hubUrl: {HUB!r}}}));
@@ -39,7 +62,7 @@ with sync_playwright() as p:
     )
     page.goto(HUB, wait_until="domcontentloaded")
     page.wait_for_timeout(3000)
-    page.screenshot(path=os.path.join(SHOTDIR, "f319-home.png"))
+    page.screenshot(path=os.path.join(SHOTDIR, f"f319-{TAG}-home.png"))
     for name in ("Tasks", "Board"):
         loc = page.get_by_role("button", name=name)
         if not loc.count():
@@ -49,18 +72,46 @@ with sync_playwright() as p:
             print(f"clicked {name!r}")
             break
     page.wait_for_timeout(3000)
-    page.screenshot(path=os.path.join(SHOTDIR, "f319-board.png"), full_page=True)
-    body = page.inner_text("body")
-    for title in ("B1 b2", "B2 b2", "A a1", "C a1"):
-        i = body.find(title)
-        print(f"--- {title!r}: {'present' if i >= 0 else 'ABSENT'}")
-        if i >= 0:
-            print("    " + body[max(0, i - 80) : i + 240].replace("\n", " | "))
-    loc = page.get_by_text("B1 b2", exact=True)
+    page.screenshot(path=os.path.join(SHOTDIR, f"f319-{TAG}-board.png"), full_page=True)
+    columns = page.locator(".task-board-column")
+    print(f"--- {columns.count()} board columns")
+    placed = {}
+    card_text = {}
+    for leg_key, title in TITLES.items():
+        label = f"Open {title}"
+        where = []
+        for i in range(columns.count()):
+            col = columns.nth(i)
+            if col.locator(f'[aria-label="{label}"]').count():
+                where.append(col.get_attribute("data-status"))
+        placed[leg_key] = where
+        card = page.locator(f'[aria-label="{label}"]')
+        # The first match is the card's `task-card-body`; its parent is the card, which also holds
+        # the `@assignee` chip.
+        text = card.first.locator("xpath=..").inner_text() if card.count() else ""
+        card_text[leg_key] = text
+        print(f"--- {title!r}: columns {where or 'ABSENT'}")
+        if text:
+            print("    " + text[:300].replace("\n", " | "))
+    if EXPECT == "fixed":
+        for leg_key in ("B1", "B2", "A"):
+            ok(f"{TITLES[leg_key]!r} is on the board", placed[leg_key], placed[leg_key])
+        for leg_key in ("B1", "B2"):
+            ok(
+                f"{TITLES[leg_key]!r} is not in Under Review",
+                placed[leg_key] and "under_review" not in placed[leg_key],
+                placed[leg_key],
+            )
+        ok(
+            f"{TITLES['A']!r}'s card does not name {AUTH}",
+            card_text["A"] and f"@{AUTH}" not in card_text["A"],
+            card_text["A"][:200].replace("\n", " | "),
+        )
+    loc = page.get_by_label(f"Open {TITLES['B1']}")
     if loc.count():
         loc.first.click()
         page.wait_for_timeout(2500)
-        page.screenshot(path=os.path.join(SHOTDIR, "f319-b1-detail.png"), full_page=True)
+        page.screenshot(path=os.path.join(SHOTDIR, f"f319-{TAG}-b1-detail.png"), full_page=True)
         print("--- B1 detail body (head):")
         print(page.inner_text("body")[:2500])
     print("--- non-GET requests the page made:")
@@ -69,3 +120,7 @@ with sync_playwright() as p:
     for line in console:
         print("   ", line)
     b.close()
+
+if EXPECT == "fixed":
+    print(f"\n{len(PASS)} ok, {len(FAIL)} fail")
+    sys.exit(1 if FAIL else 0)

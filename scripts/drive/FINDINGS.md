@@ -26533,3 +26533,79 @@ supports, so it is left for a proposal.
 which cleans up after itself.
 
 **Related:** F331 (the same class of POSIX-only escape), F323.
+
+## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
+
+**Status:** open. Filed 2026-09-13 by the night window, from the fixed-tree drive of
+`a-refused-review-leaves-nothing-behind` (queue item `r8-drive-fixed`, §5.3, leg F). **Measured
+through the route on a live Hub. The UI's rendering was read, not driven.** This is a new
+interaction: the F320 fix is what made the pass go on, and it is out of that change's scope.
+
+**The claim.** `POST /conversations/<H's>/continue` was sent while that conversation held
+review H (`entry-b087e9dc3dc9`, `queued` at 2 attempts, refused by the guard). Its pass gave H up
+(`withdrawn` at 3) and then went on to start M, the input behind H in another conversation. That
+is exactly what F320's fix intends. The answer was:
+`{"started": false, "started_conversation_id": "conv-1c194f349562", "waiting_reason": "this conversation had nothing queued"}`.
+The conversation had input queued when the request arrived. The pass had just given up on that
+input, and the refusal it gave up over is not in the answer.
+
+**Why.** `checkpoints.py:289-307` replaces the scheduler's `waiting_reason` whenever a turn
+started in another conversation. It picks the wording by asking `queued_entries` about the named
+conversation **after** the pass, and by then H is `withdrawn`. So the answer reads the
+conversation's state after the pass, while the shipped scenario (*"The named conversation had
+nothing queued"*, under *"A start is reported only to the input it is about"*,
+`agent-conversation-workspace`) is about a request naming a conversation that *has* no input
+queued. Before the fix, the give-up pass stopped. `started_conversation_id` was null, so the
+route passed the guard's sentence through (r7's leg F: `started: false`,
+`started_conversation_id: null`, the guard's sentence as the reason).
+
+**What the operator sees.** `AgentOutputPanel.tsx:759-769` renders *"Not started — this
+conversation had nothing queued. <M's conversation> started instead."* So an operator who pressed
+Continue on a review they were waiting for is told nothing was ever there. The give-up itself is
+recorded on the entry (`abandoned_reason`) and as `queue_entry_abandoned`.
+
+**A possible repair, not proposed.** Take the answer's wording from the entries the pass gave up,
+which the scheduler already knows, rather than from `queued_entries` after the pass. Where the
+named conversation's input was given up in this pass, say that, with its refusal.
+
+**Reproduce:** leg F of `scripts/drive/t_d1_0912_f319_reach.py` with `AW_EXPECT=fixed`. Line 81
+of `~/.agentweave/hub/profiles/drive0913s/r8-fixed-transcripts/r8f-drive.out` has the answer.
+
+**Related:** F320 (the pass going on), F131 (the other-conversation answer).
+
+## F334 (B) — the author guard's refusal of a dispatched review names an assignment the rollback discarded
+
+**Status:** open. Filed 2026-09-13 by the night window, from the same drive as F333 (§5.3, leg A).
+**Measured on a live Hub.** This is a new consequence of F319's fix, and out of that change's scope.
+
+**The claim.** A review queued for agent X behind X's own turn, during which X records evidence,
+is refused at every delivery by `_guard_evidence_author_not_reviewer`
+(`task_transition_service.py:454-464`). On the fixed tree, the entry's `waiting_reason`, and
+then its `abandoned_reason`, read *"Cannot move task task-bf0e7cd8ad2c to 'under_review': it is
+assigned to 'authr8f', which recorded evidence for this task … Assign a different reviewer, or
+clear the assignee to review it yourself."* The task is `("completed", None)`, before the
+dispatch and after every pass. **It is not assigned to anyone.**
+
+**Why.** `enter_selected_task` writes the reviewer into `assignee` before it transitions (F70), so
+the guard judges a *staged* assignee. Design D1 of `a-refused-review-leaves-nothing-behind` says
+so, and says the refusal is correct, which it is. The sentence was written for an operator's
+`PATCH` of a task that really is assigned. Before F319's fix the staged assignee was committed,
+so the sentence happened to be true (r7: `("completed", "authr7q")`). Now the rollback discards
+it, and the words describe a state nobody can see. *"Clear the assignee"* is advice with nothing
+to act on. *"Assign a different reviewer"* is still right.
+
+**Where it shows.** Measured: the queued entry's reason, and the give-up's `abandoned_reason`.
+Possibly also a route `409` for an idle author, if that path stages before the guard answers. That
+was neither read nor measured, and the route's own pre-check (`review_dispatch_refusal`) may
+answer first, in its own words.
+
+**A possible repair, not proposed.** Word the dispatch-time refusal from the reviewer being
+entered (*"'authr8f' recorded evidence for this task, so it cannot review it"*), or let
+`_guard_evidence_author_not_reviewer` say "being assigned" when the assignee is uncommitted. The
+guard's decision is unchanged either way. §6.2 of that change (is the reason enough?) is the
+human judgement this finding feeds.
+
+**Reproduce:** leg A of `scripts/drive/t_d1_0912_f319_reach.py` with `AW_EXPECT=fixed`, in lines
+49-61 of the same output file.
+
+**Related:** F319, F70.

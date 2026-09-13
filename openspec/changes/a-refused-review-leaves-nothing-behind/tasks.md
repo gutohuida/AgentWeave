@@ -513,7 +513,7 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
     listens on 8025), and `git worktree remove` needed no `--force`. The drive outputs and the Hub
     log are kept in `~/.agentweave/hub/profiles/drive0913r/r7-prefix-transcripts/`, and so is the
     database. 8000 and 8010 were never touched.
-- [ ] 5.3 **Fixed tree.** Use a fresh project and fresh agents, and run the same legs with
+- [x] 5.3 **Fixed tree.** Use a fresh project and fresh agents, and run the same legs with
   `AW_EXPECT=fixed`.
   - Every task equals its before-dispatch snapshot, and no refused reviewer has a run.
   - The route's `409` sentences for B1 and B2 are unchanged.
@@ -522,13 +522,80 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
     `queue_entry_abandoned` row exists.
   - F: M is delivered by the pass of the second `continue`. A run exists whose delivered entry is M,
     and no other event came between.
-- [ ] 5.4 **Where the operator saw it.** Run `scripts/drive/t_d1_0912_f319_ui.py` (Chromium,
+
+  **Actual (night r8-drive-fixed, 2026-09-13): 37 ok, 0 fail, every item held.**
+  - **Setup.** The Hub ran from this checkout's `hub/` at `fa07089`, where `_Attempt` resolves in
+    `hub.turn_scheduler`. It used fresh profile `drive0913s`, migrated to `0102`, on port 8026. The
+    listening PID was 19008, started 03:50:51. The key answered 200 and a wrong key 401. The fixture
+    was `testbed/scratch/night0913/r8/fixture`, project `proj-f85df4264704`, tag `r8f`, legs B, A
+    and F. No `.py` was edited while it ran.
+  - **B1 `task-18316bdb30b7`.** The route answered `409`, and the task stayed
+    `("completed", None)` with 2 transitions, before and after. `revr8f` has no run. Its entry
+    `entry-de2dfa32519b` is `withdrawn` at 1 attempt, carrying the refusal.
+  - **The route sentences are unchanged.** B1 and B2 are identical to r7's once the sha, tag and
+    path are normalised.
+  - **D9.** `revcr8f` was answered with the commit refusal, not *"already under review"*. The task
+    still equals its snapshot.
+  - **B2 `task-6077efcaeecd`.** `409`, `("completed", None)` with 2 transitions. `revbr8f` has no
+    run, and `entry-a0482c31399a` is `withdrawn`.
+  - **A `task-bf0e7cd8ad2c`.**
+    - The author's turn `run-99812124467a` ran 74 s and recorded evidence `ev-13bf0d11329f`.
+    - `entry-0e76e7492ed3` was answered `200 queued`. The run-end re-drain and `continue`s 1 and
+      2 refused it at attempts 1, 2 and 3, with the guard's sentence as `waiting_reason` each time.
+      It ended `withdrawn` at 3, with one `queue_entry_abandoned` row.
+    - The task was `("completed", None)`, 2 transitions, after every pass. There was no second run.
+  - **F `task-49f3cc28aef3`.**
+    - X `authfr8f`'s turn `run-ea6573780a3a` ran 78 s.
+    - H `entry-b087e9dc3dc9` (`conv-f9449e84e830`) was refused at 1 (re-drain) and 2. M
+      `entry-304f78c1af8a` (`conv-1c194f349562`) was `queued` at 0 attempts before the second
+      `continue`.
+    - That `continue` withdrew H at 3 (02:54:04.493). It answered
+      `started_conversation_id: conv-1c194f349562`, and M was `delivered` into `run-54144cbb80c4`,
+      started at 02:54:04.607, in the same request.
+    - TF equals its snapshot.
+  - **Two B findings came out of reading the answers rather than the assertions.** Both are filed
+    in FINDINGS.md, and neither is in this change's scope.
+    - **F333.** That same `continue` answered `waiting_reason: "this conversation had nothing
+      queued"`, of a conversation that held H when the request arrived. The UI renders it as
+      *"Not started — this conversation had nothing queued. … started instead."* Before the fix
+      (r7) the answer carried the guard's sentence.
+    - **F334.** A's guard sentence says *"it is assigned to 'authr8f' … clear the assignee"* of a
+      task whose assignee is `None`. The rollback discards the staged assignee that the sentence
+      describes.
+- [x] 5.4 **Where the operator saw it.** Run `scripts/drive/t_d1_0912_f319_ui.py` (Chromium,
   against the served bundle) on the fixed-tree Hub. The B1 and B2 cards are not in **Under
   Review**. A's card does not name X. The bundle is unchanged by this change. This checks the
   symptom F319 recorded on the board.
-- [ ] 5.5 Confirm that every run in the profile joined to a Haiku runner (`model LIKE
+
+  **Actual (night r8-drive-fixed): 6 ok, 0 fail.**
+  - **The script is parametrized** by `AW_RUN_TAG` and asserts under `AW_EXPECT=fixed`. It reads
+    each card's column from `.task-board-column[data-status]`, finds the card by its
+    `Open <title>` label, and reads the card's text from the card itself.
+  - **The board.** B1, B2 and A r8f are all in `completed`, and none is in `under_review`. Under
+    Review shows 0 (`f319-r8f-board.png`). A's card text is *"A r8f | FR-2 | Completed | Medium"*,
+    with no `@authr8f`.
+  - **The page** made no non-GET request and raised no page error.
+  - **The bundle is unchanged.** `git diff ab49909.. -- hub/hub/static hub/ui` is 0 lines.
+  - **Limit.** The `@auth<TAG>` absence check was not run against a board where the chip exists.
+    The pre-fix Hub had already been stopped, and restarting it on r7's kept database could let
+    startup reconciliation rewrite that database. The chip renders `@{task.assignee}` inside the
+    same card root (`TaskCard.tsx:475-494`). That was read, not run.
+- [x] 5.5 Confirm that every run in the profile joined to a Haiku runner (`model LIKE
   'claude-haiku-4-5%'`), and that
   `GET /jobs` is empty or every job is disabled. Stop the Hub. Remove any worktree the drive made.
+
+  **Actual (night r8-drive-fixed).**
+  - **Runs and jobs.** There were three runs (`run-99812124467a`, `run-ea6573780a3a` and
+    `run-54144cbb80c4`), and all three joined to `claude-haiku-4-5-20251001`. None was running.
+    `GET /jobs` is `[]` for the only project.
+  - **The Hub logs** have 0 tracebacks and no 5xx.
+  - **The Hub was stopped** by its listening PID 19008, and nothing listens on 8026. 8000 was
+    untouched.
+  - **Worktrees.** The drive made no worktree of this repository: `git worktree list` shows only
+    the main checkout. The two worktrees inside the fixture are the product's own agent
+    workspaces.
+  - **Kept.** The outputs, the screenshots and the Hub log are in
+    `~/.agentweave/hub/profiles/drive0913s/r8-fixed-transcripts/`.
 
 ## 6. Verification only a human can do
 
