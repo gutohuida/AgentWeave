@@ -20,7 +20,7 @@ point: a row may not change answer before the decode exists.
 
 ## 1. Pin the table before the lexer moves
 
-- [ ] 1.1 In `hub/tests/test_permission_approver.py`, add D2's table as one parametrized test over
+- [x] 1.1 In `hub/tests/test_permission_approver.py`, add D2's table as one parametrized test over
   `_decide("Bash", {"command": …})`. Every row goes in: G1–G10, D1, I1, L1, N1, **N2, N3, N4, N5**,
   OK1, OK2 (N2 = `echo hi > $'..\x'`, a digitless `\x`; N3 = `echo hi > $'\Uffffffffx'`, an overrange
   `\U`; **N4 = a `\u` escape whose value 0x100 is above 0xFF — the command is `echo hi > $'..` then
@@ -40,7 +40,7 @@ point: a row may not change answer before the decode exists.
   would be mangled by an editor (see DEAD-ENDS, backslash handling); assert once at import that each
   command string contains the intended `$'…'` text.
   `ids=` are D2's labels so a failure names its row.
-- [ ] 1.2 Platform-scope the rows exactly as measured (D2):
+- [x] 1.2 Platform-scope the rows exactly as measured (D2):
   - **POSIX only**, `xfail(strict=True, reason="a-quote-can-spell-a-slash §2")`: G1–G5, G7–G10, D1
     (they flip from allow to deny). G6 is refused today on POSIX too but for a false reason, so mark
     only its **reason** assertion xfail on POSIX.
@@ -78,7 +78,21 @@ point: a row may not change answer before the decode exists.
   Ubuntu (`python3 -p posix_stubs`, per `testbed/scratch/night0912/posix_stubs.py`). Record which
   assertion each row fails. **Any failure not explained by a mark means the table is wrong, not the
   code** — re-measure with `testbed/scratch/r1f332/reader_forms.py` and record the difference.
-- [ ] 1.3 Commit §1 alone, green. From this commit, a decode that flips a row before §2 fails CI.
+
+  **Done 2026-09-13 night, and two marks above were wrong against the measurement.** D2's table is
+  right; this list's prose disagreed with it twice. **N1** on Windows is refused *today* (*cannot
+  be checked*, like every other row with a `$` and a `\`), so it takes a **reason** mark there, not
+  an answer mark — it does not flip allow→deny. **D1** on Windows is *cannot be checked* today and
+  after, so it takes **no** mark there; the reason mark listed would have been a strict XPASS. As
+  pinned, each mark is `xfail(strict=True, raises=…)` naming the one assertion that moves
+  (`_WrongAnswerError` or `_WrongReasonError`), so a row failing the *other* assertion is a real
+  failure, not an XFAIL. Measured (`testbed/scratch/night0913/s1_measure.py`, `--runxfail`):
+  Windows — G1–G10, N1–N5 fail their reason, I1 its answer; D1, L1, OK1, OK2 pass (16 xfailed,
+  4 passed). WSL — G1–G5, G7–G10, D1 fail their answer, G6 its reason; I1, L1, N1–N5, OK1, OK2
+  pass (11 xfailed, 9 passed). With R3's reference decoder patched in
+  (`testbed/scratch/night0913/r3_lex_plugin.py`) all 20 rows pass on both platforms and exactly
+  the marked rows XPASS; with R1's, Windows fails N2–N5, and with R2's, N3–N5.
+- [x] 1.3 Commit §1 alone, green. From this commit, a decode that flips a row before §2 fails CI.
 
 ## 2. The decode
 
