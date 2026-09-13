@@ -1,168 +1,40 @@
 {
-  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-  "playbook": ".claude/loops/night-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-09-12-daily",
-  "parent_branch": "master",
-  "parent_sha": "eac213c",
-  "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 19,
-  "log_file": ".claude/autonomous/2026-09-12-night-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "changes": [
-    "openspec/changes/a-url-is-not-a-path",
-    "openspec/changes/a-refused-review-leaves-nothing-behind"
-  ],
-  "prefix_sha": "c12a7d3",
-  "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
-  "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "compose",
-      "status": "done",
-      "title": "Compose this window's queue from the playbook",
-      "detail": "DONE iteration 1. APPROVALS.md 2026-09-12: APPROVED a-url-is-not-a-path (F300+F312+F321+F323, 46 tasks) and a-refused-review-leaves-nothing-behind (F319+F320, 52 tasks), with ORDER: a-url-is-not-a-path, a-refused-review-leaves-nothing-behind. The ORDER is the queue; the default backlog is ignored tonight. Baseline chunk green (153 passed, 1 skipped). CI reds on the branch (34711633220, 34716889283) carry the F292 and F314 signatures exactly - known intermittents, not those commits'."
-    },
-    {
-      "id": "u1-pin",
-      "status": "done",
-      "title": "a-url-is-not-a-path S1: pin D2's table against the unmodified _decide",
-      "detail": "DONE iteration 2 (commit 'pin(F300,F312,F321,F323,F331)'). test_the_decided_table (88 common rows + 9 Windows / 7 POSIX), test_a_fetch_is_not_governed (N8), test_the_run_s_own_hub_is_nobody_s_without_hub_url (H12). Windows: file 86 passed/1 skipped/59 xfailed; baseline chunk 194 passed/1 skipped/59 xfailed. WSL Ubuntu: 47 passed/52 xfailed. why_each_row.py: 0 mark disagreements on both platforms. Platform-scoped marks (POSIX today reads https:// as relative s://): H4/H15/H16 xfail Windows-only; X8 xfail POSIX-only raises=ValueError; H12-H4 xfail POSIX-only; new row F331 xfail POSIX-only. F331 (A) filed: on Linux `curl -T x file:///tmp/...` is allowed and writes outside."
-    },
-    {
-      "id": "u2-reader",
-      "status": "done",
-      "title": "a-url-is-not-a-path S2: the reader (lexer + words + six rules + backstop), own-Hub test, refusal texts, bound, totality",
-      "detail": "DONE iteration 3. Reader in hub/hub/mcp_server.py (lexer per dialect, words+continues, six rules, D4 own-Hub, D5 texts verbatim 197/168/26, MAX_REASON_CHARS=1000 + 200-char rendered bound, (OSError, ValueError) totality, \\-aware backstop on Windows). grep -c xfail = 0. Windows: file 176 passed/1 skipped; baseline chunk 285 passed/1 skipped. WSL: 170 passed/1 skipped (cap test, stub env)/2 failed (sse_starlette stub env, not _decide); why_each_row 0 disagreements on both. Found and fixed an escape the design's reader opened: a quoted/escaped $HUB_URL was read as a reference (E20-E22, measured writing outside in Git Bash; R2 and R3 readers allow). Departures recorded in design D11a (literal-$ sentinel, dialect references H17, continuing-word reason, nesting fallback). F332 (A) filed: POSIX bash $'..\\x2f...' writes outside, allowed before and after."
-    },
-    {
-      "id": "u3-wire-docs",
-      "status": "done",
-      "title": "a-url-is-not-a-path S3 wire shape + S4 docs",
-      "detail": "DONE iteration 4. 3.1: test_a_network_address_is_refused_on_the_wire + test_the_run_s_own_hub_is_allowed_on_the_wire through a real spawn (_call_tool_over_stdio gained env_overrides; HUB_URL=http://127.0.0.1:8016, AW_PERMISSION_POSTURE empty). Both FAIL against c12a7d3's server (measured: pre-fix answers were deny 's://example.com/x' outside / deny '/api/v1/agent-actions/tasks' outside), control passes. 4.1 docs paragraph, every claim checked against _decide first. 8.3 valid. test_permission_approver.py 178 passed/1 skipped on Windows. Not run on WSL; CI Linux is the first POSIX run."
-    },
-    {
-      "id": "u4-mutations",
-      "status": "done",
-      "title": "a-url-is-not-a-path S5: sixteen mutation checks, each killed by a NAMED row",
-      "detail": "DONE iteration 5. 17 mutations via testbed/scratch/night0912/u4/mutate.py (utf-8, newline='', each edit asserted once, restore by git checkout, git status clean after every one). Every named row failed; no test changed. Table in tasks.md under 5.17 and in the log. 5.6 run in two readings: literal cwd-resolution is killed by W1-W6 (pytest cwd hub/ is itself outside the workspace, so R1-R3 cannot separate it); unresolved-relative kills R1-R3. 5.12b's J2 dies on its $HUB_URL word, not its body. Windows only."
-    },
-    {
-      "id": "u5-gate",
-      "status": "done",
-      "title": "a-url-is-not-a-path S8 gate: CI lint set + whole Hub suite + no migration/API/UI diff",
-      "detail": "DONE iteration 6. 8.1 ruff/black(py311)/mypy clean at 3fba6b2. 8.2 whole Hub suite from hub/ on Windows: 4194 passed, 86 skipped in 34m39s, exit 0; JUnit 4280 tests 0 failures 0 errors; F292/F314 did not fire. 8.4 git diff c12a7d3.. -- migrations/api/ui = 0 lines. A lost firing (00:20-00:31) had backgrounded the suite and ended its turn; claude -p killed the job after 600s (driver-night.log). Recorded in DEAD-ENDS: wait inside the turn."
-    },
-    {
-      "id": "u6-drive-prefix",
-      "status": "done",
-      "title": "a-url-is-not-a-path S6.1: reproduce on the PRE-FIX tree (git worktree, never stash)",
-      "detail": "DONE iteration 7. Worktree at 00a5569 (no product diff from c12a7d3), Hub PID 17968 port 8023, fresh profile drive0913u (key at ~/.agentweave/hub/drive0913u-key.txt), proj-7451ee4a1b89, agent url012022 default posture, Haiku. scripts/drive/t_url_is_not_a_path.py AW_EXPECT=prefix: 14/14. Asks 1-3 refused as '/api/v1/agent-actions/tasks', '/hello.py', 's://example.com/' outside; asks 4 and 5 ALLOWED (exact commands, backslashes intact), stray.txt and out.txt landed in <fixture>\\.agentweave\\worktrees\\ - the parent of the agent's worktree workspace, not the project root's parent. All permission_denied rows tool_name='Bash'. Strays deleted, Hub stopped, worktree removed; transcripts in profiles/drive0913u/u6-prefix-transcripts/."
-    },
-    {
-      "id": "u7-drive-fixed",
-      "status": "done",
-      "title": "a-url-is-not-a-path S6.2-6.4: the fixed tree, the agent's next move, Haiku/jobs check",
-      "detail": "DONE iteration 8. Hub from this checkout's hub/ at 39b6be3, PID 23648 port 8024, fresh profile drive0913f (key at ~/.agentweave/hub/drive0913f-key.txt), proj-45310ef3de5f, agent url013122 default posture, Haiku. t_url_is_not_a_path.py AW_EXPECT=fixed: 15/15. Ask 1 run-cb819f7613b4 created task-03dd81bf6fec (created_by_run_id = that run, no permission_denied); ask 2 'hello from sub'; ask 3 run-f729c2de5139 'Denied: 'https://example.com/' is a network address. Under this posture ... ask the operator with ask_user.' (D5 verbatim); ask 4 run-7d9fd8579e1c 'Denied: '..\\stray.txt' is outside your workspace.'; ask 5 run-e1831f34f07d 'Denied: '\\out.txt' is outside your workspace.'; no strays anywhere. permission_denied evt-12f9a4705b4a/evt-24d349950cfc/evt-14049a3d8e1a, all tool_name='Bash' (6/6 with u6). 6.3: agent made no further tool call - stopped and reported, asked in prose (not ask_user), named WebFetch without calling it. 6.4: 5 runs all Haiku, jobs [], Hub stopped, 0 tracebacks. Transcripts in profiles/drive0913f/u7-fixed-transcripts/."
-    },
-    {
-      "id": "u8-close",
-      "status": "done",
-      "title": "a-url-is-not-a-path S9 + S10: four Status lines, corrections, archive",
-      "detail": "DONE iteration 9. F300/F312/F321/F323 fixed 612b9c9 driven f492261, each quoting its 6.2 ask and 6.1 pre-fix run; F331 fixed 612b9c9 tested-not-driven on POSIX (CI hub-test ubuntu-24.04: rows XFAIL at 00a5569 run 34722726736, PASSED at 612b9c9 run 34723993806). Dated corrections in F312 and F300 (N4, F331; F300's candidate is s://, not //). Index paragraph revised: open A = F299 F301 F319 F325 F332. classify_findings: exactly the five moved OPEN->RESOLVED, B/C/D/? identical. F322/F299/F301/F332 stay open. DECISIONS.md untouched; review page carried 1c/1d (html:200-203). Archived as openspec/changes/archive/2026-09-13-a-url-is-not-a-path (44/47, S7 human-only open); 4 blocks verbatim in main; validate --specs --strict 43/43. Test guide checked command-by-command against shipped _decide; D11a rows E20-E22/H17 added. APPROVALS BUILT note added."
-    },
-    {
-      "id": "r1-pin",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S1: the new test file against the unmodified tree",
-      "detail": "DONE iteration 10 (commit 'pin(F319,F320)' - its parent ab49909 is r7's/r6's <base>; the pin commit itself is the pre-fix worktree sha for 5.2). hub/tests/test_a_refused_review_leaves_nothing_behind.py: 11 pins + 13 strict xfails, every marker raises=AssertionError. File alone 11 passed/13 xfailed; with baseline chunk 298 passed/1 skipped/13 xfailed 1m38s. --runxfail: each xfail fails on the design's measured value (B/T ('under_review','rr-reviewer',3) vs ('completed',None,2); A ('completed','rr-reviewer',2) each pass; 1.6 a/b/d/g one call; 1.7 queued; 1.8a resolved_at set; 1.8b ('withdrawn',3)). Departures under tasks 1.9 (additive). RunDivergence PK is sequence - select by id."
-    },
-    {
-      "id": "r2-rollback",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S2: the rollback (F319) - a green, coherent stopping point",
-      "detail": "DONE iteration 11 (commit 'fix(F319)'). turn_scheduler.py: selected_ids + conversation_id captured before the call; await db.rollback() first in except TriggerAgentError; selected re-read by id AND state=='queued' in captured order; entries re-read via queued_entries; captured conversation_id passed to other_input_would_have_run_elsewhere. Branch-opening comment adds F319/D1/D3/F328 paragraph; F97's kept plus one sentence. agent_trigger.py:788 comment-only, names the one-caller test. 6 @MOVES_IN_2 decorators (8 tests) removed + marker def. 2.5 docstrings name test_leg_a_leaves_the_task_as_it_was_after_every_pass; MEASURED extra: on the fixed tree with section 3.5 removed, the 3.5 test fails at :505 on the queue, not the holder - docstring says so (tasks 2.5 Actual). New file 19 passed/5 xfailed (the MOVES_IN_3 ones); baseline chunk + new file + test_a_blocked_agent_workspace_holds_its_input.py: 309 passed/1 skipped/5 xfailed 1m31s; D6's test GREEN. ruff/black(py311) clean, validate --strict valid. Not driven (r7/r8)."
-    },
-    {
-      "id": "r3-mut-a",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S4.1-4.4c: rollback mutations",
-      "detail": "DONE iteration 12 (docs only). testbed/scratch/night0913/r3/mutate.py, 4 files (new file + 2 D3 files + evidence_names_the_author; unmutated 50 passed/5 xfailed), tree clean after each restore. 4.1 7 failed (1.2 B0-B2, 1.3, 1.4 leaves, 1.5, 1.8a); 4.2 7 failed (same); 4.3 6 failed (1.2 records_the_refusal B0-B2 waiting_reason None, 1.4 pin '' + 1.8a fixture pin + D3 operators_message); 4.4 exactly the three MissingGreenlet, the other two pass; 4.4b 1.8b ('withdrawn',3) and a probe measured abandoned_reason set + queue_entry_abandoned=1 (HEAD: 2/None/0); 4.4c exactly the five of D3, D6's test PASSES on this tree. Table under tasks 4.4c. No finding."
-    },
-    {
-      "id": "r4-loop",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S3: the pass goes on (F320)",
-      "detail": "DONE iteration 13 (commit 'fix(F320)'). turn_scheduler.py: _attempt_turn(db, project_id, agent, counted) -> frozen _Attempt(result, attempted, gave_up, nothing_queued); schedule_agent loops while gave_up, bound len(queued at pass start)+1 with D4's argument as comment; 3.1a counted set (skip after the waiting_reason write); 3.2 result rule on nothing_queued; 3.3 comments (re-drain named, not line-cited: it is :2431-2460 now). 3.4 :227 -> ('queued',1) + docstring; 3.5 five @MOVES_IN_3 + def removed. New file 24 passed; baseline chunk + new file + blocked_agent_workspace: 314 passed/1 skipped (81.7s, 78.3s). FIRST run of that set STALLED at test 253 test_failed_run_returns_input::test_giving_up_lets_the_agent_accept_new_input (killed 10m16s, no traceback); file alone 8/8 green, set 2/2 green after. Loop cannot repeat there by reading (no TriggerAgentError; gave_up empty); shape matches F292 hang mode; NOT classified. Watch it in r6's whole suite. ruff/black clean, validate --strict valid. Not driven."
-    },
-    {
-      "id": "r5-mut-b",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S4.5-4.10: loop mutations",
-      "detail": "DONE iteration 14 (docs only, plus one docstring sentence in 1.6(e)). testbed/scratch/night0913/r5/mutate.py, same 4 files as r3 (unmutated 55 passed), tree clean after each restore. 4.5 (loop condition attempted and response is None and terminal_failure) 3 failed: 1.6(b),(g) + extra 1.6(f), all RuntimeError test guard; 4.6 (attempted and response is None) 4 failed: 1.6(c) + 4.5's three, all guard; 4.7 6 failed: 1.6(a),(b),(d) call counts, 1.7 'queued'!='running', extra 1.6(g) + D6 :230 back to ('queued',0); 4.8 2 failed: 1.6(d) + extra 1.6(e), both 'queue is empty' (1.6(e) docstring said no mutation targets it - corrected); 4.9 exactly 1: D6 :230; 4.10 2: 1.6(f) M ('withdrawn',3), 1.6(g) M ('queued',2) MEASURED. Table under tasks 4.10. validate --strict valid."
-    },
-    {
-      "id": "r6-gate",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S7 gate",
-      "detail": "DONE iteration 15 (docs only). 7.1 at f4bb1bb via py -3.11 -m: ruff clean, black(py311) 566 unchanged, mypy 22 files clean. 7.2 whole Hub suite from hub/, one background process waited on INSIDE the turn (540s py -c polls): 4218 passed/86 skipped 26m30s exit 0; JUnit 4304 tests 0 failures 0 errors (= u5's 4194 + the new file's 24). F292/F314 did not fire; faulthandler_timeout=300 dumped nothing; r4's stall did NOT recur (test_giving_up_lets_the_agent_accept_new_input 0.72s) - still unclassified. 22 aiosqlite thread warnings, none in changed files (u5: 30). 7.3 valid. 7.4 base ab49909: six-path diff 0 lines; hub/hub/api = one comment-only hunk agent_trigger.py @@-788,9 +788,18@@. Logs testbed/scratch/night0913/r6/."
-    },
-    {
-      "id": "r7-drive-prefix",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S5.1-5.2: harness + pre-fix reproduction",
-      "detail": "DONE iteration 16. 5.1 harness: AW_EXPECT=prefix|fixed (fixed = (task row, transition count) equals the before-dispatch snapshot + refused reviewer has no run; A: guard sentence each queued pass, withdrawn at 3, queue_entry_abandoned; F: M queued at 0 before the give-up pass, same continue answers started_conversation_id=M's conv, M delivered into a real run), D9 asserted both ways, leg F (own task fr-5, own agent authf<TAG>), leg A driven to its limit with 2 continues. Long step is committed slow_step.py, NOT sleep 60: Claude Code 2.1.269 blocks standalone sleep (DEAD-ENDS). 5.2: worktree at 73ae6c5, Hub PID 19484 port 8025, profile drive0913r (key ~/.agentweave/hub/drive0913r-key.txt). Attempt 1 r7p proj-d4c9ea1d16f1 NOT a reproduction of A (sleep blocked, agent never became author; review ran, divergence restaffed TA to F's agent, contaminating F). Attempt 2 r7q proj-a9dad9b9fc33: 32 ok/0 fail, all four reproduced: B1 task-a6c1743d81d3 -> (under_review, revr7q) + row; D9 'already under review by revr7q'; B2 task-4704b6fc04d7 -> (under_review, revbr7q) + row; A task-1799a95e0375 (completed, authr7q), entry-9a583d9b13cf withdrawn at 3; F task-5eb6eb4c3c18 -> (completed, authfr7q), H entry-66a52bdb22f2 withdrawn by 2nd continue, M entry-f512a2aacfcd queued at 0 no run. 6 runs all Haiku, jobs [], 0 tracebacks, Hub stopped, worktree removed. Outputs in profiles/drive0913r/r7-prefix-transcripts/."
-    },
-    {
-      "id": "r8-drive-fixed",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S5.3-5.5: fixed tree + UI in Chromium + Haiku/jobs",
-      "detail": "DONE iteration 17. Hub from this checkout's hub/ at fa07089 (_Attempt resolves), fresh profile drive0913s (key ~/.agentweave/hub/drive0913s-key.txt), port 8026, LISTENING PID 19008, proj-f85df4264704, tag r8f. 5.3 t_d1_0912_f319_reach.py AW_EXPECT=fixed legs B A F: 37 ok/0 fail, one attempt. B1 task-18316bdb30b7 409 same sentence as r7 (normalised), ('completed',None) 2 transitions before/after, revr8f no run; D9 revcr8f got the commit refusal not 'already under review'; B2 task-6077efcaeecd 409 same sentence, unchanged, revbr8f no run; A task-bf0e7cd8ad2c author run-99812124467a ev-13bf0d11329f, entry-0e76e7492ed3 guard sentence at 1/2/3 then withdrawn + 1 queue_entry_abandoned, task ('completed',None) every pass; F task-49f3cc28aef3 X run-ea6573780a3a, H entry-b087e9dc3dc9 withdrawn by continue 2 at 02:54:04.493, M entry-304f78c1af8a queued at 0 before it and delivered into run-54144cbb80c4 at 02:54:04.607 by the same request (started_conversation_id=M's conv), TF unchanged. 5.4 t_d1_0912_f319_ui.py parametrized by AW_RUN_TAG, asserts under AW_EXPECT=fixed: 6 ok/0 fail - B1/B2/A in completed, Under Review 0, A's card no @authr8f, no non-GET, bundle diff ab49909.. 0 lines; limit: absence check not shown to fail on a chip-bearing board. 5.5 3 runs all Haiku, jobs [], 0 tracebacks/5xx, Hub stopped, no repo worktree. Filed F333 (B, continue answers 'had nothing queued' of a conversation whose input its pass gave up - checkpoints.py reads queued_entries after the pass) and F334 (B, guard sentence names the staged assignee the rollback discarded). Outputs in profiles/drive0913s/r8-fixed-transcripts/."
-    },
-    {
-      "id": "r9-close",
-      "status": "done",
-      "title": "a-refused-review-leaves-nothing-behind S8 + S9: close out, archive",
-      "detail": "DONE iteration 18. F319 'fixed 6ebcd9f' and F320 'fixed 997ff5d', each driven 1b3d52c with its own quoted 5.3 leg + r7 pre-fix outcome; F320 dated line -> F333. F326/F327 (option (a), DECISIONS F327-scope)/F328 stay open, F328 got one dated 'narrowed by 6ebcd9f, still open' paragraph. F335 (D) filed: measured at 1b3d52c by a scratch run of 1.8a's _divergence_leg (broadcasts ['run_divergence_resolved'], resolved_at None, 0 rows, task unchanged), unit level only. classify_findings before/after: exactly F319+F320 OPEN->RESOLVED, F335 new OPEN D, all else identical modulo offsets; open A = F299 F301 F325 F332 (index paragraph added). Archived as openspec/changes/archive/2026-09-13-a-refused-review-leaves-nothing-behind (49/52, S6 human-only open); both ADDED deltas appended verbatim; 'Dispatching a review staffs the task...' 6805 bytes cmp-identical; validate --specs --strict 43/43; openspec list: no active changes. test-guide 9.1: slow_step.py replaces sleep 60, F334 sentence quoted, F333 'had nothing queued' noted, F327 answered, F335 listed. APPROVALS BUILT note."
-    },
-    {
-      "id": "w-final",
-      "status": "done",
-      "title": "Final log entry for the morning, then next_action null",
-      "detail": "DONE iteration 19. Final morning entry in the log (decisions, product vs doc commits, driven vs tested vs inferred, open, distrust). Both changes archived, nothing mid-flight, no Hub running, no stray worktree. CI tonight: 18 completed, 7 red, all F292 on BEGIN IMMEDIATE (recorded as a dated section in F292; classifier identical modulo offsets). Closed the 'sleep' sweep note: only t_d1_0912_f319_reach.py was affected, already fixed."
-    }
-  ],
-  "notes_for_tomorrow": [
-    "Open severity-A findings with no proposal (measured by scripts/classify_findings.py at compose): F299, F301, F325. The playbook routes these to the day window. DECISIONS.md 1c/1d rests on a false python -c measurement - re-derive F301's notice before proposing it (from the 2026-09-12 review page).",
-    "Classifier CONFLICT verdicts at compose: F52 (A), F292 (B). Hand-check them.",
-    "CI reds on this branch today are the two known intermittents (F292 at 34711633220, F314 at 34716889283). Both are open; F314 is B, F292 is B/CONFLICT.",
-    "F332 (A) filed in u2-reader: on POSIX, bash's ANSI-C quoting ($'..\\x2fx') writes a traversal no reader of the command text sees; measured writing outside under WSL bash 5.2.21. No proposal. Repair sketched in the finding (decode $'...' in the lexer, own rows).",
-    "Lost firing 2026-09-13 00:20-00:31: claude -p killed a backgrounded whole-suite run 600s after the turn ended ('Background tasks still running after 600s; terminating. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0'). Setting that variable in the driver's environment would remove the trap; not done - driver configuration is the operator's.",
-    "a-url-is-not-a-path archived 2026-09-13 (night u8-close). Human-only S7 open: 7.1 refusal legibility in the served UI, 7.2 D5 wording vs the one observed Haiku turn (stopped, asked in prose not ask_user, named WebFetch), 7.3 N3 and /dev/null (X4) for DECISIONS.md. The PowerShell tool_name was never exercised in either drive (D10 item 5 half-unverified).",
-    "CLOSED at w-final: the sleep sweep of scripts/drive/ found no other harness asking its agent to sleep (t_row19_crash.py had already moved off sleep 90; d1_0905_restart_hub.sh's sleep 2 runs in the driver's shell).",
-    "F292 fired 7 times in 18 completed CI runs on this branch tonight (c12a7d3..fa07089), every one at setup on [SQL: BEGIN IMMEDIATE], 6 of 7 on commits with no product change; mitigated-tree total now 8/35. Runs 1b3d52c and 44879bb and w-final's were in flight at close. The merge gate needs HEAD's own run green."
-  ],
-  "decisions_for_user": [
-    "a-url-is-not-a-path's implementation departs from R2's reader in four places, recorded in design D11a. One closes an escape the approved design would have opened (E20-E22: a quoted '$HUB_URL' read as a reference). None widens an answer beyond D2's table. Worth a look on the next review page; no action needed unless you disagree.",
-    "Two B findings came out of tonight's fixed-tree drive of a-refused-review-leaves-nothing-behind, both interactions its fix exposed and both left OUT of that change: F333 (Continue on a conversation whose review the pass just gave up says 'this conversation had nothing queued', losing the refusal) and F334 (the author guard's sentence says 'it is assigned to X ... clear the assignee' of a task nobody is assigned to, because the rollback discards the staged assignee). Both have repair sketches; whether to propose them together or fold F334 into S6.2's wording judgement is yours.",
-    "a-refused-review-leaves-nothing-behind is archived with S6 open for you: 6.1 what the UI's dispatch control shows for the 409, 6.2 whether 'queued, then a reason, then a give-up notice' is enough (now with F334's wrong assignee wording in view). F335 (D) was filed at close-out: the refused dispatch's run_divergence_resolved SSE broadcast escapes the rollback, so the live feed briefly shows a false 'resolved' line.",
-    "F292 now reddens roughly 2 in 5 CI runs on the mitigated tree (7/18 tonight, all on BEGIN IMMEDIATE, 6 of 7 on commits with no product change) and so holds the morning merge gate shut on noise about as often. Whether to prioritise it (DIRECTION.md) is yours; evidence in F292's w-final section."
-  ],
-  "limits": [
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-12-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "ab7cf72",
+    "stop_at":  "2026-09-14T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-13-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage and must never be touched.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
