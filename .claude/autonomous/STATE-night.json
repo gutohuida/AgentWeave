@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 14,
+  "iteration": 15,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r6-gate",
-  "next_action": "Queue item r6-gate: a-refused-review-leaves-nothing-behind S7. 7.1 CI lint set from the repo root: ruff check src/ hub/ tests/ ; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/ ; mypy src/. 7.2 whole Hub suite from hub/ under py -3.11 with --junitxml into testbed/scratch/night0913/r6/ (u5 took 34m39s, 4194 passed/86 skipped). It exceeds the 10-min Bash cap: run it with run_in_background and WAIT FOR IT INSIDE THIS TURN (Monitor until-loop on the junit file / process) - never end the turn with it running (DEAD-ENDS: claude -p kills background jobs 600s after turn end; u5's lost firing). Classify any F292/F314 red by signature and re-run that test in isolation. WATCH for r4's unattributed stall at test_failed_run_returns_input.py::test_giving_up_lets_the_agent_accept_new_input: if the suite hangs there, capture a signature (py-spy dump or faulthandler via -o faulthandler_timeout=120) and suspect r4's loop first. 7.3 openspec validate --strict a-refused-review-leaves-nothing-behind. 7.4 git diff 73ae6c5^.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py hub/hub/task_transition_service.py hub/hub/scheduler.py hub/hub/run_divergence.py must be empty; git diff 73ae6c5^.. -- hub/hub/api must be 2.3's comment hunk only (agent_trigger.py). Tick 7.1-7.4 with measured numbers, log, docs-only commit 'gate(a-refused-review-leaves-nothing-behind)', push. Then r7-drive-prefix (GATE: >= 75 min before stop_at 07:00).",
+  "current": "r7-drive-prefix",
+  "next_action": "Queue item r7-drive-prefix: a-refused-review-leaves-nothing-behind S5.1-5.2. GATE: do not start the drive with < 75 min before stop_at 07:00 (i.e. start by 05:45; if later, skip r7/r8 and go to w-final, leaving r9 open - never close without the drive). Read tasks.md 5.1-5.2 in full first. 5.1 extend scripts/drive/t_d1_0912_f319_reach.py (AW_EXPECT=prefix|fixed, D9 assertion, leg F). 5.2 git worktree add at 73ae6c5 (r1-pin's commit; never stash), fresh profile drive0913r on its own free port (not 8000, not 8010), legs B, A, F with AW_EXPECT=prefix, Haiku runners only. Expected pre-fix: B1/B2 under_review held by the refused reviewer with a new transition row, D9 refusal of a 2nd reviewer, A ('completed', X), F: H withdrawn and M queued at 0 with no run. Not reproduced -> say so and stop. Stop the Hub, remove the worktree, tick 5.1-5.2 with measured ids, log, commit 'drive(a-refused-review-leaves-nothing-behind): S5.1-5.2 ...', push. Then r8-drive-fixed.",
   "queue": [
     {
       "id": "compose",
@@ -108,9 +108,9 @@
     },
     {
       "id": "r6-gate",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S7 gate",
-      "detail": "7.1 CI lint set. 7.2 whole Hub suite, backgrounded (F292/F314 classified by signature, re-run in isolation). 7.3 validate --strict. 7.4 git diff <r1's parent>.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py hub/hub/task_transition_service.py hub/hub/scheduler.py hub/hub/run_divergence.py empty; hub/hub/api diff is 2.3's comment hunk only. NOTE the base: a-url-is-not-a-path legitimately changes mcp_server.py, so diff from r1-pin's parent, not from c12a7d3."
+      "detail": "DONE iteration 15 (docs only). 7.1 at f4bb1bb via py -3.11 -m: ruff clean, black(py311) 566 unchanged, mypy 22 files clean. 7.2 whole Hub suite from hub/, one background process waited on INSIDE the turn (540s py -c polls): 4218 passed/86 skipped 26m30s exit 0; JUnit 4304 tests 0 failures 0 errors (= u5's 4194 + the new file's 24). F292/F314 did not fire; faulthandler_timeout=300 dumped nothing; r4's stall did NOT recur (test_giving_up_lets_the_agent_accept_new_input 0.72s) - still unclassified. 22 aiosqlite thread warnings, none in changed files (u5: 30). 7.3 valid. 7.4 base ab49909: six-path diff 0 lines; hub/hub/api = one comment-only hunk agent_trigger.py @@-788,9 +788,18@@. Logs testbed/scratch/night0913/r6/."
     },
     {
       "id": "r7-drive-prefix",

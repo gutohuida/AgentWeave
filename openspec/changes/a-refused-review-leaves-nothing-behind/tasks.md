@@ -479,16 +479,38 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
 
 ## 7. The gate
 
-- [ ] 7.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+- [x] 7.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
   --target-version py311`, and `mypy src/`. Use CI's path list, not a narrower one.
-- [ ] 7.2 The whole Hub suite, `py -3.11 -m pytest tests/ -q` from `hub/`, in chunks or in the
+  **Actual (night r6-gate, 2026-09-13, at `f4bb1bb`, from the repo root, each as
+  `py -3.11 -m <tool>`).** ruff: *All checks passed!* black: *566 files would be left unchanged.*
+  mypy: *no issues found in 22 source files.* All three exit 0.
+- [x] 7.2 The whole Hub suite, `py -3.11 -m pytest tests/ -q` from `hub/`, in chunks or in the
   background (it exceeds the 600 s command cap). Use `py -3.11`, never bare `python`.
-- [ ] 7.3 `openspec validate --strict a-refused-review-leaves-nothing-behind` after every delta
+  **Actual (night r6-gate, 2026-09-13, Windows, at `f4bb1bb`).** The run was one background
+  process, waited on inside the turn, with `-o faulthandler_timeout=300` and `--junitxml`.
+  - Result: **4218 passed, 86 skipped** in 26m30s, exit 0. The JUnit file records 4304 tests,
+    0 failures and 0 errors. That is `a-url-is-not-a-path`'s gate (4194 passed, 86 skipped) plus
+    this change's 24 tests.
+  - F292 and F314 did not fire, so nothing needed an isolated re-run.
+  - No test ran past the 300 s faulthandler timeout, so no traceback was dumped.
+  - r4's unattributed stall did not recur.
+    `test_failed_run_returns_input.py::test_giving_up_lets_the_agent_accept_new_input` passed in
+    0.72 s. The stall stays unclassified: this run does not reproduce it and does not explain it.
+  - The 22 `PytestUnhandledThreadExceptionWarning`s (aiosqlite, *Event loop is closed*) come from
+    files this change does not touch. The previous gate had 30.
+- [x] 7.3 `openspec validate --strict a-refused-review-leaves-nothing-behind` after every delta
   edit.
-- [ ] 7.4 `git diff <base>.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py
+  **Actual (night r6-gate).** *Change 'a-refused-review-leaves-nothing-behind' is valid*, exit 0.
+- [x] 7.4 `git diff <base>.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py
   hub/hub/task_transition_service.py hub/hub/scheduler.py hub/hub/run_divergence.py` is empty (the
   last three make the non-goals mechanical: no guard weakened, no flow staging moved), and
   `git diff <base>.. -- hub/hub/api` is the comment hunk of §2.3 only.
+  **Actual (night r6-gate, at `f4bb1bb`).** `<base>` is `ab49909`, the parent of §1's commit
+  `73ae6c5`. It is not `c12a7d3`: the archived `a-url-is-not-a-path` changes `mcp_server.py`
+  legitimately, before this change began. The six-path diff is **0 lines**. The `hub/hub/api`
+  diff is one hunk in `agent_trigger.py` at `@@ -788,9 +788,18 @@`, 12 insertions and 3 deletions,
+  every changed line a `#` comment. The whole change touches `turn_scheduler.py` and
+  `agent_trigger.py` in product code, and nothing else.
 
 ## 8. Close it out
 
