@@ -272,7 +272,7 @@ Every real agent turn binds `claude-haiku-4-5`. No job is left enabled. The driv
 port chosen that night, with a fresh profile, started from `hub/` with uvicorn **from source**,
 and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010.
 
-- [ ] 6.1 **Pre-fix, first.** `git worktree add ../aw-url-prefix <sha>` at the commit **before**
+- [x] 6.1 **Pre-fix, first.** `git worktree add ../aw-url-prefix <sha>` at the commit **before**
   §2's (not `git stash`). Start the drive Hub from that worktree, on a fresh git fixture project
   containing `sub/hello.py`, with one agent on the default posture (no override) and a Haiku runner.
   On its **first** turn it is told the HTTP form, because there are no grounds for MCP yet.
@@ -286,6 +286,18 @@ and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010
   be **allowed**, and `stray.txt` must appear in the fixture's parent directory: it is an escape
   today (D2). If any of these does not hold, this is not a reproduction. Say so and stop. Delete the
   stray file and remove the worktree afterwards.
+  *Reproduced (night 2026-09-12, Windows, measured): worktree at `00a5569` (u1's pin commit, no
+  product diff from `c12a7d3`), Hub PID 17968 on port 8023, fresh profile `drive0913u`, project
+  `proj-7451ee4a1b89`, agent `url012022` on the default posture, Haiku.
+  `scripts/drive/t_url_is_not_a_path.py` with `AW_EXPECT=prefix` gave 14/14. Asks 1–3 were refused
+  as `'/api/v1/agent-actions/tasks'`, `'/hello.py'` and `'s://example.com/'` outside the workspace.
+  Asks 4 and 5 (exact commands, backslashes intact in the tool input) were allowed:
+  `(Bash completed with no output)`, and `stray.txt` (`hi`) and `out.txt` (`notes.md` sorted)
+  appeared. They landed in `<fixture>\.agentweave\worktrees\`, the parent of the agent's workspace,
+  because a writing agent in a git project works in its own worktree. That is outside
+  `AW_WORKSPACE_DIR`, but it is not the project root's parent. All three `permission_denied` rows
+  have `tool_name='Bash'`. No task was created. The strays were deleted, the Hub was stopped and the
+  worktree was removed. Transcripts are in `profiles/drive0913u/u6-prefix-transcripts/`.*
 - [ ] 6.2 **Fixed tree**, same fixture shape, on a fresh project and agent:
   - Ask 1 creates the task. Read `tasks`: it exists, created by the run, with no
     `permission_denied` for that call.
