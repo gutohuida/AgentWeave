@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 13,
+  "iteration": 14,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r5-mut-b",
-  "next_action": "Queue item r5-mut-b: a-refused-review-leaves-nothing-behind S4.5-4.10, the loop mutations. Follow r3's pattern (testbed/scratch/night0913/r3/mutate.py): copy to testbed/scratch/night0913/r5/, each mutation a scripted edit of hub/hub/turn_scheduler.py (utf-8, newline='', each old asserted once), run from hub/ under py -3.11 the new file + test_a_blocked_workspace_counts_where_input_could_run.py (+ test_a_blocked_agent_workspace_holds_its_input.py, test_the_evidence_names_the_author.py), restore with git checkout, git status --short empty after each. 4.5 continue after ANY non-transient refusal (loop condition: not transient instead of gave_up) -> 1.6(b) and 1.6(g) fail on their guard RuntimeError; 4.6 also continue after transient -> 1.6(c) fails on guard RuntimeError; 4.7 remove the loop -> 1.6(a),(b),(d),1.7 fail; 4.8 return last attempt's result unconditionally -> 1.6(d) fails ('queue is empty'); 4.9 with loop, restore :227's ('queued', 0) (a TEST edit, restore by git checkout) -> that test fails; 4.10 remove the counted guard -> 1.6(f) fails with M withdrawn at 3, and 1.6(g) with M queued at 2 (inferred, not run - measure it). 4.5/4.6 need the mutated loop to carry the transient flag: _Attempt has no transient field - the mutation may read result.terminal_failure (transient == not terminal_failure for refusals) or result.refusal/attempted; record which. Table under tasks 4.10 and in the log; tick 4.5-4.10. Docs-only commit 'mutate(F320)', push. Then r6-gate.",
+  "current": "r6-gate",
+  "next_action": "Queue item r6-gate: a-refused-review-leaves-nothing-behind S7. 7.1 CI lint set from the repo root: ruff check src/ hub/ tests/ ; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/ ; mypy src/. 7.2 whole Hub suite from hub/ under py -3.11 with --junitxml into testbed/scratch/night0913/r6/ (u5 took 34m39s, 4194 passed/86 skipped). It exceeds the 10-min Bash cap: run it with run_in_background and WAIT FOR IT INSIDE THIS TURN (Monitor until-loop on the junit file / process) - never end the turn with it running (DEAD-ENDS: claude -p kills background jobs 600s after turn end; u5's lost firing). Classify any F292/F314 red by signature and re-run that test in isolation. WATCH for r4's unattributed stall at test_failed_run_returns_input.py::test_giving_up_lets_the_agent_accept_new_input: if the suite hangs there, capture a signature (py-spy dump or faulthandler via -o faulthandler_timeout=120) and suspect r4's loop first. 7.3 openspec validate --strict a-refused-review-leaves-nothing-behind. 7.4 git diff 73ae6c5^.. -- hub/hub/migrations hub/ui hub/hub/mcp_server.py hub/hub/task_transition_service.py hub/hub/scheduler.py hub/hub/run_divergence.py must be empty; git diff 73ae6c5^.. -- hub/hub/api must be 2.3's comment hunk only (agent_trigger.py). Tick 7.1-7.4 with measured numbers, log, docs-only commit 'gate(a-refused-review-leaves-nothing-behind)', push. Then r7-drive-prefix (GATE: >= 75 min before stop_at 07:00).",
   "queue": [
     {
       "id": "compose",
@@ -102,9 +102,9 @@
     },
     {
       "id": "r5-mut-b",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S4.5-4.10: loop mutations",
-      "detail": "4.5 (1.6(b) and 1.6(g) fail on their guard RuntimeError), 4.6, 4.7, 4.8, 4.9, 4.10. Clean tree after every restore. Table into the log."
+      "detail": "DONE iteration 14 (docs only, plus one docstring sentence in 1.6(e)). testbed/scratch/night0913/r5/mutate.py, same 4 files as r3 (unmutated 55 passed), tree clean after each restore. 4.5 (loop condition attempted and response is None and terminal_failure) 3 failed: 1.6(b),(g) + extra 1.6(f), all RuntimeError test guard; 4.6 (attempted and response is None) 4 failed: 1.6(c) + 4.5's three, all guard; 4.7 6 failed: 1.6(a),(b),(d) call counts, 1.7 'queued'!='running', extra 1.6(g) + D6 :230 back to ('queued',0); 4.8 2 failed: 1.6(d) + extra 1.6(e), both 'queue is empty' (1.6(e) docstring said no mutation targets it - corrected); 4.9 exactly 1: D6 :230; 4.10 2: 1.6(f) M ('withdrawn',3), 1.6(g) M ('queued',2) MEASURED. Table under tasks 4.10. validate --strict valid."
     },
     {
       "id": "r6-gate",

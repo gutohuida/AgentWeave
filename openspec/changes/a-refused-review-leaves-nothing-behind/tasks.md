@@ -364,20 +364,56 @@ named test must fail. Record which test failed, then restore.
     `test_a_blocked_task_checkout_still_counts_with_nothing_waiting`, the `:227` assertion. R3's
     sixth failure came from the prototype's loop, which D6 attributes to §3, and §3 is not applied
     here. So 4.4c is exactly the five of D3.
-- [ ] 4.5 Make the loop continue after **any** non-transient refusal, not only after giving up.
+- [x] 4.5 Make the loop continue after **any** non-transient refusal, not only after giving up.
   1.6(b) and 1.6(g) must fail **on their guard `RuntimeError`** (R3). The reason R1 gave, *"because
   B is counted more than once"*, cannot be the failure once 3.1a is in place: 3.1a stops any entry
   being counted twice in a pass, so this mutation's cost is the same refusal repeated until the loop
   bound, and the guard is what catches it.
-- [ ] 4.6 Also continue after a transient refusal. 1.6(c) must fail, on its guard `RuntimeError`.
-- [ ] 4.7 Remove the loop. 1.6(a), 1.6(b), 1.6(d) and 1.7 must fail.
-- [ ] 4.8 Return the last attempt's result unconditionally. 1.6(d) must fail, because it reports
+- [x] 4.6 Also continue after a transient refusal. 1.6(c) must fail, on its guard `RuntimeError`.
+- [x] 4.7 Remove the loop. 1.6(a), 1.6(b), 1.6(d) and 1.7 must fail.
+- [x] 4.8 Return the last attempt's result unconditionally. 1.6(d) must fail, because it reports
   `"queue is empty"`.
-- [ ] 4.9 With the loop in place, restore §3.4's old expectation `("queued", 0)`. That test must
+- [x] 4.9 With the loop in place, restore §3.4's old expectation `("queued", 0)`. That test must
   fail. This confirms that D6's change is caused by the loop and by nothing else.
-- [ ] 4.10 Remove 3.1a's once-per-pass guard, keeping the loop. 1.6(f) must fail, with M
+- [x] 4.10 Remove 3.1a's once-per-pass guard, keeping the loop. 1.6(f) must fail, with M
   `withdrawn` at 3 (R2 measured exactly this against R1's prototype). 1.6(g) must fail too, with M
   `queued` at 2 instead of 1 (inferred from the prototype's counting loop, not run).
+
+  **Actual (night 2026-09-13, `r5-mut-b`, against `997ff5d`).** Each mutation was a scripted edit,
+  each `old` asserted to occur exactly once, using `testbed/scratch/night0913/r5/mutate.py`. The run
+  covered the same four files as 4.1–4.4c. Unmutated they gave **55 passed** (the 50 + 5 of §2,
+  after §3 removed the last five `xfail`s). After every mutation the edited file was restored with
+  `git checkout`, and `git status --short` was empty. **Every named test failed. No named test
+  passed.** 4.9 is itself a test edit, as its task says; no test was changed otherwise.
+
+  `_Attempt` has no transient field. So 4.5 and 4.6 widen the loop's condition using the fields it
+  does carry. A refusal is `attempted` with no `result.response`, and for a refusal
+  `result.terminal_failure == not transient`, as the refusal return in `_attempt_turn` sets it.
+  - 4.5 goes on while `attempted and result.response is None and result.terminal_failure`.
+  - 4.6 goes on while `attempted and result.response is None`.
+
+  | Mutation | Result | Failed (the named ones in bold) | Message |
+  |---|---|---|---|
+  | 4.5 continue after any non-transient refusal | 3 failed | **1.6(b) `…counted_once_when_it_is_refused_too`**, **1.6(g) `…stops_at_a_rider_refused_alone`** | `RuntimeError: test guard` |
+  | | | also 1.6(f) `…rider_is_counted_once_in_a_pass` | `RuntimeError: test guard`. Its third attempt carries M alone, refused, having given up on nothing: 1.6(g)'s shape |
+  | 4.6 continue after any refusal | 4 failed | **1.6(c) `…transient_refusal_of_the_head_ends_the_pass`**, plus 4.5's three | all `RuntimeError: test guard` |
+  | 4.7 the loop removed | 6 failed | **1.6(a)**, **1.6(b)**, **1.6(d)** | `calls` holds only the first attempt: "Right contains one more item" / "2 more items" |
+  | | | **1.7 `…route_starts_its_input_behind_a_head_given_up`** | `'queued' == 'running'`, answered *"Input queued for rr-f320-route."* |
+  | | | also 1.6(g) | its call count |
+  | | | also D6's `test_a_blocked_task_checkout_still_counts_with_nothing_waiting` | `('queued', 0) != ('queued', 1)`: without the loop, `:230` goes back to §3.4's old value |
+  | 4.8 the last attempt's result, unconditionally | 2 failed | **1.6(d) `…gives_up_on_everything_reports_the_refusal`** | `'queue is empty' == 'refused entry-…'` |
+  | | | also 1.6(e) `…lone_head_given_up_reports_its_refusal` | `'queue is empty' == 'refused entry-…'` |
+  | 4.9 `:230` back to `("queued", 0)`, loop kept | **exactly 1** failed | **D6's `…still_counts_with_nothing_waiting`** | `('queued', 1) != ('queued', 0)` |
+  | 4.10 the once-per-pass guard removed | 2 failed | **1.6(f)** | `('withdrawn', 3) == ('queued', 1)`, R2's number exactly |
+  | | | **1.6(g)** | `[('queued', 2), ('queued', 0)] == [('queued', 1), ('queued', 0)]`. This was inferred and is now **measured** |
+
+  - **4.7 and 4.9 agree on D6.** Removing the loop alone flips `:230` back to `0`. Restoring `0`
+    with the loop kept fails. So D6's change is caused by the loop and by nothing else.
+  - **4.8 and 1.6(e).** 1.6(e)'s docstring said *"no §4 mutation targets it"*. No task names it,
+    but 4.8 kills it. H alone at its limit is given up on by the first attempt, and the second
+    attempt finds the queue empty. Without 3.2's rule, the ordinary case answers *"queue is empty"*.
+    That is exactly the regression 1.6(e) is there to catch. The docstring now says so; no
+    assertion changed.
 
 ## 5. Drive it — the tests are an argument, and a drive is the product
 

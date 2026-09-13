@@ -595,8 +595,9 @@ async def test_a_pass_that_gives_up_on_everything_reports_the_refusal(app, auth_
 
 async def test_a_lone_head_given_up_reports_its_refusal(app, auth_headers):
     """1.6(e). Pin, passes today: H alone, refused at its limit. The result is the refusal and
-    `terminal_failure` is `True`. Keeps §3's result rule (3.2) from regressing the ordinary case;
-    no §4 mutation targets it."""
+    `terminal_failure` is `True`. Keeps §3's result rule (3.2) from regressing the ordinary case.
+    No §4 task names it, but 4.8 (the result rule removed) fails it too: the attempt after the
+    give-up finds the queue empty, and answers *"queue is empty"* (measured, night 2026-09-13)."""
     agent = "rr-f320-e"
     await _register(app, auth_headers, agent)
     head = await _head(agent)
