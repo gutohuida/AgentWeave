@@ -23526,6 +23526,38 @@ position in the run order is **unmeasured** — but it is a far cheaper thing to
 week of rate estimation, and it is the first lead this finding has had that points at a place rather
 than at a probability.
 
+### The 2026-09-12/13 night window: 7 of 18, every one on `BEGIN IMMEDIATE` (recorded at `w-final`)
+
+Recorded while writing the night window's closing entry, rather than re-deriving the table above.
+The method is the one above, on branch `autonomous/2026-09-12-daily`, which **does** carry the
+mitigation (`git merge-base --is-ancestor af69a27 HEAD` → yes). The window ran from `c12a7d3`
+(21:55Z) to `fa07089` (02:48Z). **18 runs completed. 7 were red, all 7 F292 and nothing else:**
+setup-time `database is locked`, `1 error`, and `[SQL: BEGIN IMMEDIATE]` in every one.
+
+| run | sha | errored at setup of |
+|---|---|---|
+| `34721761782` | `45d9de4` | `test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer` |
+| `34722726736` | `00a5569` | same |
+| `34724236621` | `5b6f393` | `…::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` |
+| `34727910846` | `39b6be3` | `…::test_a_wedged_review_is_restaffed_to_a_real_reviewer` |
+| `34728358869` | `f492261` | `test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` |
+| `34729890812` | `6ebcd9f` | `test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted` |
+| `34733956679` | `fa07089` | `test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn` |
+
+What this adds:
+
+- **7 in 18 is 38.9%, on the mitigated tree.** That is above the unmitigated window's 26.8%. With
+  the 1 in 17 above, the mitigated count is now 8 in 35. The table's reading, *"consistent with no
+  reduction at all"*, is no longer a tie. **The rate gives no support to the mitigation now.**
+- **Six of the seven shas carry no product change.** Only `6ebcd9f` touched `hub/hub/`, and its
+  successor `997ff5d` changed the same file and went green. The tree under test does not explain
+  these errors.
+- **Still the same three tests in two files**, five of the seven in
+  `test_reviewer_is_not_the_author.py`. The concentration lead above holds and is still
+  unmeasured.
+- Two runs (`1b3d52c`, `44879bb`) were in flight at the time of writing and are excluded from both
+  counts, per the method note above.
+
 
 ---
 

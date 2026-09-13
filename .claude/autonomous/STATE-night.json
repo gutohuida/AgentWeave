@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 18,
+  "iteration": 19,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "w-final",
-  "next_action": "Queue item w-final: per .claude/loops/night-window.md 'Ending the window', append the final log entry for the morning: what changed (product commits 612b9c9, 6ebcd9f, 997ff5d vs doc/test/drive commits), what was proven vs inferred (driven: F300/F312/F321/F323 on Windows, F319/F320; tested-not-driven: F331 on CI Linux; unit-only: F335), what is open (human-only S7 of a-url-is-not-a-path, S6 of a-refused-review-leaves-nothing-behind; F333/F334/F335 new; open A = F299 F301 F325 F332), decisions_for_user, what to distrust (r4's unclassified stall; the 5.4 absence check never shown to fail; the Claude Code sleep block in other drive harnesses). Both changes are archived, nothing is mid-flight. Then mark w-final done, set next_action to JSON null, commit, push.",
+  "current": null,
+  "next_action": null,
   "queue": [
     {
       "id": "compose",
@@ -132,9 +132,9 @@
     },
     {
       "id": "w-final",
-      "status": "open",
+      "status": "done",
       "title": "Final log entry for the morning, then next_action null",
-      "detail": "Per night-window.md 'Ending the window': what changed (product vs doc commits), what was proven vs inferred (driven vs tested), what is open, decisions for the operator, what to distrust. If a change is mid-flight, say exactly where so the next night resumes it. Then set next_action to null."
+      "detail": "DONE iteration 19. Final morning entry in the log (decisions, product vs doc commits, driven vs tested vs inferred, open, distrust). Both changes archived, nothing mid-flight, no Hub running, no stray worktree. CI tonight: 18 completed, 7 red, all F292 on BEGIN IMMEDIATE (recorded as a dated section in F292; classifier identical modulo offsets). Closed the 'sleep' sweep note: only t_d1_0912_f319_reach.py was affected, already fixed."
     }
   ],
   "notes_for_tomorrow": [
@@ -144,12 +144,14 @@
     "F332 (A) filed in u2-reader: on POSIX, bash's ANSI-C quoting ($'..\\x2fx') writes a traversal no reader of the command text sees; measured writing outside under WSL bash 5.2.21. No proposal. Repair sketched in the finding (decode $'...' in the lexer, own rows).",
     "Lost firing 2026-09-13 00:20-00:31: claude -p killed a backgrounded whole-suite run 600s after the turn ended ('Background tasks still running after 600s; terminating. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0'). Setting that variable in the driver's environment would remove the trap; not done - driver configuration is the operator's.",
     "a-url-is-not-a-path archived 2026-09-13 (night u8-close). Human-only S7 open: 7.1 refusal legibility in the served UI, 7.2 D5 wording vs the one observed Haiku turn (stopped, asked in prose not ask_user, named WebFetch), 7.3 N3 and /dev/null (X4) for DECISIONS.md. The PowerShell tool_name was never exercised in either drive (D10 item 5 half-unverified).",
-    "Drive harnesses that time a window with `sleep N` are broken under Claude Code 2.1.269 (standalone sleep blocked in the spawned agent). t_d1_0912_f319_reach.py now uses a committed slow_step.py. Other scripts/drive/ harnesses were not swept for the same pattern."
+    "CLOSED at w-final: the sleep sweep of scripts/drive/ found no other harness asking its agent to sleep (t_row19_crash.py had already moved off sleep 90; d1_0905_restart_hub.sh's sleep 2 runs in the driver's shell).",
+    "F292 fired 7 times in 18 completed CI runs on this branch tonight (c12a7d3..fa07089), every one at setup on [SQL: BEGIN IMMEDIATE], 6 of 7 on commits with no product change; mitigated-tree total now 8/35. Runs 1b3d52c and 44879bb and w-final's were in flight at close. The merge gate needs HEAD's own run green."
   ],
   "decisions_for_user": [
     "a-url-is-not-a-path's implementation departs from R2's reader in four places, recorded in design D11a. One closes an escape the approved design would have opened (E20-E22: a quoted '$HUB_URL' read as a reference). None widens an answer beyond D2's table. Worth a look on the next review page; no action needed unless you disagree.",
     "Two B findings came out of tonight's fixed-tree drive of a-refused-review-leaves-nothing-behind, both interactions its fix exposed and both left OUT of that change: F333 (Continue on a conversation whose review the pass just gave up says 'this conversation had nothing queued', losing the refusal) and F334 (the author guard's sentence says 'it is assigned to X ... clear the assignee' of a task nobody is assigned to, because the rollback discards the staged assignee). Both have repair sketches; whether to propose them together or fold F334 into S6.2's wording judgement is yours.",
-    "a-refused-review-leaves-nothing-behind is archived with S6 open for you: 6.1 what the UI's dispatch control shows for the 409, 6.2 whether 'queued, then a reason, then a give-up notice' is enough (now with F334's wrong assignee wording in view). F335 (D) was filed at close-out: the refused dispatch's run_divergence_resolved SSE broadcast escapes the rollback, so the live feed briefly shows a false 'resolved' line."
+    "a-refused-review-leaves-nothing-behind is archived with S6 open for you: 6.1 what the UI's dispatch control shows for the 409, 6.2 whether 'queued, then a reason, then a give-up notice' is enough (now with F334's wrong assignee wording in view). F335 (D) was filed at close-out: the refused dispatch's run_divergence_resolved SSE broadcast escapes the rollback, so the live feed briefly shows a false 'resolved' line.",
+    "F292 now reddens roughly 2 in 5 CI runs on the mitigated tree (7/18 tonight, all on BEGIN IMMEDIATE, 6 of 7 on commits with no product change) and so holds the morning merge gate shut on noise about as often. Whether to prioritise it (DIRECTION.md) is yours; evidence in F292's w-final section."
   ],
   "limits": [
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
