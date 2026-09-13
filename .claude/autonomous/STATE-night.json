@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "u5-gate",
-  "next_action": "Queue item u5-gate: a-url-is-not-a-path S8 gate. 8.1 CI lint set (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/). 8.2 whole Hub suite from hub/ (py -3.11 -m pytest tests/ -q -p no:cacheprovider), backgrounded with output to testbed/scratch/night0912/ (15-47 min); F292 (database is locked setup ERROR) and F314 (test_a_wide_flows_state_is_still_one_call) are known intermittents - re-run in isolation before attributing, write the attribution down. 8.4 git diff c12a7d3.. -- hub/hub/migrations hub/hub/api hub/ui must be empty. Tick 8.1/8.2/8.4 in tasks.md with measured notes.",
+  "current": "u6-drive-prefix",
+  "next_action": "Queue item u6-drive-prefix: a-url-is-not-a-path S6.1, the pre-fix reproduction. git worktree add ../aw-url-prefix <prefix_sha or u1's commit>. Hub from that worktree's hub/ via py -3.11 -m uvicorn, fresh profile drive0913u (AW_BOOTSTRAP_API_KEY set, aw_live_+32hex, recorded in the log), on a port shown free by netstat (never 8000/8010). Fresh git fixture project with sub/hello.py (prints 'hello from sub') and notes.md, one agent on the DEFAULT posture, Haiku runner. First turn told the HTTP form. Asks: 1 curl create-task, 2 python sub/hello.py, 3 curl -s https://example.com/, 4 echo hi > \"..\\stray.txt\" (Bash tool), 5 sort -o\"..\\out.txt\" notes.md (Bash tool). Pre-fix: 1-3 refused for filesystem reasons, 4 and 5 ALLOWED with the stray files in the fixture's parent. If any does not hold, this is not a reproduction - say so and stop. Record tool_name of every permission_denied row. Delete the stray files, stop the Hub, git worktree remove. Export AW_HUB/AW_KEY for every scripts/drive harness run. LONG WAITS: under claude -p a background job still running 600s after the turn ends is killed - wait inside the turn with foreground ~9-min poll loops (DEAD-ENDS, Unattended runs).",
   "queue": [
     {
       "id": "compose",
@@ -54,9 +54,9 @@
     },
     {
       "id": "u5-gate",
-      "status": "open",
+      "status": "done",
       "title": "a-url-is-not-a-path S8 gate: CI lint set + whole Hub suite + no migration/API/UI diff",
-      "detail": "8.1 ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/. 8.2 whole Hub suite from hub/ (py -3.11 -m pytest tests/ -q), backgrounded to testbed/scratch/night0912/ (15-47 min). F292 (database is locked setup ERROR) and F314 (test_a_wide_flows_state_is_still_one_call, event-loop lock) are known intermittents: re-run in isolation before attributing, and write the attribution down. 8.4 git diff c12a7d3.. -- hub/hub/migrations hub/hub/api hub/ui empty."
+      "detail": "DONE iteration 6. 8.1 ruff/black(py311)/mypy clean at 3fba6b2. 8.2 whole Hub suite from hub/ on Windows: 4194 passed, 86 skipped in 34m39s, exit 0; JUnit 4280 tests 0 failures 0 errors; F292/F314 did not fire. 8.4 git diff c12a7d3.. -- migrations/api/ui = 0 lines. A lost firing (00:20-00:31) had backgrounded the suite and ended its turn; claude -p killed the job after 600s (driver-night.log). Recorded in DEAD-ENDS: wait inside the turn."
     },
     {
       "id": "u6-drive-prefix",
@@ -141,7 +141,8 @@
     "Open severity-A findings with no proposal (measured by scripts/classify_findings.py at compose): F299, F301, F325. The playbook routes these to the day window. DECISIONS.md 1c/1d rests on a false python -c measurement - re-derive F301's notice before proposing it (from the 2026-09-12 review page).",
     "Classifier CONFLICT verdicts at compose: F52 (A), F292 (B). Hand-check them.",
     "CI reds on this branch today are the two known intermittents (F292 at 34711633220, F314 at 34716889283). Both are open; F314 is B, F292 is B/CONFLICT.",
-    "F332 (A) filed in u2-reader: on POSIX, bash's ANSI-C quoting ($'..\\x2fx') writes a traversal no reader of the command text sees; measured writing outside under WSL bash 5.2.21. No proposal. Repair sketched in the finding (decode $'...' in the lexer, own rows)."
+    "F332 (A) filed in u2-reader: on POSIX, bash's ANSI-C quoting ($'..\\x2fx') writes a traversal no reader of the command text sees; measured writing outside under WSL bash 5.2.21. No proposal. Repair sketched in the finding (decode $'...' in the lexer, own rows).",
+    "Lost firing 2026-09-13 00:20-00:31: claude -p killed a backgrounded whole-suite run 600s after the turn ended ('Background tasks still running after 600s; terminating. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0'). Setting that variable in the driver's environment would remove the trap; not done - driver configuration is the operator's."
   ],
   "decisions_for_user": [
     "a-url-is-not-a-path's implementation departs from R2's reader in four places, recorded in design D11a. One closes an escape the approved design would have opened (E20-E22: a quoted '$HUB_URL' read as a reference). None widens an answer beyond D2's table. Worth a look on the next review page; no action needed unless you disagree."

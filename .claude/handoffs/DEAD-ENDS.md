@@ -586,6 +586,17 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   reported "expired" after the run's own stop time — while the operator had been told progress
   would be reported. Silence read as success. Watch for **forward progress** (iteration counter or
   commit count advancing within a bound) rather than for the absence of known errors.
+- **A headless iteration that ends its turn to "wait for the monitor" kills its own background
+  job 600 s later** *(measured 2026-09-13, night window, iteration 6)*. The iteration backgrounded
+  the whole Hub suite at 00:20, armed a monitor, and ended its turn. `driver-night.log` at 00:31:52:
+  `Background tasks still running after 600s; terminating. Set
+  CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely.` The suite died at 28% with no
+  summary line, the iteration exited 0, and its uncommitted ticks were left in the tree for the
+  next firing to find. **Under `claude -p`, any job longer than ten minutes must be waited on
+  inside the turn.** Use repeated foreground waits of about 9 minutes each (a `py -3.11 -c` poll
+  loop on the output file, with the Bash tool's `timeout` at 600000), not a monitor followed by
+  the end of the turn. The other fix is to set that variable in the driver's environment. Not done:
+  that is the driver's configuration, not a night item.
 - **The morning merge gate is read at ~09:00 and will essentially always find CI mid-run**
   *(2026-09-08, found by the day window itself and confirmed here)*. `AgentWeaveArmDay` fires at
   08:55, the window composes and reads the gate within a few minutes, and the CI suite takes 15–25

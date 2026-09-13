@@ -326,15 +326,28 @@ and no `.py` under `hub/hub` or `src` newer than the process. Never 8000 or 8010
 
 ## 8. The gate
 
-- [ ] 8.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+- [x] 8.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
   --target-version py311`, `mypy src/`. Use CI's path list, not a narrower one.
-- [ ] 8.2 `py -3.11 -m pytest tests/ -q` from `hub/` (the whole Hub suite), under `py -3.11`, never
+  *Measured at 3fba6b2 (night 2026-09-12, under `py -3.11 -m`): ruff "All checks passed!",
+  black "565 files would be left unchanged", mypy "Success: no issues found in 22 source files".*
+- [x] 8.2 `py -3.11 -m pytest tests/ -q` from `hub/` (the whole Hub suite), under `py -3.11`, never
   bare `python`.
+  *Measured at 3fba6b2 (night 2026-09-13, Windows, `-p no:cacheprovider`): "4194 passed, 86
+  skipped, 261 warnings in 2079.29s (0:34:39)", exit 0. The JUnit report agrees: 4280 tests, 0
+  failures, 0 errors. Neither known intermittent fired (F292 `database is locked`, F314
+  `test_a_wide_flows_state_is_still_one_call`), so nothing needed attributing. The 30
+  `PytestUnhandledThreadExceptionWarning`s are aiosqlite's `Event loop is closed` in
+  `test_migrations.py` round trips. They are warnings, not failures, and come from no file this
+  change touches.*
 - [x] 8.3 `openspec validate --strict a-url-is-not-a-path` after every delta edit.
   *Measured at S3/S4 (night 2026-09-12): "Change 'a-url-is-not-a-path' is valid". No delta was
   edited in S2–S4; 9.4 runs it again before archiving.*
-- [ ] 8.4 No migration, no API or schema change. `git diff <base>.. -- hub/hub/migrations
+- [x] 8.4 No migration, no API or schema change. `git diff <base>.. -- hub/hub/migrations
   hub/hub/api hub/ui` is empty.
+  *Measured at 3fba6b2 with base c12a7d3 (arm(night)): 0 diff lines. The whole diff since the
+  base is `hub/hub/mcp_server.py`, `hub/tests/test_permission_approver.py`,
+  `docs/reference/permission-postures.md`, this change's design and tasks, `FINDINGS.md`,
+  `DEAD-ENDS.md`, and the night window's own log and state files.*
 
 ## 9. Close it out
 
