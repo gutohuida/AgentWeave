@@ -291,6 +291,14 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   harness commits `slow_step.py` (`time.sleep(60)`) into the fixture and says *run
   `python slow_step.py`*. A harness whose timing rests on a `sleep` instruction should also assert
   that the long step actually ran. *(Confirmed 2026-09-13, drive0913r, `run-63cea161a1d6`.)*
+- **Reading the operator's `:8000` database: guessed column names fail, so read `pragma
+  table_info` first** *(2026-09-13, cost a retry twice)*. `projects` has `working_directory`, not
+  `working_dir`. `runs` has `agent` and `started_at`, not `agent_name` and `created_at`. Open it
+  only as `sqlite3.connect("file:" + path + "?mode=ro", uri=True)` from `py -3.11`. The path is
+  `~/.agentweave/hub/data/agentweave.db`, the default profile, **not** `profiles/live`. This worked
+  while that Hub was serving, with no lock trouble. LoopEngine is `proj-03b9c6a6c37a`.
+  Transcripts are in `~/.claude/projects/C--Users-huida-Documents-projects-LoopEngine*` (25
+  directories, one per worktree, review and task checkout).
 
 ## SQLAlchemy and Hub test patterns
 
