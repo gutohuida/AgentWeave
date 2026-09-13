@@ -102,6 +102,39 @@ def test_every_spawn_reaches_console_suppression(path: Path):
     )
 
 
+def _is_conpty_spawn(node: ast.Call) -> bool:
+    """`winpty.PtyProcess.spawn(...)` — pywinpty's own `CreateProcess`, which takes no flags."""
+    func = node.func
+    return (
+        isinstance(func, ast.Attribute)
+        and func.attr == "spawn"
+        and isinstance(func.value, ast.Attribute)
+        and func.value.attr == "PtyProcess"
+    )
+
+
+def test_every_conpty_spawn_holds_a_windowless_console_first():
+    """F341: a ConPTY spawn cannot be given `CREATE_NO_WINDOW` — pywinpty makes the call — and
+    it allocates a console for a console-less parent, which Windows 11 opens as a terminal
+    window. Every such spawn must be preceded by `ensure_windowless_console()` in its scope."""
+    found = 0
+    violations = []
+    for path in _source_files():
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not _is_conpty_spawn(node):
+                continue
+            found += 1
+            if "ensure_windowless_console" not in _enclosing_function_source(tree, source, node):
+                violations.append(f"{path.name}:{node.lineno}")
+    assert found, "no winpty.PtyProcess.spawn call found — this guard is checking nothing"
+    assert not violations, (
+        f"ConPTY spawn(s) at {violations} do not call ensure_windowless_console() first -- "
+        "each one opens a Windows Terminal window from a console-less Hub."
+    )
+
+
 def test_source_files_were_actually_found():
     """A guard on the guard: an empty parametrize list would pass vacuously."""
     assert len(_source_files()) >= 10

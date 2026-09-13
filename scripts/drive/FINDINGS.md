@@ -27194,3 +27194,47 @@ depends on it.
 - For the harness side, `py -3.11 scripts/drive/t_d4_0913_f299_slow_server.py S_0 S_crash` (each a
   separate invocation) and `py -3.11 scripts/drive/t_d2_0913_f299_harness.py A_hub --env plain`.
   Read `init_agentweave` in each.
+
+## F341 (A) — every message to a Claude agent opens a Windows Terminal window, and it stays open
+
+**Status:** fixed — `ensure_windowless_console()` before every ConPTY spawn, and the CLI starts the
+Hub with `CREATE_NO_WINDOW` instead of `DETACHED_PROCESS`. Reported by the operator 2026-09-13
+from real use: *"For every new message I sent the agent it's opening a new terminal window. It
+flashes on the screen and the terminal remains open."*
+
+**Mechanism.** `_hub_native_start` launched uvicorn with `DETACHED_PROCESS`, so the Hub had no
+console. A Claude turn spawns through `PtySession.spawn` → `winpty.PtyProcess.spawn`, and
+pywinpty's ConPTY backend opens every spawn with `AllocConsole()` then
+`ShowWindow(GetConsoleWindow(), SW_HIDE)` "in case ConPTY is running in a GUI application"
+(winpty-rs `src/pty/conpty/pty_impl.rs:92-96`). With the Windows 11 default-terminal setting
+("Let Windows decide", `HKCU\Console\%%Startup` empty), `AllocConsole` hands the new console to
+Windows Terminal — `svchost` starts `OpenConsole.exe -Embedding` — and the handle `SW_HIDE` is aimed
+at is not the visible window. pywinpty `FreeConsole`s on teardown (`pty_impl.rs:694-696`), so the
+next turn is console-less again and repeats it: one window per message.
+
+**Measured on the operator's live Hub (PID 3488, port 8000), read-only.** 16 orphaned `conhost`
+children of the Hub, each paired with an `OpenConsole.exe -Embedding` created in the same second as
+one of 16 Architect runs' start times. Again at 15:18:05 on 2026-09-13: the Hub's winpty
+`OpenConsole --headless` (a turn starting) and a `svchost`-parented `-Embedding` in the same second.
+
+**Why `CREATE_NO_WINDOW` alone was not enough.** Every other spawn in `hub/hub/` already passed
+`no_console_kwargs()` (Q6, `9a51d9c`), and `subprocess_windows.py`'s docstring said the ConPTY spawn
+"already handled this". It did not: pywinpty makes that `CreateProcess` itself and takes no flags,
+and `test_no_console_flash.py` only looked for `subprocess`/`asyncio` calls.
+
+**The fix.** A console already attached makes pywinpty's `AllocConsole` fail harmlessly, and it
+then frees nothing because it frees only what it allocated. `ensure_windowless_console()` borrows
+the console of a `CREATE_NO_WINDOW` helper (`cmd.exe`, because `sys.executable` may be `pythonw`,
+for which the flag is ignored) with `AttachConsole`, and keeps it. The CLI change makes the ordinary
+launch hold one from birth; the helper covers any other launch (a bare `pythonw` uvicorn).
+
+**Driven.** A `DETACHED_PROCESS` probe running the fixed code: no console before, a windowless one
+after (38 ms, `GetConsoleWindow()` = 0), three real ConPTY spawns all returning their output, the
+console still held at the end, and **no** `-Embedding` process created during it — against the
+live Hub's same-second pairs above. Pinned by `hub/tests/test_windowless_console.py` (a real
+console-less child, Windows-only), `test_pty_runner.py` (console before spawn, every platform),
+`test_no_console_flash.py` (every `PtyProcess.spawn` scope calls it) and `test_hub_commands.py`
+(the CLI's flags).
+
+**Not yet on the operator's instance.** The live Hub loaded its Python at 2026-09-12 21:35; the fix
+reaches it on the operator's next restart. The 16 lingering windows are leftovers and can be closed.

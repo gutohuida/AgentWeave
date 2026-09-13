@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .subprocess_windows import no_console_kwargs
+from .subprocess_windows import ensure_windowless_console, no_console_kwargs
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -249,6 +249,10 @@ class PtySession:
         if IS_WINDOWS:
             import winpty
 
+            # pywinpty allocates a console for a parent that has none, and on Windows 11 that
+            # console opens a terminal window nothing closes (F341). Holding a windowless one
+            # first makes its allocation a no-op.
+            ensure_windowless_console()
             proc = winpty.PtyProcess.spawn(resolved_cmd, cwd=cwd, env=env, dimensions=dimensions)
         else:
             import ptyprocess

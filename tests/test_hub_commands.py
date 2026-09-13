@@ -511,6 +511,55 @@ class TestNativeStartProjectLifecycle:
         mock_resolve.assert_called_once_with(8000, tmp_path)
         mock_open_window.assert_called_once_with("resolved-url")
 
+    def test_windows_detached_start_gives_the_hub_a_windowless_console(self, tmp_path, monkeypatch):
+        """F341: the Hub must be started with a console that has no window, never with none.
+
+        `DETACHED_PROCESS` left it console-less, so pywinpty allocated a console on every agent
+        turn and Windows 11 handed each one to Windows Terminal — a window per message, left
+        open. `CREATE_NO_WINDOW` gives the Hub a hidden console of its own, which makes
+        pywinpty's allocation a no-op.
+        """
+        self._stub_hub_main(monkeypatch, tmp_path)
+        monkeypatch.setattr("agentweave.cli.HUB_DIR", tmp_path / "hub")
+        monkeypatch.setattr("agentweave.cli.sys.platform", "win32")
+        env_path = tmp_path / "hub" / ".env"
+        env_path.parent.mkdir(parents=True)
+        env_path.write_text("", encoding="utf-8")
+        calls = {"n": 0}
+
+        def _urlopen_side_effect(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise Exception("not running yet")
+            return self._health_response()
+
+        fake_proc = MagicMock()
+        fake_proc.pid = 4242
+        with patch(
+            "agentweave.cli.urllib.request.urlopen", side_effect=_urlopen_side_effect
+        ):  # noqa: SIM117
+            with patch("agentweave.cli._hub_pid_running", return_value=None):
+                with patch(
+                    "agentweave.cli._hub_native_scaffold", return_value=(env_path, None, False)
+                ):
+                    with patch("agentweave.cli._hub_run_migrations", return_value=True):
+                        with patch(
+                            "agentweave.cli._maybe_create_desktop_shortcut", return_value=False
+                        ):  # noqa: SIM117
+                            with patch(
+                                "agentweave.cli.subprocess.Popen", return_value=fake_proc
+                            ) as mock_popen:
+                                with patch("agentweave.cli._hub_resolve_launch_url"):
+                                    with patch("agentweave.cli._open_app_window"):
+                                        _hub_native_start(
+                                            port=8000, detach=True, app=False, cwd=None
+                                        )
+
+        flags = mock_popen.call_args.kwargs["creationflags"]
+        create_no_window, detached_process = 0x08000000, 0x00000008
+        assert flags & create_no_window, "the Hub must own a console with no window"
+        assert not flags & detached_process, "a console-less Hub reopens F341"
+
     def test_already_running_instance_still_opens_the_directory(self, tmp_path):
         """Design decision 6: whether the instance was already running or was just
         started, bare invocation opens/registers its directory the same way."""

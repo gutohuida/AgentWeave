@@ -154,6 +154,30 @@ class TestCmdShimUnwrapping:
 
 
 class TestPtySessionSpawn:
+    def test_windows_spawn_holds_a_console_before_pywinpty_can_allocate_one(self, monkeypatch):
+        """F341: pywinpty's ConPTY spawn calls `AllocConsole()` for a parent with no console,
+        and on Windows 11 that console opens a Windows Terminal window nobody closes. The
+        windowless console has to be in place *before* the spawn, which is the order pinned
+        here. Runs on every platform: pywinpty is faked, so this is a fact about our call
+        order, not about Windows."""
+        order: list[str] = []
+
+        def _spawn(*args, **kwargs):
+            order.append("spawn")
+            return MagicMock()
+
+        fake_winpty = MagicMock()
+        fake_winpty.PtyProcess.spawn.side_effect = _spawn
+        monkeypatch.setitem(sys.modules, "winpty", fake_winpty)
+        monkeypatch.setattr("hub.pty_runner.IS_WINDOWS", True)
+        monkeypatch.setattr(
+            "hub.pty_runner.ensure_windowless_console", lambda: order.append("console")
+        )
+
+        PtySession.spawn([sys.executable, "-c", "pass"])
+
+        assert order == ["console", "spawn"]
+
     @pytest.mark.skipif(not IS_WINDOWS, reason="pywinpty socket polling is Windows-only")
     def test_delayed_output_is_not_mistaken_for_eof(self):
         session = PtySession.spawn(
