@@ -22,8 +22,16 @@
 .PARAMETER DryRun
     Do everything except mutate git and register the task. Prints what it would do.
 
+.PARAMETER AsOf
+    With -DryRun only: read spec-queue/DIRECTION.md as though today were this date (yyyy-MM-dd),
+    so tomorrow's `DAY WINDOW:` line can be rehearsed tonight.
+
 .EXAMPLE
     powershell -File arm-cycle.ps1 -Window day -DryRun
+
+.EXAMPLE
+    # what tomorrow's 08:55 arm will read from DIRECTION.md
+    powershell -File arm-cycle.ps1 -Window day -DryRun -AsOf 2026-09-14
 
 .EXAMPLE
     # what the persistent Scheduled Task runs
@@ -41,7 +49,8 @@ param(
   # daily arming tasks pass neither, and a window that quietly moved would be worse than no window.
   [string] $StartAt = "",
   [string] $Until = "",
-  [switch] $DryRun
+  [switch] $DryRun,
+  [string] $AsOf = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,7 +70,7 @@ $windows = @{
     StateFile = ".claude\autonomous\STATE-day.json"
     LogFile   = ".claude\autonomous\driver-day.log"
     Playbook  = ".claude/loops/day-window.md"
-    Purpose   = "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement."
+    Purpose   = "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds')."
   }
   night = @{
     StartAt   = "23:00"
@@ -74,6 +83,44 @@ $windows = @{
   }
 }
 $w = $windows[$Window]
+
+# --- today's hours, from DIRECTION.md -----------------------------------------------------------
+# A day's hours are part of its shape, and DIRECTION.md's section for today is the operator's
+# channel for that shape (day-window.md, Iteration 1 step 5). A line `DAY WINDOW: HH:mm-HH:mm` in
+# the newest dated section moves the day window, but only when that section is dated today, so it
+# expires with the day and nobody has to remember to move it back. -StartAt/-Until still win: a
+# hand-armed catch-up run means what it says. Anything malformed is ignored loudly, not guessed at.
+if ($AsOf -and -not $DryRun) { throw "-AsOf rehearses a future arm and is only allowed with -DryRun." }
+if ($Window -eq "day" -and -not $StartAt -and -not $Until) {
+  $readAs = if ($AsOf) { $AsOf } else { (Get-Date -Format "yyyy-MM-dd") }
+  $directionPath = Join-Path $Repo "spec-queue\DIRECTION.md"
+  if (Test-Path $directionPath) {
+    $sectionDate = $null; $newest = $null; $hours = $null
+    foreach ($line in [System.IO.File]::ReadAllLines($directionPath, [System.Text.Encoding]::UTF8)) {
+      if ($line -match '^## (\d{4}-\d{2}-\d{2})\s*$') {
+        $sectionDate = $Matches[1]
+        if (-not $newest -or $sectionDate -gt $newest) { $newest = $sectionDate; $hours = $null }
+        continue
+      }
+      if ($sectionDate -and $sectionDate -eq $newest -and $line -match '^DAY WINDOW:\s*(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})\s*$') {
+        $hours = @($Matches[1], $Matches[2])
+      }
+    }
+    if ($hours -and $newest -eq $readAs) {
+      $fmt = [System.Globalization.CultureInfo]::InvariantCulture
+      $from = [datetime]::MinValue; $to = [datetime]::MinValue
+      $okFrom = [datetime]::TryParseExact($hours[0], "HH:mm", $fmt, [System.Globalization.DateTimeStyles]::None, [ref] $from)
+      $okTo   = [datetime]::TryParseExact($hours[1], "HH:mm", $fmt, [System.Globalization.DateTimeStyles]::None, [ref] $to)
+      if ($okFrom -and $okTo -and $from -lt $to) {
+        [Console]::WriteLine("[arm-$Window] DIRECTION.md ## $newest moves today's window: $($hours[0])-$($hours[1]) (standard $($w.StartAt)-$($w.Until)).")
+        $w.StartAt = $hours[0]; $w.Until = $hours[1]
+      } else {
+        [Console]::WriteLine("[arm-$Window] WARNING: DIRECTION.md ## $newest has an unusable DAY WINDOW line ($($hours -join '-')); keeping $($w.StartAt)-$($w.Until).")
+      }
+    }
+  }
+}
+
 if ($StartAt) { $w.StartAt = $StartAt }
 if ($Until)   { $w.Until   = $Until }
 
@@ -203,7 +250,7 @@ $state = [ordered]@{
     "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
     "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
     "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
     "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
   )
 }

@@ -27,6 +27,128 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ## 2026-09-14
 
+DAY WINDOW: 09:00-19:00
+
+**Rewritten 2026-09-13 ~23:30 by a RESUME session, on the operator's instruction of that night.**
+Authority: `DECISIONS.md` `### 2026-09-14 — a day that reads LoopEngine and builds what it finds`.
+**Today is a build day** (`day-window.md`, `## A day that builds`), and that row names what it
+covers. The plan this section used to hold is kept at the bottom, under *Carried*, and today only
+its fallback runs.
+
+The line above is read by `arm-cycle.ps1` at 08:55, and it is why `stop_at` reads 19:00.
+
+### The day's shape
+
+```
+09:00        iteration 1         merge gate, branch, last night, research  (steps 1-4, unchanged)
+09:00-11:00  O-1, O-2, O-3       read-only review of LoopEngine on :8000   (day-window.md, ## O)
+from O-3     I-1                 one short brief per improvement
+then         per fix: R1 R2 R3 REV IMPL DRIVE                               (## A day that builds)
+if the fixes run out: F327 R1 R2 R3, spec only
+18:15 on     D-5                 the review page, then next_action null
+```
+
+**The drain count does not apply today.** This section overrides step 6. There is no `D-1` drive
+of the night's work either. The night built nothing (below), and the F332 drive is carried.
+
+### What last night did, so iteration 1 does not re-derive it
+
+The 2026-09-13 night **built nothing and closed at 23:42** (`f509c6f`). It stopped F332's §2 before
+committing any product code, because the approved decode rule opens a Windows escape (`b1fbd5a`).
+`DECISIONS.md` carries it as `OPEN F332-rule`, which is the operator's to decide. **Do not take
+F332 up today.** No `REVISING` token has been given, and today is not an F332 day. The only product
+commit of the night is `1ebff15`, which adds tests only. The night's log reports that `aa78021`'s
+`hub-test` went red on F292 and F314 signatures, which the merge gate's one re-run covers.
+
+### O — the review: project `LoopEngine` on `:8000`, until 11:00
+
+Follow `day-window.md` `## O` in full, including its read-only rules and **cite, don't quote**.
+- **The project:** `LoopEngine`, `proj-03b9c6a6c37a`. Resolve it by name anyway, in case it moved.
+  Its directory is `C:\Users\huida\Documents\projects\LoopEngine`.
+- **The corpus, measured 2026-09-13 ~23:15:**
+  - 4 agents (Architect, dev, dev_2, tester), 134 runs, 48 tasks, 147 queue entries, 59
+    conversations, 90 messages, 15 questions, 37 evidence rows, 7 checkpoints, 1 loop, 1 job
+    (23 job runs), 5,359 `agent_outputs` rows and 3,492 `event_logs` rows;
+  - runs from 2026-09-12 20:39 to the present, and still growing while you read;
+  - transcripts in 25 directories matching `~/.claude/projects/C--Users-huida-Documents-projects-LoopEngine*`.
+- **Already filed from this project**, so O-3 extends these rather than duplicating them:
+  - F347 (a repository with no commit refuses every turn);
+  - F351 (an agent-created flow never fired; the scheduler fix is `022903f`);
+  - F352 (A, a flow starved of reviewers by holdings outside it);
+  - F353 (B, "clear the assignee" with no control that can);
+  - F354 (B, live agents spawn the working tree's `mcp_server.py`).
+
+  The operator's own sessions have been acting on this project (landing tasks, rejecting one), so
+  some recent history is theirs, not the agents'. Say which, where it matters.
+- **Split O-2 by agent** if the transcripts do not fit one firing. The Architect first: it did the
+  most coordination.
+- **O-3 starts no later than the first firing at or after 11:00**, whatever O-2 has covered.
+
+### I-1 — the improvements, briefs only
+
+One file per improvement: `openspec/explorations/2026-09-14-<slug>.md`. **Not** a change directory,
+and no `tasks.md`, so the drain count and the night never mistake it for work. Keep each to about a
+page, in this order:
+1. **What we saw.** The observation, cited by id and paraphrased.
+2. **What would change.** The behaviour the operator would get, in a paragraph.
+3. **Why it matters.** Who it helps, and what it would have changed on LoopEngine.
+4. **Rough cost.** The files and capabilities it would touch (`openspec/specs/<capability>`), and
+   whether it needs a migration, an API shape change or UI. Labelled a code-read estimate.
+5. **Risks and open questions.**
+6. **The decision, in one line.** What approving it would mean: a spec loop on a named day.
+
+All of them in one firing, split only if there are more than about eight. The review page lists them
+as decisions.
+
+### The fixes: every one, higher severity first
+
+Every fix O-3 lists, new or existing, gets its own `R1 R2 R3 REV IMPL DRIVE` in severity order.
+When two fixes would edit the same lines, they become one change, as F300 and F312 did. Choose the
+next fix so the earlier ones finish.
+
+- **The day's rules on what may be built:**
+  - No `hub/hub/mcp_server.py`, because of F354.
+  - A UI bundle only if it is compatible with the running `:8000` process.
+  - Migrations are named on the page.
+
+  A fix those rules stop is still specced, R1 to REV, and its row says why it is unbuilt.
+- **F352 is A.** If O-3 keeps it as a fix, it goes first. Its shape is not decided. If R1 finds a
+  choice that is the operator's to make, R1 writes an OPERATOR QUESTION in `proposal.md` and the
+  change stops after REV, unbuilt.
+- **F347 already has its verdict** (option a, `DECISIONS.md`, `### F347, decided 2026-09-13
+  evening`), so R1 builds toward it.
+
+### The fallback: F327's spec loop, R1 to R3 only
+
+This runs only if the fix queue is empty before the 18:15 reservation. It uses the plan below,
+*Loop 1, the drain*. It is **specced, not built**, because the build-day row does not cover F327. It
+gets an `APPROVALS.md` row with no token, as on any day.
+
+### D-5 — the review page
+
+In the playbook's order, adapted for today. After §1 (the branch and the gate) and §2 (the night):
+- **§3, the LoopEngine review.** *What happened*, in a paragraph, and the counts of fixes,
+  improvements and out-of-scope items.
+- **§4, one section per fix change:**
+  - the problem, the argument, and what R2, R3 and REV each changed;
+  - **built and driven**, with the commit and the drive's evidence, **or** specced only and why;
+  - migrations, and whether a UI bundle was committed.
+- **§4b, the improvements:** one row per brief, with its decision line.
+- **§5 and §6** as usual.
+
+End the page with **two reminders for the evening session:**
+- `DIRECTION.md` has no section for 2026-09-15 yet. The plan under *Carried* needs one.
+- `F332-rule` is still OPEN.
+
+`APPROVALS.md` `## 2026-09-14` gets one row per change the day specced and did not build, with no
+token. Built and archived changes get no row, and a line above the `---` names them.
+
+### Carried — the plan this section replaced, for 2026-09-15
+
+**Not today's instructions**, except where *The fallback* above uses its Loop 1. It is kept whole so
+the evening session can move it into a `## 2026-09-15` section. The window must not write that
+section itself, because this file is the operator's channel.
+
 Written 2026-09-13 afternoon by a DECIDE session, on the operator's decisions of that afternoon
 (`DECISIONS.md`, `### 2026-09-13 afternoon`). It replaces the order in `## 2026-09-13` below.
 **Two things changed.** The second daily loop now takes release/usability work rather than the
@@ -36,14 +158,14 @@ into one open question.
 `master` is `ab7cf72`, landed by hand at 14:25, so this window's merge gate starts from a landed
 cycle. The gate may now re-run a flaky red once (`day-window.md` step 1, condition 3).
 
-### `D-1` drives what the night built
+#### `D-1` drives what the night built
 
 Tonight (2026-09-13) is to build the **F332** change, if the session's spec loop and its Opus
 review pass before 22:55. `APPROVALS.md` `## 2026-09-13` says whether it was approved. F332 is
 POSIX-only, so follow the change's `test-guide.md` for what a Windows drive can and cannot show.
 If nothing was approved, D-1 has nothing of the night's to drive. Say so, and move on.
 
-### Loop 1, the drain: `F327` (B)
+#### Loop 1, the drain: `F327` (B)
 
 This is unchanged from `## 2026-09-13`, where it was skipped on a file collision:
 - a review that a flow or a divergence restaff staffed *before* its dispatch, and which the dispatch
@@ -55,7 +177,7 @@ This is unchanged from `## 2026-09-13`, where it was skipped on a file collision
 
 The F299 change it collided with is archived, so that collision is gone.
 
-### Loop 2, usability, only at drain count 0: `F215` (B)
+#### Loop 2, usability, only at drain count 0: `F215` (B)
 
 *"The operator's screen tells them evidence is waiting for them and gives them nothing to press."*
 This is the first item of the work-lands arc (`openspec/explorations/2026-08-30-release-roadmap.md`).
@@ -80,7 +202,7 @@ operator-plane route.
 
 **At a drain count of 1, run loop 1 only.** At 2 or more, run neither, as step 6 already says.
 
-### Before D-5, if it comes up before 15:00: the access-path exploration
+#### Before D-5, if it comes up before 15:00: the access-path exploration
 
 Write `openspec/explorations/2026-09-14-a-harness-that-blocks-mcp.md`. It frames the OPEN question
 in `DECISIONS.md` `### 2026-09-13 afternoon`: what a `claude` run should do when its harness refuses
@@ -98,7 +220,7 @@ the Hub's tool server. That question covers F299, F301, F339 and F340.
 - Exploration only: no `openspec/changes/` directory, and no spec edit.
 - If the queue reaches it at 15:00 or later, skip it and say so on the page.
 
-### The order for the days after
+#### The order for the days after
 
 ```
 1. F327    (B)  a flow-staffed review refused at dispatch      loop 1, 2026-09-14

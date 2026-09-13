@@ -628,6 +628,57 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-14 — a day that reads LoopEngine and builds what it finds
+
+**DECIDED 2026-09-13 ~23:05, by the operator, in session**, for the 2026-09-14 day window only. The
+operator's words:
+
+> *"I want to change the daily run for tomorrow. I have a project running in hub 8000. I want to
+> push the window to 11:00 and from 9 to 11 we're doing a different run. We're going to read every
+> conversation, interaction and log running on the project loopengine in the port 8000 in agentweave
+> and pick up everything that happened. All the issues and improvements that we can find. The
+> development life cicle, the interaction between agents propose the fixes and improvements. For
+> each fix then the afternoon window will do a spec loop and implement it. For each imrpovement it
+> will just generate a short specification so I can evaluate the improvement. The window will run
+> until 19 then."*
+
+- DECIDED   2026-09-14-hours  **09:00–11:00 is a read-only review of LoopEngine on `:8000`, and the
+  building half runs 11:00–19:00.** It is delivered as **one** armed day window, 09:00–19:00, whose
+  first phase is the review (`day-window.md`, `## O`) and which moves to the building half at 11:00.
+  It is not delivered as two windows, because both would own the same tree and cycle branch, and
+  the windows must never overlap (`.claude/loops/README.md`, State). Two windows would also need a
+  second arming task, which someone has to remember to remove. The hours come from a `DAY WINDOW:`
+  line in `DIRECTION.md`'s dated section, which `arm-cycle.ps1` reads and which expires with the
+  day.
+- DECIDED   2026-09-14-build  **A build day.** This is the first use of `day-window.md`'s
+  `## A day that builds`.
+  - **Each fix** the review finds is taken through R1, R2 and R3, an adversarial review (`REV`),
+    implementation and a drive, then archived by the day window. That covers new findings and
+    existing ones the review re-observes on LoopEngine. Higher severity goes first.
+  - **Each improvement** gets a short brief the operator evaluates. It is not specced into
+    `openspec/changes/`, and it is not built.
+  - **A fix that does not finish** stays specced, with no `APPROVED` row. The night builds it only if
+    the operator approves it that evening.
+- DECIDED   2026-09-14-privacy  **Cite, don't quote.** This repository is public, and the window pushes
+  every iteration. Findings and briefs cite run, entry, task and conversation ids, and paraphrase.
+  Only AgentWeave's own output is quoted verbatim. LoopEngine's code, task and conversation text, and
+  the operator's messages stay out of the repository. Credentials are always redacted. Rejected:
+  **quote freely**, and **raw notes kept outside the repository**.
+- DECIDED   2026-09-14-plan  **The LoopEngine work replaces the day's plan.** If its queue empties
+  before the review page's slot, the window continues with F327's spec loop (R1–R3 only, with no
+  build, since this row does not cover F327). Everything else in the plan it replaced is carried to
+  2026-09-15 unchanged: the F332 drive, F215's loop, and the access-path exploration. Rejected:
+  **replace with no fallback**, and **keep the F332 drive at 09:00**, which would push the review
+  later.
+- DECIDED   2026-09-14-ui  **A UI fix's bundle is committed only if it is compatible with what `:8000`
+  is running.** The bundle must be driven in a browser, and it must need nothing from Python newer
+  than the `:8000` process's start time. Otherwise the fix is specced and left for the night, pending
+  approval. Rejected: **no UI fixes by day**, and **allow every UI fix**.
+- DECIDED   2026-09-14-read  **`:8000` is read, never touched.** Its database is opened only through a
+  `mode=ro` SQLite URI. The project's files and transcripts are read, never written, and the Hub's
+  API is never called. `arm-cycle.ps1`'s `:8000` limit is narrowed from *"must never be touched"* to
+  exactly this exception, and nothing else about `:8000` changes.
+
 ### F347, decided 2026-09-13 evening — and `:8000` running this checkout is intended
 
 **DECIDED 2026-09-13 ~22:45, by the operator, in session**, on a RESUME session's recommendations.

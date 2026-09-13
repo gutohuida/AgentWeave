@@ -54,9 +54,15 @@ powershell -File .claude\loops\install-tasks.ps1             # turn the loop on
 powershell -File .claude\loops\install-tasks.ps1 -Remove     # turn it off entirely
 
 powershell -File .claude\loops\arm-cycle.ps1 -Window day -DryRun   # what tomorrow would arm onto
+powershell -File .claude\loops\arm-cycle.ps1 -Window day -DryRun -AsOf 2026-09-14   # ...reading tomorrow's DIRECTION.md
 Get-ScheduledTaskInfo -TaskName AgentWeaveArmNight | fl NextRunTime,LastRunTime,LastTaskResult
 Disable-ScheduledTask -TaskName AgentWeaveArmNight                  # pause one window
 ```
+
+**Moving one day's hours:** put `DAY WINDOW: HH:mm-HH:mm` on its own line in that day's
+`spec-queue/DIRECTION.md` section. `arm-cycle.ps1` applies it only when the newest dated section is
+dated today, so it lapses with the day and nothing has to be moved back. First used for 2026-09-14
+(09:00-19:00).
 
 Logs: `.claude/autonomous/driver-day.log` and `driver-night.log` (gitignored, per-firing), the
 tracked prose logs beside them, and `~/.claude/routines/agentweave-research/logs/`.
