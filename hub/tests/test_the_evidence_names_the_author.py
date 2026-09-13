@@ -471,13 +471,17 @@ async def test_dispatching_the_evidence_author_as_reviewer_is_refused_before_the
     provisioning is patched and must never have been called. Must fail with the §3.5 fallback
     removed.
 
-    **The holder is the assertion that carries it, measured 2026-09-12.** With §3.5 removed the
+    **The queue is the assertion that carries it, measured 2026-09-13.** With §3.5 removed the
     request is queued, the scheduler's turn is refused by the entry guard (§3.4) inside
     `trigger_agent_directly`, and F108's path answers that refusal as `403` with the guard's own
-    sentence — so the status code, the sentence and the provisioning all still pass. What fails is
-    the task: it reads back `("completed", "ev-author")`, because the scheduler commits the session
-    `enter_selected_task` wrote the assignee into (F319). The route's refusal is what keeps that
-    write from ever being staged.
+    sentence — so the status code, the sentence and the provisioning all still pass. Until
+    `a-refused-review-leaves-nothing-behind` the task failed too, reading back
+    `("completed", "ev-author")`, because the scheduler committed the session `enter_selected_task`
+    had written the assignee into (F319). The scheduler now rolls that session back before it
+    records the refusal, so the task reads back as it was, and
+    `test_a_refused_review_leaves_nothing_behind.py::test_leg_a_leaves_the_task_as_it_was_after_every_pass`
+    is the test that shows it. What still fails here without §3.5 is the queue: the request left an
+    entry behind, which the route's refusal never creates.
     """
     await _roster(app, auth_headers, bind_runner, AUTHOR, OTHER)
     async with async_session_factory() as db:
@@ -515,9 +519,12 @@ async def test_the_direct_dispatch_refuses_the_evidence_author_before_the_checko
     it must land before `prepare_review_turn`.
 
     What this does **not** show is that the staged assignee is abandoned on the product's path. It
-    reads back `None` here because this session closes without a commit; `turn_scheduler` commits
-    its session after the same refusal, and the write lands (F319, measured 2026-09-12). This test
-    asserts the ordering, not the rollback."""
+    reads back `None` here because this session closes without a commit. On the product's path
+    `turn_scheduler` used to commit its session after the same refusal, and the write landed (F319,
+    measured 2026-09-12); it now rolls the session back first, and
+    `test_a_refused_review_leaves_nothing_behind.py::test_leg_a_leaves_the_task_as_it_was_after_every_pass`
+    is the test that shows the staging no longer lands. This test asserts the ordering, not the
+    rollback."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, OTHER)
     async with async_session_factory() as db:
         _loop, task = await _f306(db, suffix="direct")

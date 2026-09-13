@@ -192,7 +192,7 @@ that must fail it.
 
 ## 2. The rollback (F319)
 
-- [ ] 2.1 In `hub/hub/turn_scheduler.py`, capture `selected_ids` and `conversation_id` immediately
+- [x] 2.1 In `hub/hub/turn_scheduler.py`, capture `selected_ids` and `conversation_id` immediately
   before the `trigger_agent_directly` call. Make `await db.rollback()` the **first** statement of
   `except TriggerAgentError`. Then:
   - re-read `selected` with `InboundQueueEntry.id.in_(selected_ids)` **and
@@ -205,20 +205,34 @@ that must fail it.
 
   Everything after that is unchanged: the `waiting_reason` write, both commits, the events, and
   `TurnRefusal` (`design.md` D1, D3).
-- [ ] 2.2 Rewrite the comment that opens the branch (today `:340-346`). It should say that the
+- [x] 2.2 Rewrite the comment that opens the branch (today `:340-346`). It should say that the
   dispatch's staging is discarded **before** anything is recorded, and why: F319. It should also say
   that the refusal's words are written after the rollback, so F97's reason for this commit still
   holds. Keep F97's paragraph and add to it. Do not replace it.
-- [ ] 2.3 Correct the comment at `hub/hub/api/v1/agent_trigger.py:788-793`. A refusal abandons the
+- [x] 2.3 Correct the comment at `hub/hub/api/v1/agent_trigger.py:788-793`. A refusal abandons the
   staging because `turn_scheduler.schedule_agent`, the one caller, rolls back before it records the
   refusal. Name this change, and name the one-caller test (§1.8). **Comment only. No code in this
   file changes.**
-- [ ] 2.4 Remove the §2 xfail markers from 1.2 to 1.5, 1.8a and 1.8b.
-- [ ] 2.5 Update the docstrings of `test_dispatching_the_evidence_author_as_reviewer_is_refused_before_the_turn`
+- [x] 2.4 Remove the §2 xfail markers from 1.2 to 1.5, 1.8a and 1.8b.
+- [x] 2.5 Update the docstrings of `test_dispatching_the_evidence_author_as_reviewer_is_refused_before_the_turn`
   (`test_the_evidence_names_the_author.py:474-480`) and
   `test_the_direct_dispatch_refuses_the_evidence_author_before_the_checkout` (`:517-520`). Each
   should stop saying the product path commits the staging, and should name §1.4 as the test that
   shows it no longer does. Change no assertions.
+
+  **Actual (night r2-rollback, 2026-09-13, Windows, `py -3.11`).** Six `@MOVES_IN_2` decorators
+  cover eight tests, because 1.2 is parametrized three ways. All six are removed, along with the
+  marker's now-unused definition. The new file gives 19 passed and 5 xfailed. The five xfails are
+  the `MOVES_IN_3` tests.
+
+  **2.5 needed one more sentence than the task names, and it was measured.** The first docstring
+  said the §3.5 test's *holder* assertion is what fails when §3.5 is removed. On the fixed tree that
+  is no longer true. It was measured in a throwaway worktree carrying this section's diff with the
+  route's `review_dispatch_refusal` call deleted. The task reads back `("completed", None)`, because
+  the rollback now discards the staged assignee. The test still fails, but at `:505`, on the queue
+  (`['entry-…'] == []`): the request left an entry behind, and the route's refusal never creates one.
+  So §3.5 is still load-bearing for that test, on a different assertion, and the docstring now says
+  which. No assertion changed.
 
 ## 3. The pass goes on (F320)
 

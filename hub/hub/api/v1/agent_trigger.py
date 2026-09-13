@@ -788,9 +788,18 @@ async def trigger_agent_directly(
         # Before `prepare_review_turn`, not after (design D10): `run-task-binding` requires that a
         # request which is going to be refused leaves no workspace behind. Free to do here because
         # `apply_transition` neither commits nor flushes -- the staffing joins this dispatch's
-        # transaction as pending state, so a refusal below (including `ReviewTurnRefused` from the
-        # provisioning that now follows) abandons it and the task is never left staffed for a
-        # review that did not happen.
+        # transaction as pending state, and a refusal below (including `ReviewTurnRefused` from
+        # the provisioning that now follows) leaves it pending, uncommitted.
+        #
+        # Pending is not abandoned, and this comment used to claim it was: this function does not
+        # roll back, and its caller used to commit the session it was handed, staging and all, so
+        # a review refused for a pruned commit left the task staffed for a review that did not
+        # happen (F319). It is abandoned because `turn_scheduler.schedule_agent` -- the one caller
+        # -- rolls the session back as the first thing it does with a `TriggerAgentError`, before
+        # it records the refusal (`a-refused-review-leaves-nothing-behind`, design D1). A second
+        # caller has to do the same, and
+        # `test_a_refused_review_leaves_nothing_behind.py::test_trigger_agent_directly_has_one_caller`
+        # fails when one appears, so that it has to be read first.
         try:
             review_task = await resolve_task_for_project(session, review_task_id, project_id)
         except TaskBindingError as exc:

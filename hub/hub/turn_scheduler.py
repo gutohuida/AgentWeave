@@ -318,16 +318,21 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
             controlling_operator.spec_document if controlling_operator is not None else None
         )
 
+        # Captured before the call because the refusal branch rolls the session back, and a
+        # rollback expires every row this function loaded (`expire_on_commit=False` does not cover
+        # it). Plain values survive; the rows are read again from these.
+        selected_ids = [entry.id for entry in selected]
+        conversation_id = conversation.id
         try:
             response = await trigger_agent_directly(
                 project_id=project_id,
                 agent=agent,
                 message=format_turn_prompt(selected),
-                conversation_id=conversation.id,
+                conversation_id=conversation_id,
                 work_dir=work_dir,
                 spec_document=spec_document,
                 session=db,
-                queue_entry_ids=[entry.id for entry in selected],
+                queue_entry_ids=selected_ids,
                 # The admitting entry's depth, not `min()` across the batch. `min()` was never a
                 # decision — it let a turn batching a hop-0 entry with a deeper one restart the
                 # count from zero, so the chain ran backwards (design D2). With the filter above,
@@ -336,6 +341,43 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                 initiator=initiator,
             )
         except TriggerAgentError as exc:
+            # Discard whatever the refused dispatch staged, **before** anything here is recorded
+            # (F319). `trigger_agent_directly` writes into this session before some of its refusals
+            # are raised: a review dispatch stages the reviewer as assignee, moves the task to
+            # `under_review` and appends the transition (and, through it, closes an open run
+            # divergence) before `prepare_review_turn` has checked out the commit. Its design says
+            # a refusal abandons that staging, and of the function alone that is true -- but the
+            # commit below used to write it for it, so a review refused for a pruned commit left
+            # the task held by a reviewer who never ran, and every other reviewer refused behind
+            # it. Rolling back the whole transaction rather than the review's rows is deliberate:
+            # it covers every refusal raised after a write, including the transient one, and the
+            # next write anyone adds above a raise site in that function without having to know
+            # about this line. This session holds nothing of its own pending at the call, so the
+            # rollback costs the scheduler nothing but its loaded rows, which are read again
+            # (`a-refused-review-leaves-nothing-behind`, design D1 and D3).
+            #
+            # `selected` is re-read by id **and** `state == "queued"`, in the order it was
+            # selected in, so input the operator withdrew while the dispatch ran is neither counted
+            # nor given up on here. That narrows F328 and does not close it: a withdrawal that
+            # waits on the dispatch's write lock commits after this read. `entries` is re-read
+            # because `other_input_would_have_run_elsewhere` reads the rows outside `selected`, and
+            # an expired row there raises `MissingGreenlet` rather than reloading.
+            await db.rollback()
+            still_queued = {
+                row.id: row
+                for row in (
+                    await db.execute(
+                        select(InboundQueueEntry).where(
+                            InboundQueueEntry.id.in_(selected_ids),
+                            InboundQueueEntry.state == "queued",
+                        )
+                    )
+                ).scalars()
+            }
+            selected = [
+                still_queued[entry_id] for entry_id in selected_ids if entry_id in still_queued
+            ]
+            entries = await queued_entries(db, project_id, agent)
             workspace_unavailable = getattr(exc, "workspace_unavailable", False)
             # Written down before the classification is even asked, because it matters in both
             # branches and for the same reason: this is the only place the refusal's own words
@@ -344,6 +386,10 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
             # unimplemented runner, a work_dir the project does not contain (F97). Recording it
             # here is what keeps the status route from having to restate each condition, and what
             # makes the *next* refusal visible without another edit.
+            #
+            # It is written *after* the rollback above, so the commit that follows records the
+            # refusal's words and nothing the refused dispatch staged -- F97's reason for this
+            # commit holds exactly as it did before F319's rollback was added in front of it.
             for entry in selected:
                 entry.waiting_reason = exc.detail
             await db.commit()
@@ -399,7 +445,7 @@ async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
                         agent=agent,
                         entries=entries,
                         selected=selected,
-                        controlling_conversation_id=conversation.id,
+                        controlling_conversation_id=conversation_id,
                         hop_budget=hop_budget,
                     )
                 )

@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 10,
+  "iteration": 11,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r2-rollback",
-  "next_action": "Queue item r2-rollback: a-refused-review-leaves-nothing-behind S2 (2.1-2.5). Read tasks.md S2 and design D1/D3 first; the reference prototype with the queued filter is testbed/scratch/r3f319/turn_scheduler.r3filter.py (a design aid, NOT the implementation - write the code and comments properly). 2.1 in hub/hub/turn_scheduler.py: capture selected_ids + conversation_id before trigger_agent_directly; `await db.rollback()` FIRST in except TriggerAgentError; re-read selected by id AND state=='queued' in captured order; re-read entries via queued_entries; use captured conversation_id wherever conversation.id was read in the branch. 2.2 rewrite the branch's opening comment (keep F97's paragraph, add F319). 2.3 comment-only at api/v1/agent_trigger.py:788-793 naming this change and the one-caller test. 2.4 remove MOVES_IN_2 from the 1.2-1.5, 1.8a, 1.8b tests in hub/tests/test_a_refused_review_leaves_nothing_behind.py (8 tests; the MOVES_IN_3 ones stay). 2.5 docstrings only in test_the_evidence_names_the_author.py:474-480 and :517-520. Run the new file (expect 19 passed, 5 xfailed = the MOVES_IN_3 ones) + baseline chunk from hub/ under py -3.11 (test_a_blocked_workspace_counts_where_input_could_run.py must stay GREEN in S2 - D6's change is S3's). ruff+black(py311) on touched files. Tick 2.1-2.5, log, commit S2 alone (green), push. Then r3-mut-a.",
+  "current": "r3-mut-a",
+  "next_action": "Queue item r3-mut-a: a-refused-review-leaves-nothing-behind S4.1-4.4c, rollback mutations against the fix(F319) commit. No test and no product code changes; each mutation is a scripted single edit to hub/hub/turn_scheduler.py (utf-8, newline='', assert the edit applies exactly once), run the named tests from hub/ under py -3.11, restore with `git checkout -- hub/hub/turn_scheduler.py`, and `git status --short` clean after every one (pattern: testbed/scratch/night0912/u4/mutate.py). 4.1 delete `await db.rollback()`: 1.2 (B0/B1/B2 leaves_the_task_as_it_was), 1.3 (does_not_stop_another_reviewer), 1.4 (leg_a_leaves...), 1.5 (leg_t_leaves...) and 1.8a (does_not_close_an_open_divergence) must fail. 4.2 move the rollback below the first `await db.commit()` of the branch: 1.2 must fail. 4.3 keep the rollback, move the waiting_reason write before it: the waiting_reason assertions of 1.2 and 1.4 must fail. 4.4 drop only the `entries = await queued_entries(...)` re-read: EXACTLY three MissingGreenlet failures in test_a_blocked_workspace_counts_where_input_could_run.py (inherited_from_the_thread, second_unbound_conversation, task_bound_entry_waiting_elsewhere); holds_the_operators_message and vanished_task_does_not_count PASS. 4.4b drop the state=='queued' filter: 1.8b (test_input_withdrawn_during_its_dispatch_is_not_counted) fails with LIMIT + queue_entry_abandoned. 4.4c read conversation.id instead of captured conversation_id in the branch: the five D3 tests fail with MissingGreenlet (record whether D6's test also fails; on HEAD it is green before S3). Record each failing test and its message in a table under tasks 4.4c and in the log; a named test that PASSES under its mutation is a finding - stop, record it, do not change the test. Tick 4.1-4.4c, commit (docs only), push. Then r4-loop.",
   "queue": [
     {
       "id": "compose",
@@ -84,9 +84,9 @@
     },
     {
       "id": "r2-rollback",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S2: the rollback (F319) - a green, coherent stopping point",
-      "detail": "2.1 hub/hub/turn_scheduler.py: capture selected_ids + conversation_id before trigger_agent_directly; await db.rollback() FIRST in except TriggerAgentError; re-read selected by id AND state=='queued' in captured order; re-read entries via queued_entries; use captured conversation_id. 2.2 rewrite the branch's opening comment (keep F97's paragraph, add). 2.3 comment-only edit at api/v1/agent_trigger.py:788-793. 2.4 remove S2 xfails (1.2-1.5, 1.8a, 1.8b). 2.5 two docstrings in test_the_evidence_names_the_author.py, no assertion changes. Commit."
+      "detail": "DONE iteration 11 (commit 'fix(F319)'). turn_scheduler.py: selected_ids + conversation_id captured before the call; await db.rollback() first in except TriggerAgentError; selected re-read by id AND state=='queued' in captured order; entries re-read via queued_entries; captured conversation_id passed to other_input_would_have_run_elsewhere. Branch-opening comment adds F319/D1/D3/F328 paragraph; F97's kept plus one sentence. agent_trigger.py:788 comment-only, names the one-caller test. 6 @MOVES_IN_2 decorators (8 tests) removed + marker def. 2.5 docstrings name test_leg_a_leaves_the_task_as_it_was_after_every_pass; MEASURED extra: on the fixed tree with section 3.5 removed, the 3.5 test fails at :505 on the queue, not the holder - docstring says so (tasks 2.5 Actual). New file 19 passed/5 xfailed (the MOVES_IN_3 ones); baseline chunk + new file + test_a_blocked_agent_workspace_holds_its_input.py: 309 passed/1 skipped/5 xfailed 1m31s; D6's test GREEN. ruff/black(py311) clean, validate --strict valid. Not driven (r7/r8)."
     },
     {
       "id": "r3-mut-a",

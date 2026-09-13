@@ -70,9 +70,6 @@ REVIEWER = "rr-reviewer"
 SECOND = "rr-second"
 WORKER = "rr-worker"
 
-MOVES_IN_2 = pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="a-refused-review-leaves-nothing-behind §2"
-)
 MOVES_IN_3 = pytest.mark.xfail(
     strict=True, raises=AssertionError, reason="a-refused-review-leaves-nothing-behind §3"
 )
@@ -302,7 +299,6 @@ async def test_a_refused_review_on_the_scheduler_path_records_the_refusal(
     assert await _runs() == []
 
 
-@MOVES_IN_2
 @pytest.mark.parametrize("leg", ["B0", "B1", "B2"])
 async def test_a_refused_review_on_the_scheduler_path_leaves_the_task_as_it_was(
     leg, app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
@@ -367,7 +363,6 @@ async def test_a_refused_review_through_the_route_is_answered_and_withdrawn(
     assert await _events("queue_entry_withdrawn", agent=REVIEWER) == 1
 
 
-@MOVES_IN_2
 async def test_a_refused_review_through_the_route_does_not_stop_another_reviewer(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):
@@ -442,7 +437,6 @@ async def test_leg_a_records_the_guards_refusal_and_gives_up_at_the_limit(
     assert await _events("queue_entry_abandoned", agent=REVIEWER) == 1
 
 
-@MOVES_IN_2
 async def test_leg_a_leaves_the_task_as_it_was_after_every_pass(app, auth_headers, bind_runner):
     """F319's leg A. Today the refused author is left holding the completed task: the assignee is
     written before the guard refuses, and the scheduler commits it. Mutation 4.1 must fail this."""
@@ -483,7 +477,6 @@ async def test_leg_t_defers_without_counting(
     assert result.refusal is None
 
 
-@MOVES_IN_2
 async def test_leg_t_leaves_the_task_as_it_was(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):
@@ -857,7 +850,6 @@ async def test_the_divergence_fixture_is_built_through_the_product(
     assert B_REFUSAL_WORDS["B1"] in (entry.waiting_reason or ""), entry.waiting_reason
 
 
-@MOVES_IN_2
 async def test_a_refused_review_does_not_close_an_open_divergence(
     app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
 ):
@@ -887,7 +879,6 @@ async def test_a_refused_review_does_not_close_an_open_divergence(
 # ---------------------------------------------------------------------------
 
 
-@MOVES_IN_2
 async def test_input_withdrawn_during_its_dispatch_is_not_counted(app, auth_headers):
     """1.8b (R3, F328, design D13). The operator withdraws the entry while its turn is being
     dispatched, and the dispatch is then refused. Today the refusal branch counts it anyway, to
