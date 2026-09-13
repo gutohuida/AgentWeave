@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 17,
+  "iteration": 18,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r9-close",
-  "next_action": "Queue item r9-close: a-refused-review-leaves-nothing-behind S8 + S9.1. Read tasks.md S8/S9 and the S5.3 Actual first; the S5 drive is DONE (r7 prefix + r8 fixed), so the close-out gate is satisfied. 8.1 F319 **Status:** 'fixed 6ebcd9f' (S2), driven fa07089's r8 (quote B1/B2/A/D9 from 5.3 Actual, r7's pre-fix repro in 5.2); 8.2 F320 separately 'fixed 997ff5d' (S3), quote leg F (M entry-304f78c1af8a delivered into run-54144cbb80c4 by the continue that withdrew H; r7's M entry-f512a2aacfcd stranded). Add a dated line to F320 pointing at F333 (the continue's answer on that same pass). 8.3 F326 open, 8.4 F327 open (APPROVALS did not bring it in - check), 8.5 file the escaped run_divergence_resolved broadcast as a new finding severity D (next free number is F335) with test 1.8a as repro (read design D8 first), 8.5a F328 stays OPEN - one dated line naming 6ebcd9f as the narrowing commit. Say 8.3/8.4/8.5a in the close-out commit message. Run py -3.11 scripts/classify_findings.py before and after: exactly F319 and F320 move OPEN->RESOLVED. 8.6 openspec validate --strict, then archive per openspec-archive-change skill (sync deltas into main specs); confirm the main 'Dispatching a review staffs the task, whichever path dispatched it' requirement is byte-identical before/after (save a copy first); openspec validate --specs --strict. 9.1 check test-guide.md against shipped behaviour - note check 4's continue notice now reads 'had nothing queued' (F333) and check 3's reason names a discarded assignee (F334); record, do not fix. S6 stays open (human-only). Tick with measured facts, log, commit 'close(F319,F320): a-refused-review-leaves-nothing-behind ...', push. Then w-final.",
+  "current": "w-final",
+  "next_action": "Queue item w-final: per .claude/loops/night-window.md 'Ending the window', append the final log entry for the morning: what changed (product commits 612b9c9, 6ebcd9f, 997ff5d vs doc/test/drive commits), what was proven vs inferred (driven: F300/F312/F321/F323 on Windows, F319/F320; tested-not-driven: F331 on CI Linux; unit-only: F335), what is open (human-only S7 of a-url-is-not-a-path, S6 of a-refused-review-leaves-nothing-behind; F333/F334/F335 new; open A = F299 F301 F325 F332), decisions_for_user, what to distrust (r4's unclassified stall; the 5.4 absence check never shown to fail; the Claude Code sleep block in other drive harnesses). Both changes are archived, nothing is mid-flight. Then mark w-final done, set next_action to JSON null, commit, push.",
   "queue": [
     {
       "id": "compose",
@@ -126,9 +126,9 @@
     },
     {
       "id": "r9-close",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S8 + S9: close out, archive",
-      "detail": "NEVER without the S5 drive. 8.1 F319 fixed, 8.2 F320 fixed, separately. 8.3 F326 open, 8.4 F327 open unless brought in (say which), 8.5 file the escaped run_divergence_resolved broadcast as severity D with 1.8a as repro, 8.5a F328 stays OPEN - one dated line naming the narrowing commit. 8.6 validate --strict, archive; the main 'Dispatching a review staffs the task, whichever path dispatched it' requirement byte-identical after sync. 9.1 test guide. S6 is human-only and stays open."
+      "detail": "DONE iteration 18. F319 'fixed 6ebcd9f' and F320 'fixed 997ff5d', each driven 1b3d52c with its own quoted 5.3 leg + r7 pre-fix outcome; F320 dated line -> F333. F326/F327 (option (a), DECISIONS F327-scope)/F328 stay open, F328 got one dated 'narrowed by 6ebcd9f, still open' paragraph. F335 (D) filed: measured at 1b3d52c by a scratch run of 1.8a's _divergence_leg (broadcasts ['run_divergence_resolved'], resolved_at None, 0 rows, task unchanged), unit level only. classify_findings before/after: exactly F319+F320 OPEN->RESOLVED, F335 new OPEN D, all else identical modulo offsets; open A = F299 F301 F325 F332 (index paragraph added). Archived as openspec/changes/archive/2026-09-13-a-refused-review-leaves-nothing-behind (49/52, S6 human-only open); both ADDED deltas appended verbatim; 'Dispatching a review staffs the task...' 6805 bytes cmp-identical; validate --specs --strict 43/43; openspec list: no active changes. test-guide 9.1: slow_step.py replaces sleep 60, F334 sentence quoted, F333 'had nothing queued' noted, F327 answered, F335 listed. APPROVALS BUILT note."
     },
     {
       "id": "w-final",
@@ -148,7 +148,8 @@
   ],
   "decisions_for_user": [
     "a-url-is-not-a-path's implementation departs from R2's reader in four places, recorded in design D11a. One closes an escape the approved design would have opened (E20-E22: a quoted '$HUB_URL' read as a reference). None widens an answer beyond D2's table. Worth a look on the next review page; no action needed unless you disagree.",
-    "Two B findings came out of tonight's fixed-tree drive of a-refused-review-leaves-nothing-behind, both interactions its fix exposed and both left OUT of that change: F333 (Continue on a conversation whose review the pass just gave up says 'this conversation had nothing queued', losing the refusal) and F334 (the author guard's sentence says 'it is assigned to X ... clear the assignee' of a task nobody is assigned to, because the rollback discards the staged assignee). Both have repair sketches; whether to propose them together or fold F334 into S6.2's wording judgement is yours."
+    "Two B findings came out of tonight's fixed-tree drive of a-refused-review-leaves-nothing-behind, both interactions its fix exposed and both left OUT of that change: F333 (Continue on a conversation whose review the pass just gave up says 'this conversation had nothing queued', losing the refusal) and F334 (the author guard's sentence says 'it is assigned to X ... clear the assignee' of a task nobody is assigned to, because the rollback discards the staged assignee). Both have repair sketches; whether to propose them together or fold F334 into S6.2's wording judgement is yours.",
+    "a-refused-review-leaves-nothing-behind is archived with S6 open for you: 6.1 what the UI's dispatch control shows for the 409, 6.2 whether 'queued, then a reason, then a give-up notice' is enough (now with F334's wrong assignee wording in view). F335 (D) was filed at close-out: the refused dispatch's run_divergence_resolved SSE broadcast escapes the rollback, so the live feed briefly shows a false 'resolved' line."
   ],
   "limits": [
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

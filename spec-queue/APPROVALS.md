@@ -139,6 +139,36 @@ lever it needs to be. The one Haiku turn stopped and asked in prose, not through
 named `WebFetch` without calling it. §7.3, N3 and `/dev/null`, to decide in `DECISIONS.md`. And D11a's four
 departures from R2's reader.
 
+**BUILT — `a-refused-review-leaves-nothing-behind`, written by the FIX window at close-out,
+2026-09-13, not by the operator.** **49 of 52 tasks are ticked** with actuals. The three left open
+are §6.1–6.3, which are human-only (see below).
+- **Commits, in the approved order.** Pin `73ae6c5`, §2 `6ebcd9f` (F319), mutations 4.1–4.4c
+  `229092e`, §3 `997ff5d` (F320), mutations 4.5–4.10 `f4bb1bb`, gate `449f706`, drives `fa07089`
+  (pre-fix) and `1b3d52c` (fixed), close-out after them. Product code is `turn_scheduler.py` and one
+  comment hunk in `agent_trigger.py`; no migration, schema, API shape or bundle change.
+- **Mutations.** Twelve, each killed by the tests its task names.
+- **Gate.** The whole Hub suite gave 4218 passed, 86 skipped, 0 failed. CI's lint set is clean.
+- **Two findings, verified as two.** `F319` carries `fixed 6ebcd9f` and `F320` `fixed 997ff5d`,
+  each with its own quoted §5.3 evidence and r7's pre-fix outcome. The pre-fix tree (worktree at
+  `73ae6c5`) reproduced all four legs; the fixed tree left every task as it was and delivered F's
+  queued-behind input in the give-up pass.
+- **Left open, as approved.** `F326`, `F327` (option (a), `DECISIONS.md` `F327-scope`) and `F328`
+  (narrowed by `6ebcd9f`, one dated line). **Filed by this change:** `F335` (D, the escaped
+  `run_divergence_resolved` broadcast, measured at unit level), and from the fixed-tree drive
+  `F333` (B, a `continue` says *"had nothing queued"*) and `F334` (B, the guard names a discarded
+  assignee).
+
+The two ADDED deltas were appended verbatim to `task-lifecycle-governance` and
+`agent-conversation-workspace`. The main requirement *"Dispatching a review staffs the task,
+whichever path dispatched it"* is byte-identical before and after (`cmp`). `validate --specs
+--strict` passes 43/43. The change is archived as
+`2026-09-13-a-refused-review-leaves-nothing-behind`.
+
+**Still yours:** §6.1, what the UI's own dispatch control shows for the `409`. §6.2, whether being
+told late (a *queued* answer, then the reason, then the give-up notice) is enough, now weighed with
+F334's wording. §6.3 is answered in `DECISIONS.md` and is listed only because it is a human task.
+And whether F333 and F334 go into one proposal.
+
 ---
 
 ## 2026-09-11

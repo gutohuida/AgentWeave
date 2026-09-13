@@ -63,7 +63,12 @@ first refusal left `critic` holding the task.
 
 This is leg A. It needs an agent to become the task's author while your request waits.
 1. Create a fresh completed task whose evidence names a commit that exists.
-2. Send `critic` a message asking it to run `sleep 60` and then record evidence for that task.
+2. Send `critic` a message asking it to run a step that takes a minute and then record evidence
+   for that task. **Not `sleep 60`:** Claude Code 2.1.269 answers a standalone `sleep` (and
+   `Start-Sleep`) with *"Blocked: standalone sleep 60"*, and Haiku then records the evidence at
+   once, so there is no window to dispatch into. Commit a `slow_step.py` that calls
+   `time.sleep(60)` and ask for `python slow_step.py`, as leg A of
+   `scripts/drive/t_d1_0912_f319_reach.py` does. Confirm the turn is still running first.
 3. **While it is still running**, dispatch a review of that task naming `critic`.
 
 **You should see** the dispatch answered as queued: nothing is refusable yet. When `critic`'s turn
@@ -71,6 +76,13 @@ ends, the queued review is refused, because `critic` is now the task's author. T
 **Completed**, and does not show `@critic`. The waiting input's reason reads *"… recorded evidence
 for this task …"*. After the third attempt, you are told the system gave up on it. Continuing the
 conversation twice gets you there quickly.
+
+**What the reason says, as shipped (F334, open).** The full sentence reads *"Cannot move task … to
+'under_review': it is assigned to 'critic', which recorded evidence for this task … Assign a
+different reviewer, or clear the assignee to review it yourself."* The task is not assigned to
+`critic`, and not to anyone: the assignment it describes was staged by the refused dispatch and
+discarded with it. The refusal is right; *"clear the assignee"* has nothing to act on. Measured
+in the 2026-09-13 drive (tasks 5.3, leg A). Weigh it in 6.2.
 
 **Judge it.** You asked for a review and were told *queued*. The only news that it will not happen
 is that reason, and then the give-up notice. Is that enough? This change does not alter it. Task
@@ -88,6 +100,13 @@ This continues from check 3, before the third attempt.
 **You should see** `critic` start a turn on your one-line message straight away, in the pass that
 gave up. You did nothing else.
 
+**What the `continue` tells you, as shipped (F333, open).** The answer names the new turn's
+conversation, and its reason says the conversation you continued *"had nothing queued"*. The UI
+renders it as *"Not started — this conversation had nothing queued. … started instead."* That is
+false: it held the review until this very pass gave it up, and the refusal is not repeated. The
+give-up notice is the only place it says so. Measured in the drive's answer (tasks 5.3, leg F);
+the UI line was read in the source, not seen.
+
 **It has gone wrong if** the message sits queued with no reason given and `critic` idle. That is
 F320.
 
@@ -101,9 +120,13 @@ F320.
   3. It names *"a review nobody is doing"* only after the input is given up.
 
   Meanwhile, sending another reviewer is refused with *"let the review in flight finish"*. This
-  change does not alter any of that unless the operator's answer to the question at the top of
-  `proposal.md` brings it in (task 6.3). R2 measured it at unit level (`design.md` D7).
+  change does not alter any of that: the operator's answer to the question at the top of
+  `proposal.md` was option (a), leaving F327 open for its own change (`DECISIONS.md`
+  `F327-scope`). R2 measured it at unit level (`design.md` D7).
 - **The review checkout directory.** A refusal raised *after* the reviewer's checkout was prepared
   can leave `.agentweave/reviews/<agent>` behind. That is F326, which is open and not fixed here.
 - **A faster answer for check 3.** The request is still answered *queued* at first. Nothing about
   when you are told has changed.
+- **The live activity feed (F335, open).** When the refused review's task had an open divergence,
+  the feed still shows *"1 open divergence on … resolved"* for a moment. It is false and a reload
+  drops it; the divergence stays open. Measured at unit level only.

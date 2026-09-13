@@ -647,27 +647,67 @@ the process. Export `AW_HUB` and `AW_KEY` before every harness run.
 
 ## 8. Close it out
 
-- [ ] 8.1 Set F319's `**Status:**` line to `fixed <sha>`, naming §2 and quoting §5.3's legs.
-- [ ] 8.2 Set F320's `**Status:**` line to `fixed <sha>`, separately, naming §3 and quoting §5.3's
+- [x] 8.1 Set F319's `**Status:**` line to `fixed <sha>`, naming §2 and quoting §5.3's legs.
+  **Actual (night r9-close, 2026-09-13).** *"fixed `6ebcd9f` by `a-refused-review-leaves-nothing-behind`
+  (tasks §2 …), driven `1b3d52c` (tasks §5.3 …)"*, quoting B1, D9, B2 and A from 5.3's Actual
+  and r7's pre-fix outcome for each from 5.2. The old status text is kept below it as history.
+- [x] 8.2 Set F320's `**Status:**` line to `fixed <sha>`, separately, naming §3 and quoting §5.3's
   leg F.
-- [ ] 8.3 F326 stays **open**. Say so in the close-out commit, so nobody reads this change as
+  **Actual (night r9-close).** *"fixed `997ff5d` … (tasks §3 …), driven `1b3d52c` (tasks §5.3, leg
+  F …)"*, quoting M `entry-304f78c1af8a` delivered into `run-54144cbb80c4` by the `continue` that
+  withdrew H, and r7's stranded M `entry-f512a2aacfcd`. A dated line points at F333, the same
+  `continue`'s wrong wording.
+- [x] 8.3 F326 stays **open**. Say so in the close-out commit, so nobody reads this change as
   closing it.
-- [ ] 8.4 F327 stays **open** unless the operator's answer brought it into this change. Say which in
+  **Actual (night r9-close).** F326's Status is untouched (`open`); the classifier still reads it
+  OPEN D. The close-out commit says so.
+- [x] 8.4 F327 stays **open** unless the operator's answer brought it into this change. Say which in
   the close-out commit.
-- [ ] 8.5 File the escaped `run_divergence_resolved` broadcast (`design.md` D8, 1.8a) as a finding,
+  **Actual (night r9-close).** It stays open. The operator's answer was option (a), *"ships as
+  scoped, and F327 stays open"* (`DECISIONS.md` `F327-scope`, `0e41a15`). F327's Status is
+  untouched; the classifier still reads it OPEN B. The close-out commit says which.
+- [x] 8.5 File the escaped `run_divergence_resolved` broadcast (`design.md` D8, 1.8a) as a finding,
   severity D, with 1.8a as its reproduction. It exists only once §2 has landed, which is why it is
   filed here and not earlier.
-- [ ] 8.5a **F328 stays open. Do not set it `fixed`.** 2.1's `state == "queued"` filter narrows it,
+  **Actual (night r9-close).** Filed as **F335 (D)**. Measured at `1b3d52c` before filing, with a
+  scratch test that runs 1.8a's own `_divergence_leg` and reads its `broadcasts`
+  (`testbed/scratch/night0913/r9/test_zz_r9_broadcast_scratch.py`, copied into `hub/tests`, run
+  once, deleted): broadcasts `['run_divergence_resolved']`, the divergence's `resolved_at` `None`,
+  0 `run_divergence_resolved` rows, the task equal to its snapshot. Not driven.
+- [x] 8.5a **F328 stays open. Do not set it `fixed`.** 2.1's `state == "queued"` filter narrows it,
   and a withdrawal that waits on a real review dispatch's write lock still lands after the re-read
   (pre-approval review, test O2 in `testbed/scratch/opusf319/test_zz_opusf319.py`). Append one
   dated line to F328's section naming the commit that narrowed it, and say in the close-out commit
   that F328 stays open.
-- [ ] 8.6 `openspec validate --strict a-refused-review-leaves-nothing-behind`, then archive with the
+  **Actual (night r9-close).** One dated paragraph, *"narrowed by `6ebcd9f`, still open"*, naming
+  1.8b as the pin and test O2 as what remains. F328's Status line is untouched (`open`).
+- [x] 8.6 `openspec validate --strict a-refused-review-leaves-nothing-behind`, then archive with the
   `openspec-archive-change` skill. After syncing, confirm that the main requirement *"Dispatching a
   review staffs the task, whichever path dispatched it"* is **byte-identical** to before. This
   change adds requirements beside it and does not modify it (`design.md` D9).
+  **Actual (night r9-close).** `validate --strict`: *valid*, exit 0, before the move. Both deltas
+  are `## ADDED` only, so the sync appended each block byte-for-byte to the end of its main spec
+  (`testbed/scratch/night0913/r9/sync.py`, which asserts neither requirement title already exists):
+  *"A refused review dispatch leaves the task as it was before the dispatch"* (8 scenarios) to
+  `task-lifecycle-governance`, and *"Giving up on queued input goes on to the input behind it"* (7)
+  to `agent-conversation-workspace`. The main requirement *"Dispatching a review staffs the task,
+  whichever path dispatched it"* was extracted to a file before and after: `cmp` reports the 6,805
+  bytes **identical**, and each main spec's whole prior content is an unchanged prefix of the new
+  one. Archived with `git mv` to `openspec/changes/archive/2026-09-13-a-refused-review-leaves-nothing-behind`.
+  `openspec validate --specs --strict`: 43 passed, 0 failed. 49 of 52 tasks ticked; §6 (6.1–6.3)
+  is human-only and stays open.
 
 ## 9. User test guide
 
-- [ ] 9.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
+- [x] 9.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
   shipped.
+  **Actual (night r9-close).** Checked against the two drives (5.2, 5.3) and the shipped
+  `turn_scheduler.py`. Four corrections, and no product change:
+  - **Check 3** asked for `sleep 60`, which Claude Code 2.1.269 blocks (r7, DEAD-ENDS). It now
+    names a committed `slow_step.py`, as the harness does.
+  - **Check 3's reason** names an assignee the rollback discarded (F334). The guide now quotes the
+    full sentence and says the task is not assigned to anyone.
+  - **Check 4's `continue` answer** reads *"had nothing queued"* (F333). The guide now says so,
+    and that the UI line was read, not seen.
+  - **F327** is answered (option (a)), and **F335** is added to *What this does not show*.
+  Recorded, not fixed: F333 and F334 are open B findings with their own repair sketches.

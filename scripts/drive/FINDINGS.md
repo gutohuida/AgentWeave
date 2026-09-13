@@ -479,6 +479,15 @@ was edited and recomputed after. The requirement was that exactly those five mov
 `RESOLVED`, and nothing else. Stripped of line offsets, the B, C, D and `?` verdict lists match
 across the two runs. The only severity-A `CONFLICT` is still `F52`.
 
+**Revised again 2026-09-13 (night window, `r9-close`): the open severity-A set is four: `F299`,
+`F301`, `F325`, `F332`.** `F319` leaves it, closed by `a-refused-review-leaves-nothing-behind`
+(fix `6ebcd9f`, driven `1b3d52c`), and `F320` (B) leaves the open B set with it (fix `997ff5d`).
+Each carries its own Status line. Under the same rule, the classifier was run before and after:
+exactly `F319` and `F320` moved from `OPEN` to `RESOLVED`, and the only new verdict is `F335`, filed
+open as D by that change's close-out. Stripped of line offsets, every other list matches. `F326`,
+`F327` and `F328` stay open, as that change said they would; so do `F333` and `F334`, which its
+drive found.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -25784,7 +25793,25 @@ and the consumer reads only `OPEN`.
 
 ## F319 (A) — a review refused on the scheduler path leaves the refused reviewer holding the task
 
-**Status:** open — raised from B to **A** 2026-09-12 (day window, D-1): both unverified legs were reached live through `POST /agent/trigger` on a correct tree, and the after-staging leg leaves a task `under_review`, held, with no turn. Filed 2026-09-12 (night window, iteration 4), measured at unit level on the tree at `40bd429`. No proposal; it wants the day window's spec loop.
+**Status:** fixed `6ebcd9f` by `a-refused-review-leaves-nothing-behind` (tasks §2: the scheduler
+rolls back the refused dispatch's transaction before it records the refusal, then re-reads its
+entries by id and `state == 'queued'`), driven `1b3d52c` (tasks §5.3; night 2026-09-13, Windows,
+Haiku, Hub from this checkout at `fa07089`, project `proj-f85df4264704`). Measured, each leg's task
+read back from the drive database: **B1** `task-18316bdb30b7` answered the same `409` as before,
+and stayed *"`("completed", None)` with 2 transitions, before and after. `revr8f` has no run"*;
+**D9** *"`revcr8f` was answered with the commit refusal, not 'already under review'"*; **B2**
+`task-6077efcaeecd` *"`409`, `("completed", None)` with 2 transitions. `revbr8f` has no run"*;
+**A** `task-bf0e7cd8ad2c` *"was `("completed", None)`, 2 transitions, after every pass"*, its entry
+`entry-0e76e7492ed3` carrying the guard's sentence at attempts 1, 2 and 3, then `withdrawn`. The
+pre-fix tree, driven the same night (§5.2, `r7q`, `proj-a9dad9b9fc33`), left B1
+`task-a6c1743d81d3` at `("under_review", "revr7q")` with a new transition row, refused a second
+reviewer with *"already under review by 'revr7q'"*, left B2 `task-4704b6fc04d7` at
+`("under_review", "revbr7q")`, and left A `task-1799a95e0375` at `("completed", "authr7q")`. What
+the fix leaves open is filed beside it: F326 (the checkout), F327 (a flow's staging, decided out of
+scope in `DECISIONS.md` `F327-scope`), F328 (narrowed, not fixed), F334 (the guard's words), and
+F335 (the escaped broadcast).
+
+Raised from B to **A** 2026-09-12 (day window, D-1): both unverified legs were reached live through `POST /agent/trigger` on a correct tree, and the after-staging leg leaves a task `under_review`, held, with no turn. Filed 2026-09-12 (night window, iteration 4), measured at unit level on the tree at `40bd429`.
 
 **Measured live, 2026-09-12 (day window, D-1).** Drive Hub on **8016**, from `hub/` with uvicorn
 from source at `50bd12e`, a fresh profile `drive0912d`, fresh fixture project `proj-e594aacf615a`
@@ -25914,7 +25941,22 @@ the dispatch began. Filed separately as **F327**, measured in
 
 ## F320 (B) — the scheduling pass that abandons a refused head returns, and the entry queued behind it is never delivered
 
-**Status:** open — filed 2026-09-12 (day window, D-1), measured live on the drive Hub (8016, `50bd12e`, profile `drive0912d`, project `proj-e594aacf615a`). No proposal.
+**Status:** fixed `997ff5d` by `a-refused-review-leaves-nothing-behind` (tasks §3: `schedule_agent`
+loops while an attempt gave up on its head, bounded by the entries queued at the pass's start, and
+counts each entry at most once per pass), driven `1b3d52c` (tasks §5.3, leg F; night 2026-09-13,
+Windows, Haiku, Hub from this checkout at `fa07089`, project `proj-f85df4264704`). Measured: *"H
+`entry-b087e9dc3dc9` was withdrawn by the 2nd `continue` at 02:54:04.493. M `entry-304f78c1af8a`
+was queued at 0 before that pass and delivered into `run-54144cbb80c4` at 02:54:04.607, by the same
+request (`started_conversation_id` = M's conversation)"*. The pre-fix tree, driven the same night
+(§5.2, `r7q`), withdrew H `entry-66a52bdb22f2` on its 2nd `continue`, which answered
+`started: false`, and left *"M `entry-f512a2aacfcd` `queued` at 0, no run"*, still so at 03:46.
+
+Filed 2026-09-12 (day window, D-1), measured live on the drive Hub (8016, `50bd12e`, profile `drive0912d`, project `proj-e594aacf615a`).
+
+**2026-09-13 (night r9-close).** The same `continue` that delivered M answered the operator
+*"this conversation had nothing queued"* of the conversation whose input its pass had just given
+up. That answer is the fix's interaction with `checkpoints.py`, filed as **F333 (B)**; F320's
+delivery is right and F333's wording is not.
 
 **How it surfaced.** Found while driving F319, and not what that drive was looking for. Leg C
 dispatched a fresh reviewer (`revca1`) to an operator-completed task; the Haiku review turn ended
@@ -26411,6 +26453,12 @@ re-read by id): the same. The prototype with the re-read filtered to `state == "
 that turn to be refused. What it costs is one false event and a wrong reason on input the operator
 already chose to drop. Nothing is lost that was wanted.
 
+**2026-09-13 (night r9-close): narrowed by `6ebcd9f`, still open.** That commit's re-read by id and
+`state == 'queued'` (`a-refused-review-leaves-nothing-behind` §2.1) stops counting a withdrawal
+that commits before the rollback, pinned by that change's test 1.8b. A withdrawal that waits on a
+review dispatch's write lock still commits after the re-read (test O2 above), so the repair named
+in the Status line is still owed.
+
 ---
 
 ## F329 (A) — a first `agentweave` start builds a database no conversation can be written to
@@ -26609,3 +26657,42 @@ human judgement this finding feeds.
 49-61 of the same output file.
 
 **Related:** F319, F70.
+
+## F335 (D) — a review refused on dispatch still broadcasts that it resolved the task's open divergence
+
+**Status:** open. Filed 2026-09-13 by the night window (r9-close of
+`a-refused-review-leaves-nothing-behind`, task 8.5), as that change's `design.md` D8 said it
+would be once §2 landed. **Measured at unit level on the fixed tree at `1b3d52c`.** Not driven.
+
+**The claim.** Entering review resolves the task's open divergences: `apply_transition` calls
+`resolve_divergences_for_task` (`run_divergence.py:66`), which stages the `resolved_at` write and
+a `run_divergence_resolved` event row, and **broadcasts** `run_divergence_resolved` over SSE at
+once (`:103`). When the dispatch is then refused, F319's fix (`6ebcd9f`) rolls the scheduler's
+transaction back, so the divergence stays open and the event row is never written. The broadcast
+has already gone. The live activity feed renders it as *"1 open divergence on T resolved"*
+(`hub/ui/src/lib/eventSummary.ts:142`). That line is false, and a reload drops it, because the
+event row it would be reloaded from was rolled back.
+
+**Measured.** A scratch test (`testbed/scratch/night0913/r9/test_zz_r9_broadcast_scratch.py`,
+copied into `hub/tests`, run once and deleted) drives 1.8a's own leg
+(`_divergence_leg` in `hub/tests/test_a_refused_review_leaves_nothing_behind.py`): a completed task
+whose run ended with an open divergence, built through `bind_run_to_task` and `evaluate_run_end`,
+then a B1-refused review through `schedule_agent`, with `sse_manager.broadcast` spied. Result:
+broadcasts `['run_divergence_resolved']`; the divergence's `resolved_at` is `None`; 0
+`run_divergence_resolved` event rows; the task equals its before-dispatch snapshot.
+
+**Why D.** It needs a completed task carrying an open divergence (a bound run that ended without
+moving its task, then the operator completing it), and a review of it refused on dispatch. What it
+costs is one false line in a live feed, gone on reload; the database, the board and every durable
+record tell the truth (test 1.8a pins that). Before F319's fix the same broadcast was true only
+because the defective staging was committed with it.
+
+**A possible repair, not proposed.** Defer the broadcast until the transaction commits — collect
+it on the session and send it after `commit()`, as the event row already is — rather than sending
+it at staging time. That is a change to `run_divergence.py`, which `a-refused-review-leaves-nothing-behind`
+kept out of its file set on purpose (its tasks 7.4).
+
+**Reproduce:** test 1.8a, `test_a_refused_review_does_not_close_an_open_divergence`, which already
+captures `broadcasts` for this record; assert `"run_divergence_resolved" in broadcasts` to see it.
+
+**Related:** F319 (the fix that made it real), F326 (the other thing a rollback cannot take back).
