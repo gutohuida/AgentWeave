@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "eac213c",
     "stop_at": "2026-09-13T17:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-13-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d6-repair",
-    "next_action": "d6-repair: read the queue item d6-repair's detail in full and do it. Candidates F328 (D) and F326 (D) per DIRECTION.md ## 2026-09-13. Before touching code, check ALL of day-window.md D-6's conditions for the candidate: no requirement in openspec/specs touched (grep the capability), no migration, no API/schema change, fully described by a finding with a reproduction. Also check the candidate's files against openspec/changes/an-absent-approver-is-not-named's blast radius (runner_commands.py, launchability.py, agent_trigger.py, runner_parsing.py, db/models.py) and say in the log whether they overlap; overlap is a reason to prefer the other candidate. If one qualifies: reproduce first, fix, add a test, mutation-check it, run the CI lint set (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/) and the touched test files under py -3.11, drive it, and set the finding's Status line to 'fixed <sha>'. If neither qualifies, or it turns out to want a spec, stop, log why, and leave it for tomorrow's loop. Then log, rewrite state (next: d7-ledger), commit and push. If the repair lands after the review page, add one dated line to the APPROVALS 2026-09-13 section and the page's section 5 saying so.",
+    "current": "d7-ledger",
+    "next_action": "d7-ledger: read the queue item d7-ledger's detail in full and do it. Reading plus local measurement only, no open web. Candidate 2 (acceptEdits path-confined on headless runs): check the four repository claims against their current text (docs/reference/permission-postures.md:33, openspec/specs/agent-capability-plane/spec.md:258-259, hub/hub/runner_commands.py:63-64, spec-queue/DECISIONS.md:772-773), reproduce Q1 once in a %TEMP% dir on Haiku and record the claude build; file as a finding plus an operator question, not a repair. Candidate 3 (harness_has_honoured_mcp positive-only and permanent, launchability.py:232-259; runner_parsing.py has no system-message branch): verify against the code, file it citing the overlap with an-absent-approver-is-not-named design D3/D9, and use R3's evidence/r3-harness-results.json as the reproduction. Each entry gets **Status:** open, a severity, file:line and a reproduction; next free id is F339 (F338 was filed by d6-repair). Do not duplicate anything the F299 rounds already filed. Then log, rewrite state (next_action null when the queue is done), commit and push.",
     "queue": [
         {
             "id": "compose",
@@ -77,9 +77,9 @@
         },
         {
             "id": "d6-repair",
-            "status": "open",
+            "status": "done",
             "title": "D-6 repair, only if the day has room: F328 or F326, if the carve-out holds",
-            "detail": "DIRECTION.md ## 2026-09-13 names F328 (D, narrowed by a-refused-review-leaves-nothing-behind and not closed) and F326 (D) as candidates. Take one only if ALL of day-window.md D-6's conditions hold: it touches no requirement in openspec/specs (grep the capability first), there is no migration and no API/schema change, and it is fully described by a finding with a reproduction. Drive it before closing, run the CI lint set (ruff check src/ hub/ tests/; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/), mutation-check any test you add, and set the finding's Status line to 'fixed <sha>'. If it turns out to want a spec, stop, log it, and leave it for tomorrow's loop. That is a good outcome."
+            "detail": "DONE iteration 8, fix a5cb384. F328 taken; F326 NOT taken (its refusals are in agent_trigger.py, which an-absent-approver-is-not-named edits; F328's turn_scheduler.py/inbound_queue.py do not overlap). Carve-out held: agent-conversation-workspace already says input withdrawn during the attempt gives up nothing (spec :2329-2334); no migration/API/schema. Reproduced O2 on 7b8a33f first; it showed the finding's named repair was half: withdraw_entry also read-then-wrote by key and its UPDATE landed after the Hub's give-up. Repair: every write taking an entry out of queued without delivering it is one UPDATE ... WHERE state='queued' (inbound_queue._withdraw_if_queued for withdraw_entry + withdraw_refused_entry, commits both branches; scheduler count/give-up conditional per entry, set_committed_value mirror). 3 tests in hub/tests/test_a_withdrawal_and_a_give_up_do_not_both_win.py, all fail on 7b8a33f; each condition's mutation and the mirror's are killed. 30 queue files 465 passed; full Hub suite 4221 passed/86 skipped; ruff/black/mypy clean. Driven (scripts/drive/t_d6_0913_f328_withdraw_race.py, real routes, 1 Haiku turn/Hub): pre-fix worktree 8025 drive0913v 3/8 inconsistent (DELETE 200 + Hub reason + both events); fixed 8024 drive0913w 0/24. Hubs stopped, worktree removed, profiles kept, no jobs. F328 Status 'fixed a5cb384'. F338 (D, read only) filed: deliver_entries_with_run's check-then-write. APPROVALS 2026-09-13 and review page s5 got one dated line each."
         },
         {
             "id": "d7-ledger",

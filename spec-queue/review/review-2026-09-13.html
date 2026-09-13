@@ -632,6 +632,13 @@
     remains is carve-out repairs that need no spec. Today's D-6 may take <code>F328</code> or
     <code>F326</code> (both <span class="sev d">D</span>) first, so either may be gone by tonight.</li>
 </ol>
+<p class="small">
+  <strong>Added 2026-09-13, after this page was written:</strong> D-6 fixed <code>F328</code> in
+  <code>a5cb384</code>. Both the operator's withdrawal and the scheduler's give-up now write only an
+  entry that is still queued. Driven: 3 of 8 samples inconsistent before, 0 of 24 after.
+  <code>F326</code> was not taken, because it shares <code>agent_trigger.py</code> with §4's change.
+  New: <code>F338</code> (<span class="sev d">D</span>, read only), delivery's own check-then-write.
+</p>
 <p>
   <strong>So an unapproved night lands no feature, <code>F299</code> stays open, and the 50 commits
   above stay off <code>master</code></strong> until a morning gate finds a green CI run.

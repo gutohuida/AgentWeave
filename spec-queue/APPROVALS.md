@@ -77,6 +77,12 @@ tonight and want no row here:
 
 `ORDER:` and `NOTHING TONIGHT` are both available.
 
+**Added 2026-09-13, after the page was written, by `d6-repair`:** `F328` (D) is fixed in `a5cb384`
+under the D-6 no-spec carve-out. Both the operator's withdrawal and the scheduler's give-up now
+write only an entry that is still queued. Driven: 3 of 8 samples inconsistent before, 0 of 24
+after. It wants no row and no token. `F326` was not taken, because it shares `agent_trigger.py`
+with the change above. `F338` (D, read only) is new: delivery's own check-then-write.
+
 ---
 
 ## 2026-09-12

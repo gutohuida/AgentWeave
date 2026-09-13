@@ -26505,7 +26505,9 @@ edge the lifecycle does not declare and leaves two transition rows.
 
 ## F328 (D) — input the operator withdraws while its turn is being dispatched is counted, given up on, and announced as dropped by the Hub
 
-**Status:** open. Filed 2026-09-12 by R3 of `a-refused-review-leaves-nothing-behind`, measured at unit level on `895aad9`. That change's task 2.1 (as R3 amended it) **narrows it and does not retire it** — corrected 2026-09-12 evening by the pre-approval Opus review. The `state == "queued"` re-read catches a withdrawal that commits before the rollback. But a review dispatch holds the database write lock while it records the reviewer, so an operator's withdrawal waits on that lock and commits *after* the re-read. Test O2 (`testbed/scratch/opusf319/test_zz_opusf319.py`, delay 0.3 s) measured the DELETE succeeding and the entry still ending `('withdrawn', 3)`, with the Hub's "delivery failed 3 times" reason and one `queue_entry_abandoned`. The result was identical on the unmodified tree. The durable repair is a counting write conditioned on `state = 'queued'`, or a re-read inside the same write transaction.
+**Status:** fixed `a5cb384` (day window `d6-repair`, 2026-09-13). Driven live, before and after: see the dated note at the end of this entry. **The repair covers both sides.** The repair the paragraph below names, a counting write conditioned on `state = 'queued'`, was half of it: the operator's withdrawal had the same check-then-write. Delivery's own check-then-write is not covered, and is filed as F338.
+
+**Original status:** open. Filed 2026-09-12 by R3 of `a-refused-review-leaves-nothing-behind`, measured at unit level on `895aad9`. That change's task 2.1 (as R3 amended it) **narrows it and does not retire it** — corrected 2026-09-12 evening by the pre-approval Opus review. The `state == "queued"` re-read catches a withdrawal that commits before the rollback. But a review dispatch holds the database write lock while it records the reviewer, so an operator's withdrawal waits on that lock and commits *after* the re-read. Test O2 (`testbed/scratch/opusf319/test_zz_opusf319.py`, delay 0.3 s) measured the DELETE succeeding and the entry still ending `('withdrawn', 3)`, with the Hub's "delivery failed 3 times" reason and one `queue_entry_abandoned`. The result was identical on the unmodified tree. The durable repair is a counting write conditioned on `state = 'queued'`, or a re-read inside the same write transaction.
 
 **The claim.** `schedule_agent` loads the entries of a turn, calls `trigger_agent_directly`, and on
 a refusal writes `waiting_reason`, counts the attempt and gives up at the limit
@@ -26533,6 +26535,57 @@ already chose to drop. Nothing is lost that was wanted.
 that commits before the rollback, pinned by that change's test 1.8b. A withdrawal that waits on a
 review dispatch's write lock still commits after the re-read (test O2 above), so the repair named
 in the Status line is still owed.
+
+**2026-09-13 (day `d6-repair`): fixed `a5cb384`.** The D-6 carve-out held. No requirement changes:
+`agent-conversation-workspace` already says a pass that finds *"every input it carried was withdrawn
+while the attempt was being made"* gave up on nothing. There is no migration and no API or schema
+change. `turn_scheduler.py` and `inbound_queue.py` are outside `an-absent-approver-is-not-named`'s
+blast radius. F326 was the other candidate and was not taken, because its three refusals are in
+`agent_trigger.py`, which that change edits.
+
+- **Both writers checked, then wrote by key, and the entry above only named one.** Test O2 re-run
+  on `7b8a33f`: delay 0.3 gave `withdrew: True`, the entry `('withdrawn', 3)`, the Hub's reason,
+  and one `queue_entry_abandoned`. That end state also arises from the *operator's* write landing
+  last. `withdraw_entry` read the row as queued before the lock, and its unconditional `UPDATE` ran
+  after the Hub's give-up had committed. So a counting write conditioned on `queued` alone would not
+  have fixed O2's interleaving. The Hub would still have won, and the `DELETE` would still have
+  said `200`.
+- **The repair: the check is the `UPDATE`'s own condition, on every writer that takes an entry out
+  of `queued` without delivering it.**
+  - `inbound_queue._withdraw_if_queued` serves `withdraw_entry` and `withdraw_refused_entry`. It
+    commits on both branches, because a rollback would expire the caller's rows, and it re-reads
+    with `populate_existing`.
+  - The scheduler's count-and-give-up is one conditional `UPDATE` per entry, in the batch's one
+    transaction. It mirrors onto the session's copy with `set_committed_value`, because a rider
+    carried by the pass's next turn has its count stated by `format_turn_prompt`.
+  - Whoever writes first wins. The loser matches no row: the `DELETE` answers `409`, or the pass
+    counts nothing.
+- **Tests.** `hub/tests/test_a_withdrawal_and_a_give_up_do_not_both_win.py` has three, and all three
+  fail on `7b8a33f`.
+  - The scheduler's side is pinned deterministically, through the awaited
+    `other_input_would_have_run_elsewhere` seam.
+  - The withdrawal's side is pinned deterministically, through a session holding a copy read as
+    queued before the give-up.
+  - The route interleaving is pinned with a flushed write holding the lock and a concurrent real
+    `DELETE`. It asserts that the answer and the record name the same winner.
+  - Mutations: dropping the scheduler's condition fails test 1. Dropping the withdrawal's condition
+    fails tests 2 and 3. Dropping the `set_committed_value` loop fails
+    `test_failed_run_returns_input.py::test_a_terminal_pre_spawn_refusal_abandons_the_entry_after_the_limit`.
+  - The 30 test files that touch the queue: 465 passed.
+- **Driven**, `scripts/drive/t_d6_0913_f328_withdraw_race.py`, real routes, no row inserts, one
+  Haiku turn per Hub. N reviews of tasks whose evidence names a pruned commit (F319's B1) are queued
+  behind the reviewer's own slow turn. At every attempt-2 head, `POST …/continue` and
+  `DELETE …/queue/entries/{head}` are fired together, at offsets 0–250 ms.
+  - **Pre-fix Hub**, a `7b8a33f` worktree on port 8025, profile `drive0913v`: **3 of 8 samples
+    inconsistent**. Each was `DELETE 200`, the entry at 3 attempts with *"delivery failed 3 times
+    (commit …"*, and **both** `queue_entry_abandoned` and `queue_entry_withdrawn` for one entry.
+  - **Fixed Hub**, port 8024, profile `drive0913w`: **0 of 24 inconsistent**, over two runs.
+    Seven samples went to the operator (`200`, 2 attempts, no reason, no abandoned event) and 17 to
+    the Hub (`409`, 3 attempts, its reason, one abandoned event). 20 of the 24 `DELETE`s overlapped
+    their pass, the longest waiting 198 ms.
+- **What the operator now sees when the Hub wins:** the `DELETE` is answered `409` *"Queue entry is
+  absent or has already been delivered/withdrawn"*, which is the route's existing sentence and now
+  true. The queue card leaves on `queue_entry_abandoned`, as before.
 
 ---
 
@@ -26886,3 +26939,37 @@ wording has a test (`hub/ui/src/__tests__/eventSummary.test.ts:30-45`).
 
 **Reproduce:** read the two lines cited above. Or trigger any Codex refusal outside a workspace and
 compare the activity line with the row's copied JSON.
+
+---
+
+## F338 (D) — delivery reads an entry as queued and then marks it delivered by key, so a withdrawal that lands in between is answered 200 and delivered anyway
+
+**Status:** open. Filed 2026-09-13 by the day window's `d6-repair`, while fixing F328. **Read from
+the source. Not measured, and not driven.**
+
+**The claim.** F328's repair makes every write that takes an entry out of `queued` *without
+delivering it* one conditional statement (`inbound_queue._withdraw_if_queued`, and the scheduler's
+counting write). Delivery was left as it was. `deliver_entries_with_run`
+(`hub/hub/inbound_queue.py:125-162`) selects the entries `state == 'queued'`, then sets `delivered`
+on those objects, which the commit writes by primary key. An operator's
+`DELETE …/queue/entries/{id}` whose `UPDATE` commits after that select and before that commit
+matches its row, is answered `200`, and has its `withdrawn` overwritten by `delivered`. The run
+starts with input the operator was told they withdrew.
+
+**Why it may not reach, and what is not established.** SQLite takes the write lock at a write, not
+at a read. For a **review** dispatch, the session already wrote the reviewer's staging in the same
+transaction, so the select runs under the lock and the window is closed. For a **plain** turn,
+nothing ahead of the select is written, as far as `agent_trigger.py:1190-1241` shows. There,
+`bind_run_to_task` and `record_response_run` stage writes only for a bound or delegated run. So the
+select would run outside a write transaction. What has not been checked is whether an autoflush
+before the select closes the window anyway. The window is also narrow: between two statements on
+one connection, with no `await` of anything else in between.
+
+**Why D.** It needs the operator to withdraw input within milliseconds of its delivery. A run then
+does what the operator had asked it to do in the first place.
+
+**A possible repair, not proposed.** The same shape as F328's. Deliver with
+`UPDATE … WHERE id IN (…) AND state = 'queued'` and compare the matched count with the ids. Or take
+the write lock first (write the `Run` row) and read after it. Measure first. F328's drive
+(`scripts/drive/t_d6_0913_f328_withdraw_race.py`) is the pattern, with a plain turn in place of a
+refused review.
