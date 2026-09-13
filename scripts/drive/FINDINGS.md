@@ -26716,6 +26716,27 @@ which cleans up after itself.
 
 **Related:** F331 (the same class of POSIX-only escape), F323.
 
+**R1 note (2026-09-13, spec loop, proposed `a-quote-can-spell-a-slash`).** Reproduced and mapped
+the class by measurement. `ansic.sh` under WSL (bash 5.2.21): `echo hi > $'..\x2fansic_stray.txt'`
+from `/tmp/ansic/ws` exited 0 and wrote `/tmp/ansic/ansic_stray.txt` in the parent. `_decide`
+called directly under WSL Ubuntu (Python 3.12.3) returns `allow`. The full class, measured with
+`testbed/scratch/r1f332/forms.sh` (bash truth) and `reader_forms.py` (today's reader, both
+platforms): the ANSI-C separator decodings — `\x2f` hex, `\057` octal, the 4- and 8-hex unicode
+escapes, the fully-spelled `$'\x2e\x2e\x2f…'`, the split-quote and adjacent forms, and the same in
+`tee`/`cp` argument position — all write outside and are all allowed on POSIX today; a literal-`$`
+spelling (`$'\x24HUB_URL\x2f..\x2f..\x2fx'`, the ANSI-C analog of E20–E22) is likewise allowed. On
+**Windows** every one is already refused today (the literal `\` the reader keeps is a separator
+there, so with the `$` it trips rule 3, for the false reason *cannot be checked*) — so this escape
+is **POSIX-only**, exactly as F331 was. Measured *not* escaping: `$"…"` locale strings (write a
+literal-backslash name inside the workspace), brace expansion (cannot both produce and hide a
+separator), tilde and glob (already accounted for). **No new escaping form found beyond the ANSI-C
+class; no new finding filed.** The repair (lexer decodes `$'…'` as bash does, produced literal `$`
+becomes the sentinel, bash dialect only) was prototyped (`testbed/scratch/r1f332/prototype.py`) and
+flips all ten POSIX rows to refused while keeping inside ANSI-C paths and `$"…"` allowed; it also
+corrects a Windows over-refusal of an inside ANSI-C path (`cat $'sub\x2fhello.py'`). POSIX evidence
+route is CI's Linux `hub-test` (strict XFAIL→PASS) plus WSL, per the change's design D4; the night
+drive is Windows and cannot show the flip. R2 and R3 to follow.
+
 ## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
 
 **Status:** open. **Rendered 2026-09-13 by the day window's `d1-drive`**, in Chromium against the

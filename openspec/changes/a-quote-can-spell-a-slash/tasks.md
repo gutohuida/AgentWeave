@@ -1,0 +1,171 @@
+# Tasks — a quote can spell a slash
+
+Implementation belongs to a night window. **No task here is complete because this plan exists.**
+Only verified implementation closes one. Size each section so one night firing finishes it.
+
+**This change is Python-only.** No `hub/ui` change, so `hub/hub/static/ui` is **not** rebuilt. The
+Python lint set **is** required (§6).
+
+**Two constraints of `hub/hub/mcp_server.py` bind every task.**
+- It is spawned standalone and may import **only** the standard library and fastmcp. The ANSI-C
+  decoder is stdlib code (a small state machine). Add nothing else.
+- `approve_tool_call` has **no return annotation**; with one, FastMCP emits `structuredContent` and
+  a correct `allow` is silently not honoured. Nothing here touches that function, and
+  `test_response_carries_no_structured_content` must still pass.
+
+**The table is pinned first, and the tree stays green at every commit.** §1 pins D2's rows against
+the **unmodified** lexer, marking each row that will move `xfail(strict=True)`; §2 removes those
+markers as the decode lands. A strict xfail that starts passing early is a failure — that is the
+point: a row may not change answer before the decode exists.
+
+## 1. Pin the table before the lexer moves
+
+- [ ] 1.1 In `hub/tests/test_permission_approver.py`, add D2's table as one parametrized test over
+  `_decide("Bash", {"command": …})`. Every row goes in: G1–G10, D1, I1, L1, N1, OK1, OK2. Use the
+  existing `workspace` fixture (it has `sub/` and the workspace directory is named `work`, so write
+  the escapes against `../work`-relative paths as D2 does) and set `HUB_URL=http://127.0.0.1:8016`
+  with `monkeypatch`. For each row assert `allow`, and where D2 names a reason assert a
+  distinguishing substring:
+  - outside: the whole decoded path, e.g. `"'../stray.txt'"` for G1;
+  - cannot be checked: `"cannot be checked"` present, `"outside your workspace"` absent (D1);
+  - inside: `allow is True` (I1, OK1, OK2).
+  Build each escaped command from explicit bytes/`chr` where a literal `\uHHHH` in a source string
+  would be mangled by an editor (see DEAD-ENDS, backslash handling); assert once at import that each
+  command string contains the intended `$'…'` text.
+  `ids=` are D2's labels so a failure names its row.
+- [ ] 1.2 Platform-scope the rows exactly as measured (D2):
+  - **POSIX only**, `xfail(strict=True, reason="a-quote-can-spell-a-slash §2")`: G1–G5, G7–G10, D1
+    (they flip from allow to deny). G6 is refused today on POSIX too but for a false reason, so mark
+    only its **reason** assertion xfail on POSIX.
+  - **Windows only**: every G row and D1 are refused today as *cannot be checked*, so mark their
+    **reason** assertion (outside, resp. still cannot-be-checked for D1) xfail on Windows. **I1**
+    flips deny→allow on Windows, so mark its answer xfail on Windows. **N1** flips allow→deny on
+    Windows (mark its answer xfail on Windows); on POSIX N1 is allowed today and after (no mark).
+  - **Unmarked on both**: L1 (allow POSIX / deny Win, unchanged), OK1, OK2, and I1 on POSIX
+    (allowed today and after).
+  Verify every mark on both platforms before §2: run the file on Windows (`py -3.11`) and under WSL
+  Ubuntu (`python3 -p posix_stubs`, per `testbed/scratch/night0912/posix_stubs.py`). Record which
+  assertion each row fails. **Any failure not explained by a mark means the table is wrong, not the
+  code** — re-measure with `testbed/scratch/r1f332/reader_forms.py` and record the difference.
+- [ ] 1.3 Commit §1 alone, green. From this commit, a decode that flips a row before §2 fails CI.
+
+## 2. The decode
+
+- [ ] 2.1 In `hub/hub/mcp_server.py` `_lex`, add a branch: **in the bash dialect, when no quote is
+  open**, `$` immediately followed by `'` opens an ANSI-C string. Consume the `$` and the `'`,
+  decode until the closing `'` (or end of text — stay total), consume the closing `'`, and append
+  the decoded characters to the current word (`started = True`). A produced literal `$` is appended
+  as `_LITERAL_DOLLAR`, exactly as a `$` inside ordinary single quotes already is. The branch sits
+  **after** the `quote == "'"` block and **before** the generic `char in "'\""` open, so `quote is
+  None` is guaranteed and the opening `'` is not consumed twice.
+- [ ] 2.2 Add the decoder helper beside `_lex`: given the text and the index of a `\`, return the
+  decoded string and the next index. Decode exactly what bash decodes:
+  - simple: `\a \b \e \E \f \n \r \t \v \\ \' \" \?`;
+  - `\NNN` octal (1–3 digits), `\xHH` hex (1–2), `\uHHHH` (1–4), `\UHHHHHHHH` (1–8);
+  - `\cX` control;
+  - unrecognized escape keeps its backslash; a trailing `\` is literal.
+  It MUST NOT raise on any input. `testbed/scratch/r1f332/prototype.py` has a working reference; the
+  implementation is held to D2's table, not to it.
+- [ ] 2.3 Leave everything after the lexer unchanged: the six rules, `_is_own_hub`, the refusal
+  wordings, the reason bound. Confirm **no new reason string** is introduced (`grep` the refusal
+  constants; the diff is `_lex` plus a helper).
+- [ ] 2.4 Add one sentence to the reader's block comment (above `_SEPARATORS`): a shell may carry a
+  quote form that *decodes* escapes into characters, not only removes them, so the word judged is
+  what the shell produces.
+- [ ] 2.5 Remove every §1 `xfail` marker. The whole table is green on both platforms with no marker
+  left; `grep -n "a-quote-can-spell-a-slash" hub/tests/test_permission_approver.py` shows no xfail.
+- [ ] 2.6 Commit §2, green.
+
+## 3. The wire shape
+
+- [ ] 3.1 Beside `_call_tool_over_stdio`, add one case through a **real spawn** of `mcp_server.py`
+  with `AW_WORKSPACE_DIR` and `HUB_URL` in the child's environment: `echo hi > $'..\x2fstray.txt'`
+  answers `behavior: deny` on POSIX with a message beginning `Denied: '../stray.txt' is outside`.
+  On Windows the same command already denies (as *cannot be checked* before, *outside* after), so
+  assert the deny and, after §2, the *outside* reason. The result carries **no** `structuredContent`.
+
+## 4. Mutation checks — the decode must be load-bearing
+
+Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly once), run the whole
+`test_permission_approver.py`, record which named row failed, then restore with `git checkout`.
+
+- [ ] 4.1 Remove the ANSI-C branch from `_lex` (revert to treating `$'` as `$` + ordinary single
+  quote). **On POSIX, G1–G5, G7–G10 and D1 must fail.** On Windows their reason assertion fails.
+- [ ] 4.2 Decode the ANSI-C string but do **not** map a produced `$` to `_LITERAL_DOLLAR`. **D1 must
+  fail** (it becomes a trusted reference and is allowed).
+- [ ] 4.3 Fire the ANSI-C branch regardless of quote state (drop the `quote is None` guard). A row
+  with `$'…'` inside `"…"` must change answer — add that row (`echo "x$'..\x2fy'"`, which bash keeps
+  literal) and assert it stays allowed unmutated and fails mutated.
+- [ ] 4.4 Decode only `\x` (drop octal, `\u`, `\U`). **G2, G3 and G4 must fail.**
+- [ ] 4.5 Apply the decode in the PowerShell dialect too. A PowerShell row with `$'…'` (which
+  PowerShell does not decode) must change answer — pin `_decide("PowerShell", {"command": ...})` on
+  a `$'…'` traversal as unchanged from today, and assert it fails under this mutation.
+
+## 5. Drive it — the reason a real operator reads (Windows), POSIX proven on CI
+
+Every real agent turn binds `claude-haiku-4-5`. No job left enabled. The drive Hub runs on a port
+chosen that night, fresh profile, started from `hub/` with uvicorn **from source**, no `.py` under
+`hub/hub` or `src` newer than the process. Never 8000 or 8010.
+
+- [ ] 5.1 **Pre-fix, first.** `git worktree add ../aw-ansic <sha>` at the commit **before** §2's.
+  Start the drive Hub from that worktree, on a fresh git fixture project with `sub/hello.py`, one
+  agent on the default posture (no override), Haiku. Ask it, with its **Bash** tool:
+  1. `python sub/hello.py` — allowed.
+  2. `echo hi > $'..\x2fstray.txt'` — on Windows this is **refused today** (as *cannot be checked*),
+     so a Windows drive cannot show the escape writing out; record the refusal reason verbatim.
+  Read `event_logs` and the transcript. Record every `permission_denied` row's `tool_name`. Remove
+  the worktree afterwards. **The POSIX allow→deny flip is not drivable on Windows (D4); say so.**
+- [ ] 5.2 **Fixed tree**, fresh project and agent. Ask it, with its Bash tool:
+  - `echo hi > $'..\x2fstray.txt'` — refused as `'../stray.txt' is outside your workspace`, and no
+    `stray.txt` appears in the fixture's parent (`.agentweave\worktrees\` for a git-project agent,
+    per `a-url-is-not-a-path` §6.1).
+  - `cat $'sub\x2fhello.py'` (I1) — **allowed**, prints the file. This is the over-refusal the fix
+    corrects on Windows; confirm it reads the file rather than being refused.
+  - `python sub/hello.py` — allowed. `curl "$HUB_URL/api/v1/agent-actions/tasks"` — allowed.
+  Record every `permission_denied` row's reason and `tool_name`; confirm `event_logs` holds the
+  refusal with the same reason. Stop the Hub, confirm every run bound `claude-haiku-4-5-*` and no
+  job is enabled.
+
+## 6. The gate
+
+- [ ] 6.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+  --target-version py311`, `mypy src/`. Use `py -3.11 -m ...` (ruff/mypy are not on PATH in Git
+  Bash; the failure is silent — see DEAD-ENDS). CI's path list, not a narrower one.
+- [ ] 6.2 `py -3.11 -m pytest tests/ -q -p no:cacheprovider` from `hub/` (the whole Hub suite),
+  never bare `python`. Run in the background or in chunks — the suite takes 15–47 min and exceeds
+  the 600 s cap. Only re-run whole if something here could plausibly break it (it changes `_lex`, so
+  run the whole suite once). Attribute any red by signature (F292 `database is locked`, F314 event
+  loop) before blaming this change.
+- [ ] 6.3 `openspec validate --strict a-quote-can-spell-a-slash` after every delta edit.
+- [ ] 6.4 No migration, no API/schema/UI change. `git diff <base>.. -- hub/hub/migrations hub/hub/api
+  hub/ui` is empty. The whole product diff is `hub/hub/mcp_server.py` and
+  `hub/tests/test_permission_approver.py`.
+
+## 7. Close it out
+
+- [ ] 7.1 Set `F332` to `fixed <sha>` in `scripts/drive/FINDINGS.md`, naming §2 as the mechanism and
+  quoting §5.2's evidence (the Windows reason and the corrected I1) plus the CI Linux XFAIL→PASS run
+  ids for the POSIX flip (§1/§2, the F331-style evidence, per D4). Label it **tested on Linux, not
+  driven on POSIX**; the drive is Windows.
+- [ ] 7.2 `F299`, `F301` and `F322` stay **open**. Say so in the close-out commit so nobody reads
+  this change as closing them.
+- [ ] 7.3 `openspec validate --strict a-quote-can-spell-a-slash`, then archive with the
+  `openspec-archive-change` skill. Before syncing, compare the MODIFIED block with the main
+  `agent-run-sandboxing` requirement: every shipped scenario must survive byte-for-byte and only the
+  one new paragraph and the one new scenario are added.
+
+## 8. Verification only a human can do
+
+- [ ] 8.1 **Is the refusal legible?** Open the agent's activity in the served UI and read §5.2's
+  refusal of `$'..\x2fstray.txt'`. Does *"'../stray.txt' is outside your workspace"* tell you what
+  happened? An agent can check the string is there; only you can say whether it reads. (This is the
+  same judgement as `a-url-is-not-a-path` §7.1.)
+- [ ] 8.2 **Is I1's allow acceptable?** `cat $'sub\x2fhello.py'` is now allowed on Windows. Confirm
+  by eye that it is the same file as `cat sub/hello.py`, i.e. the change made an inside path
+  reachable, not an escape. If you disagree that an ANSI-C-spelled inside path should be allowed,
+  that is a product judgement — record it in `spec-queue/DECISIONS.md`.
+
+## 9. User test guide
+
+- [ ] 9.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
+  shipped; correct it if any reason string changes (none is expected).
