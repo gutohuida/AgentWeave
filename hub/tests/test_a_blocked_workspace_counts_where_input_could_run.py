@@ -213,6 +213,9 @@ async def test_a_blocked_task_checkout_still_counts_with_nothing_waiting(app, au
 
     The two refusals are one line apart in `agent_trigger.py` and were one sentence before phase 2
     split them. This is the test that fails if a later edit re-merges them.
+
+    The pass that gives up on the head now attempts the entry behind it, and the mock refuses that
+    one too, so it is counted once (`a-refused-review-leaves-nothing-behind`, design D6).
     """
     agent = "f188-task-arm"
     await _register(app, auth_headers, agent)
@@ -224,7 +227,7 @@ async def test_a_blocked_task_checkout_still_counts_with_nothing_waiting(app, au
 
     await _schedule_to_the_limit(agent, BLOCKED_TASK_CHECKOUT)
 
-    assert await _rows(agent) == [("withdrawn", DELIVERY_ATTEMPT_LIMIT), ("queued", 0)]
+    assert await _rows(agent) == [("withdrawn", DELIVERY_ATTEMPT_LIMIT), ("queued", 1)]
 
 
 @pytest.mark.asyncio

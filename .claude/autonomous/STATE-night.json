@@ -8,7 +8,7 @@
   "parent_branch": "master",
   "parent_sha": "eac213c",
   "stop_at": "2026-09-13T07:00:00+01:00",
-  "iteration": 12,
+  "iteration": 13,
   "log_file": ".claude/autonomous/2026-09-12-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
@@ -19,8 +19,8 @@
   "prefix_sha": "c12a7d3",
   "prefix_sha_note": "c12a7d3 (arm(night)) carries the same product Python as every commit before u2-reader's and r2-rollback's: compose and the two pin commits add tests only. Either change's pre-fix drive may run its Hub from a worktree at c12a7d3, or at its own pin commit (tasks say 'the commit before S2'); record which in the log.",
   "baseline_chunk": "From hub/: py -3.11 -m pytest -q -p no:cacheprovider tests/test_permission_approver.py tests/test_a_blocked_workspace_counts_where_input_could_run.py tests/test_a_delivery_attempt_means_a_delivery.py tests/test_the_evidence_names_the_author.py tests/test_reviewer_is_not_the_author.py tests/test_review_turn.py tests/test_failed_run_returns_input.py tests/test_a_flow_names_what_it_cannot_staff.py  -- measured GREEN at compose on c12a7d3: 153 passed, 1 skipped, 1m48s.",
-  "current": "r4-loop",
-  "next_action": "Queue item r4-loop: a-refused-review-leaves-nothing-behind S3 (F320), the pass goes on. Read tasks 3.1-3.5 and design D4/D5/D6 first. 3.1 schedule_agent's body becomes _attempt_turn(db, project_id, agent) returning a frozen dataclass (result, attempted, gave_up, nothing_queued); schedule_agent loops, bounded at len(initial queued)+1 with D4's argument in a comment, continuing ONLY after an attempt that gave up on something and was not transient. 3.1a a once-per-pass counted-id set so no entry is counted twice in one pass. 3.2 the pass's result rule keyed on nothing_queued, not on the 'queue is empty' string. 3.3 comment rewrites. 3.4 the ONLY existing assertion that changes: test_a_blocked_workspace_counts_where_input_could_run.py:227 (test_a_blocked_task_checkout_still_counts_with_nothing_waiting) -> [('withdrawn', LIMIT), ('queued', 1)]; a second failing existing assertion means STOP and record it in design D6 before changing it. 3.5 remove the MOVES_IN_3 xfail markers (5 tests: 1.6 a/b/d/g and 1.7) and the marker def. Verify: the new file all green (24 passed); baseline chunk + new file + test_a_blocked_agent_workspace_holds_its_input.py green; ruff/black(py311) clean; validate --strict. Commit 'fix(F320)', push. Then r5-mut-b.",
+  "current": "r5-mut-b",
+  "next_action": "Queue item r5-mut-b: a-refused-review-leaves-nothing-behind S4.5-4.10, the loop mutations. Follow r3's pattern (testbed/scratch/night0913/r3/mutate.py): copy to testbed/scratch/night0913/r5/, each mutation a scripted edit of hub/hub/turn_scheduler.py (utf-8, newline='', each old asserted once), run from hub/ under py -3.11 the new file + test_a_blocked_workspace_counts_where_input_could_run.py (+ test_a_blocked_agent_workspace_holds_its_input.py, test_the_evidence_names_the_author.py), restore with git checkout, git status --short empty after each. 4.5 continue after ANY non-transient refusal (loop condition: not transient instead of gave_up) -> 1.6(b) and 1.6(g) fail on their guard RuntimeError; 4.6 also continue after transient -> 1.6(c) fails on guard RuntimeError; 4.7 remove the loop -> 1.6(a),(b),(d),1.7 fail; 4.8 return last attempt's result unconditionally -> 1.6(d) fails ('queue is empty'); 4.9 with loop, restore :227's ('queued', 0) (a TEST edit, restore by git checkout) -> that test fails; 4.10 remove the counted guard -> 1.6(f) fails with M withdrawn at 3, and 1.6(g) with M queued at 2 (inferred, not run - measure it). 4.5/4.6 need the mutated loop to carry the transient flag: _Attempt has no transient field - the mutation may read result.terminal_failure (transient == not terminal_failure for refusals) or result.refusal/attempted; record which. Table under tasks 4.10 and in the log; tick 4.5-4.10. Docs-only commit 'mutate(F320)', push. Then r6-gate.",
   "queue": [
     {
       "id": "compose",
@@ -96,9 +96,9 @@
     },
     {
       "id": "r4-loop",
-      "status": "open",
+      "status": "done",
       "title": "a-refused-review-leaves-nothing-behind S3: the pass goes on (F320)",
-      "detail": "3.1 _attempt_turn returning a frozen dataclass (result, attempted, gave_up, nothing_queued); loop bounded at len(initial queued)+1 with D4's argument in a comment. 3.1a once-per-pass counted-id set. 3.2 result rule keyed on nothing_queued, not the string. 3.3 comment rewrites. 3.4 the ONLY existing assertion that changes: test_a_blocked_workspace_counts_where_input_could_run.py:227 -> [('withdrawn', LIMIT), ('queued', 1)]; a second failing existing assertion means stop and record in design D6. 3.5 remove S3 xfails. Commit."
+      "detail": "DONE iteration 13 (commit 'fix(F320)'). turn_scheduler.py: _attempt_turn(db, project_id, agent, counted) -> frozen _Attempt(result, attempted, gave_up, nothing_queued); schedule_agent loops while gave_up, bound len(queued at pass start)+1 with D4's argument as comment; 3.1a counted set (skip after the waiting_reason write); 3.2 result rule on nothing_queued; 3.3 comments (re-drain named, not line-cited: it is :2431-2460 now). 3.4 :227 -> ('queued',1) + docstring; 3.5 five @MOVES_IN_3 + def removed. New file 24 passed; baseline chunk + new file + blocked_agent_workspace: 314 passed/1 skipped (81.7s, 78.3s). FIRST run of that set STALLED at test 253 test_failed_run_returns_input::test_giving_up_lets_the_agent_accept_new_input (killed 10m16s, no traceback); file alone 8/8 green, set 2/2 green after. Loop cannot repeat there by reading (no TriggerAgentError; gave_up empty); shape matches F292 hang mode; NOT classified. Watch it in r6's whole suite. ruff/black clean, validate --strict valid. Not driven."
     },
     {
       "id": "r5-mut-b",

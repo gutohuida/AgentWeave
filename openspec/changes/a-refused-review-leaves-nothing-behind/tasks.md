@@ -236,7 +236,7 @@ that must fail it.
 
 ## 3. The pass goes on (F320)
 
-- [ ] 3.1 Split `schedule_agent`'s body into one attempt, `_attempt_turn(db, project_id, agent)`. It
+- [x] 3.1 Split `schedule_agent`'s body into one attempt, `_attempt_turn(db, project_id, agent)`. It
   returns a small frozen dataclass with four fields:
   - `result`, the `ScheduleResult`;
   - `attempted`, whether `trigger_agent_directly` was called;
@@ -246,25 +246,60 @@ that must fail it.
   `schedule_agent` keeps the lock and the session and loops. It stops unless `gave_up` is
   non-empty. Bound the loop at `len(initial queued entries) + 1` attempts, counted once when the
   pass begins, and state D4's argument that the bound is never reached in the comment beside it.
-- [ ] 3.1a **Count each entry at most once per pass (R2, `design.md` D4).** `schedule_agent` holds a
+- [x] 3.1a **Count each entry at most once per pass (R2, `design.md` D4).** `schedule_agent` holds a
   set of the entry ids counted in this pass and hands it to every attempt. The counting loop skips
   an entry already in the set: it still gets the refusal's words as its `waiting_reason`, and it is
   neither counted nor given up on again. So an attempt can give up only on entries it counted, and
   one pass raises an entry's `delivery_attempts` by at most one, which is what a single pass does
   today. The comment names F114 and the measured rider case. 1.6(f) must still pass.
-- [ ] 3.2 The result rule of D5, keyed on `nothing_queued`, **not** on the string
+- [x] 3.2 The result rule of D5, keyed on `nothing_queued`, **not** on the string
   `"queue is empty"`. Where the last attempt has `nothing_queued` and an earlier attempt gave up,
   return that earlier attempt's result.
-- [ ] 3.3 Rewrite the comment at `:493-497` (*"the next tick tries again"*). No tick exists. A
+- [x] 3.3 Rewrite the comment at `:493-497` (*"the next tick tries again"*). No tick exists. A
   transient refusal waits for the run-end re-drain (`agent_trigger.py:2422-2451`) or an operator
   action. At the abandonment paragraph (`:407-413`), add that the pass then goes on to the input
   behind, and why: F320.
-- [ ] 3.4 `hub/tests/test_a_blocked_workspace_counts_where_input_could_run.py:227`: change the
+- [x] 3.4 `hub/tests/test_a_blocked_workspace_counts_where_input_could_run.py:227`: change the
   expectation to `[("withdrawn", DELIVERY_ATTEMPT_LIMIT), ("queued", 1)]`. Add one sentence to its
   docstring: the pass that gives up on the head now attempts the entry behind it, and the mock
   refuses that one too (`design.md` D6). **This is the only existing assertion that changes.** If a
   second one fails, stop and record it in `design.md` D6 before changing it.
-- [ ] 3.5 Remove the §3 xfail markers from 1.6 and 1.7.
+- [x] 3.5 Remove the §3 xfail markers from 1.6 and 1.7.
+
+  **Actual (night r4-loop, 2026-09-13, Windows, `py -3.11`).**
+  - **3.1.** `_attempt_turn(db, project_id, agent, counted)` returns `_Attempt(result, attempted,
+    gave_up, nothing_queued)`, a frozen dataclass. `schedule_agent` keeps the lock and the session,
+    reads `len(queued_entries(...)) + 1` once when the pass begins, and repeats only while the last
+    attempt's `gave_up` is non-empty. D4's argument that the bound is never reached is the comment
+    beside it. The signature has a fourth parameter the task's text does not name, because 3.1a
+    hands the set to every attempt.
+  - **3.1a.** The counting loop skips an id already in `counted`, after the `waiting_reason` write,
+    so a skipped entry keeps the refusal's words and is neither counted nor given up on again. The
+    comment names F114 and R2's measured `[H1, M]`, `[M, H6]`, `[M]` rider. 1.6(f) passes.
+  - **3.2.** `schedule_agent` returns the last attempt's result, unless that attempt has
+    `nothing_queued` and an earlier attempt gave up. Then it returns the result of the last attempt
+    that gave up. The rule never compares the string.
+  - **3.3.** The line numbers the task cites had drifted to `:539-543` and `:453-459` after §2. The
+    transient paragraph now says the pass ends and that there is no tick. It names the run-end
+    re-drain in `agent_trigger` (F90) by name, not by line: that block is at `:2431-2460` today,
+    not `:2422-2451`. The abandonment paragraph gains the F320 paragraph.
+  - **3.4.** `:227` now expects `[("withdrawn", LIMIT), ("queued", 1)]`, and its docstring has D6's
+    sentence. No second existing assertion failed in the ten files below. The whole suite is §7.2.
+  - **3.5.** The five `@MOVES_IN_3` decorators and the marker definition are removed.
+
+  Measured:
+  - The new file: 24 passed.
+  - The baseline chunk, plus the new file and `test_a_blocked_agent_workspace_holds_its_input.py`:
+    **314 passed, 1 skipped, in 81.7s and then 78.3s.** That is 309 + the 5 flipped.
+  - The first run of that set **stalled**. It was killed after 10m16s at test 253,
+    `test_failed_run_returns_input.py::test_giving_up_lets_the_agent_accept_new_input`, with no
+    traceback. That file then passed 8 of 8 alone (about 9s each), and the whole set passed twice.
+  - By reading, the loop cannot repeat in that test. It never raises `TriggerAgentError`: its
+    failures happen in the background run, so `gave_up` stays empty. What it sees of this change is
+    one extra `SELECT` per pass. The shape matches F292's unbounded-hang mode, a background
+    `_execute_run` and a dead aiosqlite worker, but without a signature that is not classified.
+    §7.2 is where it would show again.
+  - ruff and black (py311) are clean. `validate --strict` is valid.
 
 ## 4. Mutation checks — every line must be load-bearing
 

@@ -70,10 +70,6 @@ REVIEWER = "rr-reviewer"
 SECOND = "rr-second"
 WORKER = "rr-worker"
 
-MOVES_IN_3 = pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="a-refused-review-leaves-nothing-behind §3"
-)
-
 #: The words that tell B0, B1 and B2's refusals apart (`review_turn.py`, `worktrees.py`).
 B_REFUSAL_WORDS = {
     "B0": "not a git repository",
@@ -514,7 +510,6 @@ async def _head(agent):
     return await _queue_review(agent, "task-nope", attempts=DELIVERY_ATTEMPT_LIMIT - 1)
 
 
-@MOVES_IN_3
 async def test_the_pass_that_gives_up_on_its_head_delivers_the_entry_behind(app, auth_headers):
     """1.6(a). F320: H is given up on, and B, waiting in another conversation, starts in the same
     pass. Today the pass ends after H. Mutation 4.7 (no loop) must fail this."""
@@ -536,7 +531,6 @@ async def test_the_pass_that_gives_up_on_its_head_delivers_the_entry_behind(app,
     assert result.response is not None and result.response.run_id == "run-rr-fake"
 
 
-@MOVES_IN_3
 async def test_the_entry_behind_is_counted_once_when_it_is_refused_too(app, auth_headers):
     """1.6(b). The pass goes on to B, B is refused as well, and B is counted once — not three
     times in one pass (F114). Mutation 4.5 (continue after any refusal) must fail this on its guard
@@ -578,7 +572,6 @@ async def test_a_transient_refusal_of_the_head_ends_the_pass(app, auth_headers):
     assert (row.state, row.delivery_attempts) == ("queued", DELIVERY_ATTEMPT_LIMIT - 1)
 
 
-@MOVES_IN_3
 async def test_a_pass_that_gives_up_on_everything_reports_the_refusal(app, auth_headers):
     """1.6(d). Three heads at `LIMIT - 1` in three conversations, all refused: three calls, all
     three given up, and the pass reports the refusal that emptied the queue, not *"queue is
@@ -660,7 +653,6 @@ async def test_a_rider_is_counted_once_in_a_pass(app, auth_headers):
     assert (row.state, row.delivery_attempts) == ("queued", 1)
 
 
-@MOVES_IN_3
 async def test_the_pass_stops_at_a_rider_refused_alone(app, auth_headers):
     """1.6(g) (R3, design D13). H1 and M in C1, N in C2. The pass gives up on H1, then carries M
     alone; M is refused, counts nothing (it was counted in this pass) and gives up on nothing, so
@@ -695,7 +687,6 @@ async def test_the_pass_stops_at_a_rider_refused_alone(app, auth_headers):
 # ---------------------------------------------------------------------------
 
 
-@MOVES_IN_3
 async def test_the_route_starts_its_input_behind_a_head_given_up(app, auth_headers):
     """1.7. H waits at `LIMIT - 1`; the operator sends a plain message, which opens a new
     conversation. The pass gives up on H and starts the operator's turn, and the answer says so.

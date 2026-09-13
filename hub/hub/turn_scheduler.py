@@ -249,318 +249,403 @@ def _tasks_this_entry_is_about(
     return named
 
 
+@dataclass(frozen=True)
+class _Attempt:
+    """What one attempt of a pass did, for `schedule_agent` to decide whether the pass goes on.
+
+    `gave_up` is the only field the loop reads to go on: it names the entries this attempt set
+    `withdrawn`, and giving up is the one outcome that changes what the next attempt would select.
+    `nothing_queued` is set by the empty-queue return and nothing else, so the result rule is keyed
+    on the fact rather than on the words `"queue is empty"`. `attempted` says whether
+    `trigger_agent_directly` was called at all, which an early return never does.
+    """
+
+    result: ScheduleResult
+    attempted: bool = False
+    gave_up: Tuple[str, ...] = ()
+    nothing_queued: bool = False
+
+
 async def schedule_agent(project_id: str, agent: str) -> ScheduleResult:
-    """Start at most one turn for *agent*; leave work durable when it cannot start."""
+    """Start at most one turn for *agent*; leave work durable when it cannot start.
+
+    A pass is one attempt, repeated **only after an attempt that gave up on queued input** (F320).
+    Giving up is the one outcome that changes what the next attempt would select -- the head has
+    left the queue -- so the input behind it is attempted in the same pass instead of waiting for a
+    re-drain nothing schedules. Every other outcome ends the pass: a started turn; a transient or
+    agent-wide refusal, which counts nothing and would repeat identically; a refusal that counted
+    and gave up on nothing, whose repetition would spend an entry's whole allowance in one pass
+    (F114); and every early return, which has nothing to try
+    (`a-refused-review-leaves-nothing-behind`, design D4).
+    """
+    async with _lock_for(project_id, agent), async_session_factory() as db:
+        # The bound is a backstop, and the argument is that it is never reached. A repetition
+        # follows only a give-up, and an entry is given up on when its count reaches
+        # `DELIVERY_ATTEMPT_LIMIT`, so it had at least `LIMIT - 1` attempts before this pass. Input
+        # that arrives during the pass has 0, and only `return_run_entries` raises a count, which
+        # needs a run of this agent to fail -- there is none, because every attempt refuses a
+        # running agent and this lock is held. So everything the pass gives up on was queued when
+        # it began, and the attempts number at most that plus the one that finds nothing left.
+        limit = len(await queued_entries(db, project_id, agent)) + 1
+        # The ids counted in this pass. An entry that rides with a head that is given up on is
+        # carried again by the next attempt; without this set R2 measured it counted three times
+        # and withdrawn in one pass (design D4) -- F114's failure, reached through the loop.
+        counted: Set[str] = set()
+        after_give_up: Optional[ScheduleResult] = None
+        attempt = await _attempt_turn(db, project_id, agent, counted)
+        for _ in range(limit - 1):
+            if not attempt.gave_up:
+                break
+            after_give_up = attempt.result
+            attempt = await _attempt_turn(db, project_id, agent, counted)
+        # The last attempt's result, except where it found the queue empty: that one's default
+        # `terminal_failure=True` would fail a job's `JobRun` with "queue is empty" rather than the
+        # refusal that emptied the queue, so the attempt that gave up on the last entry answers
+        # instead (design D5). Every other early return describes what the remaining input waits
+        # on, which is the true answer.
+        if attempt.nothing_queued and after_give_up is not None:
+            return after_give_up
+        return attempt.result
+
+
+async def _attempt_turn(
+    db: AsyncSession, project_id: str, agent: str, counted: Set[str]
+) -> _Attempt:
+    """Start at most one turn for *agent* from its queue as it stands now; one attempt of a pass.
+
+    *counted* is the pass's once-per-pass set (`schedule_agent`): an entry in it is not counted,
+    and so not given up on, again.
+    """
     from .api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
 
-    async with _lock_for(project_id, agent), async_session_factory() as db:
-        running = await db.execute(
-            select(Run.id)
-            .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
-            .limit(1)
-        )
-        if running.scalar_one_or_none() is not None:
-            return ScheduleResult(waiting_reason="agent is already running", terminal_failure=False)
-
-        entries = await queued_entries(db, project_id, agent)
-        if not entries:
-            return ScheduleResult(waiting_reason="queue is empty")
-        hop_budget, cap = await project_limits(db, project_id)
-        if not can_start(entries, hop_budget):
-            return ScheduleResult(waiting_reason="hop budget exhausted")
-
-        controlling = next((entry for entry in entries if entry.hop_depth <= hop_budget), None)
-        if controlling is None or controlling.conversation_id is None:
-            return ScheduleResult(waiting_reason="queued entry has no conversation")
-        conversation = await get_conversation_by_id(db, controlling.conversation_id)
-        if (
-            conversation is None
-            or conversation.project_id != project_id
-            or conversation.agent != agent
-            or conversation.lifecycle != "open"
-        ):
-            return ScheduleResult(waiting_reason="conversation is unavailable")
-
-        # Filter by depth and by kind, as well as by conversation. `can_start` asks whether the
-        # turn may begin; nothing used to ask which entries may ride on it, so an over-budget
-        # entry was bundled into a turn admitted by a shallower one and delivered anyway (design
-        # D1, finding F5). F66 is the same defect one column over: a review entry and a work entry
-        # batched together delivered a turn that was neither, so the controlling entry's kind
-        # decides the turn and the other kind's entries are deferred to the next one (design D3).
-        # An entry naming neither — a plain message riding beside a delegation — has no kind to
-        # conflict with either and always rides along.
-        controlling_kind = _entry_kind(controlling)
-        selected = [
-            entry
-            for entry in entries
-            if entry.conversation_id == conversation.id
-            and entry.hop_depth <= hop_budget
-            and (
-                controlling_kind is None
-                or _entry_kind(entry) is None
-                or _entry_kind(entry) == controlling_kind
-            )
-        ][:cap]
-        if not selected:
-            return ScheduleResult(waiting_reason="hop budget exhausted")
-        controlling_operator = next(
-            (entry for entry in selected if entry.origin_type == "operator"), None
-        )
-        initiator = "operator" if controlling_operator is not None else "autonomous"
-        budget = await project_budget_state(db, project_id)
-        if initiator == "autonomous" and budget["exhausted"]:
-            return ScheduleResult(waiting_reason="token budget exhausted")
-        work_dir = controlling_operator.work_dir if controlling_operator is not None else None
-        # Read from the same entry `work_dir` comes from, for the same reason: a turn can batch
-        # several entries, and the operator's own is the one whose viewing position describes
-        # what they asked. An agent's or a job's entry never carries one.
-        spec_document = (
-            controlling_operator.spec_document if controlling_operator is not None else None
+    running = await db.execute(
+        select(Run.id)
+        .where(Run.project_id == project_id, Run.agent == agent, Run.status == "running")
+        .limit(1)
+    )
+    if running.scalar_one_or_none() is not None:
+        return _Attempt(
+            ScheduleResult(waiting_reason="agent is already running", terminal_failure=False)
         )
 
-        # Captured before the call because the refusal branch rolls the session back, and a
-        # rollback expires every row this function loaded (`expire_on_commit=False` does not cover
-        # it). Plain values survive; the rows are read again from these.
-        selected_ids = [entry.id for entry in selected]
-        conversation_id = conversation.id
-        try:
-            response = await trigger_agent_directly(
-                project_id=project_id,
-                agent=agent,
-                message=format_turn_prompt(selected),
-                conversation_id=conversation_id,
-                work_dir=work_dir,
-                spec_document=spec_document,
-                session=db,
-                queue_entry_ids=selected_ids,
-                # The admitting entry's depth, not `min()` across the batch. `min()` was never a
-                # decision — it let a turn batching a hop-0 entry with a deeper one restart the
-                # count from zero, so the chain ran backwards (design D2). With the filter above,
-                # every delivered entry is within budget and `controlling` is the first of them.
-                turn_depth=controlling.hop_depth,
-                initiator=initiator,
-            )
-        except TriggerAgentError as exc:
-            # Discard whatever the refused dispatch staged, **before** anything here is recorded
-            # (F319). `trigger_agent_directly` writes into this session before some of its refusals
-            # are raised: a review dispatch stages the reviewer as assignee, moves the task to
-            # `under_review` and appends the transition (and, through it, closes an open run
-            # divergence) before `prepare_review_turn` has checked out the commit. Its design says
-            # a refusal abandons that staging, and of the function alone that is true -- but the
-            # commit below used to write it for it, so a review refused for a pruned commit left
-            # the task held by a reviewer who never ran, and every other reviewer refused behind
-            # it. Rolling back the whole transaction rather than the review's rows is deliberate:
-            # it covers every refusal raised after a write, including the transient one, and the
-            # next write anyone adds above a raise site in that function without having to know
-            # about this line. This session holds nothing of its own pending at the call, so the
-            # rollback costs the scheduler nothing but its loaded rows, which are read again
-            # (`a-refused-review-leaves-nothing-behind`, design D1 and D3).
-            #
-            # `selected` is re-read by id **and** `state == "queued"`, in the order it was
-            # selected in, so input the operator withdrew while the dispatch ran is neither counted
-            # nor given up on here. That narrows F328 and does not close it: a withdrawal that
-            # waits on the dispatch's write lock commits after this read. `entries` is re-read
-            # because `other_input_would_have_run_elsewhere` reads the rows outside `selected`, and
-            # an expired row there raises `MissingGreenlet` rather than reloading.
-            await db.rollback()
-            still_queued = {
-                row.id: row
-                for row in (
-                    await db.execute(
-                        select(InboundQueueEntry).where(
-                            InboundQueueEntry.id.in_(selected_ids),
-                            InboundQueueEntry.state == "queued",
-                        )
+    entries = await queued_entries(db, project_id, agent)
+    if not entries:
+        return _Attempt(ScheduleResult(waiting_reason="queue is empty"), nothing_queued=True)
+    hop_budget, cap = await project_limits(db, project_id)
+    if not can_start(entries, hop_budget):
+        return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
+
+    controlling = next((entry for entry in entries if entry.hop_depth <= hop_budget), None)
+    if controlling is None or controlling.conversation_id is None:
+        return _Attempt(ScheduleResult(waiting_reason="queued entry has no conversation"))
+    conversation = await get_conversation_by_id(db, controlling.conversation_id)
+    if (
+        conversation is None
+        or conversation.project_id != project_id
+        or conversation.agent != agent
+        or conversation.lifecycle != "open"
+    ):
+        return _Attempt(ScheduleResult(waiting_reason="conversation is unavailable"))
+
+    # Filter by depth and by kind, as well as by conversation. `can_start` asks whether the
+    # turn may begin; nothing used to ask which entries may ride on it, so an over-budget
+    # entry was bundled into a turn admitted by a shallower one and delivered anyway (design
+    # D1, finding F5). F66 is the same defect one column over: a review entry and a work entry
+    # batched together delivered a turn that was neither, so the controlling entry's kind
+    # decides the turn and the other kind's entries are deferred to the next one (design D3).
+    # An entry naming neither — a plain message riding beside a delegation — has no kind to
+    # conflict with either and always rides along.
+    controlling_kind = _entry_kind(controlling)
+    selected = [
+        entry
+        for entry in entries
+        if entry.conversation_id == conversation.id
+        and entry.hop_depth <= hop_budget
+        and (
+            controlling_kind is None
+            or _entry_kind(entry) is None
+            or _entry_kind(entry) == controlling_kind
+        )
+    ][:cap]
+    if not selected:
+        return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
+    controlling_operator = next(
+        (entry for entry in selected if entry.origin_type == "operator"), None
+    )
+    initiator = "operator" if controlling_operator is not None else "autonomous"
+    budget = await project_budget_state(db, project_id)
+    if initiator == "autonomous" and budget["exhausted"]:
+        return _Attempt(ScheduleResult(waiting_reason="token budget exhausted"))
+    work_dir = controlling_operator.work_dir if controlling_operator is not None else None
+    # Read from the same entry `work_dir` comes from, for the same reason: a turn can batch
+    # several entries, and the operator's own is the one whose viewing position describes
+    # what they asked. An agent's or a job's entry never carries one.
+    spec_document = controlling_operator.spec_document if controlling_operator is not None else None
+
+    # Captured before the call because the refusal branch rolls the session back, and a
+    # rollback expires every row this function loaded (`expire_on_commit=False` does not cover
+    # it). Plain values survive; the rows are read again from these.
+    selected_ids = [entry.id for entry in selected]
+    conversation_id = conversation.id
+    try:
+        response = await trigger_agent_directly(
+            project_id=project_id,
+            agent=agent,
+            message=format_turn_prompt(selected),
+            conversation_id=conversation_id,
+            work_dir=work_dir,
+            spec_document=spec_document,
+            session=db,
+            queue_entry_ids=selected_ids,
+            # The admitting entry's depth, not `min()` across the batch. `min()` was never a
+            # decision — it let a turn batching a hop-0 entry with a deeper one restart the
+            # count from zero, so the chain ran backwards (design D2). With the filter above,
+            # every delivered entry is within budget and `controlling` is the first of them.
+            turn_depth=controlling.hop_depth,
+            initiator=initiator,
+        )
+    except TriggerAgentError as exc:
+        # Discard whatever the refused dispatch staged, **before** anything here is recorded
+        # (F319). `trigger_agent_directly` writes into this session before some of its refusals
+        # are raised: a review dispatch stages the reviewer as assignee, moves the task to
+        # `under_review` and appends the transition (and, through it, closes an open run
+        # divergence) before `prepare_review_turn` has checked out the commit. Its design says
+        # a refusal abandons that staging, and of the function alone that is true -- but the
+        # commit below used to write it for it, so a review refused for a pruned commit left
+        # the task held by a reviewer who never ran, and every other reviewer refused behind
+        # it. Rolling back the whole transaction rather than the review's rows is deliberate:
+        # it covers every refusal raised after a write, including the transient one, and the
+        # next write anyone adds above a raise site in that function without having to know
+        # about this line. This session holds nothing of its own pending at the call, so the
+        # rollback costs the scheduler nothing but its loaded rows, which are read again
+        # (`a-refused-review-leaves-nothing-behind`, design D1 and D3).
+        #
+        # `selected` is re-read by id **and** `state == "queued"`, in the order it was
+        # selected in, so input the operator withdrew while the dispatch ran is neither counted
+        # nor given up on here. That narrows F328 and does not close it: a withdrawal that
+        # waits on the dispatch's write lock commits after this read. `entries` is re-read
+        # because `other_input_would_have_run_elsewhere` reads the rows outside `selected`, and
+        # an expired row there raises `MissingGreenlet` rather than reloading.
+        await db.rollback()
+        still_queued = {
+            row.id: row
+            for row in (
+                await db.execute(
+                    select(InboundQueueEntry).where(
+                        InboundQueueEntry.id.in_(selected_ids),
+                        InboundQueueEntry.state == "queued",
                     )
-                ).scalars()
-            }
-            selected = [
-                still_queued[entry_id] for entry_id in selected_ids if entry_id in still_queued
-            ]
-            entries = await queued_entries(db, project_id, agent)
-            workspace_unavailable = getattr(exc, "workspace_unavailable", False)
-            # Written down before the classification is even asked, because it matters in both
-            # branches and for the same reason: this is the only place the refusal's own words
-            # exist. `GET /queue/{agent}/status` re-derives what it can and reported
-            # `waiting_reason: null` for everything it could not — a D8 checkout collision, an
-            # unimplemented runner, a work_dir the project does not contain (F97). Recording it
-            # here is what keeps the status route from having to restate each condition, and what
-            # makes the *next* refusal visible without another edit.
+                )
+            ).scalars()
+        }
+        selected = [still_queued[entry_id] for entry_id in selected_ids if entry_id in still_queued]
+        entries = await queued_entries(db, project_id, agent)
+        workspace_unavailable = getattr(exc, "workspace_unavailable", False)
+        # Written down before the classification is even asked, because it matters in both
+        # branches and for the same reason: this is the only place the refusal's own words
+        # exist. `GET /queue/{agent}/status` re-derives what it can and reported
+        # `waiting_reason: null` for everything it could not — a D8 checkout collision, an
+        # unimplemented runner, a work_dir the project does not contain (F97). Recording it
+        # here is what keeps the status route from having to restate each condition, and what
+        # makes the *next* refusal visible without another edit.
+        #
+        # It is written *after* the rollback above, so the commit that follows records the
+        # refusal's words and nothing the refused dispatch staged -- F97's reason for this
+        # commit holds exactly as it did before F319's rollback was added in front of it.
+        for entry in selected:
+            entry.waiting_reason = exc.detail
+        await db.commit()
+        # Does this refusal clear on its own? `workspace_unavailable` was the first refusal
+        # that did, and it still selects the operator event below, but it is no longer the only
+        # one: a turn refused because another agent holds the task's checkout (design D8) waits
+        # for that turn to end. Asking the classification rather than enumerating the causes is
+        # what stops the next transient refusal from having to edit this branch again.
+        transient = getattr(exc, "transient", workspace_unavailable)
+        abandoned: list[InboundQueueEntry] = []
+        if workspace_unavailable:
+            await persist_event(
+                db,
+                project_id,
+                "queue_agent_paused",
+                {
+                    "agent": agent,
+                    "reason": exc.detail,
+                    "directory_state": exc.directory_state,
+                },
+                agent=agent,
+                severity="warn",
+            )
+            await sse_manager.broadcast(
+                project_id,
+                "queue_agent_paused",
+                {
+                    "agent": agent,
+                    "reason": exc.detail,
+                    "directory_state": exc.directory_state,
+                },
+            )
+        elif (
+            not transient
+            and not getattr(exc, "agent_wide", False)
+            # The third question, and it is asked **last** because it is the only one of the
+            # three that costs queries: `not transient` and `not agent_wide` are attribute
+            # reads, so a refusal that is either never reaches the helper at all.
             #
-            # It is written *after* the rollback above, so the commit that follows records the
-            # refusal's words and nothing the refused dispatch staged -- F97's reason for this
-            # commit holds exactly as it did before F319's rollback was added in front of it.
+            # A refusal about the agent's **own** worktree is not `agent_wide` and by design
+            # must not become it (design D2 of `a-blocked-agent-workspace-holds-its-input`):
+            # the agent has a runner, its CLI is installed, and it would have run. But nothing
+            # queued behind the head can run either while that one directory is obstructed
+            # — unless some other queued entry would have taken a *different* workspace, in
+            # which case the head really is in the way and F56's argument applies unchanged.
+            # `agent-conversation-workspace` counts such a refusal exactly *"where other
+            # queued input could have run"*, and this is where that is measured. Every other
+            # refusal reaches this branch with the condition it already had (F188).
+            and (
+                not getattr(exc, "agent_workspace_unavailable", False)
+                or await other_input_would_have_run_elsewhere(
+                    db,
+                    project_id=project_id,
+                    agent=agent,
+                    entries=entries,
+                    selected=selected,
+                    controlling_conversation_id=conversation_id,
+                    hop_budget=hop_budget,
+                )
+            )
+        ):
+            # No `Run` was ever created for this attempt, so `selected` never became
+            # `delivered` and `return_run_entries`'s own abandonment bookkeeping never runs
+            # for it (F56) — a refusal raised here (a review target with no evidence naming a
+            # commit, an archived agent, a task that does not exist, ...) repeats identically
+            # forever, and every entry queued behind it starves along with it. Count the
+            # attempt the same way a spawned-and-failed run's does, and give up on the same
+            # schedule, so a permanently wrong entry stops wedging the whole queue.
+            #
+            # And having given up, the pass goes on to the input behind (F320): before it did,
+            # the pass ended here, and the entry the head had been starving went on waiting
+            # for a re-drain that nothing schedules -- the operator's request was answered
+            # *"queued behind other input"* and never delivered. `schedule_agent` repeats the
+            # attempt only after one that gave up, which is what `abandoned` is returned for.
+            #
+            # **`and not agent_wide` is F114, and it is the same rule the `transient` half of
+            # this condition already applies.** F56's reasoning holds wherever the refused
+            # entry is *in the way of other input* — which is every example in the list above.
+            # It does not hold where the refusal stops the agent running at all: no runner is
+            # bound, its CLI is not installed, its runner row is gone. Nothing is starving
+            # behind that entry, because nothing for that agent could run either way, so
+            # dropping the head of the queue buys nobody a turn — and it costs the operator
+            # the input the product promised to hold until they performed the repair (F96).
+            #
+            # Measured before this line existed: three messages to an unbound agent destroyed
+            # the first in under two seconds, and two clicks of the Continue button — the
+            # control the conversation view offers for exactly this situation — destroyed it
+            # faster. Every schedule counted an attempt, so the operator's own attempts to
+            # find out why nothing was happening were what consumed the allowance.
+            #
+            # Only refusals that are *certainly* agent-wide carry the flag, and a refusal
+            # that blocks one entry keeps counting (design D3a of
+            # `2026-08-28-a-delivery-attempt-means-a-delivery`).
+            #
+            # **This comment used to say the workspace refusal was one of those, flatly, and
+            # for one of its two arms that was wrong** — which is F188, and which
+            # `a-blocked-agent-workspace-holds-its-input` is the change that split them. The
+            # two arms are now different sites raising different sentences, and the `or` above
+            # is where the difference lands:
+            #
+            #   * a **task's** checkout that could not be prepared is the *task's* workspace,
+            #     not the agent's. The agent is fine, its other input can run, and the head
+            #     entry really is in the way — so that arm carries no flag at all and reaches
+            #     this branch exactly as it did before either flag existed.
+            #   * the agent's **own** workspace is the case that argument does not survive.
+            #     Nothing of this agent's runs in a directory the Hub cannot provision, so
+            #     there is usually nothing behind the head that dropping it would release, and
+            #     dropping it costs the operator the message F96 promised to hold. That arm
+            #     carries `agent_workspace_unavailable`, and the condition above asks
+            #     `other_input_would_have_run_elsewhere` before believing the head is in
+            #     anybody's way — because "usually" is not "always", and a task-bound entry
+            #     waiting in another conversation would have run in the task's checkout, which
+            #     this failure never touched.
+            #
+            # Two citations, kept apart on purpose. The rule *this* branch applies is D3a of
+            # the change named above. The predicate the helper reaches for — whether some other
+            # entry's task would have taken a checkout of its own — is design **D8** of
+            # `a-blocked-agent-workspace-holds-its-input`, numbered away from D3a precisely so
+            # that a reference in this file names exactly one of them; the split at the raise
+            # site itself is that change's D1.
             for entry in selected:
-                entry.waiting_reason = exc.detail
+                # Counted at most once per pass, and so given up on only by the attempt that
+                # counted it. An entry riding with a head that is given up on is carried again
+                # by the next attempt, and F114 is exactly what counting it each time would
+                # repeat: R2 measured a rider carried by `[H1, M]`, `[M, H6]` and `[M]` and
+                # withdrawn at 3 in one pass (design D4). It still keeps the refusal's words,
+                # written above, and one pass raises its count by one, as a pass always did.
+                if entry.id in counted:
+                    continue
+                counted.add(entry.id)
+                entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
+                if entry.delivery_attempts >= DELIVERY_ATTEMPT_LIMIT:
+                    entry.state = "withdrawn"
+                    entry.withdrawn_at = datetime.now(timezone.utc)
+                    entry.abandoned_reason = (
+                        f"delivery failed {entry.delivery_attempts} times "
+                        f"({exc.detail}); the Hub stopped retrying"
+                    )
+                    abandoned.append(entry)
             await db.commit()
-            # Does this refusal clear on its own? `workspace_unavailable` was the first refusal
-            # that did, and it still selects the operator event below, but it is no longer the only
-            # one: a turn refused because another agent holds the task's checkout (design D8) waits
-            # for that turn to end. Asking the classification rather than enumerating the causes is
-            # what stops the next transient refusal from having to edit this branch again.
-            transient = getattr(exc, "transient", workspace_unavailable)
-            if workspace_unavailable:
+            # Same shape `_report_abandoned_entries` broadcasts for a spawned-and-failed run,
+            # `run_id: None` because none was ever created — the operator's signal that input
+            # is being dropped should not depend on which of the two paths dropped it.
+            for entry in abandoned:
+                payload = {
+                    "entry_id": entry.id,
+                    "agent": agent,
+                    "run_id": None,
+                    "attempts": entry.delivery_attempts,
+                    "reason": entry.abandoned_reason,
+                    "conversation_id": entry.conversation_id,
+                }
                 await persist_event(
                     db,
                     project_id,
-                    "queue_agent_paused",
-                    {
-                        "agent": agent,
-                        "reason": exc.detail,
-                        "directory_state": exc.directory_state,
-                    },
+                    "queue_entry_abandoned",
+                    payload,
                     agent=agent,
                     severity="warn",
                 )
-                await sse_manager.broadcast(
-                    project_id,
-                    "queue_agent_paused",
-                    {
-                        "agent": agent,
-                        "reason": exc.detail,
-                        "directory_state": exc.directory_state,
-                    },
-                )
-            elif (
-                not transient
-                and not getattr(exc, "agent_wide", False)
-                # The third question, and it is asked **last** because it is the only one of the
-                # three that costs queries: `not transient` and `not agent_wide` are attribute
-                # reads, so a refusal that is either never reaches the helper at all.
-                #
-                # A refusal about the agent's **own** worktree is not `agent_wide` and by design
-                # must not become it (design D2 of `a-blocked-agent-workspace-holds-its-input`):
-                # the agent has a runner, its CLI is installed, and it would have run. But nothing
-                # queued behind the head can run either while that one directory is obstructed
-                # — unless some other queued entry would have taken a *different* workspace, in
-                # which case the head really is in the way and F56's argument applies unchanged.
-                # `agent-conversation-workspace` counts such a refusal exactly *"where other
-                # queued input could have run"*, and this is where that is measured. Every other
-                # refusal reaches this branch with the condition it already had (F188).
-                and (
-                    not getattr(exc, "agent_workspace_unavailable", False)
-                    or await other_input_would_have_run_elsewhere(
-                        db,
-                        project_id=project_id,
-                        agent=agent,
-                        entries=entries,
-                        selected=selected,
-                        controlling_conversation_id=conversation_id,
-                        hop_budget=hop_budget,
-                    )
-                )
-            ):
-                # No `Run` was ever created for this attempt, so `selected` never became
-                # `delivered` and `return_run_entries`'s own abandonment bookkeeping never runs
-                # for it (F56) — a refusal raised here (a review target with no evidence naming a
-                # commit, an archived agent, a task that does not exist, ...) repeats identically
-                # forever, and every entry queued behind it starves along with it. Count the
-                # attempt the same way a spawned-and-failed run's does, and give up on the same
-                # schedule, so a permanently wrong entry stops wedging the whole queue.
-                #
-                # **`and not agent_wide` is F114, and it is the same rule the `transient` half of
-                # this condition already applies.** F56's reasoning holds wherever the refused
-                # entry is *in the way of other input* — which is every example in the list above.
-                # It does not hold where the refusal stops the agent running at all: no runner is
-                # bound, its CLI is not installed, its runner row is gone. Nothing is starving
-                # behind that entry, because nothing for that agent could run either way, so
-                # dropping the head of the queue buys nobody a turn — and it costs the operator
-                # the input the product promised to hold until they performed the repair (F96).
-                #
-                # Measured before this line existed: three messages to an unbound agent destroyed
-                # the first in under two seconds, and two clicks of the Continue button — the
-                # control the conversation view offers for exactly this situation — destroyed it
-                # faster. Every schedule counted an attempt, so the operator's own attempts to
-                # find out why nothing was happening were what consumed the allowance.
-                #
-                # Only refusals that are *certainly* agent-wide carry the flag, and a refusal
-                # that blocks one entry keeps counting (design D3a of
-                # `2026-08-28-a-delivery-attempt-means-a-delivery`).
-                #
-                # **This comment used to say the workspace refusal was one of those, flatly, and
-                # for one of its two arms that was wrong** — which is F188, and which
-                # `a-blocked-agent-workspace-holds-its-input` is the change that split them. The
-                # two arms are now different sites raising different sentences, and the `or` above
-                # is where the difference lands:
-                #
-                #   * a **task's** checkout that could not be prepared is the *task's* workspace,
-                #     not the agent's. The agent is fine, its other input can run, and the head
-                #     entry really is in the way — so that arm carries no flag at all and reaches
-                #     this branch exactly as it did before either flag existed.
-                #   * the agent's **own** workspace is the case that argument does not survive.
-                #     Nothing of this agent's runs in a directory the Hub cannot provision, so
-                #     there is usually nothing behind the head that dropping it would release, and
-                #     dropping it costs the operator the message F96 promised to hold. That arm
-                #     carries `agent_workspace_unavailable`, and the condition above asks
-                #     `other_input_would_have_run_elsewhere` before believing the head is in
-                #     anybody's way — because "usually" is not "always", and a task-bound entry
-                #     waiting in another conversation would have run in the task's checkout, which
-                #     this failure never touched.
-                #
-                # Two citations, kept apart on purpose. The rule *this* branch applies is D3a of
-                # the change named above. The predicate the helper reaches for — whether some other
-                # entry's task would have taken a checkout of its own — is design **D8** of
-                # `a-blocked-agent-workspace-holds-its-input`, numbered away from D3a precisely so
-                # that a reference in this file names exactly one of them; the split at the raise
-                # site itself is that change's D1.
-                abandoned: list[InboundQueueEntry] = []
-                for entry in selected:
-                    entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
-                    if entry.delivery_attempts >= DELIVERY_ATTEMPT_LIMIT:
-                        entry.state = "withdrawn"
-                        entry.withdrawn_at = datetime.now(timezone.utc)
-                        entry.abandoned_reason = (
-                            f"delivery failed {entry.delivery_attempts} times "
-                            f"({exc.detail}); the Hub stopped retrying"
-                        )
-                        abandoned.append(entry)
-                await db.commit()
-                # Same shape `_report_abandoned_entries` broadcasts for a spawned-and-failed run,
-                # `run_id: None` because none was ever created — the operator's signal that input
-                # is being dropped should not depend on which of the two paths dropped it.
-                for entry in abandoned:
-                    payload = {
-                        "entry_id": entry.id,
-                        "agent": agent,
-                        "run_id": None,
-                        "attempts": entry.delivery_attempts,
-                        "reason": entry.abandoned_reason,
-                        "conversation_id": entry.conversation_id,
-                    }
-                    await persist_event(
-                        db,
-                        project_id,
-                        "queue_entry_abandoned",
-                        payload,
-                        agent=agent,
-                        severity="warn",
-                    )
-                    await sse_manager.broadcast(project_id, "queue_entry_abandoned", payload)
-            # A transient refusal that is not the paused-workspace one records nothing at all,
-            # which is the shape the sibling per-agent rule already has: `schedule_agent` returns
-            # "agent is already running" above without an event, because a queue waiting its turn
-            # is the system working. The entry keeps `delivery_attempts` at whatever it was, stays
-            # `queued`, and the next tick tries again.
-            # Carried out only when the refusal is about what was asked (design D10). A
-            # non-transient refusal about the *environment* — no runner bound, the CLI missing
-            # from PATH — is why the queue exists: the entry waits, the operator performs the
-            # repair, and binding a runner delivers it (F96). Answering those as failures would
-            # discard input the Hub promised to keep.
-            refusal = (
-                TurnRefusal(
-                    status_code=exc.status_code,
-                    detail=exc.detail,
-                    entry_ids=tuple(entry.id for entry in selected),
-                )
-                if getattr(exc, "request_level", False) and not transient
-                else None
+                await sse_manager.broadcast(project_id, "queue_entry_abandoned", payload)
+        # A transient refusal that is not the paused-workspace one records nothing at all,
+        # which is the shape the sibling per-agent rule already has: `schedule_agent` returns
+        # "agent is already running" above without an event, because a queue waiting its turn
+        # is the system working. The entry keeps `delivery_attempts` at whatever it was and
+        # stays `queued`, and the pass ends, because a repetition would meet the same hold.
+        # There is no tick to try it again: its release is the run-end re-drain in
+        # `agent_trigger` (F90), which re-schedules every agent with something queued when the
+        # run holding the checkout ends, or an operator action that re-drains.
+        #
+        # Carried out only when the refusal is about what was asked (design D10). A
+        # non-transient refusal about the *environment* — no runner bound, the CLI missing
+        # from PATH — is why the queue exists: the entry waits, the operator performs the
+        # repair, and binding a runner delivers it (F96). Answering those as failures would
+        # discard input the Hub promised to keep.
+        refusal = (
+            TurnRefusal(
+                status_code=exc.status_code,
+                detail=exc.detail,
+                entry_ids=tuple(entry.id for entry in selected),
             )
-            return ScheduleResult(
+            if getattr(exc, "request_level", False) and not transient
+            else None
+        )
+        return _Attempt(
+            ScheduleResult(
                 waiting_reason=exc.detail,
                 terminal_failure=not transient,
                 refusal=refusal,
-            )
-        return ScheduleResult(response=response, terminal_failure=False)
+            ),
+            attempted=True,
+            gave_up=tuple(entry.id for entry in abandoned),
+        )
+    return _Attempt(ScheduleResult(response=response, terminal_failure=False), attempted=True)
 
 
 async def redrain_queued_agents(project_id: str) -> None:
