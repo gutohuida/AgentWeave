@@ -96,6 +96,31 @@ point: a row may not change answer before the decode exists.
 
 ## 2. The decode
 
+> **STOPPED 2026-09-13 night (f332-s2). §2 as written opens a Windows escape. Nothing of §2 is
+> committed; the tree is §1's (`1ebff15`).** The invariant in design.md ("safe iff it never emits
+> *fewer* separators than bash") is half of the truth. On Windows an *extra* separator is just as
+> unsafe, because it adds a directory level for a later `..` to climb out of. Keeping the backslash
+> is only safe where bash keeps it too. Measured with 2.2's rules built into `_lex`, against real
+> Git Bash 5.2.37 (`testbed/scratch/night0913/s2/depth_probe2.py`, workspace `a\work`):
+> - `mkdir A` (allowed), then `echo hi > $'A\Uffffffff/../../esc2.txt'` — **allowed**, and bash
+>   wrote `a\esc2.txt`, **outside**. bash emits *nothing* for `\U` ≥ 0x80000000 in every locale, so
+>   the kept `\Uffffffff` is a phantom directory level. Not locale-dependent.
+> - Under `LANG=C.UTF-8` or `en_US.UTF-8`, `mkdir -p $'A\u0100'`, then
+>   `echo hi > $'A\u0100/../../x'` — **allowed**, and bash wrote `a\x`, **outside**. UTF-8 bash
+>   encodes `\u0100` as `c4 80`, with no backslash.
+> - At `1ebff15` (today's lexer) both are **refused**, so §2 would be a regression, Windows only (on
+>   POSIX a backslash is not a separator, so keeping and decoding have the same structure).
+>
+> Git Bash's rendering, measured for every locale (`render_probe.sh` beside it): `\u0100`…`\U7fffffff`
+> is kept literal (backslash included) under C or an unset `LANG`, and encoded under C.UTF-8 and
+> en_US.UTF-8; `\U80000000` and `\Uffffffff` are empty in all four; `\u00ff` is `ff` or `c3 bf`;
+> `\cA`, `\c/` and `\c` + é are `01`, `0f` and `03 a9` in all four. No single rendering of a `\u`
+> above 0xFF is safe in every locale. The candidate correction goes to the day window (see
+> `spec-queue/DECISIONS.md`, *a-quote-can-spell-a-slash stopped at §2*): judge both readings of a
+> codepoint escape between 0x100 and 0x7FFFFFFF, render `\U` ≥ 0x80000000 as nothing, and decode
+> `\cX` from X's first UTF-8 byte. That changes N3's Windows answer and adds rows. The stopped
+> implementation is kept, unapplied, at `testbed/scratch/night0913/s2/s2-stopped.patch`.
+
 - [ ] 2.1 In `hub/hub/mcp_server.py` `_lex`, add a branch: **in the bash dialect, when no quote is
   open**, `$` immediately followed by `'` opens an ANSI-C string. Consume the `$` and the `'`,
   decode until the closing `'` (or end of text — stay total), consume the closing `'`, and append

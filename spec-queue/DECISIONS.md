@@ -18,6 +18,49 @@ DECIDED. Absence is not consent.
 
 ---
 
+## Open
+
+### a-quote-can-spell-a-slash stopped at §2 — 2026-09-13 night
+
+- OPEN      F332-rule  `a-quote-can-spell-a-slash` is APPROVED, but its §2 decode rule opens a
+  Windows escape. Mark it **REVISING** so the day window takes another round, or decide the
+  correction here.
+
+**What was found.** The rule was built exactly as tasks §2.2 states (not committed), then measured
+through `_decide` and real Git Bash. It **allows two writes outside the workspace that today's lexer
+refuses**, on Windows only. The cause is in design D1's invariant, "safe iff it never emits *fewer*
+separators than bash". That is half of it. A backslash the decoder keeps but bash does not is a
+phantom directory level on Windows, and a later `..` climbs out of it:
+`mkdir A; echo hi > $'A\Uffffffff/../../x'` writes outside in every locale (bash emits nothing for
+`\U` ≥ 0x80000000), and `$'A\u0100/../../x'` does the same under a UTF-8 `LANG`. Evidence, the
+measured rendering table and the reproductions are under F332's *Night note* in
+`scripts/drive/FINDINGS.md` and at the top of the change's tasks §2.
+
+**The night's candidate correction, for the day window to re-derive, not to adopt as written.**
+The invariant becomes *reproduce bash's separator structure exactly, and judge every reading
+where it depends on the locale*:
+- `\u`/`\U` from 0x100 to 0x7FFFFFFF: two readings, the C-locale literal (backslash kept) and the
+  UTF-8 one (a non-separator character). Refuse if either refuses. One way to build it is a flag on
+  `_lex` and one `_read_command` pass per reading, the way `_decide` already reads an unknown tool
+  in both dialects.
+- `\U` ≥ 0x80000000: nothing, which is what bash emits in every locale. This moves **N3**
+  (`$'\Uffffffffx'`) to *allow* on Windows, since bash writes `x` inside, and D2's N3 row with it.
+- `\cX`: the control character of X's first UTF-8 byte (`\c` + é is `03 a9`), per tasks §2.2's "any
+  real body character". The night briefly restricted it to ASCII X, which re-created the phantom
+  level. Measured, then dropped.
+- New D2 rows pinning both escapes above (Windows deny *outside*), plus a mutation that keeps the
+  backslash for `\U` ≥ 0x80000000 and one that renders only the C reading.
+
+The other option is to refuse every word holding a codepoint escape above 0xFF on Windows as
+*cannot be checked*. It is simpler, but the `_UNCHECKED` wording names variables, `~` and
+substitutions, so it would need a new reason string, which §2.3 forbids.
+
+**What stays.** `1ebff15` (§1, tests only, green: 182 passed, 1 skipped, 16 xfailed on Windows)
+stays on the branch. Its N3 *after* answer on Windows is wrong under the correction; the revision
+changes that row. The night queue's f332-s4…s7 are blocked on this row.
+
+---
+
 ## Re-triage of 2026-09-01, evening — eight rows to three
 
 The morning triage folded 32 raw entries into 8 rows. An evening pass compared all eight **against

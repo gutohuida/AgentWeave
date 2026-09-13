@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "ab7cf72",
     "stop_at": "2026-09-14T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-13-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f332-s2",
-    "next_action": "Do queue item f332-s2: openspec/changes/a-quote-can-spell-a-slash/tasks.md sections 2 and 3 (2.1-2.6, 3.1). Implement the ANSI-C branch in hub/hub/mcp_server.py _lex plus a decoder helper beside it, built to tasks.md 2.2's rules (keep the backslash on digitless x/u/U, on u/U above 0xFF, on \\c before the closing quote or at end, on unrecognized and trailing; never consume the closing quote; chr() only for values <= 0xFF; produced $ -> _LITERAL_DOLLAR) -- NOT copied from any testbed/scratch prototype. Add 2.4's one comment sentence. Remove every section-1 xfail mark (and _until_decoded/_POSIX_*/_WINDOWS_* if nothing else uses them; the _WrongAnswerError/_WrongReasonError split may stay if the test still reads well). Then 3.1: one real-spawn case beside _call_tool_over_stdio. Verify: whole test_permission_approver.py on Windows (py -3.11) and WSL (posix_stubs; the 2 ModuleNotFoundError failures are the WSL harness, also on HEAD), plus test_mcp_server*.py and test_tool_surface_matches_server.py and test_fastmcp_api_contract.py on Windows; ruff/black on both files; mcp_server.py stays stdlib+fastmcp; approve_tool_call keeps no return annotation; grep confirms no new refusal string. Commit, push, record the sha in the log as f332-s2's (7.1 needs its CI PASS run).",
+    "current": "close-window",
+    "next_action": "Do queue item close-window: write the final log entry per .claude/loops/night-window.md 'Ending the window' (what changed: 1ebff15 is product-test only, iteration 3's commit is docs/ledger only; proven vs inferred; open; decisions waiting - F332-rule first; what to distrust), then set next_action to null, commit and push. Do NOT attempt f332-s4..s7: they are blocked on the REVISING of a-quote-can-spell-a-slash, which only the operator/day window can do.",
     "queue": [
         {
             "id": "compose",
@@ -29,33 +29,33 @@
         },
         {
             "id": "f332-s2",
-            "status": "open",
+            "status": "stopped",
             "title": "section 2 + 3: the decode in _lex, and the real-spawn wire case",
-            "detail": "Tasks 2.1-2.6 and 3.1. Build tasks.md 2.2's rules, NOT a prototype from testbed/scratch/r1f332, r2f332 or r3f332. Every section-1 xfail removed; table green on Windows and WSL. mcp_server.py stays stdlib+fastmcp; approve_tool_call keeps no return annotation. Commit, push."
+            "detail": "STOPPED iteration 3, nothing of §2 committed. Built to tasks §2.2, green, then measured: on Windows a kept backslash bash does not keep is a phantom directory level, so mkdir A; echo hi > $'A\\Uffffffff/../../x' and (UTF-8 LANG) $'A\\u0100/../../x' are allowed and write outside; HEAD refuses both. Recorded in tasks.md §2, F332 night note, DECISIONS.md OPEN F332-rule. Patch kept at testbed/scratch/night0913/s2/s2-stopped.patch."
         },
         {
             "id": "f332-s4",
-            "status": "open",
+            "status": "blocked",
             "title": "section 4: mutation checks 4.1-4.8",
-            "detail": "Each mutation alone, whole test_permission_approver.py, record the NAMED failing row, restore with git checkout. 4.3-4.5 bite only on POSIX (run under WSL); 4.6-4.8 bite on Windows. A Windows run where a POSIX-only mutation fails to bite is expected, not a pass. If a mutation leaves the table green, add the missing row and commit it."
+            "detail": "BLOCKED on DECISIONS.md F332-rule (change must be REVISED first). Each mutation alone, whole test_permission_approver.py, record the NAMED failing row, restore with git checkout. 4.3-4.5 bite only on POSIX (run under WSL); 4.6-4.8 bite on Windows. A Windows run where a POSIX-only mutation fails to bite is expected, not a pass. If a mutation leaves the table green, add the missing row and commit it."
         },
         {
             "id": "f332-s5",
-            "status": "open",
+            "status": "blocked",
             "title": "section 5: drive it, pre-fix worktree then fixed tree",
-            "detail": "Pick a free port (never 8000, never 8010), fresh profile drive0914 (or drive0913), AW_BOOTSTRAP_API_KEY named, uvicorn from hub/ from source. 5.1 pre-fix in a worktree at f332-s1's sha; 5.2 fixed tree, fresh project + agent, Haiku, every command 5.2 lists. Record reasons verbatim and permission_denied rows in FINDINGS.md under F332. No job left enabled; stop the Hub."
+            "detail": "BLOCKED on DECISIONS.md F332-rule (change must be REVISED first). Pick a free port (never 8000, never 8010), fresh profile drive0914 (or drive0913), AW_BOOTSTRAP_API_KEY named, uvicorn from hub/ from source. 5.1 pre-fix in a worktree at f332-s1's sha; 5.2 fixed tree, fresh project + agent, Haiku, every command 5.2 lists. Record reasons verbatim and permission_denied rows in FINDINGS.md under F332. No job left enabled; stop the Hub."
         },
         {
             "id": "f332-s6",
-            "status": "open",
+            "status": "blocked",
             "title": "section 6: the gate",
-            "detail": "ruff/black(--target-version py311)/mypy over CI's paths via py -3.11 -m; whole Hub suite in the background (15-47 min), attribute any red by signature (F292 database is locked, F314 event loop); openspec validate --strict; 6.4 diff check. Also collect the CI Linux hub-test run ids: XFAIL at f332-s1's sha, PASS at f332-s2's sha."
+            "detail": "BLOCKED on DECISIONS.md F332-rule (change must be REVISED first). ruff/black(--target-version py311)/mypy over CI's paths via py -3.11 -m; whole Hub suite in the background (15-47 min), attribute any red by signature (F292 database is locked, F314 event loop); openspec validate --strict; 6.4 diff check. Also collect the CI Linux hub-test run ids: XFAIL at f332-s1's sha, PASS at f332-s2's sha."
         },
         {
             "id": "f332-s7",
-            "status": "open",
+            "status": "blocked",
             "title": "section 7 + 9: close out and archive",
-            "detail": "F332 -> fixed <sha> with 5.2's evidence and the CI XFAIL->PASS run ids, labelled tested on Linux, not driven on POSIX. F299, F301, F322 stay open - say so in the commit. Fix the ledger index's open severity-A list. 9.1 test-guide true to what shipped. Archive via openspec-archive-change, comparing the MODIFIED block byte-for-byte first. Section 8 (human-only) goes to decisions_for_user, not ticked."
+            "detail": "BLOCKED on DECISIONS.md F332-rule (change must be REVISED first). F332 -> fixed <sha> with 5.2's evidence and the CI XFAIL->PASS run ids, labelled tested on Linux, not driven on POSIX. F299, F301, F322 stay open - say so in the commit. Fix the ledger index's open severity-A list. 9.1 test-guide true to what shipped. Archive via openspec-archive-change, comparing the MODIFIED block byte-for-byte first. Section 8 (human-only) goes to decisions_for_user, not ticked."
         },
         {
             "id": "close-window",
@@ -64,7 +64,9 @@
             "detail": "Per the playbook's 'Ending the window': what changed (product vs docs commits), what was proven vs inferred, what is open, decisions waiting, what to distrust. Then next_action null."
         }
     ],
-    "decisions_for_user": [],
+    "decisions_for_user": [
+        "F332-rule (spec-queue/DECISIONS.md, top 'Open' section): a-quote-can-spell-a-slash is APPROVED but its §2 decode rule opens a Windows escape, measured against real Git Bash - mark it REVISING in APPROVALS.md (or decide the correction). The night's candidate correction is written there; it changes D2's N3 row and adds rows. f332-s4..s7 are blocked on it."
+    ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

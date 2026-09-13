@@ -26789,6 +26789,34 @@ Checks that found nothing: escaped-quote lexing (`\'`/`\\` match bash), `\x`/oct
 (now only U+0000–U+00FF), `\U`≥0x80000000 (benign over-refusal on Windows, not a regression),
 spec-delta integrity, PowerShell dialect untouched.
 
+**Night note (2026-09-13, f332-s2, implementation STOPPED).** Status unchanged: **open**. The
+proposal's fix opens a Windows escape of its own. It was built exactly to tasks §2.2, measured, and
+not committed. R3's invariant ("never emit *fewer* separators than bash") misses the other
+direction: on Windows a backslash the decoder keeps and bash does not keep is a **phantom directory
+level**, and a following `..` climbs out of it. Two consequences, both measured through the built
+`_decide` and through real Git Bash 5.2.37, with the workspace at `a\work`
+(`testbed/scratch/night0913/s2/depth_probe2.py`):
+- `mkdir A`, then `echo hi > $'A\Uffffffff/../../esc2.txt'`: **allowed**, and bash wrote
+  `a\esc2.txt`, **outside**. bash emits nothing for `\U` ≥ 0x80000000 in every locale, so the
+  literal the rule keeps adds a level that is not there. This is exactly the case R3's checklist
+  cleared as "benign over-refusal, not a regression"; that holds only at the start of a word, with no
+  `..` after it.
+- Under `LANG=C.UTF-8` or `en_US.UTF-8`, `mkdir -p $'A\u0100'`, then
+  `echo hi > $'A\u0100/../../x'`: **allowed**, and bash wrote outside. A UTF-8 locale encodes
+  `\u0100` with no backslash.
+- At `1ebff15` (today's lexer) both are **refused**, so the built change would be a regression.
+  Windows only: on POSIX a backslash is not a separator.
+
+Git Bash's rendering, all four locales (C, unset, C.UTF-8, en_US.UTF-8), from
+`s2/render_probe.sh`: `\u0100` through `\U7fffffff` is kept literal under C and under an unset `LANG`, and
+encoded under both UTF-8 locales; `\U80000000` and `\Uffffffff` are empty in all four; `\cA`, `\c/`
+and `\c` + é give `01`, `0f` and `03 a9` in all four (bash's `TOCTRL` masks with 0x1F; R3's reference
+decoder XORs with 0x40 and so gives `o` for `\c/`, which is harmless for separators). The fault was found
+by fuzzing the built `_lex` against R3's reference decoder (`s2/fuzz.py`, 200,000 commands). Every
+divergence was a `\c` escape; following one of them led to the phantom-level class. Handed back to the
+day window through `spec-queue/DECISIONS.md` (*a-quote-can-spell-a-slash stopped at §2*). The
+stopped implementation is at `testbed/scratch/night0913/s2/s2-stopped.patch`.
+
 ## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
 
 **Status:** open. **Rendered 2026-09-13 by the day window's `d1-drive`**, in Chromium against the
