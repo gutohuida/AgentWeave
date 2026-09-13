@@ -26764,9 +26764,9 @@ corrected decoder through the real `_decide` on both platforms (`testbed/scratch
 proposal (not shipped), no separate finding filed:**
 - **Finding 1 (`\u`/`\U` above 0xFF).** bash's decode of a codepoint above 0xFF is *locale-dependent*:
   the **C locale Git Bash uses by default for a non-login `bash -c`** keeps the escape literal,
-  backslash and all (`$'..Ā'` → `..Ā`), while a UTF-8 login shell decodes it. R1 and R2
+  backslash and all (`$'..\u0100'` → `..\u0100`), while a UTF-8 login shell decodes it. R1 and R2
   both decode it to one character (R2 returns `""` above U+10FFFF), dropping the backslash; on Windows
-  that backslash is a separator, so `$'..Ā'`…`$'..\U00110000x'` would flip from *deny* (today) to
+  that backslash is a separator, so `$'..\u0100'`…`$'..\U00110000x'` would flip from *deny* (today) to
   *allow* — an escape the change would introduce. Measured through `_decide` (R2 column allows; R3
   column denies). R2's N3 argument ("bash emits high bytes, none a separator") was true of the bytes
   but false about the literal backslash — an argument wrong while its Linux/UTF-8 outcome is right.

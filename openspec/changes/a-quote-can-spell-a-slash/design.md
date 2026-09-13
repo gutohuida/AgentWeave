@@ -309,9 +309,9 @@ patched two leaks of this class (digitless; `chr()` overflow); the class was lar
 round enumerated, which is why R3 replaced the per-escape arguments with the invariant in D1.
 
 > **Corrected by the pre-approval review (see "Pre-approval review" below).** The claim below that
-> Git Bash "uses the C locale by default" and therefore writes `Ā` **outside** on Windows is
+> Git Bash "uses the C locale by default" and therefore writes `\u0100` **outside** on Windows is
 > **false on this machine's Git Bash** (msys2 5.2.37), which forces `LC_CTYPE=C.UTF-8` (even under
-> `LC_ALL=C`) and writes `Ā` as UTF-8 bytes `c4 80` *inside* the workspace. R3's
+> `LC_ALL=C`) and writes `\u0100` as UTF-8 bytes `c4 80` *inside* the workspace. R3's
 > keep-the-backslash decoder is still the correct **safe** choice — it never under-counts
 > separators under any locale — but on the measured Git Bash its Windows deny of N3/N4 is a
 > conservative **over-refusal**, not the closing of a live escape. Read this finding as "a true C
@@ -463,17 +463,17 @@ claim about Git Bash is false on this machine, and its "security escape" severit
 unsubstantiated.** Measured with `bashtruth.py` and `locale_probe.py`: Git Bash 5.2.37 (msys2) on
 this machine reports `LC_CTYPE=C.UTF-8` by default (`LANG=C.UTF-8`, not empty) and **cannot be put
 into a non-UTF-8 C locale** — `LC_ALL=C`, `LANG=C`, `LC_CTYPE=C`, `POSIX` all leave `LC_CTYPE` at
-`C.UTF-8`. In every one of those, `$'..Ā'` decodes to UTF-8 bytes `2e 2e c4 80` (no backslash),
+`C.UTF-8`. In every one of those, `$'..\u0100'` decodes to UTF-8 bytes `2e 2e c4 80` (no backslash),
 so on Windows Git Bash writes a file named `..Ā` **inside** the workspace, not a `..\…` traversal
 outside. R3's own recorded probe (`r3f332/unicode_probe.gitbash.txt`) shows it measured
-`LANG=[] LC_ALL=[]` — an **empty** environment that falls back to C and keeps `Ā` literal —
+`LANG=[] LC_ALL=[]` — an **empty** environment that falls back to C and keeps `\u0100` literal —
 which is not what a subprocess spawned on this machine inherits. Consequences:
 - The design's repeated claim (D1, D5, finding 1, and by implication N3/N4, the test-guide, and
   drive §5.2) that "the C locale Git Bash uses by default keeps the escape literal, backslash and
   all" and that R1/R2 therefore *open a Windows security escape* is **backwards on the measured Git
-  Bash**: there, R1/R2's decode of `Ā` to one character (word `..Ā`, no separator, judged
+  Bash**: there, R1/R2's decode of `\u0100` to one character (word `..Ā`, no separator, judged
   inside) *matches* what bash actually writes (inside), and it is the **R3 decoder that
-  over-refuses** it (keeps `..Ā`, whose `\` is a Windows separator → deny outside).
+  over-refuses** it (keeps `..\u0100`, whose `\` is a Windows separator → deny outside).
 - **The R3 decoder is nonetheless the correct choice, and safe.** Independently re-derived and
   measured (`decoder_check.py`, both platforms; `bashtruth.py`, C and UTF-8, WSL and Git Bash):
   **no `\u`/`\U`/UTF-8 codepoint ever produces byte 0x2F (`/`) or 0x5C (`\`)** — UTF-8 of any
@@ -533,7 +533,7 @@ mutation does **not** make them fail there. The night runs on Windows. **Repair 
   only reinforces finding A's "locale is unguaranteed", and the decision logic is locale-safe, so
   the drive's assertions (refused as outside; no file appears) hold regardless.
 
-**Residual risk the night should know.** The drive (§5.2) runs on Windows and, for N4 (`$'..Ā'`),
+**Residual risk the night should know.** The drive (§5.2) runs on Windows and, for N4 (`$'..\u0100'`),
 shows a **conservative over-refusal**: if allowed, the real Git Bash (C.UTF-8) would write `..Ā`
 *inside* the worktree, so an operator who reruns the command bare will see a file appear inside and
 may read the refusal as wrong. This is the same category as I1 (an over-/under-refusal corrected or
