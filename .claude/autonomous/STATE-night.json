@@ -1,82 +1,81 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-12-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "ab7cf72",
-    "stop_at":  "2026-09-14T07:00:00+01:00",
-    "iteration":  1,
-    "log_file":  ".claude/autonomous/2026-09-13-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "f332-s1",
-    "next_action":  "Do queue item f332-s1: openspec/changes/a-quote-can-spell-a-slash/tasks.md section 1 (tasks 1.1-1.3) only. Add D2's table (design.md) as one parametrized test in hub/tests/test_permission_approver.py against the UNMODIFIED lexer, with the platform-scoped strict xfail marks 1.2 lists. Verify every mark on Windows (py -3.11) AND under WSL Ubuntu (python3 with testbed/scratch/night0912/posix_stubs.py); any failure a mark does not explain means the table is wrong - re-measure, do not bend the test. Commit section 1 alone, green, push, and record the sha in the log (section 5.1's pre-fix worktree and section 7.1's CI XFAIL evidence both need it). Do not touch hub/hub/mcp_server.py this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "done",
-                      "title":  "Compose this window's queue from the playbook",
-                      "detail":  "Done iteration 1. APPROVALS 2026-09-13 carries ORDER: a-quote-can-spell-a-slash, so the queue is that one change, split by tasks.md section."
-                  },
-                  {
-                      "id":  "f332-s1",
-                      "status":  "open",
-                      "title":  "a-quote-can-spell-a-slash section 1: pin D2's table before the lexer moves",
-                      "detail":  "Tasks 1.1-1.3. Test file only. Strict xfail marks per 1.2, verified on Windows and WSL. Commit alone, green; its sha is the pre-fix base for 5.1 and the CI XFAIL half of 7.1's evidence."
-                  },
-                  {
-                      "id":  "f332-s2",
-                      "status":  "open",
-                      "title":  "section 2 + 3: the decode in _lex, and the real-spawn wire case",
-                      "detail":  "Tasks 2.1-2.6 and 3.1. Build tasks.md 2.2's rules, NOT a prototype from testbed/scratch/r1f332, r2f332 or r3f332. Every section-1 xfail removed; table green on Windows and WSL. mcp_server.py stays stdlib+fastmcp; approve_tool_call keeps no return annotation. Commit, push."
-                  },
-                  {
-                      "id":  "f332-s4",
-                      "status":  "open",
-                      "title":  "section 4: mutation checks 4.1-4.8",
-                      "detail":  "Each mutation alone, whole test_permission_approver.py, record the NAMED failing row, restore with git checkout. 4.3-4.5 bite only on POSIX (run under WSL); 4.6-4.8 bite on Windows. A Windows run where a POSIX-only mutation fails to bite is expected, not a pass. If a mutation leaves the table green, add the missing row and commit it."
-                  },
-                  {
-                      "id":  "f332-s5",
-                      "status":  "open",
-                      "title":  "section 5: drive it, pre-fix worktree then fixed tree",
-                      "detail":  "Pick a free port (never 8000, never 8010), fresh profile drive0914 (or drive0913), AW_BOOTSTRAP_API_KEY named, uvicorn from hub/ from source. 5.1 pre-fix in a worktree at f332-s1's sha; 5.2 fixed tree, fresh project + agent, Haiku, every command 5.2 lists. Record reasons verbatim and permission_denied rows in FINDINGS.md under F332. No job left enabled; stop the Hub."
-                  },
-                  {
-                      "id":  "f332-s6",
-                      "status":  "open",
-                      "title":  "section 6: the gate",
-                      "detail":  "ruff/black(--target-version py311)/mypy over CI's paths via py -3.11 -m; whole Hub suite in the background (15-47 min), attribute any red by signature (F292 database is locked, F314 event loop); openspec validate --strict; 6.4 diff check. Also collect the CI Linux hub-test run ids: XFAIL at f332-s1's sha, PASS at f332-s2's sha."
-                  },
-                  {
-                      "id":  "f332-s7",
-                      "status":  "open",
-                      "title":  "section 7 + 9: close out and archive",
-                      "detail":  "F332 -> fixed <sha> with 5.2's evidence and the CI XFAIL->PASS run ids, labelled tested on Linux, not driven on POSIX. F299, F301, F322 stay open - say so in the commit. Fix the ledger index's open severity-A list. 9.1 test-guide true to what shipped. Archive via openspec-archive-change, comparing the MODIFIED block byte-for-byte first. Section 8 (human-only) goes to decisions_for_user, not ticked."
-                  },
-                  {
-                      "id":  "close-window",
-                      "status":  "open",
-                      "title":  "Final log entry, then next_action null",
-                      "detail":  "Per the playbook's 'Ending the window': what changed (product vs docs commits), what was proven vs inferred, what is open, decisions waiting, what to distrust. Then next_action null."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-12-daily",
+    "parent_branch": "master",
+    "parent_sha": "ab7cf72",
+    "stop_at": "2026-09-14T07:00:00+01:00",
+    "iteration": 2,
+    "log_file": ".claude/autonomous/2026-09-13-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "f332-s2",
+    "next_action": "Do queue item f332-s2: openspec/changes/a-quote-can-spell-a-slash/tasks.md sections 2 and 3 (2.1-2.6, 3.1). Implement the ANSI-C branch in hub/hub/mcp_server.py _lex plus a decoder helper beside it, built to tasks.md 2.2's rules (keep the backslash on digitless x/u/U, on u/U above 0xFF, on \\c before the closing quote or at end, on unrecognized and trailing; never consume the closing quote; chr() only for values <= 0xFF; produced $ -> _LITERAL_DOLLAR) -- NOT copied from any testbed/scratch prototype. Add 2.4's one comment sentence. Remove every section-1 xfail mark (and _until_decoded/_POSIX_*/_WINDOWS_* if nothing else uses them; the _WrongAnswerError/_WrongReasonError split may stay if the test still reads well). Then 3.1: one real-spawn case beside _call_tool_over_stdio. Verify: whole test_permission_approver.py on Windows (py -3.11) and WSL (posix_stubs; the 2 ModuleNotFoundError failures are the WSL harness, also on HEAD), plus test_mcp_server*.py and test_tool_surface_matches_server.py and test_fastmcp_api_contract.py on Windows; ruff/black on both files; mcp_server.py stays stdlib+fastmcp; approve_tool_call keeps no return annotation; grep confirms no new refusal string. Commit, push, record the sha in the log as f332-s2's (7.1 needs its CI PASS run).",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "Done iteration 1. APPROVALS 2026-09-13 carries ORDER: a-quote-can-spell-a-slash, so the queue is that one change, split by tasks.md section."
+        },
+        {
+            "id": "f332-s1",
+            "status": "done",
+            "title": "a-quote-can-spell-a-slash section 1: pin D2's table before the lexer moves",
+            "detail": "Done iteration 2, commit 1ebff15 (pushed) -- the pre-fix base for 5.1 and the CI XFAIL half of 7.1. test_a_quote_is_judged_by_what_it_decodes_to carries all 20 D2 rows; each mark is xfail(strict=True, raises=_WrongAnswerError|_WrongReasonError). Windows: 16 xfailed (G1-G10, N1-N5 reason; I1 answer), 4 passed. WSL: 11 xfailed (G1-G5, G7-G10, D1 answer; G6 reason), 9 passed. With R3's reference decoder patched over _lex all 20 pass on both platforms; R1 fails N2-N5 and R2 N3-N5 on Windows. tasks.md 1.2 was wrong twice (N1 Windows takes a reason mark, D1 Windows no mark); recorded under 1.2. CI run id for 1ebff15 not yet collected (f332-s6)."
+        },
+        {
+            "id": "f332-s2",
+            "status": "open",
+            "title": "section 2 + 3: the decode in _lex, and the real-spawn wire case",
+            "detail": "Tasks 2.1-2.6 and 3.1. Build tasks.md 2.2's rules, NOT a prototype from testbed/scratch/r1f332, r2f332 or r3f332. Every section-1 xfail removed; table green on Windows and WSL. mcp_server.py stays stdlib+fastmcp; approve_tool_call keeps no return annotation. Commit, push."
+        },
+        {
+            "id": "f332-s4",
+            "status": "open",
+            "title": "section 4: mutation checks 4.1-4.8",
+            "detail": "Each mutation alone, whole test_permission_approver.py, record the NAMED failing row, restore with git checkout. 4.3-4.5 bite only on POSIX (run under WSL); 4.6-4.8 bite on Windows. A Windows run where a POSIX-only mutation fails to bite is expected, not a pass. If a mutation leaves the table green, add the missing row and commit it."
+        },
+        {
+            "id": "f332-s5",
+            "status": "open",
+            "title": "section 5: drive it, pre-fix worktree then fixed tree",
+            "detail": "Pick a free port (never 8000, never 8010), fresh profile drive0914 (or drive0913), AW_BOOTSTRAP_API_KEY named, uvicorn from hub/ from source. 5.1 pre-fix in a worktree at f332-s1's sha; 5.2 fixed tree, fresh project + agent, Haiku, every command 5.2 lists. Record reasons verbatim and permission_denied rows in FINDINGS.md under F332. No job left enabled; stop the Hub."
+        },
+        {
+            "id": "f332-s6",
+            "status": "open",
+            "title": "section 6: the gate",
+            "detail": "ruff/black(--target-version py311)/mypy over CI's paths via py -3.11 -m; whole Hub suite in the background (15-47 min), attribute any red by signature (F292 database is locked, F314 event loop); openspec validate --strict; 6.4 diff check. Also collect the CI Linux hub-test run ids: XFAIL at f332-s1's sha, PASS at f332-s2's sha."
+        },
+        {
+            "id": "f332-s7",
+            "status": "open",
+            "title": "section 7 + 9: close out and archive",
+            "detail": "F332 -> fixed <sha> with 5.2's evidence and the CI XFAIL->PASS run ids, labelled tested on Linux, not driven on POSIX. F299, F301, F322 stay open - say so in the commit. Fix the ledger index's open severity-A list. 9.1 test-guide true to what shipped. Archive via openspec-archive-change, comparing the MODIFIED block byte-for-byte first. Section 8 (human-only) goes to decisions_for_user, not ticked."
+        },
+        {
+            "id": "close-window",
+            "status": "open",
+            "title": "Final log entry, then next_action null",
+            "detail": "Per the playbook's 'Ending the window': what changed (product vs docs commits), what was proven vs inferred, what is open, decisions waiting, what to distrust. Then next_action null."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ],
+    "f332_s1_sha": "1ebff15e611697258967c8ff1dae906e3f0347b2"
 }
