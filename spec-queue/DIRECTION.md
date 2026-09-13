@@ -25,6 +25,98 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-14
+
+Written 2026-09-13 afternoon by a DECIDE session, on the operator's decisions of that afternoon
+(`DECISIONS.md`, `### 2026-09-13 afternoon`). It replaces the order in `## 2026-09-13` below.
+**Two things changed.** The second daily loop now takes release/usability work rather than the
+next drain item. F299's change was rejected, which takes F299 and F301 out of the drain order and
+into one open question.
+
+`master` is `ab7cf72`, landed by hand at 14:25, so this window's merge gate starts from a landed
+cycle. The gate may now re-run a flaky red once (`day-window.md` step 1, condition 3).
+
+### `D-1` drives what the night built
+
+Tonight (2026-09-13) is to build the **F332** change, if the session's spec loop and its Opus
+review pass before 22:55. `APPROVALS.md` `## 2026-09-13` says whether it was approved. F332 is
+POSIX-only, so follow the change's `test-guide.md` for what a Windows drive can and cannot show.
+If nothing was approved, D-1 has nothing of the night's to drive. Say so, and move on.
+
+### Loop 1, the drain: `F327` (B)
+
+This is unchanged from `## 2026-09-13`, where it was skipped on a file collision:
+- a review that a flow or a divergence restaff staffed *before* its dispatch, and which the dispatch
+  then refuses;
+- start from R2's option (b), where the dispatch stages and the flow stops staging first;
+- R3's warning applies: the divergence restaff's task is already `under_review` and collides with
+  D9;
+- it will MODIFY `agent-flows`.
+
+The F299 change it collided with is archived, so that collision is gone.
+
+### Loop 2, usability, only at drain count 0: `F215` (B)
+
+*"The operator's screen tells them evidence is waiting for them and gives them nothing to press."*
+This is the first item of the work-lands arc (`openspec/explorations/2026-08-30-release-roadmap.md`).
+It is a missing screen over an API that already works: `POST /spec/evidence/{id}/decision` is an
+operator-plane route.
+
+- **F215 has no verdict.** R1 therefore writes an OPERATOR QUESTION at the top of `proposal.md`,
+  covering where the control lives, what it shows, and accept versus reject with a reason. It
+  recommends one option and does not pick it.
+- **Scope it to F215 alone.** F206's five routes and F211's three (drift, reindex, retention) are
+  later changes. Handoff 0120 measured `GET /spec/drift` projecting bare database ids, so a drift
+  screen needs an API shape change. Evidence acceptance may not need one. R1 measures which.
+- **It is a UI change.** The night drives it in Chromium against the served bundle, and commits
+  `hub/ui/src` with `hub/hub/static/ui` through `scripts/refresh_ui_bundle.py`. The test guide must
+  say so.
+- **Collision check, as step 6 requires:** F327 is backend (`agent_trigger.py`, `scheduler.py`,
+  `run_divergence.py`, the review staffing path). If F215's R1 lists any of them, run loop 1 alone
+  and say why.
+
+**At a drain count of 1, run loop 1 only.** At 2 or more, run neither, as step 6 already says.
+
+### Before D-5, if it comes up before 15:00: the access-path exploration
+
+Write `openspec/explorations/2026-09-14-a-harness-that-blocks-mcp.md`. It frames the OPEN question
+in `DECISIONS.md` `### 2026-09-13 afternoon`: what a `claude` run should do when its harness refuses
+the Hub's tool server. That question covers F299, F301, F339 and F340.
+
+- Lay shapes (i), (ii) and (iii) against what was measured:
+  - the archived change's `design.md` and `evidence/`, for `claude` 2.1.269's behaviour;
+  - F339's reproduction;
+  - F340's code read;
+  - `DECISIONS.md` 1c's four-shape table.
+- **Measure, don't argue**, where one Haiku spawn settles a claim. One candidate: does a no-approver
+  `acceptEdits` run on a blocking harness still reach the plane at all?
+- **It decides nothing.** It ends with the question in one line and a recommendation. The review
+  page carries it as a decision.
+- Exploration only: no `openspec/changes/` directory, and no spec edit.
+- If the queue reaches it at 15:00 or later, skip it and say so on the page.
+
+### The order for the days after
+
+```
+1. F327    (B)  a flow-staffed review refused at dispatch      loop 1, 2026-09-14
+2. F215    (B)  the evidence screen                             loop 2, 2026-09-14 if drain = 0
+3. F124    (B)  a loop's work never reaches main                loop 2, the next clear day
+4. the access path, F299 + F301 + F339 + F340                  after the operator decides from the exploration
+5. the three R-3 leftovers      F209's reason; queue/settings port-then-remove; entry 19 narrowed
+```
+
+**Not in the order, deliberately:**
+- **F325** (A): Codex, undrivable, no verdict.
+- **F292 and F314** (B): the CI flakes. Their priority is still open. The gate's re-run is a
+  mitigation, not a fix.
+- **F333 + F334** (B): the night's decision 2 (propose together, or fold F334 into §6.2's wording)
+  is unanswered.
+- **F326** (D): a D-6 carve-out candidate. The collision that kept it out today, `agent_trigger.py`
+  with F299, is gone. It collides with F327 if loop 1 runs, so take it only on a day F327 is not in
+  flight.
+
+---
+
 ## 2026-09-13
 
 Written 2026-09-12 by a DECIDE session, on the operator's instruction, and **rewritten that

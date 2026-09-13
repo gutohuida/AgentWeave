@@ -19,6 +19,74 @@ says "the operator writes a verdict", it is describing work, not performing it.
 
 ---
 
+## 2026-09-13 — the objective widens: loop 1 drains, loop 2 makes it usable
+
+**Decided by the operator, in session, 2026-09-13 ~14:20** (`DECISIONS.md`, `### 2026-09-13
+afternoon`, row `roadmap`). This answers the question the handoff chain carried for three handoffs:
+*"We still havent fisished working all that it was open so I can do new stuff already? Or use
+agentweave for my day to day work"*. **Read this section before the older ones below. It changes
+where half the proposals point, and it leaves the scope verdict standing.**
+
+**What is decided.**
+- Loop 1 keeps draining decided A and B findings.
+- Loop 2, which runs only at a drain count of 0, takes the **work-lands arc**: F215 first, then F124.
+- The operator also uses AgentWeave day to day **on another project**.
+
+**Why the drain alone was not the plan.**
+- **It does not converge.** Handoff 0121 counted A+B open at **74** (A 8, B 66). This afternoon's
+  `classify_findings.py` counts **73** (A 4, B 69). In between, **8** findings were fixed: F300,
+  F312, F319, F320, F321, F323, F331 and F328. **9** were filed: F332 to F340. Two of the best
+  build nights the loop has had moved the count by one.
+- **It produces a correct Hub. The operator's own definition of released asks for a usable one.**
+  `openspec/explorations/2026-08-30-release-roadmap.md:6-8` defines released as *"(1) the product
+  gives a stranger a compelling reason to use it, and (2) the operator can develop AgentWeave with
+  AgentWeave, locally, for real."* Its concrete test (`:59-64`) is retiring the hand-rolled
+  overnight driver this repository runs. The gap it names (`:38-40`): *"a flow's finished work
+  cannot reach the main branch in a default project."*
+
+**The capability assessment, from handoff 0120 (2026-09-11), as it survived an Opus refutation.**
+This is its first time on disk. It was code-read and route-mapped, **not driven**.
+- **The gap is the operator surface, not the backend.** 100 of 155 operator routes are reachable
+  from the running app. 36 have no client anywhere, and 8 more have a client whose screen was
+  deleted.
+- **The largest cluster is 17 spec routes** (evidence, drift, reindex, retention), absent from both
+  `hub/ui/src` and the shipped bundle. The defensible statement is F215's own: an operator using
+  only the product cannot accept their own project's evidence. That is a missing screen over a
+  working API.
+- **Evidence does gate merging.** `evidence_governs` (`hub/hub/task_integration.py:347-382`) is true
+  for any non-loop task. So until F215 lands, an agent's recorded evidence waits for an acceptance
+  the UI cannot give, and the work does not land.
+- **Against the three differentiators** (`openspec/explorations/2026-08-02-product-direction.md:26-34`):
+  - multi-agent collaboration's messages surface is tree-shaken out of the shipped app;
+  - spec-driven development is built, and breaks at the last step;
+  - governance is a read-only panel pointing at `agentweave.yml`, which the product no longer
+    writes.
+- **Refuted, and not to be repeated:**
+  - *"The operator cannot accept evidence, so an agent must self-accept."* `decide()` refuses
+    self-acceptance by identity (`requirement_evidence.py:712-719`).
+  - *"MCP-only."* The operator-plane REST route works.
+
+**The work-lands arc, 2026-09-13:**
+
+| finding | what | state |
+|---|---|---|
+| F140, F142 | — | fixed and driven |
+| F122 | — | fixed |
+| **F215** (B) | no control to accept evidence | open, **loop 2's first**, no verdict |
+| **F124** (B) | a loop's work never reaches `main` | open, loop 2's next, no verdict |
+| F206 (B), F211 (C) | drift, reindex and retention have no screen | open. `GET /spec/drift` projects bare ids, so this needs an API shape change |
+
+**What this does not settle.**
+- **The `:8000` live instance runs PyPI 1.1.0**, at migration head `0081`, while this checkout is at
+  `0102`. Day-to-day use on another project will exercise last month's product unless it is updated,
+  from source or through a release. That is outward-facing and the operator's call. **Not asked yet.**
+- **The drain's own front is blocked on a question, not on capacity.** After F332, the open A
+  findings are the access-path cluster (F299 and F301, re-decided with F339 and F340) and F325
+  (Codex, undrivable). `DIRECTION.md` `## 2026-09-14` queues the exploration that frames that
+  question.
+
+---
+
 ## The one fact that reorders everything
 
 **This section was true for 54 minutes and is now history. It is kept, struck through, because it
