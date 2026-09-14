@@ -6,6 +6,12 @@ redirected the night window onto it (`spec-queue/APPROVALS.md` `## 2026-09-14`, 
 down at 23:30"*). The queue there calls this change `who-owns-a-loops-queue`. R1 renamed it,
 because this change builds the half of the design that the old name does not describe (see *Scope*).
 
+**R2, the same night**, re-derived it against the code and repaired four defects. An archived loop
+held its agents forever. The queued-turn arm counted input past the hop budget, which could have
+left LoopEngine frozen. The same arm read a map that hides the assignee's own input. And the
+documentless widening is F128. Each is marked *Round 2* where it lands; the account is in
+`design.md`'s *Round 2* section.
+
 ## Why
 
 LoopEngine, the operator's real flow on `:8000`, stood still for twelve hours. From 07:02 to at
@@ -89,9 +95,13 @@ the exploration and this proposal, and a later change named `who-owns-a-loops-qu
 
 - **`_agents_that_are_free` asks whether the holding is reachable, not only what its status is.**
   An agent holds work where it is the assignee of a task in `LIVE_STATUSES` that either:
-  - belongs to a loop that has not ended (`Loop.ending_state IS NULL`), or
-  - has a turn running or queued for that assignee, naming the task. This reads
-    `run_task_binding.tasks_with_a_turn_pending_or_running`, the F154 helper, rather than a new query.
+  - belongs to a loop that has neither ended nor been archived (`Loop.ending_state IS NULL AND
+    Loop.archived_at IS NULL`; the second clause is Round 2's, design D2), or
+  - has a turn running or queued for that assignee, naming the task, where a queued turn counts
+    only within the project's hop budget. *Round 2:* this reads `(task, agent)` pairs from a new
+    `run_task_binding` function, not the F154 helper R1 named. That helper keeps one agent per
+    task, so it can hide the assignee's own input, and it counts input that only the operator's
+    release will deliver (design D4).
 
   Every other assigned live task is a bookmark. It stays on the board with its status and assignee
   untouched, and it no longer costs anybody anything.
@@ -143,6 +153,12 @@ the exploration and this proposal, and a later change named `who-owns-a-loops-qu
    review that the day's `DIRECTION.md` asks for, and nothing in A depends on the answer. It stays
    with F361.
 
+   *Round 2: R1's "nothing in A depends on the answer" was true only of the fix R2 made, not of
+   R1's own design.* Those eight messages are F361's peer chains, suspended at hop 7 against a
+   budget of 6. If they name tasks their recipients hold, R1's queued-turn arm would count them as
+   turns queued and keep `dev` and `dev_2` held, and LoopEngine would not unfreeze. Under Round 2's
+   rule, input past the hop budget holds nobody, so the answer genuinely no longer matters to A.
+
 ## Relation to F352, and to the stopped change
 
 This change answers F352's definition half. `an-unstaffed-review-names-its-holders` stopped on the
@@ -188,16 +204,26 @@ another agent in the project is free"*), so it needs no delta.
 ## Impact
 
 - **Python:** `hub/hub/scheduler.py`, meaning `_agents_that_are_free`, one docstring line in
-  `resolve_reviewer`, and the comment at `:1363`. Tests go in a new
+  `resolve_reviewer`, and the comment at `:1363`. *Round 2:* also one new function in
+  `hub/hub/run_task_binding.py` (task 1.1a). Tests go in a new
   `hub/tests/test_a_task_nothing_will_move_holds_nobody.py`, plus one existing test re-staged
   (tasks 2.1–2.2).
 - **Not touched:** `hub/hub/mcp_server.py`, `hub/hub/api/v1/tasks.py`, the transition map,
-  `LIVE_STATUSES`, the roster, the rung-3 sentence, and any row.
+  `LIVE_STATUSES`, the roster, the rung-3 sentence, and any row. *Round 2:* also not touched are
+  `tasks_with_a_turn_pending_or_running`, its reader at `:1454`, and the held-resume arm at `:1506`.
+  Each has a defect R2 filed (F371, F370) and this change does not repair.
 - **No migration. No API shape change. No UI.**
 - **Behaviour an operator will see:**
   - A flow that was stuck on `review_unstaffed` behind out-of-loop holdings starts staffing.
   - A flow whose job agent is mid-turn now proceeds, rather than being refused, when another agent
     holds only bookmarks. This affects the board's stall line and `POST /jobs/{id}/run`'s 409
     (design D3).
+  - *(Round 2)* **A plain loop does too, which is F128.** A documentless loop whose agent is
+    mid-turn can hand its next pending task to a sibling that holds only bookmarks. F128's
+    substitution already reaches any multi-agent project with an unencumbered sibling. This change
+    adds the projects where every sibling holds bookmarks. F128's decision is the operator's and
+    stays open (design D3).
+  - *(Round 2)* Agents held only by tasks in a loop archived through the job route, or only by peer
+    messages past the hop budget, become available.
 - **Findings:** retires none whole. F352's definition half is fixed, and it stays open for the
-  visibility half.
+  visibility half. *Round 2* filed F370 and F371 against shipped code, and neither is fixed here.

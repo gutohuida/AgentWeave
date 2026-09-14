@@ -2,7 +2,7 @@
 
 ### Requirement: An active task makes its assignee unavailable only while something will move it
 
-A flow SHALL count an agent as holding work only for a task in an active status that belongs to a loop that has not ended, or that the agent has a turn running or queued on.
+A flow SHALL count an agent as holding work only for a task in an active status that belongs to a loop that has neither ended nor been archived, or on which the agent has a turn running or queued within the project's hop budget.
 
 An assignee is a record of who holds a task, not evidence that anything will ever work it. A loop
 walks only its own queue, so a task that belongs to no loop is never started, moved or closed by any
@@ -13,11 +13,16 @@ follow-up an agent files outside a loop and assigns to a colleague costs the pro
 A task in a loop that has not ended is a real queue its loop will reach, and it SHALL hold its
 assignee, so that an agent with work waiting in one loop is not given more by another. This holds
 while the loop's job is paused, because a pause can be undone and an ending cannot. A task in a loop
-that has ended SHALL NOT hold its assignee, because no firing will walk that loop again.
+that has ended SHALL NOT hold its assignee, because no firing will walk that loop again. A task in a
+loop the operator has archived SHALL NOT hold its assignee either, whether or not the loop ended
+first: archiving retires the loop and hides it from the listing that would show why its agents were
+held.
 
 A turn running or queued for the task's assignee, naming that task, SHALL make the task hold its
-assignee whether or not the task belongs to a loop. A turn queued for a different agent SHALL NOT
-make the task hold its assignee.
+assignee whether or not the task belongs to a loop, and input naming the same task that is queued
+for other agents SHALL NOT prevent it. A turn queued for a different agent SHALL NOT make the task
+hold its assignee. Input queued past the project's hop budget SHALL NOT count as a turn queued,
+because it is delivered only if the operator releases it.
 
 The firing's refusal while its job's agent is busy, the agents a firing may give new work to, and
 the agents a review may be given to SHALL all use this one definition. A firing refused because
@@ -62,6 +67,21 @@ assignee or its loop, and it SHALL NOT change what the roster reports an agent a
 
 - **WHEN** an agent is assigned a task that belongs to no loop, and input naming that task is queued only for a different agent
 - **THEN** that task does not stop the assignee being counted free
+
+#### Scenario: Input for someone else does not hide the assignee's own
+
+- **WHEN** an agent is assigned a task that belongs to no loop, input naming that task is queued for that agent, and input naming the same task is also queued for a different agent
+- **THEN** it is not counted among the agents free for new work or for review, whichever agent's input the Hub reads first
+
+#### Scenario: Input past the hop budget does not hold the assignee
+
+- **WHEN** an agent is assigned a task that belongs to no loop, and the only input naming that task queued for it is past the project's hop budget
+- **THEN** that task does not stop the agent being counted free
+
+#### Scenario: An archived loop's task holds nobody
+
+- **WHEN** an agent is assigned a task in an active status that belongs only to a loop the operator archived without ending it
+- **THEN** that task does not stop the agent being counted free
 
 #### Scenario: The busy refusal agrees with the walk
 
@@ -158,7 +178,8 @@ arrival; the resolution SHALL exclude it rather than discover the refusal afterw
 #### Scenario: A busy agent is not selected
 
 - **WHEN** an otherwise eligible agent is running a turn, is held by a refusal of the provider's
-  usage allowance, or holds a task in an active status in a loop that has not ended
+  usage allowance, or holds work as *An active task makes its assignee unavailable only while
+  something will move it* defines
 - **THEN** it is not selected while another eligible agent is available
 
 #### Scenario: An agent whose only task is outside every loop is selected

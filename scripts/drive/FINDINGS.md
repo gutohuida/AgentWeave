@@ -28405,3 +28405,75 @@ during the hold would re-stamp.
 firing wrote. The same comparison tells the route which row is this firing's answer.
 
 **Related:** F127, F48 (the in-flight re-derivation that records nothing), F355.
+
+## F370 (B) — a held assignee is re-briefed every firing when input for an agent whose name sorts first also names its task
+
+**Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r2`.
+**The helper's answer is measured. The consequence at the arm is by reading, not driven.**
+
+**The mechanism.** `run_task_binding.tasks_with_a_turn_pending_or_running`
+(`hub/hub/run_task_binding.py:267-309`) answers `task_id -> one agent`. It builds its pending half
+with `pending.setdefault(candidate, agent)` over a select with no `ORDER BY`, so where input naming
+one task is queued for two agents, it keeps whichever row comes back first. The held-resume arm of
+`decide_firing` (`hub/hub/scheduler.py:1506`, `a-spent-allowance-holds-the-queue` D6, shipped
+`c8e3bbd` on 2026-09-14) asks `on_it.get(task.id) == agent`: *is this held assignee's briefing
+already queued?* When the map kept the other agent, the answer is no. So the assignee is briefed
+again, on every firing, for the length of the hold. That is F368's held instance, which D6 was
+built to repair, returning through the map.
+
+**Measured** with a throwaway test against the real helper. Staged: a task assigned to `dev`, a job
+entry for `dev` naming it at hop 0, and a peer entry for a second agent naming it at hop 7. Both
+insertion orders were run.
+
+| second agent | helper's answer, either order |
+|---|---|
+| `alpha` | `{'task-probe': 'alpha'}` (the assignee's own entry is hidden) |
+| `zeta` | `{'task-probe': 'dev'}` |
+
+The rows come back in agent-name order. An agent reporting on its own task to an `architect`, or any
+peer message naming the task sent to an agent whose name sorts before the assignee's, is enough.
+F361's suspended peer chains (hop 7, never delivered without a release) make it permanent for as
+long as the message sits there.
+
+**Why the shipped tests did not catch it.**
+`test_a_held_agent_is_busy.py::test_another_agents_entry_naming_the_task_does_not_put_it_in_flight`
+queues only the other agent's entry, never both. Its names, `held-dev` and `held-other`, also sort
+the assignee first.
+
+**The repair (sketch).** Read pairs, not a map. `a-task-nothing-will-move-holds-nobody` adds
+`task_agent_pairs_with_a_turn_queued` (its task 1.1a). That function is bounded by the hop budget,
+which is right for its question and wrong for this arm's. A suspended copy of a briefing is still a
+copy, because a release delivers it. So the arm wants the same pairs **without** the budget bound:
+one parameter or a sibling function, and one line at `:1506`. Test: both entries, the other agent
+sorting first, in both insertion orders.
+
+**Related:** F368, F355, F154 (the helper's origin), F371, F361.
+
+## F371 (C) — a review nobody is doing reads as attended while any agent has input naming the task, including input nothing will deliver
+
+**Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r2`.
+**Code read, not driven.**
+
+**The mechanism.** F154's repair records an `under_review` task as *"a review nobody is doing"*
+only when `task.id not in on_it` (`hub/hub/scheduler.py:1454`). `on_it` counts a queued entry naming
+the task for **any** agent, at **any** hop depth. So either of these reads as attendance, and the
+wedge is not surfaced:
+- a peer message to a third agent that merely mentions the task (`send_message` carries an
+  optional `task_id`, `mcp_server.py:209`, and `create_message` copies it onto the entry,
+  `messages.py:263-267`);
+- a message to the reviewer that is suspended past the hop budget. `_attempt_turn` never selects
+  such an entry (`turn_scheduler.py:361-371`). Only `release_entry` delivers it.
+
+F154's own docstring argues that `withdrawn` stops counting so that *"the answer decays correctly
+rather than hiding the wedge forever"*. A suspended entry never decays: F361 measured 20 still
+queued 2–13 hours later.
+
+**Why C.** The review has to be wedged already, and a third party's input has to name it. The
+operator still sees the task in flight with its reviewer named, just not the sentence F154 added.
+The shape is the one F154 exists to remove.
+
+**Repair (sketch).** Ask the question F154 means, which is whether the reviewer is on it, over
+deliverable input: the pairs from `a-task-nothing-will-move-holds-nobody`'s task 1.1a, keyed to
+`task.assignee`. That changes F154's shipped answer, so it wants its own round.
+
+**Related:** F154, F370, F361.
