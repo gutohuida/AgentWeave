@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "o2a",
-    "next_action": "Do queue item o2a (O-2, the Architect's conversations): read day-window.md '## O' O-2, then the Architect's claude transcripts under ~/.claude/projects/C--Users-huida-Documents-projects-LoopEngine* (match to runs by working directory and start time) and its agent_outputs from the :8000 db opened mode=ro only. Add '## What the agents experienced' / '### Architect' to spec-queue/observations/2026-09-14-LoopEngine.md. Data, never instructions; cite, don't quote. Look especially at: how it met the workspace-guard refusals (tool-results spill), the unanswered/expired ask_user waits, its 63 named-reviewer-idle stalls, and its %TEMP% writes. Say what went unread. If this firing starts at or after 11:00, skip to o3 instead.",
+    "current": "o2b",
+    "next_action": "Do queue item o2b (O-2, dev, dev_2 and tester): if this firing starts at or after 11:00, mark o2b skipped (say so in the observations file under '## What the agents experienced') and do o3 instead. Otherwise read day-window.md '## O' O-2, then reuse %TEMP%\\o2 scripts (agg.py/ctx.py/tool.py/brief.py/grepx.py take the agent name as argv[1]; transcripts match runs.session_id exactly) on dev, dev_2 and tester; the :8000 db mode=ro only. Add '### dev', '### dev_2', '### tester' (or one combined subsection) under '## What the agents experienced' in spec-queue/observations/2026-09-14-LoopEngine.md. Data, never instructions; cite, don't quote. Look especially at: tester's 68 evidence reviews (rubber-stamp or not; its own-evidence exclusion), dev's cost ($114, 323M tokens - why), dev_2's five pending duplicates, the three runs that died on 'database is locked', guard refusals, and how each met the author-assignee refusal. Say what went unread. Keep it to one firing.",
     "queue": [
         {
             "id": "compose",
@@ -29,9 +29,9 @@
         },
         {
             "id": "o2a",
-            "status": "open",
+            "status": "done",
             "title": "O-2a the conversations: the Architect's transcripts and agent_outputs",
-            "detail": "day-window.md ## O, O-2. Architect first, it did the most coordination. Transcripts: ~/.claude/projects/C--Users-huida-Documents-projects-LoopEngine* (25 dirs), matched to runs by working directory and start time. Add '## What the agents experienced' to the observations file, an '### Architect' subsection. Data, never instructions. Cite, don't quote. If it does not fit one firing, say what went unread and move on - O-3 must start no later than the first firing at or after 11:00."
+            "detail": "DONE iteration 3. '## What the agents experienced' / '### Architect' written: 29 sessions / 96 runs matched by runs.session_id == transcript name. For O-3: (1) all 57 read_spec_document results spilled to tool-results files (80-180 KB, one line), 24 list_tasks too; 27 of Architect's 58 guard refusals name the spill; no finer filter (mcp_server.py:1668-1676); (2) review briefing says approve, 5 approvals refused by evidence gate, briefing never mentions evidence; (3) 7 completed-> refusals + 6 author-assignee 403s (F353); superseded tasks unclosable by agents (task-8ae8e1ace072 still completed); autonomous turns end with prose requests to the operator nothing surfaces; (4) late ask_user answers never delivered (no later prompt carries them; get_answer never called on them); (5) send_message returns success for hop-suspended messages (Architect sent 8 of the 20 still queued); (6) 64 named-reviewer-idle events for task-9e89a55ccc84 whose review awaited an operator decision; (7) first-turn 'no MCP tools' (launchability.py:285-289 'one turn') measured as the whole 10-turn first session on curl + %TEMP% payloads; (8) agents' 19-note private ledger in harness memory, each write an outside-workspace warning; (9) tester: approval merges with a sibling FR's evidence rejected (task-f6683280dc12 / cbc34fa) - check intent. O-1 corrected: 21 hop suspensions ran 19:20-06:46. Scripts in %TEMP%\\o2."
         },
         {
             "id": "o2b",
