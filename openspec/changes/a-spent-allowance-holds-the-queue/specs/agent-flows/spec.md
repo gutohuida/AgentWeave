@@ -11,8 +11,9 @@ re-brief a held agent's assigned task on every firing, and the agent would find 
 identical briefings when its hold ended.
 
 A task assigned to a held agent SHALL be reported as in flight while input naming that task is
-queued, and SHALL NOT be briefed again. Where no input naming it is queued, the firing SHALL brief
-it once, as it resumes any assigned task, and the task is in flight from then on. A held agent is
+queued for that agent, and SHALL NOT be briefed again. Input naming the task that is queued for a
+different agent does not count. Where no input naming it is queued for the held agent, the firing
+SHALL brief it once, as it resumes any assigned task, and the task is in flight from then on. A held agent is
 working nothing, so its assignment alone is not the in-flight condition: that condition is the one
 `agent-loops` *A task reported as in flight is one an agent is actually working* already states.
 

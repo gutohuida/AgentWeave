@@ -3,7 +3,8 @@
 Finding: F355 (retired by this change at archive). R1 2026-09-14. R2 the same day; its additions
 are marked **(Round 2)**: 1.2b, 2.5, 2.6, 3.4b, 3.4c, 3.7 and 4.3, with edits to 1.2, 2.2, 3.2,
 3.3, 3.5 and 6.4. R3 the same day; its additions are marked **(Round 3)**: 3.4d and 4.4, with
-edits to 1.2, 1.2b, 2.5, 3.1, 3.4b, 3.4c and 6.5.
+edits to 1.2, 1.2b, 2.5, 3.1, 3.4b, 3.4c and 6.5. REV the same day (verdict PROCEED); its
+additions are marked **(Round 4 — REV)**: 2.4b and 3.4e, with edits to 2.4, 3.4b, 4.4, 6.5 and 7.1.
 Build day 2026-09-14. Day rules:
 - no `hub/hub/mcp_server.py` (nothing here needs it);
 - no UI and no bundle;
@@ -109,7 +110,9 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
       Mutation: read `delivery_attempts` alone. The test fails.
 - [ ] 2.4 `_execute_run` computes the refusal from `accounting_sample` when
-      `final_status == "failed"` and `binding_conflict is None`, and passes it. Test with the
+      `final_status == "failed"` and `binding_conflict is None`, and passes it. **(Round 4 — REV)**
+      Only when the reading was recorded (the `if run:` branch) and `resets_at` is later than the
+      run's end; otherwise it passes nothing (design D2). Test with the
       `_fake_pty` pattern (`hub/tests/test_agent_trigger.py:147`), scripted as the harness emits a
       refusal:
       - a `system` init line with a session id;
@@ -121,10 +124,25 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       the entry is `queued` with `delivery_attempts == 0` and `allowance_refusals == 1`, and that
       the conversation's `provider_session_id` is the init line's.
 
-      Mutation: pass no refusal. The spawn count rises and the entry is withdrawn.
+      Mutation: pass no refusal. The entry reads `delivery_attempts == 1` and
+      `allowance_refusals == 0`, and the test fails on those. *(Round 4 — REV: R1 wrote "the spawn
+      count rises and the entry is withdrawn". Neither can happen. D4 still derives the hold from
+      the recorded `TurnUsage`, so nothing re-spawns, and one counted attempt is below
+      `DELIVERY_ATTEMPT_LIMIT = 3`.)*
 
       The test runs with no `JobScheduler` (`get_scheduler()` is `None`). So it also shows that
       arming the wake with no scheduler neither raises nor stops the run's end (design D5).
+- [ ] 2.4b **(Round 4 — REV, design D2)** The two conditions. Through the 2.4 fixture:
+      - with `resetsAt` one second **before** the run's end, the entry reads
+        `delivery_attempts == 1` and `allowance_refusals == 0`. The hold still applies for the
+        60 s floor (D3);
+      - with `db.get(Run, run_id)` returning `None` in the finalizing session (the loud branch,
+        `agent_trigger.py:2279`; no existing test reaches it, so patch the lookup), the entry is
+        counted, and no wake is armed.
+
+      Mutations:
+      - drop the `resets_at` condition. The first test reads `delivery_attempts == 0`;
+      - compute the refusal outside `if run:`. The second test reads `allowance_refusals == 1`.
 - [ ] 2.5 **(Round 2, design D10)** The refused turn's own firing stays `in_progress`. Through the
       2.4 fixture, with the entry queued by `_do_fire_job` for a plain job:
       - after the refused run, the firing's `JobRun` reads `in_progress`, not `failed`;
@@ -205,7 +223,8 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       branch.
 - [ ] 3.4b **(Round 2, rewritten in Round 3; design D6)** `decide_firing` reads
       `held_agents = agents_held(...)` once, beside `running`. The resumption arm records in
-      flight for `agent in running or (agent in held_agents and task.id in on_it)`. The default
+      flight for `agent in running or (agent in held_agents and on_it.get(task.id) == agent)`
+      **(Round 4 — REV: not `task.id in on_it`, which counts another agent's entry)**. The default
       branch requires `default_agent not in held_agents` as well as `not in running`. `running`
       itself is unchanged. Tests in `hub/tests/test_scheduler.py`, on a flow whose project has a
       **second, free** agent `other`. That agent is what lets the firing past the busy guard;
@@ -218,13 +237,17 @@ The reading used in tests is the measured one (`design.md`, *Context*):
         naming the task, on the first firing. The decision reports the task in flight on the second
         and third;
       - `dev` is the job's own agent and is held, and one unassigned task is startable. The
-        firing staffs `other`, not `dev`.
+        firing staffs `other`, not `dev`;
+      - **(Round 4 — REV)** `dev` is held and holds an `assigned` task. The only queued entry
+        naming it is **`other`'s** (a peer message to `other` carrying the task id). The first
+        firing queues one entry for `dev` naming the task.
 
       Mutations:
       - ignore `held_agents` in the resumption arm (R1's form). The first test gains three entries;
       - read `agent in held_agents` alone, without `on_it` (R2's form). The second test gains no
         entry, and it reports the task in flight on the first firing;
-      - drop `held_agents` from the default branch. The third test staffs `dev`.
+      - drop `held_agents` from the default branch. The third test staffs `dev`;
+      - read `task.id in on_it` (R3's form). The fourth test queues nothing for `dev`.
 - [ ] 3.4c **(Round 2, design D6)** `_agents_that_are_free`'s running half reads
       `running | agents_held`. The holdings half is untouched. Tests:
       - a held agent holding no task is not in the free list;
@@ -249,6 +272,22 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
       Update the stopped change's D2 length budget in the same commit only if it is built first.
       Otherwise record in the review page that its rung-3 rewrite must carry this ground.
+- [ ] 3.4e **(Round 4 — REV, design D6)** The board's stalled answer names the guard's refusal. In
+      `_batch_loop_summaries` (`api/v1/jobs.py:339-340`), when `decide_firing` answers
+      `DECISION_STALLED` and `_loop_flow_busy_reason(job.agent)` refuses, `stall_reason` is the
+      guard's reason. An in-flight or proceeding decision is untouched. Tests beside the existing
+      board-summary tests:
+      - a single-agent loop, agent held, one pending unassigned task, and the agent's only queued
+        input a peer message. The summary's `stall_reason` names the hold's `HH:MM UTC` and does
+        not contain *"no claimable task"*;
+      - the same loop with its agent running a turn bound to the loop's task: `stall_reason` is
+        `None`. This pins that a working loop does not read `stalled`;
+      - with no hold and nothing running, the stalled reason is byte-identical to today's.
+
+      Mutations:
+      - drop the re-ask. The first test reads *"no claimable task among 1 open (1 pending)"*;
+      - ask the guard for every decision, not only a stalled one. The second test reads the
+        running reason.
 - [ ] 3.5 Plain-job coalescing in `_do_fire_job` (D7). Tests:
       - during a hold that came from a refusal on **another conversation**, the first firing
         queues;
@@ -300,11 +339,14 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       `waiting_reason` fallback (`api/v1/inbound_queue.py:183`) then reports the ended hold, and
       the test fails.
 
-- [ ] 4.4 **(Round 3, design D11; retires F127)** `run_job` asks `_loop_flow_busy_reason`
-      first for a loop job, before the `skipped` check. A refusal answers 409 with the guard's
-      reason, that no other agent is free, and that nothing was started. On
+- [ ] 4.4 **(Round 3, design D11; retires F127 and, Round 4, F369)** `run_job` reads the newest
+      `JobRun` id before `_fire_job_internal` and after it **(Round 4 — REV)**. If they differ, the
+      firing wrote a row: stamp `requested_by_run_id` on it and answer from it as today. If they
+      do not, stamp nothing, and for a loop job ask `_loop_flow_busy_reason`. A refusal answers 409
+      with the guard's reason, that no other agent is free, and that nothing was started. On
       `DECISION_IN_FLIGHT`, the answer names each held agent among the in-flight tasks' staffing,
-      read through `task_attribution.staffing_from_decision`, and drops *"nothing is wrong"*.
+      read through `task_attribution.staffing_from_decision`, and drops both *"already being
+      worked"* and *"nothing is wrong"* (Round 4).
       Tests in `hub/tests/test_board_agent_role.py`, beside F48's:
       - a single-agent loop whose agent is running a turn on no loop task, with a pending task.
         `POST …/run` answers 409 naming the agent, not 500 *"Failed to fire job"*. This is F127's
@@ -313,14 +355,21 @@ The reading used in tests is the measured one (`design.md`, *Context*):
         its briefing queued. 409 names the hold's `HH:MM UTC`, and does not contain *"already being
         worked"* or *"nothing is wrong"*;
       - a two-agent flow, job agent free with nothing startable, and the in-flight task staffed to
-        a held agent with its briefing queued. 409 names that agent's hold, and does not contain
-        *"nothing is wrong"*;
-      - F48's test (`:291-319`), unchanged, still passes.
+        a held agent with its briefing queued. 409 names that agent's hold, and contains neither
+        *"already being worked"* nor *"nothing is wrong"*;
+      - F48's test (`:291-319`), unchanged, still passes;
+      - **(Round 4 — REV)** a loop past its `stop_at`, whose agent is made to run a turn between the
+        firing and the route's answer (patch `_fire_job_internal` to record its skip and then open
+        a `running` `Run`). 409 carries the stop-time reason, not the busy reason;
+      - **(Round 4 — REV)** an earlier firing's `JobRun` carries `requested_by_run_id = "run-a"`.
+        A manual press whose firing the guard refuses leaves it `"run-a"`.
 
       Mutations:
       - drop the busy-guard re-ask. The first test reads 500, and the second reads *"already being
         worked"*;
-      - drop the held clause on the in-flight answer. The third test reads *"nothing is wrong"*.
+      - drop the held clause on the in-flight answer. The third test reads *"nothing is wrong"*;
+      - re-ask the guard before comparing ids (R3's order). The fifth test reads the busy reason;
+      - stamp the newest row unconditionally (today's code). The sixth test reads `None`.
 
       A source-scanning test already pins `task_attribution` as the only reader of
       `_cannot_staff`, and the new route code must not read it directly.
@@ -374,12 +423,16 @@ in the log and on the review page.
       nothing is queued for it. Without one, the busy guard refuses it (3.4).
       **(Round 3)** Press Run on that loop while held. Record the status code and the detail. It
       must be a 409 naming the hold's time, not *"already being worked"* and not a 500 (4.4).
+      **(Round 4 — REV)** Read the loop's summary (`GET` the jobs list) while held. Where the
+      decision is stalled and nobody else is free, its `stall_reason` names the hold, not *"no
+      claimable task"* (3.4e). Record which case the drive reached.
 - [ ] 6.6 Leave no job enabled. Record the drive's evidence in `scripts/drive/FINDINGS.md` under
       F355.
 
 ## 7. Archive
 
 - [ ] 7.1 `openspec-sync-specs`, then archive. Retire F355 in `FINDINGS.md` with `fixed <sha>`, in
-      the archive commit. **(Round 3)** Retire F127 the same way, unless REV narrowed D11 to the
-      hold. In that case add a dated note to F127 saying the hold half is fixed and the running
-      half is not. Add a dated note to F128 saying a hold now reaches its substitution (design D6).
+      the archive commit. **(Round 3)** Retire F127 the same way (REV kept D11 whole, Round 4).
+      **(Round 4 — REV)** Retire F369 the same way. Add a dated note to F128: a hold adds one case
+      to its substitution, a single startable unassigned task while the job agent is held. The
+      two-task case already reaches every documentless loop, busy agent or not (design D6).

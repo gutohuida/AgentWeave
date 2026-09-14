@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 14,
+    "iteration": 15,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f355-rev",
-    "next_action": "Do queue item f355-rev: the adversarial review (the operator's standing pre-approval step; memory 'Opus review before approval') of openspec/changes/a-spent-allowance-holds-the-queue after three rounds. Spawn one Opus subagent (model opus) with the change files and the code they cite, asked to REJECT the change's arguments where wrong, not re-read them. Point it at: (1) the no-OPERATOR-QUESTION argument - hold vs drop (F96), the flow's job, _agents_that_are_free's running half vs F352-free, and F128 (the loop substitution a hold now reaches); if it finds a genuine operator choice, write an OPERATOR QUESTION in proposal.md, add it to decisions_for_user, and mark f355-impl/f355-drive skipped (DIRECTION 2026-09-14 stop clause); (2) D11's scope - it folds F127's running half into a build-day change; REV decides keep (retire F127) or narrow to the hold (one condition), and records the verdict; (3) D7 plain-job coalescing, the one severable choice, and R3's note that severing it breaks finalize's one-in_progress-per-conversation invariant for resuming jobs under D10; (4) R3's D6 resumption rule (held assignee in flight only with queued input naming the task, else briefed once) against agent-loops 'A task reported as in flight...' and loop-notices-and-reacts D4; (5) the MODIFIED agent-flows reviewer requirement - copied whole and faithful to the shipped text apart from the hold? (diff it against openspec/specs/agent-flows/spec.md:231-342). Fix defects in the change files, add a 'Round 4 - REV' section to design.md, record the verdict (PROCEED / STOP / SPLIT) in the log. openspec validate --strict must pass. Day rules: no hub/hub/mcp_server.py; no UI; migration 0103 named on the page. If it is at or after 18:15, do d5 instead.",
+    "current": "f355-impl",
+    "next_action": "Do f355-impl PART 1 of 3: openspec/changes/a-spent-allowance-holds-the-queue tasks groups 1 and 2 (1.1, 1.2, 1.2b, 1.3; 2.1 migration 0103 + model field + BOTH head assertions in hub/tests/test_migrations.py and hub/tests/test_project_persistence.py; 2.2, 2.3, 2.4, 2.4b, 2.5, 2.6). Read design.md D1-D3, D2 (with its Round 4 conditions: recorded reading, resets_at after the run's end), D5's arm placement and D8/D10 before coding; read night-window.md '## Implementing'. Apply each task's named mutation and record the observed failure beside the tick in tasks.md; never tick on a plan. Run the touched test files plus hub/tests/test_migrations.py, test_project_persistence.py, test_agent_trigger.py, test_inbound_queue.py under py -3.11; ruff + black --target-version py311 on touched files. Day rules: no hub/hub/mcp_server.py, no UI. If group 2's _execute_run tasks (2.4-2.6) do not fit this firing, commit what is done and verified and point next_action at the first unticked task. Then part 2 (group 3) and part 3 (group 4 + gate 5.x), then f355-drive. If it is at or after 18:15, do d5 instead.",
     "queue": [
         {
             "id": "compose",
@@ -113,15 +113,15 @@
         },
         {
             "id": "f355-rev",
-            "status": "open",
+            "status": "done",
             "title": "f355-REV: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
-            "detail": "Step REV of f355: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "DONE iteration 15 (13:50-14:20). Opus REV verdict PROCEED once fixed; no OPERATOR QUESTION. F128: R3's premise (a hold extends the substitution from a turn to hours) was false - _loop_candidates (scheduler.py:704-721) does not filter on a document, so any documentless loop with two startable tasks already recruits from free; D6 adds only the single-task case. D7 settled, NOT severable (docstring scheduler.py:236-240 + new-conversation-per-firing :2837-2843 means ~60 turns into the reset allowance). D11 KEPT whole, retires F127 (roadmap: decided, queued). Fixed: (1) MODIFIED agent-loops SHALL was false for every flow (guard passes when anyone free, :295-300) - shipped running sentence restored verbatim, hold paragraph conditioned on nobody else free; (2) board read 'stalled: no claimable task' for a whole hold (jobs.py:339 -> :1464 -> :1802) - a STALLED decision the guard would refuse carries the guard's reason, task 3.4e; window NARROWED REV's ask-the-guard-for-every-loop (UI buckets on stall_reason first, loopCounts.ts:23, would mark every working loop stalled); (3) D11 compares newest JobRun id before/after, answers from/stamps only a row the firing wrote (race + requested_by_run_id stamp on an earlier row, jobs.py:1283-1285) - filed F369 (C), retired by this change; in-flight answer with a held agent drops 'already being worked'; (4) on_it.get(task.id)==agent; refusal needs a recorded reading and resetsAt after the run's end else counted (task 2.4b, ACW paragraph+scenario); D10 invariant already false today; Python informative check; handover spawn named; 2.4 mutation fixed. validate --strict valid; test_classify_findings 23 passed. No product code."
         },
         {
             "id": "f355-impl",
             "status": "open",
             "title": "f355-IMPL: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
-            "detail": "Step IMPL of f355: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f355: implement per night-window.md 'Implementing' (may span firings). Build-day change under the 2026-09-14 DECISIONS row. Day rules: no hub/hub/mcp_server.py, no UI/bundle, migration 0103 named on the page. Split: part 1 = tasks groups 1-2 (1.1-1.3, 2.1-2.6 incl. 2.4b); part 2 = group 3 (3.1-3.7 incl. 3.4b-3.4e); part 3 = group 4 + gate (5.1-5.3). Each named mutation observed failing before a task is ticked."
         },
         {
             "id": "f355-drive",

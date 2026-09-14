@@ -9,6 +9,7 @@ Everything below runs without a person. Each item names the task that pins it.
 | A refusal is recognised from the reading, not the prose | unit tests over the measured reading | 1.1 |
 | The hold is derived, floored, and survives rows that say nothing | `provider_hold` and `agents_held` tests, including the real `record_turn_usage(sample=None)` row and 60 rows after a refusal | 1.2, 1.2b, 1.3 |
 | A refused turn is not counted, keeps its session, and is never withdrawn | `return_run_entries` tests; `_execute_run` through `_fake_pty` with a spawn count of 1 | 2.2, 2.4 |
+| A refusal whose reset has passed, or whose reading was not recorded, is counted as today | the 2.4 fixture with a past `resetsAt`, and with the run row invisible | 2.4b |
 | The retry note counts refusals | `format_turn_prompt` test | 2.3 |
 | A refused firing reads in progress, and takes its delivery's outcome | the 2.4 fixture fired by a plain job | 2.5 |
 | A completed turn with a refused reading still wakes the queue | the 2.4 fixture with exit 0 | 2.6 |
@@ -17,9 +18,10 @@ Everything below runs without a person. Each item names the task that pins it.
 | Loops refuse and plain jobs coalesce while held | `_do_fire_job` tests | 3.4, 3.5, 3.6 |
 | A flow neither re-briefs nor recruits a held agent, and briefs a held assignee's unbriefed task once | `decide_firing` and free-list tests with a second, free agent | 3.4b, 3.4c |
 | An unstaffed review names the hold when a hold is why | `resolve_reviewer` rung 3 with a held non-author | 3.4d |
+| The loops board names the hold rather than "no claimable task", and a working loop does not read stalled | `_batch_loop_summaries` tests | 3.4e |
 | A held firing survives a restart in progress | `reconcile_stale_job_runs` tests | 3.7 |
 | The operator is told, and not told once it is over | the queue status route and the `queue_agent_held` row | 4.1, 4.2, 4.3 |
-| Pressing Run on a held or busy loop answers 409 with the reason, never 500 or "nothing is wrong" | `POST …/jobs/{id}/run` tests beside F48's | 4.4 |
+| Pressing Run on a held or busy loop answers 409 with the reason, never 500 or "nothing is wrong"; a firing's own skip is answered from its row; an earlier row's requester is never overwritten | `POST …/jobs/{id}/run` tests beside F48's | 4.4 |
 | The whole thing on a live Hub | the stub-provider drive | 6.1–6.5 |
 
 ## Human-only
@@ -37,6 +39,8 @@ These need the operator, because only they can see the real allowance and the re
      is delivered after the reset. That should hold even if you restart the Hub in between.
    - Pressing **Run** on a loop whose agent is held should say the agent is held until HH:MM UTC.
      It should not say the work is being done, and it should not be an error.
+   - On the Loops page, a held loop that reads *stalled* should give the hold as its reason, not
+     *"no claimable task"*.
 2. **Your probe.** While an agent is held, send it one message.
    - If you have not changed your plan, you should see one refused run and nothing after it.
    - If you have enabled extra usage, the turn should run, and the queue behind it should drain.

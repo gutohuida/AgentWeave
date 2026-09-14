@@ -9754,6 +9754,12 @@ That change's D11 takes this entry's own fix shape (re-ask `_loop_flow_busy_reas
 answer 409 with its reason), and retires F127 at its archive, unless its REV narrows the rule to
 the hold. Specced, not built.
 
+**Note 2026-09-14 (f355-REV).** REV kept D11 whole, so F127 retires at that change's archive. One
+correction to the fix shape above: re-asking the guard *first* could answer a firing's own real
+`skipped` row with the busy reason, if the agent became busy in between. D11 now compares the
+newest `JobRun` id before and after the firing. It answers from a row only if the firing wrote it,
+and re-asks the guard only if it wrote none.
+
 ## F128 (B) — a loop runs on an agent its job does not name, whenever its own agent is busy
 
 Driven live in `t_run_while_busy.py` (that file's own BAD lines are this discovery). Job
@@ -27925,6 +27931,23 @@ open operator call D6 reaches (F128) is applied, not decided. Four disagreements
 Test construction: a module clock (`provider_allowance._utcnow`) for the tests that must end a hold,
 a mutation for 1.2b, and fixtures for 3.4b and 3.4c that can tell their mutations apart.
 
+**REV, 2026-09-14** (adversarial Opus review, code-read, not driven; `design.md` *Round 4 — REV*).
+**PROCEED.** No OPERATOR QUESTION. F128's reach was misargued: it already covers any documentless
+loop with two startable tasks, and D6 adds only the single-task case. D7 is settled, not severable.
+D11 is kept whole and retires F127. The window re-read each finding at its line before applying it:
+- **The MODIFIED `agent-loops` SHALL was false for every flow.** The guard lets a firing through
+  when anyone is free. The shipped running sentence is now verbatim, and the hold is conditioned on
+  nobody else being free.
+- **The loops board read *"stalled: no claimable task"* for the whole hold** (`jobs.py:339-340` →
+  `scheduler.py:1802`). A stalled decision the guard would refuse now carries the guard's reason.
+  REV's broader form, asking the guard for every loop, was narrowed. It would have labelled every
+  working single-agent loop `stalled`.
+- **`run_job` answered from, and stamped, a row its firing did not write.** Filed as F369, and
+  retired by this change.
+- Smaller: `on_it.get(task.id) == agent`; a refusal needs a recorded reading and a future
+  `resetsAt`, or it is counted; the D10 invariant is already false today; the Python informative
+  check; test 2.4's mutation.
+
 ## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
@@ -28232,3 +28255,23 @@ queued for it is in flight, not resumable. That changes flow behaviour for every
 once, including hop-budget parking, so it wants its own proposal.
 
 **Related:** F355 (the held instance), F154 (`on_it`'s origin).
+
+## F369 (C) — pressing Run stamps the requester onto an earlier firing's record when the firing wrote none
+
+**Status:** open. Filed 2026-09-14 by the day window's `f355-rev`. **Code read, not driven.**
+Retired by `a-spent-allowance-holds-the-queue` (design D11, task 4.4) at its archive.
+
+**The mechanism.** `run_job` (`hub/hub/api/v1/jobs.py:1270-1285`) fires the job, then reads the
+job's newest `JobRun` and sets `requested_by_run_id = run_identity` on it. A firing that declines
+without recording anything writes no row. That covers the busy guard and F23's in-flight decision.
+So the stamped row is some **earlier** firing's. For an operator `run_identity` is `None`, which
+erases an agent's attribution on that row. For an agent it claims an earlier firing as its own.
+
+**Why it matters now.** Under that change's D10, a firing whose turn the provider refused stays
+`in_progress` for the length of the hold. It is the newest row, and it is the one a Run press
+during the hold would re-stamp.
+
+**The repair.** Read the newest id before the firing and again after it. Stamp only a row the
+firing wrote. The same comparison tells the route which row is this firing's answer.
+
+**Related:** F127, F48 (the in-flight re-derivation that records nothing), F355.

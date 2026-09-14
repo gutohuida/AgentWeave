@@ -6,6 +6,9 @@ Round 2 (re-derived against the code) the same day. It changed items 2, 5 and 6,
 is written up in `design.md` *Round 2*. Round 3 (re-derived again) the same day. It changed item 6
 and added item 10, and is written up in `design.md` *Round 3*. It folds in F127 and MODIFIES a
 shipped `agent-flows` requirement that R2's addition contradicted. Still no OPERATOR QUESTION.
+REV (the adversarial pre-approval review) the same day: **PROCEED**. It changed items 2, 6 and 10
+and the operator-question section, found D7 settled rather than severable, kept D11 whole, and is
+written up in `design.md` *Round 4 — REV*.
 
 ## Why
 
@@ -61,7 +64,9 @@ provider refused.
 2. **A refused turn is not a delivery attempt.** Its input goes back to the queue with
    `delivery_attempts` unchanged, and the conversation's provider session is kept. The entry
    records the refusal in a new count, `allowance_refusals` (D2, D8). The hold's sentence is not
-   stored on it: the queue status derives it live (D9). *(Round 2.)*
+   stored on it: the queue status derives it live (D9). *(Round 2.)* *(REV: a refusal whose reset
+   time is already past states no wait with an end, so it is counted, and the shipped limits still
+   end it. So is a refusal whose reading could not be recorded.)*
 3. **The agent's queue is held until the reset.** The hold is **derived, not stored**: an agent is
    held while its most recent recorded turn outcome is a refusal and the reset has not passed.
    There is a 60 s floor after the refusal, so a `resetsAt` already in the past cannot become a
@@ -72,8 +77,13 @@ provider refused.
 5. **The Hub wakes the queue at the reset.** A one-shot timer at the hold's end re-schedules the
    agent. It is armed at the end of every run whose reading is a refusal, whatever the run's status,
    and re-armed at Hub start (D5).
-6. **A loop does not fire into a held agent,** exactly as it does not fire into a running one
-   (`agent-loops` *A firing is refused while its loop's agent is already running*). **A flow treats
+6. **A loop does not fire into a held agent** when no other agent in the project is free, as it
+   does not fire into a running one (`agent-loops` *A firing is refused while its loop's agent is
+   already running*). *(REV: R1 to R3 wrote "exactly as it does not fire into a running one",
+   which is false wherever another agent is free. The busy guard then lets the firing through,
+   and `agent-flows` decides who is staffed. The shipped running sentence is kept verbatim, and the
+   hold has its own, conditioned paragraph.)* Where the loop's summary would read *"stalled: no
+   claimable task"* while the guard refuses, it names the guard's reason instead (REV). **A flow treats
    a held agent as one that cannot take a turn**, wherever it asks: it does not re-brief a held
    assignee, select a held job agent, or recruit a held agent (D6). *(Round 2: R1 said a flow
    inherits this from the busy guard. It does not. The guard lets a firing through whenever anyone
@@ -93,8 +103,11 @@ provider refused.
     Run button on a held loop answered either *"already being worked … nothing is wrong"* or 500
     *"Failed to fire job"*. The route now re-asks the busy guard, the first question the firing
     asked, and answers 409 with its reason. It names a held agent on its in-flight answer. The same
-    rule fixes the running-agent case, **F127**, which the change retires at archive. REV may narrow
-    the rule to the hold instead.
+    rule fixes the running-agent case, **F127**, which the change retires at archive. *(REV kept it
+    whole. It also found that the route re-asked the guard even when the firing had written its own
+    `skipped` row, and that it stamps the requester onto an earlier firing's row, which under D10 is
+    usually the held one (F369). The route now answers from a row only if this firing wrote it, and
+    stamps only that row.)*
 
 ## Is any of this the operator's to decide?
 
@@ -134,8 +147,17 @@ decision already shipped. The argument is written out so R2, R3 and REV can reje
   keeps the shipped position's reason (the instruction is delivered when the agent frees up) and
   drops only the duplicates. It dominates both alternatives: skipping would lose a daily job's
   instruction until the next day, and queuing every tick would deliver the same instruction many
-  times. **If REV judges this a policy choice, it is the change's one candidate OPERATOR QUESTION,
-  and D7 is severable:** without it, plain jobs behave as today, which is to queue every tick.
+  times. ~~If REV judges this a policy choice, it is the change's one candidate OPERATOR QUESTION,
+  and D7 is severable.~~ **REV: settled, and not severable.** A job that does not resume gets a
+  new conversation per firing (`scheduler.py:2837-2843`), so queuing every tick of a five-hour
+  hold delivers about sixty separate turns into the freshly reset allowance and spends it again.
+  Queuing every tick defeats itself, and skipping loses the instruction, so D7 is the only choice
+  that keeps the shipped position's reason. Offering it as severable also invited removing an
+  operator question to avoid a stop, which the F352-free precedent forbids. See design D7.
+- **F128 (REV).** R3 argued that the hold extends F128's substitution from a turn's length to a
+  hold's. That premise is false. The substitution already reaches any documentless loop with two
+  startable tasks, busy agent or not. D6 adds one case, a single startable task while the job agent
+  is held, and leaves F128 exactly as open as it was.
 
 ## What does not change
 
@@ -162,9 +184,10 @@ of `delivery_attempts`.
 - `agent-conversation-workspace`: MODIFIED *Repeated delivery failure does not wedge an agent* and
   *A re-delivered turn says the earlier attempt was cut off*; ADDED *A turn the provider's allowance
   refused holds the agent's queue until the reset*.
-- `agent-loops`: MODIFIED *A firing is refused while its loop's agent is already running*; ADDED
-  *A job firing into a held queue is coalesced*, and (Round 3) *Pressing Run on a loop that
-  declines names why it declined*.
+- `agent-loops`: MODIFIED *A firing is refused while its loop's agent is already running* (its
+  shipped sentence kept verbatim since REV, with the hold and the summary's reason added); ADDED *A
+  job firing into a held queue is coalesced*, and (Round 3) *Pressing Run on a loop that declines
+  names why it declined*.
 - `agent-flows` (Round 2): ADDED *A flow treats an agent whose queue is held as unable to take a
   turn* (rewritten in Round 3); MODIFIED (Round 3) *A flow resolves a reviewer by declaration, then
   by availability*, whose availability sentence the ADDED requirement contradicted.
@@ -189,7 +212,9 @@ of `delivery_attempts`.
 - `hub/hub/main.py`: re-arm at start.
 - `hub/hub/api/v1/inbound_queue.py`: the status route's reason.
 - `hub/hub/api/v1/jobs.py`: `run_job` re-asks the busy guard and names a hold on its in-flight
-  answer (D11, Round 3).
+  answer (D11, Round 3), answering from and stamping only a row its own firing wrote (REV); and
+  `_batch_loop_summaries` reports the guard's reason for a stalled decision the guard would refuse
+  (D6, REV).
 - `hub/hub/db/models.py` and migration `0103`.
 - The migration head assertions in `hub/tests/test_migrations.py` and
   `hub/tests/test_project_persistence.py`.

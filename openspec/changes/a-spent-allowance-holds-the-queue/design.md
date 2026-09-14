@@ -62,8 +62,23 @@ The id is still returned in the requeued list. So `evaluate_run_end` and the han
 as they are for any returned input (`agent_trigger.py:2364-2374`): the work is going to another run.
 
 `_execute_run` computes `refusal = allowance_refusal(accounting_sample.allowance)` once, when
-`final_status == "failed"` and `binding_conflict is None`, and passes it. Every other caller passes
-nothing:
+`final_status == "failed"` and `binding_conflict is None`, and passes it. **(Round 4 — REV)** Two
+more conditions apply, and without either one `refusal` is `None` and the run takes today's counted
+path:
+- **The reading was recorded.** That is the `if run:` branch that writes the `TurnUsage` row
+  (`agent_trigger.py:2298-2327`), the same condition D5 arms on. `return_run_entries` sits outside
+  that branch (`:2349-2353`). A run whose row the finalizing session could not see records no
+  reading, so D3 derives no hold and D5 arms nothing. An uncounted requeue there would record a
+  refusal for a hold that does not exist. It would not loop: that row stays `running`, and
+  `schedule_agent` refuses the agent's later turns anyway (the loud branch at `:2279-2297`). But
+  the refusal count and the hold would stop describing the same fact. Conditioned, they cannot.
+- **`resets_at` is later than the run's end.** A `rejected` reading whose reset is already past
+  states no wait with an end. Uncounted, D3's floor would retry it once a minute for ever, never
+  counted and never given up, and that is the case the shipped limit calls *"indistinguishable from
+  being stuck"*. Counted, the floor still spaces the retries a minute apart, and the shipped limits
+  give it up after three.
+
+Every other caller passes nothing:
 - the transport-failure tail (`:1927`) and the spawn failure (`:2070`);
 - the Codex path (`:2847`, `:2942`);
 - startup reconciliation (`run_reconciliation.py:87`).
@@ -114,16 +129,19 @@ The agent is held when:
   the reading decides it.
 - **JSON `null` is not SQL `NULL` here.** A row written with no reading stores the JSON literal
   `null`, which `allowance IS NOT NULL` matches (measured: 3 such rows on `:8000`, which
-  `json.loads` read as `None`). So the informative filter has to test for an object. Either
-  `json_type(allowance) = 'object'` on SQLite, or a Python check over rows read newest-first until
-  the first informative one. **Not a fixed window** *(Round 2: R1 offered one)*: every spawn failure
+  `json.loads` read as `None`). So the informative filter has to test for an object. It is a
+  Python check over rows read newest-first until the first informative one. *(Round 4 — REV:
+  R1 also offered `json_type(allowance) = 'object'`. That function is SQLite's, and `models.py`
+  still reasons about PostgreSQL (`:756`), so the Python check is the one that holds on both.)*
+  **Not a fixed window** *(Round 2: R1 offered one)*: every spawn failure
   after a refusal adds an uninformative row. A window those rows overflow finds no refusal, and it
   releases the hold. Task 1.3 pins the trap.
 - **The 60 s floor** is the spin guard. A `rejected` reading whose `resetsAt` is already past
   (clock skew, or a provider that reset late) would otherwise release immediately, refuse again and
   requeue. That is a tight loop of uncounted spawns, which is worse than today's bounded three. The
   floor caps it at one refused spawn a minute per agent. It is not a backoff policy; it only
-  bounds a pathological reading.
+  bounds a pathological reading. *(Round 4 — REV: the floor bounds the rate, not the count. D2 now
+  counts such a refusal as a delivery attempt, so the shipped limits end it.)*
 - **Per agent, not per provider account.** All four LoopEngine agents shared one Claude login, so
   a per-account hold would have saved three spawns per wall. But the Hub has no model of which
   runners share an account. A `claude` runner's flags or environment can point at another
@@ -278,10 +296,13 @@ is autonomous input, so `_attempt_turn` would hold it too.
   `provider_allowance.py`: for each agent with a `TurnUsage` row, its newest informative row, held
   per D3 at one `now`. `decide_firing` reads it once, beside `running`, as `held_agents`, and uses
   it in three places:
-  - **Resumption** (`:1426`): `agent in running or (agent in held_agents and task.id in on_it)`
-    records in flight. `on_it` is `tasks_with_a_turn_pending_or_running` (`:1310`), already read
-    for the review arm, and it counts a `queued` entry naming the task
-    (`run_task_binding.py:295-309`). A held assignee whose task has no queued input falls through
+  - **Resumption** (`:1426`): `agent in running or (agent in held_agents and on_it.get(task.id)
+    == agent)` records in flight. `on_it` is `tasks_with_a_turn_pending_or_running` (`:1310`),
+    already read for the review arm. It maps a task to the agent with a `queued` entry naming it
+    (`run_task_binding.py:295-309`), **whichever agent that is**. *(Round 4 — REV: R3 wrote
+    `task.id in on_it`, so another agent's stale entry naming the task would have made the held
+    assignee's task read in flight, with nothing queued for the assignee.)* A held assignee whose
+    task has no input queued for it falls through
     to the ordinary resumption and is briefed **once**. That briefing names the task (job entries
     carry `task_id`, `scheduler.py:2870-2874`), so on the next firing the task is in `on_it` and
     therefore in flight. One briefing per held-assigned task, in total.
@@ -336,22 +357,52 @@ is autonomous input, so `_attempt_turn` would hold it too.
   hold's ground into the other's wording. The pre-existing gap beside it, a runnerless agent
   excluded but not named, is that change's D1, not this one's. Task 3.4d.
 - **A loop's work moves to a free agent during a hold, as F128 records for a running one**
-  *(Round 3)*. `_loop_flow_busy_reason` lets a firing through when anyone is free, and the default
-  branch now passes over a held job agent. So in a project with a free agent, a loop whose job names
-  the held agent is staffed with the free one, for as long as the hold lasts. That is F128's
+  *(Round 3; the reach corrected in Round 4 — REV)*. `_loop_flow_busy_reason` lets a firing through
+  when anyone is free, and the default branch now passes over a held job agent. So in a project with
+  a free agent, a loop whose job names the held agent is staffed with the free one. That is F128's
   substitution, which the operator has open (*"either the free list becomes loop-scoped … or the UI
-  and the API stop presenting `job.agent` as who runs this loop"*). This change neither widens nor
-  narrows the rule. It applies it to one more reason an agent cannot take a turn. Whatever the
-  operator decides for F128 applies to held and running agents alike. The alternative, leaving
-  the default branch blind to the hold, is the cross-task pile-up above.
+  and the API stop presenting `job.agent` as who runs this loop"*).
+
+  **How much of it is new.** R3 argued that the substitution used to last only as long as a turn,
+  and a hold now makes it last hours. That premise is false. `decide_firing` gives width to a loop
+  that declares no document too: `_loop_candidates` (`scheduler.py:704-721`) does not filter on
+  `spec_document_id`, and the walk's only check on it is the review arm's (`:1492`). So in any
+  documentless loop with two startable tasks, the first goes to the default agent (`:1445`), and the
+  second falls to `else` and recruits from `free` (`:1459`), **whether or not the job's agent is
+  busy**. Today's wall reaches it that way too: tick 2 re-selects the refused agent's T1
+  (`:1421-1435`) and adds it to `taken` (`:1467`), and T2 goes to `free`. Code-read, not driven.
+
+  So D6 adds exactly one case: a **single** startable unassigned task while the job agent is held.
+  It neither widens nor narrows the rule; it applies it to one more reason an agent cannot take a
+  turn. Whatever the operator decides for F128 applies to held and running agents alike. The
+  alternative, leaving the default branch blind to the hold, is the cross-task pile-up above.
 - **What the board shows.** `api/v1/jobs.py:339, 1232` read the same `decide_firing`. A held
   agent's task with queued input is in the firing's cannot-staff collection, and
   `task_attribution.attribute` renders it `held` (*"staffed, and nothing is running"*,
   `task_attribution.py:55-58`, `:186-188`), which is true. `firing_active` joins a **running**
   `Run` (`jobs.py:405-413`), so a held loop does not read as firing. The queue status (D9) says why
-  nothing moves. This change adds no word for it on the board. *(Round 3: R2 said the task reads
-  in flight "as a running agent's does". A running agent's task renders `working` only where a run
-  is bound to it.)*
+  nothing moves. *(Round 3: R2 said the task reads in flight "as a running agent's does". A running
+  agent's task renders `working` only where a run is bound to it.)*
+
+  **But a stalled answer on the board was false** *(Round 4 — REV)*. R3 said *"this change adds no
+  word for it on the board"*. That misses a case. Take a single-agent loop whose agent is held, with
+  one pending unassigned task and no input naming it (the refused turn was a peer message). The
+  default branch skips the held agent, `free` is empty, and the walk reaches `continue` (`:1464`).
+  So `_batch_loop_summaries` (`jobs.py:339-340`) reads `DECISION_STALLED`, with *"loop queue is
+  stalled: no claimable task among 1 open (1 pending)"* (`scheduler.py:1802`), for the length of
+  the hold. The firing never records it, because the busy guard refuses first. Only the board shows
+  it. The UI's contract for that field is *"set exactly when the next firing would be refused, by
+  the same computation that would refuse it"* (`hub/ui/src/components/spec/loopCounts.ts:21-22`),
+  and the computation that refuses the next firing is the guard.
+
+  **Repair:** when `decide_firing` answers `DECISION_STALLED` for a loop, and
+  `_loop_flow_busy_reason(job.agent)` refuses, the summary's `stall_reason` is the guard's reason.
+  It applies only to a stalled decision. An in-flight decision keeps `stall_reason = None`, so a
+  single-agent loop whose agent is working its task keeps reading `running`, not `stalled`. REV
+  proposed asking the guard first for every loop, and that would have labelled every working
+  single-agent loop `stalled` for the length of each turn. The same repair fixes the running
+  variant, which exists today while a turn lasts (the agent running a chat, with one pending task).
+  No UI change: the field is already rendered. Task 3.4e.
 - **What pressing Run says is not presentation** *(Round 3)*. `run_job` (`jobs.py:1287-1321`)
   turns a declined firing into an HTTP answer, and D6 changes which answer it reaches. See D11.
 - **The review wedge stops by itself.** The flow's *"is named on … as its reviewer and is not
@@ -382,8 +433,22 @@ Otherwise the firing queues as today. At the reset the one queued copy is delive
   agent name (measured by `f355len.py` in `%TEMP%`). The hold sentence (D9) is 285 there. Task 3.4 pins both.
 - The `resetsAt` time is in the reason, so a new wall gives a new reason and a new row. That is the
   loop path's *"a stall that changes shape stays visible"*, unchanged.
-- **Severable.** D7 is the one decision the proposal names as open to challenge. Removing it
-  changes nothing else in this design.
+- **Not severable, and not an operator question** *(Round 4 — REV; R1 to R3 called it the one
+  severable choice)*. The shipped position settles it. `_loop_agent_busy_reason`'s docstring
+  (`scheduler.py:236-240`) calls a plain job's message *"a standing instruction still true when the
+  agent frees up"*. One queued copy satisfies that, and no reading of it asks for sixty. The
+  argument R1 to R3 never made is the decisive one. A job that does not resume gets a **new
+  conversation per firing** (`scheduler.py:2837-2843`). So a `*/5` job held for five hours would
+  deliver about sixty separate turns back to back into the freshly reset allowance, and exhaust it
+  again. Queuing every tick is therefore self-defeating, not merely wasteful. Skipping instead would
+  lose the instruction until the next firing after the reset. D7 is the only choice that keeps the
+  shipped position's reason.
+
+  It is not severable in practice either. Without D7, D4's `terminal_failure=False` keeps every held
+  firing of a *resuming* job `in_progress` on one conversation. The inbound batch cap of ten
+  (`inbound_queue.py:17`) then delivers them in one turn whose end finalizes one row, and the rest
+  wait for a restart to mark them `failed` (D10's last bullet). Calling it severable also invited
+  exactly what the F352-free precedent forbids: removing an operator question to avoid a stop.
 
 ### D8 — the count is a new column, and the retry note reads both counts
 
@@ -478,11 +543,17 @@ days** *(Round 3)*. Read at each site; none is misled:
   whatever its status.
 - **`finalize_job_run_for_conversation`'s own invariant** (`:1812-1816`): *"at most one
   `JobRun` should be in progress for a given `conversation_id`"*, because a resuming job's earlier
-  firings are terminal before the next is created. D10 keeps a refused firing open, so a resuming
-  plain job whose later firing reached the same conversation would break it. D7 is what prevents
-  that: the later firing finds the first one's queued entry and coalesces. **If REV severs D7, D10
-  needs a replacement for this**, or two rows on one conversation are flipped newest-first by
-  deliveries that arrive oldest-first.
+  firings are terminal before the next is created. *(Round 4 — REV corrected R3's attribution.)*
+  The invariant is **already false today**. A plain job is not busy-guarded, so a resuming job that
+  fires during its own running turn creates a second `in_progress` row on the same conversation,
+  and the two are flipped newest-first (`:1823`). What would amplify it is D4 plus the inbound
+  batch, not D10. D4's `terminal_failure=False` keeps every held firing `in_progress`, and the batch
+  cap of ten (`inbound_queue.py:17`) delivers them in one turn whose end flips one row. D7 prevents
+  that **during a hold**: the later firing finds the first one's queued entry and coalesces. With D7
+  and D10 together, two `in_progress` rows on one conversation still arise only when a firing lands
+  during the refused turn's own 6–10 s, before any hold exists. That is today's shape. At a restart,
+  `reconcile_stale_job_runs` (`run_reconciliation.py:210-223`) marks the leftover row `failed` once
+  its entry has been delivered, so nothing stays open for ever.
 
 ### D11 — pressing Run on a loop that declines says why (Round 3; retires F127)
 
@@ -509,19 +580,33 @@ Under R1's and R2's D6 the route is therefore wrong both ways. The second case i
 reachable for the length of a hold instead of the length of a turn. F127's own write-up names the
 honest fix: *"make the re-derivation ask the same question the firing asked"*.
 
-**The rule:**
-- For a job with a `Loop`, `run_job` first asks `_loop_flow_busy_reason(session, project_id,
-  job.agent)`, **before** the `skipped` check. It is the first question `_do_fire_job` asks
-  (`:2538-2558`), before any row is written, so if it refuses now, the newest row belongs to some
-  earlier firing and is not this one's answer. A refusal answers 409, naming the guard's reason and
-  that no other agent is free, and saying nothing was started. For a running agent that is *"gamma
-  is already running a turn"*. For a held one it is `hold_busy_reason`.
+**The rule** *(restructured in Round 4 — REV)*:
+- **Did this firing write a row?** `run_job` reads the newest `JobRun` id for the job **before**
+  `_fire_job_internal`, and again after. If they differ, the firing wrote a row, and the route
+  answers from it exactly as today: 409 with a `skipped` row's reason, and otherwise today's
+  branches. *(R3's rule re-asked the guard before the `skipped` check, so a firing that recorded a
+  real `skipped` row, for example *"loop stop time reached"*, was answered with the busy reason if
+  the agent became busy in between. Comparing ids asks which firing wrote the row, which is the
+  question, and not when.)*
+- **Only a new row is stamped.** `latest_run.requested_by_run_id = run_identity` (`:1283-1285`)
+  today stamps whatever row is newest. When the firing wrote nothing, that is an earlier firing's
+  row, and `run_identity` is `None` for an operator, so an agent's attribution is erased. Under D10,
+  that earlier row is usually the held firing. So the stamp moves under the same *"the firing wrote
+  a row"* condition. This is F369, which D10 makes reachable for the length of a hold, and which the
+  change retires at archive.
+- **Otherwise, for a job with a `Loop`,** the route asks `_loop_flow_busy_reason(session,
+  project_id, job.agent)`. It is the first question `_do_fire_job` asks (`:2538-2558`), before any
+  row is written. A refusal answers 409, naming the guard's reason and that no other agent is free,
+  and saying nothing was started. For a running agent that is *"gamma is already running a turn"*.
+  For a held one it is `hold_busy_reason`.
 - When the route answers from `DECISION_IN_FLIGHT`, it reads who the in-flight tasks are staffed
   to through `task_attribution.staffing_from_decision` (the one sanctioned reader of
   `_cannot_staff`, `task_attribution.py:145-154`). If any of them is in `agents_held`, the detail
-  names each held agent with `hold_busy_reason`, and it drops *"nothing is wrong"*. Otherwise it is
-  unchanged, which keeps F48's test (`test_board_agent_role.py:291-319`) passing as written. That
-  test's guard passes because its author agent is free.
+  names each held agent with `hold_busy_reason`, and drops both *"already being worked"* and
+  *"nothing is wrong"*. A held agent's task is staffed and queued, not worked. *(Round 4 — REV:
+  R3 dropped only the second phrase.)* Otherwise it is unchanged, which keeps F48's test
+  (`test_board_agent_role.py:291-319`) passing as written. That test's guard passes because its
+  author agent is free.
 
 **Why this is in the change and not filed.** The hold half is this change's own regression, since D6
 decides which branch of the route is reached. Restricting the rule to the hold would need a test for
@@ -529,6 +614,15 @@ decides which branch of the route is reached. Restricting the rule to the hold w
 answers. The running half comes free with the unrestricted rule, and it retires F127. **REV may
 narrow it to the hold** if it judges F127 outside the build-day row. The narrowing is one condition,
 and F127 then stays open.
+
+**REV's verdict: keep it, and retire F127** *(Round 4)*.
+- F127's own *shape of the fix* (`FINDINGS.md`, F127) is the rule D11 implements.
+- The release roadmap already lists F127 as *decided, queued*.
+- Narrowing needs a second predicate on the one guard's answer. The route would then answer 409
+  for a held agent and 500 for a running one, which reads as two products.
+
+The build-day row covers what LoopEngine showed, and a Run press on a held loop is that
+observation's own surface.
 
 A race remains, as it does for F48's re-derivation. If the agent's turn ends between the firing and
 the re-ask, the guard passes and the route falls through to today's branches. That cannot produce a
@@ -547,13 +641,20 @@ false hold sentence, only today's answer.
 - It does not stop `maybe_generate_title` (`agent_trigger.py:2429`) from spawning a titling CLI at
   a refused run's end. That spawn is not a turn: it records no `Run`
   (`conversation_titles.py:7-11`). It is at most one per untitled conversation, and it fails
-  quietly (`:95`). Named so that nobody reads it as a hole in the hold.
+  quietly (`:95`). Named so that nobody reads it as a hole in the hold. *(Round 4 — REV.)* The
+  author's handover (`consider_handover_from_run_end`, `agent_trigger.py:2373`) is the same kind of
+  spawn, about 19 s of CLI. It is reached for 2.6's shape, a `completed` run with a refusal reading,
+  because nothing was returned. It self-declines for anything but a flow agent handing over with
+  notes recorded. Checkpoint generation may spawn as well (unverified). None of these is a turn, so
+  none meets the hold.
 - It does not repair F368, the general form of D6's pile-up. *(Round 3.)* D6's resumption rule,
   `task.id in on_it`, is F368's repair restricted to held agents. Unrestricted, it would also stop
   a token-budget firing from recording `failed` every tick. Some operators read that record, so it
   is a behaviour change beyond this finding, and it stays F368's.
 - It does not decide F128 (D6). During a hold, a loop in a project with a free agent is staffed
-  with that agent, as it is today while its own agent is running a turn.
+  with that agent, as it is today while its own agent is running a turn. *(Round 4 — REV.)* F128's
+  substitution already reaches every documentless loop with two startable tasks, busy agent or not.
+  D6 adds only the single-task case during a hold.
 
 ## Risks
 
@@ -703,3 +804,75 @@ exactly as open as it was.
   entry by `task_id` and by `review_task_id` (`run_task_binding.py:295-309`), and a refused entry
   is requeued with both kept.
 - `trigger_agent_directly` still has one caller, so every turn meets D4.
+
+## Round 4 — REV (2026-09-14, `f355-rev`)
+
+The operator's standing pre-approval step: one Opus subagent, asked to reject the change's
+arguments rather than re-read them. It read the change, DIRECTION.md 2026-09-14, the decisions it
+rests on (F96, F127, F128, loop D4, flow D12, F352-free), and the cited code. It edited nothing.
+The window re-read each finding against the code before applying it. The one it did not verify
+(the checkpoint spawn) is labelled so. Nothing was driven.
+
+**Verdict: PROCEED**, once the fixes below are in the change files, which they now are. The
+subagent tested every leg of the no-OPERATOR-QUESTION argument and found no choice that is the
+operator's:
+- **Hold vs drop** is F96's (`turn_scheduler.py:533-540`). A refusal that stops the agent running
+  at all must not drop input, because nothing for that agent could run either way.
+- **`_agents_that_are_free`**: only the running half moves. F352-free's options (a) to (e) differ
+  only in the holdings half.
+- **F128** stays exactly as open as it was. R3's premise that the hold extends its reach was false:
+  the substitution already reaches any documentless loop with two startable tasks. D6 adds one case.
+- **D7** is settled by the shipped docstring, plus the self-defeat argument the change never made.
+  Calling it severable was both untrue and the move the F352-free precedent forbids.
+- **D11** retires F127, which the roadmap already lists as *decided, queued*.
+
+**What REV changed, in order of weight:**
+1. **The MODIFIED `agent-loops` SHALL was false under the change's own code** (defect). It said a
+   firing whose loop agent is held is refused. But `_loop_flow_busy_reason` (`scheduler.py:295-300`)
+   lets it through whenever anyone is free, and the change's own `agent-flows` scenario then staffs
+   the free agent. A flow is a loop (`agent-flows`), so the two deltas disagreed for every flow.
+   That is the class of defect R3 fixed for the reviewer requirement. The shipped running sentence
+   is now restored verbatim. The hold gets its own paragraph, conditioned on *no other agent in the
+   project is free*, and a sentence leaves staffing to `agent-flows`. Proposal item 6 is corrected.
+2. **The board said "no claimable task" for the whole hold** (defect). A single-agent loop, agent
+   held, one pending task that no queued input names: `decide_firing` stalls at `:1464`, and
+   `_batch_loop_summaries` shows *"no claimable task among 1 open (1 pending)"*. The firing never
+   records it, since the guard refuses first. Repair: when the decision is stalled and the guard
+   refuses, `stall_reason` is the guard's reason (D6, task 3.4e, a new `agent-loops` sentence and
+   scenario). **The window narrowed REV's proposal.** REV said to ask the guard first for every
+   loop, and that would have labelled every working single-agent loop `stalled` for each turn,
+   because the UI buckets on `stall_reason` before `firing_active` (`loopCounts.ts:23`).
+3. **D7 is not severable** (defect in the argument). The proposal, D7 and the D10 note are
+   rewritten.
+4. **D11 answered from the wrong row in a race, and stamped an earlier row** (defect).
+   - Re-asking the guard before the `skipped` check could answer a real `skipped` row with the
+     busy reason.
+   - The route stamps `requested_by_run_id` onto whatever row is newest (`jobs.py:1283-1285`).
+     Under D10 that is usually the held firing.
+
+   Repair: compare the newest `JobRun` id before and after the firing, answer from a row only if
+   the firing wrote it, and stamp only that row. The stamp is filed as **F369**, retired by this
+   change. The in-flight answer with a held agent now also drops *"already being worked"*.
+5. **Smaller, each read at its line:**
+   - D6's resumption rule is now `on_it.get(task.id) == agent`, not `task.id in on_it`
+     (`run_task_binding.py:302-309` maps a task to *any* agent);
+   - D2's refusal needs a recorded reading (`if run:`), or an uncounted requeue with no hold
+     loops;
+   - a refusal whose `resetsAt` is not after the run's end is counted, so the shipped limits end
+     it (new `agent-conversation-workspace` paragraph and scenario);
+   - D3 uses the Python informative check, not SQLite's `json_type`;
+   - the D10 invariant note is re-attributed: it is already false today, and D4 plus batching is
+     what would amplify it;
+   - the handover spawn is named beside the titler;
+   - test 2.4's mutation named an outcome that cannot occur.
+
+**Checked and found sound by REV:**
+- All four MODIFIED requirements diff clean against the shipped text. The reviewer requirement
+  (`openspec/specs/agent-flows/spec.md:231-342`) differs in exactly three hunks.
+- The migration head is `0102` (`test_migrations.py:40`, `test_project_persistence.py:227`), and
+  `0103` is unclaimed.
+- No task edits `mcp_server.py` or the UI.
+- `trigger_agent_directly` has one caller (`turn_scheduler.py:392`).
+- The finalize → commit → `evaluate_run_end` order at `agent_trigger.py:2348-2365` matches D5.
+- R3's *briefed once* trace holds: the brief carries `task_id` (`scheduler.py:2870-2874`), and a
+  refused probe or wake requeues it with `task_id` kept.

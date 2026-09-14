@@ -42,6 +42,10 @@ that cannot be resumed from an input that cannot be served, and a spent allowanc
 session and the input are both sound, and the provider has said when it will serve them. The
 refusal SHALL still be recorded on the input, as a count distinct from failed deliveries.
 
+A refusal whose stated reset time is not later than the refusal itself states no wait with an end.
+It SHALL be counted as a failed delivery, so the limits above still bound it, and a provider that
+keeps reporting a reset already past is given up on as any other repeated failure is.
+
 An input the system has given up on SHALL still name the run that was carrying it, so the operator
 can find what happened to their message.
 
@@ -117,6 +121,12 @@ failed attempts.
 
 - **WHEN** a run fails and the provider's reading says the allowance is refused but states no reset time
 - **THEN** the input records that a delivery attempt failed
+
+#### Scenario: A refusal whose reset time has already passed is counted
+
+- **WHEN** a run fails and the provider's reading says the allowance is refused with a reset time no later than the refusal
+- **THEN** the input records that a delivery attempt failed
+- **AND** repeated such refusals give up the input as any repeated failure does
 
 #### Scenario: Giving up unblocks the agent
 
