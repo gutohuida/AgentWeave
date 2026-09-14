@@ -320,3 +320,89 @@ async def test_abandonment_persists_an_operator_visible_event(app):
     assert events[0].severity == "warn"
     assert events[0].data["entry_id"] == entry.id
     assert events[0].data["attempts"] == DELIVERY_ATTEMPT_LIMIT
+
+
+# ---------------------------------------------------------------------------
+# `a-spent-allowance-holds-the-queue` 2.2 / 2.3 — a refusal is returned without being counted
+# ---------------------------------------------------------------------------
+
+
+def _refusal():
+    from datetime import datetime, timedelta, timezone
+
+    from hub.provider_allowance import AllowanceRefusal
+
+    return AllowanceRefusal(
+        resets_at=datetime.now(timezone.utc) + timedelta(hours=1), limit_type="five_hour"
+    )
+
+
+async def refuse_a_delivery(db, entry, run_id):
+    """Deliver *entry* into a run the provider then refused on usage grounds."""
+    run = Run(
+        id=run_id,
+        project_id="proj-test",
+        agent=AGENT,
+        status="running",
+        turn_depth=0,
+        conversation_id=entry.conversation_id,
+    )
+    await deliver_entries_with_run(
+        db, project_id="proj-test", agent=AGENT, entry_ids=[entry.id], run=run
+    )
+    requeued = await return_run_entries(db, run_id, refusal=_refusal())
+    await db.commit()
+    return requeued
+
+
+@pytest.mark.asyncio
+async def test_a_refused_delivery_is_requeued_without_counting_an_attempt(app):
+    """Design D2. The refusal was the provider's allowance, not the input, so it must not move the
+    entry towards being withdrawn. The hold's sentence is not stored: the status route derives it
+    while the hold lasts, and a stored copy would outlive it (F97)."""
+    async with async_session_factory() as db:
+        await make_conversation(db)
+        entry = await queue_one(db)
+
+        assert await refuse_a_delivery(db, entry, "run-r1") == [entry.id]
+        await db.refresh(entry)
+        assert entry.state == "queued"
+        assert entry.delivered_in_run_id is None
+        assert entry.delivery_attempts == 0
+        assert entry.allowance_refusals == 1
+        assert entry.waiting_reason is None
+
+
+@pytest.mark.asyncio
+async def test_three_refusals_keep_the_provider_session_and_the_entry(app):
+    """What the counted path did to LoopEngine at every wall: the session cleared at the second
+    attempt and the operator's message withdrawn at the third, for a session that was sound."""
+    async with async_session_factory() as db:
+        conversation = await make_conversation(db)
+        entry = await queue_one(db)
+
+        for i in range(3):
+            assert await refuse_a_delivery(db, entry, f"run-r{i}") == [entry.id]
+        await db.refresh(conversation)
+        await db.refresh(entry)
+        assert conversation.provider_session_id == "thread-dead"
+        assert entry.state == "queued"
+        assert entry.allowance_refusals == 3
+        assert entry.delivery_attempts == 0
+
+
+@pytest.mark.asyncio
+async def test_the_retry_note_counts_a_refused_delivery(app):
+    """Design D8. A refused delivery was cut off all the same, and the resumed session may hold
+    the agent's own copy of it, so the next delivery says so."""
+    from hub.inbound_queue import format_turn_prompt
+
+    async with async_session_factory() as db:
+        await make_conversation(db)
+        entry = await queue_one(db)
+        await refuse_a_delivery(db, entry, "run-r1")
+        await db.refresh(entry)
+
+    prompt = format_turn_prompt([entry])
+    assert "delivery attempt 2" in prompt
+    assert "an earlier attempt was cut off before it finished" in prompt

@@ -38,6 +38,9 @@ class QueueEntryResponse(BaseModel):
     #: How many deliveries of this entry have failed. Exposed so a queue that is not moving can be
     #: told from one that is merely waiting — before this they looked identical.
     delivery_attempts: int = 0
+    #: How many deliveries the provider refused because the agent's usage allowance was spent.
+    #: Apart from `delivery_attempts`, which a refusal does not move.
+    allowance_refusals: int = 0
     #: Set when the Hub stopped trying. Present with `state == "withdrawn"`, which an operator
     #: withdrawal also produces — the reason is what distinguishes the two.
     abandoned_reason: Optional[str] = None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable, List, Optional
+from typing import TYPE_CHECKING, Iterable, List, Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .conversations import get_conversation_by_id
 from .db.models import InboundQueueEntry, Project, Run
 from .utils import short_id
+
+if TYPE_CHECKING:
+    from .provider_allowance import AllowanceRefusal
 
 DEFAULT_HOP_BUDGET = 6
 DEFAULT_TURN_DELIVERY_CAP = 10
@@ -112,10 +115,15 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
         # The fact and nothing more. What to do about half-finished work depends on what the work
         # was, so an instruction to inspect or redo would be wrong often enough to cost more than
         # it saves. Absent at zero attempts, which is every ordinary delivery.
+        #
+        # A delivery the provider refused on usage grounds counts here too, though not towards
+        # the limits (`a-spent-allowance-holds-the-queue`, D8): it was cut off before or during
+        # the turn all the same, and the resumed session may hold the agent's own copy of it.
         retry = ""
-        if entry.delivery_attempts:
+        earlier = (entry.delivery_attempts or 0) + (entry.allowance_refusals or 0)
+        if earlier:
             retry = (
-                f" — delivery attempt {entry.delivery_attempts + 1}; "
+                f" — delivery attempt {earlier + 1}; "
                 f"an earlier attempt was cut off before it finished"
             )
         blocks.append(f"{origin} (hop {entry.hop_depth}){retry}:\n{entry.content}")
@@ -178,7 +186,9 @@ RESUME_RETRY_LIMIT = 2
 DELIVERY_ATTEMPT_LIMIT = 3
 
 
-async def return_run_entries(db: AsyncSession, run_id: str) -> List[str]:
+async def return_run_entries(
+    db: AsyncSession, run_id: str, *, refusal: Optional["AllowanceRefusal"] = None
+) -> List[str]:
     """Put a failed run's input back, unless putting it back is what keeps failing.
 
     Returning an entry keeps it lost-proof, and used to be unconditional. But a returned entry
@@ -198,6 +208,14 @@ async def return_run_entries(db: AsyncSession, run_id: str) -> List[str]:
 
     Returns the ids that went back to `queued`, as it always has. Abandoned ids are reported
     separately by `abandoned_for_run`, so a caller that only wants the requeued set is unaffected.
+
+    **A refusal is returned without being counted** (`a-spent-allowance-holds-the-queue`, D2). When
+    the provider refused the turn because the agent's usage allowance is spent, *refusal* is given:
+    the entry goes back to `queued` with `allowance_refusals` counted instead, and neither limit is
+    evaluated. Here the session *was* resumed and the input was not what failed, so clearing the
+    provider session would discard the agent's context for nothing, and withdrawing the entry would
+    drop the operator's message for a wait with a stated end. `waiting_reason` stays cleared: the
+    status route derives the hold live, and a stored copy would outlive it (F97).
     """
     result = await db.execute(
         select(InboundQueueEntry).where(
@@ -208,8 +226,14 @@ async def return_run_entries(db: AsyncSession, run_id: str) -> List[str]:
     entries = list(result.scalars().all())
     requeued: List[str] = []
     for entry in entries:
-        entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
         entry.delivered_at = None
+        if refusal is not None:
+            entry.allowance_refusals = (entry.allowance_refusals or 0) + 1
+            entry.state = "queued"
+            entry.delivered_in_run_id = None
+            requeued.append(entry.id)
+            continue
+        entry.delivery_attempts = (entry.delivery_attempts or 0) + 1
 
         if entry.delivery_attempts >= RESUME_RETRY_LIMIT and entry.conversation_id:
             # The one change that breaks the loop. Cleared rather than flagged, because

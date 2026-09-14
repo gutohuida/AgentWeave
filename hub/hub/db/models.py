@@ -571,6 +571,14 @@ class InboundQueueEntry(Base):
     delivery_attempts: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    #: How many deliveries of this entry the provider refused because the agent's usage allowance
+    #: was spent (`a-spent-allowance-holds-the-queue`, D2 and D8). Kept apart from
+    #: `delivery_attempts` because a refusal is not the entry's fault and must not move it towards
+    #: being withdrawn, or its conversation towards losing its provider session; and counted at all
+    #: so the next delivery can still say an earlier attempt was cut off.
+    allowance_refusals: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
     #: Why the Hub stopped trying. Set with `state = 'withdrawn'`, which already means "this will
     #: never be delivered" — deliberately not a fourth state, because the value is CHECK-constrained
     #: and rewriting that on SQLite means rebuilding a table the scheduler's ordering depends on.

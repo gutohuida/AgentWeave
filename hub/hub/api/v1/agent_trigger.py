@@ -92,6 +92,13 @@ from ...model_catalog import (
 from ...output_recording import record_agent_output, record_context_usage
 from ...outside_write_record import OutsideWriteRecorder
 from ...permission_requests import expire_pending_for_run
+from ...provider_allowance import (
+    AllowanceRefusal,
+    ProviderHold,
+    allowance_refusal,
+    arm_allowance_wake,
+    hold_for_reading,
+)
 from ...pty_runner import (
     STRUCTURED_OUTPUT_DIMENSIONS,
     PipeSession,
@@ -2274,6 +2281,12 @@ async def _execute_run(
         else:
             final_status, lifecycle_event = "failed", "run_failed"
 
+        # The provider's refusal on usage grounds, when this run's recorded reading is one
+        # (`a-spent-allowance-holds-the-queue`, D2 and D5). `held` is the hold that reading
+        # establishes, whatever the run's status; `refusal` is set only for a failed run whose
+        # input goes back uncounted.
+        refusal: Optional[AllowanceRefusal] = None
+        held: Optional[ProviderHold] = None
         async with async_session_factory() as db:
             run = await db.get(Run, run_id)
             if run is None:
@@ -2317,7 +2330,7 @@ async def _execute_run(
                 # still read as answerable. In the same transaction as `ended_at`: the two facts
                 # must not be separable by a reader.
                 await expire_pending_for_run(db, run_id)
-                await record_turn_usage(
+                usage = await record_turn_usage(
                     db,
                     run_id=run_id,
                     project_id=project_id,
@@ -2325,6 +2338,22 @@ async def _execute_run(
                     runner=runner,
                     sample=accounting_sample,
                 )
+                # Inside `if run`, deliberately (D2, D5): only a *recorded* reading holds the
+                # queue, because the hold is derived from this row. A run whose row the finalizing
+                # session could not see records nothing, so an uncounted requeue or a wake there
+                # would describe a hold that does not exist.
+                held = hold_for_reading(usage.allowance, usage.observed_at, run_id)
+                recognised = allowance_refusal(usage.allowance)
+                # And only a reset still ahead of the run's end. A `rejected` reading whose reset
+                # has already passed states no wait with an end; uncounted, the hold's floor would
+                # retry it once a minute for ever, never given up. Counted, the limits end it.
+                if (
+                    recognised is not None
+                    and final_status == "failed"
+                    and binding_conflict is None
+                    and recognised.resets_at > run.ended_at
+                ):
+                    refusal = recognised
             # Outside the `if run` guard, and before the commit that closes this block. A run that
             # ended abnormally is carrying input nobody else will hand back, and the spawn-failure
             # branch above already reads this way — a run row that has vanished still has entries.
@@ -2345,13 +2374,38 @@ async def _execute_run(
             # Design D13, task A4.3: if this run's conversation belongs to a job's loop firing,
             # that firing is no longer "in progress" once the agent's own turn has ended, one
             # way or the other. A no-op for the common case of a run that was never a firing.
-            await finalize_job_run_for_conversation(db, conversation_id, final_status)
+            #
+            # Except a refusal (D10): its input is going back to the queue to be delivered at the
+            # reset, so the firing has not failed. The run that finally delivers it flips the row,
+            # whatever it ends as; flipped here, that run would find no `in_progress` row and the
+            # history would read `failed` for an instruction that was carried out.
+            if refusal is None:
+                await finalize_job_run_for_conversation(db, conversation_id, final_status)
             returned = (
-                await return_run_entries(db, run_id)
+                await return_run_entries(db, run_id, refusal=refusal)
                 if final_status == "failed" and binding_conflict is None
                 else []
             )
             await db.commit()
+            # The wake, immediately after the commit and above anything else that can raise (D5).
+            # Everything below shares this `try`, whose failure tail skips the rest, and a wake
+            # placed below it would be lost to any exception there until the next restart. For
+            # any status: the hold is derived from the reading, so a `completed` run that ended
+            # with a refusal holds the queue too, and without a wake nothing would come back.
+            if held is not None:
+                arm_allowance_wake(project_id, agent, held.hold_until)
+                held_payload = {
+                    "agent": agent,
+                    "run_id": run_id,
+                    "hold_until": held.hold_until.isoformat(),
+                    "resets_at": held.resets_at.isoformat(),
+                    "limit_type": held.limit_type,
+                    "entry_ids": list(returned),
+                }
+                await persist_event(
+                    db, project_id, "queue_agent_held", held_payload, agent=agent, severity="warn"
+                )
+                await sse_manager.broadcast(project_id, "queue_agent_held", held_payload)
             # The run boundary. After the commit, so the check reads the run's final state, and
             # outside the `if run` block for the same reason — a missing run row is not a
             # divergence, and `evaluate_run_end` says so itself.

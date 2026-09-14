@@ -22,6 +22,7 @@ from .inbound_queue import (
     project_limits,
     queued_entries,
 )
+from .provider_allowance import hold_sentence, provider_hold
 from .run_task_binding import decided_task_refusal
 from .sse import sse_manager
 from .task_workspace import takes_own_checkout
@@ -374,6 +375,23 @@ async def _attempt_turn(
         (entry for entry in selected if entry.origin_type == "operator"), None
     )
     initiator = "operator" if controlling_operator is not None else "autonomous"
+    # The provider refused this agent's last turn because its usage allowance is spent, so every
+    # turn started before the reset would be refused the same way (`a-spent-allowance-holds-the-
+    # queue`, D4). Input waits, uncounted, for the wake at the reset. Not a terminal failure: a job
+    # firing that meets it leaves its `JobRun` in progress, because its entry will be delivered.
+    #
+    # Operator input that arrived after the refusal is tried once: only the operator can change
+    # the allowance, and a hold derived from the provider's last word cannot see that they did.
+    # Keyed on the whole queue, not on `selected`, because their message can sit in a conversation
+    # behind an autonomous head. A refused probe renews the reading, whose `observed_at` is then
+    # later than every entry already queued, so the same input cannot probe twice.
+    hold = await provider_hold(db, project_id, agent)
+    if hold is not None and not any(
+        entry.origin_type == "operator" and entry.arrived_at > hold.observed_at for entry in entries
+    ):
+        return _Attempt(
+            ScheduleResult(waiting_reason=hold_sentence(agent, hold), terminal_failure=False)
+        )
     budget = await project_budget_state(db, project_id)
     if initiator == "autonomous" and budget["exhausted"]:
         return _Attempt(ScheduleResult(waiting_reason="token budget exhausted"))

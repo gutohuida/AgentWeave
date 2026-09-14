@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0102"
+HEAD_REVISION = "0103"
 
 
 # ---------------------------------------------------------------------------
@@ -3493,6 +3493,79 @@ def test_migration_0102_is_guarded_when_runs_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0102"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0103 — deliveries a provider refused on usage grounds, counted apart from failed ones
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_0103_adds_allowance_refusals_to_the_queue(tmp_path) -> None:
+    """Not null with a server default of 0, as `0072`'s `delivery_attempts` is."""
+    db_file = tmp_path / "allowance_refusals.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {row[1]: row for row in conn.execute("PRAGMA table_info(inbound_queue_entries)")}
+        assert "allowance_refusals" in columns
+        assert columns["allowance_refusals"][3] == 1  # notnull
+        assert columns["allowance_refusals"][4] == "'0'"  # dflt_value
+
+
+def test_migration_0103_reads_zero_for_an_entry_that_predates_it(tmp_path) -> None:
+    """Downgrade and back up, so the re-upgrade is `0103`'s own `op.add_column` doing the work on
+    a row written without the column."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "allowance_refusals_backfill.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    stamp = "2026-01-01T00:00:00Z"
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0102")
+
+        with sqlite3.connect(db_file) as conn:
+            assert "allowance_refusals" not in {
+                row[1] for row in conn.execute("PRAGMA table_info(inbound_queue_entries)")
+            }
+            conn.execute(
+                "INSERT INTO projects (id, name, created_at) " f"VALUES ('proj-1', 'p', '{stamp}')"
+            )
+            conn.execute(
+                "INSERT INTO inbound_queue_entries (id, project_id, agent, origin_type, content, "
+                "arrived_at, hop_depth, state) "
+                f"VALUES ('entry-1', 'proj-1', 'dev', 'operator', 'hi', '{stamp}', 0, 'queued')"
+            )
+            conn.commit()
+
+        command.upgrade(cfg, "head")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT allowance_refusals FROM inbound_queue_entries WHERE id = 'entry-1'"
+        ).fetchone() == (0,)
+
+
+def test_migration_0103_is_guarded_when_the_queue_does_not_exist(tmp_path) -> None:
+    """An upgrade starting from an early revision reaches 0103 with only that revision's tables."""
+    db_file = tmp_path / "no_queue_0103.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0102')")
+
+    _upgrade_to(db_url, "0103")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0103"
 
 
 # ---------------------------------------------------------------------------

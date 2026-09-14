@@ -25,7 +25,7 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
 ## 1. Recognition and the derived hold (design D1, D3, D9)
 
-- [ ] 1.1 New `hub/hub/provider_allowance.py`:
+- [x] 1.1 New `hub/hub/provider_allowance.py`:
       - `AllowanceRefusal(resets_at, limit_type)`;
       - `allowance_refusal(allowance)`, per D1: `status == "rejected"` and a numeric, non-`bool`
         `resetsAt`, converted to an aware UTC `datetime`.
@@ -37,7 +37,13 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - a reading with `overageStatus: "rejected"` and `status: "allowed"` returns `None`.
 
       Mutation: recognise on `overageStatus`. The last test fails.
-- [ ] 1.2 `ProviderHold` and `provider_hold(db, project_id, agent, *, now=None)` per D3:
+
+      **Done 2026-09-14 (f355-impl part 1).** `hub/tests/test_provider_allowance.py`, 25 tests. Mutation
+      observed: recognising on `overageStatus` failed `…_is_not_a_refusal[allowed]`,
+      `[allowed_warning]`, `test_overage_rejected_on_a_served_turn_is_not_a_refusal` and
+      `test_a_later_served_turn_with_an_allowed_reading_releases`.
+
+- [x] 1.2 `ProviderHold` and `provider_hold(db, project_id, agent, *, now=None)` per D3:
       - the newest *informative* `TurnUsage` row (its allowance is a JSON object, or its status is
         `measured`);
       - `hold_until = max(resets_at, observed_at + HOLD_FLOOR)`, with `HOLD_FLOOR` a module
@@ -64,7 +70,16 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - the newest row of any kind (the fourth test fails);
       - read only the newest 50 rows (the fifth fails);
       - drop the floor (the sixth fails).
-- [ ] 1.2b **(Round 2)** `agents_held(db, project_id, *, now=None) -> Set[str]`, the set-valued
+
+      **Done 2026-09-14 (part 1).** Newest informative row read in pages of 50 until found, not a
+      window. Mutations observed: newest row of any kind failed
+      `test_a_later_unavailable_row_with_no_reading_does_not_release` (and the 60-row, 1.2b and 1.3
+      tests); stopping after the first page of 50 failed
+      `test_sixty_uninformative_rows_after_a_refusal_still_hold`; dropping the floor failed
+      `test_a_reset_already_past_holds_for_the_floor`. The clock seam has its own test
+      (`test_the_hold_reads_the_module_clock_when_no_now_is_given`).
+
+- [x] 1.2b **(Round 2)** `agents_held(db, project_id, *, now=None) -> Set[str]`, the set-valued
       form of `provider_hold` at one `now` (design D6). Test: two agents refused and one served,
       read in one call, give exactly the two. Also test that it agrees with `provider_hold` agent
       by agent over the 1.2 fixtures.
@@ -72,14 +87,25 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       **(Round 3)** One of the two refused agents has a crash-reconciled `unavailable` row after
       its refusal. Mutation: read each agent's newest row of any kind. That agent drops out and the
       test fails.
-- [ ] 1.3 The informative filter treats a JSON-`null` allowance as no reading. Test: write the
+
+      **Done 2026-09-14 (part 1).** `test_agents_held_names_exactly_the_refused_agents` (beta has the
+      crash-reconciled row; checked agent by agent against `provider_hold`). `agents_held` delegates
+      to `provider_hold`, so the newest-row-of-any-kind mutation is 1.2's first one: observed, `beta`
+      dropped out and the test failed.
+
+- [x] 1.3 The informative filter treats a JSON-`null` allowance as no reading. Test: write the
       row through `record_turn_usage(..., sample=None)` (the real writer, not a hand-built row)
       after a refusal, and assert that the hold survives. Then assert, in the same test, that the
       stored column is not SQL `NULL` (`select allowance is null` is false). That second assertion
       is what shows the test exercises the trap.
 
       Mutation: filter with `TurnUsage.allowance.is_not(None)`. The hold assertion fails.
-- [ ] 1.4 `hold_sentence(agent, hold)`, `hold_busy_reason(agent, hold)` and
+
+      **Done 2026-09-14 (part 1).** `test_a_null_reading_written_by_the_real_writer_does_not_release`.
+      Mutation observed (the SQL `allowance.is_not(None) | status == 'measured'` filter in place of
+      the Python check): `assert None is not None` on the hold assertion.
+
+- [x] 1.4 `hold_sentence(agent, hold)`, `hold_busy_reason(agent, hold)` and
       `hold_coalesce_reason(agent, hold)`, worded as in D6, D7 and D9.
       - Test the lengths at a 32-character agent name and a `seven_day` type. Measured shapes: 285,
         86 and 161 characters. The coalesce reason must be at most 500
@@ -87,14 +113,22 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - Test that each names the agent and the `HH:MM UTC` of `hold_until`.
       - Test that the limit word is omitted, not rendered `None`, when `limit_type` is absent.
 
+      **Done 2026-09-14 (part 1).** Lengths measured 285 / 86 / 161 as designed. No mutation named.
+
 ## 2. The queue (design D2, D8)
 
-- [ ] 2.1 `InboundQueueEntry.allowance_refusals`: integer, not null, default 0, with a server
+- [x] 2.1 `InboundQueueEntry.allowance_refusals`: integer, not null, default 0, with a server
       default. Migration `0103_allowance_refusals.py`, guarded for a missing table as `0033`/`0034`
       are. Bump the head assertions in `hub/tests/test_migrations.py` **and**
       `hub/tests/test_project_persistence.py`. Expose it on the queue entry response schema beside
       `delivery_attempts` (`api/v1/inbound_queue.py:40`).
-- [ ] 2.2 `return_run_entries(db, run_id, *, refusal=None)` per D2. Tests in
+
+      **Done 2026-09-14 (part 1).** Migration `0103_allowance_refusals.py`; head `0103` in both test
+      files; three migration tests (column shape, a pre-`0103` row reads 0 through downgrade/upgrade,
+      missing-table guard); F329's init_db-vs-alembic schema test still passes. `QueueEntryResponse`
+      gains `allowance_refusals`.
+
+- [x] 2.2 `return_run_entries(db, run_id, *, refusal=None)` per D2. Tests in
       `hub/tests/test_delivery_attempts.py`:
       - with a refusal, the entry is `queued` and `delivery_attempts` is unchanged, while
         `allowance_refusals` is 1 and `waiting_reason` is `None` (Round 2: the status route
@@ -104,12 +138,20 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - without a refusal, every existing test in the file still passes unchanged.
 
       Mutation: ignore `refusal`. The first two fail.
-- [ ] 2.3 `format_turn_prompt` names attempt `delivery_attempts + allowance_refusals + 1`, and
+
+      **Done 2026-09-14 (part 1).** Mutation observed (ignore `refusal`): both new tests failed; the
+      file's 11 existing tests pass unchanged.
+
+- [x] 2.3 `format_turn_prompt` names attempt `delivery_attempts + allowance_refusals + 1`, and
       states the note when that sum is positive. Test: an entry with one refusal and no failed
       delivery carries *"delivery attempt 2"*.
 
       Mutation: read `delivery_attempts` alone. The test fails.
-- [ ] 2.4 `_execute_run` computes the refusal from `accounting_sample` when
+
+      **Done 2026-09-14 (part 1).** Mutation observed (`delivery_attempts` alone):
+      `test_the_retry_note_counts_a_refused_delivery` failed.
+
+- [x] 2.4 `_execute_run` computes the refusal from `accounting_sample` when
       `final_status == "failed"` and `binding_conflict is None`, and passes it. **(Round 4 — REV)**
       Only when the reading was recorded (the `if run:` branch) and `resets_at` is later than the
       run's end; otherwise it passes nothing (design D2). Test with the
@@ -132,7 +174,14 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
       The test runs with no `JobScheduler` (`get_scheduler()` is `None`). So it also shows that
       arming the wake with no scheduler neither raises nor stops the run's end (design D5).
-- [ ] 2.4b **(Round 4 — REV, design D2)** The two conditions. Through the 2.4 fixture:
+
+      **Done 2026-09-14 (part 1),** in `hub/tests/test_a_refused_turn_holds_the_queue.py` (its own file,
+      same `_fake_pty` pattern). The refusal is computed from the *recorded* row
+      (`record_turn_usage`'s return), inside `if run:`. The spawn count of 1 depends on D4's check in
+      `_attempt_turn`, written in this part for that reason; 3.1 stays unticked until its own tests
+      exist. Mutation observed (pass no refusal): `assert 1 == 0` on `delivery_attempts`.
+
+- [x] 2.4b **(Round 4 — REV, design D2)** The two conditions. Through the 2.4 fixture:
       - with `resetsAt` one second **before** the run's end, the entry reads
         `delivery_attempts == 1` and `allowance_refusals == 0`. The hold still applies for the
         60 s floor (D3);
@@ -143,7 +192,13 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       Mutations:
       - drop the `resets_at` condition. The first test reads `delivery_attempts == 0`;
       - compute the refusal outside `if run:`. The second test reads `allowance_refusals == 1`.
-- [ ] 2.5 **(Round 2, design D10)** The refused turn's own firing stays `in_progress`. Through the
+
+      **Done 2026-09-14 (part 1).** The finalizing lookup is patched from the fake process's `wait()`
+      onwards. Mutations observed: dropping the `resets_at` condition read `delivery_attempts` 0
+      (`assert 0 == 1`); computing the refusal outside `if run:` read `delivery_attempts` 0
+      (`assert 0 == 1`, the first assertion; by construction the entry went back uncounted).
+
+- [x] 2.5 **(Round 2, design D10)** The refused turn's own firing stays `in_progress`. Through the
       2.4 fixture, with the entry queued by `_do_fire_job` for a plain job:
       - after the refused run, the firing's `JobRun` reads `in_progress`, not `failed`;
       - after a served run delivers the same entry, it reads `completed`.
@@ -155,13 +210,21 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       Mutation: keep the finalize call on a refusal. The first assertion fails, and so does the
       second, because the row already reads `failed` and the finalize selects only `in_progress`
       rows.
-- [ ] 2.6 **(Round 2, design D5)** A run that ends `completed` with a `rejected` reading arms the
+
+      **Done 2026-09-14 (part 1).** Plain job fired through `JobScheduler._fire_job_internal`.
+      Mutation observed (keep the finalize on a refusal): the firing read `failed`, not
+      `in_progress`.
+
+- [x] 2.6 **(Round 2, design D5)** A run that ends `completed` with a `rejected` reading arms the
       wake and emits `queue_agent_held` with empty `entry_ids`. Script the 2.4 lines with exit
       code 0 and a `result` line that is not an error. Assert that its input is **not** returned
       (it completed), and that the wake-arming function was called with `hold_until`. Patch it to
       record its calls.
 
       Mutation: arm only when `final_status == "failed"`. The test fails.
+
+      **Done 2026-09-14 (part 1).** `arm_allowance_wake` is patched on `agent_trigger`. Mutation
+      observed (arm only when `failed`): `Expected 'mock' to be called once. Called 0 times.`
 
 ## 3. The scheduler, the wake, loops and jobs (design D4–D7)
 
@@ -179,6 +242,10 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - key the probe on `selected` (the second test fails);
       - drop the `arrived_at > observed_at` condition (the third fails, because the probe
         re-fires).
+
+      *Part 1 (2026-09-14) wrote the check, because 2.4's spawn count needs it. Not ticked: its four
+      tests and two mutations are part 2's.*
+
 - [ ] 3.2 `arm_allowance_wake(project_id, agent, when)` (D5), and make
       `run_reconciliation._schedule_or_defer` public as `schedule_or_defer`. Keep the old name as
       an alias only if a test imports it.
@@ -201,6 +268,11 @@ The reading used in tests is the measured one (`design.md`, *Context*):
         mutation must fail on that assertion, not on the timeout.
 
       Mutation: do not arm. The pre-date assertion fails.
+
+      *Part 1 (2026-09-14) wrote `arm_allowance_wake`, the arm after the finalize commit, and the
+      rename to `schedule_or_defer` (no test imported the old name, so no alias). Not ticked: the
+      three tests and the mutation are part 2's.*
+
 - [ ] 3.3 A start-up re-arm, `arm_held_queues()`, called from `lifespan()` after
       `init_scheduler()`. It reads the newest **informative** row (D3), not the newest row
       (Round 2). Tests:
@@ -326,10 +398,15 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - an entry queued during a hold with no `waiting_reason` of its own reports the hold
         sentence;
       - with a newer operator entry queued, the route does not report the hold.
-- [ ] 4.2 `queue_agent_held` is persisted at `warn` and broadcast at the end of every run whose
+- [x] 4.2 `queue_agent_held` is persisted at `warn` and broadcast at the end of every run whose
       reading is a refusal, with `agent`, `run_id`, `hold_until`, `resets_at`, `limit_type` and
       `entry_ids`. Test the persisted row through the 2.4 fixture (and through 2.6's, with empty
       `entry_ids`).
+
+      **Done 2026-09-14 (part 1),** emitted beside the wake. Asserted in the 2.4 test (severity `warn`,
+      the requeued id) and the 2.6 test (empty `entry_ids`). Mutation observed (drop the
+      `persist_event`): both tests failed unpacking an empty event list.
+
 - [ ] 4.3 **(Round 2)** Once the hold has ended, the status route reports no hold sentence, even
       for an entry the refusal returned. Test: an entry returned by `return_run_entries(...,
       refusal=...)`, left `queued`, with the agent not running and `now` past `hold_until`. The

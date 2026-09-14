@@ -128,7 +128,7 @@ async def reconcile_interrupted_runs() -> int:
         logger.warning(
             "Reconciled %d orphaned run(s) to status=interrupted on Hub start", reconciled
         )
-        await _schedule_or_defer(agents_to_schedule)
+        await schedule_or_defer(agents_to_schedule)
     return reconciled
 
 
@@ -137,7 +137,7 @@ async def reconcile_interrupted_runs() -> int:
 _deferred_schedules: set[tuple[str, str]] = set()
 
 
-async def _schedule_or_defer(agents: set[tuple[str, str]]) -> None:
+async def schedule_or_defer(agents: set[tuple[str, str]]) -> None:
     """Re-drain the reconciled agents now, or as soon as the Hub knows its own address.
 
     `reconcile_interrupted_runs` runs inside `lifespan()`, which is to say **before the Hub has
