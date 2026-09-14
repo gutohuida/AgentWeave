@@ -13,6 +13,7 @@
 | A queued answer waits behind the live run | scheduler test | 2.5 |
 | Repeated reports and lone late declines queue nothing more | report tests | 2.6, 2.7 |
 | Either order of answer and report delivers exactly once | both orders | 3.1, 3.2 |
+| An answer or decline landing between the report's load and its write: the answer is delivered, the decline is not stamped | a second session commits mid-report (Round 2) | 2.8, 2.9 |
 | The real tool, the real wait and a real agent | drive 5.2–5.4 on a drive Hub | 5.x |
 
 ## Human-only
@@ -34,3 +35,7 @@
   or sending the agent answers it already has.
 - **A lost report, then an answer inside the run's remaining life** (design D5, the proposal's
   *Residual*). Still lost. Nothing in the Hub can tell it apart from an answer the tool received.
+- **(Round 2) A timeout lengthened while a run is live** leads to the same outcome by a second
+  route. The tool gives up at the old deadline, and its report is refused against the new one
+  (design, *Context*). A later answer inside the run's life is lost. Round 2 names a no-migration
+  way to deliver both at the run's end, left to a follow-on change (design D5).

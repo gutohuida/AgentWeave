@@ -58,6 +58,21 @@ ended, not only from the moment its run has ended.
 - **WHEN** the asking run reports both as expired in one report and the batch is complete
 - **THEN** exactly one delivery carrying the whole batch is queued
 
+#### Scenario: An answer that lands while the expiry report is being recorded is delivered
+
+- **GIVEN** a blocking question whose asking run's expiry report has read it unanswered
+- **AND** the operator's answer is recorded before that report records the wait's end
+- **WHEN** both have been recorded
+- **THEN** the answer is queued for the agent
+
+#### Scenario: A decline that lands while the expiry report is being recorded is not called an absence
+
+- **GIVEN** a blocking question whose asking run's expiry report has read it unresolved
+- **AND** the operator's decline is recorded before that report records the wait's end
+- **WHEN** both have been recorded
+- **THEN** the question does not record that its wait ended
+- **AND** the task it was bound to does not say it proceeded without the operator's answer
+
 #### Scenario: The answer is not duplicated for an asker still waiting
 
 - **WHEN** a blocking question is answered while its asking run is still waiting for it

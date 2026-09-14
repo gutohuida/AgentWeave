@@ -19,6 +19,25 @@ predicate (D1).
 Measured on `:8000` (`mode=ro`, 2026-09-14), the report landed on 21 of 21 expired waits, 0.06–1.2 s
 after `wait_expires_at`. See `proposal.md`, *What was measured*.
 
+**(Round 2) The third row is narrower than the table says.** The sweep (`run_divergence.py:713-736`)
+stamps at most **one** question, the earliest from `unanswered_blocking_question` (`.limit(1)`,
+`run_task_binding.py:667-677`). It is also reached only on the task-bound branch of
+`evaluate_run_end`: an unbound run returns before it (`:706`). So a batch of three whose report was
+lost gets one `wait_ended_at` at the run's end, not three. That changes nothing this change
+decides. By then the run has ended, and the run-ended arm answers "nobody is waiting" for every
+question in the batch without reading `wait_ended_at`. It is recorded because the row read as
+covering the batch, and D1's argument cites the sweep.
+
+**(Round 2) The two clocks can also disagree by configuration, and that favours D1.** The Hub
+computes `wait_expires_at` from `effective_question_wait(agent_row)` at the **ask**
+(`agent_actions.py:519-523`). The tool reads `AW_QUESTION_TIMEOUT` once, when its process starts at
+the **spawn** (`mcp_server.py:935`). An operator who changes `question_timeout_seconds` while a run
+is live splits the two. Read, not measured. If the timeout is shortened, the Hub's deadline passes
+first and the tool keeps polling, which is the grace window made longer. `wait_ended_at` handles
+that correctly, and `wait_expires_at` would duplicate every answer inside it. If the timeout is
+lengthened, the tool gives up first and its report is refused by `wait_has_expired`. That is a
+second route into D5's residual.
+
 ## D1 — "still waiting" is: blocking, run live, wait not ended
 
 ```python
@@ -81,7 +100,9 @@ Changed behaviour, for a question asked by the calling run that is **answered**,
 - after the commit, deliver once per **batch**, not once per question. Collect the batch keys
   (`batch_id`, or the question id for a batch of one) during the loop, then call
   `_deliver_batch_if_complete` once per key. Two late answers from one batch, reported together,
-  would otherwise queue the batch twice.
+  would otherwise queue the batch twice. **(Round 2)** The keys are no longer collected during the
+  loop from the row as loaded. They come from the rows this request stamped, re-read after its
+  commit. See D4, *The report half*.
 
 **A question declined after the tool's last poll is accepted, and nothing else happens.** It gets no
 `wait_ended_at`, no write and no delivery key. The column's stated invariant is that a declined
@@ -130,6 +151,60 @@ route loaded it still reads `answered = False`, the batch reads incomplete, and 
 The re-read must use `populate_existing` (or refresh each row) before `_completed_batch` judges
 completeness. Task 2.3 pins it with a sibling answered mid-request.
 
+### (Round 2) The report half, as round 1 wrote it, still decides before it commits
+
+D4 claims that "whichever commits second sees the first one's write". That holds for the answer
+route. It does not hold for the report as D3 specifies it, because the report picks its branch from
+the row **as loaded**, and loading comes before its commit. Walk the interleaving:
+
+1. The report loads question Q: unanswered, `wait_ended_at` NULL, deadline passed.
+2. The operator's answer commits `answered = True`. The answer route refreshes and reads
+   `wait_ended_at` NULL. The run is live, so it decides the asker is still waiting and queues
+   nothing.
+3. The report takes the **expired** branch from its stale row, writes `wait_ended_at`, and commits.
+   Only the changed column is flushed, so the answer survives in the database. But Q entered no
+   delivery key, because at load time it was not answered.
+
+Both writers declined to deliver. The requirement forbids exactly that (*"SHALL NOT both decline to
+deliver"*). No database snapshot prevents this. `engine.py` sets no isolation level and emits no
+`BEGIN` before a `SELECT` (only `check_same_thread`, `:39`), so the driver's default applies. The
+load reads committed state and holds no transaction open until the `UPDATE`. This is read, not
+measured. The window is the milliseconds between load and commit: rare, but D4's whole claim is
+*never a lost one*.
+
+**The fix is to decide delivery from the report's own committed writes, not from its load:**
+
+- Take the batch key from **every question this request stamped**, on either branch. After the loop,
+  re-read those rows with `populate_existing`, and key each one that is `answered` in committed
+  state. Then whichever of the two writers commits second sees the other's write, and D4 becomes
+  true for both.
+- A row accepted through the *already recorded* branch (`:683`) is not re-keyed. That is what keeps
+  task 2.6, a second report delivering nothing, true.
+
+### (Round 2) The invariant D3 leans on is not enforced at the write
+
+D3 narrows the late decline on the ground that a declined question never carries `wait_ended_at`.
+**That can already be broken today.** Run the same interleaving with a decline in place of the
+answer: the report loads Q unresolved, the decline commits, and the report stamps `wait_ended_at`
+on its stale row. The result is a declined question carrying `wait_ended_at`, and
+`proceeded_without_answer_reason` (which reads `wait_ended_at` alone, `tasks.py:456-462`) then says
+*"Proceeded without your answer"* about a question the operator declined. The race predates this
+change. This change should not rest an argument on the invariant while leaving it unguarded.
+
+**The fix is to make the stamp a guarded `UPDATE`:** `UPDATE question SET wait_ended_at = :now
+WHERE id = :id AND wait_ended_at IS NULL AND declined IS FALSE`. Replace the ORM attribute write
+with it, and read the `rowcount`. SQLite serialises writers, so the `WHERE` is judged against
+committed state at the moment of the write.
+
+- A `rowcount` of 1 means this request stamped the row. It enters the post-commit re-read above.
+  For the expired branch only, `release_block_for_expired_wait` runs, as it does today.
+- A `rowcount` of 0 means the row was declined, or its end was already recorded by a concurrent
+  report or sweep. Either way the caller's assertion is true, so the row is accepted, with no key
+  and no release.
+
+The same one statement serves both D3 branches. The answered branch keeps skipping
+`wait_has_expired`.
+
 ## D5 — no receipt stamp (considered, not taken)
 
 The residual case is a report that never lands, an answer after the tool's last poll, and a run that
@@ -145,6 +220,44 @@ Not taken, for three reasons:
 
 It is named in the proposal's *Residual*, so the choice is visible and can be reversed. **R2 and R3
 should challenge this choice rather than assume it.**
+
+### (Round 2) The challenge: one of D5's costs is wrong, and there is a third option
+
+**The write cost is overstated.** The tool stops polling a question once it has read it resolved
+(`if question_id in answers: continue`, `mcp_server.py:387-389`). So a receipt stamp costs one write
+per resolved question, not one per poll. The migration cost stands. So does today's day rule
+against one.
+
+**The residual has two routes, not one.** The first is the one D5 names: the report is lost, the
+answer arrives after the tool's last poll, and the run lives on. The second is D1's configuration
+split: the timeout is lengthened mid-run, so the tool's report is refused. Both leave a question
+that is answered, has `wait_ended_at` NULL, and was answered after its deadline. A receipt closes
+both, but only **at the run's end**. While the run lives, no design can tell whether the tool will
+poll again.
+
+**A third option needs no migration.** At the run's end, deliver any blocking question from this
+run that is answered, has `wait_ended_at` NULL, and has `answered_at > wait_expires_at`. Both
+timestamps are the Hub's own, so this is the same-clock comparison `wait_has_expired` already makes.
+It fires in three cases:
+
+- the report was lost, which is a true delivery;
+- the report was refused under the configuration split, which is a true delivery;
+- an answer landed in the grace window and the tool returned it, which is a **duplicate**. The
+  window is about 2 s per wait.
+
+That is D4's own trade: at worst a duplicate, never a loss. It turns both routes of the residual
+from *lost* into *delivered at the run's end*. It would live in `evaluate_run_end` beside the sweep.
+It would need its own stamp for idempotency, since `wait_ended_at` would then mark the task
+*"Proceeded without your answer"*, and that is false in the grace-window case. And it has to reach
+unbound runs, which the sweep does not (`:706`).
+
+**Round 2's position.** D5 stands for **this** change, for scope. The third option adds a new
+delivery path at the run's end, with its own idempotency question, and deserves its own three
+rounds. It is not a clause to bolt on here. But D5's stated reasons are corrected above, and the
+proposal's *Residual* now names both routes and the third option. That way the follow-on starts from
+the right costs. **Round 3 should re-derive this position rather than inherit it.** In particular,
+R3 should check whether the idempotency stamp can be avoided, for instance by deriving it from a
+queue entry's existence. If it can, the option may be small enough to take here after all.
 
 ## D6 — the late delivery's wording is unchanged (considered, not taken)
 

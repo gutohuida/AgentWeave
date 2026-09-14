@@ -45,8 +45,8 @@ and the observed failure beside the task when ticking it.
       declined"* is no longer a refusal, and the docstring says why.
       **Mutation:** also set `wait_ended_at` on the declined one → 2.7's
       `proceeded_without_answer_reason` assertion fails.
-- [ ] 2.2 After the loop, deliver once per batch key over the questions resolved before their
-      report, through `_deliver_batch_if_complete`. Announce and wake through the helper that 2.4
+- [ ] 2.2 After the loop, deliver once per batch key, through `_deliver_batch_if_complete`. The
+      keys are the ones 2.9 collects (Round 2), not those read at load time. Announce and wake through the helper that 2.4
       extracts. Test: a batch of 4, 2 answered in time, 2 reported expired **after** being
       answered, all in one report → exactly one entry carrying all four, in ask order. Assert the
       event and the wake. **Mutations:** (a) deliver per question → two entries; (b) keep the old
@@ -71,6 +71,27 @@ and the observed failure beside the task when ticking it.
 - [ ] 2.7 A lone question declined after the tool's last poll, then reported: accepted, no entry,
       `wait_ended_at` still NULL, and the bound task's `proceeded_without_answer_reason` still
       null.
+- [ ] 2.8 **(Round 2) The stamp is a guarded `UPDATE`** (design D4, *The invariant D3 leans on*).
+      Both branches of `report_wait_ended` write `wait_ended_at` with
+      `UPDATE question SET wait_ended_at = :now WHERE id = :id AND wait_ended_at IS NULL AND
+      declined IS FALSE`, in place of the ORM attribute write, and read `rowcount`.
+      `release_block_for_expired_wait` runs only on the expired branch, and only when `rowcount` is
+      1. A `rowcount` of 0 is accepted, with no key and no release.
+      Test: the report loads Q unresolved, then a decline is committed through a second session
+      before the report writes (a hook on `wait_has_expired`, or a patched `session.get` that
+      commits the decline after returning the row) → Q's `wait_ended_at` still NULL, and the bound
+      task's `proceeded_without_answer_reason` null. **Mutation:** restore the ORM write →
+      `wait_ended_at` set on a declined row.
+- [ ] 2.9 **(Round 2) Keys come from committed state, after the report's own commit** (design D4,
+      *The report half*). After the loop, re-read every row whose `rowcount` was 1, with
+      `populate_existing`, and take a batch key from each that is `answered`. This replaces 2.2's
+      key collection from the load-time answered branch. Test: the report loads Q unanswered, then
+      an answer is committed through a second session before the report writes, using the same hook
+      as 2.8. Drive the answer through the real `answer_question`, so its own predicate reads
+      `wait_ended_at` NULL and queues nothing → after the report, exactly one entry carrying Q's
+      answer. **Mutations:** (a) key from the load-time branch, which is round 1's design → no
+      entry; (b) re-read without `populate_existing` → no entry; (c) key rows accepted through the
+      *already recorded* branch too → 2.6 gets a second entry.
 
 ## 3. Races (design D4)
 

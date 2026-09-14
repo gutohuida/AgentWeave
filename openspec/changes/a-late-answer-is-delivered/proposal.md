@@ -74,6 +74,14 @@ On `:8000`, read with `mode=ro` on 2026-09-14, **23** questions carry a `wait_ex
    second sees the other's write, so a race costs a duplicate delivery and never a lost one. This is
    the rule `_deliver_batch_if_complete` already states for two concurrent answers. (D4)
 
+   **(Round 2)** As round 1 wrote it, the report still picked its branch from the row it had
+   loaded. So an answer committing between the report's load and its commit was delivered by
+   neither writer (design D4, *The report half*). Two fixes follow from that. The report keys
+   delivery from the rows **it stamped**, re-read after it commits. And the stamp becomes a guarded
+   `UPDATE … WHERE wait_ended_at IS NULL AND declined IS FALSE`. The guard also closes an existing
+   race: a decline landing mid-report could leave a declined question carrying `wait_ended_at`,
+   which is the invariant D3's decline narrowing rests on.
+
 **No new column, no migration, no `mcp_server.py` edit, no UI code and no bundle.** The UI already
 renders `asker_waiting === false` as nobody waiting (`AgentQuestionCard.tsx:75`,
 `QuestionsPanel.tsx:26`). The field starts telling the truth, and the view follows without a change.
@@ -97,6 +105,19 @@ still lost. The sweep cannot help, because at run end the question reads answere
 report success is 21 of 21. D5 sets out why a receipt stamp that would close this gap is not taken
 in this change.
 
+**(Round 2) The residual has a second route.** The Hub's deadline is computed from the agent's
+timeout at the ask. The tool's deadline is computed from `AW_QUESTION_TIMEOUT` at the spawn. An
+operator who **lengthens** the timeout while a run is live makes the tool give up first. Its report
+is then refused by `wait_has_expired`, and a later answer inside the run's life is lost the same way.
+That is read from the code, not measured.
+
+Round 2 also found a **third option** that closes both routes at the run's end without a migration:
+deliver a question that is answered, has `wait_ended_at` NULL, and has
+`answered_at > wait_expires_at`. Both timestamps are the Hub's own. At worst it duplicates an answer
+the tool took in its ~2 s grace window, which is D4's own trade. Round 2 leaves it to a follow-on
+change for scope. Round 3 is asked to re-derive that position (design D5). One of D5's reasons has
+been corrected: the receipt stamp would cost one write per resolved question, not one per poll.
+
 ## Capabilities
 
 - **`run-task-binding`**: MODIFIED *An answer reaches an asker whose run has ended*.
@@ -105,7 +126,9 @@ in this change.
 
 - `hub/hub/api/v1/questions.py`: the predicate, `answer_question`, `decline_question`,
   `_with_asker_state` and `_with_asker_state_one`.
-- `hub/hub/api/v1/agent_actions.py`: `report_wait_ended`'s answered and declined branch.
+- `hub/hub/api/v1/agent_actions.py`: `report_wait_ended`'s answered and declined branch. **(Round 2)**
+  Also its stamp, which becomes a guarded `UPDATE`, and its delivery keys, which are re-read from
+  the rows it stamped after it commits.
 - Tests: `hub/tests/` (new file `test_a_late_answer_is_delivered.py`).
 - Day rules 2026-09-14: no `hub/hub/mcp_server.py` edit (F354), none needed. No migration. No UI
   bundle.
