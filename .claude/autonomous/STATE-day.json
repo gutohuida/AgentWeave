@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "i1a",
-    "next_action": "Do queue item i1a: the first six improvement briefs, one openspec/explorations/2026-09-14-<slug>.md each (rework-in-a-fresh-session, agents-can-retire-their-own-work, a-review-can-wait-on-the-operator, requests-that-name-another-task, the-first-turn-has-its-tools, the-transition-model-agents-are-told). Six headings per DIRECTION.md ## 2026-09-14 I-1, about a page each; source is spec-queue/observations/2026-09-14-LoopEngine.md '## Improvements' and the O-2 sections it cites. Cite ids, paraphrase, quote only AgentWeave's own strings; cost labelled a code-read estimate. Not a change dir, no tasks.md. If it is at or after 18:15, do d5 instead.",
+    "current": "i1b",
+    "next_action": "Do queue item i1b: the last five improvement briefs, one openspec/explorations/2026-09-14-<slug>.md each (a-peer-can-see-the-answer, project-notes-inside-the-product, peer-threads-that-only-acknowledge, background-work-ends-with-the-turn, localhost-for-the-thing-under-test). Same six headings as i1a's six (DIRECTION.md ## 2026-09-14 I-1); source spec-queue/observations/2026-09-14-LoopEngine.md '## Improvements' 7-11 and the O-2 sections they cite. Before writing each, grep scripts/drive/FINDINGS.md and spec-queue/DECISIONS.md for an existing finding or verdict (i1a found O-3 had missed F302). Cite ids, paraphrase, quote only AgentWeave's own strings; cost labelled a code-read estimate. If it is at or after 18:15, do d5 instead.",
     "queue": [
         {
             "id": "compose",
@@ -47,9 +47,9 @@
         },
         {
             "id": "i1a",
-            "status": "open",
+            "status": "done",
             "title": "I-1 briefs 1-6 of 11 (observations file '## Improvements' 1-6)",
-            "detail": "DIRECTION.md ## 2026-09-14 section I-1: six headings in order (what we saw / what would change / why it matters / rough cost, labelled a code-read estimate / risks and open questions / the decision in one line). Not a change directory, no tasks.md. All in one firing unless more than about eight. Eleven improvements, so split in two firings. This one: rework-in-a-fresh-session, agents-can-retire-their-own-work, a-review-can-wait-on-the-operator, requests-that-name-another-task, the-first-turn-has-its-tools, the-transition-model-agents-are-told. Cite ids, paraphrase; quote only AgentWeave's own strings."
+            "detail": "DONE iteration 6 (10:35-10:50). Six briefs in openspec/explorations/2026-09-14-*.md: rework-in-a-fresh-session (dev's 18 working continuation runs were all peer-woken, resuming the author's conversation; the project's offered checkpoint at 80% of Sonnet 5's 1M window = 800k never reachable, dev peaked 547k; after F360/F364), agents-can-retire-their-own-work (evidence withdraw needs a migration - CHECK ck_requirement_evidence_review_state; task close-as-superseded is the operator's call), a-review-can-wait-on-the-operator (on_it = live bound run or queued entry only; ask_user's wait-ended RELEASES the block; under_review has no blocked edge; after f352/f356; notes the corpus still states the retired unasked-question requirement, agent-capability-plane:281), requests-that-name-another-task (a message's task id picks the recipient's workspace regardless of assignee, agent_trigger.py:901-954; part 1 buildable without mcp_server.py), the-first-turn-has-its-tools (IS F302, decided 2026-09-09 DAY-2 and unbuilt - O-3 missed it; measured mode=ro: the Architect's 10-run session had the denial once and the MCP rendering 9 times yet stayed on curl; F302 got a dated note and joins the fix queue after f347), the-transition-model-agents-are-told (render the edges from task_transitions.py:101-153 into every turn's briefing; after f357). Read-only scripts %TEMP%\\i1a_q*.py."
         },
         {
             "id": "i1b",
@@ -380,6 +380,42 @@
             "status": "open",
             "title": "f347-DRIVE: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
             "detail": "Step DRIVE of f347: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f302-r1",
+            "status": "open",
+            "title": "f302-R1: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
+            "detail": "VERDICT ALREADY GIVEN: DECISIONS.md '#### DAY-2 / F302 - the notice stops asserting, and does not start trusting' (2026-09-09): drop the sentence at launchability.py:392; do NOT grant the MCP rendering on trust. The no-grounds branch still describes the HTTP form and still does not claim tools (agent-capability-plane 'No grounds means no assertion'). Evidence: FINDINGS.md F302 incl. the 2026-09-14 note (the false line outlived its turn in a resumed session). The follow-up line for a resumed session is NOT in this fix - it is the-first-turn-has-its-tools brief's spec loop. Must not touch the open F299/F301/F339/F340 access-path question. Suggested name: the-no-grounds-notice-stops-denying. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the finding with 'fixed <sha>'."
+        },
+        {
+            "id": "f302-r2",
+            "status": "open",
+            "title": "f302-R2: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
+            "detail": "Step R2 of f302: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f302-r3",
+            "status": "open",
+            "title": "f302-R3: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
+            "detail": "Step R3 of f302: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f302-rev",
+            "status": "open",
+            "title": "f302-REV: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
+            "detail": "Step REV of f302: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f302-impl",
+            "status": "open",
+            "title": "f302-IMPL: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
+            "detail": "Step IMPL of f302: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f302-drive",
+            "status": "open",
+            "title": "f302-DRIVE: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
+            "detail": "Step DRIVE of f302: drive it and archive it per night-window.md 'Driving'; retire the finding."
         },
         {
             "id": "f362-r1",

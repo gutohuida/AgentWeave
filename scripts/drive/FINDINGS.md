@@ -24640,6 +24640,18 @@ PY
 # the task exists; the turn was told `no MCP tools this turn`
 ```
 
+**Observed again 2026-09-14** (day window I-1, `openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`,
+read-only from `:8000`). **Decided 2026-09-09 and still unbuilt**
+(`DECISIONS.md` `#### DAY-2 / F302`: drop the sentence; do not grant MCP on trust). O-3 sorted this
+as improvement 5 without finding this entry. All four of LoopEngine's agents got the denial on their
+first turn. The verdict calls the defect *"bounded — one turn per agent, healing on the second"*,
+and LoopEngine measured that premise as wrong. The Architect's spec conversation resumed one harness
+session for ten runs (`run-2445bbbe1d6d` 20:39 to `run-75a371830046` 23:44). The session carries
+the denial once and the MCP rendering on each of the nine later runs, checked one prompt per run.
+Even so, the Architect submitted every draft for the rest of the session with `curl` and a payload
+file, while calling the MCP `ask_user` in the same session. The false first line outlived its turn
+because the session's history kept it.
+
 ## F303 (B) — four drive scripts kept defaulting a Hub key for a day after the sweep that removed it, and the guard could not see them because the literal was the wrong shape
 
 **Status:** fixed 2026-09-09 — day window, D-4, in the commit carrying this entry. Both halves.

@@ -608,6 +608,10 @@ Severity first. Within a severity, ordered by what the fault cost on this projec
 12. **F364 (C)**: `submit_checkpoint_notes` enforces caps it never states, with a refusal that
     names nothing. 23 of 36 calls failed.
 13. **F47 (C)**: the flow's staging is recorded as the operator's. That is the ~26 on cron ticks.
+14. **F302 (B)**, *added in I-1*: every agent's first turn is told *"no MCP tools this turn"*, and
+    the Architect kept to HTTP for a ten-run session. It is decided (drop the sentence) and
+    `launchability.py` only. It sits in the queue after F347, the other fix whose verdict is already
+    given.
 
 **Re-observed and not in the list.**
 - F349 gets a note: the same lock kills runs, which is F359.
@@ -640,6 +644,9 @@ Most useful first. Each is briefed in I-1, and none is specced or built.
 5. **`the-first-turn-has-its-tools`.** Every agent's first turn was told *"no MCP tools this turn"*.
    For the Architect that became a whole ten-turn session of `curl` and payload files
    (`launchability.py:285-289` prices it at one turn). Related to F340.
+   *Corrected in I-1:* the denial itself is **F302**, decided 2026-09-09 and unbuilt, which this
+   sort missed. F302 has a dated note and joins the fix queue. The brief covers what is new: the
+   false first line outlived its turn in a resumed session.
 6. **`the-transition-model-agents-are-told`.** Agents repeatedly tried edges that do not exist:
    - `in_progress → under_review`, `completed → approved`, and `pending → completed`;
    - a reviewer who moved a task to `completed` then could not approve it (`task-bb06b8c3c708`).
