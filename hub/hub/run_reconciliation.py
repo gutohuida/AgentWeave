@@ -18,9 +18,10 @@ from sqlalchemy import select
 
 from . import bound_address
 from .db.engine import async_session_factory
-from .db.models import Agent, JobRun, Run, Runner
+from .db.models import Agent, InboundQueueEntry, JobRun, Run, Runner
 from .inbound_queue import abandoned_for_run, return_run_entries
 from .permission_requests import expire_pending_for_run
+from .provider_allowance import last_refusal
 from .pty_runner import pid_alive
 from .sse import sse_manager
 from .usage_accounting import record_turn_usage
@@ -186,6 +187,24 @@ async def drain_deferred_schedules() -> int:
     return len(pending)
 
 
+async def _waits_on_a_refusal(db, conversation_id: str) -> bool:
+    """Whether *conversation_id* has queued input for an agent the provider last refused (D10)."""
+    pairs = (
+        await db.execute(
+            select(InboundQueueEntry.project_id, InboundQueueEntry.agent)
+            .where(
+                InboundQueueEntry.conversation_id == conversation_id,
+                InboundQueueEntry.state == "queued",
+            )
+            .distinct()
+        )
+    ).all()
+    for project_id, agent in pairs:
+        if await last_refusal(db, project_id, agent) is not None:
+            return True
+    return False
+
+
 async def reconcile_stale_job_runs() -> int:
     """Mark every `JobRun` row still `"in_progress"` whose firing has no live `Run` behind
     it as `"failed"` (task A4.5, design D13).
@@ -204,6 +223,14 @@ async def reconcile_stale_job_runs() -> int:
     it (an agent with no runner bound is the live example this was diagnosed against on the
     trial Hub: `job-0b490274`, agent `claude-1`, `runner_id` NULL). That firing is exactly as
     stuck as a crashed one and gets the same treatment here, not a narrower one.
+
+    **Except a firing whose input waits on a refusal** (`a-spent-allowance-holds-the-queue`,
+    D10). Its conversation has input queued for an agent whose provider's last word was a refusal
+    on usage grounds, so the Hub has promised that delivery: by the wake if the reset is ahead, and
+    by the start-up re-arm if it fell while the Hub was down. *"No live run behind this firing"*
+    describes it exactly and would be false as a verdict. Keyed on the refusal, deliberately: a
+    firing waiting for a runner to be bound waits on a repair the Hub cannot promise, so the rule
+    above still stands for it.
     """
     reconciled = 0
     async with async_session_factory() as db:
@@ -216,6 +243,10 @@ async def reconcile_stale_job_runs() -> int:
                 )
                 run = run_result.scalars().first()
             if run is not None and run.status == "running":
+                continue
+            if job_run.conversation_id is not None and await _waits_on_a_refusal(
+                db, job_run.conversation_id
+            ):
                 continue
 
             job_run.status = "failed"

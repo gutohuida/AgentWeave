@@ -97,12 +97,17 @@ def _scripted_pty(turns, *, on_wait=None):
     """A spawn replacement playing one scripted `(lines, exit_code)` turn per call.
 
     EOF forever after each turn's lines, for the reason `_fake_pty`'s docstring gives. A spawn past
-    the script raises `StopIteration` inside `spawn`, which is a spawn failure the test would see.
+    the script raises `RuntimeError`, a spawn failure the test sees. Not `StopIteration`, which is
+    what `next()` would raise: `spawn` runs in an executor, and a `StopIteration` cannot be raised
+    into a future, so the run never ended and the test hung instead of failing (measured).
     """
     remaining_turns = iter(turns)
 
     def _spawn(*args, **kwargs):
-        lines, exit_code = next(remaining_turns)
+        turn = next(remaining_turns, None)
+        if turn is None:
+            raise RuntimeError("spawned past the end of the script")
+        lines, exit_code = turn
         session = MagicMock()
         session.pid = 4343
         remaining = iter([*lines, ""])
@@ -354,3 +359,255 @@ async def test_a_completed_turn_with_a_refusal_reading_arms_the_wake(
     )
     [event] = await _held_events()
     assert event.data["entry_ids"] == []
+
+
+# ---------------------------------------------------------------------------
+# 3.1 — the hold check in `_attempt_turn` (design D4)
+# ---------------------------------------------------------------------------
+
+
+async def _hold(agent, *, observed_ago=timedelta(minutes=1), resets_in=timedelta(hours=1)):
+    """A refusal recorded for *agent*, as `_execute_run` records one, without a turn to make it."""
+    from hub.db.models import TurnUsage
+    from hub.utils import short_id
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        run_id = f"run-{short_id()}"
+        db.add(Run(id=run_id, project_id="proj-test", agent=agent, status="failed"))
+        await db.flush()
+        db.add(
+            TurnUsage(
+                id=f"usage-{short_id()}",
+                run_id=run_id,
+                project_id="proj-test",
+                agent=agent,
+                status="unavailable",
+                allowance=_reading((now + resets_in).timestamp()),
+                observed_at=now - observed_ago,
+            )
+        )
+        await db.commit()
+
+
+async def _queue(agent, conversation_id, *, origin_type, content):
+    from hub.db.models import Conversation
+    from hub.inbound_queue import new_entry
+
+    async with async_session_factory() as db:
+        if await db.get(Conversation, conversation_id) is None:
+            db.add(
+                Conversation(
+                    id=conversation_id, project_id="proj-test", agent=agent, lifecycle="open"
+                )
+            )
+        entry = new_entry(
+            project_id="proj-test",
+            agent=agent,
+            origin_type=origin_type,
+            origin_agent="peer" if origin_type == "agent" else None,
+            content=content,
+            hop_depth=0,
+            conversation_id=conversation_id,
+        )
+        db.add(entry)
+        await db.commit()
+        return entry.id
+
+
+async def _await_a_bounded_number_of_runs(rounds=20):
+    """`_await_background_run`, but a scheduler that re-spawns at every run's end cannot hang it.
+
+    That is the failure 3.1's second mutation produces: without the `arrived_at` condition the
+    run-end re-drain probes again after each refusal, for ever. Bounded, the test fails on the
+    spawn count instead of never finishing.
+    """
+    for _ in range(rounds):
+        if not agent_trigger._background_runs:
+            return
+        for task in list(agent_trigger._background_runs):
+            await task
+    for task in list(agent_trigger._background_runs):
+        task.cancel()
+
+
+async def _schedule(agent, spawn):
+    from hub.turn_scheduler import schedule_agent
+
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            result = await schedule_agent("proj-test", agent)
+            await _await_a_bounded_number_of_runs()
+    return result
+
+
+async def test_autonomous_input_queued_during_a_hold_starts_no_turn(app, auth_headers, bind_runner):
+    """A peer message reaching a held agent waits for the reset, uncounted, and the scheduler's
+    answer is the hold sentence. Not a terminal failure: the input will be delivered."""
+    agent = "hold-autonomous"
+    await _set_up(app, auth_headers, bind_runner, agent)
+    await _hold(agent)
+    await _queue(agent, "conv-hold-auto", origin_type="agent", content="a peer's note")
+    spawn = _scripted_pty([])
+
+    result = await _schedule(agent, spawn)
+
+    assert spawn.call_count == 0
+    async with async_session_factory() as db:
+        hold = await provider_allowance.provider_hold(db, "proj-test", agent)
+    assert result.waiting_reason == provider_allowance.hold_sentence(agent, hold)
+    assert result.terminal_failure is False
+    [entry] = await _entries(agent)
+    assert (entry.state, entry.delivery_attempts) == ("queued", 0)
+
+
+async def _probe_behind_an_autonomous_head(app, auth_headers, bind_runner, agent):
+    """An operator message sent after the refusal, in a conversation of its own, queued behind an
+    autonomous head. The probe turn is the one the queue would start: the head's."""
+    await _set_up(app, auth_headers, bind_runner, agent)
+    await _hold(agent)
+    await _queue(agent, f"conv-{agent}-auto", origin_type="agent", content="the head")
+    await _queue(agent, f"conv-{agent}-op", origin_type="operator", content="I bought credits")
+    spawn = _scripted_pty([(_refused_turn(f"sess-{agent}", int(time.time()) + 3600), 1)])
+    await _schedule(agent, spawn)
+    return spawn
+
+
+async def test_operator_input_after_the_refusal_probes_once_even_behind_an_autonomous_head(
+    app, auth_headers, bind_runner
+):
+    """Only the operator can change the allowance, so their new input is tried once. Keyed on the
+    whole queue: keyed on the turn's own entries, it could never probe from behind the head."""
+    spawn = await _probe_behind_an_autonomous_head(app, auth_headers, bind_runner, "hold-probe")
+
+    assert spawn.call_count == 1
+
+
+async def test_after_the_probe_is_refused_nothing_more_starts(app, auth_headers, bind_runner):
+    """The renewed reading is later than every entry already queued, so the same operator input
+    cannot probe twice. Without that condition the run-end re-drain would probe again at once."""
+    agent = "hold-probed"
+    spawn = await _probe_behind_an_autonomous_head(app, auth_headers, bind_runner, agent)
+    assert spawn.call_count == 1
+
+    result = await _schedule(agent, spawn)
+
+    assert spawn.call_count == 1
+    assert result.waiting_reason.startswith(f"{agent}'s provider refused its last turn")
+    assert {entry.state for entry in await _entries(agent)} == {"queued"}
+
+
+async def test_after_the_hold_ends_the_scheduler_starts_a_turn(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """Ended by the module clock: `_attempt_turn` passes no `now` (Round 3)."""
+    agent = "hold-ended"
+    await _set_up(app, auth_headers, bind_runner, agent)
+    await _hold(agent)
+    await _queue(agent, "conv-hold-ended", origin_type="agent", content="waited for the reset")
+    spawn = _scripted_pty([(_served_turn("sess-hold-ended"), 0)])
+    monkeypatch.setattr(
+        provider_allowance, "_utcnow", lambda: datetime.now(timezone.utc) + timedelta(hours=2)
+    )
+
+    await _schedule(agent, spawn)
+
+    assert spawn.call_count == 1
+    [entry] = await _entries(agent)
+    assert entry.state == "delivered"
+
+
+# ---------------------------------------------------------------------------
+# 3.2 — the wake (design D5)
+# ---------------------------------------------------------------------------
+
+
+class _RecordingScheduler:
+    """Stands in for a running `JobScheduler`: `arm_allowance_wake` reads `.scheduler` only."""
+
+    def __init__(self):
+        self.scheduler = MagicMock()
+
+
+async def test_the_wake_is_one_date_job_per_agent_at_the_holds_end(monkeypatch):
+    import hub.scheduler as scheduler_module
+
+    recording = _RecordingScheduler()
+    monkeypatch.setattr(scheduler_module, "_scheduler_instance", recording)
+    now = datetime(2026, 9, 14, 1, 25, tzinfo=timezone.utc)
+    monkeypatch.setattr(provider_allowance, "_utcnow", lambda: now)
+
+    provider_allowance.arm_allowance_wake("proj-test", "dev", now + timedelta(minutes=45))
+    provider_allowance.arm_allowance_wake("proj-test", "dev", now - timedelta(minutes=5))
+
+    first, second = recording.scheduler.add_job.call_args_list
+    assert first.kwargs["id"] == "allowance-wake:proj-test:dev"
+    assert first.kwargs["replace_existing"] is True
+    assert first.kwargs["trigger"].run_date == now + timedelta(minutes=45)
+    # Never in the past: beyond APScheduler's misfire grace a past date would be dropped.
+    assert second.kwargs["trigger"].run_date == now + timedelta(seconds=1)
+
+
+async def test_a_second_refusal_moves_the_wake_rather_than_adding_one(app, monkeypatch):
+    import hub.scheduler as scheduler_module
+    from hub.scheduler import JobScheduler
+
+    scheduler = JobScheduler()
+    await scheduler.start()
+    monkeypatch.setattr(scheduler_module, "_scheduler_instance", scheduler)
+    try:
+        later = datetime.now(timezone.utc) + timedelta(hours=2)
+        provider_allowance.arm_allowance_wake(
+            "proj-test", "dev", datetime.now(timezone.utc) + timedelta(hours=1)
+        )
+        provider_allowance.arm_allowance_wake("proj-test", "dev", later)
+        [wake] = [job for job in scheduler.scheduler.get_jobs() if job.id.startswith("allowance")]
+        assert wake.next_run_time == later
+    finally:
+        await scheduler.shutdown()
+
+
+async def test_the_wake_starts_the_turn_at_the_reset_with_no_other_call(
+    app, auth_headers, bind_runner, monkeypatch
+):
+    """A real `JobScheduler`. The bound address is made known first, or `schedule_or_defer` would
+    defer the wake to a first request that never comes, and the test would time out whether or not
+    the wake was armed (Round 2). So the armed job is asserted before its date passes too."""
+    import asyncio
+
+    import hub.scheduler as scheduler_module
+    from hub import bound_address
+    from hub.scheduler import JobScheduler
+
+    agent = "wake-claude"
+    await _set_up(app, auth_headers, bind_runner, agent)
+    monkeypatch.setattr(provider_allowance, "HOLD_FLOOR", timedelta(seconds=1))
+    monkeypatch.setattr(bound_address, "known", lambda: True)
+    spawn = _scripted_pty(
+        [
+            (_refused_turn("sess-wake-1", int(time.time()) + 2), 1),
+            (_served_turn("sess-wake-1"), 0),
+        ]
+    )
+    scheduler = JobScheduler()
+    await scheduler.start()
+    monkeypatch.setattr(scheduler_module, "_scheduler_instance", scheduler)
+    try:
+        run_id = await _operator_turn(app, auth_headers, agent, spawn)
+        assert spawn.call_count == 1
+        assert scheduler.scheduler.get_job(f"allowance-wake:proj-test:{agent}") is not None
+
+        with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
+            with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+                for _ in range(100):
+                    await asyncio.sleep(0.1)
+                    if spawn.call_count == 2:
+                        break
+                await _await_background_run()
+    finally:
+        await scheduler.shutdown()
+
+    assert spawn.call_count == 2
+    [entry] = await _entries(agent)
+    assert entry.state == "delivered"
+    assert entry.delivered_in_run_id != run_id

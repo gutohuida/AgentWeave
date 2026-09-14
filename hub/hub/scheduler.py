@@ -25,6 +25,7 @@ from .conversations import (
 from .db.engine import async_session_factory
 from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
+from .provider_allowance import agents_held, hold_busy_reason, hold_coalesce_reason, provider_hold
 from .run_task_binding import (
     TERMINAL_FOR_BINDING,
     tasks_held_by_a_running_turn,
@@ -238,6 +239,10 @@ async def _loop_agent_busy_reason(
     message is a standing instruction still true when the agent frees up, so queuing it is the
     inbound queue working as designed. A loop's briefing re-briefs the task it just claimed, and a
     second copy is stale before it is read.
+
+    **A held agent is busy too** (`a-spent-allowance-holds-the-queue`, D6). After the provider
+    refuses a turn on usage grounds, `schedule_agent` holds every autonomous input until the reset,
+    and a loop briefing is autonomous input. So the hold is the second fact the two must agree on.
     """
     from sqlalchemy import select
 
@@ -248,6 +253,9 @@ async def _loop_agent_busy_reason(
     )
     if running.scalar_one_or_none() is not None:
         return f"{agent} is already running a turn"
+    hold = await provider_hold(session, project_id, agent)
+    if hold is not None:
+        return hold_busy_reason(agent, hold)
     return None
 
 
@@ -925,6 +933,43 @@ async def _stall_run_to_increment(
     return latest
 
 
+async def _held_job_coalesce_reason(
+    session: AsyncSession, job: AIJob, exclude_run_id: str
+) -> Optional[str]:
+    """Why a plain job's firing should add nothing, or `None` to queue as usual (design D7).
+
+    Both halves are needed. The agent is held, **and** an entry is still queued for it on a
+    conversation one of this job's earlier firings names -- the correlation
+    `finalize_job_run_for_conversation` uses. A hold that came from a refusal elsewhere, with none
+    of this job's input waiting, lets the first firing queue: one copy is the instruction kept.
+    """
+    from .db.models import InboundQueueEntry
+
+    hold = await provider_hold(session, job.project_id, job.agent)
+    if hold is None:
+        return None
+    earlier = select(JobRun.conversation_id).where(
+        JobRun.job_id == job.id,
+        JobRun.id != exclude_run_id,
+        JobRun.conversation_id.isnot(None),
+    )
+    waiting = (
+        await session.execute(
+            select(InboundQueueEntry.id)
+            .where(
+                InboundQueueEntry.project_id == job.project_id,
+                InboundQueueEntry.agent == job.agent,
+                InboundQueueEntry.state == "queued",
+                InboundQueueEntry.conversation_id.in_(earlier),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if waiting is None:
+        return None
+    return hold_coalesce_reason(job.agent, hold)
+
+
 async def _discard_unused_run(session: AsyncSession, run: JobRun) -> None:
     """Drop a `JobRun` this firing built but must not persist (design D6).
 
@@ -997,6 +1042,11 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
     Ordered by name so a project with two free agents picks the same one twice. The proposal
     requires a firing to select "a task and an agent, both deterministically", and "whichever row
     the database returned first" is not that.
+
+    **A held agent counts as running here** (`a-spent-allowance-holds-the-queue`, D6). After a
+    refusal on usage grounds `schedule_agent` refuses its start just as it refuses a running
+    agent's, so leaving the hold out of this half would be the third opinion the paragraph above
+    rules out. Only this half moves: which tasks make an agent unavailable is unchanged.
     """
     from .task_transitions import LIVE_STATUSES
 
@@ -1008,7 +1058,7 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
         )
         .scalars()
         .all()
-    )
+    ) | await agents_held(session, project_id)
     holding = set(
         (
             await session.execute(
@@ -1158,12 +1208,32 @@ async def resolve_reviewer(
             ),
         )
 
+    # The hold is named only where it is one of the reasons (`a-spent-allowance-holds-the-queue`,
+    # D6): `_agents_that_are_free` now counts a held agent as busy, so without the clause this
+    # sentence would be false whenever a hold is why nobody was free. Conditional, so a project
+    # that never meets a usage limit reads exactly as before.
+    held = await agents_held(session, project_id)
+    roster_held = bool(held - exclude) and bool(
+        (
+            await session.execute(
+                select(Agent.name)
+                .where(
+                    Agent.project_id == project_id,
+                    Agent.lifecycle != "archived",
+                    Agent.runner_id.isnot(None),
+                    Agent.name.in_(sorted(held - exclude)),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+    )
+    waiting = "waiting for its provider's usage limit to reset, " if roster_held else ""
     return ReviewerChoice(
         rung="unstaffed",
         reason=(
             f"could not staff this step: no agent is free to take it. Every agent on the roster is "
-            f"either running a turn, already holding active work, or {excluded_because} and so may "
-            f"not review it."
+            f"either running a turn, already holding active work, {waiting}or {excluded_because} "
+            f"and so may not review it."
         ),
     )
 
@@ -1308,6 +1378,12 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # only thing left to check -- and an assignee is a record of who holds a task, never evidence
     # that a turn exists.
     on_it = await tasks_with_a_turn_pending_or_running(session, loop.project_id)
+    # Agents whose provider refused their last turn on usage grounds (`a-spent-allowance-holds-the-
+    # queue`, D6). `schedule_agent` will start nothing for them before the reset, so briefing them
+    # again only piles up queued input. Kept apart from `running` on purpose: a held agent has no
+    # run, so the running arm's agent-level exception (a run carrying no `task_id`) does not reach
+    # it, and its assigned task is in flight only where input naming it is queued for it.
+    held_agents = await agents_held(session, loop.project_id)
     default_taken = False
 
     for task in await _loop_candidates(session, loop):
@@ -1423,7 +1499,11 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 # assignee with the job's default here is the defect group 5's spec review found:
                 # under width it hands one agent's running task to another and briefs them for it.
                 agent = task.assignee
-                if agent in running:
+                # A held assignee with its briefing already queued is the held form of the same
+                # case: the briefing waits for the reset, and another would be one more copy. One
+                # with nothing queued for this task falls through and is briefed once, and that
+                # briefing names the task, so the next firing finds it here.
+                if agent in running or (agent in held_agents and on_it.get(task.id) == agent):
                     # That agent's turn is still going, so this firing cannot start it -- the old
                     # whole-firing busy guard, scoped to the one selection it is actually about.
                     #
@@ -1442,7 +1522,12 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                         )
                     )
                     continue
-            elif not default_taken and default_agent not in running and default_agent not in taken:
+            elif (
+                not default_taken
+                and default_agent not in running
+                and default_agent not in held_agents
+                and default_agent not in taken
+            ):
                 # D2's default, still first in line for the first unstaffed task.
                 #
                 # Tested against `running`, deliberately **not** against `free`. `free` is the
@@ -2595,6 +2680,48 @@ class JobScheduler:
                 )
                 logger.info(f"Job {job.id} fire skipped: {skip_reason}")
                 return False
+
+            if loop is None:
+                # A plain job's message is a standing instruction (`_loop_agent_busy_reason`), and
+                # one queued copy keeps it (`a-spent-allowance-holds-the-queue`, D7). Queuing a copy
+                # per tick would not: a job that does not resume gets a conversation per firing,
+                # so at the reset they would be delivered as separate turns, back to back, into
+                # the allowance that has just come back.
+                coalesce_reason = await _held_job_coalesce_reason(session, job, run_id)
+                if coalesce_reason:
+                    # Counted in place, as a continuing loop stall is (D6 of
+                    # `loop-notices-and-reacts`): the first coalesced firing writes a row and the
+                    # next ones count against it.
+                    counted = await _stall_run_to_increment(
+                        session, job.id, coalesce_reason, exclude_run_id=run_id
+                    )
+                    if counted is not None:
+                        counted.tick_count += 1
+                        await _discard_unused_run(session, run)
+                        await session.commit()
+                        logger.debug(
+                            f"Job {job.id} coalesced ({counted.tick_count}): {coalesce_reason}"
+                        )
+                        return False
+                    run.status = "skipped"
+                    run.error_summary = coalesce_reason
+                    await session.commit()
+                    await persist_event(
+                        session,
+                        job.project_id,
+                        "job_run_skipped",
+                        {
+                            "job_id": job.id,
+                            "job_name": job.name,
+                            "agent": job.agent,
+                            "trigger": trigger,
+                            "run_id": run_id,
+                            "reason": coalesce_reason,
+                        },
+                        agent=job.agent,
+                    )
+                    logger.info(f"Job {job.id} fire coalesced: {coalesce_reason}")
+                    return False
 
             # Design D11 (task A2.2): stage-apply any pending edit in memory before the stop check
             # below and before the briefing is composed further down — both must see this loop's

@@ -22,6 +22,7 @@ from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
 from .db.engine import engine, init_db
+from .provider_allowance import arm_held_queues
 from .run_reconciliation import reconcile_interrupted_runs, reconcile_stale_job_runs
 from .run_task_binding import TaskBindingError
 from .scheduler import init_scheduler, shutdown_scheduler
@@ -414,6 +415,9 @@ async def lifespan(app: FastAPI):
     await reconcile_interrupted_runs()
     await reconcile_stale_job_runs()
     await init_scheduler()
+    # After the scheduler, which holds the wakes; after both reconciliations, whose rows it reads
+    # past (`a-spent-allowance-holds-the-queue`, D5).
+    await arm_held_queues()
     warning = _ui_staleness_warning()
     if warning:
         logger.warning(warning)

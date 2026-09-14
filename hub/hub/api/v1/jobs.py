@@ -280,7 +280,13 @@ async def _batch_loop_summaries(
     # human-only check 13.1 asks. `Task.updated` is scoped to non-pending rows there — see that
     # helper for the bug the scoping fixes. Imported inside the function, matching this module's
     # existing convention for `...scheduler` (get_scheduler does the same at three call sites).
-    from ...scheduler import CURRENT_ITEM_TASK_STATUSES, _loop_queue_order, decide_firing
+    from ...scheduler import (
+        CURRENT_ITEM_TASK_STATUSES,
+        DECISION_STALLED,
+        _loop_flow_busy_reason,
+        _loop_queue_order,
+        decide_firing,
+    )
 
     candidates_result = await session.execute(
         select(Task)
@@ -336,8 +342,20 @@ async def _batch_loop_summaries(
     # One batched query for every loop in the batch, for design D7's reason.
     live = await task_attribution.live_runs(session, {loop.project_id for loop in loops})
     for job_id, loop in loop_by_job.items():
-        decision = await decide_firing(session, loop, default_agent=job_agent_by_id.get(job_id, ""))
-        stall_reason_by_loop[loop.id] = decision.stall_reason
+        job_agent = job_agent_by_id.get(job_id, "")
+        decision = await decide_firing(session, loop, default_agent=job_agent)
+        stall_reason = decision.stall_reason
+        if decision.kind == DECISION_STALLED:
+            # `stall_reason` is promised to be set exactly when the next firing would be refused,
+            # by the computation that would refuse it (`loopCounts.ts`). When the busy guard
+            # refuses first, that computation is the guard, and the walk's *"no claimable task"*
+            # would be a false account of it: for the length of a hold, or of a turn
+            # (`a-spent-allowance-holds-the-queue`, D6). Only a stalled decision is re-asked, so a
+            # loop whose agent is working its task keeps reading as running, not stalled.
+            stall_reason = await _loop_flow_busy_reason(session, loop.project_id, job_agent) or (
+                stall_reason
+            )
+        stall_reason_by_loop[loop.id] = stall_reason
         staffing_by_loop[loop.id] = task_attribution.staffing_from_decision(decision)
 
     # The current item is the first candidate **in queue order** that is either the task the firing

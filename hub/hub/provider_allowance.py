@@ -143,14 +143,25 @@ async def _newest_informative(db: AsyncSession, project_id: str, agent: str) -> 
         offset += _PAGE
 
 
+async def last_refusal(db: AsyncSession, project_id: str, agent: str) -> Optional[ProviderHold]:
+    """The hold *agent*'s newest informative row establishes, **whether or not it has ended**.
+
+    `provider_hold` answers *is the agent held now*. A Hub start asks the other question (designs
+    D5 and D10): was the provider's last word a refusal, so that queued input is still promised a
+    delivery, by a wake if the reset is ahead and by a re-drain now if it fell while the Hub was
+    down.
+    """
+    row = await _newest_informative(db, project_id, agent)
+    if row is None:
+        return None
+    return hold_for_reading(row.allowance, row.observed_at, row.run_id)
+
+
 async def provider_hold(
     db: AsyncSession, project_id: str, agent: str, *, now: Optional[datetime] = None
 ) -> Optional[ProviderHold]:
     """The hold on *agent*'s queue, read from the provider's most recent word about it (D3)."""
-    row = await _newest_informative(db, project_id, agent)
-    if row is None:
-        return None
-    hold = hold_for_reading(row.allowance, row.observed_at, row.run_id)
+    hold = await last_refusal(db, project_id, agent)
     current = now if now is not None else _utcnow()
     if hold is None or current >= hold.hold_until:
         return None
@@ -250,3 +261,44 @@ def arm_allowance_wake(project_id: str, agent: str, when: datetime) -> None:
         )
     except Exception as exc:
         logger.error("Failed to arm the allowance wake for %r: %s", agent, exc)
+
+
+async def arm_held_queues() -> int:
+    """Re-arm every wake a restart dropped (design D5). Returns how many agents it covered.
+
+    The wake lives in the job scheduler's memory store, so a restart loses it. Called from
+    `lifespan()` after `init_scheduler()`, for every agent with queued input whose newest
+    *informative* row is a refusal. The newest row would not do: crash reconciliation runs just
+    before, in the same `lifespan`, and writes an uninformative row that would hide the refusal.
+
+    A reset still ahead is armed at the hold's end. One that fell while the Hub was down is
+    re-drained now (or at the first request, `schedule_or_defer`): the Hub promised that delivery.
+    """
+    from .db.engine import async_session_factory
+    from .db.models import InboundQueueEntry
+    from .run_reconciliation import schedule_or_defer
+
+    to_arm: list[tuple[str, str, datetime]] = []
+    to_schedule: set[tuple[str, str]] = set()
+    async with async_session_factory() as db:
+        pairs = (
+            await db.execute(
+                select(InboundQueueEntry.project_id, InboundQueueEntry.agent)
+                .where(InboundQueueEntry.state == "queued")
+                .distinct()
+            )
+        ).all()
+        now = _utcnow()
+        for project_id, agent in pairs:
+            hold = await last_refusal(db, project_id, agent)
+            if hold is None:
+                continue
+            if now < hold.hold_until:
+                to_arm.append((project_id, agent, hold.hold_until))
+            else:
+                to_schedule.add((project_id, agent))
+    for project_id, agent, when in to_arm:
+        arm_allowance_wake(project_id, agent, when)
+    if to_schedule:
+        await schedule_or_defer(to_schedule)
+    return len(to_arm) + len(to_schedule)
