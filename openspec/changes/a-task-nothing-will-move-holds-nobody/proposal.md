@@ -12,6 +12,16 @@ left LoopEngine frozen. The same arm read a map that hides the assignee's own in
 documentless widening is F128. Each is marked *Round 2* where it lands; the account is in
 `design.md`'s *Round 2* section.
 
+**R3, the same night**, asked what each of the guard's readers returns for every decision the walk
+can reach once the guard passes, and measured the answers. When the guard passes, a loop whose agent
+is busy and whose queue is empty briefs **the busy agent** on every firing. With an unencumbered
+agent in the project, that is shipped today: three firings queued three entries, and Run answered
+200. This change as R2 left it would have carried that into every project whose free agents hold
+only bookmarks, which is LoopEngine's shape. That is F372, repaired here by design D8: the guard
+also refuses when the loop holds no open task. R3 also made task 1.7b's mutation independent of
+the query plan, and filed F373, a stale reason on Run that this change widens but does not cause.
+The account is in `design.md`'s *Round 3* section.
+
 ## Why
 
 LoopEngine, the operator's real flow on `:8000`, stood still for twelve hours. From 07:02 to at
@@ -72,8 +82,9 @@ The whole design has five parts:
   `blocking = False` and `blocked_task_id` set, so the asking turn is not suspended. The model has
   both fields, but `ask_user` always blocks, so an agent has no way to raise one.
 
-**This change builds A only.** It touches `hub/hub/scheduler.py` and its tests. There is no
-migration, no `hub/hub/mcp_server.py` edit, no API shape change and no UI. B to E stay specced in
+**This change builds A only.** It touches `hub/hub/scheduler.py` and its tests. *Round 3:* it also
+touches `run_task_binding.py`, as Round 2 added, and `api/v1/jobs.py`, for the guard's queue half
+(design D8). There is no migration, no `hub/hub/mcp_server.py` edit, no API shape change and no UI. B to E stay specced in
 the exploration and this proposal, and a later change named `who-owns-a-loops-queue` builds them.
 
 **Why A first, and alone:**
@@ -90,6 +101,8 @@ the exploration and this proposal, and a later change named `who-owns-a-loops-qu
   tree on every agent turn (F354), and a UI bundle reaches the operator's live app on their next
   reload. Neither suits a night window with nobody watching.
 - **A is severable.** It changes one predicate, and every consumer of that predicate is in one file.
+  *Round 3:* the guard's readers are in two files, `scheduler.py` and `jobs.py`. It is still
+  severable.
 
 ## What changes
 
@@ -107,6 +120,11 @@ the exploration and this proposal, and a later change named `who-owns-a-loops-qu
   untouched, and it no longer costs anybody anything.
 - **All three callers change together**, because they read one function. The guard and the walk must
   not come to different answers (design D3).
+- *(Round 3)* **The busy guard gains a queue half** (design D8). A firing whose job agent is running
+  or held is refused when the loop holds no open task, whoever else is free, because the only
+  input it could queue is a briefing for the busy agent. The Run route's 409 names that half.
+  Without this, the item above would have let such a firing through wherever the free agents hold
+  only bookmarks (F372).
 - **The docstrings that state the old rule are corrected.** Three places state it: the pool's
   docstring, which claims the pool and the roster cannot disagree; the ladder's rung-2 line; and
   the comment at `:1363`. The roster keeps counting a bookmark as an active task, on purpose: it
@@ -199,7 +217,13 @@ None.
 
 `agent-loops` defers the meaning of "free" to `agent-flows` (*"A firing is refused while its loop's
 agent is already running"*: *"This requirement does not state which agent a firing staffs when
-another agent in the project is free"*), so it needs no delta.
+another agent in the project is free"*). R1 and R2 concluded that it needed no delta. *Round 3:* it
+gets one, for design D8.
+- `agent-loops`:
+  - modifies *"A firing is refused while its loop's agent is already running"*: another agent being
+    free does not let a firing queue input for the busy agent, and two scenarios are added;
+  - modifies *"Pressing Run on a loop that declines names why it declined"*: the guard's
+    description gains the queue half, the answer says which half held, and one scenario is added.
 
 ## Impact
 
@@ -207,7 +231,10 @@ another agent in the project is free"*), so it needs no delta.
   `resolve_reviewer`, and the comment at `:1363`. *Round 2:* also one new function in
   `hub/hub/run_task_binding.py` (task 1.1a). Tests go in a new
   `hub/tests/test_a_task_nothing_will_move_holds_nobody.py`, plus one existing test re-staged
-  (tasks 2.1–2.2).
+  (tasks 2.1–2.2). *Round 3:* also `_loop_has_open_task` and the queue half of
+  `_loop_flow_busy_reason`, whose signature takes the `Loop`, in `scheduler.py`. In
+  `hub/hub/api/v1/jobs.py`, the board's and the Run route's calls to the guard change, and the
+  route's 409 clause names the half that refused (design D8, group 3b).
 - **Not touched:** `hub/hub/mcp_server.py`, `hub/hub/api/v1/tasks.py`, the transition map,
   `LIVE_STATUSES`, the roster, the rung-3 sentence, and any row. *Round 2:* also not touched are
   `tasks_with_a_turn_pending_or_running`, its reader at `:1454`, and the held-resume arm at `:1506`.
@@ -225,5 +252,13 @@ another agent in the project is free"*), so it needs no delta.
     stays open (design D3).
   - *(Round 2)* Agents held only by tasks in a loop archived through the job route, or only by peer
     messages past the hop budget, become available.
-- **Findings:** retires none whole. F352's definition half is fixed, and it stays open for the
-  visibility half. *Round 2* filed F370 and F371 against shipped code, and neither is fixed here.
+  - *(Round 3)* A loop whose agent is mid-turn or held and whose queue is empty stops queuing a
+    briefing for that agent on every firing, in any project. It is refused with no record, as a
+    single-agent loop already is, and Run answers 409 in place of 200. Three things now wait for the
+    turn to end in a multi-agent project too, as they already do in a single-agent one:
+    - a never-filled loop's first briefing;
+    - a drained loop's emptiness stop;
+    - a pending loop edit.
+- **Findings:** retires F372 whole (Round 3). F352's definition half is fixed, and it stays open for
+  the visibility half. *Round 2* filed F370 and F371 against shipped code, and *Round 3* filed F373.
+  None of those three is fixed here.

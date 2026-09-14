@@ -27,7 +27,10 @@ because it is delivered only if the operator releases it.
 The firing's refusal while its job's agent is busy, the agents a firing may give new work to, and
 the agents a review may be given to SHALL all use this one definition. A firing refused because
 nobody else is free, when the walk it refuses would have staffed somebody, is two answers to one
-question.
+question. So is the converse: a firing let through because somebody is free, when its queue holds
+nothing anybody could be given. `agent-loops`' *A firing is refused while its loop's agent is
+already running* refuses that firing, and an agent freed by this requirement SHALL NOT be the reason
+it proceeds.
 
 This requirement changes only which agents a flow may staff. It SHALL NOT change a task's status, its
 assignee or its loop, and it SHALL NOT change what the roster reports an agent as holding.
@@ -89,6 +92,13 @@ assignee or its loop, and it SHALL NOT change what the roster reports an agent a
 - **AND** the flow has a startable task
 - **THEN** the firing is not refused as busy
 - **AND** the other agent is staffed
+
+#### Scenario: A freed agent does not let a busy agent's empty loop through
+
+- **WHEN** a loop's job agent is running a turn, the only other agent is assigned only tasks that belong to no loop, and the loop's queue holds no task in a non-terminal status
+- **AND** the loop's job fires
+- **THEN** the firing is refused as busy
+- **AND** no input is queued for the job's agent
 
 #### Scenario: The roster still reports the task
 

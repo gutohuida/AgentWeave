@@ -28477,3 +28477,84 @@ deliverable input: the pairs from `a-task-nothing-will-move-holds-nobody`'s task
 `task.assignee`. That changes F154's shipped answer, so it wants its own round.
 
 **Related:** F154, F370, F361.
+
+## F372 (B) — a loop whose agent is mid-turn queues a briefing for it on every firing when its queue is empty and another agent is free
+
+**Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r3`,
+which folds the repair into that change (its design D8). **Measured** with a throwaway test through
+the real firing and the real Run route, deleted before the commit.
+
+**The mechanism.** `_loop_flow_busy_reason` (`hub/hub/scheduler.py:282-308`) refuses a firing only
+when the job's agent is busy **and** `_agents_that_are_free` is empty. That second half stands in for
+*"the walk could staff somebody else"*, and it is wrong in one case that matters. When the loop holds
+no open task, `decide_firing` answers `DECISION_PROCEED_EMPTY` (`:1716-1720`), and the firing then
+briefs **the job's own agent** to fill the queue (`:2926-3002`, `acting_agent = job.agent`). That
+agent is the busy one. `schedule_agent` answers *"agent is already running"*, which is not terminal,
+so the entry waits and the `JobRun` reads `in_progress`. The next tick does it again.
+
+**Measured**, on a loop with no tasks, its job agent mid-turn, and one roster agent with a runner:
+
+| the other agent holds | three scheduled firings | `POST /jobs/{id}/run` |
+|---|---|---|
+| nothing | 3 entries queued for the busy agent, 3 `JobRun`s, each firing returned `True` | **200** `{"success": true}`, and one more entry |
+| one task outside any loop | refused: 0 entries, 0 `JobRun`s | (not driven) |
+
+This breaches `agent-loops`' *"A firing is refused while its loop's agent is already running"*.
+Its scenarios say *"no inbound queue entry is created for that agent"* and *"Repeated firings during
+one turn do not accumulate work"*. The requirement carves out only *which agent a firing staffs*
+when another is free. It does not carve out queuing for the busy agent. It is the pile-up
+`loop-notices-and-reacts` D4 was built to stop, which returned through `loop-becomes-a-flow` D12. It
+reaches every multi-agent project with an unencumbered agent. The held form (a job agent held by a
+provider refusal) takes the same path.
+
+**Why it is filed now.** `a-task-nothing-will-move-holds-nobody` frees agents that hold only
+out-of-loop tasks. So the second row of the table turns into the first: the change would extend this
+pile-up to exactly the LoopEngine-shaped projects it exists for.
+
+**The repair** (that change's D8). The guard also refuses when the loop holds no open task. The test
+is the same predicate `_stall_reason_from_walk` uses to answer `DECISION_PROCEED_EMPTY`, because
+nobody else can be staffed from an empty queue. The Run route's 409 then names the running agent and
+does not say *"no other agent is free"*.
+
+**Related:** F128 (the same guard, the substitution half), F127 (the route's busy 409), F368.
+
+## F373 (B) — pressing Run on a loop whose work is in flight answers with an earlier firing's stall reason
+
+**Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r3`.
+**Measured** with a throwaway test through the real Run route, deleted before the commit. Not
+repaired by that change.
+
+**The mechanism.** `run_job` (`hub/hub/api/v1/jobs.py:1338-1401`) handles a firing that returned
+`False` in this order:
+1. Where the firing wrote no row, ask the busy guard.
+2. Then `if latest_run and latest_run.status == "skipped"`, answer 409 with that row's
+   `error_summary`.
+3. Only then ask whether the decision was `DECISION_IN_FLIGHT`.
+
+Step 2 is not gated on `wrote_row`. It is right for a **continuing** stall, which counts into the
+earlier row and discards its own. It is wrong for an in-flight decline, which writes nothing at all
+(F23). The newest row is then some earlier firing's skipped row.
+
+**Measured.** The staging:
+- the job agent is mid-turn on the loop's only task (`in_progress`, assigned to it);
+- another roster agent is free, so the guard passes;
+- the newest `JobRun` is an earlier firing's `skipped` row reading *"loop queue is stalled: 1 still
+  awaiting a prerequisite's approval"*.
+
+`decide_firing` answered `in_flight`. The route answered **409** with that stale sentence. The
+operator is told the queue waits on a prerequisite while its only task is being worked.
+
+This breaches `agent-loops`' *"Pressing Run on a loop that declines names why it declined"*: *"The
+route SHALL answer from a firing record only when the manual firing wrote that record."* A counted
+stall arguably did write to that row, and an in-flight decline did not. The route cannot tell the two
+apart today, because it compares row ids and a counted stall keeps the id.
+
+**Reach.** Any project where the guard passes while the job agent is busy, meaning any multi-agent
+project with a free agent. `a-task-nothing-will-move-holds-nobody` widens that set (its design D3,
+Round 3), the same way it widens F128's.
+
+**The repair (sketch).** Before firing, read the newest row's `tick_count` together with its id.
+Answer from that row only where it is new, or where its `tick_count` moved. Otherwise fall through to
+the in-flight question. Route-only.
+
+**Related:** F369 (the same comparison, for stamping), F48, F23, F127.

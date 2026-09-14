@@ -16,7 +16,10 @@
 | A bookmark-holder takes new work | `decide_firing` | 3.2 |
 | The guard, the Run route and the board agree with the walk | guard test, `POST …/run`, the loops board | 3.3–3.5 |
 | The roster still counts the task | `GET` agents | 3.6 |
+| A busy or held agent's empty loop queues nothing and records nothing, whoever else is free; a free agent's empty loop still fires (Round 3, D8, F372) | firing ×3, plus the held form and the idle control | 3b.2–3b.5 |
+| Run on a busy agent's empty loop answers 409 naming the agent, not "no other agent is free" (Round 3) | `POST …/run` with `live_scheduler` | 3b.6 |
 | Real routes, a real Haiku turn, with the control and the paused/ended/archived cases, and a peer message past the budget | drive on a fresh drive Hub | 5.2–5.4b |
+| Run pressed on an empty loop while its agent's real turn is running (Round 3) | drive, if a turn can be held open long enough | 5.4c |
 
 ## Human-only
 
@@ -53,6 +56,18 @@
   decision, not this change's.
 - **Input that is within budget but never delivered still holds** (design D5, Round 2). For
   example, a controlling entry whose conversation was closed.
+- **A "could not staff this step" that clears on its own** (design *Risks*, Round 2, weighed in
+  Round 3). Take a flow whose job agent is mid-turn, where the only other agent is the work's author
+  and holds only out-of-loop tasks. It now records the unstaffed review once, where it used to be
+  refused silently. The job agent takes the
+  review when its turn ends, and the notice clears. If you see one clear within a turn's length,
+  that is this case.
+- **An empty loop waits for its agent** (design D8, Round 3). A loop with nothing queued whose
+  agent is mid-turn does not fire, even when others are free. A pending edit and a drained loop's
+  stop both wait for the turn to end. Pressing Run says so, naming the agent.
+- **Run can still answer with an earlier firing's stall reason** when every task is in flight
+  (F373, Round 3). This is shipped behaviour that this change reaches in more projects, and it is not
+  fixed here.
 - **New orphans are still created.** Stopping them is `who-owns-a-loops-queue`: owner, admission,
   amend and a non-blocking question. This change makes them cost nothing. It does not make them
   stop.

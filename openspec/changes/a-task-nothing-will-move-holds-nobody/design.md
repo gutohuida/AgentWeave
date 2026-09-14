@@ -182,6 +182,38 @@ The pool stays one function, and all three callers read it. Each needs the chang
   - **`POST /jobs/{id}/run`** (`jobs.py:1350`). It returns 409 only when the guard refuses. It now
     returns the firing's success where the walk staffs somebody.
 
+  **Round 3: what each of those readers returns, per decision the walk can reach once the guard
+  passes** (the F108 question, asked of all four answers `decide_firing` gives rather than of the
+  staffed one only). The case is a busy job agent with another agent free. The two routes were
+  measured through the real firing and the real Run route with a throwaway test.
+  - **`DECISION_CLAIM`.** The firing stages the other agent, and Run answers **200**
+    `{"success": true, ...}` (`jobs.py:1414`). The board is not stalled, so it asks no guard. This is
+    the case D3 was written for, and it is right.
+  - **`DECISION_IN_FLIGHT`.** The firing records nothing and queues nothing (`scheduler.py:2838`).
+    Run answers 409 *"already being worked … nothing is wrong"*, **except** where the newest `JobRun`
+    is an earlier firing's `skipped` row. The route reads that row without asking whether this press
+    wrote it (`jobs.py:1359`). **Measured:** with the job agent mid-turn on the loop's only task and
+    an earlier stall row reading *"1 still awaiting a prerequisite's approval"*, Run answered 409 with
+    that stale sentence. This is shipped wherever a free agent exists, and filed as **F373**. This
+    change adds the projects where the only free agents hold bookmarks, as it does for F128. It is
+    not repaired here, because the defect is the route's row comparison, not the pool.
+  - **`DECISION_STALLED`.** The firing writes a `skipped` row, or counts into one, and emits the
+    unstaffed reasons. Run answers 409 with the walk's reason. The board shows the same reason,
+    because the guard now answers `None`. The three readers agree. The one cost is R2's Risk: a
+    `review_unstaffed` that clears when the job agent's turn ends.
+  - **`DECISION_PROCEED_EMPTY`.** **This is a defect, and D3 as R1 and R2 wrote it would widen it.**
+    The loop holds no open task, so the firing briefs **the job's own agent** to fill the queue
+    (`scheduler.py:2926-3002`), and that agent is the busy one. **Measured** on the current code, with
+    a loop holding no task, its agent mid-turn and a free roster agent:
+    - three firings queued **three** entries for the busy agent and wrote three `JobRun`s;
+    - Run answered **200** and queued a fourth.
+
+    With the other agent holding only an out-of-loop task, today's rule refused all three (zero and
+    zero). This change turns that second case into the first. It breaches `agent-loops` *"A firing
+    is refused while its loop's agent is already running"*, which already happens wherever an
+    unencumbered agent exists. Filed as **F372**, and repaired here by **D8**, because without it
+    this change carries the pile-up into exactly the projects it is for.
+
   **A single-agent loop keeps its "records nothing" property.** Its one agent is the running one,
   so `running` excludes it whatever it holds, and the pool is empty unless the project has another
   free agent. That was already true before this change
@@ -376,6 +408,22 @@ pool is scoped to a project that exists, and `_attempt_turn` makes the same call
 grounds, so the pool does not guard it. R3 should confirm that no caller reaches the pool with a
 `project_id` naming no row. For example: the board batch, and a loop whose project was deleted.
 
+**Round 3: confirmed, with one race named.** Every caller takes its `project_id` from a row it read
+in the same session:
+- the firing reads `job.project_id`;
+- the board reads `loop.project_id` for loops of a project `get_project` resolved;
+- the Run route reads the route's project;
+- `decide_firing` reads `loop.project_id`;
+- the divergence restaff reads `run.project_id`, and `project_lifecycle.delete` refuses while any
+  run is `running` (`project_lifecycle.py:207-216`).
+
+A deleted project takes its jobs and loops with it (`delete` sweeps every table carrying
+`project_id`), and `_fire_job_by_id` re-reads the job, so a tick after the deletion never reaches the
+pool. What is left is a deletion racing a firing already past that read. `_do_fire_job`'s `except
+Exception` (`scheduler.py:3087`) catches the raise and logs it. No `JobRun` exists yet at the guard,
+so nothing is recorded. That is the right outcome for a project that no longer exists, so the pool
+still does not guard it.
+
 **Why not a separate helper returning `agent -> [task ids]`**, which the stopped change's rung-3
 rewrite will want in order to name holdings. That change must be re-derived against (f) first. A
 helper shaped for its sentence now would be designed against a requirement that does not exist. The
@@ -395,6 +443,68 @@ Its point, D4's pile-up, is still true inside a loop. So it is re-staged, not de
 Any other test that fails because it staged a holding with no `loop_id` is handled the same way.
 The implementation lists each in the log, with why re-staging preserves its point (task 2.3).
 Weakening an assertion to make it pass is not an option.
+
+### D8 — The guard's other half: a busy agent's empty queue is refused, whoever is free (Round 3)
+
+*Added in Round 3. See D3's Round 3 paragraph for the measurement, and F372.*
+
+**The guard refuses a firing when the job's agent is busy and either no other agent is free or the
+loop holds no open task.** "Open" is `status NOT IN TERMINAL_FOR_BINDING`. That is the predicate
+`_stall_reason_from_walk` uses to answer `DECISION_PROCEED_EMPTY` (`scheduler.py:1863-1871`), read
+through one new helper, `_loop_has_open_task(session, loop)`, so the guard and the walk cannot come
+to different answers about whether the queue is empty.
+
+**Why this is the guard's question and not a new one.** The guard's docstring states its test as
+*"the job's agent is busy **and** nobody else could be staffed instead"*. The empty pool is its
+stand-in for the second half. It misses one case: an empty queue. Nobody can be staffed from it, so
+the firing falls through to briefing the job's own agent, and that agent is the busy one. The queue
+half makes the stand-in exact there.
+- In `DECISION_PROCEED_EMPTY`, a proceeding firing always briefs the job's agent. So *busy and
+  empty* is, precisely, *this firing would queue input for the busy agent*.
+- The other three decisions never queue for a running job agent:
+  - the default arm requires it not to be running or held (`:1525-1530`);
+  - resumption records it in flight (`:1506`);
+  - the pool excludes it.
+
+**Why a guard clause and not a check at the `PROCEED_EMPTY` branch of the firing.** A check there
+would refuse inside the firing. By then:
+- a `JobRun` exists, and would have to be discarded;
+- a pending edit has been staged;
+- the stop check has run.
+
+The Run route would then need a new branch to name the refusal. It would reach that branch only
+after its unconditional `skipped`-row check, which is F373. Because the guard refuses before any
+of that, the route's existing *"ask the guard again before anything else"* (`agent-loops`, *Pressing
+Run on a loop that declines names why it declined*) already answers it. That makes the guard
+clause the one placement where every reader agrees without new code in two of them.
+
+**Why not derive the guard from the whole decision** ("busy, and the walk selected nobody"). That is
+exact for all four answers, but it needs `decide_firing` to run before the guard. Today the guard
+runs before the `JobRun`, before a pending loop edit is staged (`:2731`), and before the stop check
+(`:2733`). Reordering those changes when edits apply and when a drained loop stops, for every busy
+tick of every loop. That is a change with its own requirements (`agent-loops` *An edit to a loop
+takes effect at its next firing and never during one*), not a clause in this one.
+
+**What changes for an operator.** A loop whose agent is mid-turn, or held, and whose queue holds no
+open task is refused with no record, as a single-agent loop already is, even when another agent is
+free. Three things wait for the turn to end, exactly as they already do in a single-agent project:
+- a *never filled* loop's first briefing;
+- a drained loop's queue-emptiness stop;
+- a pending loop edit.
+
+Run answers 409, naming the running agent.
+
+**The Run route's sentence names the half that refused.** Today it appends *"…, and no other agent is
+free to take this loop's work. Nothing was started."* (`jobs.py:1355`). For the queue half that is
+false, because an agent is free. The route picks its clause with the same `_loop_has_open_task`
+helper: *"…, and this loop's queue holds no open task for another agent to take. Nothing was
+started."* The guard still returns the short busy reason, so the board's text does not change. The
+board never reaches the queue half anyway: it asks the guard only on `DECISION_STALLED`, and a
+stalled queue holds open tasks.
+
+**Signature.** `_loop_flow_busy_reason(session, loop, agent)`, taking the `Loop` in place of the
+project id. All three callers already hold it, except the Run route, which loads it where it now
+asks `_job_has_loop`.
 
 ## Risks
 
@@ -498,3 +608,82 @@ commit: the archive route, the F154 helper's answer, and the status sets.
 - **Whether each named mutation can fire**, especially 1.7b's. It depends on the helper's row order,
   which R2 measured on SQLite. A mutation that reverts to `on_it.get(...)` must fail, so the test
   must name the other agent to sort *before* the assignee.
+
+## Round 3 — second and final review, night of 2026-09-14/15
+
+R3 started from the code that R2's repairs touch, not from R2's argument. It read:
+- the guard and its three readers: the firing, `_batch_loop_summaries` and `run_job`;
+- all four exits of `decide_firing`, and what the firing does after each;
+- both archive routes;
+- `_attempt_turn`'s selection filter and `release_entry`;
+- `create_message`'s depth rule, and the F154 helper and its index;
+- `project_lifecycle.delete`;
+- whole requirements: `agent-loops` *A firing is refused while its loop's agent is already
+  running*, *A firing is refused while its queue is stalled*, *A firing that does not fire records
+  only what is new*, *A loop's stop condition can only ever prevent a firing…*, *An empty queue with
+  a request still in flight terminates*, and *Pressing Run on a loop that declines names why it
+  declined*; `agent-flows` *A flow is a loop that declares a specification document*, *A firing
+  determines both the task and the agent*, *A flow may start every task whose dependencies are
+  met*, *A review nobody is doing is named*, and *A flow treats an agent whose queue is held as
+  unable to take a turn*.
+
+It ran three measurements through the real firing and the real Run route in one throwaway test file,
+deleted before the commit.
+
+**What R3 found wrong, and repaired:**
+
+1. **A busy agent's empty loop queued a briefing for it on every firing, and this change would have
+   carried that into LoopEngine-shaped projects (D3 Round 3, D8, F372).** None of R1, R2 or the
+   change's own tasks asked what the firing does when the guard passes and the walk answers
+   `DECISION_PROCEED_EMPTY`. It briefs the job's own agent, which is the busy one. **Measured:** with a
+   free agent, three firings made three entries and three `JobRun`s, and Run answered 200. With the
+   free agent holding a bookmark instead, today's rule refused all three, and this change would have
+   removed that refusal. This breaches `agent-loops` *"no inbound queue entry is created for that
+   agent"*. The guard gains a queue half (D8), which gets group 3b's tests and the `agent-loops`
+   delta. The ADDED requirement gains a scenario.
+2. **Task 1.7b's mutation could fail to fire under another query plan.** R2 measured the helper's row
+   order as agent-name order. That follows from `ix_inbound_queue_project_agent_state_arrival`,
+   whose leading columns are `project_id, agent`. The test depended on the planner keeping to it.
+   It is re-staged with three agents, one sorting before the assignee and one after, with the
+   assignee's entry inserted between them. The helper then keeps a non-assignee in agent-name
+   order, reverse name order, insertion order and reverse insertion order alike, so the R1-shaped
+   mutation fails whatever order the rows come back in.
+3. **Tasks 3.3 and 3.4 were silent on the guard's loop having an open task.** Under D8 an empty guard
+   loop refuses whoever is free, so the "returns `None`" case must stage a startable task. Task 3.4
+   also needs the `live_scheduler` fixture. Without it the route answers **503** *"Job scheduler not
+   available"* before reaching the firing (measured), which is how F48 survived.
+4. **The sweep (2.3) would have stopped on D8's intended effect.** A test that asserted a busy
+   agent's empty loop proceeds now fails on purpose, and 2.3 read every failure *"not of that shape"*
+   as a missed consumer. It now names D8's shape and says what to do with it.
+
+**Filed against shipped code, and not repaired here:**
+- **F373 (B).** An in-flight decline answers Run with an earlier firing's `skipped` reason, because
+  `run_job` reads the newest skipped row without asking whether this press wrote it. Measured. This
+  change widens its reach, as it widens F128's.
+
+**What R3 checked and kept:**
+- **D2.** The job route stamps `loop.archived_at` and leaves `ending_state` alone
+  (`jobs.py:1193-1200`), and no route clears a loop's `archived_at`.
+- **D4.** `_attempt_turn` never selects an entry past the budget (`turn_scheduler.py:361-371`). An
+  entry at exactly the budget is deliverable (`<=`), so 1.1a's `<=` agrees. `POST /messages`
+  without a run queues at `hop_budget + 1` (`messages.py:57-58`), so drive step 5.4b stages what it
+  says.
+- **D6's `project_limits` question**, answered in D6: no caller reaches the raise except a deletion
+  racing a firing.
+- **Every other named mutation** can fire as written: 1.2 to 1.7, 2.1, 2.2, 3.1, 3.2, 3.5 and 3.6.
+  3.5's mutation empties the pool, the walk then stalls, and the board re-asks the guard and shows
+  the busy sentence.
+- **The statements of the old rule** outside the three task 1.8 names:
+  - `task_transition_service.py:397` narrates F70 in the past tense;
+  - `scheduler.py:1419` is about a task inside the walk, which is in a live loop and still holds.
+
+  Both stay true and are left alone.
+- **The ADDED requirement against `agent-flows` *A flow is a loop that declares a specification
+  document*.** That requirement scopes the capability to flows, while the pool also serves
+  documentless loops. R2's F128 paragraph already records the shipped departure. D8 narrows it
+  rather than widening it, because a documentless loop with an empty queue and a busy agent
+  now fires nobody else, as that requirement's *"fires the job's own agent"* expects.
+
+**Readiness.** With these repairs the change is ready to implement. It is larger than R2 left it: one
+helper, a signature change at three call sites, a clause in the Run route's sentence, and group 3b.
+Nothing in it touches `mcp_server.py`, a migration or the UI.
