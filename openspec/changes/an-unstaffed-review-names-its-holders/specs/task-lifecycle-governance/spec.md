@@ -14,15 +14,25 @@ asserts that a reviewer holds the task while naming its author.
 
 **The refusal SHALL name a remedy the refused actor can take, and SHALL NOT name a control that
 actor does not have.**
-- **To the operator,** it SHALL name the single action that releases the author's hold and approves
-  the work. It SHALL also name the one-request form that names a different reviewer and sends the
-  task to review together.
-- **To an agent,** it SHALL state that an agent cannot change who holds a task, and SHALL name who
-  can move the work on.
+- **To the operator,** it SHALL name the landing action as the way to review the work themselves,
+  and SHALL NOT promise that landing approves it, because landing is subject to the approval gate.
+  It SHALL also name the single API request that names a different reviewer and sends the task to
+  review together, stated as a request rather than as a control in the app.
+- **To an agent,** it SHALL state that none of the tools the agent is offered changes who holds a
+  task, and SHALL name who can move the work on. It SHALL NOT tell the agent to change the task's
+  holder by any route.
 
 Measured on the operator's own project: agents met this refusal eight times and could act on none
 of them. Its remedy, *"clear the assignee"*, is a field no agent tool carries and no control in the
 app sends. The action that works sat unnamed beside it.
+
+A refusal that tells an agent no agent *can* change a task's holder would be false. The agents'
+HTTP task route accepts an assignee today, though neither rendering of the agent's tool surface
+offers one. The refusal describes the surface the agent is given.
+
+**A review dispatched by the operator and refused because the reviewer is the task's author SHALL
+name a remedy that exists for the task's status**: the landing action for a `completed` task, and
+the operator's own decision for an `under_review` task, which landing refuses.
 
 **The refusal SHALL be true whether the assignee it judges was already recorded or was set by the
 same operation**, and SHALL NOT state that the task is assigned to that agent. A dispatch writes the
@@ -63,15 +73,30 @@ reviewer and sending the task to review is accepted rather than refused on the a
 
 - **WHEN** the operator's move of a completed task still held by its author to `under_review` is
   refused
-- **THEN** the refusal names the action that releases the hold and approves the work
+- **THEN** the refusal names the landing action as the way to review the work themselves
 - **AND** it does not tell the operator to clear the assignee
+- **AND** it does not state that landing approves the work
 
 #### Scenario: An agent's refusal does not offer it a control it lacks
 
 - **WHEN** an agent's move of a completed task held by that task's author to `under_review` is
   refused
-- **THEN** the refusal states that an agent cannot change who holds a task
+- **THEN** the refusal states that none of the agent's tools changes who holds a task
 - **AND** it does not tell the agent to clear the assignee or to assign a reviewer
+
+#### Scenario: A dispatch refused for an under-review task does not name landing
+
+- **WHEN** the operator dispatches a review of an `under_review` task to the agent recorded as
+  completing it
+- **THEN** the refusal names approving, rejecting or returning the task for revision
+- **AND** it does not name the landing action
+
+#### Scenario: A dispatch refused for a completed task names landing
+
+- **WHEN** the operator dispatches a review of a `completed` task to the agent recorded as
+  completing it
+- **THEN** the refusal names the landing action
+- **AND** it does not tell the operator to clear the assignee
 
 #### Scenario: A refused dispatch does not claim an assignment it discarded
 

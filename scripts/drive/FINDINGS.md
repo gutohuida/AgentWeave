@@ -28105,3 +28105,31 @@ another agent's work, or name itself on a completed task and send it to review i
 `agent_actions.py:101-103` states that rule for task creation. Whether the agent's HTTP route is
 meant to take `assignee` at all is the question. Neither direction of the difference has been
 driven.
+
+## F367 (B) — a stall reason longer than 500 characters is stored, and then the job's run history answers 500
+
+**Status:** open. Filed 2026-09-14 by the day window's `f352-r2`. **Computed and mechanism-proven,
+not observed.** Taken into `an-unstaffed-review-names-its-holders` (design D2).
+
+**The mechanism, proven.** `JobRun.error_summary` is `String(500)` (`hub/hub/db/models.py:1349`),
+which SQLite does not enforce. `JobRunResponse.error_summary` is `Field(max_length=500)`
+(`hub/hub/schemas/jobs.py:88`), and `GET /jobs/{job_id}/history` answers `List[JobRunResponse]`
+(`hub/hub/api/v1/jobs.py:1197`). With the real schema class in a `response_model=List[...]` route,
+500 characters answer 200 and 501 answer **500** (`%TEMP%\f352r2\route.py`, `py -3.11`). One long
+row therefore fails the whole history for as long as it is among the rows returned.
+
+**A reason that already passes 500, computed.** `_wedged_review_reason`
+(`hub/hub/scheduler.py:1744-1748`) reaches `error_summary` through F64's promotion (`:1655`) and the
+stall write (`:2762`). It quotes the task title with `!r` in about 230 characters of fixed prose,
+and names the reviewer twice. With a 32-character reviewer, the sentence passes 500 once the title
+reaches 206 characters. At the 256-character limit it is 551 characters, and 807 when the title is
+256 backslashes, which `repr` doubles.
+
+**Unbounded by construction:** `schedule_result.waiting_reason` at `:2923` and `:3062` is the
+`detail` of any non-transient `TriggerAgentError`. Several embed exception text, including git's
+stderr and two absolute paths (`hub/hub/api/v1/agent_trigger.py:966, 970`).
+
+**Observed so far:** nothing has failed. The `:8000` database's longest `error_summary` is 276
+characters over 43 rows, and the trial Hub's 3 rows are empty (mode=ro, `%TEMP%\f352r2\len.py`).
+
+**Related:** F108 (a route's return, not read by the rounds), F154 (the wedged-review sentence).

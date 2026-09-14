@@ -1,3 +1,31 @@
+## ADDED Requirements
+
+### Requirement: A firing's recorded reason never makes the loop's history unreadable
+
+The Hub SHALL store every reason it records on a job's run history within the length that history returns, whatever produced the reason, so that no recorded firing can cause the history to be refused.
+
+The run history declares its reason at 500 characters. The database stores more without complaint, and the history then fails as a whole for as long as that row is among those it returns. A reason recorded on the history comes from many places: a stall, a refused dispatch carrying a tool's own error text, a wedged review quoting a task's title. Bounding each of them where it is written leaves the next one unbounded, so the bound SHALL hold for every write.
+
+Where a reason is shortened, a reason that names its remedy SHALL keep the remedy, and SHALL shorten what it quotes instead.
+
+A continuing stall SHALL still be recognised as the same stall when its reason had to be shortened. Comparing the shortened stored reason with the unshortened new one would never match, and would record one row per firing.
+
+#### Scenario: A wedged review with a long title leaves the history readable
+
+- **WHEN** a firing records a stall naming a wedged review whose task title and reviewer name make the reason longer than the history accepts
+- **THEN** the job's run history is returned successfully
+- **AND** the recorded reason still names the operator's remedy
+
+#### Scenario: A refused dispatch with a long error leaves the history readable
+
+- **WHEN** a firing's turn is refused with a reason longer than the history accepts
+- **THEN** the job's run history is returned successfully
+
+#### Scenario: An unchanged long stall is counted in place
+
+- **WHEN** two consecutive firings stall with the same reason, longer than the history accepts
+- **THEN** the history holds one row for that stall, counting both firings
+
 ## MODIFIED Requirements
 
 ### Requirement: A surfaced step is recorded once, not once per tick

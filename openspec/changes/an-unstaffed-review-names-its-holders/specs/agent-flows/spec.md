@@ -24,10 +24,18 @@ The reason SHALL NOT describe an agent as having completed the work when the res
 that agent for a different reason, such as having reviewed the task without recording a verdict.
 
 The reason SHALL name an action that exists for the task in its present status:
-- for a `completed` task, the operator's single action that releases the author's hold and approves
-  it;
+- for a `completed` task, the landing action as the operator's way to review it themselves. It
+  SHALL NOT promise that landing approves it. Landing is subject to the approval gate, and at this
+  point the task's evidence names a commit and is often not yet judged, so the gate may refuse;
 - for an `under_review` task, the operator's own decision on it. It SHALL NOT name the landing
   action, which refuses a task in that status.
+
+Where an agent is excluded for more than one reason, the reason SHALL state the most specific:
+- having been recorded as completing the task outranks having reviewed it without a verdict;
+- having reviewed it without a verdict outranks having merely worked on it.
+
+The broader set of agents that may have authored a task includes whoever holds it and whoever ran
+on it, and a silent reviewer is both.
 
 The reason SHALL fit every surface that carries it. Where naming every agent would exceed that, the
 remaining agents SHALL be counted rather than omitted without a count, and the action SHALL still be
@@ -59,10 +67,26 @@ decides that.
   recording one
 - **AND** it does not state that this agent completed the task
 
-#### Scenario: A completed task's reason names the landing action
+#### Scenario: On operator-completed work the silent reviewer is still named as silent
+
+- **WHEN** the operator completed the task, a review selected on availability ends without a
+  verdict, and the second resolution finds nobody
+- **THEN** the reason states that the agent which gave no verdict reviewed the task without
+  recording one
+- **AND** it does not describe that agent only as having worked on the task
+
+#### Scenario: A completed task's reason does not promise approval
 
 - **WHEN** the unstaffed task is `completed`
-- **THEN** the reason names the operator's action that releases the author's hold and approves it
+- **THEN** the reason names the landing action as the operator's own review
+- **AND** it does not state that landing approves the task
+
+#### Scenario: An empty roster is stated
+
+- **WHEN** a flow cannot staff a review and the project has no non-archived agent
+- **THEN** the reason states that the roster has no agent
+- **AND** it still names the action
+
 
 #### Scenario: An under-review task's reason does not name an action that refuses it
 

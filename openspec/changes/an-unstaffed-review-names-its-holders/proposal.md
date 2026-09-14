@@ -15,7 +15,8 @@ almost all of it outside the flow (F352's table). The reviewing agent was asked 
 blamed the wrong thing. It then told the operator to reassign, which the app does not offer (F353).
 The operator unblocked it by hand at 22:33 UTC with two `land` calls and one rejection.
 
-Four defects share that surface, and this change repairs all four.
+Four defects share that surface, and this change repairs all four. R2 found a fifth on the column
+the sentence is written to, F367, which is under *What changes*.
 
 1. **F352, the visibility half.** The rung-3 sentence names nobody. F352 itself says what any
    repair must do, *"whatever else changes, the unstaffed sentence has to name the holdings — agent
@@ -66,20 +67,34 @@ Four defects share that surface, and this change repairs all four.
   The last clause is rejecting a held task that is no longer wanted, which frees its agent. The
   facts come from the **same queries** `_agents_that_are_free` reads, restructured so the pool and
   the sentence are one computation.
-- **The sentence fits in 500 characters, and every stall row is fitted to its column.**
-  `GET /jobs/{id}/history` validates `error_summary` at `max_length=500` (`schemas/jobs.py:88`). A
-  longer stall reason would be stored without complaint by SQLite and would then turn that route
-  into a 500. Agents that do not fit collapse into a count, and the remedy is always kept.
+
+  The remedy never promises an approval. `land` runs the approval gate first, and at this rung the
+  gate refuses while evidence awaits judgment (R2). One status-aware helper writes the remedy, for
+  this sentence and for the dispatch refusal below.
+- **The sentence fits in 500 characters, and every `error_summary` write is fitted to its
+  column.** `GET /jobs/{id}/history` validates `error_summary` at `max_length=500`
+  (`schemas/jobs.py:88`). A longer reason would be stored without complaint by SQLite, and would
+  then turn that route into a 500. R2 confirmed that with the real schema at 501 characters.
+  - Agents that do not fit collapse into a count, and the remedy is always kept.
+  - The fit is applied **at the model**, so none of the eight writes can miss it.
+  - **F367 (new, R2, computed):** `_wedged_review_reason` already passes 500 today, with a long
+    title and a long agent name.
 - **`resolve_reviewer` takes the exclusion with its reasons.** The divergence restaff
   (`run_divergence.py:430-446`) excludes the silent reviewer and the author together under one
   `excluded_because`, *"is the one that completed this task"*. That is harmless while the sentence
   names nobody. Once the sentence names each agent, it would say a reviewer that gave no verdict
-  completed the work, which `agent-flows` already forbids for the author case.
+  completed the work, which `agent-flows` already forbids for the author case. The silent
+  reviewer's clause overrides *"has worked on this task"*, because the wider author set always
+  contains it (R2).
 - **A surfaced step is recorded once per task.** `_review_unstaffed_already_stands` compares against
   the newest `review_unstaffed` **for this task** in this loop, not the loop's newest.
 - **The author guard's two sentences and the dispatch refusal name remedies that exist**:
-  - to the operator, **Land it**, or the one-request form that names a reviewer;
-  - to an agent, that no agent can change who holds a task, and who can.
+  - to the operator, **Land it**, or the one API request that names a reviewer and sends the task
+    to review;
+  - to an agent, that none of its tools changes who holds a task, and who can move the work on.
+    R1 wrote *"no agent can"*, and F366's HTTP route makes that false (R2).
+  - the dispatch refusal's remedy follows the task's status, because that refusal can meet an
+    `under_review` task, which `land` refuses (R2).
 
   They are worded so they are true whether the assignee was committed before the request or staged
   by it (F334). The rule the guard enforces does not change.
@@ -143,16 +158,21 @@ rather than the change, REV stops it, and it waits for the operator like any oth
 
 - `agent-flows` — adds *"A review nobody is free to take names who holds what"*.
 - `agent-loops` — *"A surfaced step is recorded once, not once per tick"* gains a scenario for two
-  steps surfaced by one loop.
+  steps surfaced by one loop. It also adds *"A firing's recorded reason never makes the loop's
+  history unreadable"* (R2, F367).
 - `task-lifecycle-governance` — *"A task entering review must not still name its author as its
   holder"*: the refusal's remedy is one the refused actor can take, and it is true whether the
-  assignee was staged by the request.
+  assignee was staged by the request. The operator's author-refused dispatch names a remedy for
+  the task's status (R2).
 
 ## Impact
 
 - **Python:**
   - `hub/hub/scheduler.py`: `_agents_that_are_free` restructured over a per-agent availability
-    read; `resolve_reviewer` rung 3; `_review_unstaffed_already_stands`.
+    read; `resolve_reviewer` rung 3; `own_review_remedy`; `_wedged_review_reason`'s title fit;
+    `_stall_run_to_increment`'s comparison; `_review_unstaffed_already_stands`.
+  - `hub/hub/db/models.py`: `JOB_RUN_ERROR_SUMMARY_CHARS`, `fit_error_summary`, and
+    `@validates("error_summary")` on `JobRun`. `hub/hub/schemas/jobs.py` reads the constant.
   - `hub/hub/run_divergence.py`: the exclusion carries reasons.
   - `hub/hub/task_transition_service.py`: the guard's two sentences.
   - `hub/hub/api/v1/agent_trigger.py`: the dispatch refusal's sentence.
@@ -163,5 +183,6 @@ rather than the change, REV stops it, and it waits for the operator like any oth
   the transition map, and every guard's decision.
 - **No migration.** No API shape change: `reason` is already a string on the event and on
   `stall_reason`.
-- **Findings:** retires F353, F334 and F365. **Leaves F352 open** with a dated note, because its
-  definition half is the operator's question above.
+- **Findings:** retires F353, F334, F365 and F367. **Leaves F352 open** with a dated note, because
+  its definition half is the operator's question above. **Leaves F366 open**: this change stops
+  relying on the route's hole, and closing it is that finding's own loop.
