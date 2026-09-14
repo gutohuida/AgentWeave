@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Set
+from typing import Any, Iterable, Optional, Set
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -187,6 +187,18 @@ async def agents_held(
         if await provider_hold(db, project_id, agent, now=current) is not None:
             held.add(agent)
     return held
+
+
+def operator_would_probe(entries: Iterable[Any], hold: ProviderHold) -> bool:
+    """Whether queued operator input arrived after *hold*'s refusal, and so is tried once (D4).
+
+    Only the operator can change the allowance, and a hold derived from the provider's last word
+    cannot see that they did. Asked of an agent's whole queue, by the scheduler that probes and by
+    the status route that must not name a hold the next turn will not wait for.
+    """
+    return any(
+        entry.origin_type == "operator" and entry.arrived_at > hold.observed_at for entry in entries
+    )
 
 
 def _clock(moment: datetime) -> str:

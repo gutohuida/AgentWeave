@@ -22,16 +22,19 @@ earlier firing rather than a fresh one, and answered `500 Failed to fire job` fo
 health. The operator pressing Run while a review was out was told their flow had broken.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, Loop, Run, SpecDocument, Task
+from hub.db.models import AIJob, JobRun, Loop, Run, SpecDocument, Task
 from hub.scheduler import JobScheduler, enter_selected_task
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import run_actor
 
 from .review_evidence import record_review_evidence
+from .test_loop_busy_guard import _make_loop_job
 from .test_review_turn import _roster
 
 pytestmark = pytest.mark.asyncio
@@ -341,3 +344,161 @@ async def test_no_job_run_row_is_written_for_a_declined_firing(
     async with async_session_factory() as db:
         fresh = (await db.execute(select(AIJob).where(AIJob.id == job.id))).scalar_one()
         assert fresh.run_count == 0, "a declined firing must not count as a run"
+
+
+# ---------------------------------------------------------------------------
+# F127, F369 and F355 — pressing Run on a loop whose firing declined without a row
+# (`a-spent-allowance-holds-the-queue` design D11, task 4.4)
+# ---------------------------------------------------------------------------
+
+
+async def _busy_loop(db, *, suffix, agent):
+    """F127's reproduction (`scripts/drive/t_run_while_busy2.py`): a single-agent loop with a
+    pending task, and its agent mid-turn on something that is no loop task."""
+    from .test_loop_busy_guard import _running_turn as _running_turn_on_nothing
+
+    job, loop, task = await _make_loop_job(db, suffix=suffix, agent=agent)
+    await _running_turn_on_nothing(db, agent=agent, suffix=suffix)
+    return job, loop, task
+
+
+async def _job_runs(job_id):
+    async with async_session_factory() as db:
+        return list(
+            (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+        )
+
+
+async def test_running_a_loop_whose_agent_is_mid_turn_answers_409_not_500(
+    app, auth_headers, live_scheduler
+):
+    """F127. The firing's busy guard refused and wrote nothing, so the route used to re-derive a
+    decision the firing never reached, find it not in flight, and answer 500."""
+    async with async_session_factory() as db:
+        job, _loop, _task = await _busy_loop(db, suffix="f127", agent="f127-agent")
+
+    res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+    assert "f127-agent is already running a turn" in detail
+    assert "no other agent is free" in detail
+    assert "Nothing was started" in detail
+    assert await _job_runs(job.id) == []
+
+
+async def test_running_a_loop_whose_agent_is_held_names_the_hold(app, auth_headers, live_scheduler):
+    """The LoopEngine case: the refused firing's row is still `in_progress` (D10) and its briefing
+    is queued, so the in-flight re-derivation would have said the work is being done."""
+    from .test_a_held_agent_is_busy import _clock, _hold, _queue, _the_hold
+
+    agent = "held-run-agent"
+    async with async_session_factory() as db:
+        job, _loop, task = await _make_loop_job(db, suffix="held-run", agent=agent)
+        task.status = "assigned"
+        task.assignee = agent
+        db.add(
+            JobRun(
+                id="jobrun-held-run",
+                job_id=job.id,
+                project_id="proj-test",
+                fired_at=datetime.now(timezone.utc) - timedelta(minutes=2),
+                status="in_progress",
+                trigger="scheduled",
+                conversation_id="conv-held-run",
+            )
+        )
+        await db.commit()
+    await _hold(agent)
+    await _queue(agent, "conv-held-run", origin_type="job", task_id=task.id)
+
+    res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+    assert _clock(await _the_hold(agent)) in detail
+    assert "no other agent is free" in detail
+    assert "already being worked" not in detail
+    assert "nothing is wrong" not in detail
+
+
+async def test_running_a_flow_whose_in_flight_work_waits_on_a_held_agent_names_the_hold(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """The job's agent is free, so the guard passes and the firing reaches `DECISION_IN_FLIGHT`.
+    The in-flight task is staffed to an agent the provider is refusing: staffed, not worked."""
+    from .test_a_held_agent_is_busy import _clock, _hold, _queue, _the_hold
+    from .test_flow_width import _flow as _width_flow
+    from .test_flow_width import _task
+
+    dev, lead = "run-held-dev", "run-free-lead"
+    await _roster(app, auth_headers, bind_runner, dev, lead)
+    async with async_session_factory() as db:
+        job, loop = await _width_flow(db, suffix="run-held", agent=lead)
+        task = await _task(db, loop, "run-held", status="assigned", assignee=dev)
+    await _hold(dev)
+    await _queue(dev, "conv-run-held", origin_type="job", task_id=task.id)
+
+    res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+    assert f"{dev} is held until {_clock(await _the_hold(dev))}" in detail
+    assert "already being worked" not in detail
+    assert "nothing is wrong" not in detail
+
+
+async def test_a_stop_time_skip_is_answered_from_its_row_even_if_the_agent_is_now_busy(
+    app, auth_headers, live_scheduler, monkeypatch
+):
+    """(Round 4 — REV.) The firing wrote a real `skipped` row, so that row is this press's answer.
+    The agent starting a turn in between must not turn it into the busy reason."""
+    agent = "stop-then-busy"
+    async with async_session_factory() as db:
+        job, loop, _task = await _make_loop_job(db, suffix="stop-busy", agent=agent)
+        loop.stop_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        await db.commit()
+
+    fire = live_scheduler._fire_job_internal
+
+    async def fire_then_start_a_turn(job, trigger="scheduled", session=None):
+        outcome = await fire(job, trigger=trigger, session=session)
+        session.add(Run(id="run-stop-busy", project_id="proj-test", agent=agent, status="running"))
+        await session.commit()
+        return outcome
+
+    monkeypatch.setattr(live_scheduler, "_fire_job_internal", fire_then_start_a_turn)
+
+    res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+    assert "loop stop time reached" in detail
+    assert "already running a turn" not in detail
+
+
+async def test_a_refused_press_leaves_an_earlier_firings_requester_alone(
+    app, auth_headers, live_scheduler
+):
+    """F369. The guard wrote no row, so the newest row is an earlier firing's and not this press's
+    to stamp. An operator's press stamped `None` over an agent's attribution."""
+    async with async_session_factory() as db:
+        job, _loop, _task = await _busy_loop(db, suffix="f369", agent="f369-agent")
+        db.add(
+            JobRun(
+                id="jobrun-f369-earlier",
+                job_id=job.id,
+                project_id="proj-test",
+                fired_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+                status="completed",
+                trigger="manual",
+                requested_by_run_id="run-a",
+            )
+        )
+        await db.commit()
+
+    res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    runs = await _job_runs(job.id)
+    assert [(run.id, run.requested_by_run_id) for run in runs] == [("jobrun-f369-earlier", "run-a")]

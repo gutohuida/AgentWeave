@@ -22,7 +22,7 @@ from .inbound_queue import (
     project_limits,
     queued_entries,
 )
-from .provider_allowance import hold_sentence, provider_hold
+from .provider_allowance import hold_sentence, operator_would_probe, provider_hold
 from .run_task_binding import decided_task_refusal
 from .sse import sse_manager
 from .task_workspace import takes_own_checkout
@@ -386,9 +386,7 @@ async def _attempt_turn(
     # behind an autonomous head. A refused probe renews the reading, whose `observed_at` is then
     # later than every entry already queued, so the same input cannot probe twice.
     hold = await provider_hold(db, project_id, agent)
-    if hold is not None and not any(
-        entry.origin_type == "operator" and entry.arrived_at > hold.observed_at for entry in entries
-    ):
+    if hold is not None and not operator_would_probe(entries, hold):
         return _Attempt(
             ScheduleResult(waiting_reason=hold_sentence(agent, hold), terminal_failure=False)
         )

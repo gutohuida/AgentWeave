@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -471,3 +472,89 @@ async def test_queue_status_does_not_report_a_missing_repository_as_a_blocker(
     reason = status.json()["waiting_reason"] or ""
     assert "git" not in reason.lower(), reason
     assert "repository" not in reason.lower(), reason
+
+
+# ---------------------------------------------------------------------------
+# `a-spent-allowance-holds-the-queue` 4.1 and 4.3 — the status route names the hold (design D9).
+# ---------------------------------------------------------------------------
+
+
+async def _status_reason(app, auth_headers, agent):
+    response = await app.get(
+        f"/api/v1/projects/proj-test/queue/{agent}/status", headers=auth_headers
+    )
+    assert response.status_code == 200
+    return response.json()["waiting_reason"]
+
+
+@pytest.mark.asyncio
+async def test_queue_status_names_the_hold_for_input_queued_during_it(app, auth_headers):
+    """An entry with no `waiting_reason` of its own reads the hold sentence, derived live."""
+    from hub.provider_allowance import hold_sentence
+
+    from .test_a_held_agent_is_busy import _hold, _queue, _the_hold
+
+    await _hold("status-held")
+    await _queue("status-held", "conv-status-held")
+
+    reason = await _status_reason(app, auth_headers, "status-held")
+
+    assert reason == hold_sentence("status-held", await _the_hold("status-held"))
+    assert "five-hour usage limit" in reason
+
+
+@pytest.mark.asyncio
+async def test_queue_status_does_not_name_the_hold_when_an_operator_message_will_probe(
+    app, auth_headers
+):
+    """Operator input newer than the refusal is tried once, so the next turn does not wait (D4)."""
+    from .test_a_held_agent_is_busy import _hold, _queue
+
+    await _hold("status-probe")
+    await _queue("status-probe", "conv-status-probe")
+    # On a conversation of its own, behind the autonomous head: the probe is keyed on the whole queue.
+    await _queue("status-probe", "conv-status-probe-operator", origin_type="operator")
+
+    reason = await _status_reason(app, auth_headers, "status-probe")
+
+    assert "usage limit" not in (reason or ""), reason
+
+
+@pytest.mark.asyncio
+async def test_queue_status_names_no_hold_once_it_has_ended(app, auth_headers, monkeypatch):
+    """The input the refusal returned is still queued, but the reset has passed (4.3, Round 2).
+
+    Probing is stubbed runnable so that nothing above the stored-reason fallback answers first:
+    a hold sentence stored on the entry would then be what the route reports.
+    """
+    import hub.api.v1.inbound_queue as queue_api
+    from hub.provider_allowance import AllowanceRefusal
+
+    from .test_a_held_agent_is_busy import _end_every_hold, _hold
+
+    agent = "status-ended"
+    await _hold(agent)
+    async with async_session_factory() as db:
+        db.add(Conversation(id="conv-status-ended", project_id="proj-test", agent=agent))
+        db.add(Run(id="run-status-ended", project_id="proj-test", agent=agent, status="failed"))
+        entry = new_entry(
+            project_id="proj-test",
+            agent=agent,
+            origin_type="operator",
+            content="do the thing",
+            hop_depth=0,
+            conversation_id="conv-status-ended",
+        )
+        entry.state = "delivered"
+        entry.delivered_in_run_id = "run-status-ended"
+        db.add(entry)
+        await db.commit()
+        refusal = AllowanceRefusal(resets_at=datetime.now(timezone.utc) + timedelta(hours=1))
+        assert await return_run_entries(db, "run-status-ended", refusal=refusal) == [entry.id]
+        await db.commit()
+    monkeypatch.setattr(queue_api, "probe_agent", lambda _agent, _config: {"runnable": True})
+    _end_every_hold(monkeypatch)
+
+    reason = await _status_reason(app, auth_headers, agent)
+
+    assert reason is None

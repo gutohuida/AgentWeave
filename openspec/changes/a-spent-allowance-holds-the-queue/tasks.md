@@ -459,12 +459,19 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
 ## 4. Visibility (design D9)
 
-- [ ] 4.1 The queue status route names the hold after the running and hop-budget checks and
+- [x] 4.1 The queue status route names the hold after the running and hop-budget checks and
       before the token budget, unless a queued operator entry would probe. Tests in
       `hub/tests/test_inbound_queue.py`:
       - an entry queued during a hold with no `waiting_reason` of its own reports the hold
         sentence;
       - with a newer operator entry queued, the route does not report the hold.
+
+      **Done 2026-09-14 (part 3).** D4's condition is now one predicate,
+      `provider_allowance.operator_would_probe`, read by `schedule_agent` and by the route, so the
+      two cannot disagree about when the next turn waits. The operator entry in the second test
+      sits on a conversation of its own, behind the autonomous head. Mutations observed: drop the
+      hold branch, and the first test read *"Runner CLI 'status-held' was not found in PATH."*;
+      drop the probe condition, and the second test read the hold sentence.
 - [x] 4.2 `queue_agent_held` is persisted at `warn` and broadcast at the end of every run whose
       reading is a refusal, with `agent`, `run_id`, `hold_until`, `resets_at`, `limit_type` and
       `entry_ids`. Test the persisted row through the 2.4 fixture (and through 2.6's, with empty
@@ -474,7 +481,7 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       the requeued id) and the 2.6 test (empty `entry_ids`). Mutation observed (drop the
       `persist_event`): both tests failed unpacking an empty event list.
 
-- [ ] 4.3 **(Round 2)** Once the hold has ended, the status route reports no hold sentence, even
+- [x] 4.3 **(Round 2)** Once the hold has ended, the status route reports no hold sentence, even
       for an entry the refusal returned. Test: an entry returned by `return_run_entries(...,
       refusal=...)`, left `queued`, with the agent not running and `now` past `hold_until`. The
       route's `waiting_reason` is not the hold sentence.
@@ -483,7 +490,12 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       `waiting_reason` fallback (`api/v1/inbound_queue.py:183`) then reports the ended hold, and
       the test fails.
 
-- [ ] 4.4 **(Round 3, design D11; retires F127 and, Round 4, F369)** `run_job` reads the newest
+      **Done 2026-09-14 (part 3).** The test stubs `probe_agent` runnable: otherwise, on a machine
+      with no `claude` on PATH, the probe's reason answers first and the mutation cannot be seen.
+      It asserts `waiting_reason is None`, which is also that precondition. Mutation observed: the
+      route read the stored sentence.
+
+- [x] 4.4 **(Round 3, design D11; retires F127 and, Round 4, F369)** `run_job` reads the newest
       `JobRun` id before `_fire_job_internal` and after it **(Round 4 — REV)**. If they differ, the
       firing wrote a row: stamp `requested_by_run_id` on it and answer from it as today. If they
       do not, stamp nothing, and for a loop job ask `_loop_flow_busy_reason`. A refusal answers 409
@@ -517,6 +529,29 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
       A source-scanning test already pins `task_attribution` as the only reader of
       `_cannot_staff`, and the new route code must not read it directly.
+
+      **Done 2026-09-14 (part 3).** Five new tests beside F48's two, which pass unchanged. The
+      route's guard refusal reads *"{reason}, and no other agent is free to take this loop's work.
+      Nothing was started."*; the held in-flight answer reads *"Every task on this loop's queue is
+      staffed, but {each hold_busy_reason}. The queued input is delivered at the reset. Nothing was
+      started."* Two things beyond the letter of the task:
+      - the 500 branch reports a row's `error_summary` only when this firing wrote the row. With
+        no new row, the newest is an earlier firing's, which is F369's error in the answer rather
+        than the stamp. Every decline that writes nothing is one of the guard, F23's in-flight
+        decision, or a stall counted into an earlier `skipped` row, so this reaches only a case
+        none of them explains;
+      - a stall counted in place writes no new row either, so it is no longer stamped. Its answer
+        is unchanged: the guard passes and the earlier `skipped` row answers, which keeps
+        `test_a_review_nobody_is_doing.py`'s *"a second press says the same thing"* green.
+
+      Mutations observed:
+      - drop the re-ask: the first and sixth tests read 500 *"Failed to fire job"*. The second
+        read the held in-flight sentence, **not** *"already being worked"* as predicted above,
+        because the held clause answers first. It still failed, on *"no other agent is free"*;
+      - drop the held clause: the third test read *"already being worked … nothing is wrong"*;
+      - re-ask before comparing ids: the fifth test read *"stop-then-busy is already running a
+        turn"*;
+      - stamp unconditionally: the sixth test read `None`.
 
 ## 5. The gate
 

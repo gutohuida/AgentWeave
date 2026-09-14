@@ -13,6 +13,7 @@ from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
 from ...inbound_queue import DELIVERY_ATTEMPT_LIMIT, release_entry, withdraw_entry
 from ...launchability import get_agent_config, probe_agent
+from ...provider_allowance import hold_sentence, operator_would_probe, provider_hold
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...usage_accounting import project_budget_state
@@ -143,8 +144,14 @@ async def get_queue_status(
         reason = "agent is already running"
     elif entries:
         project_row = await session.get(Project, project_id)
+        # Derived here and never stored on the entries (`a-spent-allowance-holds-the-queue`, D9),
+        # so it names the hold exactly while the hold stands, for every entry, whenever it arrived.
+        # Not while an operator entry would probe: the next turn will not wait for the reset.
+        hold = await provider_hold(session, project_id, agent)
         if project_row and all(entry.hop_depth > project_row.hop_budget for entry in entries):
             reason = "hop budget exhausted"
+        elif hold is not None and not operator_would_probe(entries, hold):
+            reason = hold_sentence(agent, hold)
         elif (
             all(entry.origin_type != "operator" for entry in entries)
             and (await project_budget_state(session, project_id))["exhausted"]

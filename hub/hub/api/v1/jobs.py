@@ -16,7 +16,7 @@ from ...db.engine import get_session
 from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
 from ...loop_ending import end_loop
 from ...operator_direction import require_operator_direction
-from ...scheduler import cron_day_ambiguity_reason
+from ...scheduler import FiringDecision, cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
 from ...sse import sse_manager
@@ -1230,25 +1230,57 @@ async def get_job_history(
     return result.scalars().all()
 
 
-async def _loop_work_is_all_in_flight(session: AsyncSession, job: AIJob) -> bool:
-    """Whether this job's loop declined to fire because everything it could take is already being
-    worked — finding F48's question, asked of the decision rather than guessed from a run row.
+async def _loop_in_flight_decision(session: AsyncSession, job: AIJob) -> Optional[FiringDecision]:
+    """The decision, when this job's loop declined to fire because everything it could take is
+    already staffed — finding F48's question, asked of the decision rather than guessed from a row.
 
     Re-deciding is cheap and, more to the point, it is the only honest way to ask. The firing that
     just declined recorded nothing at all (design: F23), so there is no artefact to read; the
     alternative would be inferring health from the *absence* of a row, which is exactly how "the
     flow is fine" and "the flow broke" became indistinguishable in the first place.
 
-    Answers `False` for a plain job with no loop, which is right: `DECISION_IN_FLIGHT` is a loop's
-    outcome, so a plain job that failed to fire really did fail.
+    `None` for a plain job with no loop, which is right: `DECISION_IN_FLIGHT` is a loop's outcome,
+    so a plain job that failed to fire really did fail.
     """
     from ...scheduler import DECISION_IN_FLIGHT, decide_firing
 
     loop = (await session.execute(select(Loop).where(Loop.job_id == job.id))).scalar_one_or_none()
     if loop is None:
-        return False
+        return None
     decision = await decide_firing(session, loop, default_agent=job.agent or "")
-    return decision.kind == DECISION_IN_FLIGHT
+    return decision if decision.kind == DECISION_IN_FLIGHT else None
+
+
+async def _held_in_flight_reasons(
+    session: AsyncSession, project_id: str, decision: FiringDecision
+) -> List[str]:
+    """Each held agent the in-flight tasks are staffed to, in its hold's short form (design D11).
+
+    A held agent's task is staffed and its input queued, but nobody is working it, so *"already
+    being worked"* would be false for it. Read through `staffing_from_decision`, the one sanctioned
+    reader of the decision's cannot-staff collection.
+    """
+    from ...provider_allowance import hold_busy_reason, provider_hold
+
+    reasons: List[str] = []
+    for agent in dict.fromkeys(
+        task_attribution.staffing_from_decision(decision).unstaffable.values()
+    ):
+        hold = await provider_hold(session, project_id, agent)
+        if hold is not None:
+            reasons.append(hold_busy_reason(agent, hold))
+    return reasons
+
+
+async def _job_has_loop(session: AsyncSession, job: AIJob) -> bool:
+    return (await session.execute(select(Loop.id).where(Loop.job_id == job.id))).first() is not None
+
+
+async def _newest_job_run(session: AsyncSession, job_id: str) -> Optional[JobRun]:
+    result = await session.execute(
+        select(JobRun).where(JobRun.job_id == job_id).order_by(JobRun.fired_at.desc()).limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 @router.post("/{job_id}/run")
@@ -1284,21 +1316,22 @@ async def run_job(
             )
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
 
+        # Which firing wrote the newest row is the question, not what the newest row says (design
+        # D11 of `a-spent-allowance-holds-the-queue`, findings F127 and F369). The busy guard and
+        # F23's in-flight decision both decline without writing one, and a continuing stall counts
+        # into an earlier row, so after any of them the newest row is an earlier firing's.
+        earlier_run = await _newest_job_run(session, job_id)
+        earlier_run_id = earlier_run.id if earlier_run is not None else None
+
         # Pass the session to avoid duplicate work
         success = await scheduler._fire_job_internal(job, trigger="manual", session=session)
 
-        # Get the run_id from the most recent run we just created
-        # (scheduler creates it within the same session)
-        from sqlalchemy import select
-
-        from ...db.models import JobRun
-
-        result = await session.execute(
-            select(JobRun).where(JobRun.job_id == job_id).order_by(JobRun.fired_at.desc()).limit(1)
-        )
-        latest_run = result.scalar_one_or_none()
-        run_id = latest_run.id if latest_run else "unknown"
-        if latest_run is not None:
+        latest_run = await _newest_job_run(session, job_id)
+        wrote_row = latest_run is not None and latest_run.id != earlier_run_id
+        run_id = latest_run.id if latest_run is not None and wrote_row else "unknown"
+        if latest_run is not None and wrote_row:
+            # Only a row this firing wrote. Stamping an earlier one erased an agent's attribution
+            # with an operator's `None`, or claimed another firing for the agent pressing Run.
             latest_run.requested_by_run_id = run_identity
             await session.commit()
 
@@ -1307,6 +1340,22 @@ async def run_job(
             # job_run_failed) and set the JobRun's own status/error_summary — this branch
             # only translates that into the right HTTP response, it must not persist a
             # second, duplicate event on top of what was already recorded.
+            if not wrote_row and await _job_has_loop(session, job):
+                # The first question the firing asked, asked again (F127's own shape of the fix).
+                # Its refusal writes nothing, so without this the branches below re-derived a
+                # decision the firing never reached: *"already being worked … nothing is wrong"*
+                # for an agent the provider is refusing, and 500 for one merely mid-turn.
+                from ...scheduler import _loop_flow_busy_reason
+
+                busy_reason = await _loop_flow_busy_reason(session, project_id, job.agent)
+                if busy_reason:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=(
+                            f"{busy_reason}, and no other agent is free to take this loop's work. "
+                            "Nothing was started."
+                        ),
+                    )
             if latest_run and latest_run.status == "skipped":
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -1321,13 +1370,26 @@ async def run_job(
             # Reachable before this change and much more so after F45, which parks every dispatched
             # review in flight — pressing Run while a review is out is now the ordinary case, and
             # the operator was being told their flow had broken.
-            if not await _loop_work_is_all_in_flight(session, job):
+            in_flight = await _loop_in_flight_decision(session, job)
+            if in_flight is None:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail=(
                         latest_run.error_summary
-                        if latest_run and latest_run.error_summary
+                        if latest_run and wrote_row and latest_run.error_summary
                         else "Failed to fire job"
+                    ),
+                )
+            held = await _held_in_flight_reasons(session, project_id, in_flight)
+            if held:
+                # Staffed and queued, not worked: the provider is refusing the agent until its
+                # reset, so neither "already being worked" nor "nothing is wrong" is true.
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        "Every task on this loop's queue is staffed, but "
+                        f"{'; '.join(held)}. The queued input is delivered at the reset. "
+                        "Nothing was started."
                     ),
                 )
             raise HTTPException(
