@@ -1,109 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement.",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-12-daily",
-    "parent_branch": "master",
-    "parent_sha": "eac213c",
-    "stop_at": "2026-09-13T17:00:00+01:00",
-    "iteration": 9,
-    "log_file": ".claude/autonomous/2026-09-13-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "DONE iteration 1. The merge gate did NOT open. Condition 3 failed: CI run 34746396329 for 000fcbf (the arm) concluded failure, and hub-test's single error is F292 (database is locked on BEGIN IMMEDIATE in test_reviewer_is_not_the_author.py), on a commit with no product change. The failed job was not re-run; that is the operator's F292 priority call. Drain count is 0 (openspec/changes/ holds only archive/), so two spec loops run: F299, then F327, per DIRECTION.md ## 2026-09-13. The research was delivered at 07:33 and is copied to spec-queue/research/2026-09-13.md. The branch is unmerged and spans two days."
-        },
-        {
-            "id": "gate-retry",
-            "status": "done",
-            "title": "Merge gate, one retry: land the 2026-09-12 cycle if CI for iteration 1's commit is green",
-            "detail": "DONE iteration 2, did NOT land. CI run 34747152049 for b798ff6 (a state-only commit) concluded failure: hub-test 1 failed / 4212 passed / 18 skipped, the failure is F314 (test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call, 'asyncio.locks.Lock ... is bound to a different event loop'), not F292. Conditions 1, 2 and 4 passed. Not re-run. The branch stays autonomous/2026-09-12-daily, unmerged, 45 commits ahead of master. Branch CI, last 20 runs: 8 failure, 12 success. Every classified red is F292 or F314."
-        },
-        {
-            "id": "d1-drive",
-            "status": "done",
-            "title": "D-1 drive: the night's inferred-not-seen legs of both archived changes, live",
-            "detail": "DONE iteration 3, on drive Hub 8023, profile drive0913d, at 4521625, Claude Code 2.1.269, Haiku only. The Hub was stopped at 09:55, the profile kept, and no job exists. P1: D10 item 5 is VERIFIED, 19/19 (t_d1_0913_powershell_tool_name.py). permission_denied rows carry tool_name='PowerShell', a manual-posture request row carries tool_name='PowerShell' with the script in tool_input.command, and the discriminator $env:HUB_URL was allowed, which only an exact 'PowerShell' reading does. No fallback fired. P2 (t_d1_0913_render.py, Chromium, served bundle): F333 RENDERED as predicted, and the notice contradicts the NOT DELIVERED row above it. F335 NARROWED: the route's 409 is refused before staging (agent_trigger.py:1461), so there is no broadcast. A delivery-time refusal does broadcast (curl captured it), but the feed drops the kind (F251, useSSE.ts:21-68), so F335 is latent behind F251. F336 (C) NEW: the app has no control that dispatches a review, so 6.1 and test-guide check 1 cannot be done in the UI. P3: r4's file ran 5/5 clean (19 passed; wall 29.2/11.2/11.0/11.1/10.8s), and the stall stays unclassified."
-        },
-        {
-            "id": "d2-r1",
-            "status": "done",
-            "title": "D-2 spec R1: F299 - no grounds, no approver flag (DECISIONS.md 1b)",
-            "detail": "DONE iteration 4. openspec/changes/an-absent-approver-is-not-named/ written for DECISIONS 1b AS DECIDED; validate --strict passes. Re-drive on claude 2.1.269 through build_command's own argv and the Hub's PtySession (the research used pipes; pty_runner.py:357 is Codex's PipeSession), inherit and plain CLAUDE* envs: A_hub/A_repro exit 1 before any model call naming the policy; B_1b (1b's true shape, server still injected) completes, 2 turns, ~$0.023, Write denied, 'please approve'; C_1b_none says 'no approval surface' but retried via PowerShell once (plain). Env made no difference. OPERATOR QUESTION at the top of proposal.md: (a) / (b) / 1b as written; not picked. R1 found: (1) 1b's signal cannot carry 'from the second run' - harness_has_honoured_mcp is false for every agent's first run, so a literal reading refuses every new agent's first-turn writes; design adds Run.mcp_server_injected (migration 0103) and an 'untested' state; (2) 1b as written newly breaches 'A refusal is recorded wherever it is decided' (Claude refusals only reach the record through approve_tool_call), so the change records the harness's permission_denials for approver-less Claude runs (MODIFIED sandboxing requirement). Evidence in the change's evidence/. COLLISION: agent_trigger.py is shared with F327's dispatch path (:452/:1461), rule is 'shares no file', so d2b/d3b/d4b SKIPPED; DIRECTION item 3 (F301) collides too. F299's ledger entry carries a dated re-measurement note; status still open."
-        },
-        {
-            "id": "d3-r2",
-            "status": "done",
-            "title": "D-3 spec R2: re-derive the F299 proposal against the code, independently",
-            "detail": "DONE iteration 5. claude 2.1.269. R1's B_1b/A_hub re-run and reproduce. R2 FOUND: (1) R1's 'exit 1 before any model call, spending nothing' is WRONG - every A transcript (R1's own and R2's) has a model call and a Write tool_use and no result line; on 2.1.269 F299's config completes a no-approval turn and dies at the first approval-needing call, usage 'unavailable'. Operator question premise rewritten (options unchanged, not picked), design/D7/D8/test-guide/F299 ledger corrected. (2) D3 counted a typo as refutation: on a PERMITTED harness an unknown runner flag exits 1 with no init and no server; --resume of an unseen session exits before init. Added Run.harness_init_at (second column in 0103, from ParsedLine.harness_init on the system/init line); verified the Hub's own read loop parses init under the PTY. (3) D6 now joins on tool_use_id instead of keying on argv: measured the approver's own refusals appear in permission_denials under the same tool_use_id; R1's spec claim that approver-named runs already record each refusal was false (F299 09-09 first run, swallowed _report_decision). (4) NEW MODIFIED of 'The default posture lets an agent work inside its own workspace' (D11): its MUST NOT clause contradicted the new requirement on a blocking harness; 1b decided the exception. (5) Activity line never renders detail - F337 (C) filed. (6) Task 6.1 now reads the live Win32_Process.CommandLine (the Hub stores no argv); drive 6.2b and guide check 2b added. D8 attacked, stands. Evidence r2-harness-results.json, a-hub-plain-raw-pty.txt; scripts t_d3_0913_f299_*.py. validate --strict passes. Collision unchanged."
-        },
-        {
-            "id": "d4-r3",
-            "status": "done",
-            "title": "D-4 spec R3: re-derive F299 again, independently of R2",
-            "detail": "DONE iteration 6. claude 2.1.269. R2's E_badflag/E_ok reproduce. R3 FOUND: (1) R2's D3 argument ('given init, only a lost announce leaves a permitted harness unreported') was wrong where unmeasured: scripts/drive/t_d4_0913_f299_slow_server.py shows the harness waits ~30 s for a slow server then lists it 'failed' and COMPLETES the turn rc 0 (S_45), and lists a server that exits at start 'failed' and completes (S_crash); MCP_CONNECTION_NONBLOCKING=true changes nothing, no 'pending'. Fix: Run.harness_init_at replaced by Run.harness_mcp_status (init's status for the Hub server verbatim, or 'absent'); a test needs NOT NULL and <> 'connected'. That also removes R1's D9 lost-announce risk; S_45 remains (one bad turn, needs a start ~20 s slower than the measured ~1 s import + <=10 s announce); S_crash is a true refutation. (2) D11: exception paragraph promised 'those refusals are recorded' for runs that die before a result line, asserted 'no posture gives both' (1b said 'may be'; research candidate 2 disputes it), and named an ambiguous way out; the qualified newly-created-agent scenario dropped no-server agents. All fixed; the grounds-agent case the text covers is named in D11 and left to candidate 3. (3) Operator question option (a) said 'adds a version probe'; the refuting run's init line carries claude_code_version, so the text now says so (not picked; one-line answer intact). D6's tool_use_id join attacked and holds (first JSON-path filter in the codebase, tested through real routes). Evidence r3-harness-results.json. validate --strict passes; MODIFIED bodies keep every shipped line. Collision unchanged. F299 ledger has a dated R3 note, status open. Candidate 3 NOT absorbed."
-        },
-        {
-            "id": "d2b-r1",
-            "status": "skipped",
-            "title": "D-2b spec R1 (second loop): F327 - a review a flow staffed and whose dispatch is refused",
-            "detail": "SKIPPED at iteration 4 by d2-r1's collision check: F299's change touches hub/hub/api/v1/agent_trigger.py, which holds F327's review-dispatch path (review_dispatch_refusal :452, called :1461). day-window.md step 6: a second loop runs 'only if its blast radius shares no file with the first change's'. The next DIRECTION item (F301's notice) collides as well (launchability.py, agent_trigger.py's access-path block). F327 stays first in line for tomorrow's loop. Original detail: GUARDS FIRST. (1) If d2-r1 recorded that F299's files overlap F327's radius, skip d2b/d3b/d4b, log why, and go to d5-review. (2) If this item comes up later than 14:30 (PowerShell Get-Date), skip d2b/d3b/d4b as well, log why ('run one loop and say why in the log', day-window.md step 6), and go to d5-review so the day still ends with a review page. Otherwise: FINDINGS.md '## F327 (B)' (~:26407); DECISIONS.md F327-scope (~:612, option (a) shipped; (b) rejected only as unexamined; (c) and (d) stay rejected); DIRECTION.md ## 2026-09-13, which makes option (b) the starting point: the dispatch stages, and the flow stops staging first. Examine (b) properly, which is this loop's purpose. Start from R3-of-F319's warning that the divergence restaff's task is already under_review and collides with D9 (read openspec/changes/archive/2026-09-13-a-refused-review-leaves-nothing-behind design.md for D7 and D9). The change will MODIFY agent-flows ('in the same commit that queues the review turn', 'A dispatched review leaves the reviewable pool') and must reconcile task-lifecycle-governance 'Dispatching a review staffs the task, whichever path dispatched it'. Code: hub/hub/scheduler.py (~:2794 staging, ~:2891 commit), hub/hub/run_divergence.py, hub/hub/turn_scheduler.py (post-F319/F320, as of 997ff5d), and hub/hub/api/v1/agent_trigger.py. Re-measure F327's table on the current tree before designing. Consider F333/F334 (B, filed by the night) only to state whether this change touches them; do not absorb them without saying so, because that is the operator's open question. Deliverable, rules and validate --strict: as d2-r1."
-        },
-        {
-            "id": "d3b-r2",
-            "status": "skipped",
-            "title": "D-3b spec R2: re-derive the F327 proposal against the code, independently",
-            "detail": "SKIPPED at iteration 4 by d2-r1's collision check: F299's change touches hub/hub/api/v1/agent_trigger.py, which holds F327's review-dispatch path (review_dispatch_refusal :452, called :1461). day-window.md step 6: a second loop runs 'only if its blast radius shares no file with the first change's'. The next DIRECTION item (F301's notice) collides as well (launchability.py, agent_trigger.py's access-path block). F327 stays first in line for tomorrow's loop. Original detail: Skip if d2b-r1 was skipped. As d3-r2, for F327. Re-measure the F327 table yourself on the current tree. Trace every path that stages a review before dispatch (flow firing, divergence restaff, any other; grep for the staging call rather than trusting R1's list) and check the proposal covers each or names it as out of scope. Ask the F108 question: what the operator sees when the dispatch refuses. Requirement headers must match openspec/specs character for character. openspec validate --strict. If this round changes nothing, say so."
-        },
-        {
-            "id": "d4b-r3",
-            "status": "skipped",
-            "title": "D-4b spec R3: re-derive F327 again, independently of R2",
-            "detail": "SKIPPED at iteration 4 by d2-r1's collision check: F299's change touches hub/hub/api/v1/agent_trigger.py, which holds F327's review-dispatch path (review_dispatch_refusal :452, called :1461). day-window.md step 6: a second loop runs 'only if its blast radius shares no file with the first change's'. The next DIRECTION item (F301's notice) collides as well (launchability.py, agent_trigger.py's access-path block). F327 stays first in line for tomorrow's loop. Original detail: Skip if d2b-r1 was skipped. As d4-r3, for F327. Attack R2's additions hardest, especially the D9 interaction and whether the flow's reviewable-pool guarantee still holds in the window between queueing and dispatch (two flows firing on the same task). openspec validate --strict. If this round changes nothing, say so."
-        },
-        {
-            "id": "d5-review",
-            "status": "done",
-            "title": "D-5 review page review-2026-09-13.html + the APPROVALS rows",
-            "detail": "DONE iteration 7. spec-queue/review/review-2026-09-13.html written (self-contained, theme-aware, 0 external requests, rendered in Chromium light and dark; the gate table's overflow was seen and fixed). Branch banner first: 50 commits ahead of master at f5f0091 (43 from the 2026-09-12 cycle, 7 today), gate shut on F292 (000fcbf) then F314 (b798ff6), condition 3 only. F299 section quotes the OPERATOR QUESTION in substance, per-round table (R1/R2/R3), cost 24 tasks (22 + H.1-H.2), migration 0103, round spend ~$0.19/$0.10/$0.09 excluding A spawns. F327's loop not run: agent_trigger.py collision. Seven decisions: this window's three plus the night's four. APPROVALS.md ## 2026-09-13 added at the top with one untokened paragraph for an-absent-approver-is-not-named, no ORDER line; grep confirms no token lines."
-        },
-        {
-            "id": "d6-repair",
-            "status": "done",
-            "title": "D-6 repair, only if the day has room: F328 or F326, if the carve-out holds",
-            "detail": "DONE iteration 8, fix a5cb384. F328 taken; F326 NOT taken (its refusals are in agent_trigger.py, which an-absent-approver-is-not-named edits; F328's turn_scheduler.py/inbound_queue.py do not overlap). Carve-out held: agent-conversation-workspace already says input withdrawn during the attempt gives up nothing (spec :2329-2334); no migration/API/schema. Reproduced O2 on 7b8a33f first; it showed the finding's named repair was half: withdraw_entry also read-then-wrote by key and its UPDATE landed after the Hub's give-up. Repair: every write taking an entry out of queued without delivering it is one UPDATE ... WHERE state='queued' (inbound_queue._withdraw_if_queued for withdraw_entry + withdraw_refused_entry, commits both branches; scheduler count/give-up conditional per entry, set_committed_value mirror). 3 tests in hub/tests/test_a_withdrawal_and_a_give_up_do_not_both_win.py, all fail on 7b8a33f; each condition's mutation and the mirror's are killed. 30 queue files 465 passed; full Hub suite 4221 passed/86 skipped; ruff/black/mypy clean. Driven (scripts/drive/t_d6_0913_f328_withdraw_race.py, real routes, 1 Haiku turn/Hub): pre-fix worktree 8025 drive0913v 3/8 inconsistent (DELETE 200 + Hub reason + both events); fixed 8024 drive0913w 0/24. Hubs stopped, worktree removed, profiles kept, no jobs. F328 Status 'fixed a5cb384'. F338 (D, read only) filed: deliver_entries_with_run's check-then-write. APPROVALS 2026-09-13 and review page s5 got one dated line each."
-        },
-        {
-            "id": "d7-ledger",
-            "status": "done",
-            "title": "D-7 ledger: file research 2026-09-13 candidates 2 and 3 as findings, if F299's rounds did not",
-            "detail": "DONE iteration 9. Neither candidate was already filed (F330-F338 are other ground; F299's design D10/D9 route both here). Candidate 2 -> F339 (B): the four texts still say acceptEdits checks no path (permission-postures.md:33/:39/:64, agent-capability-plane/spec.md:256-259, runner_commands.py:63-64, DECISIONS.md:772-774; ledger repeats at F299 :24342, F281 :21078). Q1 reproduced TWICE via scripts/drive/t_d7_0913_accept_edits_confined.py: build_command(mcp_command=None) argv asserted acceptEdits with no server/approver, PtySession, CLAUDE* stripped, %TEMP%; init 2.1.269/acceptEdits; inside Write landed, ../ Write, echo > ../ and an absolute-path Write each in permission_denials and absent on disk ($0.028, $0.015). The Hub reads no permission_denials (grep empty). Operator question filed (does 1b's rejection stand on its remaining reason); page NOT corrected. Candidate 3 -> F340 (B): launchability.py:251-260 .limit(1) no recency, only writer agent_actions.py:442, parse_claude_line has no system branch (falls to :371), stderr -> text :235-238. Permanence measured by a one-off test (1 stamped 2020 run + 5 later unstamped -> True), deleted. Statuses from R3 r3-harness-results.json and R2 ABSENT rows. Today the grounds decide only the described path (agent_trigger.py:1001-1005); the approver-side harm arrives with F299's change, hence B now. Q4c under PTY not measured. APPROVALS 2026-09-13 and review page s6 each got one dated line/paragraph, no token."
-        }
-    ],
-    "decisions_for_user": [
-        "Merge gate, flaky CI (F292 and F314): the gate did NOT open this window, twice. Iteration 1: CI for the arm commit 000fcbf (state files only) failed on F292, database is locked on BEGIN IMMEDIATE in test_reviewer_is_not_the_author.py. Iteration 2 (gate-retry): CI for b798ff6 (state and research files only) failed on F314, test_a_wide_flows_state_is_still_one_call, 'asyncio Lock bound to a different event loop'. The branch's last 20 CI runs are 8 red and 12 green, and every classified red is one of these two intermittents. No window re-ran a failed job to manufacture a green: there is no precedent, and it is your call. Choose one: authorise 'gh run rerun --failed' for a red whose signature is F292 or F314 and nothing else; raise F292 and F314 into DIRECTION's order; or accept that roughly two mornings in five do not land. autonomous/2026-09-12-daily is unmerged and spans two days.",
-        "F299 (spec loop, change an-absent-approver-is-not-named): the research's challenge holds in outcome, and R2 corrected R1's account of it. On claude 2.1.269, through the Hub's own argv and PTY spawn, in both spawn environments, F299's configuration still starts a turn and works until its first approval-needing call; there the harness process dies (exit 1, no result line, usage recorded as 'unavailable' although a model call was paid), showing the harness's own lines ('MCP server blocked by enterprise policy: agentweave' and 'approve_tool_call ... not found'). R1 had written 'exits 1 before any model call, spending nothing'; R2 found a model call and a Write attempt in every one of R1's own transcripts. 1b as written turns that into a turn that survives the refusal (from the second run): recorded, its refusals recorded, its model asking you to 'approve' a prompt that cannot appear. Answer the OPERATOR QUESTION at the top of proposal.md in one line: (a) 1b + --permission-prompts none on the approver-less spawn, gated on a known harness build (the refuting run's init line carries claude_code_version, so no separate probe, R3; 'no approval surface' 4/4, one of 4 still retried); (b) hand 1b back - what's missing is a Hub-authored sentence (research candidate 3, a new decision); or 1b as written. Also in the proposal, from the rounds: a per-run record of the server being injected AND of the harness reporting its start (else every new agent's first turn, or one typo in a runner's flags, loses a working approver); harness-decided refusals recorded for every Claude run, once per tool call via tool_use_id; and the shipped default-posture requirement gains the exception 1b decided (D11), so the spec stops contradicting itself. R3 (d4-r3) changed the mechanism, not the question: what counts as evidence against a harness is now what its init line said of the Hub's server (anything but 'connected'), because a server the harness gave up on or that crashed also completes a turn without reporting in; and the default-posture exception now promises only what the change delivers.",
-        "F336 (C, d1-drive): the app has no control that dispatches a review. A turn is a review only with review_task_id, and no UI code sends it. The card's 'Start <agent> on this' starts a WORK turn on a completed task, with no commit check and no 409. So the archived a-refused-review-leaves-nothing-behind human-only 6.1 and test-guide check 1 ('dispatch a review from the UI') can only be done through the API. Decide whether operators should hand-dispatch reviews in the app, which means a review item on the card that renders the refusal, or whether reviews stay flow-staffed and the guide is reworded to name the API.",
-        "F339 (B, d7-ledger): acceptEdits is path-confined by Claude Code on a headless run. Reproduced twice on 2.1.269 through the Hub's own no-server argv and PTY: the inside Write landed; a ../ Write, a ../ shell redirect and an absolute-path Write outside were refused by the harness (permission_denials), and none landed. The Hub records none of those refusals. Four texts say the opposite, one of them DECISIONS.md:772-774, 1b's stated reason for rejecting 'also drop to acceptEdits on no grounds' ('removing the path check entirely'). Question: does that rejection stand on its remaining reason (containment is the operator's; the Hub does not substitute a posture that accepts without asking, and it would neither see nor record the harness's refusals)? Either way the operator page, the agent-capability-plane reasoning and the runner_commands comment need rewording (the spec text needs rounds). Separate from an-absent-approver-is-not-named's own one-line question."
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage and must never be touched.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today\u0027s DIRECTION.md section names one under an operator\u0027s DECISIONS.md row (day-window.md, \u0027A day that builds\u0027).",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-12-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "ab7cf72",
+    "stop_at":  "2026-09-14T19:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-14-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
