@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-14</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --alarm: #9c1f17;
+    --alarm-bg: #fceeec;
+    --alarm-rule: #c8372d;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --alarm: #ffb0a8;
+      --alarm-bg: #3b1a17;
+      --alarm-rule: #e0655a;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { overflow-wrap: anywhere; }
+  table.gate { table-layout: fixed; }
+  table.gate th:first-child { width: 22%; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .alarm { border: 2px solid var(--alarm-rule); background: var(--alarm-bg); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0 1.3rem; }
+  .alarm .big { display: block; color: var(--alarm); font-size: 1.12rem; font-weight: 700; margin-bottom: .35rem; letter-spacing: -0.005em; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); white-space: nowrap; }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .pill.fail { color: var(--alarm); background: var(--alarm-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  .ask h5 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); margin: 1rem 0 .2rem; }
+  blockquote { margin: .8rem 0; padding: .7rem 1rem; border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 0 6px 6px 0; }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; display: block; overflow-x: auto; }
+    table.gate { display: table; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Daily review — 2026-09-14</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-14-daily</code> · one day old · <strong>the merge gate
+    landed</strong> <code>ab7cf72..f28bc31</code> after one <code>F292</code> re-run · the first
+    <strong>build day</strong> · a read-only review of <strong>LoopEngine</strong> on
+    <code>:8000</code>: 14 fixes, 11 improvements · <strong>one change built, driven and
+    archived</strong> (<code>F355</code>) · <strong>one stopped at its review</strong> on an operator
+    question (<code>F352</code>) · <strong>one specced through its review and not built</strong>
+    (<code>F356</code>) · <strong>migration <code>0103</code></strong> is on this branch
+  </div>
+</header>
+
+<div class="alarm">
+  <span class="big">Your next restart of <code>:8000</code> applies migration <code>0103_allowance_refusals</code> to your real database.</span>
+  <code>:8000</code> runs this checkout, which is on <code>autonomous/2026-09-14-daily</code>. So the
+  migration reaches your real database on your next restart, whether or not the branch has reached
+  <code>master</code> by then. It comes with <code>a-spent-allowance-holds-the-queue</code> (§4.1).
+  It adds one counter column, so that a refused turn is not counted as a delivery failure. The window
+  upgraded a <em>copy</em> of the trial database <code>0102 → 0103</code> cleanly, and drove the
+  change on a fresh drive database at <code>0103</code>. It never touched <code>:8000</code> or its
+  database, except for the morning's <code>mode=ro</code> reads.
+  <br><br>
+  <strong>Nothing else today reaches your live app.</strong> No UI bundle was committed, and
+  <code>hub/hub/mcp_server.py</code> was not edited. <code>git diff master..HEAD</code> is empty on
+  <code>hub/hub/static/ui</code>, <code>hub/ui/src</code> and <code>mcp_server.py</code>.
+  <br><br>
+  <strong>LoopEngine is still parked, as you decided at ~14:50.</strong> It has been stalled since
+  07:02 on <code>F352</code>'s staffing gate. Today's one built fix, <code>F355</code>, does not
+  unstick it. <code>F352</code>'s change is the one that stopped for your answer (decision 2).
+</div>
+
+<p class="lede">
+  What this page needs from you: <strong>approve, revise or reject
+  <code>a-late-answer-is-delivered</code></strong> (<code>F356</code>, §4.3), and <strong>answer
+  F352's two questions</strong> (§4.2). If you approve nothing, tonight lands no feature (§5). The
+  eleven improvement briefs in §4b are decisions too, but none of them bears on tonight.
+</p>
+
+<!-- ============================== decisions ============================== -->
+<div class="ask">
+  <h4>What only you can decide</h4>
+  <p class="small">Decisions 1–3 bear on tonight and tomorrow. Decisions 4–6 do not change what
+    tonight builds.</p>
+  <ol>
+    <li id="d1">
+      <strong><code>a-late-answer-is-delivered</code>: approve, revise or reject.</strong> This is
+      <code>F356</code> <span class="sev b">B</span>, specced through R1, R2, R3 and the Opus review,
+      and not built. It has 31 tasks, no migration, no <code>mcp_server.py</code> edit and no UI. If
+      you approve it, the night builds it. One residual is left open by design, and it is yours for
+      later: a follow-on can take either a no-migration run-end delivery, which closes 2 of the 3
+      remaining routes, or a receipt stamp, which needs a migration and closes all three (§4.3, D5).
+    </li>
+    <li id="d2">
+      <strong><code>F352-free</code>: which holdings make an agent unavailable to a flow.</strong>
+      This is a shipped requirement (<code>agent-flows</code>, <em>"resolves a reviewer by
+      declaration, then by availability"</em>). It rests on your pile-up objection (loop-becomes-a-flow
+      D4). R1 set five options against LoopEngine's real holdings, in
+      <code>openspec/changes/an-unstaffed-review-names-its-holders/proposal.md</code>, under
+      <em>OPERATOR QUESTION</em>. It recommends <strong>(d)</strong>: a review asks whether the agent
+      is running or already reviewing, and new work keeps the full rule. The answer needs a spec loop
+      of its own. <code>F352</code> stays open until then.
+    </li>
+    <li id="d3">
+      <strong><code>F352-split</code>: build the <code>F353</code> half now?</strong> The review
+      stopped the change, and it recommends a split that the window did not make on its own authority.
+      Move the <code>F353</code> half into a change of its own: the refusals' remedies,
+      <code>F334</code>'s wording, <code>F365</code>'s once-per-task record, and the
+      <code>error_summary</code> fit that <code>F367</code> needs (D4 and D5; tasks 2.5, 2.5b, 2.12,
+      2.13, groups 3 and 4). Give it one verification round, then build it. The rung-3 naming (D1–D3,
+      D6) waits for decision 2, because its sentence is written against option (e). Approve the split,
+      or leave the whole change for decision 2.
+    </li>
+    <li id="d4">
+      <strong><code>F332-rule</code> is still OPEN</strong>, carried from the 2026-09-13 night.
+      <code>a-quote-can-spell-a-slash</code> is approved, but its §2 decode rule opens a Windows
+      escape. Mark it <code>REVISING</code>, or decide the correction. Today did not take it up, as
+      <code>DIRECTION.md</code> said.
+    </li>
+    <li id="d5">
+      <strong>The eleven improvement briefs (§4b).</strong> Each ends in one line saying what approving
+      it means. None is specced.
+    </li>
+    <li id="d6">
+      <strong>Research candidate 3: should WAL plus a busy timeout become an <code>OPEN</code> row in
+      <code>DECISIONS.md</code>?</strong> LoopEngine lost 3 runs to the Hub's own <code>database is
+      locked</code> write (<code>F359</code>'s cause, and <code>F349</code>'s). That is the production
+      side of the lock regime the test suite rejects as a flake class. <code>grep WAL
+      DECISIONS.md</code> finds nothing, so the window did not raise it (§6).
+    </li>
+  </ol>
+</div>
+
+<!-- ============================== 1 ============================== -->
+<h2 id="s1"><span class="num">1</span>The branch, and what the merge gate did</h2>
+
+<table class="gate">
+  <tbody>
+    <tr><th>Branch</th><td><code>autonomous/2026-09-14-daily</code>, cut this morning from the new
+      <code>master</code> (<code>f28bc31</code>). It spans <strong>one day</strong>. At
+      <code>b01d3ca</code>, before this page's commit, it was <strong>28 commits</strong> ahead of
+      <code>master</code>: 63 files, +13278 −95. That is mostly <code>openspec/</code>, the
+      observations and the ledger. <code>hub/hub</code> accounts for 11 files, +769 −41, all of it
+      <code>F355</code>.</td></tr>
+    <tr><th>Merge gate</th><td><strong>Landed.</strong> <code>master</code> was fast-forwarded
+      <code>ab7cf72..f28bc31</code> (33 commits: the 2026-09-12 cycle through the 2026-09-14 arming)
+      with <code>git merge --ff-only</code>, and pushed.</td></tr>
+    <tr><th>Condition 3 (CI)</th><td>CI run <code>34820095120</code> for <code>f28bc31</code>.
+      Attempt 1 failed in <code>hub-test</code> only, with 4233 passed, 1 error and no
+      <code>FAILED</code> lines. The error was <code>F292</code>: <code>database is locked</code> on
+      <code>BEGIN IMMEDIATE</code> during the setup of
+      <code>test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer</code>.
+      It was re-run once with <code>gh run rerun --failed</code>, as the 2026-09-13 allowance permits.
+      Attempt 2 succeeded (<code>hub-test</code> job <code>103903497503</code>).</td></tr>
+    <tr><th>Conditions 1, 2, 4</th><td>All held: <code>HEAD..master</code> was 0, the tree was clean,
+      <code>HEAD == @{u}</code>, and there was no <code>HOLD MERGE</code>.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================== 2 ============================== -->
+<h2 id="s2"><span class="num">2</span>What the night built</h2>
+
+<p>
+  <strong>Nothing, so there was nothing to drive.</strong> The 2026-09-13 night closed at 23:42
+  (<code>f509c6f</code>). It stopped <code>F332</code>'s §2 before committing any product code,
+  because the approved decode rule opens a Windows escape (<code>b1fbd5a</code>). That is
+  <code>OPEN F332-rule</code> (decision 4). Its only product commit, <code>1ebff15</code>, adds
+  tests only. Today's <code>DIRECTION.md</code> dropped <code>D-1</code> for this reason.
+</p>
+
+<!-- ============================== 3 ============================== -->
+<h2 id="s3"><span class="num">3</span>The LoopEngine review</h2>
+
+<p>
+  <strong>What happened.</strong> LoopEngine (<code>proj-03b9c6a6c37a</code>) ran unattended from
+  2026-09-12 20:39 into this morning. It had four agents: <code>Architect</code> (Opus 5, the only
+  one with a charter), <code>tester</code> (Opus 5), and <code>dev</code> and <code>dev_2</code>
+  (Sonnet 5). Totals: <strong>277 runs</strong> (205 completed, 72 failed), 50 tasks, 79 evidence
+  rows and 192 peer messages, for <strong>$281.75</strong> API-equivalent. <code>dev</code>
+  accounted for $114.21 of that, 98% of it cache reads on sessions that grew from ~45 k to 547 k of
+  context.
+</p>
+<p>
+  The Hub made things worse at several seams:
+</p>
+<ul>
+  <li>It re-spawned into an exhausted provider allowance three times, then gave up the input.</li>
+  <li>The workspace guard refused 262 commands, 85 of them the agent's own tool-result spill
+    file.</li>
+  <li>It recorded <code>review_unstaffed</code> 243 times, 180 of them <code>F352</code>'s
+    shape.</li>
+  <li>20 peer messages sat hop-suspended for up to ~13 h.</li>
+  <li>3 runs died on the Hub's own <code>database is locked</code> insert.</li>
+  <li>7 of 14 checkpoint probes failed.</li>
+</ul>
+<p>
+  The agents themselves did real work. <code>tester</code> accepted 34 and rejected 34, with a
+  median reason of ~1,160 characters. The project has been stalled on <code>F352</code> since
+  07:02. You decided at ~14:50 to leave it parked.
+</p>
+
+<dl class="kv">
+  <dt>Fixes</dt><dd><strong>14</strong>. O-3 sorted 13, and I-1 added <code>F302</code>. New
+    findings <code>F355</code>–<code>F364</code>, plus dated notes on <code>F47</code>,
+    <code>F349</code>, <code>F352</code> and <code>F353</code>. The rounds filed another five:
+    <code>F365</code>–<code>F369</code>.</dd>
+  <dt>Improvements</dt><dd><strong>11</strong>, each briefed (§4b).</dd>
+  <dt>Not AgentWeave's</dt><dd><strong>8</strong>: LoopEngine's own code, the <code>sketch</code>
+    rigor you set, the loop with no stop time, 8 overnight questions you were away for, the
+    provider's limits themselves, and three items the product already refused clearly.</dd>
+  <dt>Not sorted</dt><dd><strong>4</strong>, each with no mechanism confirmed: the Windows worktree
+    release <code>Permission denied</code>, the missing spec-turn notice on 24 of 31 operator turns,
+    the harness's own-directory bypass, and 72 unresolved divergences.</dd>
+</dl>
+<p class="small">
+  Full record: <code>spec-queue/observations/2026-09-14-LoopEngine.md</code>. Every fix's mechanism
+  was confirmed at <code>f28bc31</code>'s tree, with the <code>file:line</code> in its ledger entry.
+  The database was only ever opened <code>mode=ro</code>. Your own turn text was not read.
+</p>
+
+<!-- ============================== 4 ============================== -->
+<h2 id="s4"><span class="num">4</span>The fix changes</h2>
+
+<p>
+  The build-day queue took the fixes in severity order: <code>F352</code> (A) first, then
+  <code>F355</code>, then <code>F356</code>. Three changes, in the time from 11:05 to 18:10.
+  <code>F355</code> alone took ten iterations (12:25–17:20), because its build and its two-part drive
+  are what a build day is for. The other eleven fixes were not reached (§4.4).
+</p>
+
+<!-- 4.1 -->
+<h3>4.1 <code>a-spent-allowance-holds-the-queue</code> — <code>F355</code> <span class="sev b">B</span> <span class="pill driven">built · driven · archived</span></h3>
+
+<p>
+  <strong>The problem.</strong> A provider refused a turn at its session limit. The Hub counted that
+  as a delivery failure and re-delivered twice, about 10 s apart, into the same exhausted allowance.
+  Then it gave the input up: <em>"delivery failed 3 times; the Hub stopped retrying"</em>. On
+  LoopEngine, 25 entries were withdrawn this way, a review among them, and the <code>*/5</code> job
+  kept re-queuing into the wall.
+</p>
+<p>
+  <strong>The argument.</strong> A refusal is recognisable from what the Hub already records. Read
+  <code>mode=ro</code>, 69 of 69 session-limit runs carry <code>turn_usage.allowance</code> status
+  <code>rejected</code> with an epoch <code>resetsAt</code>, and 0 of 205 completed runs do. So the
+  change works like this:
+</p>
+<ul>
+  <li>A refused turn is not counted, its session is kept, and its input is never withdrawn.</li>
+  <li>The agent is <em>held</em>. The hold is derived from its newest informative usage row, with a
+    60 s floor.</li>
+  <li>New operator input probes the allowance once.</li>
+  <li>A date job wakes the agent at the reset.</li>
+  <li>The loop's busy guard answers <em>held</em>, and plain jobs coalesce.</li>
+</ul>
+<p>
+  <strong>What each round changed.</strong>
+</p>
+<ul>
+  <li><strong>R2</strong> found that flows did not inherit the hold: <code>decide_firing</code>
+    re-briefed a held assignee every tick. It armed the wake at every refusal's run end, not only
+    failed ones, and it filed <code>F368</code>.</li>
+  <li><strong>R3</strong> found that R2's repair made a held assignee's task read as in flight on its
+    assignment alone. That breaches a shipped <code>agent-loops</code> requirement. It also added D11:
+    pressing Run on a held loop answered <em>"already being worked … nothing is wrong"</em> or a 500.
+    That is <code>F127</code>, now retired.</li>
+  <li><strong>The review</strong> said proceed. It restored a shipped <code>agent-loops</code>
+    sentence that R3 had made false for every flow. It gave the board the guard's reason instead of
+    <em>"stalled: no claimable task"</em> for the length of a hold. It closed a race in D11:
+    <code>F369</code>, filed and retired.</li>
+</ul>
+
+<dl class="kv">
+  <dt>Built</dt><dd><code>98385cd</code>, <code>e1eca5b</code> and <code>c8e3bbd</code>. The gate
+    commit is <code>b5b6baf</code>: <code>hub/tests</code> whole in 11 chunks, 4316 passed, 86
+    skipped, 16 xfailed; <code>tests/</code> 521 passed, 3 skipped; ruff, black and mypy clean;
+    <code>openspec validate --strict</code> valid. Mutation checks are recorded per task.</dd>
+  <dt>Driven</dt><dd>On a drive Hub at <code>127.0.0.1:8013</code>, fresh
+    <code>profiles/drive0914</code> at <code>0103</code>, Haiku for every real turn. Commits
+    <code>ac6bff6</code> (6.1–6.4) and <code>87b8d6a</code> (6.5–6.6). The drive showed:
+    <ul>
+      <li>a refused run left its entry queued with 0 attempts and 1 refusal;</li>
+      <li>the status route named the hold and its reset time;</li>
+      <li>a job's Run queued without spawning, and a second Run was coalesced with a 409;</li>
+      <li>at the reset, to the second, an unprompted turn resumed the same session with
+        <em>"delivery attempt 2"</em>;</li>
+      <li>a fresh refusal took exactly one probe;</li>
+      <li>a <code>*/1</code> loop on a held agent wrote nothing while nobody else was free, and its
+        Run answered 409, naming the hold;</li>
+      <li>with a free peer, it queued exactly one briefing and then stayed quiet.</li>
+    </ul>
+  </dd>
+  <dt>Caveat</dt><dd><strong>The refusal came from a stub <code>claude</code></strong>
+    (<code>scripts/drive/f355_refusing_claude_stub.cs</code>), not from the provider. A real
+    session-limit wall has not been driven through this build.</dd>
+  <dt>Archived</dt><dd><code>4b362f3</code>, as <code>archive/2026-09-14-a-spent-allowance-holds-the-queue</code>:
+    +4 new and ~4 modified requirements across <code>agent-conversation-workspace</code>,
+    <code>agent-flows</code> and <code>agent-loops</code>, every block verbatim; 43 of 43 specs
+    strict-valid. Retired <code>F355</code>, <code>F127</code> and <code>F369</code> with
+    <code>fixed c8e3bbd</code>. <code>F128</code> has a note.</dd>
+  <dt>Migration</dt><dd><strong><code>0103_allowance_refusals</code></strong> — see the box at the
+    top.</dd>
+  <dt>UI bundle</dt><dd>None.</dd>
+</dl>
+<div class="note">
+  <strong>Carried to <code>F352</code>'s change.</strong> The stopped change
+  <code>an-unstaffed-review-names-its-holders</code> rewrites the rung-3 sentence. Because it was not
+  built first, its rewrite must carry this change's hold clause: <em>"waiting for its provider's
+  usage limit to reset, "</em>, which is +49 characters. The default rung-3 sentence measures 250
+  characters with it and 201 without.
+</div>
+
+<!-- 4.2 -->
+<h3>4.2 <code>an-unstaffed-review-names-its-holders</code> — <code>F352</code> <span class="sev a">A</span> + <code>F353</code> + <code>F334</code> + <code>F365</code> <span class="pill fail">stopped at review · unbuilt</span></h3>
+
+<p>
+  <strong>The problem.</strong> A flow counts an agent as busy if it holds any live task anywhere in
+  the project. So its reviews starved while every agent held something. That is 180 stalls on
+  LoopEngine, and 498 consecutive no-staff ticks since 07:02. The sentence it records names nobody
+  and no way out. The refusals an agent then hits (<code>F353</code>) say <em>"clear the
+  assignee"</em>, with no control that can do it.
+</p>
+<p>
+  <strong>The argument.</strong> The change splits <code>F352</code> into its visibility half, which
+  it builds, and its <em>definition of free</em>, which it does not. The rung-3 sentence names every
+  roster agent and what excludes it: <em>excluded</em>, <em>no runner</em>, <em>holds &lt;id&gt;
+  (&lt;status&gt;)</em> or <em>running</em>. It stays within the 500-character bound of the job
+  history. The remedy is chosen by status. The definition of free is a shipped requirement resting on
+  your pile-up objection, so R1 wrote it up as an <strong>operator question</strong> (decision 2).
+  Today's <code>DIRECTION.md</code> says a change with such a question stops after its review.
+</p>
+<p><strong>What each round changed.</strong></p>
+<ul>
+  <li><strong>R1</strong> found that <code>JobRunResponse.error_summary</code> is capped at 500, so a
+    long reason would 500 <code>GET /jobs/{id}/history</code>. It filed <code>F365</code>: 347 of 357
+    <code>review_unstaffed</code> records repeat, because <em>"unchanged"</em> is judged against the
+    loop's newest record, not the task's. Research candidate 1 reached the same point independently.
+    It also filed <code>F366</code>.</li>
+  <li><strong>R2</strong> found that an <em>existing</em> reason can already pass 500 characters, and
+    filed <code>F367</code>. It moved the fit onto the model. It fixed five disagreements, one of
+    which matters most: the <em>completed</em> remedy promised an approval that the land gate
+    refuses.</li>
+  <li><strong>R3</strong> found that R2's <em>"at least one agent is always named"</em> was false.
+    Task ids are caller-chosen up to 64 characters, so three of them overflow the budget. The fix
+    retries with fewer named tasks. R3 measured <code>@validates</code> on the real model.</li>
+  <li><strong>The review</strong> gave a split verdict and took the stop. It fixed four
+    defects:
+    <ul>
+      <li>the operator remedy (an assignee-and-status PATCH) queues no turn, so in a flow it makes
+        <code>F154</code>'s wedge; it now names <code>POST /agent/trigger</code> with
+        <code>review_task_id</code>;</li>
+      <li><em>"None of your tools changes who holds a task"</em> was false, because
+        <code>create_task</code> takes an assignee;</li>
+      <li>the guard sentence overflowed, at 534–583 characters;</li>
+      <li><code>revision_needed</code> and <code>rejected</code> had no remedy.</li>
+    </ul>
+  </li>
+</ul>
+<dl class="kv">
+  <dt>Cost</dt><dd>40 tasks, 0 ticked. No migration and no UI. It does not need
+    <code>mcp_server.py</code>.</dd>
+  <dt>Commits</dt><dd><code>e8ea490</code> (R1), <code>fb469e2</code> (R2), <code>82b58df</code>
+    (R3), <code>e9f4cea</code> (review).</dd>
+  <dt>Why unbuilt</dt><dd>The stop clause in <code>DIRECTION.md</code>. It waits on decisions 2 and
+    3.</dd>
+</dl>
+
+<!-- 4.3 -->
+<h3>4.3 <code>a-late-answer-is-delivered</code> — <code>F356</code> <span class="sev b">B</span> <span class="pill tested">specced through review · not built</span></h3>
+
+<p>
+  <strong>The problem.</strong> An answer to <code>ask_user</code> can arrive after the tool's wait
+  has ended but while the asking run still lives. No later prompt carries it, and nothing calls
+  <code>get_answer</code> for it, so it reaches nobody. <strong>The ledger was corrected on the way,
+  by a <code>mode=ro</code> read:</strong> only 1 of <code>F356</code>'s three batches was lost
+  (09-13 14:38). The 23:26 and 16:50 batches were delivered by the shipped run-has-ended path.
+</p>
+<p>
+  <strong>The argument.</strong> <em>Still waiting</em> becomes: blocking, <code>wait_ended_at IS
+  NULL</code>, and the run live. That is the tool's own report, not <code>wait_expires_at</code>,
+  because the tool polls about 2 s past the Hub's deadline. The expiry report delivers an answer that
+  landed after the tool's last poll, once per batch. Both writers decide after commit, so the worst
+  case is a duplicate, never a loss. There is no receipt stamp (D5), so a residual is named and left
+  to you.
+</p>
+<p><strong>What each round changed.</strong></p>
+<ul>
+  <li><strong>R2</strong> found that the report could still lose an answer that committed between
+    its load and its write. Both writers declined, so the report now takes its keys from the rows it
+    stamped, re-read after commit (task 2.9). It found a pre-existing race that put
+    <code>wait_ended_at</code> on a declined row, closed with a guarded <code>UPDATE … AND declined
+    IS FALSE</code> (task 2.8). It corrected D5's cost.</li>
+  <li><strong>R3</strong> measured R2's fix on aiosqlite with the real <code>Question</code> model.
+    The guard gives rowcount 0 on a mid-report decline. But the default
+    <code>synchronize_session</code> still stamps the loaded object, so
+    <code>synchronize_session=False</code> is required, and only <code>populate_existing</code> makes
+    the re-read fresh. It collapsed the report to one decision point, because two of R2's mutations
+    could not fire. The run-end sweep is a second writer with the same race, so both writers now go
+    through one helper (task 2.10). D5 was kept, with a three-route table.</li>
+  <li><strong>The review</strong> (Opus) did not stop the change. It found:
+    <ul>
+      <li>a <em>fourth</em> loss that R1–R3 missed: when a sibling is declined mid-report,
+        <code>_completed_batch</code> judges on stale identity-map rows, and both writers decline
+        (task 2.11);</li>
+      <li>a trap in the sweep rewrite that would park a declined question's task (2.10);</li>
+      <li>that the comment <em>"a declined question never carries <code>wait_ended_at</code>"</em> is
+        false in shipped code (task 1.6, comments only; the guard stays).</li>
+    </ul>
+  </li>
+</ul>
+<dl class="kv">
+  <dt>Cost</dt><dd>31 tasks, 0 ticked. No migration, no <code>mcp_server.py</code> edit, no
+    UI.</dd>
+  <dt>Commits</dt><dd><code>3fb17ad</code> (R1), <code>9240fde</code> (R2), <code>9e78e9c</code>
+    (R3), <code>b01d3ca</code> (review).</dd>
+  <dt>Why unbuilt</dt><dd>Time. The review finished at 18:10, and this page holds the rest of the
+    window. It gets an <code>APPROVALS</code> row.</dd>
+  <dt>Residual (D5)</dt><dd>Three routes stay open, each a lost answer:
+    <ol>
+      <li>the tool's report is lost, or its write rolls back, and the answer lands later in the
+        run's life;</li>
+      <li>the timeout is lengthened mid-run, so the report is refused;</li>
+      <li>an answer arrives in time, but the run dies before the tool's next poll. This one is
+        pre-existing.</li>
+    </ol>
+    A fourth, the runner's MCP client abandoning the call (Codex), is read, not measured. A
+    no-migration run-end delivery closes routes 1 and 2 and duplicates an answer inside the ~2 s
+    grace window. Only a receipt stamp, which needs a migration, closes all three. That follow-on is
+    your choice (design.md, Round 3 table).</dd>
+</dl>
+
+<!-- 4.4 -->
+<h3>4.4 Not reached today</h3>
+<p>
+  Each of these has an item in <code>STATE-day.json</code>'s queue, and none has a change directory:
+</p>
+<ul>
+  <li><code>F357</code> <span class="sev b">B</span>: the review briefing says nothing about the
+    evidence gate.</li>
+  <li><code>F358</code> <span class="sev b">B</span>: evidence can be decided while its recording
+    run is live.</li>
+  <li><code>F359</code> <span class="sev b">B</span>: a run killed by the Hub's own write is not
+    snapshotted.</li>
+  <li><code>F360</code> <span class="sev b">B</span>: the probe's <em>"assigned to this agent"</em>
+    rule.</li>
+  <li><code>F361</code> <span class="sev b">B</span>: a hop-suspended message says it was sent.</li>
+  <li><code>F347</code> <span class="sev b">B</span>: its verdict is given.</li>
+  <li><code>F302</code> <span class="sev b">B</span>: its verdict is given.</li>
+  <li><code>F362</code> <span class="sev b">B</span> and <code>F363</code>
+    <span class="sev b">B</span>: spec-only on a build day, because both need
+    <code>mcp_server.py</code>.</li>
+  <li><code>F364</code> <span class="sev c">C</span>.</li>
+  <li><code>F47</code> <span class="sev c">C</span>.</li>
+</ul>
+<p>
+  <strong><code>F327</code>'s fallback loop did not run</strong>, because the fix queue never emptied.
+  The access-path exploration belongs to <em>Carried</em>'s plan, not to today's.
+</p>
+
+<!-- ============================== 4b ============================== -->
+<h2 id="s4b"><span class="num">4b</span>The improvements — briefs only</h2>
+<p class="small">
+  Each is a page in <code>openspec/explorations/2026-09-14-&lt;slug&gt;.md</code>, with no change
+  directory and no tasks. They are listed most useful first. The decision line is each brief's own.
+</p>
+<table>
+  <thead><tr><th>Brief</th><th>What approving it means</th></tr></thead>
+  <tbody>
+    <tr><td><code>rework-in-a-fresh-session</code><br><span class="small">dev's $114: rework resumes
+      the author's growing session</span></td><td>A spec loop, after F360 and F364 are built, for
+      <em>an autonomous turn does not resume a session past a cost threshold</em>. R1 starts by
+      replaying <code>dev</code>'s sessions to measure what it would have saved.</td></tr>
+    <tr><td><code>agents-can-retire-their-own-work</code></td><td>A spec loop for <em>an author can
+      withdraw its own awaiting evidence</em> (it needs a migration). Decide separately whether an
+      agent may close a superseded task or only ask you to. It runs on a day that allows
+      <code>mcp_server.py</code> edits (after F354).</td></tr>
+    <tr><td><code>a-review-can-wait-on-the-operator</code></td><td>A spec loop, after f352 and f356
+      are built, for <em>an agent can declare that work waits on the operator, and the flow says
+      so</em>. Choose between a flag and a new lifecycle edge when R1 lays them out. The wait is
+      declared, not detected from prose.</td></tr>
+    <tr><td><code>requests-that-name-another-task</code></td><td>A spec loop for part 1, <em>a message
+      that names a task does not bind a recipient who does not hold it</em>, which is buildable
+      without <code>mcp_server.py</code>. Parts 2 and 3 are held for a day after F354.</td></tr>
+    <tr><td><code>the-first-turn-has-its-tools</code></td><td>Queue F302's decided wording as a fix
+      on the next build day. Approve a spec loop for <em>a session is told when the tools it was not
+      told of are present</em>, run with F302's build or after F340 is decided.</td></tr>
+    <tr><td><code>the-transition-model-agents-are-told</code></td><td>A spec loop, after f357 is
+      built, for <em>a turn is told the transitions it may take, rendered from the table the Hub
+      enforces</em>. The briefing half needs no <code>mcp_server.py</code>.</td></tr>
+    <tr><td><code>a-peer-can-see-the-answer</code></td><td>A spec loop, after f356 is built, for
+      <em>an answer to a question about a task reaches the agents on that task</em>. You choose
+      whether such answers are shared by default.</td></tr>
+    <tr><td><code>project-notes-inside-the-product</code></td><td>A spec loop, after F354, for
+      <em>agents keep project notes in the Hub, visible to and editable by you, rendered into every
+      turn</em>. You choose whether a note needs approval first.</td></tr>
+    <tr><td><code>peer-threads-that-only-acknowledge</code></td><td>A spec loop for part 1, <em>the
+      briefing states what a message costs and shows the hop budget</em>, which needs no
+      <code>mcp_server.py</code>. Part 2, a notice that does not wake, is held for after F354.</td></tr>
+    <tr><td><code>background-work-ends-with-the-turn</code></td><td>A spec loop for part 1, <em>the
+      briefing says background work ends with the turn</em>, which is small. Part 2, recording a
+      turn's leftover processes, joins only if R1 finds the Windows descendant walk solid.</td></tr>
+    <tr><td><code>localhost-for-the-thing-under-test</code></td><td>First decide whether the default
+      posture may ever reach a loopback port. If it may, a spec loop after F354 for <em>a per-project
+      list of loopback ports agents may call</em>, taken with F322.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================== 5 ============================== -->
+<h2 id="s5"><span class="num">5</span>What the night does if you approve nothing</h2>
+<p>
+  Once this page's <code>APPROVALS.md</code> section exists, it is the newest, so the 2026-09-13
+  section becomes history. That includes its <code>APPROVED a-quote-can-spell-a-slash</code> and its
+  <code>ORDER:</code>. With no token today, the night falls to <code>night-window.md</code>'s default
+  queue. Walked against today's tree:
+</p>
+<ol>
+  <li><strong>Confirm the tree is green.</strong> <code>F292</code> and <code>F314</code> are still
+    the known intermittents.</li>
+  <li><strong>Changes that only need archiving: none.</strong> <code>openspec/changes/</code> holds
+    three, and none is built:
+    <ul>
+      <li><code>a-quote-can-spell-a-slash</code>, 3 of 30 ticked, stopped on
+        <code>F332-rule</code>;</li>
+      <li><code>an-unstaffed-review-names-its-holders</code>, 0 of 40;</li>
+      <li><code>a-late-answer-is-delivered</code>, 0 of 31.</li>
+    </ul>
+  </li>
+  <li><strong>Open A findings</strong>, as <code>classify_findings.py</code> reads them now: five,
+    plus the <code>F52</code> conflict. None of the five is buildable tonight:
+    <ul>
+      <li><code>F299</code>: its change was rejected, and the access path is an open question;</li>
+      <li><code>F301</code>: no proposal;</li>
+      <li><code>F325</code>: Codex, which is undrivable;</li>
+      <li><code>F332</code>: the rule is OPEN;</li>
+      <li><code>F352</code>: its change stopped on your question.</li>
+    </ul>
+  </li>
+  <li><strong>Then open B, then <code>APPROVED</code> rows.</strong> There are no approved rows.
+    <code>F356</code>'s change is unapproved, and the other open B fixes from today have no
+    proposal.</li>
+</ol>
+<p>
+  <strong>So an unapproved night lands no feature.</strong> Approving
+  <code>a-late-answer-is-delivered</code> gives the night one change of 31 tasks with no migration,
+  which fits one night. Approving <code>F352-split</code> gives the night nothing: the split needs a
+  new change and its verification round first, which is day-window work unless you say otherwise.
+  <code>ORDER:</code> and <code>NOTHING TONIGHT</code> are both available.
+</p>
+
+<!-- ============================== 6 ============================== -->
+<h2 id="s6"><span class="num">6</span>The research, briefly</h2>
+<p class="small">
+  <code>spec-queue/research/2026-09-14.md</code> was delivered at 07:33. It was built around today's
+  fix list. Claude Code is still v2.1.270 upstream, and v2.1.269 is installed. SEP-2640 (MCP Skills)
+  merged as Final on 2026-09-13.
+</p>
+<ol>
+  <li><strong>F352's dedup is scoped to the loop, not the task.</strong> Fix that before making the
+    sentence name the holdings. <em>For AgentWeave:</em> this became <code>F365</code>, measured
+    independently by R1 (347 of 357 records repeat), and is in the stopped change's F353 half. The
+    split in decision 3 would build it.</li>
+  <li><strong>Pin the tool server by content, and serve both halves of the tool surface from the
+    same bytes</strong> (<code>F354</code>). <em>For AgentWeave:</em> this is what would let a build
+    day edit <code>mcp_server.py</code>. Two of today's fixes (<code>F362</code>, <code>F363</code>)
+    and five of the briefs, in whole or in part, wait on it, and today no record says which approver bytes judged a live
+    turn. Not taken up today.</li>
+  <li><strong>Production SQLite runs the lock regime the test suite rejects</strong>: the rollback
+    journal with a 5 s timeout, against the suite's WAL with 30 s. <em>For AgentWeave:</em> LoopEngine
+    lost 3 runs to it, so this is a product defect, not a flake class. It is decision 6.</li>
+  <li><strong>A stopped, interrupted or failed Claude turn spends tokens that no budget sees</strong>,
+    and the harness transcript holds them exactly (summed by <code>message.id</code>, it matched the
+    <code>result</code> line on one Haiku turn). <em>For AgentWeave:</em> LoopEngine has 67 runs at 0
+    tokens and 3 marked <code>unavailable</code>, and the budget brake reads measured rows only. With
+    the weekly window now a real limit (your ~14:50 decision), this is the cost you cannot see yet.
+    No proposal.</li>
+</ol>
+
+<div class="note">
+  <strong>Two reminders for this evening's session</strong>
+  <ul>
+    <li><code>DIRECTION.md</code> has <strong>no section for 2026-09-15</strong> yet. The plan under
+      <em>Carried</em> (F327, F215, the access-path exploration) needs one. It is also worth deciding
+      how the eleven fixes left in today's queue (§4.4) are ordered against it.</li>
+    <li><strong><code>F332-rule</code> is still OPEN</strong> (decision 4).</li>
+  </ul>
+</div>
+
+<footer class="page">
+  Written by the FILL window at iteration 26, 2026-09-14 ~18:25 +01:00, at <code>b01d3ca</code> on
+  <code>autonomous/2026-09-14-daily</code>. Sources: <code>.claude/autonomous/2026-09-14-day-log.md</code>
+  iterations 1–25, <code>STATE-day.json</code>, <code>spec-queue/observations/2026-09-14-LoopEngine.md</code>,
+  <code>openspec/changes/</code>, <code>openspec/changes/archive/2026-09-14-a-spent-allowance-holds-the-queue/</code>,
+  <code>spec-queue/research/2026-09-14.md</code> and <code>spec-queue/DECISIONS.md</code>. The rows in
+  <code>APPROVALS.md</code> carry no status token; that is yours to write.
+</footer>
+
+</div>
+</body>
+</html>

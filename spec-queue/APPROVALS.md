@@ -16,6 +16,72 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-14
+
+Written by the FILL window, 2026-09-14, from `review/review-2026-09-14.html`. **No status token is
+supplied below. That is the operator's to write.** A row with no token is not an approval, and the
+FIX window builds nothing from it.
+
+**Built and archived today, so no row:** `a-spent-allowance-holds-the-queue` (F355, B). The build
+day's authority is `DECISIONS.md` `### 2026-09-14 — a day that reads LoopEngine and builds what it
+finds`. Built `98385cd`/`e1eca5b`/`c8e3bbd`, gated `b5b6baf`, driven `ac6bff6` + `87b8d6a` with a
+stub `claude` standing in for the provider's refusal, archived `4b362f3`. F355, F127 and F369 are
+retired. **It adds migration `0103_allowance_refusals`.** Because `:8000` runs this checkout, the
+operator's next restart of it applies `0103` to their real database, merged or not. There is no UI
+bundle and no `mcp_server.py` edit.
+
+**Note for whoever reads this at 23:00:** this section is now the newest, so the 2026-09-13 section
+below is history. Its `APPROVED a-quote-can-spell-a-slash` and its `ORDER:` are no longer
+instructions. That change is stopped on `OPEN F332-rule` in any case (3 of 30 tasks ticked). If the
+operator wants it built after deciding the rule, the token has to be written again here. There is
+deliberately **no `ORDER:` line**. Section 5 of the page walks the default queue: nothing to archive,
+and none of the five open A findings is buildable (F299 rejected, F301 no proposal, F325 Codex, F332
+rule open, F352 stopped on an operator question). **An unapproved night lands no feature.**
+
+`a-late-answer-is-delivered` — F356 (B). An answer to `ask_user` that arrives after the tool's wait
+ended, while the asking run lives, is delivered as a queued turn. *Still waiting* reads
+`wait_ended_at`, the tool's own report. The expiry report delivers an answer that landed after the
+tool's last poll, and both writers decide after commit, so the worst case is a duplicate, never a
+loss. Specced R1 `3fb17ad`, R2 `9240fde`, R3 `9e78e9c`, and the Opus review `b01d3ca` (**no stop**).
+Every round changed it:
+- R2 found a mid-report loss and a pre-existing decline race (tasks 2.8, 2.9).
+- R3 measured the guarded `UPDATE` on aiosqlite (it needs `synchronize_session=False` and
+  `populate_existing`), and put both writers through one helper (2.10).
+- The review found a fourth loss, a sibling declined mid-report (2.11), and corrected comments that
+  are false in shipped code (1.6).
+
+**31 tasks, 0 ticked. No migration, no `mcp_server.py` edit, no UI.** It was not built only because
+time ran out. The measured ledger correction: only 1 of F356's 3 batches was lost (09-13 14:38). D5
+leaves a named residual of three routes. Whether a follow-on closes it without a migration (routes 1
+and 2, with a ~2 s grace-window duplicate) or with a receipt stamp (all three) is the operator's
+later choice, and does not block this row.
+
+`an-unstaffed-review-names-its-holders` — F352 (A) + F353 + F334 + F365. **Stopped at its review
+and unbuilt, under `DIRECTION.md`'s stop clause.** R1 wrote an OPERATOR QUESTION at the top of
+`proposal.md`: which holdings make an agent unavailable to a flow. There are five options, and it
+recommends (d). R1 `e8ea490`, R2 `fb469e2`, R3 `82b58df`, review `e9f4cea`. 40 tasks, 0 ticked, no
+migration, no UI, no `mcp_server.py`. **An `APPROVED` token here does not build it as it stands.**
+It needs one of two answers first, both carried in `STATE-day.json` `decisions_for_user`:
+- **F352-free**, the operator question itself. Its answer needs its own spec loop.
+- **F352-split**, the review's recommendation. Move the F353 half (D4 + D5: the refusals' remedies,
+  F334's wording, F365's once-per-task record, and the `error_summary` fit F367 needs) into its own
+  change, give it one verification round, and build it. That is day-window work before any night
+  can take it. The rung-3 naming waits for F352-free.
+
+The stopped change's rung-3 rewrite must also carry `a-spent-allowance-holds-the-queue`'s hold
+clause, which is +49 characters (250 with it, 201 without).
+
+**Also on the page, and wanting no row:** the eleven improvement briefs
+(`openspec/explorations/2026-09-14-*.md`), each ending in its own decision line; research candidate
+3 (whether WAL plus a busy timeout becomes an `OPEN` row in `DECISIONS.md`); and the eleven fixes
+not reached today (F357–F364, F347, F302, F47), which have no change directories. **Two evening
+reminders:** `DIRECTION.md` has no `## 2026-09-15` section yet, and the *Carried* plan needs one;
+`F332-rule` is still OPEN.
+
+`ORDER:` and `NOTHING TONIGHT` are both available.
+
+---
+
 ## 2026-09-13
 
 Written by the FILL window, 2026-09-13, from `review/review-2026-09-13.html`. **No status token is

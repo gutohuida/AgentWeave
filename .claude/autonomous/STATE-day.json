@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 25,
+    "iteration": 26,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d5",
-    "next_action": "Do d5 (review page), whatever is open - see d5's detail. It is the reserved last item: the next firing starts at or after 18:15 local and within 45 min of stop_at 19:00. f356-impl/f356-drive are not reachable this window; a-late-answer-is-delivered is specced through REV and gets an APPROVALS row. After d5, set next_action to JSON null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -155,411 +155,411 @@
         },
         {
             "id": "f356-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f356-IMPL: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
-            "detail": "Step IMPL of f356: implement per night-window.md 'Implementing' (may span firings). NOT REACHED this window (iteration 25): d5 holds the remaining time; the change is specced through REV, unbuilt."
+            "detail": "Step IMPL of f356: implement per night-window.md 'Implementing' (may span firings). NOT REACHED this window (iteration 25): d5 holds the remaining time; the change is specced through REV, unbuilt. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f356-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f356-DRIVE: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
-            "detail": "Step DRIVE of f356: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED this window (iteration 25): d5 holds the remaining time; the change is specced through REV, unbuilt."
+            "detail": "Step DRIVE of f356: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED this window (iteration 25): d5 holds the remaining time; the change is specced through REV, unbuilt. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f357-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f357-R1: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
-            "detail": "scheduler.py:2065-2085 and agents.py:1642-1646 (both channels must agree - F45/F140); agents.py:1909-1913; resolve_reviewer 1043 ignores can_accept_evidence. Runs AFTER f352 (both touch resolve_reviewer) - re-read f352's diff first. Suggested name: a-reviewer-is-told-what-approval-needs. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "scheduler.py:2065-2085 and agents.py:1642-1646 (both channels must agree - F45/F140); agents.py:1909-1913; resolve_reviewer 1043 ignores can_accept_evidence. Runs AFTER f352 (both touch resolve_reviewer) - re-read f352's diff first. Suggested name: a-reviewer-is-told-what-approval-needs. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f357-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f357-R2: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
-            "detail": "Step R2 of f357: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f357: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f357-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f357-R3: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
-            "detail": "Step R3 of f357: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f357: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f357-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f357-REV: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
-            "detail": "Step REV of f357: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f357: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f357-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f357-IMPL: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
-            "detail": "Step IMPL of f357: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f357: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f357-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f357-DRIVE: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
-            "detail": "Step DRIVE of f357: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f357: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f358-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f358-R1: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
-            "detail": "requirement_evidence.py:677-737 decide has no liveness check; :146-152 remedy; restamp :894. The record_evidence description half (mcp_server.py:1727-1731) is NOT edited today - say so in the change. Suggested name: evidence-is-decided-after-its-turn. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "requirement_evidence.py:677-737 decide has no liveness check; :146-152 remedy; restamp :894. The record_evidence description half (mcp_server.py:1727-1731) is NOT edited today - say so in the change. Suggested name: evidence-is-decided-after-its-turn. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f358-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f358-R2: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
-            "detail": "Step R2 of f358: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f358: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f358-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f358-R3: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
-            "detail": "Step R3 of f358: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f358: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f358-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f358-REV: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
-            "detail": "Step REV of f358: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f358: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f358-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f358-IMPL: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
-            "detail": "Step IMPL of f358: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f358: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f358-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f358-DRIVE: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
-            "detail": "Step DRIVE of f358: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f358: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f359-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f359-R1: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
-            "detail": "agent_trigger.py:2190-2204 (unguarded record_agent_output in the read loop) -> :2461-2491 failure tail, vs :2248-2315 normal end. Open to R1: is the harness process stopped when the read loop raises. Suggested name: a-failed-run-keeps-its-work. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "agent_trigger.py:2190-2204 (unguarded record_agent_output in the read loop) -> :2461-2491 failure tail, vs :2248-2315 normal end. Open to R1: is the harness process stopped when the read loop raises. Suggested name: a-failed-run-keeps-its-work. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f359-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f359-R2: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
-            "detail": "Step R2 of f359: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f359: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f359-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f359-R3: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
-            "detail": "Step R3 of f359: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f359: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f359-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f359-REV: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
-            "detail": "Step REV of f359: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f359: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f359-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f359-IMPL: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
-            "detail": "Step IMPL of f359: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f359: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f359-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f359-DRIVE: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
-            "detail": "Step DRIVE of f359: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f359: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f360-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f360-R1: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
-            "detail": "checkpoint_generation.py:157 prompt rule, :385-399 grade, :627-630 fail, :336-345 successor warning; checkpoints.py:257-283, 375-378. Bump PROBE_PROMPT_VERSION if the prompt changes. Suggested name: the-probe-asks-what-the-checkpoint-says. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "checkpoint_generation.py:157 prompt rule, :385-399 grade, :627-630 fail, :336-345 successor warning; checkpoints.py:257-283, 375-378. Bump PROBE_PROMPT_VERSION if the prompt changes. Suggested name: the-probe-asks-what-the-checkpoint-says. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f360-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f360-R2: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
-            "detail": "Step R2 of f360: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f360: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f360-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f360-R3: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
-            "detail": "Step R3 of f360: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f360: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f360-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f360-REV: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
-            "detail": "Step REV of f360: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f360: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f360-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f360-IMPL: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
-            "detail": "Step IMPL of f360: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f360: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f360-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f360-DRIVE: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
-            "detail": "Step DRIVE of f360: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f360: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f361-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f361-R1: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
-            "detail": "messages.py:288-308; turn_scheduler.py:336-337/371-372 never write entry.waiting_reason (only :459). The sender's reply is built in mcp_server.py:244 - if the change needs that file it is specced R1..REV and left unbuilt; R1 decides whether the Hub-side half (entry reason, a MessageResponse field) stands alone. Check whether the UI shows suspension. Suggested name: a-suspended-message-says-so. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "messages.py:288-308; turn_scheduler.py:336-337/371-372 never write entry.waiting_reason (only :459). The sender's reply is built in mcp_server.py:244 - if the change needs that file it is specced R1..REV and left unbuilt; R1 decides whether the Hub-side half (entry reason, a MessageResponse field) stands alone. Check whether the UI shows suspension. Suggested name: a-suspended-message-says-so. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f361-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f361-R2: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
-            "detail": "Step R2 of f361: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f361: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f361-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f361-R3: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
-            "detail": "Step R3 of f361: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f361: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f361-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f361-REV: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
-            "detail": "Step REV of f361: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f361: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f361-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f361-IMPL: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
-            "detail": "Step IMPL of f361: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f361: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f361-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f361-DRIVE: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
-            "detail": "Step DRIVE of f361: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f361: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f347-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f347-R1: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
-            "detail": "VERDICT ALREADY GIVEN: option (a), DECISIONS.md '### F347, decided 2026-09-13 evening' - refuse with a sentence naming the repair, written in worktrees.py; no commit, no orphan branch. worktrees.py:361-362, :80; agent_trigger.py:970. Left to R1: the refusing pass should not hold the operator's message silently. Suggested name: an-unborn-repository-names-the-repair. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "VERDICT ALREADY GIVEN: option (a), DECISIONS.md '### F347, decided 2026-09-13 evening' - refuse with a sentence naming the repair, written in worktrees.py; no commit, no orphan branch. worktrees.py:361-362, :80; agent_trigger.py:970. Left to R1: the refusing pass should not hold the operator's message silently. Suggested name: an-unborn-repository-names-the-repair. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f347-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f347-R2: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
-            "detail": "Step R2 of f347: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f347: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f347-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f347-R3: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
-            "detail": "Step R3 of f347: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f347: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f347-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f347-REV: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
-            "detail": "Step REV of f347: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f347: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f347-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f347-IMPL: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
-            "detail": "Step IMPL of f347: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f347: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f347-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f347-DRIVE: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
-            "detail": "Step DRIVE of f347: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f347: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f302-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f302-R1: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
-            "detail": "VERDICT ALREADY GIVEN: DECISIONS.md '#### DAY-2 / F302 - the notice stops asserting, and does not start trusting' (2026-09-09): drop the sentence at launchability.py:392; do NOT grant the MCP rendering on trust. The no-grounds branch still describes the HTTP form and still does not claim tools (agent-capability-plane 'No grounds means no assertion'). Evidence: FINDINGS.md F302 incl. the 2026-09-14 note (the false line outlived its turn in a resumed session). The follow-up line for a resumed session is NOT in this fix - it is the-first-turn-has-its-tools brief's spec loop. Must not touch the open F299/F301/F339/F340 access-path question. Suggested name: the-no-grounds-notice-stops-denying. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the finding with 'fixed <sha>'."
+            "detail": "VERDICT ALREADY GIVEN: DECISIONS.md '#### DAY-2 / F302 - the notice stops asserting, and does not start trusting' (2026-09-09): drop the sentence at launchability.py:392; do NOT grant the MCP rendering on trust. The no-grounds branch still describes the HTTP form and still does not claim tools (agent-capability-plane 'No grounds means no assertion'). Evidence: FINDINGS.md F302 incl. the 2026-09-14 note (the false line outlived its turn in a resumed session). The follow-up line for a resumed session is NOT in this fix - it is the-first-turn-has-its-tools brief's spec loop. Must not touch the open F299/F301/F339/F340 access-path question. Suggested name: the-no-grounds-notice-stops-denying. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the finding with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f302-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f302-R2: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
-            "detail": "Step R2 of f302: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f302: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f302-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f302-R3: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
-            "detail": "Step R3 of f302: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f302: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f302-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f302-REV: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
-            "detail": "Step REV of f302: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f302: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f302-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f302-IMPL: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
-            "detail": "Step IMPL of f302: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f302: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f302-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f302-DRIVE: F302 (B) - every agent's first turn is told 'no MCP tools this turn'; decided, unbuilt",
-            "detail": "Step DRIVE of f302: drive it and archive it per night-window.md 'Driving'; retire the finding."
+            "detail": "Step DRIVE of f302: drive it and archive it per night-window.md 'Driving'; retire the finding. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f362-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f362-R1: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
-            "detail": "mcp_server.py:957-960 (_ABSOLUTE_PATH_RE opens at any slash or backslash on Windows), :966 (_PLAIN_RELATIVE_RE admits no '*'), /dev/null. SPEC ONLY today: the repair is in mcp_server.py (F354). Must not reopen F321/F323 (612b9c9) - R2/R3 re-derive against those. Suggested name: a-relative-word-is-not-an-absolute-path. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "mcp_server.py:957-960 (_ABSOLUTE_PATH_RE opens at any slash or backslash on Windows), :966 (_PLAIN_RELATIVE_RE admits no '*'), /dev/null. SPEC ONLY today: the repair is in mcp_server.py (F354). Must not reopen F321/F323 (612b9c9) - R2/R3 re-derive against those. Suggested name: a-relative-word-is-not-an-absolute-path. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f362-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f362-R2: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
-            "detail": "Step R2 of f362: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f362: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f362-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f362-R3: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
-            "detail": "Step R3 of f362: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f362: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f362-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f362-REV: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
-            "detail": "Step REV of f362: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. SPEC ONLY today - after REV the change stays specced and unbuilt; APPROVALS row with no token."
+            "detail": "Step REV of f362: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. SPEC ONLY today - after REV the change stays specced and unbuilt; APPROVALS row with no token. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f363-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f363-R1: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
-            "detail": "mcp_server.py:1666-1676; spec_manifest.py:72. SPEC ONLY today (mcp_server.py). Suggested name: the-spec-reads-in-pieces. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "mcp_server.py:1666-1676; spec_manifest.py:72. SPEC ONLY today (mcp_server.py). Suggested name: the-spec-reads-in-pieces. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f363-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f363-R2: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
-            "detail": "Step R2 of f363: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f363: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f363-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f363-R3: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
-            "detail": "Step R3 of f363: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f363: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f363-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f363-REV: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
-            "detail": "Step REV of f363: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. SPEC ONLY today - after REV the change stays specced and unbuilt; APPROVALS row with no token."
+            "detail": "Step REV of f363: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. SPEC ONLY today - after REV the change stays specced and unbuilt; APPROVALS row with no token. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f364-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f364-R1: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
-            "detail": "agent_actions.py:337-346 (build: name the entry index, its length, the cap). The description half (mcp_server.py:511-535) is not edited today - say so. Suggested name: a-note-refusal-names-the-entry. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "agent_actions.py:337-346 (build: name the entry index, its length, the cap). The description half (mcp_server.py:511-535) is not edited today - say so. Suggested name: a-note-refusal-names-the-entry. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f364-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f364-R2: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
-            "detail": "Step R2 of f364: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f364: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f364-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f364-R3: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
-            "detail": "Step R3 of f364: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f364: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f364-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f364-REV: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
-            "detail": "Step REV of f364: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f364: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f364-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f364-IMPL: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
-            "detail": "Step IMPL of f364: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f364: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f364-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f364-DRIVE: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
-            "detail": "Step DRIVE of f364: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f364: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f47-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "f47-R1: F47 (C) - the flow's staging is recorded as the operator's",
-            "detail": "task_transitions.py:34-36 ACTOR_KINDS; scheduler.py:828/830 operator(); pinned by test_flow_chain_end_to_end.py. F47's own text: the honest repair is a third actor kind touching is_operator guards and every actor_kind consumer - R1 sizes it; the task_transitions actor_kind column has no CHECK (models.py:803), so no migration is expected - verify. Suggested name: the-flow-signs-its-own-moves. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "task_transitions.py:34-36 ACTOR_KINDS; scheduler.py:828/830 operator(); pinned by test_flow_chain_end_to_end.py. F47's own text: the honest repair is a third actor kind touching is_operator guards and every actor_kind consumer - R1 sizes it; the task_transitions actor_kind column has no CHECK (models.py:803), so no migration is expected - verify. Suggested name: the-flow-signs-its-own-moves. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f47-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "f47-R2: F47 (C) - the flow's staging is recorded as the operator's",
-            "detail": "Step R2 of f47: re-derive against the code (as D-3), independently."
+            "detail": "Step R2 of f47: re-derive against the code (as D-3), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f47-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "f47-R3: F47 (C) - the flow's staging is recorded as the operator's",
-            "detail": "Step R3 of f47: re-derive again (as D-4), independently."
+            "detail": "Step R3 of f47: re-derive again (as D-4), independently. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f47-rev",
-            "status": "open",
+            "status": "not_reached",
             "title": "f47-REV: F47 (C) - the flow's staging is recorded as the operator's",
-            "detail": "Step REV of f47: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "Step REV of f47: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f47-impl",
-            "status": "open",
+            "status": "not_reached",
             "title": "f47-IMPL: F47 (C) - the flow's staging is recorded as the operator's",
-            "detail": "Step IMPL of f47: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "Step IMPL of f47: implement per night-window.md 'Implementing' (may span firings). NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f47-drive",
-            "status": "open",
+            "status": "not_reached",
             "title": "f47-DRIVE: F47 (C) - the flow's staging is recorded as the operator's",
-            "detail": "Step DRIVE of f47: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "Step DRIVE of f47: drive it and archive it per night-window.md 'Driving'; retire the findings. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f327-r1",
-            "status": "open",
+            "status": "not_reached",
             "title": "FALLBACK D-2 spec R1: F327 - a flow-staffed review refused at dispatch (spec only, not built)",
-            "detail": "Runs ONLY if the fix queue is empty before 18:15. DIRECTION.md ## 2026-09-14 'Carried' Loop 1: start from R2's option (b) (dispatch stages, the flow stops staging first); R3's warning - the divergence restaff's task is already under_review and collides with D9; MODIFY agent-flows. Not built - the build-day row does not cover F327. Gets an APPROVALS row with no token."
+            "detail": "Runs ONLY if the fix queue is empty before 18:15. DIRECTION.md ## 2026-09-14 'Carried' Loop 1: start from R2's option (b) (dispatch stages, the flow stops staging first); R3's warning - the divergence restaff's task is already under_review and collides with D9; MODIFY agent-flows. Not built - the build-day row does not cover F327. Gets an APPROVALS row with no token. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f327-r2",
-            "status": "open",
+            "status": "not_reached",
             "title": "FALLBACK D-3 spec R2: F327, re-derive against the code",
-            "detail": "Only if f327-r1 ran. Independent re-derivation, not a re-read."
+            "detail": "Only if f327-r1 ran. Independent re-derivation, not a re-read. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "f327-r3",
-            "status": "open",
+            "status": "not_reached",
             "title": "FALLBACK D-4 spec R3: F327, re-derive again independently",
-            "detail": "Only if f327-r2 ran."
+            "detail": "Only if f327-r2 ran. NOT REACHED: the 2026-09-14 window ended at d5 (iteration 26)."
         },
         {
             "id": "d5",
-            "status": "open",
+            "status": "done",
             "title": "D-5 review page spec-queue/review/review-2026-09-14.html, APPROVALS.md ## 2026-09-14, then next_action null",
-            "detail": "RESERVED: the first firing that starts at or after 18:15 (within 45 min of stop_at 19:00) does this, whatever else is open. Order per DIRECTION.md ## 2026-09-14 section D-5: s1 branch and gate, s2 night, s3 the LoopEngine review (counts of fixes/improvements/out-of-scope), s4 one section per fix change (R2/R3/REV changes; built+driven with commit and evidence, or specced-only and why; migrations; UI bundle committed or not), s4b improvements with decision lines, s5, s6. End with the two evening reminders (no DIRECTION section for 2026-09-15 yet - the Carried plan needs one; F332-rule still OPEN). APPROVALS rows only for specced-not-built changes, no token; built+archived named above the ---. Then set next_action to JSON null. CARRIED FROM f355-impl part 2 (task 3.4d): the a-spent-allowance-holds-the-queue section must say that the stopped change an-unstaffed-review-names-its-holders' rung-3 rewrite has to carry the hold's clause ('waiting for its provider's usage limit to reset, ', +49 characters; the default rung-3 sentence measures 250 with it and 201 without), because that change was not built first. CARRIED FROM f355-drive (iteration 21), the f355 section's facts: built 98385cd/e1eca5b/c8e3bbd, gate b5b6baf (hub 4316 passed/86 skipped/16 xfailed; tests/ 521 passed), driven ac6bff6 (part A, 6.1-6.4) + 87b8d6a (part B, 6.5-6.6), archived 4b362f3; migration 0103_allowance_refusals; no UI bundle; the refusal came from a stub (scripts/drive/f355_refusing_claude_stub.cs), not the provider - say so on the page. Retired F355, F127, F369; F128 note. a-spent-allowance-holds-the-queue is built+archived: named above the --- in APPROVALS, no row. CARRIED FROM f356-r1 (iteration 22): the a-late-answer-is-delivered section must say F356's ledger was corrected - only 1 of its 3 batches (09-13 14:38) was lost; 23:26 and 16:50 were delivered by the shipped run-has-ended path. No migration, no UI bundle planned; D5 (no receipt stamp) is the choice R2/R3 were asked to challenge. CARRIED FROM f356-r2 (iteration 23): R2 found D4's report half could lose an answer landing mid-report (fixed: task 2.9 post-commit keys) and that D3's decline invariant was unguarded at the write, a pre-existing race (fixed: task 2.8 guarded UPDATE); D5 kept for scope, with its cost corrected and a no-migration run-end third option named for R3/a follow-on. CARRIED FROM f356-r3 (iteration 24): R3 measured R2's guarded UPDATE on aiosqlite (holds; needs synchronize_session=False), collapsed the report to one decision point (two R2 mutations were stale), extended the guard to the run-end sweep (the second writer, same pre-existing decline race; task 2.10), and re-derived D5: kept, with a three-route table - the no-migration run-end option closes 2 of 3 routes and duplicates the grace window; only a receipt stamp (migration) closes the third (in-time answer, run dies before the next poll). The follow-on is the operator's choice between the two. CARRIED FROM f356-rev (iteration 25): the a-late-answer-is-delivered section says the Opus REV ran and did not stop it; it found a fourth in-scope loss (sibling declined mid-report -> both writers decline; fixed by populate_existing in _completed_batch, task 2.11), the sweep-rewrite trap (2.10), and that the 'declined never carries wait_ended_at' comments are false in shipped code (task 1.6, comments only). Specced through R1-R3+REV, NOT built (f356-impl not reached) -> one APPROVALS row. Also D5 table: route 1 includes a rolled-back report write; candidate route 4 (MCP client abandons the call; Codex) read not measured."
+            "detail": "DONE iteration 26 (18:10-18:20): spec-queue/review/review-2026-09-14.html written (alarm: migration 0103 reaches :8000's real db on its next restart; 6 decisions; s1-s6 + s4b; two evening reminders) and APPROVALS.md ## 2026-09-14 appended (built+archived a-spent-allowance-holds-the-queue named above the rows, no row; token-less rows for a-late-answer-is-delivered and an-unstaffed-review-names-its-holders; 2026-09-13 APPROVED/ORDER noted as history; no ORDER line). Earlier detail: RESERVED: the first firing that starts at or after 18:15 (within 45 min of stop_at 19:00) does this, whatever else is open. Order per DIRECTION.md ## 2026-09-14 section D-5: s1 branch and gate, s2 night, s3 the LoopEngine review (counts of fixes/improvements/out-of-scope), s4 one section per fix change (R2/R3/REV changes; built+driven with commit and evidence, or specced-only and why; migrations; UI bundle committed or not), s4b improvements with decision lines, s5, s6. End with the two evening reminders (no DIRECTION section for 2026-09-15 yet - the Carried plan needs one; F332-rule still OPEN). APPROVALS rows only for specced-not-built changes, no token; built+archived named above the ---. Then set next_action to JSON null. CARRIED FROM f355-impl part 2 (task 3.4d): the a-spent-allowance-holds-the-queue section must say that the stopped change an-unstaffed-review-names-its-holders' rung-3 rewrite has to carry the hold's clause ('waiting for its provider's usage limit to reset, ', +49 characters; the default rung-3 sentence measures 250 with it and 201 without), because that change was not built first. CARRIED FROM f355-drive (iteration 21), the f355 section's facts: built 98385cd/e1eca5b/c8e3bbd, gate b5b6baf (hub 4316 passed/86 skipped/16 xfailed; tests/ 521 passed), driven ac6bff6 (part A, 6.1-6.4) + 87b8d6a (part B, 6.5-6.6), archived 4b362f3; migration 0103_allowance_refusals; no UI bundle; the refusal came from a stub (scripts/drive/f355_refusing_claude_stub.cs), not the provider - say so on the page. Retired F355, F127, F369; F128 note. a-spent-allowance-holds-the-queue is built+archived: named above the --- in APPROVALS, no row. CARRIED FROM f356-r1 (iteration 22): the a-late-answer-is-delivered section must say F356's ledger was corrected - only 1 of its 3 batches (09-13 14:38) was lost; 23:26 and 16:50 were delivered by the shipped run-has-ended path. No migration, no UI bundle planned; D5 (no receipt stamp) is the choice R2/R3 were asked to challenge. CARRIED FROM f356-r2 (iteration 23): R2 found D4's report half could lose an answer landing mid-report (fixed: task 2.9 post-commit keys) and that D3's decline invariant was unguarded at the write, a pre-existing race (fixed: task 2.8 guarded UPDATE); D5 kept for scope, with its cost corrected and a no-migration run-end third option named for R3/a follow-on. CARRIED FROM f356-r3 (iteration 24): R3 measured R2's guarded UPDATE on aiosqlite (holds; needs synchronize_session=False), collapsed the report to one decision point (two R2 mutations were stale), extended the guard to the run-end sweep (the second writer, same pre-existing decline race; task 2.10), and re-derived D5: kept, with a three-route table - the no-migration run-end option closes 2 of 3 routes and duplicates the grace window; only a receipt stamp (migration) closes the third (in-time answer, run dies before the next poll). The follow-on is the operator's choice between the two. CARRIED FROM f356-rev (iteration 25): the a-late-answer-is-delivered section says the Opus REV ran and did not stop it; it found a fourth in-scope loss (sibling declined mid-report -> both writers decline; fixed by populate_existing in _completed_batch, task 2.11), the sweep-rewrite trap (2.10), and that the 'declined never carries wait_ended_at' comments are false in shipped code (task 1.6, comments only). Specced through R1-R3+REV, NOT built (f356-impl not reached) -> one APPROVALS row. Also D5 table: route 1 includes a rolled-back report write; candidate route 4 (MCP client abandons the call; Codex) read not measured."
         }
     ],
     "decisions_for_user": [
