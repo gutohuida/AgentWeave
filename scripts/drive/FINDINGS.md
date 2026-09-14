@@ -28059,6 +28059,24 @@ exists (`hub/hub/db/models.py:993`) and is not read anywhere in `questions.py`.
 `AW_QUESTION_TIMEOUT` and then keep working, say a long `sleep`. Answer after the wait and before the
 run ends. No queue entry is created, and no later turn carries the answer.
 
+**Correction, 2026-09-14 (f356-R1, `:8000` read with `mode=ro`).** The mechanism above is right.
+But **only one of the three batches was lost.**
+- **23:26, delivered.** The asking run ended 23:31:37, before the answers came at 23:43:47–23:44:14,
+  and `entry-7f953e7a11b4` delivered them at 23:44:14.
+- **16:50, delivered.** The run ended 16:56:17, the answers came 16:56:57–16:57:26, and
+  `entry-563536954359` delivered them at 16:57:26.
+
+  Both are the shipped run-has-ended path working.
+- **14:38, lost.** `q-cab59299c48e` and `q-477c3005a5b3` were reported expired at 14:42:56.37 and
+  answered at 14:43:10 and 14:43:25. The run lived until 14:57:08. No `Architect` entry exists
+  between 14:42 and 15:08. The other two questions in the batch were answered before the deadline,
+  and the tool returned them.
+
+The tool's expiry report landed on **21 of 21** expired waits, 0.06–1.2 s after the deadline. That
+is why the fix reads `wait_ended_at`, not `wait_expires_at`.
+
+Proposal: `openspec/changes/a-late-answer-is-delivered/`.
+
 ## F357 (B) — a flow's review turn tells its reviewer to approve, and says nothing about the evidence gate that will refuse it
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
