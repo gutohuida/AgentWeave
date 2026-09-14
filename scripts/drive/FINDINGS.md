@@ -9708,10 +9708,13 @@ routes through the same `end_loop` a firing uses. Both drive harnesses now tear 
 
 ## F127 (B) — pressing Run on a healthy loop whose agent is busy answers 500 "Failed to fire job"
 
-**Status:** open. Reproduced deterministically (`t_run_while_busy2.py`, 7/7) and never
-repaired: this entry's own *"shape of the fix (not implemented -- it wants a round)"* still
-describes the code. No openspec change covers it; the only external mention is the 2026-08-30
-release roadmap. [classified 2026-09-09, D-2]
+**Status:** fixed c8e3bbd — `a-spent-allowance-holds-the-queue` design D11, task 4.4, archived
+2026-09-14. `run_job` compares the newest `JobRun` id before and after the firing; when the firing
+wrote none it re-asks the busy guard and answers 409 with the guard's reason, not 500 *"Failed to
+fire job"*. Test: `test_board_agent_role.py`, *F127's own reproduction* (`t_run_while_busy2.py`'s
+shape). Driven on a held agent in F355 *DRIVE part B*: 409 *"held is held until 16:09 UTC … and
+no other agent is free to take this loop's work. Nothing was started."* Previously: reproduced
+deterministically (`t_run_while_busy2.py`, 7/7). [classified 2026-09-09, D-2]
 
 Reproduced deterministically: `t_run_while_busy2.py`, **7 of 7 verdicts held**, against
 `proj-dc4d43543bea` on 8011.
@@ -9791,6 +9794,13 @@ takes an agent, the loop lists a label and an agent, and neither says "or whoeve
 **the operator's call**, and it is one decision with two shapes: either the free list becomes
 loop-scoped (a loop staffs only the agents it names, a flow staffs its roster), or the UI and the
 API stop presenting `job.agent` as who runs this loop. Filed, not fixed.
+
+**Note, 2026-09-14 (`a-spent-allowance-holds-the-queue`, design D6, archived).** A provider-allowance
+hold adds **one case** to this substitution: a documentless loop with a **single** startable
+unassigned task whose job agent is held now staffs another free agent (`decide_firing`'s default
+branch requires the default agent to be neither running nor held). The two-task case already reached
+every documentless loop, busy agent or not, before this change. The operator's decision is
+unchanged, and still open.
 
 ## F129 (B) — requirement drift works, and the app cannot reach any of it
 
@@ -27846,9 +27856,12 @@ of its Python.
 
 ## F355 (B) — a run that fails on the provider's session limit is re-delivered into the same exhausted allowance, and then its input is given up
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from the operator's real use (LoopEngine
-on `:8000`, read-only; `spec-queue/observations/2026-09-14-LoopEngine.md`). **Seen live, not yet
-reproduced.**
+**Status:** fixed c8e3bbd — `a-spent-allowance-holds-the-queue`, built in three commits (`98385cd`,
+`e1eca5b`, `c8e3bbd`), driven live 2026-09-14 (*DRIVE part A* and *part B* below, with a refusing
+stub standing in for the provider), and archived the same day. A turn the provider's allowance
+refused is not counted, keeps its session and is never withdrawn; the agent's queue is held until
+the provider's reset and resumes on its own. Filed 2026-09-14 by the day window's O-3, from the
+operator's real use (LoopEngine on `:8000`, read-only; `spec-queue/observations/2026-09-14-LoopEngine.md`).
 
 **What happened.** The provider's session limit was hit three times: 21:00–21:05, 01:19–02:05 and
 06:57–07:02 UTC. At least 66 runs failed on them (51 of `dev`'s and 15 of `tester`'s, plus the
@@ -28329,8 +28342,10 @@ once, including hop-budget parking, so it wants its own proposal.
 
 ## F369 (C) — pressing Run stamps the requester onto an earlier firing's record when the firing wrote none
 
-**Status:** open. Filed 2026-09-14 by the day window's `f355-rev`. **Code read, not driven.**
-Retired by `a-spent-allowance-holds-the-queue` (design D11, task 4.4) at its archive.
+**Status:** fixed c8e3bbd — `a-spent-allowance-holds-the-queue` design D11, task 4.4, archived
+2026-09-14. `run_job` stamps `requested_by_run_id` only on a row its own firing wrote; a press whose
+firing wrote none leaves an earlier firing's requester as it was (test: an earlier `"run-a"` stays
+`"run-a"`). Filed 2026-09-14 by the day window's `f355-rev`, code read.
 
 **The mechanism.** `run_job` (`hub/hub/api/v1/jobs.py:1270-1285`) fires the job, then reads the
 job's newest `JobRun` and sets `requested_by_run_id = run_identity` on it. A firing that declines

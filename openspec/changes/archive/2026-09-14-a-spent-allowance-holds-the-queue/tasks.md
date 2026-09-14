@@ -652,8 +652,23 @@ in the log and on the review page.
 
 ## 7. Archive
 
-- [ ] 7.1 `openspec-sync-specs`, then archive. Retire F355 in `FINDINGS.md` with `fixed <sha>`, in
+- [x] 7.1 `openspec-sync-specs`, then archive. Retire F355 in `FINDINGS.md` with `fixed <sha>`, in
       the archive commit. **(Round 3)** Retire F127 the same way (REV kept D11 whole, Round 4).
       **(Round 4 — REV)** Retire F369 the same way. Add a dated note to F128: a hold adds one case
       to its substitution, a single startable unassigned task while the job agent is held. The
       two-task case already reaches every documentless loop, busy agent or not (design D6).
+
+      **Done 2026-09-14.** Before the archive, each of the 4 MODIFIED blocks was compared with its
+      main block: every main scenario is still in its delta, and the main lines the deltas drop are
+      the deltas' own rewordings. The main specs were last touched at `44879bb` (09-13 04:12); the
+      deltas were first written at `c6b1bbb` (09-14 13:07). `openspec archive … -y`, run without
+      `--skip-specs`, gave +4 and ~4: `agent-conversation-workspace` 67→68, `agent-flows` 19→20,
+      `agent-loops` 40→42. **Checked afterwards with a script:**
+      - all 8 blocks equal their deltas verbatim;
+      - no requirement was lost, and the order is kept;
+      - the only other byte change is the tool collapsing a doubled blank line under
+        *"A conversation's attention state is visible in navigation"*.
+
+      `openspec validate --specs --strict`: 43 passed. F355, F127 and F369 are retired `fixed
+      c8e3bbd` (the classifier reads all three as RESOLVED on the STRONG marker), and F128 has its
+      dated note.
