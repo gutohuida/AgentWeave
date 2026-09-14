@@ -27888,6 +27888,18 @@ say so on the entry. Whether a held queue should also hold the flow's job is for
   shipped decisions: F96's "hold until repaired", and loop D4 composed through flow D12. It names
   plain-job coalescing (D7) as the one choice open to challenge, and severable.
 
+**R2, 2026-09-14** (code-read, not driven; `design.md` *Round 2*). The conclusion stands, and there
+is still no OPERATOR QUESTION. One leg of the argument was wrong, and three outcomes were fixed:
+- **Flows do not compose the hold through D12.** The busy guard covers only the job's agent, and
+  lets a firing through when anyone is free. `decide_firing` then reads its own `running` set
+  (`hub/hub/scheduler.py:1299`), so it re-briefs a held assignee on every tick (`:1421-1435`). The
+  repair reads running-or-held there and in `_agents_that_are_free`'s running half. It adds a new
+  `agent-flows` delta. The general form of the pile-up is filed as F368.
+- **A hold could have no wake:** R1 armed the wake only for a `failed` run.
+- **A held firing read `failed`:** at its own refused run's end (`agent_trigger.py:2348`), and at a
+  restart (`run_reconciliation.py:189-226`). New D10.
+- **The hold sentence was stored on entries, where it outlives the hold.** It is now derived only.
+
 ## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
@@ -28170,3 +28182,28 @@ stderr and two absolute paths (`hub/hub/api/v1/agent_trigger.py:966, 970`).
 characters over 43 rows, and the trial Hub's 3 rows are empty (mode=ro, `%TEMP%\f352r2\len.py`).
 
 **Related:** F108 (a route's return, not read by the rounds), F154 (the wedged-review sentence).
+
+## F368 (B) — a flow re-briefs an assigned, idle agent on every tick while that agent's queued turn cannot start
+
+**Status:** open. Filed 2026-09-14 by the day window's `f355-r2`. **Code read, not driven.** The held
+instance is repaired by `a-spent-allowance-holds-the-queue` (design D6). The rest is not.
+
+**The mechanism.** In `decide_firing`, the ordinary-work arm re-selects an already-assigned task
+for its assignee whenever `agent not in running` (`hub/hub/scheduler.py:1421-1435`). `running`
+counts `Run` rows in `running` (`:1299`). `held` counts only running turns too (`:1303`). `on_it`
+also counts a turn that is staffed and still queued (`:1310`), but only the review arm reads it
+(`:1378`). So an assignee that is idle **because its queued turn cannot start** is briefed again on
+every firing. Each briefing is one more queued entry on a new conversation (`:2837-2848`), all
+delivered as separate turns once the turn can start.
+
+**An instance, by reading.** The project's token budget is exhausted. `_attempt_turn` refuses
+autonomous input with *"token budget exhausted"* (`hub/hub/turn_scheduler.py:377-379`), using the
+default `terminal_failure=True`. So each firing's `JobRun` also reads `failed`
+(`scheduler.py:2918-2924`), while its entry stays queued. The firing reaches the walk because
+`_loop_flow_busy_reason` refuses only a **running** job agent (`:295-300`).
+
+**What would repair it (sketch).** Read `on_it` in the resumption arm. A task with a turn already
+queued for it is in flight, not resumable. That changes flow behaviour for every waiting reason at
+once, including hop-budget parking, so it wants its own proposal.
+
+**Related:** F355 (the held instance), F154 (`on_it`'s origin).

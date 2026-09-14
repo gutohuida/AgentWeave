@@ -208,14 +208,19 @@ The turn that starts is the one the queue would ordinarily start. If the provide
 that refusal renews the hold, and input that arrived before it cannot start another.
 
 When the reset time passes, the system SHALL attempt the agent's queue again without any operator
-action, including when the reset passed while the Hub was not running.
+action. That includes a reset that passed while the Hub was not running, and a hold that began
+with a turn which ended in some way other than failing, since the hold follows the provider's
+reading rather than how the turn ended.
 
 While the queue is held, the system SHALL report the hold as the reason the agent is waiting,
 naming the time it ends, and SHALL record an operator-visible event each time a refusal starts or
-renews a hold.
+renews a hold. Once the hold has ended, the system SHALL NOT report it as a reason for any input,
+including input the refusal returned.
 
-A job firing that reaches a held agent SHALL be reported as still in progress, not as failed. Its
-input is waiting for a stated time, not refused.
+A job firing whose input waits on a held queue SHALL be reported as still in progress, not as
+failed. That includes the firing whose own turn the provider refused, and a held firing across a
+restart of the Hub. Its input is waiting for a stated time, not refused, and the delivery at the
+reset is what ends the firing.
 
 #### Scenario: A refused turn holds the queue
 
@@ -265,3 +270,25 @@ input is waiting for a stated time, not refused.
 
 - **WHEN** a job's firing queues input for an agent whose queue is held
 - **THEN** the firing is recorded as in progress, not failed
+
+#### Scenario: A firing whose own turn was refused ends with its delivery
+
+- **WHEN** a job's firing starts a turn and the provider's allowance refuses it
+- **THEN** the firing is recorded as in progress, not failed
+- **AND** when its input is delivered after the reset, the firing takes that turn's outcome
+
+#### Scenario: A held firing survives a restart
+
+- **WHEN** a job's firing is waiting on a held queue and the Hub restarts
+- **THEN** the firing is still recorded as in progress
+
+#### Scenario: A hold that began with a completed turn still wakes
+
+- **WHEN** a turn completes but the provider's reading for it says the allowance is refused, with a reset time
+- **THEN** the agent's queue is held
+- **AND** a turn starts for the agent at the reset without any operator action
+
+#### Scenario: An ended hold is not reported
+
+- **WHEN** an agent's hold has ended and input the refusal returned is still queued
+- **THEN** the agent's queue status does not name the hold as the reason it is waiting

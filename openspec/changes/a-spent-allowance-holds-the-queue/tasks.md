@@ -1,6 +1,8 @@
 # Tasks — a spent allowance holds the queue
 
-Finding: F355 (retired by this change at archive). R1 2026-09-14.
+Finding: F355 (retired by this change at archive). R1 2026-09-14. R2 the same day; its additions
+are marked **(Round 2)**: 1.2b, 2.5, 2.6, 3.4b, 3.4c, 3.7 and 4.3, with edits to 1.2, 2.2, 3.2,
+3.3, 3.5 and 6.4.
 Build day 2026-09-14. Day rules:
 - no `hub/hub/mcp_server.py` (nothing here needs it);
 - no UI and no bundle;
@@ -46,13 +48,20 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - a later `measured` row with **no** reading also releases;
       - a later `unavailable` row with no reading does **not** release (the pre-spawn and crash
         rows);
+      - **(Round 2)** a refusal followed by 60 `unavailable` rows still holds. This fails a fixed
+        window of 50;
       - a refused row whose `resetsAt` is 5 minutes past, observed 10 s ago, holds until
         `observed_at + 60 s`;
       - another agent's refusal does not hold this agent.
 
       Mutations:
       - the newest row of any kind (the fourth test fails);
-      - drop the floor (the fifth fails).
+      - read only the newest 50 rows (the fifth fails);
+      - drop the floor (the sixth fails).
+- [ ] 1.2b **(Round 2)** `agents_held(db, project_id, *, now=None) -> Set[str]`, the set-valued
+      form of `provider_hold` at one `now` (design D6). Test: two agents refused and one served,
+      read in one call, give exactly the two. Also test that it agrees with `provider_hold` agent
+      by agent over the 1.2 fixtures.
 - [ ] 1.3 The informative filter treats a JSON-`null` allowance as no reading. Test: write the
       row through `record_turn_usage(..., sample=None)` (the real writer, not a hand-built row)
       after a refusal, and assert that the hold survives. Then assert, in the same test, that the
@@ -78,7 +87,8 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 - [ ] 2.2 `return_run_entries(db, run_id, *, refusal=None)` per D2. Tests in
       `hub/tests/test_delivery_attempts.py`:
       - with a refusal, the entry is `queued` and `delivery_attempts` is unchanged, while
-        `allowance_refusals` is 1 and `waiting_reason` is the hold sentence;
+        `allowance_refusals` is 1 and `waiting_reason` is `None` (Round 2: the status route
+        derives the sentence; D2);
       - three consecutive refusals leave the conversation's `provider_session_id` set and the entry
         `queued`;
       - without a refusal, every existing test in the file still passes unchanged.
@@ -104,6 +114,24 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
       Mutation: pass no refusal. The spawn count rises and the entry is withdrawn.
 
+      The test runs with no `JobScheduler` (`get_scheduler()` is `None`). So it also shows that
+      arming the wake with no scheduler neither raises nor stops the run's end (design D5).
+- [ ] 2.5 **(Round 2, design D10)** The refused turn's own firing stays `in_progress`. Through the
+      2.4 fixture, with the entry queued by `_do_fire_job` for a plain job:
+      - after the refused run, the firing's `JobRun` reads `in_progress`, not `failed`;
+      - after a served run delivers the same entry, it reads `completed`.
+
+      Mutation: keep the finalize call on a refusal. The first assertion fails, and so does the
+      second, because the row already reads `failed` and the finalize selects only `in_progress`
+      rows.
+- [ ] 2.6 **(Round 2, design D5)** A run that ends `completed` with a `rejected` reading arms the
+      wake and emits `queue_agent_held` with empty `entry_ids`. Script the 2.4 lines with exit
+      code 0 and a `result` line that is not an error. Assert that its input is **not** returned
+      (it completed), and that the wake-arming function was called with `hold_until`. Patch it to
+      record its calls.
+
+      Mutation: arm only when `final_status == "failed"`. The test fails.
+
 ## 3. The scheduler, the wake, loops and jobs (design D4–D7)
 
 - [ ] 3.1 The hold check in `_attempt_turn`, placed per D4, returning `terminal_failure=False`.
@@ -123,8 +151,10 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       `run_reconciliation._schedule_or_defer` public as `schedule_or_defer`. Keep the old name as
       an alias only if a test imports it.
 
-      Arm the wake in `_execute_run` after the finalize commit, when a refusal was recognised.
-      Emit `queue_agent_held` there too (4.2).
+      Arm the wake in `_execute_run` **immediately after the finalize commit** (`:2354`), for any
+      run whose recorded reading is a refusal, whatever its final status (design D5, Round 2).
+      Emit `queue_agent_held` there too (4.2). With no scheduler, arming is a debug-logged no-op,
+      and it never raises.
 
       Tests:
       - the job is added with id `allowance-wake:{project}:{agent}` and run date
@@ -132,13 +162,22 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - a second refusal replaces the job rather than adding one;
       - with `HOLD_FLOOR` monkeypatched to 1 s and `resetsAt` 2 s ahead, the wake fires and a turn
         starts with no other call (a real `JobScheduler`, not a mock, for this one).
+        **Make the bound address known first** (`bound_address.observe`, or one request through
+        the app) (Round 2). Otherwise `schedule_or_defer` defers the wake
+        (`run_reconciliation.py:152-155`) and the test times out whether or not the wake was
+        armed. So also assert that the scheduler holds the wake job before the date passes. The
+        mutation must fail on that assertion, not on the timeout.
 
-      Mutation: do not arm. The last test times out.
+      Mutation: do not arm. The pre-date assertion fails.
 - [ ] 3.3 A start-up re-arm, `arm_held_queues()`, called from `lifespan()` after
-      `init_scheduler()`. Tests:
+      `init_scheduler()`. It reads the newest **informative** row (D3), not the newest row
+      (Round 2). Tests:
       - an agent with queued input and a future hold is armed;
       - one whose hold passed while the Hub was down reaches `schedule_or_defer`;
-      - an agent with no queued input is not armed.
+      - an agent with no queued input is not armed;
+      - an agent whose refusal is followed by a crash-reconciled `unavailable` row is still armed.
+
+      Mutation: read the newest row. The last test fails.
 - [ ] 3.4 `_loop_agent_busy_reason` returns `hold_busy_reason` when held (D6). Tests in
       `hub/tests/test_scheduler.py`:
       - a loop's job firing while its agent is held creates no `JobRun` and no queue entry (the
@@ -146,18 +185,60 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - after the hold, the firing proceeds.
 
       Mutation: drop the hold branch. The first test fails.
+
+      **The project in these tests has no other agent.** With a second free agent,
+      `_loop_flow_busy_reason` lets the firing through. What stops it then is 3.4b, not this
+      branch.
+- [ ] 3.4b **(Round 2, design D6)** `_agents_that_cannot_take_a_turn(session, project_id)` =
+      `_agents_running_a_turn | agents_held`. Read it at `decide_firing`'s `running`
+      (`scheduler.py:1299`). Tests in `hub/tests/test_scheduler.py`, on a flow whose project has
+      a **second, free** agent `other`. That agent is what lets the firing past the busy guard;
+      without it the test cannot tell 3.4 from 3.4b.
+      - `dev` is held and holds an `assigned` task with an entry queued. Three firings add **no**
+        entry for `dev`, and the task is reported in flight;
+      - `dev` is the job's own agent and is held, and one unassigned task is startable. The
+        firing staffs `other`, not `dev`.
+
+      Mutation: read `_agents_running_a_turn` at `:1299`. The first test gains three entries,
+      and the second staffs `dev`.
+- [ ] 3.4c **(Round 2, design D6)** `_agents_that_are_free`'s running half reads
+      `_agents_that_cannot_take_a_turn`. The holdings half is untouched. Tests:
+      - a held agent holding no task is not in the free list;
+      - with every agent held, a flow's firing whose job agent is held is refused and records
+        nothing (the `_loop_flow_busy_reason` path);
+      - an existing free-list test, unchanged, still passes. This pins that the holdings half did
+        not move.
+
+      Mutation: leave the running half as it is. The first test fails.
 - [ ] 3.5 Plain-job coalescing in `_do_fire_job` (D7). Tests:
-      - during a hold, the first firing queues;
+      - during a hold that came from a refusal on **another conversation**, the first firing
+        queues;
       - three more firings queue nothing and leave one `skipped` `JobRun` whose `tick_count` is 3,
-        with the coalesce reason as its `error_summary`;
+        with the coalesce reason as its `error_summary`. The first of the three writes the row with
+        `tick_count` 1 (`models.py:1379`), because the newest row is still the first firing's
+        `in_progress` one (`_stall_run_to_increment`, `scheduler.py:909-925`). The next two
+        increment it;
+      - **(Round 2)** the LoopEngine shape: the job's own firing is the refused turn. Its entry is
+        requeued on its conversation, and its `JobRun` is `in_progress` (D10). So the **very next**
+        firing coalesces and queues nothing;
       - with no hold, four firings queue four entries, which is today's behaviour, pinned.
 
-      Mutation: drop the coalesce branch. The second test fails.
+      Mutation: drop the coalesce branch. The second and third tests fail.
 - [ ] 3.6 A job firing whose `schedule_agent` meets the hold leaves its `JobRun` `in_progress`.
       Test through `_do_fire_job` with a held agent.
 
       Mutation: return the hold with the default `terminal_failure`. The `JobRun` reads `failed`
       and the test fails.
+- [ ] 3.7 **(Round 2, design D10)** `reconcile_stale_job_runs` leaves a held firing `in_progress`.
+      Tests in `hub/tests/test_run_reconciliation.py` (or wherever the existing A4.5 tests are):
+      - an `in_progress` `JobRun` whose conversation has a queued entry, for an agent whose newest
+        informative row is a refusal with the reset ahead, stays `in_progress`;
+      - the same with the reset already past stays `in_progress`. D5's start-up re-arm delivers
+        it;
+      - an `in_progress` `JobRun` queued for an agent with **no runner bound** and no refusal
+        still reads `failed`. That is the docstring's decided case, pinned unchanged.
+
+      Mutation: drop the refusal exemption. The first two fail.
 
 ## 4. Visibility (design D9)
 
@@ -167,9 +248,18 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - an entry queued during a hold with no `waiting_reason` of its own reports the hold
         sentence;
       - with a newer operator entry queued, the route does not report the hold.
-- [ ] 4.2 `queue_agent_held` is persisted at `warn` and broadcast at each refused run's end, with
-      `agent`, `run_id`, `hold_until`, `resets_at`, `limit_type` and `entry_ids`. Test the
-      persisted row through the 2.4 fixture.
+- [ ] 4.2 `queue_agent_held` is persisted at `warn` and broadcast at the end of every run whose
+      reading is a refusal, with `agent`, `run_id`, `hold_until`, `resets_at`, `limit_type` and
+      `entry_ids`. Test the persisted row through the 2.4 fixture (and through 2.6's, with empty
+      `entry_ids`).
+- [ ] 4.3 **(Round 2)** Once the hold has ended, the status route reports no hold sentence, even
+      for an entry the refusal returned. Test: an entry returned by `return_run_entries(...,
+      refusal=...)`, left `queued`, with the agent not running and `now` past `hold_until`. The
+      route's `waiting_reason` is not the hold sentence.
+
+      Mutation: store the hold sentence on the returned entries (R1's D2). The route's
+      `waiting_reason` fallback (`api/v1/inbound_queue.py:183`) then reports the ended hold, and
+      the test fails.
 
 ## 5. The gate
 
@@ -208,9 +298,16 @@ in the log and on the review page.
 - [ ] 6.3 Remove the flag before the reset. Observe that at the reset one real Haiku turn starts
       without any request, resumes the **same** provider session, and carries *"delivery attempt
       2"*.
-- [ ] 6.4 Re-raise the flag and send an operator message. Observe one probe, refused, and no
-      second spawn until the new reset.
-- [ ] 6.5 A loop with a `*/1` cron on a held agent: no `JobRun` and no entry while held.
+- [ ] 6.4 Re-raise the flag and send an operator message. That one is a fresh refusal, not a
+      probe: 6.3 ended the hold (Round 2 found R1's version of this step could not observe a
+      probe). Then send a **second** operator message while held. Observe:
+      - exactly one probe spawn, refused;
+      - no further spawn until the new reset;
+      - the queue status naming the renewed hold's time.
+- [ ] 6.5 A loop with a `*/1` cron on a held agent: no `JobRun` and no entry while held. Record
+      whether the drive project had a second, free agent. With one, the firing passes the busy
+      guard and it is 3.4b's rule that holds: the held agent's assigned task reads in flight, and
+      nothing is queued for it. Without one, the busy guard refuses it (3.4).
 - [ ] 6.6 Leave no job enabled. Record the drive's evidence in `scripts/drive/FINDINGS.md` under
       F355.
 

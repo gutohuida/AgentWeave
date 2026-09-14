@@ -7,13 +7,17 @@ Everything below runs without a person. Each item names the task that pins it.
 | What | How | Task |
 |---|---|---|
 | A refusal is recognised from the reading, not the prose | unit tests over the measured reading | 1.1 |
-| The hold is derived, floored, and survives rows that say nothing | `provider_hold` tests, including the real `record_turn_usage(sample=None)` row | 1.2, 1.3 |
+| The hold is derived, floored, and survives rows that say nothing | `provider_hold` and `agents_held` tests, including the real `record_turn_usage(sample=None)` row and 60 rows after a refusal | 1.2, 1.2b, 1.3 |
 | A refused turn is not counted, keeps its session, and is never withdrawn | `return_run_entries` tests; `_execute_run` through `_fake_pty` with a spawn count of 1 | 2.2, 2.4 |
 | The retry note counts refusals | `format_turn_prompt` test | 2.3 |
+| A refused firing reads in progress, and takes its delivery's outcome | the 2.4 fixture fired by a plain job | 2.5 |
+| A completed turn with a refused reading still wakes the queue | the 2.4 fixture with exit 0 | 2.6 |
 | Autonomous input waits; new operator input probes once; a refused probe does not loop | `_attempt_turn` tests | 3.1 |
-| The queue wakes at the reset, and again after a restart | a real `JobScheduler` with a 1 s floor; the start-up re-arm | 3.2, 3.3 |
+| The queue wakes at the reset, and again after a restart | a real `JobScheduler` with a 1 s floor and a known address; the start-up re-arm | 3.2, 3.3 |
 | Loops refuse and plain jobs coalesce while held | `_do_fire_job` tests | 3.4, 3.5, 3.6 |
-| The operator is told | the queue status route and the `queue_agent_held` row | 4.1, 4.2 |
+| A flow neither re-briefs nor recruits a held agent | `decide_firing` and free-list tests with a second, free agent | 3.4b, 3.4c |
+| A held firing survives a restart in progress | `reconcile_stale_job_runs` tests | 3.7 |
+| The operator is told, and not told once it is over | the queue status route and the `queue_agent_held` row | 4.1, 4.2, 4.3 |
 | The whole thing on a live Hub | the stub-provider drive | 6.1–6.5 |
 
 ## Human-only
@@ -27,6 +31,8 @@ These need the operator, because only they can see the real allowance and the re
      withdrawn.
    - At the reset, the agents should resume without you. Their first turn should resume the same
      session, and the turn should say *"delivery attempt 2"*.
+   - A job that fired into the wall should read *in progress*, not *failed*, until its instruction
+     is delivered after the reset. That should hold even if you restart the Hub in between.
 2. **Your probe.** While an agent is held, send it one message.
    - If you have not changed your plan, you should see one refused run and nothing after it.
    - If you have enabled extra usage, the turn should run, and the queue behind it should drain.

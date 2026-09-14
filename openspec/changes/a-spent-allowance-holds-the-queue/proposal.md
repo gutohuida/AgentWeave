@@ -2,6 +2,8 @@
 
 Finding: **F355 (B)**. Round 1 (explore and propose), 2026-09-14, the day window's build day
 (`DECISIONS.md`, `### 2026-09-14 — a day that reads LoopEngine and builds what it finds`).
+Round 2 (re-derived against the code) the same day. It changed items 2, 5 and 6, added item 9, and
+is written up in `design.md` *Round 2*. Still no OPERATOR QUESTION.
 
 ## Why
 
@@ -56,8 +58,8 @@ provider refused.
    `resetsAt` (design D1).
 2. **A refused turn is not a delivery attempt.** Its input goes back to the queue with
    `delivery_attempts` unchanged, and the conversation's provider session is kept. The entry
-   records the refusal in a new count, `allowance_refusals`, and carries the hold's sentence as its
-   `waiting_reason` (D2, D8).
+   records the refusal in a new count, `allowance_refusals` (D2, D8). The hold's sentence is not
+   stored on it: the queue status derives it live (D9). *(Round 2.)*
 3. **The agent's queue is held until the reset.** The hold is **derived, not stored**: an agent is
    held while its most recent recorded turn outcome is a refusal and the reset has not passed.
    There is a 60 s floor after the refusal, so a `resetsAt` already in the past cannot become a
@@ -66,15 +68,22 @@ provider refused.
    after the refusal lets one turn start. If the provider refuses that turn too, the refusal
    renews the hold, so there is no loop. If the provider serves it, the hold ends (D4).
 5. **The Hub wakes the queue at the reset.** A one-shot timer at the hold's end re-schedules the
-   agent. It is armed at every refused turn's end and re-armed at Hub start (D5).
+   agent. It is armed at the end of every run whose reading is a refusal, whatever the run's status,
+   and re-armed at Hub start (D5).
 6. **A loop does not fire into a held agent,** exactly as it does not fire into a running one
-   (`agent-loops` *A firing is refused while its loop's agent is already running*). A flow inherits
-   this through the rule that already composes it (D6).
+   (`agent-loops` *A firing is refused while its loop's agent is already running*). **A flow treats
+   a held agent as one that cannot take a turn**, wherever it asks: it does not re-brief a held
+   assignee, select a held job agent, or recruit a held agent (D6). *(Round 2: R1 said a flow
+   inherits this from the busy guard. It does not. The guard lets a firing through whenever anyone
+   is free, and the walk then re-briefs a held assignee on every tick.)*
 7. **A plain job coalesces while its agent is held.** A firing whose job already has an entry
    queued for the held agent is recorded as skipped, not queued again. One copy of the standing
    instruction is delivered at the reset, not one per tick (D7).
 8. **The hold is visible.** The queue status route names it. A `queue_agent_held` event is
    persisted and broadcast when a refusal starts or renews a hold (D9).
+9. **A firing whose input is held reads in progress** (D10, Round 2). That includes the firing
+   whose own turn was refused, and a held firing across a Hub restart. Today both read `failed`,
+   and the delivery at the reset cannot correct them.
 
 ## Is any of this the operator's to decide?
 
@@ -92,8 +101,16 @@ decision already shipped. The argument is written out so R2, R3 and REV can reje
   prefers dropping.
 - **Loops and flows.** `loop-notices-and-reacts` design D4 decided that a loop must not queue a
   briefing its agent cannot take now, because *"a second copy is stale before it is read"*. That
-  argument applies unchanged to an agent that cannot take a turn until 02:10. A flow composes D4
-  through D12 (`_loop_flow_busy_reason`: busy *and* nobody else free), so it needs no new rule.
+  argument applies unchanged to an agent that cannot take a turn until 02:10. *(Round 2 corrected
+  the rest of this bullet.)* A flow does **not** compose that through D12 alone. It asks its own
+  question in `decide_firing`. So the change reads the hold wherever the flow asks whether an agent
+  is running. It adds no policy, because a held agent is then treated exactly as a running one
+  already is.
+- **`_agents_that_are_free` (Round 2).** F352-free is open, and it asks which *holdings* make an
+  agent unavailable. This change touches only the function's other half, the running half, on
+  that half's own stated reason. See design D6. If REV judges otherwise, D6's `free` bullet is
+  severable: without it, the walk still stops re-briefing, and a held agent can be recruited once
+  per wall.
 - **Plain jobs are the weakest of the three, and the one most open to challenge.** The shipped
   position (`_loop_agent_busy_reason`'s docstring, `scheduler.py:235-238`) is that a plain job
   firing while its agent is busy *queues*, *"a standing instruction still true when the agent
@@ -132,16 +149,25 @@ of `delivery_attempts`.
   refused holds the agent's queue until the reset*.
 - `agent-loops`: MODIFIED *A firing is refused while its loop's agent is already running*; ADDED
   *A job firing into a held queue is coalesced*.
+- `agent-flows` (Round 2): ADDED *A flow treats an agent whose queue is held as unable to take a
+  turn*.
 
 ## Impact
 
-- `hub/hub/provider_allowance.py` (new): recognition, the derived hold, and the sentence.
-- `hub/hub/inbound_queue.py`: `return_run_entries(..., held_until=...)` and `format_turn_prompt`.
+- `hub/hub/provider_allowance.py` (new): recognition, the derived hold, the set-valued
+  `agents_held`, and the sentences.
+- `hub/hub/inbound_queue.py`: `return_run_entries(..., refusal=...)` and `format_turn_prompt`.
 - `hub/hub/turn_scheduler.py`: the hold check in `_attempt_turn`.
-- `hub/hub/api/v1/agent_trigger.py`: `_execute_run` passes the recognition, arms the wake, emits
-  the event.
-- `hub/hub/scheduler.py`: `_loop_agent_busy_reason`, the plain-job coalesce in `_do_fire_job`, and
-  the wake's date job.
+- `hub/hub/api/v1/agent_trigger.py`: `_execute_run` passes the recognition, skips the `JobRun`
+  finalize on a refusal, arms the wake, and emits the event.
+- `hub/hub/scheduler.py`:
+  - `_loop_agent_busy_reason`;
+  - `_agents_that_cannot_take_a_turn`, read by `decide_firing` and by `_agents_that_are_free`'s
+    running half;
+  - the plain-job coalesce in `_do_fire_job`;
+  - the wake's date job.
+- `hub/hub/run_reconciliation.py`: `schedule_or_defer` made public, and
+  `reconcile_stale_job_runs` leaving a held firing `in_progress` (D10).
 - `hub/hub/main.py`: re-arm at start.
 - `hub/hub/api/v1/inbound_queue.py`: the status route's reason.
 - `hub/hub/db/models.py` and migration `0103`.
