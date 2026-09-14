@@ -27948,6 +27948,43 @@ D11 is kept whole and retires F127. The window re-read each finding at its line 
   `resetsAt`, or it is counted; the D10 invariant is already false today; the Python informative
   check; test 2.4's mutation.
 
+**DRIVE part A, 2026-09-14 16:50–17:05 BST (tasks 6.1–6.4, driven live).** Built at `b5b6baf`, drive
+Hub from source on `127.0.0.1:8013`, fresh `profiles/drive0914/` (migrated to `0103` on launch),
+project `proj-16a57b5e4e24`, agents `held` and `peer` on one Haiku runner. **The refusal came from a
+stub**, not the provider: `claude.cmd` first on the Hub's `PATH`, an npm-shaped shim the Hub itself
+unwraps (`pty_runner._unwrap_cmd_shim`) to a compiled `claudestub.exe`
+(`scripts/drive/f355_refusing_claude_stub.cs`). With a flag file present and
+`AW_AGENT_IDENTITY == held` it prints 2.4's four lines — the init session id echoing `--resume`,
+`resetsAt` 120 s ahead — and exits 1; otherwise it passes the raw command line to the real
+`claude.exe`. Every other turn was a real Haiku turn. Observed (drive db read `mode=ro`, stub argv
+log, the status route):
+- **6.1b** `run-8aa89050c16a` completed, provider session `c7a55611`, reply `PONG`.
+- **6.2** One refused run, `run-8e299ef54af1` (`failed`, exit 1, `TurnUsage.allowance.status`
+  `rejected`). Its entry stayed `queued` with `delivery_attempts 0`, `allowance_refusals 1`. A
+  `queue_agent_held` event named `hold_until 15:56:23Z` and the entry. `GET …/queue/held/status`:
+  *"held's provider refused its last turn: its five-hour usage limit is spent until 15:56 UTC
+  (2026-09-14T15:56:23+00:00). The Hub holds its queue until then …"*. A plain job's firing
+  (`Run`) queued an entry and **did not spawn**; its `JobRun` stayed `in_progress` through the hold
+  (D10) and read `completed` after. A second `Run` answered **409** *"held's provider usage limit is
+  spent until 15:56 UTC, and this job's earlier firing is still queued for it. This firing adds
+  nothing."* and wrote a `skipped` row (D7).
+- **6.3** Flag removed at 15:54:45. At **15:56:23, the reset to the second**, `run-cb47e0c3559d`
+  started with no request, resumed `c7a55611`, carried *"Operator (hop 0) — delivery attempt 2; an
+  earlier attempt was cut off before it finished"*, and answered `PING`. The job's entry ran next
+  on its own conversation.
+- **6.4** Flag re-raised. Operator message → fresh refusal `run-ffa7b6dbfa6c`, hold to 15:59:45.
+  A second operator message → **exactly one probe spawn** `run-1721796a3561`, refused, carrying both
+  operator entries (refusals now 2 and 1, attempts 0 and 0), hold renewed to **16:00:01**, and the
+  status route named the renewed time. While held, a **real** peer turn (`run-bde28d90f1c7`, Haiku,
+  over the HTTP plane) sent `held` *"ACK please."*: queued, no spawn. At 16:00:01 one resumed turn
+  (`run-f1cf614f7dad`) carried *"delivery attempt 3"* and *"delivery attempt 2"*, then the peer's
+  entry ran. Ten runs in all: eight for `held`, three of them refused, and no `held` spawn between a
+  refusal and its reset except the one probe.
+- **A drive artefact, not a finding:** the first "peer message", posted with the operator key and
+  no `run_id`, queued at `hop_depth = hop_budget + 1` and was suspended (`messages.py:57-58`, by
+  design), so it proved nothing about the hold. 6.4's real peer turn is the peer evidence.
+- Not yet driven: 6.5 (loop, `Run` 409, `stall_reason`), 6.6.
+
 ## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).

@@ -573,7 +573,7 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 The provider's real allowance cannot be spent on demand, so the refusal comes from a stub. Say so
 in the log and on the review page.
 
-- [ ] 6.1 Put a `claude.cmd` stub in a directory **first** on the drive Hub's `PATH`, and have it
+- [x] 6.1 Put a `claude.cmd` stub in a directory **first** on the drive Hub's `PATH`, and have it
       log its argv. While a flag file exists, it prints the four scripted lines from 2.4 and exits
       1:
       - `resetsAt` is two minutes ahead;
@@ -584,9 +584,9 @@ in the log and on the review page.
       Otherwise it execs the real `claude` with its arguments. Start a drive Hub from source on a
       free port with a fresh `profiles/drive0914/` database, as night-window.md says, and bind
       every agent to Haiku.
-- [ ] 6.1b With the flag absent, give the agent one real Haiku turn, so that its conversation has
+- [x] 6.1b With the flag absent, give the agent one real Haiku turn, so that its conversation has
       a real provider session. Every refusal below is on that conversation.
-- [ ] 6.2 With the flag present, send an operator message on that conversation. That is the
+- [x] 6.2 With the flag present, send an operator message on that conversation. That is the
       refused turn; no hold exists yet, so it is not a probe. Then, while held, have a peer message
       and a plain job's firing reach the agent. They queue on conversations of their own, and
       neither may spawn. Observe:
@@ -594,15 +594,33 @@ in the log and on the review page.
       - the entries `queued` with `allowance_refusals == 1` and `delivery_attempts == 0`;
       - `GET …/queue/{agent}/status` naming the hold and its time;
       - a `queue_agent_held` event.
-- [ ] 6.3 Remove the flag before the reset. Observe that at the reset one real Haiku turn starts
+- [x] 6.3 Remove the flag before the reset. Observe that at the reset one real Haiku turn starts
       without any request, resumes the **same** provider session, and carries *"delivery attempt
       2"*.
-- [ ] 6.4 Re-raise the flag and send an operator message. That one is a fresh refusal, not a
+- [x] 6.4 Re-raise the flag and send an operator message. That one is a fresh refusal, not a
       probe: 6.3 ended the hold (Round 2 found R1's version of this step could not observe a
       probe). Then send a **second** operator message while held. Observe:
       - exactly one probe spawn, refused;
       - no further spawn until the new reset;
       - the queue status naming the renewed hold's time.
+
+      **Driven 2026-09-14 (part A), 16:50–17:05 BST,** at `b5b6baf`: drive Hub from source on
+      `127.0.0.1:8013`, fresh `profiles/drive0914/` (migrated to `0103`), project
+      `proj-16a57b5e4e24`, agents `held` and `peer` on Haiku. **The refusal came from a stub:**
+      `claude.cmd` of the npm shim shape, which the Hub unwraps to `claudestub.exe`
+      (`scripts/drive/f355_refusing_claude_stub.cs`); it refuses only for `held`, so a peer could
+      take a real turn during a hold. Evidence in `FINDINGS.md` F355 *DRIVE part A*:
+      - 6.1b `run-8aa89050c16a` completed, provider session `c7a55611`.
+      - 6.2 one refused run; entry `queued`, attempts 0, refusals 1; `queue_agent_held` with
+        `hold_until 15:56:23Z`; the status route named the hold and its time. A plain job's `Run`
+        queued without spawning, its `JobRun` stayed `in_progress` (D10); a second `Run` was a 409
+        with a `skipped` row (D7). The operator-posted "peer" message was hop-suspended by design
+        (no `run_id` = budget + 1), so 6.4 supplied the real peer message.
+      - 6.3 at 15:56:23, to the second, `run-cb47e0c3559d` started unprompted, resumed `c7a55611`,
+        and carried *"delivery attempt 2"*.
+      - 6.4 fresh refusal, then exactly one probe spawn, refused, hold renewed to 16:00:01 and named
+        by the status route; a real Haiku peer turn's message to `held` queued without a spawn; at
+        16:00:01 one resumed turn carried *"delivery attempt 3"* and *"delivery attempt 2"*.
 - [ ] 6.5 A loop with a `*/1` cron on a held agent: no `JobRun` and no entry while held. Record
       whether the drive project had a second, free agent. With one, the firing passes the busy
       guard and it is 3.4b's rule that holds: the held agent's assigned task reads in flight, and
