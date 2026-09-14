@@ -628,6 +628,27 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-14 afternoon — LoopEngine stays parked, and the weekly rate-limit window needs care
+
+**DECIDED 2026-09-14 ~14:50, by the operator, in an interactive session** (not the day window),
+after the session reported LoopEngine stalled since 07:02 on the `review_unstaffed` staffing gate
+(F352), with 498 consecutive no-staff ticks and nothing moved since 06:41. The operator's words:
+
+> *"Let's leave it parked while we fix the issues and since anthropic ended the 50% promotion we
+> have to be more carefully about our weekly window"*
+
+- DECIDED   LoopEngine-parked  **LoopEngine is left exactly as found.** No manual intervention to
+  restaff its stuck reviews, unstick its queue, or otherwise touch `:8000` outside today's existing
+  `mode=ro` read. It stays parked until the fixes already in flight (f355, then the F352 operator
+  question, then f356–f364) ship through the normal spec loop and, separately, the operator
+  restarts it. This extends the day's existing "`:8000` is read, never touched" rule to cover
+  LoopEngine's *product* state, not only its database.
+- DECIDED   weekly-window-care  **The 50%-off promotion on the Anthropic account this repo's
+  autonomous loops and LoopEngine's agents both run under has ended**, so the shared weekly
+  rate-limit window is now a real cost/availability constraint rather than a cushioned one. The
+  concrete throttling (which sessions moderate usage, and how) is **not yet decided** — asked back
+  to the operator in the same session.
+
 ### 2026-09-14 — a day that reads LoopEngine and builds what it finds
 
 **DECIDED 2026-09-13 ~23:05, by the operator, in session**, for the 2026-09-14 day window only. The
