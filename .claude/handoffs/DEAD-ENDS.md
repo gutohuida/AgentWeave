@@ -685,6 +685,14 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   loop on the output file, with the Bash tool's `timeout` at 600000), not a monitor followed by
   the end of the turn. The other fix is to set that variable in the driver's environment. Not done:
   that is the driver's configuration, not a night item.
+  **Recurred twice on 2026-09-14** (day window, iterations 16 and 18): each started the suite in
+  the background, said it would be notified, and ended. Iteration 18 lost its whole log and state
+  that way. A foreground recipe that worked (iteration 19):
+  - split `hub/tests/test_*.py` into 10 lists balanced by file size;
+  - run each as `timeout 585 py -3.11 -m pytest $(cat cN.txt) -q -p no:cacheprovider`, two or
+    three as parallel Bash calls in one message. Each took 2–4 minutes;
+  - add `tests/browser/` as an eleventh call, because the top-level glob misses it (72 skips);
+  - check that the summed counts match the last whole run's.
 - **The morning merge gate is read at ~09:00 and will essentially always find CI mid-run**
   *(2026-09-08, found by the day window itself and confirmed here)*. `AgentWeaveArmDay` fires at
   08:55, the window composes and reads the gate within a few minutes, and the CI suite takes 15–25

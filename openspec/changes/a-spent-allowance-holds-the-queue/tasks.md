@@ -555,11 +555,18 @@ The reading used in tests is the measured one (`design.md`, *Context*):
 
 ## 5. The gate
 
-- [ ] 5.1 `py -3.11 -m pytest hub/tests/ -q`, then the full `tests/`. Both green, with the counts
+- [x] 5.1 `py -3.11 -m pytest hub/tests/ -q`, then the full `tests/`. Both green, with the counts
       recorded.
-- [ ] 5.2 The CI lint set: `ruff check src/ hub/ tests/`,
+      - `hub/tests/` at `c8e3bbd`, in 11 foreground chunks (10 of top-level files, 1 of
+        `tests/browser/`): **4316 passed, 86 skipped, 16 xfailed**, no failure and no error. That
+        is the 4308 of the full run at `e1eca5b`'s code plus group 4's 8 tests, exactly.
+      - `tests/`: **521 passed, 3 skipped**, after `scripts/sync_skills.py` refreshed the
+        machine-local skill mirrors (`test_skill_sync.py`, skipped on CI; DEAD-ENDS 2026-09-08).
+- [x] 5.2 The CI lint set: `ruff check src/ hub/ tests/`,
       `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`.
-- [ ] 5.3 `openspec validate --strict a-spent-allowance-holds-the-queue`.
+      All clean at `c8e3bbd`: black leaves 574 files unchanged, and mypy finds no issues in 22
+      source files.
+- [x] 5.3 `openspec validate --strict a-spent-allowance-holds-the-queue`. Valid.
 
 ## 6. Drive (night-window.md *Driving*)
 
