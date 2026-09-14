@@ -299,6 +299,11 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   while that Hub was serving, with no lock trouble. LoopEngine is `proj-03b9c6a6c37a`.
   Transcripts are in `~/.claude/projects/C--Users-huida-Documents-projects-LoopEngine*` (25
   directories, one per worktree, review and task checkout).
+  *(2026-09-14, i1b: now 34 and growing — `ls -d`, never a count from here. `runs` has no cost
+  column; cost is `turn_usage.api_equivalent_usd_micros` by `run_id`. The message that woke a run is
+  `inbound_queue_entries.delivered_in_run_id`. `event_logs` is `event_type`/`data`/`timestamp`.
+  Printing agent text from `py -3.11` dies on `cp1252` at the first `→`: start the script with
+  `sys.stdout.reconfigure(encoding="utf-8")`.)*
 
 ## SQLAlchemy and Hub test patterns
 
