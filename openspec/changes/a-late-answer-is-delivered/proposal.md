@@ -118,6 +118,18 @@ the tool took in its ~2 s grace window, which is D4's own trade. Round 2 leaves 
 change for scope. Round 3 is asked to re-derive that position (design D5). One of D5's reasons has
 been corrected: the receipt stamp would cost one write per resolved question, not one per poll.
 
+**(Round 3) The position was re-derived, and it stands, for different reasons.**
+- The option needs no stamp. A run's end is visited at most once, so a delivery made there cannot
+  repeat itself.
+- It cannot live in `evaluate_run_end`, though. That function is not reached when a failed run's
+  input goes back to the queue, and it returns early for an unbound run. So the option is code at
+  every finalize site.
+- There is a **third route** it does not close. An answer commits inside the wait, then the run
+  dies before the tool's next poll (up to 2 s). This is pre-existing.
+
+Only a receipt stamp closes all three routes, and that needs a migration. The follow-on is a choice
+between those two, and design D5 tabulates it.
+
 ## Capabilities
 
 - **`run-task-binding`**: MODIFIED *An answer reaches an asker whose run has ended*.
@@ -129,6 +141,9 @@ been corrected: the receipt stamp would cost one write per resolved question, no
 - `hub/hub/api/v1/agent_actions.py`: `report_wait_ended`'s answered and declined branch. **(Round 2)**
   Also its stamp, which becomes a guarded `UPDATE`, and its delivery keys, which are re-read from
   the rows it stamped after it commits.
+- **(Round 3)** `hub/hub/run_task_binding.py`: new `record_wait_ended`, the guarded stamp, shared by
+  both writers. `hub/hub/run_divergence.py`: the run-end sweep calls it instead of assigning the
+  attribute. That closes the same decline race at the second writer.
 - Tests: `hub/tests/` (new file `test_a_late_answer_is_delivered.py`).
 - Day rules 2026-09-14: no `hub/hub/mcp_server.py` edit (F354), none needed. No migration. No UI
   bundle.

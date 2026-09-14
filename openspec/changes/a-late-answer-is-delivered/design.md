@@ -205,6 +205,83 @@ committed state at the moment of the write.
 The same one statement serves both D3 branches. The answered branch keeps skipping
 `wait_has_expired`.
 
+### (Round 3) Measured: the guard holds, and the ORM's default sync lies about it
+
+Round 2's two fixes were argued from the driver's documented behaviour. Round 3 ran them against
+the Hub's real `Question` model on `aiosqlite`, using two sessions on one file database, with
+`expire_on_commit=False` as `engine.py:163` sets it (`%TEMP%\f356r3\guard.py`, not in the repo):
+
+| Interleave | Observed |
+|---|---|
+| Report loads Q, a decline commits in a second session, then the guarded `UPDATE` runs | `rowcount = 0`, and the database's `wait_ended_at` stays NULL. `declined.is_(False)` compiles to `questions.declined IS 0`, and the column is `NOT NULL` with a `server_default` of `0` (`models.py:985-987`), so no legacy NULL row escapes the guard. |
+| The same, but with the ORM `update()`'s **default** `synchronize_session` | `rowcount = 0`, the database is still NULL, **and the loaded object reads `wait_ended_at` set**. The default is `'auto'`, which evaluates the `WHERE` in Python against the stale loaded row, and that row matches. |
+| The same, with `synchronize_session=False` | `rowcount = 0`, and the loaded object stays NULL |
+| Report loads Q and a sibling, an answer commits to both in a second session, the guarded `UPDATE` commits, then the batch is re-read | `rowcount = 1`. A plain re-read returns `answered = False` for both. The `populate_existing` re-read returns `True` for both. |
+
+So 2.8 and 2.9 close the interleave as R2 argued, and 2.9's mutation (b) is real. **One trap R2
+did not name:** with the default sync, a refused stamp leaves the in-memory row saying the wait
+ended while the database says it did not. That is D4's identity-map trap again, arriving from the
+other direction. The statement must carry `.execution_options(synchronize_session=False)`, as the
+two existing bulk updates already do (`inbound_queue.py:350`, `turn_scheduler.py:627`). Nothing in
+the report reads the loaded row's `wait_ended_at` after the write today. So this is a rule for the
+code rather than a behaviour a route test can see, and task 2.8 states it as that, not as a
+mutation.
+
+### (Round 3) One decision point, not two
+
+Round 2 kept the load-time branches (`:681` answered or declined, `:683` already recorded) *and*
+added the guarded `UPDATE` beneath them. That leaves two places deciding whether a row gets
+stamped. The load-time one reads exactly the stale state R2 warned against. It also makes two of the
+round's mutations wrong:
+
+- **2.6's mutation no longer produces what it says.** "Skip the `wait_ended_at` write on the resolved
+  branch → a second entry" was true under R1. Under 2.9, keys come only from rows whose stamp
+  returned `rowcount = 1`. So skipping the write means the **first** report keys nothing: 2.2 fails,
+  and 2.6 sees no entry at all rather than a second one.
+- **2.1's mutation cannot be applied.** "Also set `wait_ended_at` on the declined one" is impossible
+  through a statement whose `WHERE` says `declined IS FALSE`.
+
+**The rule, after the ownership checks** (not found, another project, not asked by the calling
+run — each skipped and not accepted, as today):
+
+1. If the loaded row is **unanswered** and `wait_has_expired` is false, refuse it, as today. This is
+   the only load-time decision left. It is the refusal that keeps the report from creating a fact.
+   It is judged on the loaded row, and stale only in the safe direction: a row answered after the
+   load would have been let through the answered branch without the check, and is refused here
+   instead. The tool reports only after its own deadline, which normally falls after the Hub's. So
+   the only way to reach this refusal with a live wait is R2's lengthened-timeout route, and that
+   route is already D5's residual: the report is refused whether or not the answer raced it. It is
+   named so the implementer does not "fix" it.
+2. Everything else goes through the one guarded `UPDATE`. The `rowcount` decides:
+   - **1**: this request stamped the row. It enters 2.9's post-commit re-read. If the loaded row
+     was unanswered, `release_block_for_expired_wait` runs, which is silent when a concurrent answer
+     already released the task (`run_task_binding.py:853-855`).
+   - **0**: already recorded, by an earlier report or by the sweep, or declined. It is accepted,
+     with no key and no release.
+
+The *already recorded* and *declined* branches then disappear as separate code, because the
+`WHERE` is them. 2.6 becomes the test of the `wait_ended_at IS NULL` arm, and 2.7 the test of the
+`declined IS FALSE` arm. Each gets a mutation that can actually be applied (tasks 2.1, 2.6).
+
+### (Round 3) The sweep is the second writer, and R2 guarded only one
+
+R2's argument was that *this change should not rest an argument on the invariant while leaving it
+unguarded*. Two things write `wait_ended_at`, and R2 guarded one of them. The run-end sweep
+(`run_divergence.py:713-733`) loads the question through `unanswered_blocking_question`. Then it
+assigns `question.wait_ended_at = question.wait_ended_at or now` on that loaded object and commits.
+It has the same load-then-write shape. A decline that commits between the sweep's load and its
+commit leaves a declined row carrying `wait_ended_at`, and the task then says *"Proceeded without
+your answer"*. The window is narrower, because the sweep only runs once the run has ended, but it is
+the same defect. Read, not measured.
+
+**The fix:** one helper, `record_wait_ended(session, question_id, now) -> bool`, in
+`run_task_binding.py` beside `wait_has_expired`. It issues the guarded `UPDATE` with
+`synchronize_session=False` and returns whether `rowcount` was 1. Both writers call it. The sweep
+calls `release_block_for_expired_wait` only when it returns True. Its own `or now` is subsumed by the
+`IS NULL` arm. The spec's decline scenario gains the run-end twin, and task 2.10 tests it. An answer
+that lands mid-sweep needs nothing: by then the run has ended, so the answer route's run-ended arm
+delivers it.
+
 ## D5 — no receipt stamp (considered, not taken)
 
 The residual case is a report that never lands, an answer after the tool's last poll, and a run that
@@ -258,6 +335,47 @@ proposal's *Residual* now names both routes and the third option. That way the f
 the right costs. **Round 3 should re-derive this position rather than inherit it.** In particular,
 R3 should check whether the idempotency stamp can be avoided, for instance by deriving it from a
 queue entry's existence. If it can, the option may be small enough to take here after all.
+
+### (Round 3) Re-derived: the stamp is avoidable, the home is not, and there is a third route
+
+**A queue entry cannot carry the idempotency.** `InboundQueueEntry` has no question column. The
+question id appears only in the `queue_entry_queued` event's JSON payload (`questions.py:378-389`).
+Matching on an event payload or on an entry's text would be a key nobody declared.
+
+**It does not need one, provided the delivery sits at a once-per-run boundary.** `evaluate_run_end`
+has three callers. `agent_trigger.py:2419` and `:3005` each call it once after their runner's
+finalize commit. `run_reconciliation.py:126` calls it only for runs still `running` at Hub start,
+which by construction never reached either of the other two. So a run's end is visited at most once,
+and a delivery made there cannot repeat itself. The only duplicate left is the one across the
+boundary: an answer committed as the run ends, delivered by both the answer route and the run end.
+That is D4's trade. Read, not measured.
+
+**But `evaluate_run_end` is the wrong home.** It is not reached when the run's input went back to the
+queue (`agent_trigger.py:2418`, `:3004`; `run_reconciliation.py:96`). That is exactly the failed-run
+retry, and a redelivered turn carries the original input, not the answer. It also returns before the
+sweep for an unbound run (`run_divergence.py:692-698`). So the option has to sit at the finalize
+sites themselves, at least three of them, not in the divergence check. That is the scope reason,
+and a better one than round 2's.
+
+**R3 found a third route into the residual, which the option does not close.** Suppose an answer
+commits **inside** the wait, then the run is killed or crashes before the tool's next poll, a window
+of up to 2 s. The answer route read the run as live and `wait_ended_at` NULL, so it queued nothing.
+The sweep's `unanswered_blocking_question` skips an answered question. And
+`answered_at > wait_expires_at` is false, so the no-migration option skips it too. The answer is
+lost. This is pre-existing: the shipped shortcut has always had it. Read, not measured.
+
+| Route into the residual | This change | No-migration run-end option | Receipt stamp (migration) |
+|---|---|---|---|
+| 1. Report lost, answer later in the run's life | lost | delivered at run end | delivered at run end |
+| 2. Timeout lengthened mid-run, report refused | lost | delivered at run end | delivered at run end |
+| 3. In-time answer, run dies before the next poll | lost | **lost** | delivered at run end |
+| Grace-window answer the tool took | not duplicated | **duplicated** | not duplicated |
+
+**Round 3's position: D5 stands for this change, and the follow-on should be framed on this
+table.** The only complete fix is the receipt stamp, which needs a migration and is refused today by
+the day rule. The no-migration option closes two of the three routes and adds a duplicate, and it
+needs code at every finalize site. That is a choice between two follow-ons, not a clause to add to
+this one. The proposal's *Residual* and the test guide carry the third route.
 
 ## D6 — the late delivery's wording is unchanged (considered, not taken)
 

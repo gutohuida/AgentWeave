@@ -28077,6 +28077,20 @@ is why the fix reads `wait_ended_at`, not `wait_expires_at`.
 
 Proposal: `openspec/changes/a-late-answer-is-delivered/`.
 
+**Note, 2026-09-14 (f356-R3, code read).** A second writer of `wait_ended_at` shares the
+pre-existing decline race that R2 found in the report, and the answer has a third way to be lost.
+- **The run-end sweep** (`run_divergence.py:730-733`) loads the question, then assigns
+  `wait_ended_at` to it. A decline committed in between is stamped as "Proceeded without your
+  answer".
+
+  The change now routes both writers through one guarded `UPDATE` (task 2.10). On `aiosqlite`
+  it measured `rowcount = 0` against the Hub's `Question` model, with `synchronize_session=False`
+  required.
+- **A third route to a lost answer, which the change does not close.** An answer commits inside the
+  wait, then the run dies before the tool's next poll, up to 2 s later. That answer is lost today and
+  stays lost after the change. Only a receipt stamp, which needs a migration, closes it. Design D5
+  has the route table.
+
 ## F357 (B) — a flow's review turn tells its reviewer to approve, and says nothing about the evidence gate that will refuse it
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).

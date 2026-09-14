@@ -14,6 +14,7 @@
 | Repeated reports and lone late declines queue nothing more | report tests | 2.6, 2.7 |
 | Either order of answer and report delivers exactly once | both orders | 3.1, 3.2 |
 | An answer or decline landing between the report's load and its write: the answer is delivered, the decline is not stamped | a second session commits mid-report (Round 2) | 2.8, 2.9 |
+| A decline landing mid-sweep at the run's end is not stamped | a second session commits after the sweep's load (Round 3) | 2.10 |
 | The real tool, the real wait and a real agent | drive 5.2–5.4 on a drive Hub | 5.x |
 
 ## Human-only
@@ -39,3 +40,6 @@
   route. The tool gives up at the old deadline, and its report is refused against the new one
   (design, *Context*). A later answer inside the run's life is lost. Round 2 names a no-migration
   way to deliver both at the run's end, left to a follow-on change (design D5).
+- **(Round 3) An answer given inside the wait, then the run dies before the tool's next poll**
+  (up to 2 s). The answer is lost. This is pre-existing. Neither this change nor the no-migration
+  option reaches it; only a receipt stamp would (design D5, the route table).

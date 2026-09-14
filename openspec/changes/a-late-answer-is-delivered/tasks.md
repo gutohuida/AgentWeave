@@ -45,6 +45,12 @@ and the observed failure beside the task when ticking it.
       declined"* is no longer a refusal, and the docstring says why.
       **Mutation:** also set `wait_ended_at` on the declined one → 2.7's
       `proceeded_without_answer_reason` assertion fails.
+      **(Round 3)** Implement this as design D4 *One decision point*: after the ownership checks,
+      the only load-time branch left is "unanswered and not `wait_has_expired` → refuse". Everything
+      else goes through 2.8's guarded `UPDATE`, and `rowcount` decides. The *already recorded*
+      (`:683`) and *declined* branches stop being separate code. The mutation above cannot be
+      applied through a `WHERE … declined IS FALSE`. Its applicable form is: **drop the
+      `declined IS FALSE` arm** → 2.7 fails.
 - [ ] 2.2 After the loop, deliver once per batch key, through `_deliver_batch_if_complete`. The
       keys are the ones 2.9 collects (Round 2), not those read at load time. Announce and wake through the helper that 2.4
       extracts. Test: a batch of 4, 2 answered in time, 2 reported expired **after** being
@@ -68,6 +74,11 @@ and the observed failure beside the task when ticking it.
       **stop and record a finding**. Do not patch the scheduler inside this change.
 - [ ] 2.6 A second report of the same ids is accepted and delivers nothing more. **Mutation:**
       skip the `wait_ended_at` write on the resolved branch → a second entry.
+      **(Round 3)** That mutation is stale under 2.9. Skipping the write means the first report
+      stamps nothing, keys nothing, and delivers nothing, so 2.2 fails and 2.6 sees no second entry.
+      The applicable mutation is: **drop the `wait_ended_at IS NULL` arm** of 2.8's `WHERE` → the
+      second report's `rowcount` is 1, it re-keys, and a second entry appears. 2.9's mutation (c)
+      stays as a separate check.
 - [ ] 2.7 A lone question declined after the tool's last poll, then reported: accepted, no entry,
       `wait_ended_at` still NULL, and the bound task's `proceeded_without_answer_reason` still
       null.
@@ -82,6 +93,13 @@ and the observed failure beside the task when ticking it.
       commits the decline after returning the row) → Q's `wait_ended_at` still NULL, and the bound
       task's `proceeded_without_answer_reason` null. **Mutation:** restore the ORM write →
       `wait_ended_at` set on a declined row.
+      **(Round 3)** The statement lives in one helper,
+      `record_wait_ended(session, question_id, now) -> bool`, in `run_task_binding.py` beside
+      `wait_has_expired`. 2.10 is its second caller. It carries
+      `.execution_options(synchronize_session=False)`, as `inbound_queue.py:350` and
+      `turn_scheduler.py:627` do. Measured in design D4 *Measured*: with the default sync, a
+      `rowcount` of 0 still sets `wait_ended_at` on the loaded object. No route test can see that
+      today, so it is a code rule stated in the helper's docstring, not a mutation.
 - [ ] 2.9 **(Round 2) Keys come from committed state, after the report's own commit** (design D4,
       *The report half*). After the loop, re-read every row whose `rowcount` was 1, with
       `populate_existing`, and take a batch key from each that is `answered`. This replaces 2.2's
@@ -92,6 +110,20 @@ and the observed failure beside the task when ticking it.
       answer. **Mutations:** (a) key from the load-time branch, which is round 1's design → no
       entry; (b) re-read without `populate_existing` → no entry; (c) key rows accepted through the
       *already recorded* branch too → 2.6 gets a second entry.
+      **(Round 3)** Under *One decision point* the "already recorded branch" in (c) is a
+      `rowcount` of 0. Mutation (c) reads: key every accepted row, not only those whose `rowcount`
+      was 1. Mutation (b) was observed in design D4 *Measured*: a plain re-read returned
+      `answered = False` for rows answered in a second session.
+- [ ] 2.10 **(Round 3) The run-end sweep uses the same guarded write** (design D4, *The sweep is the
+      second writer*). In `evaluate_run_end` (`run_divergence.py:730-733`), replace
+      `question.wait_ended_at = question.wait_ended_at or now` with `record_wait_ended`, and call
+      `release_block_for_expired_wait` only when it returns True. Test: a bound run has ended,
+      holding an unanswered blocking question whose wait has expired. A decline is committed through
+      a second session after `unanswered_blocking_question` has loaded the row (patch it to commit
+      the decline before returning) → the question's `wait_ended_at` stays NULL, and the task's
+      `proceeded_without_answer_reason` is null. **Mutation:** restore the attribute write →
+      `wait_ended_at` set on a declined row. The existing sweep tests
+      (`grep -rl wait_ended_at hub/tests/`) stay green unchanged.
 
 ## 3. Races (design D4)
 

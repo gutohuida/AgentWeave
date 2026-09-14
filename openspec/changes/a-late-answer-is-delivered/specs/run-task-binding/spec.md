@@ -17,7 +17,8 @@ report names only what the run did not receive. So where a question it names had
 answered by the time the report arrived, the system SHALL treat that answer as never received, and
 SHALL deliver it on the same terms as an answer given after the wait. A question declined by then
 SHALL NOT be recorded as having gone ahead without an answer, since a decline is a decision handed
-back, not silence.
+back, not silence. The same holds where the system itself records the wait's end at the run's end:
+a question declined by the time that record is written SHALL NOT receive it.
 
 The system SHALL decide whether to deliver only after it has recorded the answer or the wait's end,
 and against recorded state. An answer and an expiry report that arrive together SHALL NOT both
@@ -69,6 +70,15 @@ ended, not only from the moment its run has ended.
 
 - **GIVEN** a blocking question whose asking run's expiry report has read it unresolved
 - **AND** the operator's decline is recorded before that report records the wait's end
+- **WHEN** both have been recorded
+- **THEN** the question does not record that its wait ended
+- **AND** the task it was bound to does not say it proceeded without the operator's answer
+
+#### Scenario: A decline that lands while the run's end is being recorded is not called an absence
+
+- **GIVEN** a bound run that has ended, whose end check has read its blocking question unresolved
+  with the wait expired
+- **AND** the operator's decline is recorded before that check records the wait's end
 - **WHEN** both have been recorded
 - **THEN** the question does not record that its wait ended
 - **AND** the task it was bound to does not say it proceeded without the operator's answer
