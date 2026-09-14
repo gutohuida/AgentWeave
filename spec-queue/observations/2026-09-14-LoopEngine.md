@@ -553,3 +553,146 @@ hours when this was read.
 - **Background processes.** Whether a background process outlives the turn that started it.
 - **The duplicate count.** Whether the four pending `dev_2` tasks duplicate each other beyond their
   titles.
+
+## The sort (O-3)
+
+Written at 10:15–10:30 by the day window's fifth firing. Every observation above lands in exactly
+one list below, apart from the four under *Not sorted*, whose mechanism was not confirmed.
+- **Fixes:** each mechanism was confirmed in this checkout, at `f28bc31`'s tree, with the `file:line`
+  given in its `scripts/drive/FINDINGS.md` entry.
+- **Improvements:** each gets a brief, `openspec/explorations/2026-09-14-<slug>.md`, in I-1.
+
+**The two open checks, resolved.**
+- **(i) The ~26 transitions recorded as the operator's on cron ticks** are the flow's staging, and
+  they are F47. `scheduler.py:828` and `:830` pass `operator()` for `completed → under_review` and
+  `pending → assigned`, because `ACTOR_KINDS` has only `run` and `operator`
+  (`task_transitions.py:34-36`). F47 is open (C), and has a dated note.
+- **(ii) Approving `task-f6683280dc12` merged `cbc34fa` while FR-11's evidence was rejected, and
+  that is intended.** The document is `sketch` rigor, read from `:8000`. At `sketch`,
+  `_enforced_requirements` filters out every requirement (`requirement_gate.py:339-360`), so a
+  rejection is a signal on the task, not a gate. `_check_unaccepted` blocks only when evidence is
+  `awaiting` and nothing accepted names a commit, and it allows the mixed case by design
+  (`:493-506`). Under `gate` rigor the rejected requirement would refuse the approval. The rigor is
+  the operator's setting, so this item is under *Not AgentWeave's*.
+
+## Fixes
+
+Severity first. Within a severity, ordered by what the fault cost on this project.
+
+1. **F352 + F353 (A)**: a flow counts an agent busy for any live task in the project, and its
+   unstaffed sentence names nobody and no way out. 180 stalls here. One change, because both
+   repairs rewrite the same sentence.
+2. **F355 (B)**: a provider session-limit failure is re-delivered twice into the exhausted
+   allowance, then its input is given up. There were 25 withdrawn entries, a review among them.
+3. **F356 (B)**: an answer given after `ask_user`'s wait, while the run still lives, reaches nobody.
+   Three answered batches were lost.
+4. **F357 (B)**: a review turn is told to approve, with no word about the evidence gate. Seven
+   approvals were refused, and peers were told "approved" anyway.
+5. **F358 (B)**: evidence can be decided while its recording run is live, and the duplicate
+   refusal's remedy contradicts the briefing. 3 rejections came from the race and 5 from
+   retirements.
+6. **F359 (B)**: a run the Hub's own write kills is not snapshotted and its evidence is not
+   re-pointed. `ev-85be48ba74a2` still names a commit that holds none of the work.
+7. **F360 (B)**: the checkpoint probe's "assigned to this agent" rule fails loop checkpoints on a
+   coin toss. 7 of 14 were marked failed.
+8. **F361 (B)**: a hop-suspended peer message has no reason on its entry, and the sender is told it
+   was sent. 20 entries sat 2–13 h.
+9. **F347 (B)**: a repository with no commit refuses every turn with git's plumbing error. It was
+   seen on this project on 09-13 and already has its verdict (option a).
+10. **F362 (B)**: on Windows, the guard reads the tail of a relative word containing a `/` as an
+    absolute path. That covers the globs, `/`-rooted fragments, regex and `2>/dev/null`: at least
+    128 of the 262 refusals. *Not built today: `mcp_server.py`.*
+11. **F363 (B)**: `read_spec_document` never fits a tool result, and it refuses the document id.
+    All 57 results spilled, and 85 refusals named the spill file. *Not built today:
+    `mcp_server.py`.*
+12. **F364 (C)**: `submit_checkpoint_notes` enforces caps it never states, with a refusal that
+    names nothing. 23 of 36 calls failed.
+13. **F47 (C)**: the flow's staging is recorded as the operator's. That is the ~26 on cron ticks.
+
+**Re-observed and not in the list.**
+- F349 gets a note: the same lock kills runs, which is F359.
+- F354 was not observed breaking anything here.
+- F351 is fixed, `022903f`.
+
+## Improvements
+
+Most useful first. Each is briefed in I-1, and none is specced or built.
+
+1. **`rework-in-a-fresh-session`.** `dev`'s $114 is long turns re-read from cache:
+   - 98% of it is cache reads;
+   - 8 runs account for 58%;
+   - context grows from 41–45 k to 290–547 k, with no compaction;
+   - rework resumes the author's growing session (206 M tokens across multi-run sessions);
+   - no token budget is set by default.
+2. **`agents-can-retire-their-own-work`.** No agent can withdraw its own `awaiting` evidence row or
+   close a superseded task. 5 of `tester`'s rejections were retirements, and `task-8ae8e1ace072` is
+   still `completed`.
+3. **`a-review-can-wait-on-the-operator`.** A reviewer waiting on an operator decision looks like
+   one that never started: 64 events for `task-9e89a55ccc84`. The Architect ended autonomous turns
+   asking in prose. The improvement is a *declared* wait, not detection of prose, which stays
+   retired (CLAUDE.md, 2026-08-20).
+4. **`requests-that-name-another-task`.** One run takes one task, but messages ask for work on
+   another:
+   - two *"cannot claim task"* refusals;
+   - evidence left on the wrong branch;
+   - a message carrying another agent's task id wakes its recipient in that task's workspace;
+   - `dev` and `dev_2` fixed FR-60 in parallel.
+5. **`the-first-turn-has-its-tools`.** Every agent's first turn was told *"no MCP tools this turn"*.
+   For the Architect that became a whole ten-turn session of `curl` and payload files
+   (`launchability.py:285-289` prices it at one turn). Related to F340.
+6. **`the-transition-model-agents-are-told`.** Agents repeatedly tried edges that do not exist:
+   - `in_progress → under_review`, `completed → approved`, and `pending → completed`;
+   - a reviewer who moved a task to `completed` then could not approve it (`task-bb06b8c3c708`).
+7. **`a-peer-can-see-the-answer`.** `get_answer` answers 404 for a question another agent asked
+   (`agent_actions.py:722-727`). `tester` could not see the answer its decision waited on.
+8. **`project-notes-inside-the-product`.** The agents kept a 19-note ledger of AgentWeave's
+   behaviour in the harness's memory directory, and every write raised an outside-workspace warning.
+9. **`peer-threads-that-only-acknowledge`.** 7 of the Architect's turns only acknowledged a peer.
+   Such threads spend the hop budget, which was reached 21 times.
+10. **`background-work-ends-with-the-turn`.** Two turns ended waiting for a background task's notice
+    that never came. The briefing does not say that background work ends with the turn.
+11. **`localhost-for-the-thing-under-test`.** The default posture refused the agents' calls to the
+    project's own server on `127.0.0.1`: 3 refusals.
+
+## Not AgentWeave's
+
+- **LoopEngine's code.** The defects `tester` caught belong to the project and are not
+  AgentWeave's: the DNS-rebinding claim, the 429/503 classifier, and tests that passed without the
+  feature.
+- **The rigor setting.** The spec document is `sketch` rigor, the operator's setting, so approval
+  merging over a rejected sibling requirement is intended (check (ii) above).
+- **The loop has no stop time, and the job is still enabled.** It was configured on the operator's
+  instruction.
+- **Eight questions went unanswered overnight.** The operator was away. The agents recorded the
+  open decisions and carried on correctly.
+- **The provider's session limits themselves.** The plan's allowance is not AgentWeave's. What the
+  Hub does next is F355.
+- **The first landing was refused for *"this project has no main branch set"*.** The setting was
+  unset, and the refusal named the repair.
+- **Agent slips answered by a clear refusal:** `to` for `to_agent`, and a task id passed as a
+  requirement identifier.
+- **`tester`'s reviews were real, not rubber stamps.** 34 accepted and 34 rejected, with a median
+  reason of about 1,160 characters. Nothing to change.
+
+## Not sorted, and why
+
+Each of these has an observation, but no mechanism confirmed in code this firing, so none is filed:
+- **4 task-worktree releases failed after merge on Windows** with *"failed to delete … Permission
+  denied"*. Which process held the files was not checked.
+- **Only 7 of the Architect's 31 operator turns carried the *"SPECIFICATION TURN"* notice.** Why a
+  follow-up in the spec conversation is not a spec turn was not traced.
+- **Whether the harness bypasses the permission tool for its own directories.** `Read`, `Write` and
+  `Grep` on those paths went through, while `Bash` naming them was refused.
+- **72 surfaced divergences sit unresolved.** Whether any of them mattered was not read.
+
+## What went unread
+
+O-3 started at 10:15, before 11:00, with both O-2 halves complete. Unread across O-2:
+- the `agent_outputs` rows of all four agents, which were not reconciled against the transcripts;
+- the thinking blocks, and the one subagent sidechain;
+- `dev`'s three longest sessions end to end;
+- whether `tester`'s probes were right against LoopEngine's code;
+- whether background processes outlive their turn;
+- whether `dev_2`'s pending tasks are duplicates beyond their titles.
+
+The operator's own turn text was out of bounds and was not read.

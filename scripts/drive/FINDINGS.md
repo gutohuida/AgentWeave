@@ -2577,6 +2577,16 @@ neither `assigned` nor `under_review` is one — so this is a truthfulness defec
 rather than a hole in enforcement. The pin in `test_flow_chain_end_to_end.py` now lists both rows,
 so whoever fixes the attribution will be told exactly what to update.
 
+**Observed on real use, 2026-09-14** (day window O-3, LoopEngine on `:8000`, read-only). This is
+O-1's open attribution check, and it is resolved: the moves are the flow's staging, not the
+operator's. `task_transitions` holds 32 rows with `actor_kind = operator`. About 26 of them fall
+exactly on the job's cron ticks (17:25:00, 19:00:00, 19:10:00 … 04:10:00), and are all
+`pending → assigned` or `completed → under_review` with no run. They are the flow's staging:
+`scheduler.py:828` and `:830` pass `operator()`. `ACTOR_KINDS` still has two members
+(`task_transitions.py:34-36`). One more cost showed on this project. The briefing of a 17:46 review
+said `under_review`, while its own queue listing, rendered a moment earlier, showed the task
+`completed`. The move was stamped `operator` at 17:46:34.027, after the listing.
+
 ---
 
 ## F48 (B) — pressing Run on a healthy flow reported "Failed to fire job"
@@ -27586,6 +27596,11 @@ repair needs to decide whether the `last_seen_at` write belongs inside the trigg
 all, and must answer with what actually happened to the message. See DEAD-ENDS on the two
 `database is locked` mechanisms before assuming a holder exists.
 
+**Observed again 2026-09-14** (day window O-3, LoopEngine on `:8000`, read-only). The same error
+also ends runs, not just trigger requests. `run-539bd1d44ea1` (35 minutes, 304 outputs),
+`run-d5f4b2972125` and `run-7695d6f7b4b4` each failed on `(sqlite3.OperationalError) database is
+locked` raised by `INSERT INTO agent_outputs`. What the Hub then does with such a run is **F359**.
+
 ## F350 (C) — below ~560px of height in a narrow window, the composer's send button is off the panel even with nothing pending
 
 **Status:** open. Found 2026-09-13 while measuring F345's narrow fallback; it predates it.
@@ -27729,6 +27744,15 @@ rather than the project; whether `pending`-with-assignee counts as holding; whet
 row with no running or queued turn does; and, whatever else changes, the unstaffed sentence has to
 name the holdings — agent → task — because it is the whole of what the operator is shown.
 
+**Observed again 2026-09-14** (day window O-3, `spec-queue/observations/2026-09-14-LoopEngine.md`,
+read-only from `:8000`). The same sentence was recorded **180** times between 2026-09-13 17:25 and
+2026-09-14 08:40 UTC, not fourteen, and it kept recurring after the 22:33 unblocking. `dev_2` has
+not run since 23:50 UTC, and it holds four `pending` tasks with no `loop_id` that nothing will
+start (`task-62b60f9dba50`, `task-88eff732b7f5`, `task-7673e4f80905`, `task-a7c2a75726a2`). Two of
+them describe the same change by title. F352's shape is the flow's largest single stall on this
+project. It is built on 2026-09-14 together with F353, because both repairs rewrite the same
+unstaffed sentence.
+
 ## F353 (B) — the product tells the operator to "clear the assignee", and nothing in the app can; the one action that would work, "Land it", is never named
 
 **Status:** open. Found 2026-09-13 unblocking F352.
@@ -27744,6 +27768,14 @@ the operator asked the reviewing agent three times how to reassign; it concluded
 any agent has a way to do that"* and handed the operator hand-written PowerShell against a path the
 Hub does not serve (`/tasks/<id>`, no project, no auth). One `land` call per task did it.
 
+**Observed again 2026-09-14** (day window O-3, LoopEngine, read-only). The agents met the guard's
+refusal eight times: the Architect six, and `tester` at 23:07 on `task-49b0567ce119` and at 03:59 on
+`task-0ff93faef4ba`. Each refusal followed a *"Cannot move a task from 'completed' to …"* refusal.
+The Architect put the gap to the operator through `ask_user` at 16:32. It later ended several
+autonomous turns asking in prose for tasks to be reassigned. The agents' saved notes record that no
+agent can reassign. The task stayed `completed` each time, and the verdict landed only through
+evidence decisions.
+
 ## F354 (B) — the operator's live agents launch the MCP server from the development working tree, so an unattended loop's uncommitted edits reach them mid-edit
 
 **Status:** open. Found 2026-09-13 on the operator's Hub.
@@ -27758,3 +27790,263 @@ were gone from the tree minutes later. Nothing was measured to break, and no tur
 against that window. A repair could pin the server the Hub loaded — copy `mcp_server.py` aside at
 startup and spawn the copy — so an agent's tool surface changes when the Hub restarts, like the rest
 of its Python.
+
+## F355 (B) — a run that fails on the provider's session limit is re-delivered into the same exhausted allowance, and then its input is given up
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from the operator's real use (LoopEngine
+on `:8000`, read-only; `spec-queue/observations/2026-09-14-LoopEngine.md`). **Seen live, not yet
+reproduced.**
+
+**What happened.** The provider's session limit was hit three times: 21:00–21:05, 01:19–02:05 and
+06:57–07:02 UTC. At least 66 runs failed on them (51 of `dev`'s and 15 of `tester`'s, plus the
+Architect's). Each failed in 6–10 s with the harness's session-limit notice and
+`Run failed (exit 1).` Of `dev`'s 51, 48 used 0 tokens. A traced example,
+`entry-3203bb7ad4e0` at 01:25, went like this:
+1. It was delivered, the run failed, and it was re-queued and re-delivered about 10 s later.
+2. The second delivery resumed the failed session. The third started a new one (`run-42cae48b5e1f`,
+   `run-895a732851b8`, `run-9f6ddd243259`).
+3. Then the entry was withdrawn: *"delivery failed 3 times; the Hub stopped retrying"*.
+
+25 entries ended that way: job steps, reviews and peer messages. The Architect's review of
+`task-9e89a55ccc84` was one of them, and it was never delivered again. The flow then recorded 64
+times that the Architect *"is named on … as its reviewer and is not reviewing it"*.
+
+**Where.** `return_run_entries` (`hub/hub/inbound_queue.py:181-235`) treats every failed run alike:
+- it clears the provider session at `RESUME_RETRY_LIMIT = 2` (`:170`);
+- it withdraws the entry at `DELIVERY_ATTEMPT_LIMIT = 3` (`:178`, `:222-230`).
+
+Those limits were written for a session that cannot be resumed (the docstring, `:184-189`), not for
+an allowance that is exhausted until a known time. The harness reports the allowance:
+`rate_limit_event` is parsed and kept only as an accounting sample
+(`hub/hub/runner_parsing.py:364-369`). The session-limit notice states when the limit resets.
+`grep -in "session limit\|usage limit\|quota" hub/hub` finds no code that reads either for
+scheduling.
+
+**Why B.** The failure attempts cost almost nothing. What does cost is **lost coordination**: a
+peer message or a review given up at 01:25 is gone, and no agent is told. The flow re-creates its
+own job steps on the next tick, but nothing re-creates a dropped message.
+
+**Shape of a fix (a sketch, not verified).** Recognise a provider-limit failure, and do not count it
+as a delivery attempt. Instead, hold the agent's queue until the reset time the provider gave, and
+say so on the entry. Whether a held queue should also hold the flow's job is for R1 to decide.
+
+## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+
+**What happened.** The Architect asked 22 questions in 9 `ask_user` calls. Three batches were
+answered **after** the 240 s wait had ended:
+- 09-12 23:26: the wait ended at 23:30, and the answers came at 23:43–23:44;
+- 09-13 14:38: three of the four questions;
+- 09-13 16:50.
+
+No later prompt carries those question ids, and the Architect never called `get_answer` on them. The
+operator's answers went into a store nobody read.
+
+**Where.** `answer_question` decides whether to queue the answer as a new turn from
+`asker_still_waiting = question.blocking and not await _asking_run_has_ended(...)`
+(`hub/hub/api/v1/questions.py:346`). `_asking_run_has_ended` (`:29-45`) is true only once the run
+has stopped. But `ask_user`'s tool call returns at the wait's expiry, and the run carries on. So
+between the expiry and the run's end, the answer is treated as received by a tool call that has
+already returned, and `_deliver_batch_if_complete` (`:359-362`) is skipped. `Question.wait_expires_at`
+exists (`hub/hub/db/models.py:993`) and is not read anywhere in `questions.py`.
+
+**Why B.** The operator's decision is silently lost, and both parties believe the other has it.
+
+**Reproduce (sketch).** Have a Haiku agent ask a blocking question with a short
+`AW_QUESTION_TIMEOUT` and then keep working, say a long `sleep`. Answer after the wait and before the
+run ends. No queue entry is created, and no later turn carries the answer.
+
+## F357 (B) — a flow's review turn tells its reviewer to approve, and says nothing about the evidence gate that will refuse it
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+
+**What happened.**
+- **Five of the Architect's approvals were refused** (`49d507bb` 18:00, `0682583f` 19:41,
+  `712ab8e3` 19:52, `37dd5b7a` 20:11, `8b72ca10` 20:32), each with *"This task's work has been
+  recorded and nobody has judged it … To land it, accept the evidence, or grant an agent the
+  capability to accept it — both are the operator's"*. At 18:00 it had already told `dev` the task
+  was approved, and had to send a correction.
+- **`dev_2`'s approval of `task-715470b41119` was refused twice** (19:50, 19:55). It messaged `dev`
+  that the task was approved regardless. Earlier, at 17:23, the flow had staffed it to review
+  `task-b8e8b7f3beca`, and its three `decide_evidence` calls were refused with *"accepting evidence
+  is the operator's, or an agent the operator has granted it."*
+
+The operator then granted `tester` `can_accept_evidence`, and every evidence decision was routed
+through `tester`, which lengthened every Architect↔`tester` thread.
+
+**Where.** Both channels give the same instruction: *"End the review with a verdict, using
+`update_task`. The task is `under_review`: set it to `approved` if the work is right"*
+(`hub/hub/scheduler.py:2065-2085`, `hub/hub/api/v1/agents.py:1642-1646`). Neither mentions that
+approval is refused while the task's evidence is `awaiting`, which is the gate
+`approval-refuses-unaccepted-evidence` added after that wording (F45). The context channel does say
+*"You cannot decide evidence"* (`agents.py:1909-1913`), but nothing connects that sentence to the
+verdict. `resolve_reviewer` (`scheduler.py:1043`) does not consult the grant: `can_accept_evidence`
+is read only at `requirement_evidence.py:674` and in `agents.py`.
+
+**Why B.** The review turns were genuine and the verdicts were right. Each one hit a refusal that the
+briefing had set up, and the agents misreported the result to their peers.
+
+## F358 (B) — evidence can be decided while the run that recorded it is still live, so the reviewer judges a commit the Hub is about to replace
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+
+**What happened.** `dev`'s `run-13096fbb3cc8` ran from 05:35:45 to 05:53:05. During it, `dev`
+messaged `tester` to re-check the rework. `tester` woke at 05:51:59 (`run-9f7ae8cfe645`) and read
+the new rows' footprint, `d4f5eda`. At 05:53:05 the Hub re-pointed the rows to the snapshot
+`880f47c`. At 05:53:11–17 `tester` rejected all three (`ev-c7b3dce37a88`, `ev-be17d387cd74`,
+`ev-b3a0392cf76a`) as unverifiable on `d4f5eda`. The stored rows now name `880f47c`, so each
+rejection's reason contradicts the row it sits on. One review round was lost.
+
+There were two more costs:
+- **A remedy that contradicts the briefing.** Three times `dev` re-recorded after revising in the
+  same turn, and was refused with *"… if the work has moved on, commit it first so the new evidence
+  names the commit it demonstrates."* The briefing says the opposite: *"You do not need to `git
+  commit` your own changes"* (`launchability.py:423-428`).
+- **Rows an agent cannot retire.** The duplicate refusal offers only *"say so on that piece"*. Five
+  of `tester`'s rejections existed only to retire a superseded row that its author could not
+  withdraw.
+
+**Where.** `decide` (`hub/hub/requirement_evidence.py:677-737`) checks the grant and self-acceptance,
+and nothing about whether the recording run is still running. The footprint is re-pointed only when
+the run ends (`restamp_run_footprints`, `:894`; `agent_trigger.py:2304-2315`). The duplicate remedy
+is at `requirement_evidence.py:146-152`. `record_evidence`'s description calls the returned
+footprint *"the branch and commit your evidence has been attached to. Read it."*
+(`mcp_server.py:1727-1731`). That file is not edited on 2026-09-14 (F354).
+
+**Why B.** Of `tester`'s 34 rejections, 3 are this race. Each one costs a review round and leaves a
+recorded reason that disagrees with the row.
+
+## F359 (B) — a run killed by the Hub's own write is marked failed without the snapshot or re-point a finished run gets
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+F349 is the same lock seen from a trigger request.
+
+**What happened.** Three runs ended on `(sqlite3.OperationalError) database is locked` raised by
+`INSERT INTO agent_outputs` (`run-539bd1d44ea1` after 35 minutes and 304 outputs;
+`run-d5f4b2972125`; `run-7695d6f7b4b4`). `run-d5f4b2972125` had recorded `ev-85be48ba74a2`, and
+failed at 04:03:24. The next run in the same session committed the work at 04:05:58 as `d97aef5`,
+but that run's re-point covers only its own rows. `ev-85be48ba74a2` still names `c78d35d`, which does
+not contain the code, and that is one of the reasons `tester` gave for rejecting it at 04:23.
+
+**Where.** Every output line is written by `record_agent_output` inside the read loop, with no guard
+(`hub/hub/api/v1/agent_trigger.py:2190-2204`). A lock error there propagates to the run's `except`
+(`:2461-2491`). That path marks the run failed through `_record_run_failure_tail`. It does neither
+`snapshot_worktree` nor `restamp_run_footprints`, both of which a normal end does (`:2248-2315`).
+
+**Why B.** A run can die on the Hub's own bookkeeping, not on the agent's work. When it does, the
+work is left uncommitted in the worktree, and any evidence the run recorded names a commit that does
+not hold it.
+
+**Open to R1.** Whether the harness process is stopped when the read loop raises, or runs on
+unobserved, is not verified.
+
+## F360 (B) — the checkpoint probe asks for the tasks "assigned to this agent" while a loop checkpoint lists the loop's whole queue, so half of a flow's checkpoints are marked failed
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+
+**Measured.** All 14 of the project's checkpoints were loop-scoped, and each envelope carried 32
+tasks. 7 passed and 7 failed. **Every failure was the `task_ids` dimension, with all 32 missing and
+none invented.** No other dimension ever failed. The probe reader (Haiku) either listed every id or
+listed none.
+
+**Where.** The probe prompt's rule is *"List the id of every task the checkpoint says is assigned to
+this agent"* (`hub/hub/checkpoint_generation.py:157`). For a loop, though, the envelope and the
+rendered `## Tasks` section are the loop's whole queue at every status (`checkpoints.py:257-283`,
+`:375-378`), under a note that says so. A reader that follows the rule literally finds no
+assignments stated, and returns an empty list. `grade_probe` compares the answer against every item
+(`checkpoint_generation.py:385-399`), fails it, and sets the checkpoint `failed` (`:627-630`). The
+successor then reads *"This checkpoint's written summary failed its probe … disagreed with it"*
+(`:336-345`). The written summary disagreed with nothing: the reader was asked a question that the
+Hub's own list does not answer.
+
+**Why B.** It is a coin toss on every loop checkpoint. It reports half of a flow's checkpoints as
+failed, and it tells their successors to distrust a summary that has nothing wrong with it.
+
+## F361 (B) — a peer message past the hop budget is suspended with no reason on its entry, and its sender is told it was sent
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+It is distinct from F258: these are agent chains that really did reach the budget, not operator
+messages born past it.
+
+**What happened.** 21 peer chains reached hop 7 against a budget of 6 and were suspended. One was
+released at 06:10. **The other 20 were still `queued` 2–13 hours later, and every one had an empty
+`waiting_reason`.** The Architect sent 8 of them. All 78 of its `send_message` calls returned
+`{"success": true, "message_id": …}`, and no later briefing mentioned the suspensions.
+
+**Where.**
+- `create_message` queues the entry and emits a `queue_chain_suspended` event, and returns the
+  message as usual (`hub/hub/api/v1/messages.py:288-308`).
+- The scheduler returns `waiting_reason="hop budget exhausted"` (`turn_scheduler.py:336-337`,
+  `:371-372`). It never writes that to the entry; only `:459` writes `entry.waiting_reason`.
+- The agent's tool builds its own reply, `{"success": True, "message_id": …}`
+  (`mcp_server.py:244`), and that file is not edited on 2026-09-14 (F354).
+
+**Why B.** Coordination stopped for up to 13 hours. The sender believed the message was delivered,
+and the operator was shown no reason on the entry. Whether the UI shows the suspension any other way
+is left to R1.
+
+## F362 (B) — on Windows, the workspace guard reads the tail of any relative word that contains a `/` as an absolute path
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+This is not F321 or F323, which are fixed (`612b9c9`).
+
+**Measured.** The guard refused 262 tool calls on this project. The causes that this mechanism
+explains:
+- **45 globs.** `test/*.test.js` was refused as `'/*.test.js'`.
+- **68 `/`-rooted fragments** inside Bash words.
+- **Regex fragments.** `'/script'` came from a `<script` pattern and `'/\\1'` from a
+  back-reference. Of the 45 refusals that were regex or `$VAR`, it explains the regex ones.
+- **15 `2>/dev/null`**, refused even after a `cd`.
+
+Each refusal cost a retry. The agents' shared notes describe the rule wrongly, as following the
+shell's current directory. `_decide` resolves relative words against the workspace root and never
+sees a `cd` (`mcp_server.py:1308-1311`).
+
+**Where.** `_PLAIN_RELATIVE_RE` does not admit `*` (`hub/hub/mcp_server.py:966`). The word then
+falls to the backstop, `_ABSOLUTE_PATH_RE`. On Windows that opens a candidate at any `[\\/]`
+(`:957-960`), so the tail after the first `/` of a relative word is read as a POSIX-absolute path.
+
+**Why B.** It is the largest source of refusals under the default posture. It pushes agents into
+workarounds, such as throwaway scripts written into the checkout, that are worse than what they
+were refused. **Not built on 2026-09-14**, because the repair is in `mcp_server.py` (F354).
+
+## F363 (B) — `read_spec_document` cannot return a real specification in one tool result, and it refuses the document id the other tools take
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+
+**Measured.** Every one of the project's 57 `read_spec_document` results, across all four agents,
+was too large for the harness. Each was saved to a `tool-results/` file of 80–180 KB on a single
+JSON line, and `list_tasks` spilled 24 times as well. That spill file lies outside the workspace,
+so 85 guard refusals named it.
+- Agents recovered the content with repeated `Grep` calls, and once with a whole subagent.
+- Their notes settled on reading the committed `spec.html` instead, the opposite of what the tool
+  description says.
+- `dev` read the 64 k-character spec whole into its context in 11 sessions.
+
+Separately, `read_spec_document` refused `spdoc-97d90a3506f5` with *"path must begin with
+'spec/'"* (the Architect at 03:49, `tester` at 19:08 and 19:19). `list_evidence` accepts that id.
+
+**Where.** The tool offers no filter narrower than `requirements` or `full`
+(`hub/hub/mcp_server.py:1666-1670`). Its description says *"Use this before writing code against a
+document"* and *"you almost certainly cannot open it as a file"* (`:1673-1676`). The id refusal is
+raised by `spec_manifest.py:72`.
+
+**Why B.** The one route the product names for reading the approved specification cannot deliver
+it. **Not built on 2026-09-14**, because the tool is in `mcp_server.py` (F354).
+
+## F364 (C) — `submit_checkpoint_notes` enforces caps its description never states, and the refusal names neither the entry nor the overshoot
+
+**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+
+**Measured.** `dev` made 36 calls and 23 failed:
+- 9 were pydantic's *"Input should be a valid list"*;
+- 14 were *"suspicions: each entry must be at most 400 characters"*, or the same for `warnings`.
+
+It happened in 11 sessions, and each took two to five calls to get one note through. At 02:44
+(`317bc32c`), after four refusals, `dev` wrote a script into its worktree to count characters.
+
+**Where.** The caps are 1,500 characters for `intent`, 8 entries per list, and 400 characters per
+entry (`hub/hub/api/v1/agent_actions.py:337-346`). The message at `:346` names neither which entry
+failed nor its length. The tool description says *"a few hundred words in total is right"* and
+states none of the caps (`mcp_server.py:511-535`), and that half is not edited on 2026-09-14 (F354).

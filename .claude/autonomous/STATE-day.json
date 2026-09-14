@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "o3",
-    "next_action": "Do queue item o3 (O-3 sort). Read day-window.md '## O' O-3 and the o3 queue detail. Input: spec-queue/observations/2026-09-14-LoopEngine.md (## What happened, ### Architect, ### dev, tester and dev_2) plus the o1/o2a/o2b 'detail' headlines in this file. For each observation decide fix / improvement / not-AgentWeave's. For a fix: confirm the mechanism in this checkout with file:line; search scripts/drive/FINDINGS.md first (F347, F349, F351-F354 already from LoopEngine; F349 is the db-locked 500 family); existing -> dated observation note, new -> append F355+ with severity, '**Status:** open' as first body line, file:line, run/evidence ids. Also resolve the two open checks: (i) the ~26 operator-attributed completed->under_review/pending->assigned transitions on cron ticks (who writes actor_kind=operator for job staffing), (ii) whether approval merging a commit whose sibling FR's evidence was rejected (task-f6683280dc12 / cbc34fa) is intended (requirement_gate.py:502-506 covers only awaiting). Add '## Fixes' and '## Improvements' (severity-ordered, one line each) and '## Not AgentWeave's' to the observations file; say what went unread. THEN rewrite this queue per the o3 detail: replace 'fixes' with <id>-R1 R2 R3 REV IMPL DRIVE per fix in severity order (F352 first if kept); fixes editing the same lines become one change; NO hub/hub/mcp_server.py edits today (F354) - such fixes are specced R1..REV and left unbuilt. Keep to one firing.",
+    "current": "i1a",
+    "next_action": "Do queue item i1a: the first six improvement briefs, one openspec/explorations/2026-09-14-<slug>.md each (rework-in-a-fresh-session, agents-can-retire-their-own-work, a-review-can-wait-on-the-operator, requests-that-name-another-task, the-first-turn-has-its-tools, the-transition-model-agents-are-told). Six headings per DIRECTION.md ## 2026-09-14 I-1, about a page each; source is spec-queue/observations/2026-09-14-LoopEngine.md '## Improvements' and the O-2 sections it cites. Cite ids, paraphrase, quote only AgentWeave's own strings; cost labelled a code-read estimate. Not a change dir, no tasks.md. If it is at or after 18:15, do d5 instead.",
     "queue": [
         {
             "id": "compose",
@@ -41,21 +41,465 @@
         },
         {
             "id": "o3",
-            "status": "open",
+            "status": "done",
             "title": "O-3 sort: every observation becomes one fix, one improvement, or one not-AgentWeave's line; then expand this queue",
-            "detail": "day-window.md ## O, O-3. Starts no later than the first firing at or after 11:00, whatever O-2 covered; say in the file what went unread. Search scripts/drive/FINDINGS.md first (F347, F351-F354 already filed from LoopEngine); an existing finding gets a dated observation note, a new one is appended with severity, '**Status:** open' as the first body line, file:line, and a reproduction or the run ids. Add '## Fixes' and '## Improvements' (severity-ordered, one line each) and '## Not AgentWeave's'. THEN rewrite this queue: replace the 'fixes' placeholder with, per fix in severity order, <id>-R1 <id>-R2 <id>-R3 <id>-REV <id>-IMPL <id>-DRIVE (day-window.md ## A day that builds). F352 (A) first if kept. Fixes that edit the same lines become one change. F347 builds toward DECISIONS option (a). No hub/hub/mcp_server.py edits today (F354); UI bundles only if compatible with :8000's process start time; migrations named on the page. A fix those rules stop is specced R1..REV and left unbuilt."
+            "detail": "DONE iteration 5 (10:15-10:30). Observations file gained '## The sort (O-3)', '## Fixes' (13), '## Improvements' (11), '## Not AgentWeave's' (8), '## Not sorted, and why' (4), '## What went unread'. Ledger: new F355-F364; dated notes on F352, F353, F47, F349. Open checks: (i) the ~26 cron-tick 'operator' transitions are F47 (scheduler.py:828/830 pass operator(); ACTOR_KINDS has two members); (ii) the cbc34fa merge over rejected FR-11 is intended at sketch rigor (requirement_gate.py:339-360, 493-506) - LoopEngine's doc is sketch."
         },
         {
-            "id": "i1",
+            "id": "i1a",
             "status": "open",
-            "title": "I-1 improvement briefs, one openspec/explorations/2026-09-14-<slug>.md each",
-            "detail": "DIRECTION.md ## 2026-09-14 section I-1: six headings in order (what we saw / what would change / why it matters / rough cost, labelled a code-read estimate / risks and open questions / the decision in one line). Not a change directory, no tasks.md. All in one firing unless more than about eight."
+            "title": "I-1 briefs 1-6 of 11 (observations file '## Improvements' 1-6)",
+            "detail": "DIRECTION.md ## 2026-09-14 section I-1: six headings in order (what we saw / what would change / why it matters / rough cost, labelled a code-read estimate / risks and open questions / the decision in one line). Not a change directory, no tasks.md. All in one firing unless more than about eight. Eleven improvements, so split in two firings. This one: rework-in-a-fresh-session, agents-can-retire-their-own-work, a-review-can-wait-on-the-operator, requests-that-name-another-task, the-first-turn-has-its-tools, the-transition-model-agents-are-told. Cite ids, paraphrase; quote only AgentWeave's own strings."
         },
         {
-            "id": "fixes",
+            "id": "i1b",
             "status": "open",
-            "title": "PLACEHOLDER - o3 replaces this with R1 R2 R3 REV IMPL DRIVE items per fix",
-            "detail": "If o3 found no fixes, mark this done-empty and go to the fallback. Finish one fix's steps before the next fix's R1."
+            "title": "I-1 briefs 7-11 of 11",
+            "detail": "DIRECTION.md ## 2026-09-14 section I-1: six headings in order (what we saw / what would change / why it matters / rough cost, labelled a code-read estimate / risks and open questions / the decision in one line). Not a change directory, no tasks.md. All in one firing unless more than about eight. This one: a-peer-can-see-the-answer, project-notes-inside-the-product, peer-threads-that-only-acknowledge, background-work-ends-with-the-turn, localhost-for-the-thing-under-test."
+        },
+        {
+            "id": "f352-r1",
+            "status": "open",
+            "title": "f352-R1: F352 + F353 (A) - a flow counts an agent busy for any live task in the project; the unstaffed sentence names nobody and no way out",
+            "detail": "One change: both rewrite the review_unstaffed sentence (scheduler.py _agents_that_are_free ~977, resolve_reviewer 1043; F353's 'clear the assignee' refusal agent_trigger.py ~500 and 'Land it'). F352's shape is NOT decided: if R1 finds a choice that is the operator's (flow-scoped 'free'? pending-with-assignee holds? in_progress with no turn holds?), write an OPERATOR QUESTION in proposal.md and the change STOPS after REV, unbuilt (DIRECTION ## 2026-09-14). F353's assignee control is UI - bundle rule applies. Suggested name: a-flow-reviewer-is-free-of-work-outside-it. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f352-r2",
+            "status": "open",
+            "title": "f352-R2: F352 + F353 (A) - a flow counts an agent busy for any live task in the project; the unstaffed sentence names nobody and no way out",
+            "detail": "Step R2 of f352: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f352-r3",
+            "status": "open",
+            "title": "f352-R3: F352 + F353 (A) - a flow counts an agent busy for any live task in the project; the unstaffed sentence names nobody and no way out",
+            "detail": "Step R3 of f352: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f352-rev",
+            "status": "open",
+            "title": "f352-REV: F352 + F353 (A) - a flow counts an agent busy for any live task in the project; the unstaffed sentence names nobody and no way out",
+            "detail": "Step REV of f352: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f352-impl",
+            "status": "open",
+            "title": "f352-IMPL: F352 + F353 (A) - a flow counts an agent busy for any live task in the project; the unstaffed sentence names nobody and no way out",
+            "detail": "Step IMPL of f352: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f352-drive",
+            "status": "open",
+            "title": "f352-DRIVE: F352 + F353 (A) - a flow counts an agent busy for any live task in the project; the unstaffed sentence names nobody and no way out",
+            "detail": "Step DRIVE of f352: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f355-r1",
+            "status": "open",
+            "title": "f355-R1: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
+            "detail": "inbound_queue.py:170-235 (RESUME_RETRY_LIMIT 2, DELIVERY_ATTEMPT_LIMIT 3); runner_parsing.py:364-369 keeps rate_limit_event as accounting only. Hold vs drop, and whether a held queue holds the flow's job, may be the operator's -> OPERATOR QUESTION rule as for F352. Suggested name: a-spent-allowance-holds-the-queue. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f355-r2",
+            "status": "open",
+            "title": "f355-R2: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
+            "detail": "Step R2 of f355: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f355-r3",
+            "status": "open",
+            "title": "f355-R3: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
+            "detail": "Step R3 of f355: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f355-rev",
+            "status": "open",
+            "title": "f355-REV: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
+            "detail": "Step REV of f355: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f355-impl",
+            "status": "open",
+            "title": "f355-IMPL: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
+            "detail": "Step IMPL of f355: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f355-drive",
+            "status": "open",
+            "title": "f355-DRIVE: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
+            "detail": "Step DRIVE of f355: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f356-r1",
+            "status": "open",
+            "title": "f356-R1: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
+            "detail": "questions.py:346 asker_still_waiting ignores Question.wait_expires_at (models.py:993); _asking_run_has_ended 29-45. Suggested name: a-late-answer-is-delivered. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f356-r2",
+            "status": "open",
+            "title": "f356-R2: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
+            "detail": "Step R2 of f356: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f356-r3",
+            "status": "open",
+            "title": "f356-R3: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
+            "detail": "Step R3 of f356: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f356-rev",
+            "status": "open",
+            "title": "f356-REV: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
+            "detail": "Step REV of f356: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f356-impl",
+            "status": "open",
+            "title": "f356-IMPL: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
+            "detail": "Step IMPL of f356: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f356-drive",
+            "status": "open",
+            "title": "f356-DRIVE: F356 (B) - an answer after ask_user's wait, while the asking run lives, is delivered to nobody",
+            "detail": "Step DRIVE of f356: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f357-r1",
+            "status": "open",
+            "title": "f357-R1: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
+            "detail": "scheduler.py:2065-2085 and agents.py:1642-1646 (both channels must agree - F45/F140); agents.py:1909-1913; resolve_reviewer 1043 ignores can_accept_evidence. Runs AFTER f352 (both touch resolve_reviewer) - re-read f352's diff first. Suggested name: a-reviewer-is-told-what-approval-needs. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f357-r2",
+            "status": "open",
+            "title": "f357-R2: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
+            "detail": "Step R2 of f357: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f357-r3",
+            "status": "open",
+            "title": "f357-R3: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
+            "detail": "Step R3 of f357: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f357-rev",
+            "status": "open",
+            "title": "f357-REV: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
+            "detail": "Step REV of f357: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f357-impl",
+            "status": "open",
+            "title": "f357-IMPL: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
+            "detail": "Step IMPL of f357: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f357-drive",
+            "status": "open",
+            "title": "f357-DRIVE: F357 (B) - a review turn is told to approve with no word about the evidence gate; staffing ignores the grant",
+            "detail": "Step DRIVE of f357: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f358-r1",
+            "status": "open",
+            "title": "f358-R1: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
+            "detail": "requirement_evidence.py:677-737 decide has no liveness check; :146-152 remedy; restamp :894. The record_evidence description half (mcp_server.py:1727-1731) is NOT edited today - say so in the change. Suggested name: evidence-is-decided-after-its-turn. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f358-r2",
+            "status": "open",
+            "title": "f358-R2: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
+            "detail": "Step R2 of f358: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f358-r3",
+            "status": "open",
+            "title": "f358-R3: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
+            "detail": "Step R3 of f358: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f358-rev",
+            "status": "open",
+            "title": "f358-REV: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
+            "detail": "Step REV of f358: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f358-impl",
+            "status": "open",
+            "title": "f358-IMPL: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
+            "detail": "Step IMPL of f358: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f358-drive",
+            "status": "open",
+            "title": "f358-DRIVE: F358 (B) - evidence decided while its recording run is live; the duplicate remedy contradicts the briefing",
+            "detail": "Step DRIVE of f358: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f359-r1",
+            "status": "open",
+            "title": "f359-R1: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
+            "detail": "agent_trigger.py:2190-2204 (unguarded record_agent_output in the read loop) -> :2461-2491 failure tail, vs :2248-2315 normal end. Open to R1: is the harness process stopped when the read loop raises. Suggested name: a-failed-run-keeps-its-work. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f359-r2",
+            "status": "open",
+            "title": "f359-R2: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
+            "detail": "Step R2 of f359: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f359-r3",
+            "status": "open",
+            "title": "f359-R3: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
+            "detail": "Step R3 of f359: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f359-rev",
+            "status": "open",
+            "title": "f359-REV: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
+            "detail": "Step REV of f359: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f359-impl",
+            "status": "open",
+            "title": "f359-IMPL: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
+            "detail": "Step IMPL of f359: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f359-drive",
+            "status": "open",
+            "title": "f359-DRIVE: F359 (B) - a run killed by the Hub's own write is not snapshotted and its evidence is not re-pointed",
+            "detail": "Step DRIVE of f359: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f360-r1",
+            "status": "open",
+            "title": "f360-R1: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
+            "detail": "checkpoint_generation.py:157 prompt rule, :385-399 grade, :627-630 fail, :336-345 successor warning; checkpoints.py:257-283, 375-378. Bump PROBE_PROMPT_VERSION if the prompt changes. Suggested name: the-probe-asks-what-the-checkpoint-says. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f360-r2",
+            "status": "open",
+            "title": "f360-R2: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
+            "detail": "Step R2 of f360: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f360-r3",
+            "status": "open",
+            "title": "f360-R3: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
+            "detail": "Step R3 of f360: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f360-rev",
+            "status": "open",
+            "title": "f360-REV: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
+            "detail": "Step REV of f360: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f360-impl",
+            "status": "open",
+            "title": "f360-IMPL: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
+            "detail": "Step IMPL of f360: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f360-drive",
+            "status": "open",
+            "title": "f360-DRIVE: F360 (B) - the checkpoint probe asks for tasks 'assigned to this agent' while a loop checkpoint lists the whole queue",
+            "detail": "Step DRIVE of f360: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f361-r1",
+            "status": "open",
+            "title": "f361-R1: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
+            "detail": "messages.py:288-308; turn_scheduler.py:336-337/371-372 never write entry.waiting_reason (only :459). The sender's reply is built in mcp_server.py:244 - if the change needs that file it is specced R1..REV and left unbuilt; R1 decides whether the Hub-side half (entry reason, a MessageResponse field) stands alone. Check whether the UI shows suspension. Suggested name: a-suspended-message-says-so. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f361-r2",
+            "status": "open",
+            "title": "f361-R2: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
+            "detail": "Step R2 of f361: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f361-r3",
+            "status": "open",
+            "title": "f361-R3: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
+            "detail": "Step R3 of f361: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f361-rev",
+            "status": "open",
+            "title": "f361-REV: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
+            "detail": "Step REV of f361: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f361-impl",
+            "status": "open",
+            "title": "f361-IMPL: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
+            "detail": "Step IMPL of f361: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f361-drive",
+            "status": "open",
+            "title": "f361-DRIVE: F361 (B) - a hop-suspended peer message has no reason on its entry and the sender is told it was sent",
+            "detail": "Step DRIVE of f361: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f347-r1",
+            "status": "open",
+            "title": "f347-R1: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
+            "detail": "VERDICT ALREADY GIVEN: option (a), DECISIONS.md '### F347, decided 2026-09-13 evening' - refuse with a sentence naming the repair, written in worktrees.py; no commit, no orphan branch. worktrees.py:361-362, :80; agent_trigger.py:970. Left to R1: the refusing pass should not hold the operator's message silently. Suggested name: an-unborn-repository-names-the-repair. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f347-r2",
+            "status": "open",
+            "title": "f347-R2: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
+            "detail": "Step R2 of f347: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f347-r3",
+            "status": "open",
+            "title": "f347-R3: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
+            "detail": "Step R3 of f347: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f347-rev",
+            "status": "open",
+            "title": "f347-REV: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
+            "detail": "Step REV of f347: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f347-impl",
+            "status": "open",
+            "title": "f347-IMPL: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
+            "detail": "Step IMPL of f347: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f347-drive",
+            "status": "open",
+            "title": "f347-DRIVE: F347 (B) - a repository with no commit refuses every turn with git's plumbing error",
+            "detail": "Step DRIVE of f347: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f362-r1",
+            "status": "open",
+            "title": "f362-R1: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
+            "detail": "mcp_server.py:957-960 (_ABSOLUTE_PATH_RE opens at any slash or backslash on Windows), :966 (_PLAIN_RELATIVE_RE admits no '*'), /dev/null. SPEC ONLY today: the repair is in mcp_server.py (F354). Must not reopen F321/F323 (612b9c9) - R2/R3 re-derive against those. Suggested name: a-relative-word-is-not-an-absolute-path. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f362-r2",
+            "status": "open",
+            "title": "f362-R2: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
+            "detail": "Step R2 of f362: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f362-r3",
+            "status": "open",
+            "title": "f362-R3: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
+            "detail": "Step R3 of f362: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f362-rev",
+            "status": "open",
+            "title": "f362-REV: F362 (B) - on Windows the guard reads the tail of a relative word containing '/' as an absolute path",
+            "detail": "Step REV of f362: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. SPEC ONLY today - after REV the change stays specced and unbuilt; APPROVALS row with no token."
+        },
+        {
+            "id": "f363-r1",
+            "status": "open",
+            "title": "f363-R1: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
+            "detail": "mcp_server.py:1666-1676; spec_manifest.py:72. SPEC ONLY today (mcp_server.py). Suggested name: the-spec-reads-in-pieces. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f363-r2",
+            "status": "open",
+            "title": "f363-R2: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
+            "detail": "Step R2 of f363: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f363-r3",
+            "status": "open",
+            "title": "f363-R3: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
+            "detail": "Step R3 of f363: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f363-rev",
+            "status": "open",
+            "title": "f363-REV: F363 (B) - read_spec_document never fits a tool result and refuses the document id",
+            "detail": "Step REV of f363: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user. SPEC ONLY today - after REV the change stays specced and unbuilt; APPROVALS row with no token."
+        },
+        {
+            "id": "f364-r1",
+            "status": "open",
+            "title": "f364-R1: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
+            "detail": "agent_actions.py:337-346 (build: name the entry index, its length, the cap). The description half (mcp_server.py:511-535) is not edited today - say so. Suggested name: a-note-refusal-names-the-entry. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f364-r2",
+            "status": "open",
+            "title": "f364-R2: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
+            "detail": "Step R2 of f364: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f364-r3",
+            "status": "open",
+            "title": "f364-R3: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
+            "detail": "Step R3 of f364: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f364-rev",
+            "status": "open",
+            "title": "f364-REV: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
+            "detail": "Step REV of f364: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f364-impl",
+            "status": "open",
+            "title": "f364-IMPL: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
+            "detail": "Step IMPL of f364: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f364-drive",
+            "status": "open",
+            "title": "f364-DRIVE: F364 (C) - submit_checkpoint_notes enforces caps it never states; the 422 names nothing",
+            "detail": "Step DRIVE of f364: drive it and archive it per night-window.md 'Driving'; retire the findings."
+        },
+        {
+            "id": "f47-r1",
+            "status": "open",
+            "title": "f47-R1: F47 (C) - the flow's staging is recorded as the operator's",
+            "detail": "task_transitions.py:34-36 ACTOR_KINDS; scheduler.py:828/830 operator(); pinned by test_flow_chain_end_to_end.py. F47's own text: the honest repair is a third actor kind touching is_operator guards and every actor_kind consumer - R1 sizes it; the task_transitions actor_kind column has no CHECK (models.py:803), so no migration is expected - verify. Suggested name: the-flow-signs-its-own-moves. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+        },
+        {
+            "id": "f47-r2",
+            "status": "open",
+            "title": "f47-R2: F47 (C) - the flow's staging is recorded as the operator's",
+            "detail": "Step R2 of f47: re-derive against the code (as D-3), independently."
+        },
+        {
+            "id": "f47-r3",
+            "status": "open",
+            "title": "f47-R3: F47 (C) - the flow's staging is recorded as the operator's",
+            "detail": "Step R3 of f47: re-derive again (as D-4), independently."
+        },
+        {
+            "id": "f47-rev",
+            "status": "open",
+            "title": "f47-REV: F47 (C) - the flow's staging is recorded as the operator's",
+            "detail": "Step REV of f47: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+        },
+        {
+            "id": "f47-impl",
+            "status": "open",
+            "title": "f47-IMPL: F47 (C) - the flow's staging is recorded as the operator's",
+            "detail": "Step IMPL of f47: implement per night-window.md 'Implementing' (may span firings)."
+        },
+        {
+            "id": "f47-drive",
+            "status": "open",
+            "title": "f47-DRIVE: F47 (C) - the flow's staging is recorded as the operator's",
+            "detail": "Step DRIVE of f47: drive it and archive it per night-window.md 'Driving'; retire the findings."
         },
         {
             "id": "f327-r1",
