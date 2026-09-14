@@ -2,7 +2,9 @@
 
 R1, 2026-09-14. Line numbers are at `2d5674c`. R2, 2026-09-14, re-derived at `e8ea490`: every
 decision it changed is marked **R2**, and *Round 2* at the end lists what changed and why. R3,
-2026-09-14, re-derived at `fb469e2`: marked **R3**, listed in *Round 3* at the end.
+2026-09-14, re-derived at `fb469e2`: marked **R3**, listed in *Round 3* at the end. REV,
+2026-09-14, at `82b58df`: marked **REV**, listed in *Round 4* at the end. **REV stopped the
+change**, and it is unbuilt (proposal.md, top).
 
 ## Context
 
@@ -85,9 +87,12 @@ working on, so it is named by that task instead. That choice also keeps the reas
 ticks (D4). A reason naming whoever is mid-turn would change on every turn boundary, and each change
 is recorded as news.
 
-**The sentence leads with the names.** It is `could not staff this step: nobody is free. ` followed
-immediately by the clauses, then the remedy. It has no general sentence before the names, because
-the board shows about 80 characters of it.
+**The sentence leads with the names.** It is `could not staff this step: no reviewer is free. `
+followed immediately by the clauses, then the remedy. It has no general sentence before the names,
+because the board shows about 80 characters of it. **REV** replaced R1's *"nobody is free"*, which is
+false whenever the author holds nothing: a just-finished author's `completed` task is not live, and
+in a one-agent project the only agent is free. *"No reviewer"* is true, because the author is not
+one, and its clause says so. It costs 4 characters (budget table below).
 
 **The remedy depends on the task's status.** Rung 3 is reached for `completed` tasks, and for
 `under_review` rows the F70 recovery and the divergence restaff carry to the ladder. **One helper,
@@ -103,6 +108,19 @@ the rule `enter_selected_task`'s docstring states for the same situation.
   `rejected` from every status that holds an agent. `LIVE_STATUSES` is pending, assigned,
   in_progress, revision_needed and under_review (`task_transitions.py:218-228, 338`), and each has
   an operator `rejected` edge (`:100-146`). That is what freed `tester` on LoopEngine at 22:33.
+  **REV:** *"frees its agent"* is false for an agent holding several tasks (`dev_2` held five), and
+  the clause is option (e)'s remedy, true only while the definition of free stays as it is. The
+  wording becomes *"rejecting held tasks that are no longer wanted can free their agents"*, and the
+  OPERATOR QUESTION's answer re-derives it.
+- **Any other status (REV).** The divergence screens out only `blocked` (`run_divergence.py:746`),
+  and `run_advanced_its_task` counts only the run's own transitions. So if the operator moves a
+  task to `revision_needed` or `rejected` while its review run is live, that run's end still
+  reaches `_answer_failed_review` and `resolve_reviewer`, and neither sentence above is true.
+  **Decided here:** the divergence restaff does not staff a task whose status is no longer
+  `completed` or `under_review`, because there is no review left to staff. It returns `None` at the
+  same screen as `blocked`. The helper then asserts it is given one of the two statuses, and a test
+  drives the operator move mid-run. This changes `run_divergence`'s behaviour, so it needs the
+  verification round a restart of this change requires (*Round 4*).
 
 **R3: the helper writes the status half only, and rung 3 appends the freeing clause.** R2 left
 open whether *"rejecting a held task … frees its agent"* was part of what `own_review_remedy`
@@ -183,7 +201,7 @@ four agents and three holdings each, D2's sentence reaches that length. So:
 
   | piece | characters |
   |---|---|
-  | prefix `could not staff this step: nobody is free. ` | 43 |
+  | prefix `could not staff this step: nobody is free. ` (**REV:** `no reviewer is free`, 47, so every budget and total below moves by 4; LoopEngine's `under_review` shape becomes 493, and still fits) | 43 |
   | `completed` remedy | 109 |
   | `under_review` remedy | 139 |
   | tail | 50 at most |
@@ -245,6 +263,11 @@ four agents and three holdings each, D2's sentence reaches that length. So:
     `TriggerAgentError`. Several embed exception text: git's stderr and two absolute paths
     (`agent_trigger.py:966, 970`), and `str(exc)` (`:607, 806, 853, 867, 1116`). These are unbounded
     by construction. The fit covers them, and cutting them loses only the tail of a git message.
+    **REV: not only a git message.** A non-transient refusal becomes a terminal failure
+    (`turn_scheduler.py:658-672`), and the guard's own sentence reaches `waiting_reason` this way
+    through `agent_trigger.py:852`. Today's evidence-branch sentence measures **534** at a 64-character
+    id and a 32-character name, and R2's D5 shape measured **583** (`%TEMP%\f352rev\len.py`). The
+    fit would have cut the remedy off the end. D5 is now worded to fit (D5, *REV*).
   - `_job_agent_skip_reason` (`:2580`), the stop reasons (`:2609`), both `_safe_error_summary`
     copies (`scheduler.py:2966` and `api/v1/jobs.py:81`, each already `[:500]`) and the
     reconciliation constant are bounded.
@@ -353,6 +376,9 @@ under review is held by its reviewer, so the move would make its author its revi
 whether `dev` was already there or was being written in. It does not say *"is assigned to"*. **R2**
 changed R1's *"with 'dev' holding it"* to *"held by 'dev'"*: the first reads as a statement about the
 row now, which is F334's defect again. The second names the state the move would produce.
+**REV:** *"move task T to 'under_review' held by 'dev'"* still parses as *"task T, held by dev"*.
+The shape is now *"Cannot move task T to 'under_review' with 'dev' as its holder: …"*, which
+attaches the holder to the move.
 
 **Then the remedy, chosen by `actor.is_operator`.** The flow's staging arrives as `operator()`
 (F47), and its sentence lands in the queue entry's `waiting_reason` and `abandoned_reason`, which
@@ -370,6 +396,46 @@ Land it is always the right remedy **here**.
 - **Agent:** *None of your tools changes who holds a task, so this is not yours to fix. Leave it
   `completed`. The operator can land it, or a flow or the operator can staff a reviewer who is not
   its author.*
+
+**REV replaced both remedies.**
+- **The operator's second half produced a wedge.** The PATCH writes the assignee and the transition
+  (`tasks.py:1266-1339`), and it queues no turn. Review turns are queued only by the dispatch
+  (`agent_trigger.py:1502`), the divergence (`run_divergence.py:266, 467`) and the flow
+  (`scheduler.py:2863, 3193`). In a flow, the next firing finds the task `under_review` held by a
+  non-author with no turn and surfaces F154's *"Nothing will move it on its own"*
+  (`scheduler.py:1370-1393`). That is the 63 named-reviewer-idle events LoopEngine recorded. The
+  request that gets another agent to review is the dispatch. The operator's remedy is now: *Land
+  it, on the task, to review it yourself, or dispatch another agent's review turn (POST
+  /agent/trigger with review_task_id).* The dispatch refuses a task with no evidence naming a
+  commit (`agent_trigger.py:1446-1448`), but the guard judges only `completed` tasks. A flow puts
+  those under review only after its arm required that evidence (`scheduler.py:1538-1548`), and an
+  operator PATCH on a task without it meets the dispatch's own refusal, which names what is missing.
+  So the remedy is never a silent dead end. That is a code read, and the round that restarts this
+  change drives it.
+- **The agent's claim about its tools was false.** MCP `create_task` takes an `assignee`
+  (`mcp_server.py:248-251`). `send_message` with a `task_id` binds a run, and binding sets the
+  assignee of an unassigned task (`run_task_binding.py:475-476`). An HTTP agent reaches this refusal
+  through the route that accepts `assignee` (`agent_actions.py:276-289`), and test 4.4 goes through
+  that very route. What is true is narrower: no task tool the agent is offered **reassigns** a task
+  that already has a holder. The agent's remedy is now: *None of the task tools you are offered
+  reassigns a task. Leave it completed; the operator can land it or dispatch a reviewer who is not
+  its author.*
+- **Both fit 500 at the worst ids** (`%TEMP%\f352rev\len2.py`, measured with the REV wording at a
+  64-character id and a 32-character name, and at LoopEngine's 17 and 9):
+
+  | branch | worst | typical |
+  |---|---|---|
+  | author, operator | 395 | 302 |
+  | author, agent | 454 | 361 |
+  | evidence, operator | 449 | 356 |
+  | evidence, agent (text above, before REV trimmed *"so this is not yours to fix"*) | 508 | 415 |
+
+  The agent branch never reaches `error_summary`, because only the flow's and the dispatch's
+  staging reach the queue entry, and both arrive as `operator()`. It is trimmed anyway, so no
+  sentence depends on that. The evidence branch's explanation is shortened to *"'dev' recorded
+  evidence for it and no agent is recorded as completing it, so it counts as the author, and an
+  author's verdict is refused."* An agent-loops scenario pins the operator branch under 500 at the
+  worst ids.
 
 **R2: the agent sentence no longer says "no agent can".** R1's wording was *"No agent can change
 who holds a task"*, and F366 makes that false.
@@ -410,6 +476,18 @@ helper returns the status sentence only; the freeing clause is rung 3's, D2.)
 branch is reached for an `under_review` task that nobody holds, or that is held by the very reviewer
 being dispatched. `land` refuses `under_review` with a 409 (`tasks.py:1519-1530`). One helper for
 both surfaces is also what keeps them from drifting into two accounts of the same remedy.
+
+**REV: two more sentences carry F353's defect, and two comments D5 makes false.**
+- The D9 refusal, *"Reassign the task if 'x' should take it over"*, appears twice:
+  `review_dispatch_refusal` (`agent_trigger.py:494`) and the dispatch path (`:840`). Its reader is
+  the operator, who has no reassign control. `under_review`'s only edges are `approved`,
+  `revision_needed` and `rejected` (`task_transitions.py:138-142`), so no move hands a review to
+  another agent. A PATCH of the assignee alone queues no turn, which is the wedge above. The
+  sentence becomes *"… Let the review in flight finish, or decide it yourself"*, followed by
+  `own_review_remedy`'s `under_review` sentence.
+- `agent_trigger.py:847-849` says the guard's sentence *"already names both remedies and the cost
+  of doing nothing"*, and `task_transition_service.py:405-406` says the operator *"clear[s] or
+  reassign[s] `assignee` first, which is what the refusal asks for"*. Both join task 4.6.
 
 ### D6 — the board line shows the whole reason on hover
 
@@ -543,3 +621,74 @@ decision's outcome stands, and two of R2's claims become true that were not.
    turn joins `wedged_reviews` with F154's own sentence (`:1392-1393`), and that sentence can be the
    one F64 promotes (`:1655`). LoopEngine's
    backlog had `loop_id` NULL, and 2.6 now says so.
+
+## Round 4 — REV, the adversarial review (2026-09-14): stopped
+
+REV was an Opus subagent, reading this change, DIRECTION.md 2026-09-14, the build row in
+DECISIONS.md, `day-window.md` *A day that builds*, the six findings, and the cited code. Its verdict
+was **SPLIT**, with **STOP** as the fallback if the window would not split on its own authority.
+The window took the fallback: the change is stopped, specced and unbuilt, and the split goes to the
+operator (proposal.md, top; `decisions_for_user`). What follows is what REV found. Every item marked
+*fixed* is fixed in these files, and the round that restarts either half verifies them.
+
+**Scope.**
+1. **DIRECTION's stop clause covers this change.** It attaches to R1 finding the operator's
+   question, not to the change containing it. O-3 listed the fix as *F352 + F353*.
+2. **The rung-3 half presupposes option (e).** Its freeing clause is (e)'s remedy, and under (d)
+   the sentence would name holdings that are not reasons. So the (d) change would MODIFY this
+   change's new `agent-flows` requirement. The proposal's *"built for the sentence that option will
+   need"* was false, and is removed.
+3. **The separable half** is D4 and D5, with `own_review_remedy`, the model fit (2.5, 2.12) and
+   2.13. F353 was re-observed on LoopEngine, so the build row covers it in its own right. F365 was
+   measured on LoopEngine data but is not on O-3's list. F334 and F367 ride with it, one for
+   editing the same sentence and the other because the new guard sentence depends on it.
+
+**Truth in every reachable state.**
+4. **The rung-3 prefix, *"nobody is free"*, was false** when the author holds nothing. It is now
+   *"no reviewer is free"*, in D2 (*fixed*).
+5. **`own_review_remedy` was undefined for `revision_needed` and `rejected`.** A live review run
+   whose task the operator moves still reaches `resolve_reviewer` at its end. Decided: the
+   divergence stops staffing a task that has left the review statuses (D2, task 2.14, *fixed in the
+   text*; it changes behaviour, so the restarting round verifies it).
+6. **Blocker for the built half: D5's operator remedy produced the wedge it explained.** The
+   assignee-and-status PATCH queues no turn. The remedy now names the dispatch (D5, the
+   `task-lifecycle-governance` delta, 4.1, 4.3, *fixed*).
+7. **The agent sentence's "none of your tools changes who holds a task" was false** for
+   `create_task` and for a bound `send_message` on an unassigned task. It is now *"none of the task
+   tools you are offered reassigns a task"* (*fixed*).
+8. **The guard sentence overflowed.** Today's evidence branch is 534 characters at the worst ids,
+   and R2's shape was 583. It reaches `error_summary` through a terminal dispatch failure, so the
+   fit would have cut the remedy. It is reworded to 395–449 characters on the operator branch, with
+   a SHALL and task 2.13 (*fixed*).
+9. **"Held by 'dev'" still read as a claim about the row.** It is now *"with 'dev' as its holder"*
+   (*fixed*).
+10. **Note: once per task has an edge in both directions.** A stall that cleared and returned with
+    the same reason, with no other record for that task in between, is not recorded again. The
+    docstring (`scheduler.py:1918-1919`) says a returned condition *"is news again"*. That was
+    already untrue for a loop with one stuck task, whose newest record was its own. D4 does not make
+    it worse, but it makes it uniform. **Left to the restarting round:** compare only records newer
+    than the task's last transition, or amend the docstring. Not decided here, because it changes
+    what `agent-loops` counts as one fact.
+11. **Note:** 3.3 changes one task's reason only if the agent it frees is not the other task's
+    author. The test fixture must keep that agent off both tasks' author sets.
+
+**`@validates` on `JobRun`: acceptable.** REV confirmed by grep that no Core `update()`, `insert()`
+or raw SQL writes `job_runs`. Both constructors (`scheduler.py:2562, 3163`) pass no
+`error_summary`, and the eight ORM writes are as D2 lists them. It is the first `@validates`, not
+the first custom column behaviour (`UTCDateTime`, `models.py:28`). The existing idiom, truncating at
+the call site (`_safe_error_summary`, two copies), is what D2 generalises. Rows already stored
+longer than 500 are not repaired, and none exists (max 276, observed). Test 2.12's mutation is
+sound. Test 2.9 must read the length before the fit, from the event or `stall_reason`, or the
+validator hides a broken bound. 2.13 says the same for the guard sentence.
+
+**Also fixed:** 2.6's author holds a live task outside the loop, so mutation (b) can fail. 4.5 and
+4.7 gained mutations. 4.6 gained two comments D5 makes false (`agent_trigger.py:847-849`,
+`task_transition_service.py:405-406`). 4.9 is new, for the D9 refusal's *"Reassign the task"* at
+`agent_trigger.py:494` and `:840`: the operator has no reassign control, and `under_review` has no
+edge that hands a review over.
+
+**Sampled line references held** (REV, code-read): `scheduler.py` 298, 816, 923, 1137,
+1161-1168, 1298, 1550-1584, 1655, 1744-1748 and 1913-1941; `tasks.py` 1259-1275, 1473 and
+1519-1545; `task_transition_service.py:443-464`; `agent_trigger.py:480-504`; `schemas/jobs.py:88`;
+`models.py:1349`; the eight write sites; `run_divergence.py:430-446`; `mcp_server.py:307`;
+`schemas/tasks.py:17, 72`.

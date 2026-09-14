@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f352-rev",
-    "next_action": "Do queue item f352-rev: the adversarial review (the operator's standing pre-approval step) of openspec/changes/an-unstaffed-review-names-its-holders, run as an Opus subagent over the change AND its decisions. Give it: proposal.md (incl. the OPERATOR QUESTION and the 'Why this change is built without the answer' reading), design.md (R2 and R3 sections), the three deltas, tasks.md, DIRECTION.md ## 2026-09-14 and DECISIONS.md ### 2026-09-14. It must judge (1) whether DIRECTION's 'the change stops after REV, unbuilt' covers this change - if yes, stop it: APPROVALS row with no token, decisions_for_user, skip f352-impl/f352-drive; (2) whether the rung-3 sentence, the guard's two sentences and the dispatch refusal are each true in every reachable state (R3 found the Land-it gate argument and the budget claim wrong; look for a third); (3) whether @validates on JobRun is acceptable as the first validator in hub/hub. Fix what REV finds in the change files; openspec validate --strict must pass. If REV passes it, set next_action to f352-impl. Day rules: no hub/hub/mcp_server.py; UI bundle only if :8000-compatible; migrations named on the page. If it is at or after 18:15, do d5 instead.",
+    "current": "f355-r1",
+    "next_action": "Do queue item f355-r1: R1 (explore and propose, as D-2) for F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up. Read FINDINGS.md F355 and the observations file's Fixes entry first. Code: inbound_queue.py:170-235 (RESUME_RETRY_LIMIT 2, DELIVERY_ATTEMPT_LIMIT 3), runner_parsing.py:364-369 (rate_limit_event kept as accounting only). If hold-vs-drop, or whether a held queue holds the flow's job, is the operator's, write an OPERATOR QUESTION in proposal.md and, per DIRECTION.md 2026-09-14 and f352's REV, the change stops after REV, unbuilt: do not scope around the question. Suggested name a-spent-allowance-holds-the-queue. openspec validate --strict must pass. Day rules: no hub/hub/mcp_server.py; UI bundle only if :8000-compatible; migrations named on the page. If it is at or after 18:15, do d5 instead.",
     "queue": [
         {
             "id": "compose",
@@ -77,21 +77,21 @@
         },
         {
             "id": "f352-rev",
-            "status": "open",
+            "status": "done",
             "title": "f352-REV: an-unstaffed-review-names-its-holders (F352 visibility half + F353 + F334 + F365; the definition of free is an OPERATOR QUESTION, not built)",
-            "detail": "Step REV of f352: adversarial review, the operator's standing pre-approval step; may stop the change -> decisions_for_user."
+            "detail": "DONE iteration 11 (12:00-12:45). Opus REV subagent verdict SPLIT, with STOP the fallback; the window took STOP: the change is specced and UNBUILT. (1) DIRECTION's stop clause attaches to R1 finding the operator's question, and R1 did; R1's scoping-out reading would let any R1 cancel the clause. The rung-3 half also presupposes option (e) (its freeing clause; under (d) it names holdings that are not reasons). (2) Defects fixed in the change files: D5's operator remedy (the assignee+status PATCH) queues no turn, so in a flow it produces F154's wedge (scheduler.py:1370-1393); it now names POST /agent/trigger with review_task_id. 'None of your tools changes who holds a task' was false (create_task takes an assignee, mcp_server.py:248-251; a bound send_message sets it, run_task_binding.py:475-476); it is now 'none of the task tools you are offered reassigns a task'. The guard sentence overflowed (534 today, 583 R2's shape, at a 64-char id and 32-char name) and reaches error_summary via a terminal dispatch failure; it is reworded to 395-449 on the operator branch, measured %TEMP%\f352rev\\len2.py, with a new SHALL and scenario and task 2.13. 'nobody is free' became 'no reviewer is free'. own_review_remedy was undefined for revision_needed/rejected (the divergence screens blocked only, run_divergence.py:746); decided the divergence stops staffing such a task (2.14). 'held by' became 'with X as its holder'. The D9 'Reassign the task' at agent_trigger.py:494/840 became 4.9. 2.6's fixture, 4.5/4.7 mutations, 4.6's two comments. (3) @validates on JobRun: acceptable (no Core writes to job_runs; UTCDateTime precedent). Left to a restarting round: once-per-task vs the docstring's 'news again' (scheduler.py:1918-1919). design.md 'Round 4 - REV'. validate --strict passes."
         },
         {
             "id": "f352-impl",
-            "status": "open",
+            "status": "skipped",
             "title": "f352-IMPL: an-unstaffed-review-names-its-holders (F352 visibility half + F353 + F334 + F365; the definition of free is an OPERATOR QUESTION, not built)",
-            "detail": "Step IMPL of f352: implement per night-window.md 'Implementing' (may span firings)."
+            "detail": "SKIPPED iteration 11: f352-REV stopped the change (DIRECTION.md 2026-09-14 stop clause). Waits on F352-free and F352-split in decisions_for_user."
         },
         {
             "id": "f352-drive",
-            "status": "open",
+            "status": "skipped",
             "title": "f352-DRIVE: an-unstaffed-review-names-its-holders (F352 visibility half + F353 + F334 + F365; the definition of free is an OPERATOR QUESTION, not built)",
-            "detail": "Step DRIVE of f352: drive it and archive it per night-window.md 'Driving'; retire the findings."
+            "detail": "SKIPPED iteration 11: f352-REV stopped the change (DIRECTION.md 2026-09-14 stop clause). Waits on F352-free and F352-split in decisions_for_user."
         },
         {
             "id": "f355-r1",
@@ -564,7 +564,8 @@
     ],
     "decisions_for_user": [
         "F332-rule (carried from the 2026-09-13 night, spec-queue/DECISIONS.md top 'Open' section): a-quote-can-spell-a-slash is APPROVED but its section-2 decode rule opens a Windows escape; mark it REVISING in APPROVALS.md or decide the correction. Not taken up today, per DIRECTION.md ## 2026-09-14.",
-        "F352-free (from f352-r1, 2026-09-14): which holdings make an agent unavailable to a flow is a shipped requirement (agent-flows 'resolves a reviewer by declaration, then by availability') and rests on the operator's pile-up objection (loop-becomes-a-flow D4). R1 laid out five options against LoopEngine's real holdings in openspec/changes/an-unstaffed-review-names-its-holders/proposal.md 'OPERATOR QUESTION' and recommends (d): a review asks 'running, or already reviewing?', new work keeps the full rule. Needs a decision and its own spec loop; F352 stays open until then."
+        "F352-free (from f352-r1, 2026-09-14): which holdings make an agent unavailable to a flow is a shipped requirement (agent-flows 'resolves a reviewer by declaration, then by availability') and rests on the operator's pile-up objection (loop-becomes-a-flow D4). R1 laid out five options against LoopEngine's real holdings in openspec/changes/an-unstaffed-review-names-its-holders/proposal.md 'OPERATOR QUESTION' and recommends (d): a review asks 'running, or already reviewing?', new work keeps the full rule. Needs a decision and its own spec loop; F352 stays open until then.",
+        "F352-split (from f352-REV, 2026-09-14): REV stopped an-unstaffed-review-names-its-holders under DIRECTION's stop clause and recommends a SPLIT the window did not make on its own authority: move the F353 half (D4 + D5: the refusals' remedies, F334's wording, F365's once-per-task record, the error_summary fit F367 needs; tasks 2.5, 2.5b, 2.12, 2.13, groups 3 and 4) into its own change, give it one verification round, and build it - F353 was re-observed on LoopEngine, so the 2026-09-14 build row covers it. The rung-3 naming (D1-D3, D6) waits for F352-free, because its sentence is written against option (e). Approve the split, or leave the whole change for the answer."
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",

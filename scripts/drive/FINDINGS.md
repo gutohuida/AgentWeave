@@ -27774,6 +27774,13 @@ unstaffed sentence.
   change's `proposal.md`.
 - **This finding stays open** until the question is answered and built.
 
+**Stopped at REV, 2026-09-14.** The adversarial review read DIRECTION's *"the change stops after
+REV, unbuilt"* as covering the change, because R1 found the operator's question. It also found
+that the rung-3 half is written against today's definition of free: under the recommended (d), the
+sentence would name holdings that are not reasons. Nothing is built. REV recommends a split to the
+operator: build the F353 half as its own change after one verification round, and hold the rung-3
+naming for the answer (`decisions_for_user`, `F352-split`).
+
 ## F353 (B) — the product tells the operator to "clear the assignee", and nothing in the app can; the one action that would work, "Land it", is never named
 
 **Status:** open. Found 2026-09-13 unblocking F352.
@@ -27796,6 +27803,18 @@ The Architect put the gap to the operator through `ask_user` at 16:32. It later 
 autonomous turns asking in prose for tasks to be reassigned. The agents' saved notes record that no
 agent can reassign. The task stayed `completed` each time, and the verdict landed only through
 evidence decisions.
+
+**Specced 2026-09-14, unbuilt** (`openspec/changes/an-unstaffed-review-names-its-holders`, stopped at
+REV with F352). REV found two more places with this finding's shape, code-read:
+- The D9 refusal, *"Reassign the task if 'x' should take it over"* (`agent_trigger.py:494, 840`),
+  names a control the operator does not have, and `under_review` has no edge that hands a review
+  over (`task_transitions.py:138-142`).
+- The one request that *does* change the holder, the operator's assignee-and-status PATCH, queues
+  no turn, so in a flow it leaves F154's wedge. A remedy that names it replaces this finding's
+  defect with F154's.
+
+The change's remedy is now Land it, or a review dispatch (`POST /agent/trigger` with
+`review_task_id`).
 
 ## F354 (B) — the operator's live agents launch the MCP server from the development working tree, so an unattended loop's uncommitted edits reach them mid-edit
 

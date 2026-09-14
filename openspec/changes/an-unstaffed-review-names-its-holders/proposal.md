@@ -1,5 +1,38 @@
 # Proposal — an unstaffed review names its holders
 
+## STOPPED AT REV, 2026-09-14 — specced, unbuilt, waiting on the operator
+
+The adversarial review (REV, an Opus subagent, 2026-09-14 ~12:15) read this change and the
+decisions it rests on, and **stopped it**. Nothing here is built, and no task in `tasks.md` is
+ticked. Its full findings are in `design.md`, *Round 4 — REV*.
+
+- **Why it stopped.** DIRECTION.md 2026-09-14 attaches *"the change stops after REV, unbuilt"* to R1
+  finding a choice that is the operator's and writing it here as an OPERATOR QUESTION. R1 did both.
+  R1's reading, that scoping the question out of the change avoids the stop, would let any R1
+  cancel the clause, so the clause could never fire. REV rejected that reading, and the window does
+  not substitute its own judgement for a DIRECTION clause (`day-window.md`, *A day that builds*).
+- **Why the reading was also wrong on its merits.** The rung-3 half is not independent of the
+  answer. Its freeing clause, *"rejecting a held task … frees its agent"*, is option (e)'s remedy.
+  Under the recommended (d), an agent is unavailable for a review only while it is running or
+  already reviewing, so a sentence naming every `pending` and `in_progress` holding would name
+  things that are not reasons. The (d) change would then have to MODIFY this change's new
+  requirement. The old line *"built for the sentence that option will need"* was false for (d).
+- **What REV recommends to the operator: a split.** The F353 half (D4 and D5: the refusals'
+  remedies, F334's wording, F365's once-per-task record, and the `error_summary` fit F367 needs)
+  does not depend on the definition of free. F353 was re-observed on LoopEngine, so the 2026-09-14
+  build row covers it in its own right. REV's split moves that half into its own change directory.
+  That directory needs one verification round, not three, and can then be built. The rung-3
+  naming (D1, D2, D3, D6) waits for the answer to the OPERATOR QUESTION below. The window did
+  **not** split the change on its own authority, and the question is in `decisions_for_user`.
+- **REV also found defects in the change itself.** They are fixed in these files now, so they are
+  fixed whichever way the operator decides:
+  - D5's operator remedy produced the wedge it was meant to explain. It now names the review
+    dispatch instead.
+  - The agent sentence's claim about its tools was false for `create_task`.
+  - The guard sentence overflowed 500 characters, and the fit would have cut its remedy.
+  - The rung-3 prefix, *"nobody is free"*, was false when the author is free.
+  - `own_review_remedy` was undefined for the statuses a divergence can still reach.
+
 ## Why
 
 On the operator's own Hub (LoopEngine, `:8000`, read mode=ro on 2026-09-13 and 2026-09-14), a flow
@@ -93,10 +126,14 @@ the sentence is written to, F367, which is under *What changes*.
 - **A surfaced step is recorded once per task.** `_review_unstaffed_already_stands` compares against
   the newest `review_unstaffed` **for this task** in this loop, not the loop's newest.
 - **The author guard's two sentences and the dispatch refusal name remedies that exist**:
-  - to the operator, **Land it**, or the one API request that names a reviewer and sends the task
-    to review;
-  - to an agent, that none of its tools changes who holds a task, and who can move the work on.
-    R1 wrote *"no agent can"*, and F366's HTTP route makes that false (R2).
+  - to the operator, **Land it**, or dispatching another agent's review turn
+    (`POST /agent/trigger` with `review_task_id`). **REV:** R1 and R2 named the one PATCH that sets
+    the assignee and the status together. That PATCH queues no turn, so in a flow it produced
+    F154's wedge (`scheduler.py:1370-1393`), LoopEngine's 63 repeated stalls.
+  - to an agent, that none of the task tools it is offered reassigns a task, and who can move the
+    work on. R1 wrote *"no agent can"*, and F366's HTTP route makes that false (R2). R2's *"none of
+    your tools changes who holds a task"* was false too: `create_task` takes an assignee, and a
+    bound `send_message` claims an unassigned task (REV).
   - the dispatch refusal's remedy follows the task's status, because that refusal can meet an
     `under_review` task, which `land` refuses (R2).
 
@@ -145,16 +182,17 @@ it. On LoopEngine the pool was empty because:
 
 **Recommended: (d).** It is the only option that separates the two questions D4 conflated. Of the
 options that do not re-open the pile-up for new work, it frees the most on LoopEngine. Whatever is
-chosen is a separate change, taken through its own spec loop. This change is built for the sentence
-that option will need.
+chosen is a separate change, taken through its own spec loop. **REV:** the rung-3 sentence's shape
+depends on the answer. Under (d), it would name only running turns and review holdings, and its
+freeing clause would not apply. So the rung-3 half is written against (e) today, and the answer
+re-derives it.
 
-**Why this change is built without the answer**, stated so REV can reject the reading. DIRECTION.md
-2026-09-14 says that if R1 finds a choice that is the operator's, *"the change stops after REV,
-unbuilt"*. This change was scoped so that it contains no such choice. It keeps the rule exactly as
-the corpus states it, and nothing in it depends on the answer. The sentence lists why each agent is
-not free under whatever rule is in force, and F352 says that listing is required *"whatever else
-changes"*. **F352 stays open** after this change. If REV reads DIRECTION as covering the finding
-rather than the change, REV stops it, and it waits for the operator like any other.
+**Why R1 built this change without the answer, and why REV rejected it.** R1 argued that the change
+was scoped to contain no operator choice, because it keeps the rule exactly as the corpus states
+it. So, R1 said, DIRECTION's *"the change stops after REV, unbuilt"* did not apply, and it named REV
+as the round that could reject the reading. REV did (the top of this file). DIRECTION attaches the
+stop to R1 finding the question, which R1 did. The rung-3 half also presupposes (e) (above). **F352
+stays open**, and so does everything else this change would retire.
 
 ## Capabilities
 
@@ -187,6 +225,7 @@ rather than the change, REV stops it, and it waits for the operator like any oth
   the transition map, and every guard's decision.
 - **No migration.** No API shape change: `reason` is already a string on the event and on
   `stall_reason`.
-- **Findings:** retires F353, F334, F365 and F367. **Leaves F352 open** with a dated note, because
+- **Findings:** would retire F353, F334, F365 and F367 if built (it is not; see the top). **Leaves
+  F352 open** with a dated note, because
   its definition half is the operator's question above. **Leaves F366 open**: this change stops
   relying on the route's hole, and closing it is that finding's own loop.
