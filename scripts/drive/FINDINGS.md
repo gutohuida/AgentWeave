@@ -9747,6 +9747,13 @@ gives itself: inferring health from the *absence* of a row is how "the flow is f
 broke" became indistinguishable in the first place. The cron path is unaffected; this is purely
 what the **manual Run button** reports.
 
+**Note 2026-09-14 (f355-R3).** A spent provider allowance makes this reachable for hours rather than
+the length of a turn. Once `a-spent-allowance-holds-the-queue` counts a held agent as unable to take a
+turn, a single-agent loop whose agent is held is refused by the busy guard on every press of Run.
+That change's D11 takes this entry's own fix shape (re-ask `_loop_flow_busy_reason` first, then
+answer 409 with its reason), and retires F127 at its archive, unless its REV narrows the rule to
+the hold. Specced, not built.
+
 ## F128 (B) — a loop runs on an agent its job does not name, whenever its own agent is busy
 
 Driven live in `t_run_while_busy.py` (that file's own BAD lines are this discovery). Job
@@ -27899,6 +27906,24 @@ is still no OPERATOR QUESTION. One leg of the argument was wrong, and three outc
 - **A held firing read `failed`:** at its own refused run's end (`agent_trigger.py:2348`), and at a
   restart (`run_reconciliation.py:189-226`). New D10.
 - **The hold sentence was stored on entries, where it outlives the hold.** It is now derived only.
+
+**R3, 2026-09-14** (code-read, not driven; `design.md` *Round 3*). Still no OPERATOR QUESTION: the
+`_agents_that_are_free` half is the running half, whose stated reason a hold shares, and the one
+open operator call D6 reaches (F128) is applied, not decided. Four disagreements, fixed:
+- **R2's D6 breached `agent-loops` *A task reported as in flight is one an agent is actually
+  working*.** Putting held agents into `running` made a held assignee's task in flight on its
+  assignment alone. A held assignee is now in flight only while input naming the task is queued
+  (`on_it`); otherwise it is briefed once.
+- **Pressing Run on a held loop answered falsely either way** (`hub/hub/api/v1/jobs.py:1287-1321`):
+  *"already being worked … nothing is wrong"*, or 500 *"Failed to fire job"*, which is F127 lasting
+  as long as the hold. New D11 re-asks the busy guard first. It retires F127 unless REV narrows it.
+- **The ADDED `agent-flows` requirement contradicted the shipped reviewer-availability sentence.**
+  That requirement is now MODIFIED.
+- **Rung 3's reason became false** (*"every agent … is either running a turn, already holding active
+  work, or …"*). It now names the hold when a hold is why.
+
+Test construction: a module clock (`provider_allowance._utcnow`) for the tests that must end a hold,
+a mutation for 1.2b, and fixtures for 3.4b and 3.4c that can tell their mutations apart.
 
 ## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
 

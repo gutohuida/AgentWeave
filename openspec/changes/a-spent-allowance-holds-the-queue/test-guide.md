@@ -15,9 +15,11 @@ Everything below runs without a person. Each item names the task that pins it.
 | Autonomous input waits; new operator input probes once; a refused probe does not loop | `_attempt_turn` tests | 3.1 |
 | The queue wakes at the reset, and again after a restart | a real `JobScheduler` with a 1 s floor and a known address; the start-up re-arm | 3.2, 3.3 |
 | Loops refuse and plain jobs coalesce while held | `_do_fire_job` tests | 3.4, 3.5, 3.6 |
-| A flow neither re-briefs nor recruits a held agent | `decide_firing` and free-list tests with a second, free agent | 3.4b, 3.4c |
+| A flow neither re-briefs nor recruits a held agent, and briefs a held assignee's unbriefed task once | `decide_firing` and free-list tests with a second, free agent | 3.4b, 3.4c |
+| An unstaffed review names the hold when a hold is why | `resolve_reviewer` rung 3 with a held non-author | 3.4d |
 | A held firing survives a restart in progress | `reconcile_stale_job_runs` tests | 3.7 |
 | The operator is told, and not told once it is over | the queue status route and the `queue_agent_held` row | 4.1, 4.2, 4.3 |
+| Pressing Run on a held or busy loop answers 409 with the reason, never 500 or "nothing is wrong" | `POST …/jobs/{id}/run` tests beside F48's | 4.4 |
 | The whole thing on a live Hub | the stub-provider drive | 6.1–6.5 |
 
 ## Human-only
@@ -33,6 +35,8 @@ These need the operator, because only they can see the real allowance and the re
      session, and the turn should say *"delivery attempt 2"*.
    - A job that fired into the wall should read *in progress*, not *failed*, until its instruction
      is delivered after the reset. That should hold even if you restart the Hub in between.
+   - Pressing **Run** on a loop whose agent is held should say the agent is held until HH:MM UTC.
+     It should not say the work is being done, and it should not be an error.
 2. **Your probe.** While an agent is held, send it one message.
    - If you have not changed your plan, you should see one refused run and nothing after it.
    - If you have enabled extra usage, the turn should run, and the queue behind it should drain.

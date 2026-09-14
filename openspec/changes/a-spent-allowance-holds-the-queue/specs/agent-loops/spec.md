@@ -76,3 +76,34 @@ is still queued, and SHALL fit the firing record's summary field whole.
 
 - **WHEN** the hold ends
 - **THEN** the job's instruction is delivered to the agent once
+
+### Requirement: Pressing Run on a loop that declines names why it declined
+
+The Hub SHALL answer an operator's manual firing of a loop that the loop's busy guard refused with a conflict that names the reason the guard gave, and SHALL NOT answer it as a failure to fire.
+
+The busy guard refuses a firing when the job's agent is running a turn or its queue is held, and no
+other agent in the project is free. It records nothing, deliberately, so there is no firing record
+to read a reason from, and the most recent record is some earlier firing's. The route SHALL
+therefore ask the guard again, before anything else, because the guard is the first question the
+firing asked.
+
+Where the firing declined because every task on the queue is in flight, and an agent those tasks are
+staffed to is held, the answer SHALL name that agent and the time its hold ends, and SHALL NOT state
+that nothing is wrong. The work is staffed, but it cannot start until the hold ends.
+
+#### Scenario: Run while the loop's agent is mid-turn and nobody else is free
+
+- **WHEN** a loop's agent is running a turn, no other agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent that is running
+- **AND** it is not a server error reading "Failed to fire job"
+
+#### Scenario: Run while the loop's agent is held
+
+- **WHEN** a loop's agent's queue is held, no other agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent and the time its hold ends
+
+#### Scenario: Run on a flow whose in-flight work waits on a hold
+
+- **WHEN** every task on a flow's queue is in flight, one of them is staffed to a held agent, and the operator presses Run
+- **THEN** the answer names that agent and the time its hold ends
+- **AND** it does not state that nothing is wrong

@@ -2,7 +2,8 @@
 
 Finding: F355 (retired by this change at archive). R1 2026-09-14. R2 the same day; its additions
 are marked **(Round 2)**: 1.2b, 2.5, 2.6, 3.4b, 3.4c, 3.7 and 4.3, with edits to 1.2, 2.2, 3.2,
-3.3, 3.5 and 6.4.
+3.3, 3.5 and 6.4. R3 the same day; its additions are marked **(Round 3)**: 3.4d and 4.4, with
+edits to 1.2, 1.2b, 2.5, 3.1, 3.4b, 3.4c and 6.5.
 Build day 2026-09-14. Day rules:
 - no `hub/hub/mcp_server.py` (nothing here needs it);
 - no UI and no bundle;
@@ -40,7 +41,11 @@ The reading used in tests is the measured one (`design.md`, *Context*):
         `measured`);
       - `hold_until = max(resets_at, observed_at + HOLD_FLOOR)`, with `HOLD_FLOOR` a module
         constant of 60 s;
-      - `None` unless `now < hold_until`.
+      - `None` unless `now < hold_until`;
+      - **(Round 3)** `now` defaults to `provider_allowance._utcnow()`, one module function, and
+        never to a `datetime.now` written at a call site. `_attempt_turn`, the status route and
+        `run_job` pass no `now`, so this function is the only thing a test can patch to end a hold
+        (2.5, 3.1).
 
       Tests:
       - a refused row an hour ahead holds;
@@ -62,6 +67,10 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       form of `provider_hold` at one `now` (design D6). Test: two agents refused and one served,
       read in one call, give exactly the two. Also test that it agrees with `provider_hold` agent
       by agent over the 1.2 fixtures.
+
+      **(Round 3)** One of the two refused agents has a crash-reconciled `unavailable` row after
+      its refusal. Mutation: read each agent's newest row of any kind. That agent drops out and the
+      test fails.
 - [ ] 1.3 The informative filter treats a JSON-`null` allowance as no reading. Test: write the
       row through `record_turn_usage(..., sample=None)` (the real writer, not a hand-built row)
       after a refusal, and assert that the hold survives. Then assert, in the same test, that the
@@ -121,6 +130,10 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - after the refused run, the firing's `JobRun` reads `in_progress`, not `failed`;
       - after a served run delivers the same entry, it reads `completed`.
 
+      **(Round 3)** Between the two runs, keep `resetsAt` an hour ahead so the refused run's end
+      starts nothing, then patch `provider_allowance._utcnow` past `hold_until` and call
+      `schedule_agent`. Script the fake pty with two turns, refused and then served.
+
       Mutation: keep the finalize call on a refusal. The first assertion fails, and so does the
       second, because the row already reads `failed` and the finalize selects only `in_progress`
       rows.
@@ -141,7 +154,8 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       - an operator entry arriving after the refusal starts exactly one turn, **even when it sits
         in a conversation behind an autonomous head**;
       - after that turn is refused, a further `schedule_agent` starts nothing;
-      - after the hold's end (`now` past `hold_until`), `schedule_agent` starts a turn.
+      - after the hold's end, `schedule_agent` starts a turn. **(Round 3)** End it by patching
+        `provider_allowance._utcnow` past `hold_until`, since `_attempt_turn` passes no `now`.
 
       Mutations:
       - key the probe on `selected` (the second test fails);
@@ -189,27 +203,52 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       **The project in these tests has no other agent.** With a second free agent,
       `_loop_flow_busy_reason` lets the firing through. What stops it then is 3.4b, not this
       branch.
-- [ ] 3.4b **(Round 2, design D6)** `_agents_that_cannot_take_a_turn(session, project_id)` =
-      `_agents_running_a_turn | agents_held`. Read it at `decide_firing`'s `running`
-      (`scheduler.py:1299`). Tests in `hub/tests/test_scheduler.py`, on a flow whose project has
-      a **second, free** agent `other`. That agent is what lets the firing past the busy guard;
+- [ ] 3.4b **(Round 2, rewritten in Round 3; design D6)** `decide_firing` reads
+      `held_agents = agents_held(...)` once, beside `running`. The resumption arm records in
+      flight for `agent in running or (agent in held_agents and task.id in on_it)`. The default
+      branch requires `default_agent not in held_agents` as well as `not in running`. `running`
+      itself is unchanged. Tests in `hub/tests/test_scheduler.py`, on a flow whose project has a
+      **second, free** agent `other`. That agent is what lets the firing past the busy guard;
       without it the test cannot tell 3.4 from 3.4b.
-      - `dev` is held and holds an `assigned` task with an entry queued. Three firings add **no**
-        entry for `dev`, and the task is reported in flight;
+      - `dev` is held, and holds an `assigned` task with a queued entry whose **`task_id` names
+        it**. Three firings add **no** entry for `dev`, and the decision reports the task in
+        flight;
+      - **(Round 3)** `dev` is held and holds an `assigned` task with **no** queued entry naming it
+        (its queued input is a peer message). Three firings add **exactly one** entry for `dev`,
+        naming the task, on the first firing. The decision reports the task in flight on the second
+        and third;
       - `dev` is the job's own agent and is held, and one unassigned task is startable. The
         firing staffs `other`, not `dev`.
 
-      Mutation: read `_agents_running_a_turn` at `:1299`. The first test gains three entries,
-      and the second staffs `dev`.
+      Mutations:
+      - ignore `held_agents` in the resumption arm (R1's form). The first test gains three entries;
+      - read `agent in held_agents` alone, without `on_it` (R2's form). The second test gains no
+        entry, and it reports the task in flight on the first firing;
+      - drop `held_agents` from the default branch. The third test staffs `dev`.
 - [ ] 3.4c **(Round 2, design D6)** `_agents_that_are_free`'s running half reads
-      `_agents_that_cannot_take_a_turn`. The holdings half is untouched. Tests:
+      `running | agents_held`. The holdings half is untouched. Tests:
       - a held agent holding no task is not in the free list;
-      - with every agent held, a flow's firing whose job agent is held is refused and records
-        nothing (the `_loop_flow_busy_reason` path);
+      - with every agent held, **each holding no task** (Round 3: otherwise the holdings half
+        already excludes them, and the mutation passes too), a flow's firing whose job agent is
+        held is refused and records nothing (the `_loop_flow_busy_reason` path);
       - an existing free-list test, unchanged, still passes. This pins that the holdings half did
         not move.
 
-      Mutation: leave the running half as it is. The first test fails.
+      Mutation: leave the running half as it is. The first two tests fail.
+- [ ] 3.4d **(Round 3, design D6)** Rung 3's reason names the hold. `resolve_reviewer` reads
+      `agents_held` at rung 3 only. When a roster agent that is not excluded is held, the
+      enumeration gains *"waiting for its provider's usage limit to reset"*. Tests:
+      - a completed task with no declared reviewer, whose only non-author agent is held and holds
+        nothing. The firing surfaces rung 3, and the reason names the provider's usage limit and
+        does not read *"either running a turn, already holding active work, or"* without it;
+      - with no agent held, rung 3's reason is byte-identical to today's;
+      - the reason at a 64-character task id and 32-character agent names is at most 500
+        characters.
+
+      Mutation: leave rung 3's sentence as it is. The first test fails.
+
+      Update the stopped change's D2 length budget in the same commit only if it is built first.
+      Otherwise record in the review page that its rung-3 rewrite must carry this ground.
 - [ ] 3.5 Plain-job coalescing in `_do_fire_job` (D7). Tests:
       - during a hold that came from a refusal on **another conversation**, the first firing
         queues;
@@ -261,6 +300,31 @@ The reading used in tests is the measured one (`design.md`, *Context*):
       `waiting_reason` fallback (`api/v1/inbound_queue.py:183`) then reports the ended hold, and
       the test fails.
 
+- [ ] 4.4 **(Round 3, design D11; retires F127)** `run_job` asks `_loop_flow_busy_reason`
+      first for a loop job, before the `skipped` check. A refusal answers 409 with the guard's
+      reason, that no other agent is free, and that nothing was started. On
+      `DECISION_IN_FLIGHT`, the answer names each held agent among the in-flight tasks' staffing,
+      read through `task_attribution.staffing_from_decision`, and drops *"nothing is wrong"*.
+      Tests in `hub/tests/test_board_agent_role.py`, beside F48's:
+      - a single-agent loop whose agent is running a turn on no loop task, with a pending task.
+        `POST …/run` answers 409 naming the agent, not 500 *"Failed to fire job"*. This is F127's
+        own reproduction (`t_run_while_busy2.py`'s shape);
+      - the same loop with its agent held, its refused firing's `JobRun` `in_progress` (D10) and
+        its briefing queued. 409 names the hold's `HH:MM UTC`, and does not contain *"already being
+        worked"* or *"nothing is wrong"*;
+      - a two-agent flow, job agent free with nothing startable, and the in-flight task staffed to
+        a held agent with its briefing queued. 409 names that agent's hold, and does not contain
+        *"nothing is wrong"*;
+      - F48's test (`:291-319`), unchanged, still passes.
+
+      Mutations:
+      - drop the busy-guard re-ask. The first test reads 500, and the second reads *"already being
+        worked"*;
+      - drop the held clause on the in-flight answer. The third test reads *"nothing is wrong"*.
+
+      A source-scanning test already pins `task_attribution` as the only reader of
+      `_cannot_staff`, and the new route code must not read it directly.
+
 ## 5. The gate
 
 - [ ] 5.1 `py -3.11 -m pytest hub/tests/ -q`, then the full `tests/`. Both green, with the counts
@@ -308,10 +372,14 @@ in the log and on the review page.
       whether the drive project had a second, free agent. With one, the firing passes the busy
       guard and it is 3.4b's rule that holds: the held agent's assigned task reads in flight, and
       nothing is queued for it. Without one, the busy guard refuses it (3.4).
+      **(Round 3)** Press Run on that loop while held. Record the status code and the detail. It
+      must be a 409 naming the hold's time, not *"already being worked"* and not a 500 (4.4).
 - [ ] 6.6 Leave no job enabled. Record the drive's evidence in `scripts/drive/FINDINGS.md` under
       F355.
 
 ## 7. Archive
 
 - [ ] 7.1 `openspec-sync-specs`, then archive. Retire F355 in `FINDINGS.md` with `fixed <sha>`, in
-      the archive commit.
+      the archive commit. **(Round 3)** Retire F127 the same way, unless REV narrowed D11 to the
+      hold. In that case add a dated note to F127 saying the hold half is fixed and the running
+      half is not. Add a dated note to F128 saying a hold now reaches its substitution (design D6).

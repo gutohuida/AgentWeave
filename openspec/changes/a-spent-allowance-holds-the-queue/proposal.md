@@ -3,7 +3,9 @@
 Finding: **F355 (B)**. Round 1 (explore and propose), 2026-09-14, the day window's build day
 (`DECISIONS.md`, `### 2026-09-14 — a day that reads LoopEngine and builds what it finds`).
 Round 2 (re-derived against the code) the same day. It changed items 2, 5 and 6, added item 9, and
-is written up in `design.md` *Round 2*. Still no OPERATOR QUESTION.
+is written up in `design.md` *Round 2*. Round 3 (re-derived again) the same day. It changed item 6
+and added item 10, and is written up in `design.md` *Round 3*. It folds in F127 and MODIFIES a
+shipped `agent-flows` requirement that R2's addition contradicted. Still no OPERATOR QUESTION.
 
 ## Why
 
@@ -75,7 +77,10 @@ provider refused.
    a held agent as one that cannot take a turn**, wherever it asks: it does not re-brief a held
    assignee, select a held job agent, or recruit a held agent (D6). *(Round 2: R1 said a flow
    inherits this from the busy guard. It does not. The guard lets a firing through whenever anyone
-   is free, and the walk then re-briefs a held assignee on every tick.)*
+   is free, and the walk then re-briefs a held assignee on every tick.)* *(Round 3: a held
+   assignee's task is in flight only while input naming it is queued. Otherwise it is briefed once.
+   A shipped requirement forbids calling a task in flight on its assignment alone, and a held agent
+   is running nothing. When a review cannot be staffed because of a hold, rung 3's reason says so.)*
 7. **A plain job coalesces while its agent is held.** A firing whose job already has an entry
    queued for the held agent is recorded as skipped, not queued again. One copy of the standing
    instruction is delivered at the reset, not one per tick (D7).
@@ -84,6 +89,12 @@ provider refused.
 9. **A firing whose input is held reads in progress** (D10, Round 2). That includes the firing
    whose own turn was refused, and a held firing across a Hub restart. Today both read `failed`,
    and the delivery at the reset cannot correct them.
+10. **Pressing Run on a loop that declines says why** (D11, Round 3). With the hold in place, the
+    Run button on a held loop answered either *"already being worked … nothing is wrong"* or 500
+    *"Failed to fire job"*. The route now re-asks the busy guard, the first question the firing
+    asked, and answers 409 with its reason. It names a held agent on its in-flight answer. The same
+    rule fixes the running-agent case, **F127**, which the change retires at archive. REV may narrow
+    the rule to the hold instead.
 
 ## Is any of this the operator's to decide?
 
@@ -110,7 +121,11 @@ decision already shipped. The argument is written out so R2, R3 and REV can reje
   agent unavailable. This change touches only the function's other half, the running half, on
   that half's own stated reason. See design D6. If REV judges otherwise, D6's `free` bullet is
   severable: without it, the walk still stops re-briefing, and a held agent can be recruited once
-  per wall.
+  per wall. *(Round 3 agrees, and adds two things. The rule is written into a shipped requirement,
+  so the change MODIFIES that requirement's availability sentence rather than adding a second SHALL
+  that contradicts it. And the one open operator call D6 reaches is F128, a loop staffed with a
+  free agent while its own is busy. D6 applies it to a held agent exactly as it already applies to
+  a running one, and decides nothing about it.)*
 - **Plain jobs are the weakest of the three, and the one most open to challenge.** The shipped
   position (`_loop_agent_busy_reason`'s docstring, `scheduler.py:235-238`) is that a plain job
   firing while its agent is busy *queues*, *"a standing instruction still true when the agent
@@ -148,9 +163,11 @@ of `delivery_attempts`.
   *A re-delivered turn says the earlier attempt was cut off*; ADDED *A turn the provider's allowance
   refused holds the agent's queue until the reset*.
 - `agent-loops`: MODIFIED *A firing is refused while its loop's agent is already running*; ADDED
-  *A job firing into a held queue is coalesced*.
+  *A job firing into a held queue is coalesced*, and (Round 3) *Pressing Run on a loop that
+  declines names why it declined*.
 - `agent-flows` (Round 2): ADDED *A flow treats an agent whose queue is held as unable to take a
-  turn*.
+  turn* (rewritten in Round 3); MODIFIED (Round 3) *A flow resolves a reviewer by declaration, then
+  by availability*, whose availability sentence the ADDED requirement contradicted.
 
 ## Impact
 
@@ -162,14 +179,17 @@ of `delivery_attempts`.
   finalize on a refusal, arms the wake, and emits the event.
 - `hub/hub/scheduler.py`:
   - `_loop_agent_busy_reason`;
-  - `_agents_that_cannot_take_a_turn`, read by `decide_firing` and by `_agents_that_are_free`'s
-    running half;
+  - `agents_held`, read by `decide_firing` (the resumption arm only with queued input naming the
+    task, and the default branch) and by `_agents_that_are_free`'s running half (Round 3);
+  - rung 3's reason in `resolve_reviewer` (Round 3);
   - the plain-job coalesce in `_do_fire_job`;
   - the wake's date job.
 - `hub/hub/run_reconciliation.py`: `schedule_or_defer` made public, and
   `reconcile_stale_job_runs` leaving a held firing `in_progress` (D10).
 - `hub/hub/main.py`: re-arm at start.
 - `hub/hub/api/v1/inbound_queue.py`: the status route's reason.
+- `hub/hub/api/v1/jobs.py`: `run_job` re-asks the busy guard and names a hold on its in-flight
+  answer (D11, Round 3).
 - `hub/hub/db/models.py` and migration `0103`.
 - The migration head assertions in `hub/tests/test_migrations.py` and
   `hub/tests/test_project_persistence.py`.
