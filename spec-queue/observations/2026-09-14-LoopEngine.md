@@ -299,3 +299,257 @@ harness does not consult the permission tool for its own directories. Unverified
 - The one subagent's sidechain.
 - How the step that moved `completed → under_review` ends up recorded as `operator`. That is O-1's
   open attribution, and O-3 checks it.
+
+### dev, tester and dev_2
+
+**How this was read.** As for the Architect: every session matched a transcript by
+`runs.session_id` (dev 59, tester 27, dev_2 8, none missing). The same `%TEMP%\o2` scripts counted
+tool calls, errors and refusals, and I read the transcripts at the points those counts flagged.
+The evidence reviews, footprints and run rows come from the `:8000` database, opened `mode=ro`. For
+`dev`'s long sessions I read counts and flagged points, not whole transcripts.
+
+#### dev: Sonnet 5, 99 runs, 59 sessions, $114.21
+
+**The shape of it.** 46 runs completed and 53 failed. **51 of the failures are the quota walls:**
+the job's `*/5` ticks name `dev`, so `dev` took most of the re-spawns. All 51 carry the harness's
+session-limit notice inside the run, and 48 of them used 0 tokens. The other 2 are
+`database is locked`. Across the sessions `dev` made 2,470 tool calls, 204 of them errors: 120
+guard refusals, 23 from `submit_checkpoint_notes`, 11 from `update_task` and 9 from
+`record_evidence`.
+
+**1. Why `dev` cost the most: a handful of long turns, re-read on every call.**
+- **Almost all cache reads.** 316.7 M of `dev`'s 323.2 M tokens are cache reads. Output is 1.7 M.
+- **A few long runs carry most of it.** The median run lasts 5.7 minutes, but eight runs of 13–35
+  minutes (125–294 API calls each) account for 188.9 M, or 58%.
+- **The context grows on every call.** Every fresh session starts at 41–45 k tokens of context:
+  the system prompt, the tool list and AgentWeave's briefing. The long sessions reach 290–547 k
+  (`078560c0`: 294 calls, peak 547 k). Every call re-reads the whole of it, and no `dev` transcript
+  shows a compaction.
+- **Rework resumes the author's growing session.** 206.5 M tokens are in sessions that span more
+  than one run. `task-d8d4b03d722b` alone took 86.6 M ($23.80) over 7 runs, its session carried
+  through three review rounds to 428 k.
+- **The spec spill adds to it.** Each read of the spec came back as 64 k characters. `dev` read it
+  whole into context in 11 sessions: 10 from a spill file, 1 from a scratch copy.
+- **Nothing budgets it.** The project has no token budget (O-1).
+
+**2. `submit_checkpoint_notes` failed 23 of its 36 calls.**
+- **Two failure shapes.** 9 are pydantic's *"Input should be a valid list"*, where `dev` passed a
+  string for `suspicions` or `warnings`. 14 are the Hub's 422 *"suspicions: each entry must be at
+  most 400 characters"* (or `warnings`).
+- **The caps are not in the description.** The Hub caps each entry at 400 characters, the lists at
+  8 entries and `intent` at 1,500 (`agent_actions.py:337-346`). The tool's description says *"a few
+  hundred words in total is right"* and states none of the caps (`mcp_server.py:511-535`).
+- **The 422 does not help either.** It names neither the entry nor the overshoot.
+- **What it cost.** It happened in 11 sessions, each taking two to five calls to get one note
+  through. At 02:44 (`317bc32c`), after four refusals, `dev` wrote a Python script into the task
+  worktree to count characters.
+
+**3. Evidence names the commit the turn started from, and three things followed from that.**
+- **How it works.** The briefing says *"You do not need to `git commit` your own changes. The Hub
+  commits your worktree's uncommitted changes automatically at the end of this turn … Call
+  `record_evidence` when you are done"* (`launchability.py:423-428`). `record_evidence` footprints
+  `HEAD` as it stands, and the Hub re-points the run's rows to the snapshot commit only after the
+  process exits (`requirement_evidence.py:905-930`, `agent_trigger.py:2304-2315`).
+- **The tool presents the provisional commit as final.** Its description says the returned
+  footprint is *"the branch and commit your evidence has been attached to. Read it."*
+  (`mcp_server.py:1727-1731`). The authors read it and passed it on to reviewers as the commit to
+  check. At 00:00 `tester` noted that one row's footprint was in fact `cbc34fa`, not the commit its
+  author had named.
+- **Re-recording after a fix was refused, and the remedy contradicts the briefing.** Three times
+  `dev` re-recorded evidence after revising the work in the same turn (`87affad0` 17:57 ×2,
+  `6761a8a7` 19:48). Each was refused: *"… already records evidence for FR-6 on this task at this
+  commit, and is awaiting … if the work has moved on, commit it first so the new evidence names the
+  commit it demonstrates."* That is the opposite of the briefing. `dev` committed by hand each time.
+- **A reviewer woken mid-turn reads the pre-turn commit.**
+  - `dev`'s run `run-13096fbb3cc8` ran from 05:35:45 to 05:53:05. During it, `dev` messaged
+    `tester` to re-check its rework.
+  - That message woke `tester` at 05:51:59 (`run-7695d6f7b4b4`, which died on the database lock,
+    then `run-9f7ae8cfe645`).
+  - Between 05:52:18 and 05:52:40 `tester` read the new rows' footprint and the branch head. Both
+    were `d4f5eda`.
+  - At 05:53:05 the Hub re-pointed the three rows to `880f47c`.
+  - At 05:53:11–17 `tester` rejected all three (`ev-c7b3dce37a88`, `ev-be17d387cd74`,
+    `ev-b3a0392cf76a`) as unverifiable on footprint `d4f5eda`. The stored footprints now say
+    `880f47c`, so the recorded reasons contradict the rows they sit on.
+  - `dev` re-recorded at 06:14 and `tester` re-reviewed at 06:55: one whole round lost.
+  - **No evidence decision was made while its recording run was live.** I checked this across
+    every review of agent-recorded evidence. What happens is that the decision is formed before the
+    re-point and lands after it.
+- **A run that fails on the Hub's own error is never re-pointed.**
+  - `run-d5f4b2972125` recorded `ev-85be48ba74a2`, then failed at 04:03:24 on `database is locked`.
+  - The failure path marks the run failed and does neither the snapshot nor the re-point
+    (`agent_trigger.py:2461-2491`, against `:2248-2315` for a normal end).
+  - The work was committed at 04:05:58 as `d97aef5` by the next run in the same session
+    (`run-8e0ed327cfc8`). Its re-point covers only its own rows.
+  - `ev-85be48ba74a2` still names `c78d35d`. `tester`'s 04:23 rejection gives, among its reasons,
+    that the evidence commit does not contain the code.
+
+**4. One task per run, but messages ask for more.**
+- **The refusal, twice.** *"This run cannot claim task task-0c07b268b9e5: it is already working
+  task task-9b60162f5804. A run finishes the task it took, and takes at most one."* (`5defd7fe`
+  19:19, `05a22a80` 19:25).
+- **The work had already landed on the wrong branch.** A peer turn bound to one task asked `dev` to
+  fix something on another task. `dev` did the work in the first task's workspace and then could not
+  move the second task. `tester` rejected both evidence rows as on the wrong branch
+  (`ev-91fc82a39196`, `ev-e3407121b5d8`).
+- **Three more turns ended stuck the same way.** Each said the work belonged to another task's
+  session and could not be reached from this workspace (`4a419275` 21:22, `9935088b` 23:48,
+  `be4ae6db` 00:01).
+
+**5. Smaller misfires.**
+- **The transition model.** Three `in_progress → under_review` attempts (`dev`'s idea of handing
+  work in), one `pending → completed` and one `pending → under_review`. Each cost one retry.
+- **Evidence for a task with no requirement.** Once, for a task with no requirement, `dev` passed
+  the task id as the identifier and got *"this project has no requirement FR-8ae8e1ace072"*.
+- **A wrong argument name.** `send_message` refused `to` for `to_agent` twice.
+
+**6. The guard refused `dev` 120 times.**
+
+| Cause | Refusals |
+|---|---|
+| the spill file | 42 |
+| globs | 25 |
+| `/`-rooted fragments | 18 |
+| `/dev/null` and `/tmp` | 16 |
+| regex fragments | 15 |
+| `$VAR` | 2 |
+| network | 2 |
+
+- **Why the globs are refused.** The glob word was `test/*.test.js`, and the refusal names
+  `'/*.test.js'`. The plain-relative rule does not admit `*` (`mcp_server.py:966`). On Windows the
+  backstop then opens an absolute-path candidate at any bare `/` inside the word (`:957-960`), so
+  it reads the tail of a relative path as an absolute path.
+- **`2>/dev/null`.** Refused even after a `cd`.
+- **The two network refusals.** Both were `dev` calling the project's own server on `127.0.0.1`,
+  the thing under test. `tester` hit one too.
+
+**7. Two turns ended waiting for a notification that never came.** `79131de2` (20:58) and `6623a907`
+(05:04) each ended by saying `dev` would wait for a background test run's completion notice. The
+turn ending is the process ending, and neither session was resumed with the result. In `078560c0`
+the notice did arrive, but in the *next* run (`run-d479bd1e1710`, 00:45:27), after
+`run-539bd1d44ea1` had died on the database lock. The briefing does not say that background work
+ends with the turn. Whether the harness kills those processes is unverified.
+
+#### tester: Opus 5, 63 runs, 27 sessions, $76.05
+
+**The shape of it.** 47 runs completed and 16 failed: 15 on the quota walls and 1 on the database
+lock. 1,196 tool calls, 85 of them errors, 54 of those guard refusals (12 the spill file, 11 regex
+fragments, 10 `/`-rooted, 7 globs, 5 `$VAR`, 4 `/dev/null`, 4 other harness directories, 1
+network).
+
+**1. The 68 evidence reviews were not rubber stamps.**
+- **The numbers.** 34 accepted and 34 rejected. The median reason is about 1,160 characters and the
+  shortest is 160.
+- **What a review contains.** They name the commit checked, whether it descends from `main`, the
+  suite count, and the probes or mutants tried.
+- **Real defects caught.** Several found defects the authors' tests missed:
+  - a claim about DNS-rebinding that did not hold (18:56);
+  - a failure classifier that treated any bare `429` or `503` in the output as the provider being
+    unavailable (04:23);
+  - tests that passed without the feature (04:23).
+- **Its own evidence.** It never judged its own. The Architect decided its 5 rows (4 accepted, 1
+  rejected). So the rule that excludes an agent's own evidence was never exercised by `tester`.
+- **Timing.** The median time from evidence being recorded to `tester`'s decision was 15 minutes
+  (range 1.7 to 174).
+
+**10 of its 34 rejections were not judgements of the work:**
+- **5 retired a superseded or duplicate row.** Their reasons say the content is fine, and that
+  the rejection only stops the row being counted twice. An agent has no way to withdraw its own
+  `awaiting` row. The duplicate refusal offers only *"say so on that piece"*.
+- **2 named the wrong branch** (item 4 under `dev`).
+- **3 were the footprint race** (item 3 under `dev`).
+
+**2. A reviewer who helps the work along becomes its author.**
+- At 20:45 (`55b5d597`) `tester` went to approve `task-bb06b8c3c708` and found it still
+  `in_progress`, because `dev`'s turn had ended without completing it.
+- `tester` moved it to `completed` itself. Approval was then refused: *"agent 'tester' recorded the
+  task's move to 'completed', and approving, rejecting or requesting revision of work requires a
+  different actor … Starting a new run does not make you a different actor."*
+- It sent the approval to the Architect and saved a note never to complete a task it reviews.
+
+**3. The author-assignee refusal, twice, and each time it was preceded by a `completed →` refusal.**
+- **When.** At 23:07 on `task-49b0567ce119` and at 03:59 on `task-0ff93faef4ba`.
+- **The refusal.** *"it is still assigned to 'dev', the agent recorded as completing it … Assign a
+  different reviewer, or clear the assignee to review it yourself. Left as is, the task is claimable
+  by nobody and 'dev' counts as busy for every other review in this project."*
+- **Its response.**
+  - it put the verdict in messages to the Architect and `dev`;
+  - it sent the Architect a correction when its first message had said the task was moved;
+  - it updated its saved note on reassignment.
+- **The effect.** Its judgement landed through evidence decisions, which it can make. The task
+  status stayed `completed`.
+
+**4. It could not see the answer its decision waited on.**
+- At 03:51 it called `get_answer` on `q-dc3b14272b96`, the Architect's question whose answer
+  decided the evidence it held.
+- It got *"Question not found"*. The route answers 404 for any question another agent asked
+  (`agent_actions.py:722-727`), which is deliberate scoping.
+- The effect is that a reviewer told to wait on an answer cannot tell when that answer arrives.
+
+**5. The spec, again.**
+- Two `read_spec_document` calls with the document id were refused with *"path must begin with
+  'spec/'"* (19:08, 19:19).
+- 12 guard refusals named the spill file.
+- It ended up copying the spec into a `.tmp` directory inside its own worktree to search it.
+
+#### dev_2: Sonnet 5, 19 runs, 8 sessions, $10.13
+
+**The shape of it.** All 19 runs completed. **It has not run since 09-13 23:50 UTC**, over nine
+hours when this was read.
+- **The four tasks it holds are ones nothing will start.** All four are pending, created by the
+  Architect, with no `loop_id`: `task-62b60f9dba50`, `task-88eff732b7f5`, `task-7673e4f80905` and
+  `task-a7c2a75726a2`.
+- **Two messages to it are still suspended:** `entry-c60e30d4d2b5` (Architect, 19:20) and
+  `entry-d1fe571a90e4` (`tester`, 19:30), both at hop 7.
+- **How this compares with F352.** F352 measured "five pending, three duplicates" at 22:30. One of
+  the five, `task-3fe4f652e5c2`, was since worked and completed. Going by titles, two of the four
+  remaining (`task-62b60f9dba50` and `task-a7c2a75726a2`) describe the same change to how the runner
+  is spawned.
+- **Duplicates across agents.** `task-3fe4f652e5c2` itself duplicated `dev`'s `task-8ae8e1ace072`.
+  `dev_2` found `dev`'s claimed fix had never merged and did it again. `task-8ae8e1ace072` is still
+  `completed` and assigned to `dev`.
+
+**1. Two agents fixed the same thing in parallel.**
+- `tester`'s 18:56 rejection of the FR-60 claim reached `dev_2` as the reviewer of
+  `task-b8e8b7f3beca` (`entry-d50ca4b24a74`). Meanwhile the Architect opened `task-9b60162f5804`
+  for `dev`.
+- Both wrote the fix. `dev`'s merged. `dev_2`'s went onto the already-approved `task-b8e8b7f3beca`,
+  where the Hub refused the status move (*"an agent run has no transitions available from
+  'approved'"*) but accepted the new evidence.
+- `tester` rejected both of `dev_2`'s rows as superseded or duplicate (`ev-90bc84ab8ddb`,
+  `ev-13c55e550139`).
+- `dev_2`'s 19:13 turn concluded, on its own, that it should check `list_tasks` before fixing
+  anything.
+
+**2. A message about another agent's task wakes you in that task's workspace.**
+- The Architect's `entry-b71caee8b603` carried `task-9b60162f5804` and woke `dev_2` in
+  `.agentweave/tasks/task-9b60162f5804`, which is `dev`'s task. Its next two turns, delivering
+  `tester` messages at 19:21 and 19:23, ran there too.
+- `dev_2` declined to touch it.
+- The eleven runs in that workspace between 18:58 and 19:23 (dev, Architect, tester, dev_2) did not
+  overlap.
+
+**3. Reviewing without the capability to decide.**
+- **Staffed without it.** At 17:23, in a turn the operator started after the job had staffed
+  `dev_2` to review `task-b8e8b7f3beca`, `dev_2` tried to accept three evidence rows. All three got
+  *"accepting evidence is the operator's, or an agent the operator has granted it."*
+- **Approval refused, as it was for the Architect.** At 19:50 and 19:55 the evidence gate refused
+  its approval of `task-715470b41119`.
+- **It misread the refusal.** Straight after the 19:50 refusal it messaged `dev` that the task was
+  approved. It ended the turn believing the write would succeed once the running turn ended. The
+  refusal was the evidence gate, not the live-turn check.
+
+**4. Guard refusals.** 29 (7 regex fragments, 7 `/`-rooted, 5 the spill file, 3 `$VAR`, 3
+`/dev/null`, 3 globs, 1 harness directory).
+
+**All three first turns were told there were no MCP tools.** `dev_2` at 16:35, `dev` at 16:45 and
+`tester` at 18:50 each opened with *"Tool access: no MCP tools this turn"*, as the Architect's did
+(item 8 above).
+
+**What went unread for these three.**
+- **Transcripts.** Their `agent_outputs` rows, their thinking blocks and any sidechains. `dev`'s
+  three longest sessions (`078560c0`, `c90697b9`, `9894e1e1`) end to end.
+- **Whether `tester`'s probes were right.** I did not check them against LoopEngine's code.
+- **Background processes.** Whether a background process outlives the turn that started it.
+- **The duplicate count.** Whether the four pending `dev_2` tasks duplicate each other beyond their
+  titles.
