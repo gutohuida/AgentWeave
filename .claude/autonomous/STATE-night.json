@@ -1,40 +1,56 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-14-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "f28bc31",
-    "stop_at":  "2026-09-15T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-14-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-14-daily",
+    "parent_branch": "master",
+    "parent_sha": "f28bc31",
+    "stop_at": "2026-09-15T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-14-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "ledger-conflicts",
+    "next_action": "ledger-conflicts: hand-check the four CONFLICT verdicts scripts/classify_findings.py reports (F52 A @2826, F292 B @22147, F335 D @26955, F338 D @27097 in scripts/drive/FINDINGS.md). For each, read the section, find the open marker and the external-resolution line the classifier paired (see classify() ~line 395-415), then check the claim against the CODE or git history (a fixing commit, a test that pins it), not against other prose. Write one evidence-backed '**Status:**' line per section (fixed <sha> / open, with why). If F52 turns out OPEN it is a severity-A finding: say whether a proposal exists, and if none, record it as a note to the day window, not as work. Re-run classify_findings.py and `py -3.11 -m pytest tests/test_classify_findings.py -q`. Documentation only; no product code.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Compose this window's queue from the playbook",
+            "detail": "Done iteration 1. APPROVALS ## 2026-09-14 carries no status token and no ORDER:, so the default queue applies; walked it: nothing to archive (3 unarchived changes, none built: 0/31, 3/30, 0/40), none of the 5 open A findings buildable (F299 rejected, F301 no proposal, F325 Codex, F332 rule OPEN, F352 stopped on operator question), no approved rows, open B fixes have no proposal except unapproved F356. Tree green: hub suite gated at c8e3bbd (4316 passed) with no hub/src/tests change since; CLI suite measured tonight 521 passed, 3 skipped."
+        },
+        {
+            "id": "ledger-conflicts",
+            "status": "open",
+            "title": "Hand-check the 4 CONFLICT verdicts in FINDINGS.md (F52 A, F292 B, F335 D, F338 D)",
+            "detail": "Carried since the 2026-09-12 night log ('Hand-check: the classifier's CONFLICT verdicts, F52 (A) and F292 (B)') and re-noted by every window since without being done - the night-window 'recording is not fixing' rule. Evidence from code/git, one Status line per section. Documentation only."
+        },
+        {
+            "id": "ledger-unclassified",
+            "status": "open",
+            "title": "Classify the 5 UNCLASSIFIED sections (F185 B, F135 C, F266 C, F272 C, F164 D) and F108's RESOLVED_ELSEWHERE lead, then close the window",
+            "detail": "Same method as ledger-conflicts. This firing also writes the window's final entry (what changed / proven / open / decisions / distrust) and sets next_action to null."
+        }
+    ],
+    "decisions_for_user": [
+        "Nothing new tonight. The three open operator decisions are carried in STATE-day.json decisions_for_user: F332-rule, F352-free, F352-split. Approving a-late-answer-is-delivered (F356, 31 tasks, no migration) is what would give a night a feature to build; the 2026-09-14 APPROVALS row has no token."
+    ],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ],
+    "notes_for_tomorrow": [
+        "DIRECTION.md has no ## 2026-09-15 section (the review page's evening reminder); the Carried plan (F327, F215, access-path exploration) needs one. Not night work.",
+        "The eleven fixes not reached on 2026-09-14 (F357-F364, F347, F302, F47) have no change directories - day-window work before any night can build them."
+    ]
 }
