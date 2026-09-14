@@ -27765,6 +27765,15 @@ them describe the same change by title. F352's shape is the flow's largest singl
 project. It is built on 2026-09-14 together with F353, because both repairs rewrite the same
 unstaffed sentence.
 
+**Split by R1, 2026-09-14** (`openspec/changes/an-unstaffed-review-names-its-holders`).
+- **The visibility half is taken into that change,** with F353, F334 and the new F365. It covers
+  the sentence naming each agent and its holdings, a remedy that exists, and one record per task.
+- **The definition of "free" is not taken.** `agent-flows` states the project-wide rule, and its
+  design rejected *not running* alone on the operator's own pile-up objection. So which holdings
+  count is an **OPERATOR QUESTION**, laid out with five options and a recommendation in that
+  change's `proposal.md`.
+- **This finding stays open** until the question is answered and built.
+
 ## F353 (B) — the product tells the operator to "clear the assignee", and nothing in the app can; the one action that would work, "Land it", is never named
 
 **Status:** open. Found 2026-09-13 unblocking F352.
@@ -28062,3 +28071,37 @@ It happened in 11 sessions, and each took two to five calls to get one note thro
 entry (`hub/hub/api/v1/agent_actions.py:337-346`). The message at `:346` names neither which entry
 failed nor its length. The tool description says *"a few hundred words in total is right"* and
 states none of the caps (`mcp_server.py:511-535`), and that half is not edited on 2026-09-14 (F354).
+
+## F365 (B) — a loop with two stuck reviews records both on every firing, because "unchanged" is judged against the loop's newest record rather than the task's
+
+**Status:** open. Filed 2026-09-14 by the day window's `f352-r1`, from LoopEngine on `:8000`
+(read-only, mode=ro, `%TEMP%\f352\q1.py`). **Measured.** Taken into
+`an-unstaffed-review-names-its-holders`.
+
+**What happened.** `review_unstaffed` fired **357** times on `loop-103ecb8aeb89`. **347** of those
+repeat their own task's previous reason word for word. `agent-loops` *"A surfaced step is recorded
+once, not once per tick"* requires one record per task while the reason is unchanged. From 22:35
+to 22:55 UTC, only one task was unstaffed, and it recorded once, as designed. Every other stretch
+held two or more.
+
+**Why.** `_review_unstaffed_already_stands` (`hub/hub/scheduler.py:1913-1941`) selects the **loop's**
+newest `review_unstaffed`, then compares its `task_id` and `reason`. With two tasks, their events
+alternate, the newest is always the other task's, and the check never matches. The docstring says
+*"the newest `review_unstaffed` for this task"*. The query does not filter on the task. The
+existing test (`test_an_unchanged_wedge_is_recorded_once_not_once_per_tick`) stages exactly one
+task, so it passes against this code.
+
+## F366 (C) — an agent can set any task's assignee over HTTP, a field its MCP tool does not carry
+
+**Status:** open. Filed 2026-09-14 by the day window's `f352-r1`. **Code read, not driven.**
+
+`PATCH /api/v1/agent-actions/tasks/{id}` (`hub/hub/api/v1/agent_actions.py:276-289`) takes the
+operator's `TaskUpdate`, and `assignee` is on it (`hub/hub/schemas/tasks.py:129`).
+`update_task_for_actor` writes it for any actor, with no actor check
+(`hub/hub/api/v1/tasks.py:1266-1275`). MCP `update_task` carries only `status` and `notes`
+(`mcp_server.py:307`). By reading, then, an agent using the documented HTTP form can unassign
+another agent's work, or name itself on a completed task and send it to review in one request.
+`agent-capability-plane` forbids the two surfaces from differing in what they accept, and
+`agent_actions.py:101-103` states that rule for task creation. Whether the agent's HTTP route is
+meant to take `assignee` at all is the question. Neither direction of the difference has been
+driven.
