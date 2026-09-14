@@ -621,7 +621,7 @@ in the log and on the review page.
       - 6.4 fresh refusal, then exactly one probe spawn, refused, hold renewed to 16:00:01 and named
         by the status route; a real Haiku peer turn's message to `held` queued without a spawn; at
         16:00:01 one resumed turn carried *"delivery attempt 3"* and *"delivery attempt 2"*.
-- [ ] 6.5 A loop with a `*/1` cron on a held agent: no `JobRun` and no entry while held. Record
+- [x] 6.5 A loop with a `*/1` cron on a held agent: no `JobRun` and no entry while held. Record
       whether the drive project had a second, free agent. With one, the firing passes the busy
       guard and it is 3.4b's rule that holds: the held agent's assigned task reads in flight, and
       nothing is queued for it. Without one, the busy guard refuses it (3.4).
@@ -630,8 +630,25 @@ in the log and on the review page.
       **(Round 4 — REV)** Read the loop's summary (`GET` the jobs list) while held. Where the
       decision is stalled and nobody else is free, its `stall_reason` names the hold, not *"no
       claimable task"* (3.4e). Record which case the drive reached.
-- [ ] 6.6 Leave no job enabled. Record the drive's evidence in `scripts/drive/FINDINGS.md` under
-      F355.
+
+      **Driven 2026-09-14 (part B), 17:07–17:13 BST,** at `ac6bff6`, on the same drive Hub, profile,
+      project and stub. The flag stayed raised, so every reset renewed the hold. **Both cases were
+      reached,** on one loop `job-cdff75d9c531` (`*/1`, purpose set, one seeded task):
+      - **no free agent** (`peer`'s runner unbound; `held` holding nothing, so this also exercises
+        3.4c's running half): the 16:08 and 16:09 firings wrote no `JobRun` and no entry. **Run**
+        answered **409** *"held is held until 16:09 UTC by its provider's usage limit, and no other
+        agent is free to take this loop's work. Nothing was started."* The summary's `stall_reason`
+        read *"held is held until 16:09 UTC by its provider's usage limit"* (3.4e's stalled case);
+      - **`peer` free** (re-bound), with the task assigned to `held`, where the assignment queued
+        nothing: the 16:10 firing queued **exactly one** briefing naming the task, with one
+        `in_progress` `JobRun`, and spawned nothing. The 16:11 and 16:12 firings added no entry and
+        no `JobRun` (3.4b, Round 3's form). **Run** answered **409** *"Every task on this loop's
+        queue is staffed, but held is held until 16:13 UTC by its provider's usage limit. The
+        queued input is delivered at the reset. Nothing was started."* `stall_reason` was `null`
+        (in flight).
+- [x] 6.6 Leave no job enabled. Record the drive's evidence in `scripts/drive/FINDINGS.md` under
+      F355. Both jobs disabled, no run `running`, the drive Hub stopped, and the flag removed after.
+      Evidence under F355 *DRIVE part B*.
 
 ## 7. Archive
 

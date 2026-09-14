@@ -27983,7 +27983,41 @@ log, the status route):
 - **A drive artefact, not a finding:** the first "peer message", posted with the operator key and
   no `run_id`, queued at `hop_depth = hop_budget + 1` and was suspended (`messages.py:57-58`, by
   design), so it proved nothing about the hold. 6.4's real peer turn is the peer evidence.
-- Not yet driven: 6.5 (loop, `Run` 409, `stall_reason`), 6.6.
+- 6.5 and 6.6 were driven in part B, below.
+
+**DRIVE part B, 2026-09-14 17:07–17:13 BST (tasks 6.5–6.6, driven live).** Built at `ac6bff6`. The
+same drive Hub was relaunched on `127.0.0.1:8013`, on the same profile, project and stub. The flag
+stayed raised throughout, so each reset delivered into another refusal and renewed the hold, and no
+`held` turn reached the provider. Both cases were reached, one after the other, on the same loop
+`job-cdff75d9c531` (`loop-778dd34db171`, `*/1`, purpose set, one seeded task
+`task-4d2724a2ce27`):
+- **No free agent (3.4, and 3.4c's running half).** `peer`'s runner was unbound, which takes it off
+  the free list (`_agents_that_are_free`). An operator message was a fresh refusal
+  (`run-e9c0ce22261e`, hold to 16:09:29 UTC), and the loop was created enabled at 16:07:35 with its
+  task `pending` and unassigned. `held` held no task, so without 3.4c it would have been "free" and
+  let the firing through. The **16:08 and 16:09 firings wrote no `JobRun` and no entry**: the job
+  read `last_run NULL`, `run_count 0`. **Run** at 16:09:10 answered **409** *"held is held until
+  16:09 UTC by its provider's usage limit, and no other agent is free to take this loop's work.
+  Nothing was started."* The board's summary read `queue {pending: 1}` and **`stall_reason` *"held
+  is held until 16:09 UTC by its provider's usage limit"***, not *"no claimable task"* (3.4e's
+  stalled case).
+- **A free agent (3.4b).** At the 16:09:29 reset the queued message was delivered into another
+  refusal (`run-1b05a38b42e9`), which renewed the hold to 16:11:32. The task was then assigned to
+  `held`, which queued nothing, and `peer`'s runner was re-bound, so `peer` was free (bound, not
+  running, holding nothing). The **16:10 firing passed the guard and queued exactly one briefing**
+  for `held` (`entry-b6e670147ceb`, `task_id` the task) with one `JobRun` (`run-35418b24c780`,
+  `in_progress`), and spawned nothing. The 16:11 and 16:12 firings added **no entry and no
+  `JobRun`** (`run_count` stayed 1): the task read in flight on the queued briefing (`on_it`). That
+  is Round 3's form, briefed once, not R1's every tick and not R2's never. **Run** at 16:12:10
+  answered **409** *"Every task on this loop's queue is staffed, but held is held until 16:13 UTC by
+  its provider's usage limit. The queued input is delivered at the reset. Nothing was started."*
+  It did not read *"already being worked"*, *"nothing is wrong"* or 500. The summary read
+  `stall_reason null`, with `current_tasks[0].agent_capacity "held"`. An in-flight decision is not
+  labelled stalled.
+- Between 16:07 and the Hub's stop, the only runs were `held`'s three refused deliveries (16:07:26,
+  16:09:29, 16:11:32), each at a reset or the operator's message. `peer` ran nothing.
+- **6.6:** both jobs disabled (`plain-f355`, `loop-f355`) and no run `running`. The drive Hub was
+  stopped (8013 free; `:8000` untouched), and the flag was removed after the stop.
 
 ## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
 
