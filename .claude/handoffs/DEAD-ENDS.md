@@ -304,6 +304,13 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   `inbound_queue_entries.delivered_in_run_id`. `event_logs` is `event_type`/`data`/`timestamp`.
   Printing agent text from `py -3.11` dies on `cp1252` at the first `→`: start the script with
   `sys.stdout.reconfigure(encoding="utf-8")`.)*
+  *(2026-09-14 evening, four more that each cost a retry. **There is no `jobs` table** — it is
+  **`ai_jobs`**, and its columns are `cron`, `last_run`, `next_run`, `run_count`, `enabled`,
+  `archived_at` — not `schedule` or `last_fired_at`. **`task_transitions`** has `actor_kind`,
+  `actor_agent` and `run_id` — there is **no `actor_id`**. **`inbound_queue_entries`** has
+  **`state`**, not `status`, and its values are `queued`/`delivered`/`withdrawn`. `tasks` has
+  `updated`, not `updated_at`. The reliable move remains `pragma table_info(<t>)` first, and
+  `select name from sqlite_master where type='table'` before assuming a table exists at all.)*
 
 ## SQLAlchemy and Hub test patterns
 
@@ -707,6 +714,36 @@ checkout — the dev-repo traps are in "The Hub at runtime" above and still appl
   `gh run view <id> --json jobs --jq '.jobs[] | "\(.conclusion)  \(.name)"'`. On 2026-09-08 two
   docs-only commits failed this way while the two around them passed. **The consequence that bites:
   a red `master` keeps the merge gate shut**, so an unrelated flake blocks the cycle from landing.
+
+- **A terminated iteration can leave `AgentWeaveNightLoop` *registered but Disabled*, and the whole
+  window then silently never fires** *(measured 2026-09-14 23:30)*. Found at 23:34:
+  `Get-ScheduledTask -TaskName AgentWeaveNightLoop` reporting `State: Disabled` with
+  `LastTaskResult: 267014` (`SCHED_S_TASK_TERMINATED`) and a `NextRunTime` still ticking forward,
+  which makes it *look* scheduled in `Get-ScheduledTaskInfo`. The 23:00 iteration had started,
+  composed, committed `1bf256b` at 23:04, and then been killed; `driver-night.log` shows its
+  `--- iteration start ---` with **no matching `--- iteration end ---`**.
+  **Nothing in the pipeline disables a task.** `run-iteration.ps1` and `install-driver.ps1` only
+  ever `Unregister-ScheduledTask` (three sites in the former, one in the latter), and
+  `install-tasks.ps1` mentions `Disable-ScheduledTask` only in its own help text. So a `Disabled`
+  driver task is always external — a kill, a stop gesture, or a hand-disable — and never the
+  loop's own doing. **`State` is the field to check; `NextRunTime` lies.** Re-arm with
+  `Enable-ScheduledTask -TaskName AgentWeaveNightLoop`; it keeps the existing trigger and picks up
+  at the next 5-minute boundary.
+- **Redirecting a window *after* it has composed needs `STATE-*.json` rewritten, not just
+  `APPROVALS.md`** *(2026-09-14 23:30)*. `night-window.md`'s iteration 1 is the only firing that
+  reads `APPROVALS.md` — *"Only the first firing of the window does this"* — and it writes the
+  queue into `STATE-night.json`. Once it has run, editing `APPROVALS.md` changes **nothing** for
+  that night, however correct the new `ORDER:` line is. To redirect a live window: write the
+  `ORDER:` into `APPROVALS.md` for the record *and* rewrite the state file's `queue`, `current` and
+  `next_action`. Write it **atomically** (`json.dump` to `.tmp`, then `os.replace`) — the driver
+  fires every 5 minutes and `MultipleInstances IgnoreNew` does not protect a reader from a
+  half-written file. Deprioritise the composed items rather than deleting them; they are legitimate
+  backlog and the window may reach them.
+- **The driver scripts are not in `.claude/loops/`** *(2026-09-14, cost one wrong search)*. That
+  directory holds only `arm-cycle.ps1` and `install-tasks.ps1`. `run-iteration.ps1` and
+  `install-driver.ps1` — the ones that actually run an iteration and own every stop condition —
+  live in **`.claude/skills/autonomous-session/scripts/`** (and a mirror in `.agents/skills/…`).
+  `.claude/loops/README.md` names them without saying where they are.
 
 ## Working in this checkout while an unattended window is running in it
 
