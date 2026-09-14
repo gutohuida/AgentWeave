@@ -4,7 +4,7 @@
 
 | # | check | how |
 |---|---|---|
-| A1 | The unstaffed reason names every agent and what it holds | Tasks 2.6–2.8; the drive's `review_unstaffed` event |
+| A1 | The unstaffed reason names every agent and what it holds, and names at least one even when held task ids are long | Tasks 2.6–2.8 and 2.9b; the drive's `review_unstaffed` event |
 | A2 | The history route survives a long reason, whatever wrote it (F367) | Tasks 2.9–2.12; `GET /api/v1/projects/<p>/jobs/<job>/history` → 200 on the drive Hub, including a wedged review with a long title |
 | A3 | Two stuck reviews are recorded once each | Tasks 3.2–3.3; the drive's event count after two firings |
 | A4 | The refusals name a remedy that exists for the status: Land it for `completed`, the three exits for `under_review`; never "clear the assignee", never "approves" | Tasks 4.3–4.8 |

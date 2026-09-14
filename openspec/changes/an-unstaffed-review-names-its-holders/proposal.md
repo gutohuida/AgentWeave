@@ -69,13 +69,17 @@ the sentence is written to, F367, which is under *What changes*.
   the sentence are one computation.
 
   The remedy never promises an approval. `land` runs the approval gate first, and at this rung the
-  gate refuses while evidence awaits judgment (R2). One status-aware helper writes the remedy, for
-  this sentence and for the dispatch refusal below.
+  gate usually refuses while evidence awaits judgment (R2). It does not refuse for a flow declared
+  not to need evidence, or where accepted evidence would already merge (R3). One status-aware
+  helper writes the remedy's status sentence, for this sentence and for the dispatch refusal below.
+  Only rung 3 adds the clause about freeing an agent.
 - **The sentence fits in 500 characters, and every `error_summary` write is fitted to its
   column.** `GET /jobs/{id}/history` validates `error_summary` at `max_length=500`
   (`schemas/jobs.py:88`). A longer reason would be stored without complaint by SQLite, and would
   then turn that route into a 500. R2 confirmed that with the real schema at 501 characters.
-  - Agents that do not fit collapse into a count, and the remedy is always kept.
+  - Agents that do not fit collapse into a count, and the remedy is always kept. An agent whose
+    held tasks carry long, caller-chosen ids is named with fewer of them before it is counted, so
+    at least one agent is always named (R3).
   - The fit is applied **at the model**, so none of the eight writes can miss it.
   - **F367 (new, R2, computed):** `_wedged_review_reason` already passes 500 today, with a long
     title and a long agent name.

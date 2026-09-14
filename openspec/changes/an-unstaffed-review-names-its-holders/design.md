@@ -1,7 +1,8 @@
 # Design — an unstaffed review names its holders
 
 R1, 2026-09-14. Line numbers are at `2d5674c`. R2, 2026-09-14, re-derived at `e8ea490`: every
-decision it changed is marked **R2**, and *Round 2* at the end lists what changed and why.
+decision it changed is marked **R2**, and *Round 2* at the end lists what changed and why. R3,
+2026-09-14, re-derived at `fb469e2`: marked **R3**, listed in *Round 3* at the end.
 
 ## Context
 
@@ -69,8 +70,12 @@ For each record, the **first** of these that holds becomes that agent's clause:
    `"and N more"`;
 4. **running** — `"{name} is running a turn"`.
 
-Clauses are in name order. The pool is empty by construction at rung 3, so every record matches
-one of the four.
+Clauses are in name order. Every record matches one of the four. **R3** corrected R1's reason for
+that, *"the pool is empty by construction at rung 3"*, which is false: the author can be free, and
+then it is in the pool and merely excluded. What rung 3 guarantees is narrower. Every pool member is
+in `exclude`, because rung 2 would have returned any other, and `only_taken` would have deferred
+one in `unavailable` (`scheduler.py:1137-1159`). So a pool member takes clause 1, and every other
+record fails the pool predicate, which leaves no runner, a holding, or a running turn.
 
 The order is chosen for the operator, not for the code. Exclusion is a fact about this task and
 outlasts everything else, so it wins. An agent with no runner can never be staffed, so that fact
@@ -99,6 +104,14 @@ the rule `enter_selected_task`'s docstring states for the same situation.
   in_progress, revision_needed and under_review (`task_transitions.py:218-228, 338`), and each has
   an operator `rejected` edge (`:100-146`). That is what freed `tester` on LoopEngine at 22:33.
 
+**R3: the helper writes the status half only, and rung 3 appends the freeing clause.** R2 left
+open whether *"rejecting a held task … frees its agent"* was part of what `own_review_remedy`
+returns. D5 ends the dispatch refusal with the same helper. That refusal answers an operator who
+named one reviewer, and whether anyone else is free has no bearing on it, so the clause there would
+be noise. The helper returns the `completed` or `under_review` sentence and nothing else. Rung 3
+appends `; rejecting a held task that is no longer wanted frees its agent.` The measured strings
+below already concatenate the two, so the budget is unchanged.
+
 **R2: the `completed` remedy does not promise an approval.** R1 wrote *"Land it, on the task,
 approves it"*. That is false in the common case.
 - `land_task` evaluates the approval gate before it moves anything (`tasks.py:1543-1545`).
@@ -107,11 +120,29 @@ approves it"*. That is false in the common case.
 - A task at rung 3 has evidence naming a commit **by construction**: the arm refuses anything else
   first (`scheduler.py:1538-1548`).
 - A flow's review is usually what would judge that evidence. So on a repository project with a main
-  branch, Land it refuses with *accept or grant* until someone decides the evidence.
+  branch, Land it **usually** refuses with *accept or grant* until someone decides the evidence.
 - LoopEngine's two landings at 22:33 worked only because every piece of their evidence had already
   been decided. Read mode=ro: `task-611ae46fe0fb` had 1 accepted and 2 rejected, and
   `task-c8d4a3d70c19` had 3 accepted, all decided by `tester` at 21:21 and 21:41 without moving
   either task.
+
+**R3: "usually", not "until".** R2 wrote that Land it refuses *until someone decides the evidence*.
+The code says it refuses only where all three of these hold. Each is read from code, and none was
+driven:
+- **Evidence governs the merge.** A flow created through the operator's `POST /jobs` with both
+  `spec_document_id` and `work_needs_evidence: false` is accepted (`api/v1/jobs.py:672-681`). Only
+  the agents' `create_flow` refuses the declaration. For such a flow, `evidence_governs` answers
+  from the declaration before it looks at the document (`task_integration.py:378-381`), so
+  `merge_targets` returns the task's branch tip. Awaiting evidence then reaches `_check_unaccepted`
+  as an advisory, not a refusal (`requirement_gate.py:538-540`), and Land it approves. Rung 3 is
+  still reachable there: the document passes `scheduler.py:1492`, and evidence naming a commit is
+  what passes `:1538`.
+- **Nothing already accepted would merge.** Work sent back through `revision_needed` and completed
+  again can carry earlier accepted evidence. That is the mixed case, also an advisory.
+- **The project has a main branch, and its workspace resolves as a repository.** Otherwise
+  `_merge_situation` returns `None` and the check does not run (`requirement_gate.py:393-418`).
+
+The spec's *"the gate may refuse"* was already right, and the wording does not move.
 
 *"To review it yourself"* is true either way. The drawer renders a gate refusal where the button
 is (`TaskDetailDrawer.tsx:335-369`), naming what approval still needs.
@@ -132,6 +163,22 @@ four agents and three holdings each, D2's sentence reaches that length. So:
   clauses are added in name order while prefix, clauses, the tail
   `"; and N more agents are excluded, busy or unbound"` and the remedy still fit. The remedy is
   always kept. The result is deterministic and is the same string on every surface.
+- **R3: a holds clause that would not fit names fewer of its tasks before its agent is counted.**
+  Each time a holds clause is added, it is tried with three named tasks, then two, then one,
+  and the rest are counted as `and N more`. Only when even the one-task form would not fit is the
+  agent left to the tail. R2's claim that *"at least one agent is always named"* rested on task
+  ids being 17 characters, and they are not always:
+  - `TaskCreate.id` (`schemas/tasks.py:17, 72`) and the agents' `AgentTaskCreate.id`
+    (`agent_actions.py:94`) both accept a caller-chosen id of up to 64 characters.
+  - With three such held tasks and a 32-character name, one clause measures **300**, over both
+    budgets (297 and 267). Under R2's rule, a roster whose first agent in name order held them
+    would have named nobody. That is F352's defect, returning in a corner.
+  - With the fallback, the widest clause is **219** at two named tasks and **135** at one (a
+    32-character name, 64-character ids, `revision_needed`, 1,000 more;
+    `%TEMP%\f352r3\len4.py`). Both fit the smaller budget, so at least one agent is always named
+    and R2's claim becomes true.
+  - **Not observed:** the `:8000` database's 50 tasks all have 17-character ids, and its longest
+    agent name is 9 characters (mode=ro, `%TEMP%\f352r3\ids.py`).
 - **R2, measured budget** (`%TEMP%\f352r2\len3.py`):
 
   | piece | characters |
@@ -142,10 +189,17 @@ four agents and three holdings each, D2's sentence reaches that length. So:
   | tail | 50 at most |
   | clause budget with a tail, `completed` / `under_review` | 297 / 267 |
   | widest single clause (a 32-character name, three held `revision_needed` tasks, "and 2 more") | 159 |
+  | **R3:** the same with 64-character task ids, at three / two / one named task | 300 / 219 / 135 |
   | LoopEngine's four agents, as `completed` / as `under_review` | 459 / 489 |
   | task 2.6's shape | 402 |
 
-  So at least one agent is always named, and LoopEngine's whole roster is named. **R1's wording
+  The 32-character name is the routes' limit, not the column's. `Agent.name` is `String(64)`
+  (`models.py:200`), but every route that writes one caps it at 32: `OperatorAgentCreate`
+  (`agents.py:92`), `AgentRequest` (`:78`), and `register_agent` and session sync through
+  `validate_agent_name`. No route renames an agent (**R3**, grep).
+
+  With R3's fallback, at least one agent is always named, and LoopEngine's whole roster is named.
+  **R1's wording
   would not have named it.** With an honest remedy in R1's phrasing
   (*"…approves it or says what approval still needs. Rejecting a task an agent holds…"*), the
   LoopEngine sentence measures 514, and `tester` would have collapsed into the count. R1's 483
@@ -163,6 +217,18 @@ four agents and three holdings each, D2's sentence reaches that length. So:
     `hub/hub`. It is chosen over wrapping each call site because there are eight writes today
     (`scheduler.py:2580, 2609, 2762, 2923, 2966, 3062`, `api/v1/jobs.py:81` and
     `run_reconciliation.py:222`), and the next one would be written without the wrapper.
+  - **R3: it fires on every write this column receives, measured.** A `DeclarativeBase` model
+    with `@validates` fitted both a constructor keyword and an assignment. The real `JobRun` did
+    the same through the attribute `set` event with `retval=True`, which is the hook `@validates`
+    installs. That covers `api/v1/jobs.py:81`'s `JobRun(error_summary=...)`, and all seven
+    assignments (`%TEMP%\f352r3\val.py`). The validator runs in Python when the attribute is set,
+    so an async session changes nothing. Its only blind spot is a Core `update()`/`insert()`, and
+    a grep finds none against `job_runs` in `hub/hub`. The column is nullable, so the helper passes
+    `None` through, and 2.12 asserts it.
+  - *Rejected (R3):* a `TypeDecorator` fitting at bind time. It would also catch a Core statement.
+    But it leaves the attribute unfitted in memory until the row is expired, so the object and the
+    row would hold two values, and a response built from the object would still carry 600
+    characters. `@validates` fits the value the object holds, which is what the route reads.
   - `_stall_run_to_increment` (`:923`) compares `latest.error_summary` with
     `fit_error_summary(stall_reason)`. The stored value is fitted, so comparing the raw reason would
     never match its successor, and D6 of `loop-notices-and-reacts` would record one row per tick.
@@ -337,7 +403,8 @@ unread"* is amended to say so. The rule still binds every actor.
 - The evidence-author branch gains the same helper, for consistency.
 
 **R2: the dispatch refusal's remedy depends on the status, as rung 3's does.** R1 gave both
-branches *"Land it"* unconditionally, and that is wrong for one reachable state.
+branches *"Land it"* unconditionally, and that is wrong for one reachable state. (**R3:** the
+helper returns the status sentence only; the freeing clause is rung 3's, D2.)
 `review_dispatch_refusal` admits `WITH_REVIEWER_LOOP_TASK_STATUSES` as well as the reviewable ones
 (`agent_trigger.py:480`). Its D9 check refuses only a *different* holder (`:487-491`). So the author
 branch is reached for an `under_review` task that nobody holds, or that is held by the very reviewer
@@ -417,3 +484,62 @@ in the deltas and in `tasks.md`.
 
 **Also found:** `_agents_that_are_free` has three callers, not two, and rung 3 can meet an empty
 roster (D1).
+
+## Round 3 — what the code disagreed with
+
+R3 re-derived the change against the code at `fb469e2`, starting from where R2 had not traced.
+Each disagreement is in the argument or in how a test is built, not in a conclusion. Every
+decision's outcome stands, and two of R2's claims become true that were not.
+
+**Checked, and it holds.**
+- **`@validates` is the right home, and it reaches every write** (D2). This was measured on a
+  constructor keyword and on an assignment, and on the real `JobRun`. No Core statement writes
+  `job_runs`. A `TypeDecorator` was weighed and rejected, because it would leave the in-memory value
+  unfitted. The helper must pass `None` through.
+- **No import cycle.** `agent_trigger.py:126` already imports four names from `scheduler` at module
+  level, and `scheduler` imports nothing from `agent_trigger`. Adding `own_review_remedy` to that
+  import changes nothing about the graph.
+- **The guard only ever judges a `completed` task.** `apply_transition` refuses an illegal edge
+  (`task_transition_service.py:593`) before any guard runs (`:595-606`), and `under_review` is
+  entered from `completed` alone (`task_transitions.py:134-137`). So D5's operator remedy, Land it,
+  never meets a status where `land` answers 409.
+- **No UI string, no `openspec/specs` text and no doc quotes either sentence.** `eventSummary.ts:79-80`
+  renders `reason` without reading it. The existing tests assert fragments that D2's and D5's
+  wording keep: `could not staff this step`, `review it yourself`, `is the one that completed this
+  task` and `has worked on this task`. 4.6 lists them.
+
+**Six disagreements.**
+1. **Land it does not always refuse at rung 3** (D2). R2's *"until someone decides the evidence"*
+   is false for three cases:
+   - a flow the operator created with `work_needs_evidence: false`, which merges its branch tip;
+   - the mixed case, where accepted evidence would already merge;
+   - a project whose merge situation does not resolve.
+
+   The remedy's wording was chosen to be true either way, and it is. The argument now says
+   "usually".
+2. **One clause can overflow both budgets** (D2). Task ids are caller-chosen up to 64 characters on
+   both the operator's and the agents' create routes. Three of them under a 32-character name make
+   a 300-character clause, and R2's rule would then name nobody. A holds clause now names fewer
+   tasks before its agent is counted, at 219 characters with two tasks and 135 with one. This is not
+   observed on `:8000`.
+3. **"The pool is empty by construction at rung 3"** (D1/D2) is false, because the author can be
+   free. What is true is that every pool member is excluded, and the four clauses still cover every
+   record.
+4. **The freeing clause does not belong to the dispatch refusal** (D2/D5). The helper returns the
+   status sentence only, and rung 3 appends the clause.
+5. **Three comments state the old remedy in the present tense:**
+   - `api/v1/tasks.py:1259-1268`: *"the remedy it names -- assign a different reviewer"*, and
+     *"The guard immediately below names two remedies -- reassign, or 'clear the assignee…'"*;
+   - `schemas/tasks.py:124-127`;
+   - the F78 test's docstring, `test_reviewer_is_not_the_author.py:377-378`.
+
+   After D5 each would be a false statement about the guard. F78's behaviour, clearing the
+   assignee and then entering review, stays and stays tested. Only its description of the guard
+   moves. They are added to 4.6.
+6. **Task 2.6 cannot reach rung 3 as written unless its holdings sit outside the flow.**
+   `_loop_candidates` walks `Task.loop_id == loop.id` (`scheduler.py:708-709`). An `in_progress`
+   task in the queue whose assignee is idle is resumed as a selection (`:1421-1466`), so the firing
+   claims work and never stalls. An `under_review` task in the queue held by a non-author with no
+   turn joins `wedged_reviews` with F154's own sentence (`:1392-1393`), and that sentence can be the
+   one F64 promotes (`:1655`). LoopEngine's
+   backlog had `loop_id` NULL, and 2.6 now says so.

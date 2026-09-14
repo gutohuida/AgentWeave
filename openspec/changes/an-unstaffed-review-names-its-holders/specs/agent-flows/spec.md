@@ -39,7 +39,10 @@ on it, and a silent reviewer is both.
 
 The reason SHALL fit every surface that carries it. Where naming every agent would exceed that, the
 remaining agents SHALL be counted rather than omitted without a count, and the action SHALL still be
-named.
+named. Where the roster has any agent, the reason SHALL name at least one: an agent's held tasks are
+counted before the agent itself is. Task identifiers may be chosen by whoever creates the task, and
+a few long ones held by the first agent would otherwise leave a reason that names nobody, which is
+the defect this requirement exists to end.
 
 This requirement changes what the Hub **says** at the unstaffed rung. It does not change which
 agents are available. *"A flow resolves a reviewer by declaration, then by availability"* still
@@ -87,7 +90,6 @@ decides that.
 - **THEN** the reason states that the roster has no agent
 - **AND** it still names the action
 
-
 #### Scenario: An under-review task's reason does not name an action that refuses it
 
 - **WHEN** the unstaffed task is `under_review`
@@ -101,3 +103,10 @@ decides that.
 - **THEN** the reason counts the agents it does not name
 - **AND** it still names the action
 - **AND** the job's run history is returned successfully
+
+#### Scenario: Long task identifiers still leave an agent named
+
+- **WHEN** the first agent in name order holds several tasks whose identifiers are as long as a
+  task identifier may be
+- **THEN** the reason names that agent, with as many of its held tasks as fit, and counts the rest
+- **AND** it still names the action

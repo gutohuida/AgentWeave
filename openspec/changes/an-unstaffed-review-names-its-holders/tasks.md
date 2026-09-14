@@ -2,7 +2,8 @@
 
 Findings: F353, F334, F365, F367 (retired by this change); F352 (the visibility half only; stays
 open); F366 (stays open; D5 stops relying on it). R2 (2026-09-14) revised 1.2, 2.1-2.5, 2.7, 2.10,
-4.1, 4.2, 4.4 and 4.7, and added 1.4, 2.5b, 2.11, 2.12 and 4.8.
+4.1, 4.2, 4.4 and 4.7, and added 1.4, 2.5b, 2.11, 2.12 and 4.8. R3 (2026-09-14) revised 2.3, 2.4,
+2.6, 2.12, 4.2 and 4.6, and added 2.9b.
 Build day 2026-09-14. Day rules: no `hub/hub/mcp_server.py`, no migration, and the UI bundle only
 under group 5's condition. Tests run under `py -3.11`. `black` needs `--target-version py311`.
 
@@ -56,14 +57,18 @@ mutation and the observed failure beside the task when ticking it.
         running;
       - clauses in name order, leading with `could not staff this step: nobody is free.`;
       - with no record at all, "the project has no agent on its roster" in the clauses' place;
-      - the remedy from `own_review_remedy(task)` (public, in `scheduler.py`), in D2's wording:
+      - the remedy from `own_review_remedy(task)` (public, in `scheduler.py`), in D2's wording. The
+        helper returns the status sentence only (R3):
         - `completed`: "Land it, on the task, to review it yourself", with **no** promise of
           approval;
         - `under_review`: the three exits, and **not** Land it;
-        - both: "rejecting a held task that is no longer wanted frees its agent".
+      - after the helper's sentence, rung 3 itself appends "; rejecting a held task that is no
+        longer wanted frees its agent." The dispatch refusal (4.2) does not.
 - [ ] 2.4 Bound the reason to 500 characters. If the whole sentence fits, use it. Otherwise add
       clauses in name order while the prefix, the clauses, the tail
       "; and N more agents are excluded, busy or unbound" and the remedy still fit.
+      - A holds clause that would not fit is retried with two named tasks, then one, counting the
+        rest as "and N more". Only then is its agent left to the tail (R3).
 - [ ] 2.5 Fit `JobRun.error_summary` at the model (design D2):
       - `JOB_RUN_ERROR_SUMMARY_CHARS = 500` beside `JobRun`, read by `String(...)` and by
         `JobRunResponse.error_summary`'s `max_length`;
@@ -76,7 +81,13 @@ mutation and the observed failure beside the task when ticking it.
 - [ ] 2.6 Test, LoopEngine-shaped, through a real firing (`POST …/jobs/{id}/run`), reading the
       `review_unstaffed` event **and** `LoopSummary.stall_reason`. Four agents: the author; one
       holding an `under_review` task; one holding five `pending` tasks; one holding an
-      `in_progress` task with no turn. Assert:
+      `in_progress` task with no turn.
+
+      **Every held task has `loop_id` NULL**, as LoopEngine's backlog did (R3). A held task in the
+      loop's own queue is walked: an idle assignee's `in_progress` task is resumed as a selection,
+      so the firing claims work and never stalls, and a non-author's `under_review` task with no
+      turn surfaces F154's sentence, which F64 may promote instead (design, *Round 3* item 6).
+      Assert:
       - every non-author's name, each named task id and its status, and "2 more" for the five;
       - the author's exclusion clause, and **not** the author's holdings;
       - Land it, and no "approves".
@@ -101,6 +112,16 @@ mutation and the observed failure beside the task when ticking it.
 
       *Mutation:* remove the bound (2.4) and the fit (2.5). The history route must fail, which
       proves the test reaches `JobRunResponse`.
+- [ ] 2.9b Test (R3): the first agent in name order holds three tasks with 64-character
+      caller-chosen ids (created through `POST …/tasks` with `id`), and its name is 32 characters.
+      Assert:
+      - the reason is at most 500 characters, as an `under_review` row, which has the smaller
+        budget;
+      - it names that agent with fewer than three of its tasks, plus "and N more";
+      - it still names the remedy.
+
+      *Mutation:* drop 2.4's per-clause fallback. The agent must then be missing from the reason,
+      so the test fails.
 - [ ] 2.10 Test: two consecutive stalled firings with an unchanged reason over 500 characters leave
       **one** stall row with `tick_count == 2`.
       *Mutation:* compare the raw `stall_reason` at `:923`. The test must fail.
@@ -113,7 +134,8 @@ mutation and the observed failure beside the task when ticking it.
       *Mutations:* (a) remove 2.5b, so the history still answers 200 but the remedy is cut; (b)
       remove the `@validates` as well, so the route answers 500.
 - [ ] 2.12 Test: a `JobRun` constructed or assigned with 600 characters of `error_summary` stores
-      exactly 500, ending `…`, and a 500-character value is stored unchanged.
+      exactly 500, ending `…`. A 500-character value is stored unchanged, and `None` stays `None`
+      (R3: the column is nullable).
       *Mutation:* remove the `@validates`. The test must fail.
 
 ## 3. Once per task (design D4)
@@ -144,7 +166,10 @@ mutation and the observed failure beside the task when ticking it.
       The decision is unchanged.
 - [ ] 4.2 `review_dispatch_refusal`: the author branch drops "clear the assignee", and both
       branches end with `own_review_remedy(task)`. That gives Land it for a `completed` task and the
-      three exits for an `under_review` one.
+      three exits for an `under_review` one, **without** rung 3's freeing clause (R3).
+      - Add `own_review_remedy` to the existing module-level import from `...scheduler`
+        (`agent_trigger.py:126`). There is no cycle: `scheduler` imports nothing from
+        `agent_trigger`.
 - [ ] 4.3 Test, operator PATCH on a completed task held by its author: 403, names Land it, and does
       not contain "clear the assignee" or "approves".
       *Mutation:* restore the old sentence. The test must fail.
@@ -156,6 +181,28 @@ mutation and the observed failure beside the task when ticking it.
       turn, delivered and refused. The entry's `waiting_reason` and `abandoned_reason` do not say
       the task "is assigned to" that agent, and the task's assignee is unchanged.
 - [ ] 4.6 Update any existing test asserting the old sentences, and list each one here when ticking.
+      R3's grep found these fragment assertions, and D2's and D5's wording keeps every fragment, so
+      each should pass unchanged. Confirm it:
+      - `test_flow_fires_a_review_turn.py:357`, `test_reviewer_ladder.py:174` and
+        `test_the_evidence_names_the_author.py:692`: `could not staff this step`;
+      - `test_the_evidence_names_the_author.py:693` and
+        `test_a_flow_names_what_it_cannot_staff.py:719`: `has worked on this task`;
+      - `test_a_flow_names_what_it_cannot_staff.py:733`: `is the one that completed this task`;
+      - `test_reviewer_is_not_the_author.py:82, 340`: `review it yourself`, as operator;
+      - **two absence assertions:** `"completed" not in reason` at
+        `test_a_flow_names_what_it_cannot_staff.py:720` and
+        `test_the_evidence_names_the_author.py:694`. They constrain the wording. Neither remedy nor
+        the freeing clause may contain the word "completed", and a holds clause never does,
+        because `completed` is not in `LIVE_STATUSES`. On the second test's fixture, `WORKER` is in
+        the author set through its bound run and reads "has worked on this task". `SILENT` reads
+        "recorded no verdict". Both fragments still hold.
+
+      **Amend three comments that state the old remedy in the present tense** (R3). After D5 each
+      would be false about the guard. F78's behaviour, clearing then entering review, stays:
+      - `api/v1/tasks.py:1259-1268`;
+      - `schemas/tasks.py:124-127`;
+      - the docstring of `test_reviewer_is_not_the_author.py::test_clearing_the_assignee_lets_the_operator_review_it_themselves`
+        (`:377-378`).
 - [ ] 4.7 Test: the dispatch route's author refusal (`POST /agent/trigger` with `review_task_id`) on
       a `completed` task names Land it and does not contain "clear the assignee".
 - [ ] 4.8 Test: the same refusal on an `under_review` task that nobody holds, dispatched to its

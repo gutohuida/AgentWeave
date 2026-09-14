@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f352-r3",
-    "next_action": "Do queue item f352-r3: R3 of openspec/changes/an-unstaffed-review-names-its-holders. Re-derive independently against the code (not a re-read of R1/R2); design.md's closing 'Round 2' section lists what R2 changed. Push hardest where R2 did not trace: (a) the approval gate at rung 3 for a loop declaring its work needs no evidence (merge_targets' branch-tip route); does 'Land it, to review it yourself' stay true; (b) whether SQLAlchemy @validates('error_summary') fires on the constructor kwarg path (api/v1/jobs.py:81 JobRun(error_summary=...)) and on the async session; and whether the first @validates in hub/hub is the cleanest home, or whether a helper at each write would be cleaner; (c) whether any other surface quotes the guard's or rung 3's sentence verbatim (UI strings, eventSummary.ts, other tests, openspec/specs); (d) D2's clause budget against Agent.name's real column width, and whether task ids are always 17 chars; (e) the own_review_remedy import direction (agent_trigger -> scheduler) for cycles. Leave the OPERATOR QUESTION alone. openspec validate --strict must pass. Day rules: no hub/hub/mcp_server.py; UI bundle only if :8000-compatible; migrations named on the page. If it is at or after 18:15, do d5 instead.",
+    "current": "f352-rev",
+    "next_action": "Do queue item f352-rev: the adversarial review (the operator's standing pre-approval step) of openspec/changes/an-unstaffed-review-names-its-holders, run as an Opus subagent over the change AND its decisions. Give it: proposal.md (incl. the OPERATOR QUESTION and the 'Why this change is built without the answer' reading), design.md (R2 and R3 sections), the three deltas, tasks.md, DIRECTION.md ## 2026-09-14 and DECISIONS.md ### 2026-09-14. It must judge (1) whether DIRECTION's 'the change stops after REV, unbuilt' covers this change - if yes, stop it: APPROVALS row with no token, decisions_for_user, skip f352-impl/f352-drive; (2) whether the rung-3 sentence, the guard's two sentences and the dispatch refusal are each true in every reachable state (R3 found the Land-it gate argument and the budget claim wrong; look for a third); (3) whether @validates on JobRun is acceptable as the first validator in hub/hub. Fix what REV finds in the change files; openspec validate --strict must pass. If REV passes it, set next_action to f352-impl. Day rules: no hub/hub/mcp_server.py; UI bundle only if :8000-compatible; migrations named on the page. If it is at or after 18:15, do d5 instead.",
     "queue": [
         {
             "id": "compose",
@@ -71,9 +71,9 @@
         },
         {
             "id": "f352-r3",
-            "status": "open",
+            "status": "done",
             "title": "f352-R3: an-unstaffed-review-names-its-holders (F352 visibility half + F353 + F334 + F365; the definition of free is an OPERATOR QUESTION, not built)",
-            "detail": "Step R3 of f352: re-derive again (as D-4), independently."
+            "detail": "DONE iteration 10 (11:45-12:00). Outcomes stand; six disagreements in argument or test construction, all fixed (design.md 'Round 3'). (a) Land it at rung 3 does NOT always refuse: operator POST /jobs accepts spec_document_id + work_needs_evidence=false (jobs.py:672-681), evidence_governs reads the declaration first (task_integration.py:378-381), branch tip merges, awaiting evidence is advisory (requirement_gate.py:538-540); also the mixed case and an unresolvable merge situation - 'until' became 'usually', remedy wording already true (code read). (b) @validates fires on ctor kwarg and assignment, measured on a fresh DeclarativeBase model and via the real JobRun set-event with retval (%TEMP%\f352r3\u000bal.py); no Core writes to job_runs; TypeDecorator rejected (in-memory value unfitted); must pass None (2.12). (c) no UI/spec/doc quotes; three present-tense comments quote the old remedy (tasks.py:1259-1268, schemas/tasks.py:124-127, F78 test docstring :377) -> 4.6; fragment asserts survive; two absence asserts ('completed' not in reason, test_a_flow_names...:720, test_the_evidence...:694) constrain wording. (d) R2's 'at least one agent always named' was FALSE: task ids caller-chosen up to 64 chars (schemas/tasks.py:17, agent_actions.py:94); 3 such under a 32-char name = 300-char clause > 297/267 budgets; fix: holds clause retries with 2 (219) then 1 (135) named tasks before counting the agent; agent names capped at 32 by every writing route (column String(64), no rename); not observed on :8000 (50 tasks all 17 chars, max name 9, mode=ro). New agent-flows SHALL + scenario, task 2.9b. (e) no cycle: agent_trigger.py:126 already imports scheduler at module level. Also: 'pool empty at rung 3' false (author can be free; every pool member is excluded); own_review_remedy returns the status sentence only, rung 3 appends the freeing clause; task 2.6 needs holdings with loop_id NULL (in-queue holdings are resumed or surfaced via F154's sentence). validate --strict passes; test_classify_findings 23 passed."
         },
         {
             "id": "f352-rev",
