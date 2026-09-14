@@ -95,7 +95,9 @@ Changed behaviour, for a question asked by the calling run that is **answered**,
 - **no** `wait_has_expired` check on this branch. The refusal exists so that a report cannot create
   an expiry. It cannot create one here, because the question is already answered and nothing is
   released. The release functions are not called, because the answer already released the block
-  (`release_block_for_question`).
+  (`release_block_for_question`). **(Round 4 — REV, F-D)** It does create a fact: a permanent
+  *"Proceeded without your answer"*. It is safe because the genuine tool never reports a question it
+  received, not because nothing is created.
 - count it in `accepted`. The caller's assertion is true.
 - after the commit, deliver once per **batch**, not once per question. Collect the batch keys
   (`batch_id`, or the question id for a batch of one) during the loop, then call
@@ -110,6 +112,11 @@ question never carries `wait_ended_at` (`models.py:1003-1007`, `tasks.py:447-449
 decline is a decision handed back, not silence. `proceeded_without_answer_reason` reads that
 column. Breaking the invariant would mark a task as having gone ahead without an answer when the
 operator in fact declined.
+
+**(Round 4 — REV, F-C) The invariant as stated is false.** A decline that comes *after* the report
+already carries `wait_ended_at` in shipped code. What holds, and what the guard encodes, is that
+the report does not record an end on a question the operator had already declined when the record
+is written. See *Round 4*.
 
 Nothing is lost by the narrowing:
 - if the batch also holds a late answer, that answer supplies the key;
@@ -366,7 +373,7 @@ lost. This is pre-existing: the shipped shortcut has always had it. Read, not me
 
 | Route into the residual | This change | No-migration run-end option | Receipt stamp (migration) |
 |---|---|---|---|
-| 1. Report lost, answer later in the run's life | lost | delivered at run end | delivered at run end |
+| 1. Report lost (**REV:** or its write rolled back, `:699-709`), answer later in the run's life | lost | delivered at run end | delivered at run end |
 | 2. Timeout lengthened mid-run, report refused | lost | delivered at run end | delivered at run end |
 | 3. In-time answer, run dies before the next poll | lost | **lost** | delivered at run end |
 | Grace-window answer the tool took | not duplicated | **duplicated** | not duplicated |
@@ -384,8 +391,91 @@ argue the agent should be told *"this arrived after you went on without it"*. Bu
 case has the same property and has never said so. Changing both is a wording change with its own
 tests and prompt budget, and it is not this defect. Recorded as an improvement candidate, not built.
 
+## Round 4 — REV (adversarial pre-approval review, 2026-09-14)
+
+An Opus reviewer compared the change with the code at `9e78e9c`. It found no reason to stop the
+change and three things to fix before implementation. Each was re-checked against the code
+before it was written in here.
+
+**F-A: a late answer is lost when a sibling is declined mid-report.** This is the loss D4 exists
+to forbid, and R1–R3 did not trace it. Take a batch Q1, Q2, one report naming both, and Q1 answered
+after the tool's last poll:
+1. The guarded `UPDATE` stamps Q1 (`rowcount` 1), and Q1 gets a key.
+2. The loop loads Q2, one row per iteration (`agent_actions.py:676`).
+3. The operator's decline of Q2 commits before the report's `UPDATE` on Q2, so `rowcount` is 0.
+4. `synchronize_session=False` (R3) rightly leaves the loaded Q2 alone, so it still reads
+   `declined = False`.
+5. 2.9 re-reads only rows with `rowcount` 1, so Q2 is not refreshed.
+6. `_completed_batch`'s plain `select` (`questions.py:71-77`) returns the stale Q2 from the identity
+   map. The batch reads incomplete, and the report delivers nothing.
+7. The decline route re-reads Q2 after its commit and finds `wait_ended_at` NULL, because the
+   guard refused the stamp. The run is live, so the route decides the asker is still waiting.
+
+Both writers decline, and Q1's answer reaches nobody. **Fix (task 2.11):** freshness belongs where
+completeness is judged. `_completed_batch`'s `select` gets `populate_existing`, so every route that
+judges a batch, not only the report, judges it on committed rows. 2.9's re-read still chooses the
+keys. Task 2.3 is re-aimed at this interleave through the real `decline_question`; its old form set
+up a state the product cannot produce.
+
+**F-B: the sweep's rewrite has a trap.** In `run_divergence.py:730-736`, `question = None` is what
+keeps the park at `:738` from firing. If `record_wait_ended` is folded into the `if` as a
+condition, a False return (the decline won) leaves `question` set, and `block_task_for_question`
+parks the task on a question the operator declined. Only the release depends on the helper.
+Task 2.10 states the shape and tests the task's status as re-read from the database.
+
+**F-C: the invariant D3 and R2 lean on is false in shipped code, and not only under a race.** The
+report stamps Q, then the operator declines Q, and `decline_question` (`questions.py:444-446`)
+never reads `wait_ended_at`. The row is declined, carries `wait_ended_at`, and the task reads
+*"Proceeded without your answer"* (`tasks.py:455-462` has no `declined` filter). So the comments at
+`models.py:1006` and `tasks.py:447` are wrong, and so is D3's *"a declined question never carries
+`wait_ended_at`"*. This is the argument-wrong, outcome-right shape. The guard stays, because what it
+really encodes is narrower: **the system does not record a wait's end on a question the operator
+had already closed when the record is written.** A decline after the record leaves it, as today.
+That is true to what happened, since the run did go ahead without an answer. D3's rationale and the
+spec's sentence are restated to match (task 1.6 corrects the two comments).
+
+**F-D (minor): D3's *"It cannot create one here"* overstates it.** On an answered question, the
+stamp does create a fact: a permanent *"Proceeded without your answer"* on the task
+(`schemas/tasks.py:330`), plus a delivery. The protection is elsewhere. The genuine tool never
+reports a question it received (`mcp_server.py:441`), and only the run's own credential reaches the
+route. So a false report would take a run lying about itself, which is outside this change's threat
+model.
+
+**F-E (minor): an unnamed duplicate.** An agent whose `ask_user` expired can call `get_answer`
+(`mcp_server.py:491-497`), which polls the same route. A late answer fetched that way is also
+queued. That is a D4-type duplicate, and it is listed under Risks.
+
+**F-F (minor): D5's table, corrected.**
+- Route 1 reads *"report lost, **or its write rolled back**"*. `agent_actions.py:699-709` rolls the
+  stamp back when the release raises, and the question is then neither stamped nor accepted.
+- A candidate **route 4**, read and not measured: the runner's MCP client abandons the tool call
+  before the tool's own deadline, the tool polls on into nothing, and it sends no report. It is
+  plausible for Codex (no `tool_timeout_sec` is set, `runner_commands.py:299-310`). Codex is
+  undrivable (2026-08-29), so it is low priority. Its row would read like route 1's.
+
+**F-G (minor):** the scenario's *"delivered as a new turn once the agent is free"* half now has a
+unit test (2.5), not only drive step 5.3.
+
+**F-H (minor, pre-existing, not verified):** after `session.rollback()` at `agent_actions.py:708`,
+the `run` object is expired, and the next iteration's `run.id` (`:679`) may lazy-load inside the
+async session. If 2.8's rewrite keeps that loop, the implementer reads `run.id` into a local before
+the loop. No task: it is not this change's defect, and it is recorded so it is not rediscovered.
+
+**Checked and holding:**
+- `rowcount` per id, including for mixed batches;
+- same-session visibility of another session's commit;
+- the answer/report race in every order: loss only at F-A, and the one duplicate is D4's accepted
+  trade;
+- the scheduler's refusal and re-drain;
+- no migration and no `mcp_server.py` edit needed;
+- SHALL on the requirement's first line;
+- D5's no-migration choice.
+
 ## Risks
 
+- **A late answer the agent also fetched with `get_answer`** (Round 4 — REV, F-E). After its wait
+  expired, the agent may poll the question itself. If it reads the late answer that way, the queued
+  delivery is a duplicate. That is D4's trade, accepted.
 - **A queued answer while the asker still runs.** `schedule_agent` is called for an agent whose
   run is live. R1 read the scheduler for this, and it holds. `_attempt_turn` refuses any agent
   with a `running` run, with *"agent is already running"*, non-terminal and counting nothing

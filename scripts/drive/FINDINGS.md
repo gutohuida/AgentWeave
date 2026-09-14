@@ -28091,6 +28091,18 @@ pre-existing decline race that R2 found in the report, and the answer has a thir
   stays lost after the change. Only a receipt stamp, which needs a migration, closes it. Design D5
   has the route table.
 
+**Note, 2026-09-14 (f356-REV, code read).** The adversarial pre-approval review did not stop the
+change. It found three problems, and each is fixed in the proposal:
+- **A fourth way to lose an answer, inside the change's scope.** A late answer's sibling is
+  declined while the report is running. Its guarded stamp returns 0, and `_completed_batch` then
+  judges completeness on the stale sibling from the identity map. Both writers decline. Task 2.11
+  gives `_completed_batch` `populate_existing`.
+- **The sweep rewrite has a trap.** `question = None` must not depend on the helper's result, or
+  the task is parked on a declined question (task 2.10).
+- **The "a declined question never carries `wait_ended_at`" comments are false in shipped code.**
+  A decline *after* the report keeps the stamp. The guard encodes the narrower rule, and task 1.6
+  corrects `models.py:1003-1007` and `tasks.py:447-449`.
+
 ## F357 (B) — a flow's review turn tells its reviewer to approve, and says nothing about the evidence gate that will refuse it
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).

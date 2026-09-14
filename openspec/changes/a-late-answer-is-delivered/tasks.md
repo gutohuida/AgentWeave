@@ -34,6 +34,14 @@ and the observed failure beside the task when ticking it.
       `hub/tests/test_asker_waiting_is_the_same_on_every_route.py` with that row, on both the list
       route and the detail route. **Mutation:** add the arm to only one of the two → the agreement
       test fails.
+- [ ] 1.6 **(Round 4 — REV, F-C) Correct two comments that state a false invariant.**
+      `models.py:1003-1007` and `tasks.py:447-449` say a declined question never carries
+      `wait_ended_at`. Shipped code breaks that without any race: the report stamps Q, then the
+      operator declines Q, and `decline_question` (`questions.py:444-446`) never reads
+      `wait_ended_at`. Reword both to *"not stamped on a question declined **before** its wait was
+      recorded as ended; a decline after the record leaves it, and the task then reads 'Proceeded
+      without your answer', which is true: the run did proceed without it."* Comments only, no
+      behaviour change. No test.
 
 ## 2. The expiry report delivers what the tool never received (design D3, D4)
 
@@ -62,6 +70,15 @@ and the observed failure beside the task when ticking it.
       a hook on the release, or by answering between the load and the delivery. The batch must be
       judged against committed state and delivered. **Mutation:** remove `populate_existing` or the
       refresh → no entry.
+      **(Round 4 — REV)** Re-aimed. As written, the sibling is answered by a raw second-session write,
+      a state the product never produces: the real `answer_question` would see the report's
+      committed stamp and deliver by itself. Test instead the interleave that loses an answer
+      (design, *Round 4*, F-A). In a batch of Q1 and Q2, Q1 is answered after the tool's last poll.
+      The report stamps Q1 (`rowcount` 1). Then Q2 is declined through the **real**
+      `decline_question`, in a second session, after the report loaded Q2 and before its guarded
+      `UPDATE` on Q2 (`rowcount` 0) → exactly one entry carrying Q1's answer. **Mutation:** drop
+      `populate_existing` from `_completed_batch` (2.11) → no entry, because the decline route also
+      reads `wait_ended_at` NULL and declines to deliver.
 - [ ] 2.4 Extract the post-delivery tail (`queue_entry_queued` persist and broadcast, then
       `schedule_agent`) from `answer_question` (`:377-399`) and `decline_question` (`:488-504`)
       into one helper in `questions.py`. All three routes call it. The existing tests in
@@ -72,6 +89,11 @@ and the observed failure beside the task when ticking it.
       end at `agent_trigger.py:2514`. Test: 1.2's fixture with the asking run still `running` → no
       new `Run` row, and `schedule_agent` answers *"agent is already running"*. If this fails,
       **stop and record a finding**. Do not patch the scheduler inside this change.
+      **(Round 4 — REV, F-G)** The scenario's second half, *"delivered as a new turn once the agent
+      is free"*, had only drive step 5.3. Extend the test: move the asking run out of `running`,
+      re-drain (`agent_trigger.py:2514`'s call, or `schedule_agent` directly) → one turn starts,
+      and its input is the entry. **Mutation:** drop the run-end re-drain (`agent_trigger.py:2514`)
+      and drive the run's end through the real finalize → no turn.
 - [ ] 2.6 A second report of the same ids is accepted and delivers nothing more. **Mutation:**
       skip the `wait_ended_at` write on the resolved branch → a second entry.
       **(Round 3)** That mutation is stale under 2.9. Skipping the write means the first report
@@ -124,6 +146,26 @@ and the observed failure beside the task when ticking it.
       `proceeded_without_answer_reason` is null. **Mutation:** restore the attribute write →
       `wait_ended_at` set on a declined row. The existing sweep tests
       (`grep -rl wait_ended_at hub/tests/`) stay green unchanged.
+      **(Round 4 — REV, F-B)** Only the release depends on the helper's result. `question = None`
+      and the commit happen **whatever it returns**, because `question = None` is what keeps the
+      park at `:738` from firing. Written as `if … and await record_wait_ended(...)`, a False return
+      leaves `question` set, and `block_task_for_question` parks the task on the question the
+      operator just declined. That is the *decline undone* defect that
+      `unanswered_blocking_question`'s docstring warns about (`run_task_binding.py:649-652`). The
+      shape is:
+      `if question is not None and wait_has_expired(question): if await record_wait_ended(...):
+      release; commit; question = None`.
+      The test also asserts that the task's status, **re-read from the database** (not from the
+      sweep's `task` loaded at `:702`), is not `blocked`. **Mutation:** move `question = None` under
+      the helper's True branch → the task reads `blocked`.
+- [ ] 2.11 **(Round 4 — REV, F-A) Completeness is judged on fresh rows.** Add
+      `.execution_options(populate_existing=True)` to `_completed_batch`'s `select`
+      (`questions.py:71-77`). This is safe, because it already flushes the caller's pending write
+      first (`:69`). It covers the report, and the answer and decline routes too. 2.9's re-read
+      still chooses the **keys**, and this re-read judges **completeness**. Each is needed: a sibling
+      whose guarded `UPDATE` returned 0 is not re-read by 2.9, and `synchronize_session=False`
+      leaves it stale in the identity map. Test: 2.3 as re-aimed. The existing batch tests in
+      `test_question_batch_delivery.py` stay green unchanged.
 
 ## 3. Races (design D4)
 
@@ -169,3 +211,6 @@ and the observed failure beside the task when ticking it.
       `scripts/drive/FINDINGS.md`.
 - [ ] 6.2 Record D5's residual (report lost, answer inside the run's remaining life) as an open
       note on F356's retirement line, so that it is not mistaken for closed.
+      **(Round 4 — REV, F-F)** The note carries D5's route table as REV corrected it: route 1
+      includes a report whose write was rolled back, and a candidate route 4 (the MCP client
+      abandons the tool call before its deadline) is read, not measured.

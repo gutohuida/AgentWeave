@@ -15,10 +15,15 @@ The wait has ended once the asking run has reported the wait expired without rec
 question's resolution, or once the system has recorded the wait's end at the run's end. The expiry
 report names only what the run did not receive. So where a question it names had already been
 answered by the time the report arrived, the system SHALL treat that answer as never received, and
-SHALL deliver it on the same terms as an answer given after the wait. A question declined by then
-SHALL NOT be recorded as having gone ahead without an answer, since a decline is a decision handed
-back, not silence. The same holds where the system itself records the wait's end at the run's end:
-a question declined by the time that record is written SHALL NOT receive it.
+SHALL deliver it on the same terms as an answer given after the wait. A question the operator had
+already declined when the wait's end is recorded SHALL NOT be recorded as having gone ahead without
+an answer, since that decline was a decision handed back before the record, not silence. The same
+holds where the system itself records the wait's end at the run's end: a question declined by the
+time that record is written SHALL NOT receive it. A decline that comes after the record leaves the
+record in place, because the run did go ahead without an answer.
+
+Whether a batch is complete SHALL be judged against recorded state. A resolution recorded while an
+expiry report is running SHALL count toward the batch it belongs to.
 
 The system SHALL decide whether to deliver only after it has recorded the answer or the wait's end,
 and against recorded state. An answer and an expiry report that arrive together SHALL NOT both
@@ -65,6 +70,13 @@ ended, not only from the moment its run has ended.
 - **AND** the operator's answer is recorded before that report records the wait's end
 - **WHEN** both have been recorded
 - **THEN** the answer is queued for the agent
+
+#### Scenario: A sibling declined while the expiry report is being recorded does not strand the batch's answer
+
+- **GIVEN** a batch of two blocking questions, one answered after the asking run last checked for it
+- **AND** an expiry report naming both, which has recorded the wait's end on the answered one
+- **WHEN** the operator declines the other before the report records the wait's end on it
+- **THEN** exactly one delivery carrying the batch's answer is queued
 
 #### Scenario: A decline that lands while the expiry report is being recorded is not called an absence
 

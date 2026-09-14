@@ -130,6 +130,12 @@ been corrected: the receipt stamp would cost one write per resolved question, no
 Only a receipt stamp closes all three routes, and that needs a migration. The follow-on is a choice
 between those two, and design D5 tabulates it.
 
+**(Round 4 — REV)** Route 1 also covers a report whose write was rolled back when its release raised
+(`agent_actions.py:699-709`). A candidate fourth route, read and not measured, is an MCP client that
+abandons the tool call before the tool's deadline. It is plausible for Codex, which is undrivable.
+The review found no reason to stop the change. It found one more loss inside its scope, a sibling
+declined mid-report, and it is fixed here (design *Round 4*, task 2.11).
+
 ## Capabilities
 
 - **`run-task-binding`**: MODIFIED *An answer reaches an asker whose run has ended*.
@@ -144,6 +150,9 @@ between those two, and design D5 tabulates it.
 - **(Round 3)** `hub/hub/run_task_binding.py`: new `record_wait_ended`, the guarded stamp, shared by
   both writers. `hub/hub/run_divergence.py`: the run-end sweep calls it instead of assigning the
   attribute. That closes the same decline race at the second writer.
+- **(Round 4 — REV)** `_completed_batch` judges on fresh rows (`populate_existing`). Two comments
+  that state a false invariant are corrected: `hub/hub/db/models.py:1003-1007` and
+  `hub/hub/api/v1/tasks.py:447-449`.
 - Tests: `hub/tests/` (new file `test_a_late_answer_is_delivered.py`).
 - Day rules 2026-09-14: no `hub/hub/mcp_server.py` edit (F354), none needed. No migration. No UI
   bundle.

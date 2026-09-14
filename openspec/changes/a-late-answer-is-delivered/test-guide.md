@@ -43,3 +43,10 @@
 - **(Round 3) An answer given inside the wait, then the run dies before the tool's next poll**
   (up to 2 s). The answer is lost. This is pre-existing. Neither this change nor the no-migration
   option reaches it; only a receipt stamp would (design D5, the route table).
+- **(Round 4 — REV) A decline given after the report still reads "Proceeded without your answer"**
+  on the task. This is unchanged and deliberate: the run did go ahead without an answer, and the
+  decline came after that was recorded. Only a decline that lands *before* the record keeps the
+  task from saying so (design, *Round 4*, F-C).
+- **(Round 4 — REV) An agent that fetches a late answer itself with `get_answer`** after its wait
+  expired may receive it twice, once from that call and once as queued input. That is D4's accepted
+  duplicate.
