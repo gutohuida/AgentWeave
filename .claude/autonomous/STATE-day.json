@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-14T19:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-09-14-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f355-r1",
-    "next_action": "Do queue item f355-r1: R1 (explore and propose, as D-2) for F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up. Read FINDINGS.md F355 and the observations file's Fixes entry first. Code: inbound_queue.py:170-235 (RESUME_RETRY_LIMIT 2, DELIVERY_ATTEMPT_LIMIT 3), runner_parsing.py:364-369 (rate_limit_event kept as accounting only). If hold-vs-drop, or whether a held queue holds the flow's job, is the operator's, write an OPERATOR QUESTION in proposal.md and, per DIRECTION.md 2026-09-14 and f352's REV, the change stops after REV, unbuilt: do not scope around the question. Suggested name a-spent-allowance-holds-the-queue. openspec validate --strict must pass. Day rules: no hub/hub/mcp_server.py; UI bundle only if :8000-compatible; migrations named on the page. If it is at or after 18:15, do d5 instead.",
+    "current": "f355-r2",
+    "next_action": "Do queue item f355-r2: R2 (re-derive against the code, as D-3) for openspec/changes/a-spent-allowance-holds-the-queue. Re-derive R1's argument from the code, not from R1's prose; fix the change files where the code disagrees, and add a 'Round 2' section to design.md. Check at least: (1) R1's claim that there is NO operator question (hold-vs-drop via F96; loops via D4; flows via D12; plain-job coalescing D7 named severable) - if R2 finds one is the operator's, write an OPERATOR QUESTION in proposal.md and the change stops after REV, unbuilt (DIRECTION 2026-09-14, f352 REV); (2) D3's informative-row filter and the JSON-null trap against record_turn_usage and every sample=None writer; (3) D4's probe: loop-freedom across the run-end redrain (agent_trigger.py:2433-2460), the transport-failure paths, and batching across conversations; (4) D5: APScheduler DateTrigger misfire handling on the memory store, and _schedule_or_defer before the address is known; (5) D7's JobRun<->entry correlation for new-session jobs and _stall_run_to_increment's 'most recent run' rule; (6) whether each test in tasks.md can be built as written (fake pty lines, the real JobScheduler test). openspec validate --strict must pass. Day rules: no hub/hub/mcp_server.py; UI bundle only if :8000-compatible; migrations named on the page. If it is at or after 18:15, do d5 instead.",
     "queue": [
         {
             "id": "compose",
@@ -95,9 +95,9 @@
         },
         {
             "id": "f355-r1",
-            "status": "open",
+            "status": "done",
             "title": "f355-R1: F355 (B) - a provider session-limit failure is re-delivered into the exhausted allowance, then its input is given up",
-            "detail": "inbound_queue.py:170-235 (RESUME_RETRY_LIMIT 2, DELIVERY_ATTEMPT_LIMIT 3); runner_parsing.py:364-369 keeps rate_limit_event as accounting only. Hold vs drop, and whether a held queue holds the flow's job, may be the operator's -> OPERATOR QUESTION rule as for F352. Suggested name: a-spent-allowance-holds-the-queue. Day rules: no hub/hub/mcp_server.py edits (F354); a UI bundle only if driven in a browser and needing no Python newer than the :8000 process start; migrations named on the page. IMPL/DRIVE follow night-window.md exactly (mutation checks, CI lint set, drive Hub on a free port with a fresh profiles/drive0914/ db, Haiku). Archive retires the findings with 'fixed <sha>'."
+            "detail": "DONE iteration 12 (12:25-12:50). openspec/changes/a-spent-allowance-holds-the-queue: proposal, design D1-D9, tasks (groups 1-7, mutations named), test-guide, deltas agent-conversation-workspace (MODIFIED 'Repeated delivery failure does not wedge an agent', 'A re-delivered turn says the earlier attempt was cut off'; ADDED 'A turn the provider's allowance refused holds the agent's queue until the reset') and agent-loops (MODIFIED 'A firing is refused while its loop's agent is already running'; ADDED 'A job firing into a held queue is coalesced'). Measured mode=ro on :8000: 69/69 session-limit runs carry turn_usage.allowance status 'rejected' + epoch resetsAt; 0/205 completed runs do; the refused session's transcript (2a0bb6e2) holds prompt + notice and was resumable. Shape: refusal not counted, session kept, never withdrawn; hold DERIVED from the agent's newest informative TurnUsage row (allowance object or status measured; JSON null != SQL NULL) with a 60 s floor; new operator input probes once (keyed on the whole queue, arrived_at > observed_at); APScheduler date-job wake at hold_until, re-armed at start via schedule_or_defer; loop busy guard answers held; plain jobs coalesce (D7, named severable and the one choice open to challenge); migration 0103 allowance_refusals so the retry note stays true. No OPERATOR QUESTION: R1 argues hold-vs-drop is settled by F96 and the flow's job by loop D4 composed through flow D12. No mcp_server.py, no UI. validate --strict passes."
         },
         {
             "id": "f355-r2",

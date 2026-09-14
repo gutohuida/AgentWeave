@@ -27870,6 +27870,24 @@ own job steps on the next tick, but nothing re-creates a dropped message.
 as a delivery attempt. Instead, hold the agent's queue until the reset time the provider gave, and
 say so on the entry. Whether a held queue should also hold the flow's job is for R1 to decide.
 
+**Proposed by R1, 2026-09-14** (`openspec/changes/a-spent-allowance-holds-the-queue`).
+- **The signal is structured, and it separates the cases perfectly on this corpus** (measured,
+  `mode=ro`). All 69 refused runs carry `turn_usage.allowance.status == "rejected"` with an epoch
+  `resetsAt` (21:10, 02:10 and 07:10 UTC, the notices' Lisbon times). None of the 205 completed
+  runs does. The prose is not parsed.
+- **The session was sound.** The refused session `2a0bb6e2…`'s transcript holds the prompt and the
+  notice, and the second delivery resumed it. `RESUME_RETRY_LIMIT` discarded it anyway.
+- **The shape:**
+  - a refusal is not counted, keeps the session, and is never withdrawn;
+  - the hold is derived from the agent's newest informative `TurnUsage` row, with a 60 s floor;
+  - new operator input probes once;
+  - a date job wakes the queue at the reset, and is re-armed at start;
+  - loops refuse, and plain jobs coalesce;
+  - one migration, `0103`, adds `allowance_refusals`.
+- **No OPERATOR QUESTION.** R1 argues that hold-vs-drop and the flow's job are both settled by
+  shipped decisions: F96's "hold until repaired", and loop D4 composed through flow D12. It names
+  plain-job coalescing (D7) as the one choice open to challenge, and severable.
+
 ## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
