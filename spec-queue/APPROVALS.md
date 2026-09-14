@@ -78,7 +78,59 @@ not reached today (F357–F364, F347, F302, F47), which have no change directori
 reminders:** `DIRECTION.md` has no `## 2026-09-15` section yet, and the *Carried* plan needs one;
 `F332-rule` is still OPEN.
 
-`ORDER:` and `NOTHING TONIGHT` are both available.
+---
+
+### The operator sat down at 23:30, after the window had already composed
+
+**This section was written by the FILL window with no tokens, and the night composed its default
+queue at 23:00 on that basis (`1bf256b`: ledger hand-checks, "no feature tonight"). The operator
+then sat down in an interactive session at 23:30 and redirected the window.** `STATE-night.json`'s
+queue was rewritten to match the `ORDER:` below, because iteration 1 composes the queue and does not
+run again. The rows below are the operator's, given in session.
+
+- APPROVED  a-late-answer-is-delivered   operator, 2026-09-14 23:30, in session
+
+`an-unstaffed-review-names-its-holders` gets **no token and is not built**. F352-free is still
+unanswered, and tonight's first item is the exploration that reframes it — see below. Building the
+rung-3 half before that answer would write a sentence against option (e) that the answer may
+re-derive.
+
+**Tonight's first work is a new change, from `openspec/explorations/2026-09-14-who-owns-a-loops-queue.md`.**
+That exploration was written with the operator in session this evening and is code-grounded
+throughout. It found the mechanism behind F352: on LoopEngine, eight tasks created by the Architect
+while executing the loop landed with `loop_id` NULL, assigned to `dev` and `dev_2`. Nothing walks a
+task outside a loop (`scheduler.py:717`), so nothing will ever move them, and each one disqualifies
+its assignee forever (`scheduler.py:1022`). It is a ratchet: every follow-up an agent files costs the
+project one agent, permanently. That is why the board recorded `review_unstaffed` 498 times with
+four idle agents.
+
+The operator's instruction for it: **one proposal round, then two review rounds, then implement.**
+The adversarial `REV` step is deliberately skipped — this evening's session served its purpose, with
+the operator reading the argument as it was built.
+
+**Scope guidance for R1, from the operator's own reading and the exploration's last section.** The
+full design (owner-vs-executer, an admission queue, non-blocking questions, the amend trigger) needs
+`hub/hub/mcp_server.py` and UI. **The reachability predicate is severable** — `scheduler.py` only, no
+migration, no `mcp_server.py`, no UI — and it is the half that unfreezes a board. R1 proposes the
+whole design and scopes *this change* to the severable half unless it finds a reason not to, saying
+which in `proposal.md`. The rest is specced for a later change, not built tonight.
+
+**Why `mcp_server.py` is still to be avoided tonight even though the day-only F354 rule has lapsed:**
+`:8000` spawns that file fresh from this working tree on every agent turn. LoopEngine is parked, so
+the risk is low rather than absent, and nothing in the severable half needs it.
+
+**The rest of today's fixes are not buildable tonight and are a note to tomorrow, not work.**
+F357–F364, F347, F302, F362, F363 and F47 have no change directories. Per this playbook, a finding
+with no proposal needs the day window first.
+
+ORDER: who-owns-a-loops-queue-R1, who-owns-a-loops-queue-R2, who-owns-a-loops-queue-R3, who-owns-a-loops-queue-IMPL, who-owns-a-loops-queue-DRIVE, a-late-answer-is-delivered
+
+**Why this order.** The new change goes first because it is the one that unfreezes a real board and
+because its proposal does not exist yet — stopping anywhere after an early item leaves a complete
+artefact rather than half a proposal. `a-late-answer-is-delivered` is last because it is already
+specced through its adversarial review with 31 tasks and 0 ticked, so it is the item that can absorb
+whatever time is left without needing any of it. If the window reaches it with under an hour, it
+starts it anyway and splits in the log.
 
 ---
 
