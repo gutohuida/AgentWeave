@@ -613,6 +613,10 @@ or separates, depends on the shell. So the command is read in the dialect of the
 it. Where that dialect is not known, the command is read every way the product supports, and a
 refusal under any reading refuses it.
 
+A shell may also carry a quote form that does not merely remove characters but decodes escapes into
+other characters, so that a separator the command's text does not contain is present in the word
+the shell produces. A path spelled that way SHALL be judged by what it decodes to, not by its text.
+
 Dividing a command into the words it names can end a word at a name the shell then carries on. A
 workspace-relative path that ends at the workspace's own name, followed by more characters, names
 a sibling of the workspace. Such a word SHALL be judged as the name it continues into.
@@ -651,6 +655,14 @@ answered. An error in place of an answer is not a decision.
 - **WHEN** a shell command writes a path from pieces that the shell joins by removing quotes or
   escapes between them, and the joined path resolves outside the workspace
 - **THEN** the command is refused
+
+#### Scenario: A quote that spells a separator is judged by what it decodes to
+
+- **WHEN** a shell command names a path in a quote form that the shell decodes, so that an escape
+  in the quote decodes to a path separator the command's text does not contain, and the decoded
+  path resolves outside the workspace
+- **THEN** the command is refused
+- **AND** the reason names the decoded path, not the text as typed
 
 #### Scenario: A word that runs on past the workspace's own name is judged as it runs on
 

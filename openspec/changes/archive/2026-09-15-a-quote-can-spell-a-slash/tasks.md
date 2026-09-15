@@ -768,10 +768,14 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
   finding actually names.
 - [x] 7.2 `F299`, `F301` and `F322` stay **open**. Say so in the close-out commit so nobody reads
   this change as closing them.
-- [ ] 7.3 `openspec validate --strict a-quote-can-spell-a-slash`, then archive with the
+- [x] 7.3 `openspec validate --strict a-quote-can-spell-a-slash`, then archive with the
   `openspec-archive-change` skill. Before syncing, compare the MODIFIED block with the main
   `agent-run-sandboxing` requirement: every shipped scenario must survive byte-for-byte and only the
   one new paragraph and the one new scenario are added.
+  **Done 2026-09-15** — compared programmatically (`difflib.SequenceMatcher` over both
+  requirement blocks): the only diff ops are two `insert`s (the one new paragraph, the one new
+  scenario), zero `replace`/`delete` — every shipped scenario is byte-for-byte unchanged.
+  Archived via the `openspec-archive-change` skill, synced to main specs.
 
 ## 8. Verification only a human can do
 
