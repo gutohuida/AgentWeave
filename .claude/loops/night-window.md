@@ -51,7 +51,16 @@ Only the first firing of the window does this.
    the driver already checked, but check again against `git log`, and reconcile out loud in the log
    if they disagree. Never cut a branch here; the day window owns that.
 
-2. **Read `spec-queue/APPROVALS.md`**, the newest day section only.
+2. **Read `spec-queue/APPROVALS.md`**, the newest day section only — **and only if its `## <date>`
+   heading is the date this window armed** (the `Armed` line at the top of tonight's log). A section
+   is for the night that begins on its date, including an operator redirect written into it after
+   23:00. An older section is history: its `ORDER:` and `APPROVED` tokens have usually
+   already been built by the night they were written for. Confirm against `git log` (look for its
+   change names in `impl`/`archive` commits and in `openspec/changes/archive/`) and treat the night
+   as "no section for today". Operator decisions made in session with no daily window running land
+   in `spec-queue/DECISIONS.md` (`## Decided`, newest first), not here — read its newest dated
+   entries too. Measured 2026-09-15: two compose firings took 09-14's `ORDER:` verbatim and queued
+   a proposal round for a change built, driven and archived the night before (`9e140e1`..`a099af2`).
    - **`NOTHING TONIGHT`** → write a log entry saying so, set `next_action` to null, commit, exit.
      The driver unregisters itself on a null `next_action`. Spend no model invocation on work the
      operator has explicitly paused.
