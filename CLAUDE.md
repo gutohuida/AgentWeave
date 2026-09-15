@@ -1,458 +1,164 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working on the **AgentWeave Framework** codebase itself.
+Guidance for Claude Code when working on the **AgentWeave Framework** codebase itself. This file is
+re-read on every request of every session, so it holds rules and pointers; runbooks and recipes
+live in `.claude/reference/` (read on demand) and `.claude/rules/` (loaded automatically when you
+read a file they cover). Slimmed from 33 KB on 2026-09-15 for the weekly usage budget — nothing
+that constrains a change was dropped.
 
 ## You develop AgentWeave here — and you are starting to use it here
 
-This repository is the framework's **source code** first. That is still the fact that governs most
-decisions in this file, so read this section before anything else.
+This repository is the framework's **source code** first. Since 2026-08-16 the operator is
+migrating slowly to developing AgentWeave with AgentWeave — a **staged migration, not a switch**;
+expect the tables below to move. (The old blanket "this repo must not acquire a session" rule is
+retired, deliberately: the Hub-owned spec flow shipped 2026-08-12/13 and has been driven end to end.)
 
-**What changed on 2026-08-16.** The operator decided to migrate slowly to developing AgentWeave with
-AgentWeave. The blanket prohibition that used to open this file — *"this repo has no AgentWeave
-session, and must not acquire one"* — is **retired, deliberately.** It was written on 2026-08-02
-when the Hub-owned spec flow did not exist and the only artefacts at the root were leftover test
-output. Both facts have changed: the spec flow shipped (`spec-document-authority`,
-`spec-chat-session`, 2026-08-12/13) and has been driven end to end live, and the operator's original
-choice of openspec was chronology — AgentWeave had nothing to offer yet — not a verdict against it.
-
-This is a **staged migration, not a switch.** Read the two tables below as the current stage, and
-expect them to move.
-
-### Permitted now
-
-| Do | Notes |
+| Permitted now | Notes |
 |---|---|
-| Register this repo as a project in a **trial Hub** | Creates `.agentweave/project.json` at the root. Already gitignored at any depth — leave it that way; the marker binds a project ID to this machine's database and means nothing on another. |
-| Author specification documents under `spec/` | These are work product, not test output. Track and commit them. |
-| Use the Hub-owned spec flow — documents, requirements, tasks, evidence, coverage | Via the app and its MCP tools (`submit_spec_document`, `record_evidence`, …). |
-| Throwaway experiments in `testbed/` | Unchanged — see `testbed/README.md`. Use it for anything you would not want in this repo's history. |
+| Register this repo as a project in a **trial Hub** | Creates `.agentweave/project.json` at the root — gitignored at any depth; leave it that way. |
+| Author specification documents under `spec/` | Work product: track and commit them. |
+| Use the Hub-owned spec flow (documents, requirements, tasks, evidence, coverage) | Via the app and its MCP tools. |
+| Throwaway experiments in `testbed/` | See `testbed/README.md`. |
 
-### Still prohibited
-
-| Don't | Why |
+| Still prohibited | Why |
 |---|---|
-| Point the Hub **you are editing** at this repo | Every Hub code change restarts the process orchestrating the work and kills runs in flight. The trial Hub is a separate instance on its own port with its own database, never the development one. |
-| Invoke the legacy `aw-*` collab skills (`aw-delegate`, `aw-status`, `aw-relay`, `aw-setup-*`, …) | These are product source in `src/agentweave/templates/skills/`, predating the Hub-owned flow. They are a feature you implement, not a workflow you run. |
-| Delegate this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. Roster delegation is not part of this stage. |
-| Move `openspec/specs/` into `spec/` | See "Specifications" below — AgentWeave can now hold a current-behaviour document, but migrating the accumulated 30-document corpus is the operator's call, not yet made. |
+| Pointing the Hub **you are editing** at this repo | A Hub code change restarts the process orchestrating the work and kills runs in flight. |
+| Invoking the legacy `aw-*` collab skills | Product source in `src/agentweave/templates/skills/` — a feature you implement, not a workflow you run. |
+| Delegating this repo's work through AgentWeave messaging | Do the work directly, or use Claude Code subagents. |
+| Moving `openspec/specs/` into `spec/` | The operator's call, not yet made. |
 
-### The trial Hub — rebuilt 2026-09-07 on a clean database
+## The Hubs on this machine
 
-| | |
-|---|---|
-| **Port** | `8010` |
-| **Database** | `~/.agentweave/hub/profiles/trial/agentweave.db` — created fresh 2026-09-07; at head `0102` (read from its `alembic_version`, 2026-09-12) |
-| **PID file** | `~/.agentweave/hub/hub-trial-8010.pid` (per-launch-script; any other `hub-*.pid` may be stale — check `Get-Process -Id <pid>` before trusting one) |
-| **This repo registered as** | `proj-d85a82bf4216`, working directory the repo root |
-| **Bootstrap key** | `~/.agentweave/hub/profiles/trial/bootstrap-key.txt`, sent as `Authorization: Bearer <key>` (not `X-API-Key`) |
-
-**Everything this section used to name was deleted on 2026-09-07**, at the operator's instruction,
-to get a clean slate: the `beta`, `trial`, `dev` and `drive8011` profiles, their seven `.bak` files,
-and `<repo>/hub/data/agentweave.db`. The old registration `proj-5e960453` went with them. Earlier
-revisions of this file argued at length about which of those databases port 8010 really served; the
-question is now moot, and the paragraphs making the argument are gone with the files.
-
-Confirm which database a running instance actually serves before trusting any doc, this one
-included — these paths have moved before and will again, and this file has been wrong about them for
-a day at a time. The cheap check: hit the API, then compare mtimes across the candidates.
-
-There is also the **operator's real instance on port 8000**, and it **runs this checkout, by
-intent** (operator, 2026-09-13). Their desktop shortcut starts the system Python 3.11's editable
-install (`Python311\pythonw.exe -m uvicorn hub.main:app --port 8000`) on the default profile,
-database `~/.agentweave/hub/data/agentweave.db`. It shares no database with the trial Hub, but it
-shares this code, and three consequences follow:
-
-- It runs without `--reload`, so a Python change reaches it only when the operator restarts it.
-- A restart runs this checkout's migrations **against the operator's real database**.
-- It serves `hub/hub/static/ui` straight from this checkout, so **a committed UI bundle reaches the
-  operator's live app on their next reload.** A broken bundle is a broken real app.
-
-Never restart it, migrate it, or write to its database. Read-only (`mode=ro`) SQLite reads have
-been fine. The PyPI install in `C:\Users\huida\agentweave-live` still exists, but it is not what
-serves `:8000`; earlier revisions of this file said it was.
-
-Start the trial Hub — **from `hub/`, not the repo root** (see the trap below), **from source, not the
-console script**:
-
-```bash
-cd hub
-DATABASE_URL="sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/trial/agentweave.db"   py -3.11 -m uvicorn hub.main:app --port 8010 --host 127.0.0.1
-```
-
-**Do not use `agentweave --port 8010` here.** The console script is the *installed* `agentweave-hub`,
-whose bundled migrations lag this checkout, so on any branch past the installed head it dies with
-`Migration failed: Can't locate revision identified by '00NN'`. This cost two sessions on
-2026-08-24 before it was written down. The gap is now large: the installed build is PyPI **1.1.0**
-at migration head `0081`, while this checkout is at `0102` and roughly 1,400 commits past the
-`Release 1.1.0` commit — both still calling themselves `1.1.0`.
-
-Point the Vite dev server at it with `AW_DEV_HUB=http://127.0.0.1:8010 npm run dev`, and
-`scripts/uishot.py --url http://127.0.0.1:8010` for screenshots.
-
-**`agentweave` cannot be started from this repo's root.** `_hub_native_start` spawns
-`python -m uvicorn hub.main:app`, and `-m` puts the working directory on `sys.path[0]` — so this
-repo's own `hub/` directory shadows the installed `hub` package and the child dies with
-`ImportError: cannot import name '__version__' from 'hub' (unknown location)`. The parent process
-is unaffected (console scripts do not put the cwd on the path), so migrations run and only the
-spawned server fails, 60 seconds later, with its output already sent to `DEVNULL`. Starting from
-`hub/` avoids the shadowing but makes the CLI register `<repo>/hub` as a second project — delete
-that one if it appears. This only bites a repository that contains a top-level `hub/` directory,
-which is to say: this one, the one being dogfooded.
-
-`hub/data/agentweave.db` no longer exists — **deleted 2026-09-07** with the other stale databases.
-It was the pre-migration original, created by a bare `uvicorn` launch from `hub/` landing on
-`config.py`'s relative default, and nothing had served it for weeks. If a `hub/data/` directory
-reappears, a launch has fallen through to that relative default instead of naming a profile: treat
-it as a symptom, not as a database to preserve.
+- **Trial Hub `:8010`** — the one you drive. Start it **from `hub/`, from source**
+  (`py -3.11 -m uvicorn hub.main:app --port 8010`, with `DATABASE_URL` naming the trial profile);
+  **never `agentweave --port 8010`** (the installed console script's migrations lag this checkout)
+  and never `agentweave` from the repo root (its `hub/` shadows the package). This repo is
+  registered there as `proj-d85a82bf4216`. Full runbook, paths and traps:
+  `.claude/reference/hubs.md` — confirm which database a running instance serves before trusting it.
+- **`:8000` is the operator's real instance, and it runs this checkout by intent.** Never restart
+  it, migrate it, call it, or write to its database; read-only `mode=ro` SQLite reads are fine.
+  Its restart runs this checkout's migrations on their real data, and **a committed UI bundle
+  reaches their live app on their next reload.**
 
 ## Specifications — openspec owns the corpus, AgentWeave takes new work
 
-Two systems run side by side during the migration, and the split is now a corpus-migration
-decision, not a capability gap. AgentWeave's lifecycle is `exploring → proposed → approved →
-archived` (`hub/hub/spec_lifecycle.py`), plus a `current` phase reached only through document
-creation (`create_document`) rather than through `transition()` — a `capability`-kind document is
-created directly in `current`, which **is** AgentWeave's concept of a current-behaviour
-specification. Both the archive phase and the `current` phase shipped 2026-08-16.
+AgentWeave's lifecycle is `exploring → proposed → approved → archived` (`hub/hub/spec_lifecycle.py`)
+plus `current`, reached only through `create_document` (a `capability`-kind document is created
+there). The 30 accumulated `openspec/specs/<capability>/` documents stay in openspec until the
+operator decides to migrate them.
 
-What has not happened is moving the accumulated openspec corpus (30 `openspec/specs/<capability>/`
-documents) into AgentWeave — that stays in openspec until the operator decides to migrate it (see
-"Still prohibited" above); nothing about the lifecycle itself blocks that decision anymore.
+- **openspec keeps** `openspec/specs/` (current behaviour), `openspec/changes/<date>-<name>/`
+  (in-flight: `proposal.md`, `design.md`, `tasks.md`, spec deltas), `openspec/changes/archive/`, and
+  `openspec/explorations/`. Use the `openspec-propose`, `openspec-apply-change`,
+  `openspec-sync-specs` and `openspec-archive-change` skills. Requirements use `### Requirement:`
+  with `#### Scenario:` blocks and MUST/SHALL language.
+- **AgentWeave takes** new changes chosen for the trial, one at a time, authored in the app —
+  prefer a self-contained slice with no Hub-restart hazard; reconcile the outcome back into
+  `openspec/specs/` by hand.
+- **Which one?** Already in `openspec/changes/` → finish it there. New → ask the operator; do not
+  silently pick. Never carry one change in both.
+- **Never mark a task complete on the strength of a plan existing.** Only real, verified
+  implementation closes a task.
+- The spec flow is both the thing you use and the thing you build: **when it frustrates you, record
+  a finding** rather than working around it.
 
-**openspec keeps:**
+### The round discipline — a "spec loop"
 
-- `openspec/specs/<capability>/spec.md` — current behaviour of shipped capabilities (30 today).
-- `openspec/changes/<date>-<name>/` — in-flight changes: `proposal.md`, `design.md`, `tasks.md`,
-  and `specs/<capability>/spec.md` deltas.
-- `openspec/changes/archive/` — completed changes.
-- `openspec/explorations/` — thinking that precedes a change.
+When the operator says *"do a spec loop"*, this is the whole instruction. Any change that needs a
+spec goes through **three rounds before a line is implemented**: **R1** explores the codebase and
+writes the proposal; **R2 and R3** each *independently* compare the proposal against the actual code
+and fix it — a fresh comparison, not a re-read of the previous round. A change already proposed gets
+one verification round.
 
-Use the `openspec-propose`, `openspec-apply-change`, `openspec-sync-specs`, and
-`openspec-archive-change` skills. Requirements use `### Requirement:` with `#### Scenario:` blocks
-and MUST/SHALL language.
+**Do not collapse the rounds to save time.** This repo's dominant failure mode is a fix that passes
+its tests and cannot fire in production, and an argument can be wrong while everything it argues
+about is right — only a round that re-derives the argument finds that. When queueing, expand each
+unproposed change into R1, R2, R3, IMPL, ordered so stopping anywhere leaves complete changes.
+**Rounds check the argument; a drive checks the product** — also ask what each route *returns* when
+the function it calls raises.
 
-**AgentWeave takes** new changes chosen for the trial, one at a time, authored in the app. Prefer a
-self-contained slice with no Hub-restart hazard. When a trial change completes, its outcome is
-reconciled back into `openspec/specs/` by hand until AgentWeave can hold a corpus itself.
+## Project context
 
-**Which one am I using?** If the change is already in `openspec/changes/`, finish it there. If it is
-new, ask the operator — do not silently pick. Never carry one change in both.
+- **CLI** (`src/agentweave/`) — Python 3.11+, `agentweave-ai` on PyPI; exactly one runtime
+  dependency (`agentweave-hub`), and its own code imports only the stdlib.
+- **Hub** (`hub/`) — FastAPI backend + React/Vite dashboard.
+- **Docs** (`docs/`) — MkDocs Material, deployed to GitHub Pages.
+- Versions: `pyproject.toml` and `hub/pyproject.toml` are the single source of truth.
+- Layout and module map: `.claude/reference/architecture.md`.
 
-**Never mark a task complete on the strength of a plan existing.** Only real, verified
-implementation closes a task.
-
-### The round discipline — explore/propose → review → review, then implement
-
-Any change that needs a spec goes through **three rounds before a line is implemented**, and the
-operator calls this a **"spec loop"** — when they say *"do a spec loop"*, this is the whole
-instruction and nothing needs clarifying.
-
-- **Round 1** explores the codebase and writes the proposal.
-- **Rounds 2 and 3** each *independently* compare the proposal against the actual code and fix the
-  proposal. Not a re-read of round 1's reasoning — a fresh comparison against what the code does.
-- A change that is **already** proposed gets one verification round instead of three.
-
-**Why the cost is the point.** This repository's dominant failure mode is a fix that passes its
-tests and cannot fire in production, and a proposal that reads plausibly but does not match the
-code is how you get one. The sharper variant, learned 2026-08-28: **an argument can be wrong while
-everything it argues about is right** — reviews that check outcomes will not find that, only a
-round that re-derives the argument will. The discipline has found a real defect on five consecutive
-outings; twice on 2026-08-28 alone, once when round 3 caught rounds 1 and 2 both breaching a
-requirement that had shipped four days earlier.
-
-**Do not collapse the rounds to save time.** When queueing work — especially for an autonomous run
-— expand each unproposed change into four items (R1, R2, R3, IMPL) rather than one, and order the
-queue so stopping anywhere leaves complete changes rather than half-written proposals.
-
-**Three rounds are not a substitute for driving it.** On 2026-08-28 all three rounds read the code
-and none of them thought to ask what the HTTP route *returns* when the function it calls raises;
-the first live drive found it in one request (`F108`). Rounds check the argument, a drive checks
-the product.
-
-The Hub-owned spec flow is simultaneously the thing you are using and the thing you are building.
-When it frustrates you, that is a finding — record it rather than working around it. That is the
-entire point of the migration.
-
-## Project Context
-
-You are working on the **AgentWeave Framework** — a multi-agent AI collaboration platform consisting of:
-- **CLI** (`src/agentweave/`) — Python 3.11+, published as `agentweave-ai` on PyPI. It has exactly
-  one runtime dependency, `agentweave-hub`, added in 1.0.0 so `pip install agentweave-ai` is the
-  whole install. The CLI's own code still imports nothing outside the stdlib; do not add a second.
-- **Hub** (`hub/`) — FastAPI backend + React/Vite dashboard, self-hosted via Docker
-- **Documentation** (`docs/`) — MkDocs with Material theme, deployed to GitHub Pages
-
-Current version: see `pyproject.toml` (CLI) and `hub/pyproject.toml` (Hub) — those are the
-single source of truth; version numbers repeated in prose go stale.
-
-## Quick Commands
+## Quick commands
 
 ### Development Setup
 
-**Install through `constraints-dev.txt`, always.** It pins the two packages whose resolution CI and
-this machine disagreed about — `starlette`, `fastapi` — to what CI resolves, so a test that reads a
-framework data structure fails here before it fails there. It is **development-only** and is not a
-second source of truth for what the Hub supports; the published ranges in `pyproject.toml` and
-`hub/pyproject.toml` remain that and stay deliberately loose. `tests/test_dev_constraints.py` fails
-if a documented install here or a CI step stops passing `-c`, because a constraints file nothing
-installs through is decoration.
+**Install through `constraints-dev.txt`, always** — it pins `starlette`/`fastapi` to what CI
+resolves (development-only; the published ranges stay loose). `tests/test_dev_constraints.py` fails
+if a documented install or a CI step stops passing `-c`.
 
 ```bash
-# CLI (editable install) — the Hub first, then the CLI, as CI does
 pip install -c constraints-dev.txt -e ./hub
 pip install -c constraints-dev.txt -e ".[dev,mcp]"
-
-# Verify the editable install resolves (safe at the repo root — reads no project state)
-agentweave --help
-aw --help
-
-# Throwaway runs against project state belong in the testbed, not the repo root — the root's
-# project state is the migration's, and `reset` or a stray `doctor --fix` would eat it
-cd testbed/scratch && agentweave doctor
-
-# Hub (Docker)
-cd hub && docker compose up -d
-
-# Hub UI (hot-reload)
-cd hub/ui && npm install && npm run dev  # http://localhost:5173
-
-# Documentation
-mkdocs serve  # http://localhost:8000
+agentweave --help            # safe at the root; reads no project state
+cd testbed/scratch && agentweave doctor   # throwaway runs belong in the testbed, not the root
+cd hub/ui && npm install && npm run dev   # http://localhost:5173
 ```
 
-### Code Quality
-
-**Run exactly what CI runs, over exactly the paths CI covers.** The narrower form that used to be
-written here (`ruff check src/`) passed locally on a tree CI then failed, because CI lints `tests/`
-too — a test file with an uppercase local was clean by the documented command and red by the gating
-one. The path lists below are copied from `.github/workflows/ci.yml`; if that file changes, change
-these with it.
+### Code quality — exactly what CI runs, over exactly CI's paths (`.github/workflows/ci.yml`)
 
 ```bash
-# Python — the paths matter, and they differ between the two tools
 ruff check src/ hub/ tests/
-black --check src/ hub/hub/ hub/tests/ tests/
+black --check src/ hub/hub/ hub/tests/ tests/   # add --target-version py311 on this machine
 mypy src/
-
-# TypeScript (Hub UI)
 cd hub/ui && npm run lint
 ```
 
-On this machine `black` runs under 3.11 and the codebase targets 3.12, so add
-`--target-version py311` or it refuses with a safety-check warning.
-
-### Testing
+### Testing — `py -3.11`, never bare `python`
 
 ```bash
-# CLI tests
-pytest tests/ -v
-
-# Hub tests
-pytest hub/tests/ -v
-
-# All tests
-make test-all
+pytest tests/ -v          # CLI
+pytest hub/tests/ -v      # Hub
 ```
 
-## Architecture Overview
+## Architecture rules
 
-### Local multi-project boundary
+- **One local Hub owns many projects.** A project's database ID is durable; its working directory
+  is a unique binding recorded by `.agentweave/project.json`. Operator APIs carry explicit project
+  IDs, frontend server-state keys are project-prefixed, and the operator SSE stream stamps each
+  event with its trusted project ID. **Resolve every project path through `ProjectWorkspace`; never
+  use the Hub process's `Path.cwd()` as project identity.** Native mode can open valid local
+  directories; Docker mode accepts only container-visible paths beneath `AW_WORKSPACE_ROOT`,
+  mounted from `AW_WORKSPACE_HOST_ROOT`, without Docker-socket access or host-path guessing.
+- **The Hub owns execution.** No second runtime, no filesystem or git collaboration substrate, no
+  role subsystem — `watchdog.py`, `messaging.py`, `runner.py`, `transport/local.py`,
+  `transport/git.py` are deleted and not to be recreated. Runners, agents and charters are separate
+  project-scoped concepts (`.claude/reference/architecture.md`).
+- **The CLI does only what cannot be done from the app**: five `cmd_*` functions survive. CLI rules
+  load from `.claude/rules/cli.md`.
+- **Operator-in-the-loop has deliberately no backstop.** An agent that needs an answer calls
+  `ask_user`; a turn that ends without calling it has ended. The retired "trailing prose reads like a
+  question" detector (dropped in migration `0082`, 2026-08-20) must not be reintroduced.
 
-One local Hub instance owns a collection of projects. A project's database ID is durable and its
-canonical working directory is a unique binding recorded by a non-secret
-`.agentweave/project.json` marker. Operator APIs include explicit project IDs in their routes,
-frontend server-state keys are project-prefixed, and the instance operator SSE stream stamps each
-event with its trusted project ID.
+## Critical rules
 
-Resolve every project filesystem path through `ProjectWorkspace`; never use the Hub process's
-`Path.cwd()` as project identity. Native mode can open valid local directories. Docker mode accepts
-only container-visible paths beneath `AW_WORKSPACE_ROOT`, mounted from
-`AW_WORKSPACE_HOST_ROOT`, without Docker-socket access or host-path guessing.
+- `.agentweave/` and `spec/` at the repository root are the migration's, not stray test output — do
+  not delete them as cleanup. `.agentweave/` stays gitignored; `spec/` is tracked. An
+  `agentweave.yml` at the root is a leftover: ask before keeping it.
+- Agent names match `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` (`src/agentweave/constants.py`)
+  — any match accepted — and the Hub restates it as `_AGENT_NAME_RE` (`hub/hub/api/v1/agents.py`,
+  `hub/hub/worktrees.py`); change them together. `VALID_MODES = ["hierarchical", "peer", "review"]`.
+- **Stage paths explicitly; `git add -A` sweeps in scratch.** NEVER commit `kimichanges.md`,
+  `kimiwork.md`.
+- A test for code that consumes an API payload uses **the ordering that route actually returns**,
+  and some test fails if the route's order is reversed. A fixture in an order the route never emits
+  is not evidence (F190: green for a month while the behaviour could not fire). Stated in full in
+  `agent-stream-events`; only the instance it was learned from has been swept.
+- Hub API keys are `aw_live_{random32}`; run credentials are minted per run (`agent_auth.py`), and
+  identity is never accepted from a request body or header.
+- Editing `hub/hub/mcp_server.py`, models/migrations, or anything under `hub/ui/` loads its own rules
+  from `.claude/rules/` — read them; they carry the import restriction, the `approve_tool_call`
+  annotation trap, the migration checklist, and the UI-bundle refresh (`make ui` /
+  `scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together).
 
-### CLI (`src/agentweave/`)
-
-The CLI is **not** a collaboration surface. It does only what cannot be done from inside the app:
-start it, diagnose why it will not start, stop it, reset it. Five `cmd_*` functions survive, down
-from 56 — see `openspec/explorations/2026-08-02-product-direction.md` for why, before adding a
-sixth.
-
-```
-src/agentweave/
-├── cli.py              # The 5 surviving commands: status, doctor, stop, hub_start, reset.
-│                       # To add: cmd_* function, subparser in create_parser(), routing in main()
-├── diagnostics.py      # What `doctor` reports on: runtimes, ports, database, permissions
-├── config.py           # agentweave.yml parsing and generation
-├── session.py          # Session lifecycle, JSON persistence
-├── task.py             # Task CRUD, file-based storage with locking
-├── jobs.py             # Scheduled-job records
-├── locking.py          # File-based mutex (use: `with lock("name"):`)
-├── validator.py        # validate_task/message/session + sanitize functions
-├── eventlog.py         # Read-path utilities for events.jsonl
-├── stream_events.py    # Canonical run-event kinds shared with the Hub's parsers
-├── tool_surface.py     # The agent capability surface description
-├── spec_manifest.py    # Spec manifest read/write
-├── logging_handlers.py # JSONRotatingFileHandler + HubHandler
-├── constants.py        # All valid values, regex patterns, directory paths
-├── utils.py            # load_json, save_json, generate_id, now_iso, print_* helpers
-├── templates/          # Markdown templates loaded via get_template("name")
-│   └── skills/         # Packaged skill templates (handoff, resume, generated aw-*)
-├── transport/          # HTTP only — the Hub is the single runtime
-│   ├── base.py         # BaseTransport ABC
-│   ├── http.py         # HTTP transport for the Hub
-│   └── config.py       # get_transport() factory
-└── mcp/
-    └── server.py       # Compatibility re-export of the Hub's tool surface — no tools of its own
-```
-
-**Deleted, and not to be recreated:** `watchdog.py`, `messaging.py`, `runner.py`,
-`transport/local.py`, `transport/git.py`, and the role subsystem. The Hub owns execution; there is
-no second runtime and no filesystem or git collaboration substrate.
-
-### Hub (`hub/`)
-
-```
-hub/
-├── hub/                      # Python package
-│   ├── main.py               # FastAPI app factory + lifespan
-│   ├── mcp_server.py         # Hub-side MCP server (26 @mcp.tool(), 25 agent-callable —
-│   │                         # approve_tool_call is a harness endpoint, not a capability)
-│   ├── data/charters/        # Starter charter seed documents + manifest
-│   ├── db/                   # SQLAlchemy async models and migrations
-│   │   ├── models.py
-│   │   └── engine.py
-│   ├── api/v1/               # REST endpoints
-│   │   ├── agents.py         # Agent roster, bindings, and canonical context
-│   │   ├── runners.py        # Runner registry CRUD
-│   │   ├── charters.py       # Charter CRUD
-│   │   ├── messages.py       # Messages CRUD
-│   │   ├── tasks.py          # Tasks CRUD
-│   │   ├── questions.py      # Human Q&A
-│   │   ├── events.py         # SSE endpoint for real-time updates
-│   │   ├── logs.py           # Agent output logs
-│   │   ├── agent_chat.py     # Per-agent chat history
-│   │   ├── agent_trigger.py  # POST /api/v1/agent/trigger
-│   │   └── session_sync.py   # Session sync endpoint
-│   └── schemas/              # Pydantic schemas
-├── ui/                       # React dashboard
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── api/              # React Query hooks
-│   │   │   ├── agents.ts     # useAgents, useAgentOutput, useAgentSessions
-│   │   │   ├── messages.ts   # useMessages, useMessageHistory
-│   │   │   ├── tasks.ts
-│   │   │   ├── agentChat.ts  # useAgentChatHistory
-│   │   │   └── ...
-│   │   ├── components/
-│   │   │   ├── agents/       # Agent UI
-│   │   │   │   ├── AgentsPage.tsx
-│   │   │   │   ├── AgentCard.tsx          # Runner/model and status summary
-│   │   │   │   ├── AgentOutputPanel.tsx   # Live output logs
-│   │   │   │   ├── AgentActivityTab.tsx   # Output + timeline events
-│   │   │   │   └── AgentInfoTab.tsx
-│   │   │   ├── tasks/        # TaskBoard, TaskCard
-│   │   │   ├── messages/     # MessagesFeed, MessageCard, ConversationGroup
-│   │   │   ├── questions/    # QuestionsPanel, AnswerForm
-│   │   │   ├── logs/         # LogsView, LogLine
-│   │   │   ├── activity/     # ActivityLog, EventRow
-│   │   │   ├── layout/       # Sidebar, StatusBar, SetupModal
-│   │   │   └── common/       # Badge, Icon, EmptyState
-│   │   ├── store/            # Zustand stores (configStore)
-│   │   └── hooks/            # useSSE, useCopy
-│   └── package.json
-├── docker-compose.yml
-└── Dockerfile
-```
-
-## Shipped features and their user-facing commands
-
-The commands below are the **product surface you implement and test**. Read them as "this is what a
-user types" — and, during the migration, increasingly what you type too. Exercise them against the
-trial Hub or in `testbed/`, never against the Hub instance whose code you are editing.
-
-### Runner, Agent, and Charter Separation
-
-The Hub owns three independent project-scoped concepts:
-
-- runners describe reusable execution capability (`claude`/`codex`, model, and flags);
-- agents are addressable roster identities bound to at most one runner and one charter;
-- charters are editable markdown behavior contracts injected into canonical turn context.
-
-Fresh projects seed default runners and the starter charters declared in
-`hub/hub/data/charters/charters.json` (9 today). Operators manage and bind them through
-the Hub UI. The former CLI multi-role subsystem, fixed enum, role files, and role-derived API/UI
-fields no longer exist and must not be recreated.
-
-### Runners
-
-A runner is a Runner record in the Hub — a CLI (`claude`, `codex`, …), a model, and flags. Operators
-create and bind them in the Hub UI; `hub/hub/runner_commands.py` turns one into a spawn. Claude and
-Codex are the two wired to a real spawn path today; the rest are refused with a stated 501 rather
-than silently mishandled.
-
-### Operator-in-the-loop
-
-An agent can stop and involve the operator rather than guess:
-
-- **Permissions** — the composer's Permissions pill sets the run's posture. `manual` ("Ask me")
-  routes Claude through `--permission-prompt-tool` and Codex through
-  `codex_appserver.decide_approval`, producing a card the operator answers.
-- **Questions** — `ask_user` takes 1–4 structured questions, blocks, and returns the answers. The
-  operator steps through them above the composer.
-
-There is deliberately **no backstop** behind these. A completed run whose final text merely *reads*
-like a question used to be detected, recorded and surfaced to the operator; that was retired on
-2026-08-20 at the operator's request, and migration `0082` drops its table. Do not reintroduce it:
-guessing whether trailing prose is a question is a judgement the product should not make on the
-operator's behalf. An agent that needs an answer calls `ask_user`; a turn that ends without calling
-it has ended.
-
-How long a run waits is per-agent (`Agent.permission_timeout_seconds`,
-`Agent.question_timeout_seconds`), carried to the spawned tool process as `AW_DECISION_TIMEOUT` and
-`AW_QUESTION_TIMEOUT`.
-
-### Logging
-
-Python `logging` stdlib, set up in `logging_handlers.py`:
-- `JSONRotatingFileHandler`: 10MB rotation, 5 backups → `.agentweave/logs/events.jsonl`
-  *(inside a project, never at this repo's root)*
-- `HubHandler`: forwards to the Hub
-
-Env vars: `AW_LOG_LEVEL` (default WARNING), `AW_LOG_FILE`
-
-## Hub UI Patterns
-
-### Adding a Component
-
-1. Create component in `hub/ui/src/components/{category}/ComponentName.tsx`
-2. Use existing components (Badge, Icon, EmptyState) for consistency
-3. Add to barrel export if applicable
-4. Use React Query for data fetching (see `hub/ui/src/api/`)
-
-### Adding an API Hook
-
-```typescript
-// hub/ui/src/api/feature.ts
-import { useQuery } from '@tanstack/react-query'
-import { getJson } from './client'
-import { useConfigStore } from '@/store/configStore'
-
-export function useFeature() {
-  const { isConfigured } = useConfigStore()
-  return useQuery({
-    queryKey: ['feature'],
-    queryFn: () => getJson('/api/v1/feature'),
-    enabled: isConfigured,
-  })
-}
-```
-
-### Real-time Updates
-
-Hub uses SSE (Server-Sent Events) for live updates:
-- `useSSE` hook in `hub/ui/src/hooks/useSSE.ts`
-- Events: `agent_output`, `session_synced`, `task_updated`, etc.
-- Frontend invalidates React Query cache on events
-
-## Task Status Lifecycle
+## Task status lifecycle
 
 ```
 pending → assigned → in_progress → completed → under_review → approved
@@ -460,134 +166,26 @@ pending → assigned → in_progress → completed → under_review → approved
                                              ↘ rejected
 ```
 
-## Critical Rules
+## When compacting
 
-- Agent names validated by `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` — any match accepted
-- `VALID_MODES = ["hierarchical", "peer", "review"]`
-- ALL saves pass through `validator.py` sanitize functions
-- ALL task modifications use `with lock("name"):`
-- Templates via `get_template("name")` — never hardcode in `cli.py`
-- `is_locked()` is read-only — never delete files
-- `.agentweave/` and `spec/` at the repository root are the migration's, not stray test output —
-  do not delete them as cleanup (see the opening section). `.agentweave/` stays gitignored; `spec/`
-  is tracked. An `agentweave.yml` at the root is still wrong — nothing in the current product writes
-  one, so treat it as a leftover and ask before keeping it.
-- NEVER commit `kimichanges.md`, `kimiwork.md`
-- A test for code that consumes an API payload uses **the ordering that route actually returns**,
-  and some test fails if the route's order is reversed. A fixture in an order the route never emits
-  is not evidence — `runStatusByRunId`'s fed ascending lifecycle events to a route that returns
-  newest-first, and stayed green from 2026-08-02 to 2026-09-03 while the behaviour it covered
-  could not fire (F190).
-  Stated in full as *Payload-shaped model functions are tested against real route ordering*
-  (`agent-stream-events`). **Only the instance it was learned from is checked so far** — no sweep
-  has been run over the other payload-shaped consumers.
-- Hub API key format: `aw_live_{random32}`; run credentials are minted per run (`agent_auth.py`) and
-  identity is never accepted from a request body or header
-- HttpTransport uses stdlib `urllib.request` only
-- `hub/hub/mcp_server.py` is spawned standalone and may import **only** stdlib + fastmcp — anything
-  it needs from the Hub is restated there, with a test asserting the two agree
-- `approve_tool_call` has **no return annotation**. FastMCP would derive `structuredContent` from
-  one, which silently defeats an `allow`. Do not add one.
-- `hub/hub/static/ui` is a committed build artefact. After `cd hub/ui && npm run build`, run
-  `make ui` (or `python scripts/refresh_ui_bundle.py` directly — `make` is not on PATH in Git Bash
-  on this machine) — it copies `dist/` over it, confirms the copy, and records
-  `hub/hub/static/ui/ui-build-stamp.json`, the fingerprint of the source it was built from. Commit
-  `hub/ui/src` and `hub/hub/static/ui` together; the stamp is what gives a byte-identical rebuild
-  something to commit, so `/health` can stop reporting `ui_stale`. Only the script writes the
-  stamp. `test_ui_staleness.py` still does **not** check this repo's copy;
-  `test_ui_build_stamp.py` checks the stamp parses, and gates the stricter
-  bundle-matches-source assertion behind `AW_CHECK_UI_BUNDLE=1`.
-- Stage paths explicitly; `git add -A` sweeps in scratch
-
-## Common Tasks
-
-### Adding a CLI Command
-
-1. Add `cmd_<name>()` function in `cli.py`
-2. Add subparser in `create_parser()`
-3. Add routing branch in `main()`
-4. Add tests in `tests/test_cli.py`
-
-### Adding a database column
-
-1. Add the field in `hub/hub/db/models.py`
-2. New migration in `hub/hub/migrations/versions/` — guard for a missing table, as `0033`/`0034` do,
-   because upgrades starting from an early revision reach it with only that revision's tables
-3. Bump the head assertions in `hub/tests/test_migrations.py` **and**
-   `hub/tests/test_project_persistence.py`
-4. Expose it on the relevant Pydantic schema if the UI needs it
-
-### Adding an MCP Tool
-
-1. Add `@mcp.tool()` decorated function in `hub/hub/mcp_server.py`
-2. Import and use existing core modules
-3. Follow existing error handling patterns
-
-### Adding a UI Component
-
-1. Create in `hub/ui/src/components/{category}/`
-2. Use TypeScript + functional components
-3. Use Tailwind CSS + CSS variables for theming
-4. Use React Query for data, Zustand for global state
-5. Use the `Icon` component — it wraps `lucide-react` SVGs. The Material Symbols webfont was
-   removed (it loaded `display=block` from a CDN and held every icon invisible until the request
-   completed). The `name` API was kept so call sites did not change. **Do not reintroduce a second
-   icon *font*, and do not add a third icon source without the operator deciding it.**
-
-   **`simple-icons` is a sanctioned exception, decided by the operator 2026-08-19.** lucide
-   deliberately carries no brand marks, and neither do Heroicons, Phosphor or Tabler — so a
-   Dockerfile that looks like Docker is unobtainable from any UI icon set at any version. Brand
-   marks live in `hub/ui/src/components/common/brandMarks.ts` and are reached through the same
-   `Icon` component via a `brand:<key>` name, so there is still one call surface. The original
-   rule's *reasoning* was a webfont that blocked paint on a CDN request; these are bundled path
-   strings, so that failure mode is absent. Tree-shaking is load-bearing: importing 24 marks by
-   name costs ~15 kB gzip, the full 3,453 would be megabytes — never `import * from 'simple-icons'`.
-
-   Two rules that came out of shipping it: a brand mark is used **only where one is actually
-   published** (PowerShell, Java and C# were withdrawn upstream over trademark objections, so those
-   keep a generic lucide glyph rather than borrowing a near-enough logo), and a brand's own colour
-   is used **only when it clears a contrast floor against both backgrounds** — Markdown, JSON and
-   Rust are officially `#000000` and were invisible in dark mode for one build. `brandHex` computes
-   this and returns null to fall back to a palette token; the shape still carries the identity.
-
-## When Compacting
-
-Keep in context:
-- The change being implemented, **which system it lives in** (openspec or the trial Hub), and which
-  phase/task number
-- Which CLI command, API route, or UI component is being modified
-- Test status: what passed, what is failing, what has not been run
-- Any decision made this session that is not yet written down
-- Uncommitted work in progress
-- Any friction the spec flow itself caused this session that is not yet recorded as a finding
-
-Do **not** carry the legacy CLI session vocabulary (session mode, principal agent, transport type,
-pending messages) — that subsystem was deleted and the Hub owns execution. Trial-Hub state (project
-ID, document path, task and requirement IDs) *is* worth carrying when a trial change is in flight.
+Keep: the change being implemented and **which system it lives in** (openspec or the trial Hub) with
+its phase/task number; the CLI command, route or component being modified; test status (passed,
+failing, not run); decisions not yet written down; uncommitted work; spec-flow friction not yet
+recorded as a finding; trial-Hub state (project ID, document path, task/requirement IDs) when a trial
+change is in flight. Do **not** carry the deleted CLI session vocabulary (session mode, principal
+agent, transport type, pending messages).
 
 ## Session continuity — the handoff chain
 
-`/handoff` and `/resume` carry state across context resets. Three things about this repo override
-the skills' generic defaults, stated here so no session has to re-derive them:
-
-- **Commit each completed checkpoint without asking**, and **push; do not open PRs.** The generic
-  skill defaults to asking before committing and never pushing — this repo decided otherwise
-  (2026-08-01, reaffirmed since), and the whole autonomous loop depends on it. Merging to `master`
-  is still the operator's decision, made awake.
-- **`.claude/handoffs/` is untracked**, uniformly. It was split until 2026-09-04 — handoffs
-  `0001`–`0073` tracked, `0074`+ ignored — which meant a clone's `/resume` silently loaded
-  `handoff-0073` and worked from three-week-old state. The tracked half also carried two
-  `aw_live_` trial-Hub keys, which is why the whole directory is now ignored. Do not re-track it.
-- **`.claude/handoffs/DEAD-ENDS.md` is the exception and stays tracked.** It is the durable ledger
-  of what does not work on this machine — interpreters, PATH, pytest, openspec, the Hub's own
-  startup traps. **Read it before debugging an environment problem, and append to it rather than
-  re-copying facts forward in each handoff.** Measured across the 108-handoff chain, individual
-  facts were dropped and re-learned between three and seven times each before that file existed.
-  Entries are dated; verify one that looks old rather than believing it.
+- **Commit each completed checkpoint without asking, and push; do not open PRs.** Merging to
+  `master` is the operator's decision, made awake.
+- **`.claude/handoffs/` is untracked**, uniformly — do not re-track it (it once carried `aw_live_`
+  keys, and a split chain made `/resume` load three-week-old state).
+- **`.claude/handoffs/DEAD-ENDS.md` is the exception and stays tracked**: the durable ledger of what
+  does not work on this machine. **Read it before debugging an environment problem, and append to it**
+  rather than re-copying facts forward in each handoff. Verify an old-dated entry before believing it.
 
 ## Resources
 
-- GitHub: https://github.com/gutohuida/AgentWeave
-- PyPI: https://pypi.org/project/agentweave-ai/
-- Docs: https://gutohuida.github.io/AgentWeave/
-- Issues: https://github.com/gutohuida/AgentWeave/issues
+GitHub https://github.com/gutohuida/AgentWeave · PyPI https://pypi.org/project/agentweave-ai/ ·
+Docs https://gutohuida.github.io/AgentWeave/ · Issues https://github.com/gutohuida/AgentWeave/issues

@@ -475,6 +475,10 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   being entirely predictable. Generate secrets with `py -3.11 -c "import secrets;
   print(secrets.token_hex(16))"` and assert the result is not a run of zeros. *(Hit 2026-09-07
   minting a Hub bootstrap key; caught only because the output was printed.)*
+- **Windows PowerShell 5.1's `Get-Content` reads a BOM-less UTF-8 file as ANSI**, so the driver
+  logs (deliberately written without a BOM) display `â€”` for an em-dash. The file is fine; the
+  display is not. Read it with `Get-Content -Encoding UTF8`, or from Python. *(2026-09-15 — cost
+  one false alarm while checking the metered driver's output.)*
 
 ---
 
@@ -561,6 +565,38 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
     arm refuses a dirty tree.
   - An operator question a round raises is put to the operator with `AskUserQuestion` **while the
     next round runs on the recommended answer**, which costs no wall-clock time.
+
+- **The built-in `Explore` subagent inherits the main session's model — Opus, here** *(measured
+  2026-09-15; the docs date the change to v2.1.198)*. Every Explore spawn in the 09-14 windows and
+  in the 09-15 interactive session ran on `claude-opus-5` ($8.49 for three Explore reports that
+  morning). `.claude/agents/Explore.md` now overrides it with `model: sonnet`; verified with an Opus
+  main session: the Explore turn landed on `claude-sonnet-5` in `modelUsage`. A project agent named
+  `Explore` does replace the built-in. Spawns that pass `model: "opus"` explicitly (the REV) are
+  unaffected.
+- **Headless `claude -p` waits 600 s for background tasks after the turn ends, then kills them**
+  *(driver-day.log:4827, 2026-09-14)*: *"Background tasks still running after 600s; terminating.
+  Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely."* It killed a background REV
+  after 54 calls ($8), and three iterations ended with their test suites still running. The driver
+  now sets the ceiling to 60 minutes via `usage-policy.json` `env` — not `0`, so a hung task cannot
+  hold an iteration until the 2-hour task limit.
+- **`claude -p --output-format json` is one JSON line carrying everything a ledger needs**
+  *(2026-09-15)*: `total_cost_usd`, `modelUsage` per model with `costUSD` (includes subagents and
+  Claude Code's own Haiku side-calls; `usage` does not), `num_turns`, `subtype`, `is_error`,
+  `api_error_status`, `subagent_stats`. `costUSD` is list price and matches $2/$10 (Sonnet 5),
+  $1/$5 (Haiku 4.5) per MTok with cache reads at 0.1× and 1-hour writes at 2× input — exactly.
+- **`--exclude-dynamic-system-prompt-sections` does not reduce the per-iteration cache write**
+  *(measured 2026-09-15)*: after a commit, a fresh `-p` run re-wrote 5,306 tokens without the flag
+  and 5,484 with it. Not adopted. Most of the old ~22k per-iteration write was CLAUDE.md and the
+  listings after the changing section, which the CLAUDE.md slim addresses instead.
+- **Path-scoped `.claude/rules/*.md` (`paths:` frontmatter) do load only on demand** *(probe
+  2026-09-15, CLI 2.1.269)*: a marker rule scoped to `hub/ui/src/**` was absent at start and present
+  after a Read of `hub/ui/src/main.tsx`.
+- **A PreToolUse `Read` hook that exits 2 blocks the Read under `bypassPermissions` too** *(probe
+  2026-09-15)* — the model receives the hook's stderr as the error. `large-read-guard.py` relies on
+  it, and acts only when the driver sets `AW_AUTONOMOUS=1`.
+- **`jq` is not installed on this machine.** The operator's jq-based statusline printed `ctx:--
+  api:0%` placeholders for as long as it existed; replaced 2026-09-15 by `~/.claude/statusline.py`
+  (the `.sh` is now a one-line `exec py -3.11` wrapper, so `settings.json` did not change).
 
 ## The installed CLI (`agentweave` from PyPI, outside this repo)
 

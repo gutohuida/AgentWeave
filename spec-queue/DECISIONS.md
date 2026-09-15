@@ -628,6 +628,40 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-15 — the windows are routed, metered, and trimmed rather than capped
+
+**DECIDED 2026-09-15 ~09:20, by the operator, in an interactive session** (the day window was
+disabled for the day at their request). The operator's words:
+
+> *"With the promo I wans using everything right on the weekly window so it fit me perfectly but now
+> it's not going to be enought at all. So we need to be more deliberate and find a better way to
+> execute our autonomous windows. The windows are working perfectly so I want to keep using them."*
+
+Measured first (09-14 transcripts, list-price weights): every window call ran on `claude-opus-5` at
+effort `high` — day $222 incl. $32 of Opus subagents, night $92; LoopEngine's agents $153 that day;
+~60% of cost is cache reads, so context size is the budget. The weekly bar read 49% on the Tuesday
+morning of a week resetting Sunday. Three decisions, chosen from options put to the operator:
+
+- DECIDED   window-model-routing  **Spec rounds on Opus, build on Sonnet.** R1–R3 and REV stay on
+  Opus/high (the round discipline is untouched); `-impl` runs on Sonnet/high; drives, gates,
+  archives, ledger, compose and read-and-sort items on Sonnet/medium; unrecognised ids default to
+  Opus/high. Encoded in `.claude/loops/usage-policy.json`, read by `run-iteration.ps1` per firing
+  from STATE's `current`; an item's own `model`/`effort` overrides. *Rejected:* only mechanical items
+  on Sonnet (~15–20% saving); Sonnet everywhere but REV (weakens R2/R3).
+- DECIDED   meter-before-cap  **Meter for a week, then set caps.** Every iteration writes one row
+  to `.claude/autonomous/usage-ledger.jsonl` from its own `--output-format json` result; the
+  statusline persists the plan's real 5-hour/weekly percentages to `~/.claude/usage-snapshot.json`
+  and `usage-history.jsonl`; `.claude/loops/usage_report.py` joins them into $ per 1% of weekly.
+  No window cap until then — only a per-iteration runaway guard (`--max-budget-usd 40`) and a
+  60-minute pause after a usage-limit refusal. **Revisit ~2026-09-22** with a week of calibration.
+  *Rejected:* a 50% or 70% share now, set blind.
+- DECIDED   claude-md-slim  **Slim CLAUDE.md for every session.** 33 KB → 11 KB; runbooks moved to
+  `.claude/reference/`, recipes to path-scoped `.claude/rules/` (verified to load only when a
+  matching file is read). An independent review found three dropped constraints; all restored.
+
+This closes `weekly-window-care` below: the throttle is routing + trimming now, and a cap after
+calibration.
+
 ### 2026-09-14 afternoon — LoopEngine stays parked, and the weekly rate-limit window needs care
 
 **DECIDED 2026-09-14 ~14:50, by the operator, in an interactive session** (not the day window),
@@ -647,7 +681,8 @@ after the session reported LoopEngine stalled since 07:02 on the `review_unstaff
   autonomous loops and LoopEngine's agents both run under has ended**, so the shared weekly
   rate-limit window is now a real cost/availability constraint rather than a cushioned one. The
   concrete throttling (which sessions moderate usage, and how) is **not yet decided** — asked back
-  to the operator in the same session.
+  to the operator in the same session. **Answered 2026-09-15** (section above): routing, metering
+  and trimming now; a cap after a week's calibration.
 
 ### 2026-09-14 — a day that reads LoopEngine and builds what it finds
 
