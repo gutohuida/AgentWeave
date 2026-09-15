@@ -498,6 +498,15 @@ the edit. Exactly `F372` (B, fixed by the same change) moved from `OPEN` to `RES
 new verdict is `F374`, filed open as B by the drive. Stripped of line offsets, every other list
 matches, the A lists included.
 
+**Revised 2026-09-15 (night window, `ledger-conflicts`): the classifier prints no `CONFLICT` at
+all.** The four were hand-checked from code, git and CI, and each Status line now says what was found,
+with its evidence: `F52` is `RETIRED` (closed 2026-08-27; the word was missing), and `F292`, `F335`
+and `F338` are open. Three of the four conflicts were false leads from other sections: a line
+about `F285`'s fix, a quotation in `F251`, and `F328`'s Status line. Each of those lines was
+re-wrapped or re-quoted, and no words were changed. The open severity-A set is still the five above. Under
+`F313`'s rule, exactly those four verdicts moved. Stripped of line offsets, every other list
+matches.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -2835,7 +2844,7 @@ four: the two carried over from Q1/Q2 plus this one — `create_spec_document` w
 
 ## F52 (A) — the "workspace" permission posture never sees a git command; every commit is refused, silently, with no operator visibility
 
-**Status:** partially fixed 68459ea (the refusal is no longer invisible); the underlying CLI refusal does not reproduce — 0cda570 disproved its central inference and 57eb92b eliminated the last axis live. Out of scope, 2026-08-27: a new git refusal is a new finding
+**Status:** RETIRED — closed 2026-08-27 without a full fix, and read as closed by every open-A index since; the word was written 2026-09-15 (night `ledger-conflicts`) because the old line said only *"partially fixed"* and the classifier read CONFLICT. The visible half is fixed `68459ea`: `auto_snapshot_notice()` (`hub/hub/launchability.py:404`) is still appended at `hub/hub/api/v1/agent_trigger.py:1079`, and its three `test_f52_*` tests passed 2026-09-15. The refusal itself does not reproduce: `0cda570` disproved its central inference, and `57eb92b` drove a full live turn that committed. A new git refusal is a new finding. Residual, not filed: an allowed call still leaves no record (`agent_actions.py:940`, *"Only refusals are persisted"*), so a recurrence would be as unfalsifiable as this one was (Correction 3, below).
 
 Found 2026-08-26 driving Q4 live on `ledger-stress` (`proj-18e5d4e0`): enabling `job-f632ee565238`
 ("Width bench", a loop with no reviewer other than its own agent) and letting it fire twice,
@@ -18393,7 +18402,7 @@ the Hub's literal `broadcast(…, "<kind>")` calls against `SSE_EVENT_TYPES` sti
 dropped. Six have a feed sentence in `eventSummary.ts`: `queue_agent_paused`, `review_unstaffed`,
 `run_diverged`, `run_divergence_resolved`, `task_blocked` and `task_unblocked`. **Do not fix this
 without F335.** A refused review broadcasts a false `run_divergence_resolved` at staging time, so
-admitting that kind to the allowlist puts F335's false "1 open divergence on T resolved" line in
+admitting that kind to the allowlist puts F335's false *"1 open divergence on T resolved"* line in
 the live feed.
 
 `useSSE.ts:335` is the whole of it:
@@ -21610,8 +21619,8 @@ third; `hub/hub/output_recording.py:92`.
 
 The 2026-09-04 APPROVALS note had forbidden this fix on the grounds that deleting the refresh
 "would very likely turn CI green on its own, by removing the one operation that makes the
-shared-connection rollback loud. That is masking, not fixing." That premise was spent -- F285 was
-fixed at `d9ad1e0` and the suite is file-backed -- but **F292**, filed the same morning, is a new
+shared-connection rollback loud. That is masking, not fixing." That premise was spent -- F285 was fixed at
+`d9ad1e0` and the suite is file-backed -- but **F292**, filed the same morning, is a new
 intermittent `database is locked` on the same suite, so the masking question was re-asked rather
 than waved through, and **answered by measurement**: `scripts/drive/f287_does_the_refresh_hold_a_lock.py`
 reproduces the fixture's conditions (file-backed `sqlite+aiosqlite`, WAL, `busy_timeout=30000`,
@@ -22166,7 +22175,9 @@ obvious fix.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open — **mitigated 2026-09-10, and as of 2026-09-11 the mitigation is measured and
+**Status:** open, and still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
+
+**Status as written 2026-09-11:** **mitigated 2026-09-10, and as of 2026-09-11 the mitigation is measured and
 REFUTED AS A FIX: F292 reproduced on the mitigated tree at `f51ec21`, and again at `8d227de`
 (run 34583319728, 2026-09-11 09:16Z). The classified rate was 1 in 17 runs with the mitigation
 against 11 in 41 without, which iteration 2 reported as disfavouring "it changed nothing" at
@@ -26576,7 +26587,8 @@ edge the lifecycle does not declare and leaves two transition rows.
 
 ## F328 (D) — input the operator withdraws while its turn is being dispatched is counted, given up on, and announced as dropped by the Hub
 
-**Status:** fixed `a5cb384` (day window `d6-repair`, 2026-09-13). Driven live, before and after: see the dated note at the end of this entry. **The repair covers both sides.** The repair the paragraph below names, a counting write conditioned on `state = 'queued'`, was half of it: the operator's withdrawal had the same check-then-write. Delivery's own check-then-write is not covered, and is filed as F338.
+**Status:** fixed `a5cb384` (day window `d6-repair`, 2026-09-13). Driven live, before and after: see the dated note at the end of this entry. **The repair covers both sides.** The repair the paragraph below names, a counting write conditioned on `state = 'queued'`, was half of it: the operator's withdrawal had the same check-then-write. Delivery's own check-then-write is not covered,
+and is filed as F338.
 
 **Original status:** open. Filed 2026-09-12 by R3 of `a-refused-review-leaves-nothing-behind`, measured at unit level on `895aad9`. That change's task 2.1 (as R3 amended it) **narrows it and does not retire it** — corrected 2026-09-12 evening by the pre-approval Opus review. The `state == "queued"` re-read catches a withdrawal that commits before the rollback. But a review dispatch holds the database write lock while it records the reviewer, so an operator's withdrawal waits on that lock and commits *after* the re-read. Test O2 (`testbed/scratch/opusf319/test_zz_opusf319.py`, delay 0.3 s) measured the DELETE succeeding and the entry still ending `('withdrawn', 3)`, with the Hub's "delivery failed 3 times" reason and one `queue_entry_abandoned`. The result was identical on the unmodified tree. The durable repair is a counting write conditioned on `state = 'queued'`, or a re-read inside the same write transaction.
 
@@ -26974,7 +26986,9 @@ human judgement this finding feeds.
 
 ## F335 (D) — a review refused on dispatch still broadcasts that it resolved the task's open divergence
 
-**Status:** open, **narrowed by the 2026-09-13 day drive: the false broadcast is real on the wire,
+**Status:** open, latent behind F251 — re-read 2026-09-15 (night `ledger-conflicts`): `resolve_divergences_for_task` still broadcasts at staging time (`hub/hub/run_divergence.py:104`, before its caller commits), and `SSE_EVENT_TYPES` (`hub/ui/src/hooks/useSSE.ts:21`) still omits the kind, so the false event is on the wire and in no UI surface; F251 has no fix either.
+
+**Narrowed by the 2026-09-13 day drive: the false broadcast is real on the wire,
 and no UI surface renders it today.** The live activity feed drops `run_divergence_resolved` before
 any listener (F251, `hub/ui/src/hooks/useSSE.ts:21-68`, checked at `:335`), so the feed line this
 finding predicts cannot appear in the served bundle. It is **latent behind F251**. Fixing F251
@@ -27116,7 +27130,9 @@ compare the activity line with the row's copied JSON.
 
 ## F338 (D) — delivery reads an entry as queued and then marks it delivered by key, so a withdrawal that lands in between is answered 200 and delivered anyway
 
-**Status:** open. Filed 2026-09-13 by the day window's `d6-repair`, while fixing F328. **Read from
+**Status:** open, still read from the source only — re-read 2026-09-15 (night `ledger-conflicts`): `deliver_entries_with_run` is unchanged in shape, now at `hub/hub/inbound_queue.py:133-170` (moved by `98385cd`), selecting `state == "queued"` at `:142-152` before the `Run` is added at `:160`, then setting `delivered` on those objects at `:161-164`; still not measured and not driven.
+
+Filed 2026-09-13 by the day window's `d6-repair`, while fixing F328. **Read from
 the source. Not measured, and not driven.**
 
 **The claim.** F328's repair makes every write that takes an entry out of `queued` *without

@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-15T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-14-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-conflicts",
-    "next_action": "Do ledger-conflicts: hand-check the 4 CONFLICT verdicts that scripts/classify_findings.py reports for scripts/drive/FINDINGS.md (today: F52 A, F292 B, F335 D, F338 D - re-run the classifier first, the line offsets moved). For each, read the section and establish from code/git what is true, then make its **Status:** line say exactly that, one line per section, with evidence (sha, file:line, or a measured fact). Documentation only - no product code. Recompute the census before and after (F313's rule): only the sections you meant to move may move, and beware the classifier traps (an 'open' within 80 chars after 'Status' reads OPEN; 'not a defect' reads RESOLVED weakly; see the classifier header). The operator's ORDER items are all finished (f356 archived iteration 8), so this deprioritised backlog is now legitimate. Then ledger-unclassified follows and closes the window (final entry per night-window.md 'Ending the window', next_action null). Window stop_at 07:00+01:00: if under ~20 minutes remain, skip to the final entry.",
+    "current": "ledger-unclassified",
+    "next_action": "Do ledger-unclassified: classify the UNCLASSIFIED sections that scripts/classify_findings.py reports for scripts/drive/FINDINGS.md (at 23:00 they were F185 B, F135 C, F266 C, F272 C, F164 D - re-run the classifier first, the list may have moved) and hand-check F108's RESOLVED_ELSEWHERE lead. Same method as iteration 9's ledger-conflicts (see its log entry): read each section, establish from code/git/CI what is true, and give it a one-line **Status:** declaration with its evidence. Documentation only - no product code. Capture the classifier output before and after (F313's rule): only the sections you meant to move may move. A false lead in ANOTHER section may be re-wrapped or re-quoted without changing words, as iteration 9 did, and the log must say so. Then write the window's FINAL entry per .claude/loops/night-window.md 'Ending the window' (what changed / proven / open / decisions / distrust), set next_action to null, commit and push. Window stop_at 07:00+01:00: if under ~20 minutes remain, skip straight to the final entry.",
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "ledger-conflicts",
-            "status": "open",
+            "status": "done",
             "title": "Hand-check the 4 CONFLICT verdicts in FINDINGS.md (F52 A, F292 B, F335 D, F338 D)",
-            "detail": "DEPRIORITISED by the operator's 23:30 redirect - this was the default queue composed at 23:00 when APPROVALS carried no token. Still legitimate backlog: do it only if the ORDER: items above are all finished or genuinely blocked. Original detail follows. Carried since the 2026-09-12 night log ('Hand-check: the classifier's CONFLICT verdicts, F52 (A) and F292 (B)') and re-noted by every window since without being done - the night-window 'recording is not fixing' rule. Evidence from code/git, one Status line per section. Documentation only."
+            "detail": "Done iteration 9. All four hand-checked from code/git/CI; each Status line is now one physical line with evidence. F52 (A) RETIRED -> RESOLVED: closed 2026-08-27 and read closed by every open-A index since; 68459ea's notice still wired (launchability.py:404, agent_trigger.py:1079, 3 test_f52_* pass); refusal does not reproduce (0cda570, 57eb92b). F292 (B) OPEN, still reproducing: 19 of 84 completed ci.yml runs since 2026-09-13T02:50Z errored on BEGIN IMMEDIATE, one on master f28bc31; the other 4 reds are F314. F335 (D) OPEN, latent behind F251 (run_divergence.py:104 broadcasts at staging; useSSE.ts:21 omits the kind). F338 (D) OPEN, source-read only (inbound_queue.py:133-170, moved by 98385cd). Three false cross-section leads removed by re-wrap/re-quote with no word changed (F285's line, F251's quotation, F328's Status line). Census: no CONFLICT anywhere; exactly those four verdicts moved; open-A set unchanged at five. Original detail follows. DEPRIORITISED by the operator's 23:30 redirect - this was the default queue composed at 23:00 when APPROVALS carried no token. Still legitimate backlog: do it only if the ORDER: items above are all finished or genuinely blocked. Original detail follows. Carried since the 2026-09-12 night log ('Hand-check: the classifier's CONFLICT verdicts, F52 (A) and F292 (B)') and re-noted by every window since without being done - the night-window 'recording is not fixing' rule. Evidence from code/git, one Status line per section. Documentation only."
         },
         {
             "id": "ledger-unclassified",
