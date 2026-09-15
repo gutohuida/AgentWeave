@@ -23,12 +23,13 @@ both decides and spawns would be impossible to test without one.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Iterable, NamedTuple, Optional, Tuple
+from typing import Dict, Iterable, NamedTuple, Optional, Set, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import InboundQueueEntry, Question, Run, SpecDocument, Task, TaskTransition
+from .inbound_queue import project_limits
 from .sse import sse_manager
 from .task_transition_service import (
     ORIGIN_ACTOR,
@@ -307,6 +308,51 @@ async def tasks_with_a_turn_pending_or_running(
                 pending.setdefault(candidate, agent)
     # A running turn is the stronger statement, so it wins where both exist.
     return {**pending, **held}
+
+
+async def task_agent_pairs_with_a_turn_queued(
+    session: AsyncSession, project_id: str
+) -> Set[Tuple[str, str]]:
+    """`(task_id, agent)` for every queued input that will move *agent* onto *task_id*.
+
+    The question is *will input already queued for this agent move it onto this task*, and it is
+    asked by `scheduler._agents_that_are_free` about an assignee whose task no live loop will walk
+    (`a-task-nothing-will-move-holds-nobody`, design D4). Such a task holds its assignee only if a
+    turn is coming for that assignee on it.
+
+    **Not `tasks_with_a_turn_pending_or_running`, and not a narrowing of it.** That helper answers
+    *is anybody on this task*, as a map with one agent per task, and it keeps whichever row comes
+    back first (`setdefault` over an unordered select). Where two agents have input naming one task,
+    it has already dropped one of them, so asking it *is the agent on this task the assignee* hides
+    the assignee's own input whenever a row for somebody else is returned first. The pool needs the
+    pair, so this returns pairs. Widening the helper instead would change F154's answer as a side
+    effect; whether that answer is right about a third agent's input, or input past the hop budget,
+    is its own question (finding F371). The held-resume arm of `decide_firing` reads the helper's
+    map the same masked way (finding F370); it is not repaired here.
+
+    **Bounded by the hop budget**, read through `inbound_queue.project_limits`, the reader
+    `turn_scheduler._attempt_turn` uses, so the two cannot disagree about which budget applies.
+    `_attempt_turn` never selects an entry past it; only the operator's `release_entry` delivers one,
+    and an operator who might get round to it is not something that moves a task. Counting such an
+    entry would re-create, one table over, the ratchet the pool's rule exists to remove.
+
+    `state == "queued"` for the reason the helper above gives: `"withdrawn"` already means *this
+    will never be delivered*. An entry with no agent is nobody's turn.
+    """
+    hop_budget, _ = await project_limits(session, project_id)
+    rows = await session.execute(
+        select(InboundQueueEntry.task_id, InboundQueueEntry.review_task_id, InboundQueueEntry.agent)
+        .where(InboundQueueEntry.project_id == project_id)
+        .where(InboundQueueEntry.state == "queued")
+        .where(InboundQueueEntry.agent.isnot(None))
+        .where(InboundQueueEntry.hop_depth <= hop_budget)
+    )
+    pairs: Set[Tuple[str, str]] = set()
+    for task_id, review_task_id, agent in rows.all():
+        for candidate in (task_id, review_task_id):
+            if candidate:
+                pairs.add((candidate, agent))
+    return pairs
 
 
 async def tasks_held_by_a_running_turn(session: AsyncSession, project_id: str) -> Dict[str, str]:

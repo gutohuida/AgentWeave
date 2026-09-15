@@ -26,7 +26,7 @@ who checked the work.
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, Run, SpecDocument, Task
+from hub.db.models import Agent, AIJob, Loop, Run, SpecDocument, Task
 from hub.scheduler import _agents_that_are_free, resolve_reviewer
 from hub.spec_payload import SCHEMA_VERSION, embed_payload
 
@@ -193,26 +193,70 @@ async def test_an_agent_running_a_turn_is_not_selected(app, auth_headers, bind_r
     assert choice.agent == "free-one"
 
 
+async def _live_loop(db):
+    """A loop nothing has ended, so its firing will walk the tasks that carry its id."""
+    db.add(
+        AIJob(
+            id="job-held",
+            project_id="proj-test",
+            name="Held",
+            agent="aa-loaded",
+            message="work the queue",
+            cron="*/5 * * * *",
+            session_mode="new",
+            enabled=True,
+        )
+    )
+    await db.commit()
+    db.add(Loop(id="loop-held", project_id="proj-test", job_id="job-held", purpose="held"))
+    await db.commit()
+    return "loop-held"
+
+
+async def _held_elsewhere(db, *, loop_id):
+    db.add(
+        Task(
+            id="task-held",
+            project_id="proj-test",
+            title="already assigned elsewhere",
+            status="assigned",
+            assignee="aa-loaded",
+            loop_id=loop_id,
+        )
+    )
+    await db.commit()
+
+
 async def test_an_agent_holding_an_active_task_is_not_selected(app, auth_headers, bind_runner):
     """Not-running alone was rejected in D4: an agent can hold three assigned tasks and be idle
-    between turns, which is exactly the pile-up rung 2 exists to avoid."""
+    between turns, which is exactly the pile-up rung 2 exists to avoid.
+
+    **That pile-up is a queue something will serve** (`a-task-nothing-will-move-holds-nobody`,
+    design D7), so the holding is staged in a live loop, whose firing will brief `aa-loaded` on it.
+    The sibling below stages the same task outside every loop and asserts the opposite."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, "aa-loaded", "zz-free")
 
     async with async_session_factory() as db:
-        db.add(
-            Task(
-                id="task-held",
-                project_id="proj-test",
-                title="already assigned elsewhere",
-                status="assigned",
-                assignee="aa-loaded",
-            )
-        )
-        await db.commit()
+        await _held_elsewhere(db, loop_id=await _live_loop(db))
         task = await _task(db)
         choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
 
     assert choice.agent == "zz-free"
+
+
+async def test_an_agent_holding_only_a_task_outside_every_loop_is_selected(
+    app, auth_headers, bind_runner
+):
+    """The same task with no `loop_id`: nothing will ever move it, so it is a bookmark, and a
+    bookmark does not withdraw its assignee from review (design D1). `aa-loaded` sorts first."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR, "aa-loaded", "zz-free")
+
+    async with async_session_factory() as db:
+        await _held_elsewhere(db, loop_id=None)
+        task = await _task(db)
+        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+
+    assert choice.agent == "aa-loaded"
 
 
 async def test_a_completed_task_does_not_make_its_assignee_busy(app, auth_headers, bind_runner):

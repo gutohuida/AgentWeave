@@ -352,9 +352,7 @@ async def _batch_loop_summaries(
             # would be a false account of it: for the length of a hold, or of a turn
             # (`a-spent-allowance-holds-the-queue`, D6). Only a stalled decision is re-asked, so a
             # loop whose agent is working its task keeps reading as running, not stalled.
-            stall_reason = await _loop_flow_busy_reason(session, loop.project_id, job_agent) or (
-                stall_reason
-            )
+            stall_reason = await _loop_flow_busy_reason(session, loop, job_agent) or stall_reason
         stall_reason_by_loop[loop.id] = stall_reason
         staffing_by_loop[loop.id] = task_attribution.staffing_from_decision(decision)
 
@@ -1272,8 +1270,8 @@ async def _held_in_flight_reasons(
     return reasons
 
 
-async def _job_has_loop(session: AsyncSession, job: AIJob) -> bool:
-    return (await session.execute(select(Loop.id).where(Loop.job_id == job.id))).first() is not None
+async def _job_loop(session: AsyncSession, job: AIJob) -> Optional[Loop]:
+    return (await session.execute(select(Loop).where(Loop.job_id == job.id))).scalars().first()
 
 
 async def _newest_job_run(session: AsyncSession, job_id: str) -> Optional[JobRun]:
@@ -1340,21 +1338,27 @@ async def run_job(
             # job_run_failed) and set the JobRun's own status/error_summary — this branch
             # only translates that into the right HTTP response, it must not persist a
             # second, duplicate event on top of what was already recorded.
-            if not wrote_row and await _job_has_loop(session, job):
+            loop = await _job_loop(session, job) if not wrote_row else None
+            if loop is not None:
                 # The first question the firing asked, asked again (F127's own shape of the fix).
                 # Its refusal writes nothing, so without this the branches below re-derived a
                 # decision the firing never reached: *"already being worked … nothing is wrong"*
                 # for an agent the provider is refusing, and 500 for one merely mid-turn.
-                from ...scheduler import _loop_flow_busy_reason
+                from ...scheduler import _loop_flow_busy_reason, _loop_has_open_task
 
-                busy_reason = await _loop_flow_busy_reason(session, project_id, job.agent)
+                busy_reason = await _loop_flow_busy_reason(session, loop, job.agent)
                 if busy_reason:
+                    # Name the half that refused (design D8). Telling the operator nobody else is
+                    # free when somebody is would send them to free an agent, which changes nothing:
+                    # what an empty loop lacks is work.
+                    why = (
+                        "no other agent is free to take this loop's work"
+                        if await _loop_has_open_task(session, loop)
+                        else "this loop's queue holds no open task for another agent to take"
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail=(
-                            f"{busy_reason}, and no other agent is free to take this loop's work. "
-                            "Nothing was started."
-                        ),
+                        detail=f"{busy_reason}, and {why}. Nothing was started.",
                     )
             if latest_run and latest_run.status == "skipped":
                 raise HTTPException(

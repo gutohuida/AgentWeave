@@ -28,6 +28,7 @@ from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .provider_allowance import agents_held, hold_busy_reason, hold_coalesce_reason, provider_hold
 from .run_task_binding import (
     TERMINAL_FOR_BINDING,
+    task_agent_pairs_with_a_turn_queued,
     tasks_held_by_a_running_turn,
     tasks_with_a_turn_pending_or_running,
 )
@@ -279,9 +280,24 @@ async def _agents_running_a_turn(session: AsyncSession, project_id: str) -> "Set
     )
 
 
-async def _loop_flow_busy_reason(
-    session: AsyncSession, project_id: str, agent: str
-) -> Optional[str]:
+async def _loop_has_open_task(session: AsyncSession, loop: Loop) -> bool:
+    """Whether any task carrying *loop*'s id is in a non-terminal status.
+
+    **This is the question that decides `DECISION_PROCEED_EMPTY`**: `_stall_reason_from_walk`
+    answers `None` exactly when no such task exists, and `decide_firing` then proceeds empty,
+    which briefs the job's own agent to fill the queue. Asked here with the same predicate so the
+    busy guard and the walk cannot come to different answers about whether the queue is empty
+    (`a-task-nothing-will-move-holds-nobody`, design D8).
+    """
+    found = await session.execute(
+        select(Task.id)
+        .where(Task.loop_id == loop.id, Task.status.not_in(TERMINAL_FOR_BINDING))
+        .limit(1)
+    )
+    return found.first() is not None
+
+
+async def _loop_flow_busy_reason(session: AsyncSession, loop: Loop, agent: str) -> Optional[str]:
     """Why a firing should be refused outright, recording nothing — or `None` to proceed.
 
     **This is `_loop_agent_busy_reason` narrowed for a flow (design D12).** That guard refuses the
@@ -292,18 +308,32 @@ async def _loop_flow_busy_reason(
     was reachable only inside a tick that happened to find the job's agent idle, which is the one
     state a working flow is least often in.
 
-    So the refusal now needs both halves: the job's agent is busy **and** nobody else could be
-    staffed instead. A single-agent loop reaches that by the general rule with no branch of its own
-    — its one agent is the busy one and the free list is empty — which is what keeps this exactly
-    as strict as before for every loop that exists today, including the "records nothing" property
-    the old guard's docstring argues for at length. A firing that proceeds past this and then
-    resolves nobody falls into the ordinary stall path instead, which is the right place for it:
-    something was staffable in principle and was not staffed, and that is a fact about the queue.
+    So the refusal needs the job's agent busy **and** nobody else could be staffed instead. That
+    second half has two forms, and either refuses:
+
+    - **No other agent is free.** The empty pool is the stand-in for "nobody could be staffed".
+    - **The loop holds no open task** (`a-task-nothing-will-move-holds-nobody`, design D8, finding
+      F372). Nobody can be staffed from an empty queue whoever is free, so a firing past this falls
+      through to `DECISION_PROCEED_EMPTY`, which briefs the job's *own* agent to fill the queue --
+      the busy one. Before this half, a loop whose agent was mid-turn queued one such briefing per
+      firing wherever another agent was free. The other three decisions never queue for a running
+      job agent, so *busy and empty* is precisely *this firing would queue input for the busy
+      agent*.
+
+    Where neither holds, the pool is **project-scoped**, so a loop naming one agent is not
+    single-agent as far as this guard can tell: a documentless loop whose agent is mid-turn can
+    hand its next pending task to a free sibling (finding F128, the operator's open decision). A
+    single-agent project still reaches the refusal by the general rule, with no branch of its own.
+    A firing that proceeds past this and then resolves nobody falls into the ordinary stall path,
+    which is the right place for it: something was staffable in principle and was not staffed, and
+    that is a fact about the queue.
     """
-    busy_reason = await _loop_agent_busy_reason(session, project_id, agent)
+    busy_reason = await _loop_agent_busy_reason(session, loop.project_id, agent)
     if busy_reason is None:
         return None
-    if await _agents_that_are_free(session, project_id):
+    if not await _loop_has_open_task(session, loop):
+        return busy_reason
+    if await _agents_that_are_free(session, loop.project_id):
         return None
     return busy_reason
 
@@ -1020,17 +1050,36 @@ class ReviewerChoice:
 
 
 async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list[str]":
-    """Design D4 rung 2's "free": **not running** *and* **holding no active task**, in queue-stable
-    order.
+    """Design D4 rung 2's "free": **not running** *and* **holding no work anything will move**, in
+    queue-stable order.
 
     Both facts already existed and neither alone is enough. Not-running by itself was rejected in
     D4 because an agent can hold three assigned tasks and be idle between turns, which is the
     pile-up the operator named as the thing to avoid; holding-no-task by itself would pick an agent
     mid-turn and `schedule_agent` would refuse the second start.
 
-    Reads the same running query `schedule_agent` and `_loop_agent_busy_reason` read, and the same
-    `LIVE_STATUSES` the roster's own "active task" derivation reads, so a third opinion about
-    whether an agent is busy cannot appear here.
+    **An assigned live task holds its assignee only while something will move it**
+    (`a-task-nothing-will-move-holds-nobody`, design D1). Two things in the Hub move a task on
+    their own: a loop that has not ended, whose firing walks every live task carrying its
+    `loop_id`; and a turn queued for the assignee naming the task, within the hop budget
+    (`task_agent_pairs_with_a_turn_queued`). A running turn needs no arm of its own, because a
+    running assignee is excluded by `running` whatever it holds. Anything else -- the assignee
+    field, the status, a plain job, an operator who might get round to it -- moves nothing, and a
+    task nothing will move used to withdraw its assignee from every flow in the project until
+    somebody other than a flow moved it: D4's pile-up guard, reading a queue nothing will serve.
+
+    "Not ended" is `ending_state IS NULL` **and** `archived_at IS NULL` (design D2): the operator's
+    `POST /jobs/{id}/archive` retires a looping job without ending its loop. A **paused** loop
+    still holds, because re-enabling it briefs the assignee on the task again. Membership in the
+    set of live loop ids, not an outer join on `Loop`, so a `loop_id` naming no row holds nobody
+    rather than reading its missing `ending_state` as "not ended".
+
+    **The roster and the pool differ on purpose** (design D5). The roster's "active task" count
+    (`api/v1/agents.py`) answers *what does this agent hold*, which is still every live task. This
+    answers *may a flow give this agent work*. They were never the same question, so the roster's
+    `LIVE_STATUSES` is read here only as the band a holding must be in, not as the whole test.
+    The running half still reads the query `schedule_agent` and `_loop_agent_busy_reason` read,
+    so a third opinion about whether an agent can take a turn cannot appear here.
 
     Archived agents are excluded for the reason `trigger_agent_directly` refuses one: nothing runs
     an archived agent. **Agents with no bound runner are excluded for the same reason and are the
@@ -1045,8 +1094,8 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
 
     **A held agent counts as running here** (`a-spent-allowance-holds-the-queue`, D6). After a
     refusal on usage grounds `schedule_agent` refuses its start just as it refuses a running
-    agent's, so leaving the hold out of this half would be the third opinion the paragraph above
-    rules out. Only this half moves: which tasks make an agent unavailable is unchanged.
+    agent's, so leaving the hold out of this half would be that third opinion. That change moved
+    only this half; which tasks make an agent unavailable is the reachability paragraph above.
     """
     from .task_transitions import LIVE_STATUSES
 
@@ -1059,19 +1108,34 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
         .scalars()
         .all()
     ) | await agents_held(session, project_id)
-    holding = set(
+    live = set(
         (
             await session.execute(
-                select(Task.assignee).where(
-                    Task.project_id == project_id,
-                    Task.assignee.isnot(None),
-                    Task.status.in_(tuple(sorted(LIVE_STATUSES))),
+                select(Loop.id).where(
+                    Loop.project_id == project_id,
+                    Loop.ending_state.is_(None),
+                    Loop.archived_at.is_(None),
                 )
             )
         )
         .scalars()
         .all()
     )
+    queued = await task_agent_pairs_with_a_turn_queued(session, project_id)
+    holdings = (
+        await session.execute(
+            select(Task.id, Task.assignee, Task.loop_id).where(
+                Task.project_id == project_id,
+                Task.assignee.isnot(None),
+                Task.status.in_(tuple(sorted(LIVE_STATUSES))),
+            )
+        )
+    ).all()
+    holding = {
+        assignee
+        for task_id, assignee, loop_id in holdings
+        if loop_id in live or (task_id, assignee) in queued
+    }
     roster = (
         (
             await session.execute(
@@ -1104,7 +1168,7 @@ async def resolve_reviewer(
     ```
        1.  the task's declared reviewer, if it resolves
        1b. a declaration that does NOT resolve  -> surface it; never substitute
-       2.  no declaration: any agent not running and holding no active task
+       2.  no declaration: any agent not running and holding no work anything will move
        3.  surface: "could not staff this step"
     ```
 
@@ -1361,10 +1425,10 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     wedged_reviews: "Set[str]" = set()
 
     # Both asked once, before the walk. `_agents_that_are_free` excludes agents that are running a
-    # turn *or* holding active work, which is right for staffing something new and wrong for
-    # resuming something already staffed: a task's own assignee is, by construction, holding active
-    # work — itself. So resumption consults `running` directly (design D12 step 1) and only fresh
-    # work draws from `free`.
+    # turn *or* holding work something will move, which is right for staffing something new and
+    # wrong for resuming something already staffed: a task's own assignee is, by construction,
+    # holding work this very walk will move — itself. So resumption consults `running` directly
+    # (design D12 step 1) and only fresh work draws from `free`.
     free = await _agents_that_are_free(session, loop.project_id)
     running = await _agents_running_a_turn(session, loop.project_id)
     # The per-task counterpart of `running`, for design D8's refusal. Asked once before the walk
@@ -2624,9 +2688,10 @@ class JobScheduler:
                 # `_loop_flow_busy_reason`, not `_loop_agent_busy_reason`: refusing the whole
                 # firing because *the job's* agent is mid-turn is right for a loop and wrong for a
                 # flow, where another agent may be free for independent work (design D12). The
-                # narrower question — busy *and* nobody else free — is identical for every
+                # narrower question — busy *and* nobody else could be staffed, because nobody is
+                # free or the queue holds nothing to give them — is identical for every
                 # single-agent loop, so this branch behaves exactly as it did for all of them.
-                busy_reason = await _loop_flow_busy_reason(session, job.project_id, job.agent)
+                busy_reason = await _loop_flow_busy_reason(session, loop, job.agent)
                 if busy_reason:
                     # **Records nothing.** No `JobRun`, and no event either: the agent's own
                     # running `Run` already carries the fact that it is working, and
