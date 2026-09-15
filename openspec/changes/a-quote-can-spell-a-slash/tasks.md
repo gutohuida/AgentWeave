@@ -625,7 +625,7 @@ Every real agent turn binds `claude-haiku-4-5`. No job left enabled. The drive H
 chosen that night, fresh profile, started from `hub/` with uvicorn **from source**, no `.py` under
 `hub/hub` or `src` newer than the process. Never 8000 or 8010.
 
-- [ ] 5.1 **Pre-fix, first.** `git worktree add ../aw-ansic <sha>` at the commit **before** §2's.
+- [x] 5.1 **Pre-fix, first.** `git worktree add ../aw-ansic <sha>` at the commit **before** §2's.
   Start the drive Hub from that worktree, on a fresh git fixture project with `sub/hello.py`, one
   agent on the default posture (no override), Haiku. Ask it, with its **Bash** tool:
   1. `python sub/hello.py` — allowed.
@@ -633,7 +633,19 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
      so a Windows drive cannot show the escape writing out; record the refusal reason verbatim.
   Read `event_logs` and the transcript. Record every `permission_denied` row's `tool_name`. Remove
   the worktree afterwards. **The POSIX allow→deny flip is not drivable on Windows (D4); say so.**
-- [ ] 5.2 **Fixed tree**, fresh project and agent. Ask it, with its Bash tool:
+  **Done 2026-09-15.** Worktree `../aw-ansic` at `612b9c9` (the commit immediately before
+  `0e52ad4`, this session's decoder commit). Drive Hub on port **8021**, fresh profile
+  `%TEMP%/f332_drive_pre/agentweave.db`, `proj-d7aad8937597`, agent `f332215336`, runner bound to
+  `claude-haiku-4-5-20251001`. Driven with `scripts/drive/t_f332_ansic.py` (new, `AW_PHASE=pre`).
+  Ask 1 (`python sub/hello.py`): allowed. Ask 2 (`echo hi > $'..\x2fstray.txt'`): **refused**,
+  reason verbatim: `"'$..\\x2fstray.txt' contains a variable, '~' or a command substitution that
+  the shell expands when it runs, so where it points cannot be checked against your workspace;
+  write a path relative to your workspace instead"` (rule 3, the pre-decoder "cannot be checked"
+  text D4 predicts). Both runs bound the Haiku model; `tool_name` on the one `permission_denied`
+  row was `Bash`. 5/5 assertions passed. Worktree removed and pruned; Hub process killed by PID;
+  port 8021 confirmed free afterward. **The POSIX flip is not drivable on Windows — not attempted,
+  as design D4 says.**
+- [x] 5.2 **Fixed tree**, fresh project and agent. Ask it, with its Bash tool:
   - `echo hi > $'..\x2fstray.txt'` — refused as `'../stray.txt' is outside your workspace`, and no
     `stray.txt` appears in the fixture's parent (`.agentweave\worktrees\` for a git-project agent,
     per `a-url-is-not-a-path` §6.1).
@@ -670,6 +682,53 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
   Record every `permission_denied` row's reason and `tool_name`; confirm `event_logs` holds the
   refusal with the same reason. Stop the Hub, confirm every run bound `claude-haiku-4-5-*` and no
   job is enabled.
+  **Done 2026-09-15.** Current HEAD, Hub on port **8022**, fresh profile
+  `%TEMP%/f332_drive_fixed/agentweave.db`, `proj-ac38b85c54ce`, agent `f332215531`, runner bound to
+  `claude-haiku-4-5-20251001`. Same script, `AW_PHASE=fixed`, 9 asks (G1, I1, N2, N3, N4, N5, Q1,
+  two controls). **8 of 9 matched design.md exactly:**
+  - G1: refused, `"'../stray.txt' is outside your workspace"`; no `stray.txt` anywhere under the
+    fixture or its parent.
+  - I1: not refused; transcript confirms it read `hello from sub`.
+  - N2: refused, `"'..\\x' is outside your workspace"`.
+  - N3: not refused; a file literally named `x` appeared in the agent's worktree — matches bash's
+    own behaviour exactly, not a leak.
+  - N5: refused, `"'..\\c' is outside your workspace"`.
+  - Q1: the permission decision was allow (not refused) — the tool then reported "file not found"
+    for `sub×/hello.py`, exactly as designed; not a regression of 2.2c.
+  - Both controls: allowed; the `python sub/hello.py` control printed `hello from sub`.
+  - Every one of the 9 runs bound `claude-haiku-4-5-20251001`; `event_logs` held the same three
+    reasons the transcripts showed (G1, N2, N5); no job left enabled (`GET .../jobs?include_archived=true`
+    returned `[]`).
+
+  **N4 is the one row that did not go as predicted, and the reason is the agent, not the fix.**
+  Asked (twice, the second time with an explicit "do NOT resolve this escape into a Unicode
+  character, type the six literal ASCII characters backslash-u-0-1-0-0" instruction), Haiku's own
+  Bash tool call both times carried `{"command": "echo hi > $'..Ā'"}` with the *actual*
+  U+0100 character embedded, not the six-character escape text — confirmed by inspecting the raw
+  `tool_use` payload in `agent_outputs` both times. The model resolves a `\uHHHH`-shaped
+  instruction into the character it names before ever constructing its own tool call, regardless
+  of an explicit instruction not to. The command it actually ran (`..` + a real non-separator
+  Unicode letter, no `\`/`/` anywhere) is correctly judged **allowed** by rule 4 (no separator) —
+  which is exactly why no `permission_denied` row exists for either attempt; **this is not a
+  defect in the fix**, `_decide` and the real spawned server were already verified directly against
+  the literal escape text in §1/§2/§3 (unit level and wire level, both platforms). **Ruled out the
+  transport as the cause, not just assumed it**: a controlled JSON-RPC probe against the same
+  `mcp_server.py`, sending the literal six-character escape text through a correct, one-level
+  `json.dumps`/`json.loads` round trip exactly the way a `tools/call` request carries a `command`
+  argument, gets denied exactly as N4's unit test predicts (`Denied: '..\\u0100' is outside your
+  workspace.`) — so the JSON-RPC wire and `mcp_server.py` are confirmed innocent; the resolution
+  happens specifically in Haiku's own text generation when composing its tool call, not in any
+  serialization this change owns or any this repo controls. It is a real limit on what a
+  natural-language-instructed live drive can show for this specific row: a `\u`/`\U` escape above
+  0xFF may not survive an LLM-driven agent's own command construction, so this row's drive evidence
+  is the unit/wire-level tests, not this live turn. Recorded as a finding, not fixed here — the
+  operator may want a separate note on it (a possible F-numbered finding about agent-side escape
+  resolution, and whether it says anything reassuring or concerning about this class of escape as
+  an actual attack surface) rather than folding it into F332's own close-out.
+
+  Hub stopped by PID (22352), port 8022 confirmed free afterward. Transcripts and the full record
+  (`record.json`) saved under `%TEMP%/f332/fixed/transcripts/`. New file:
+  `scripts/drive/t_f332_ansic.py` (both phases share it, `AW_PHASE=pre|fixed`).
 
 ## 6. The gate
 
