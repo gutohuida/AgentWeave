@@ -57,6 +57,16 @@ These need no operator; a test or CI settles each.
   `echo hi > $'..\c'` — bash keeps `\c` literal (`..\c`) when nothing follows it before the closing
   quote — is refused as *outside* on Windows. If the decoder consumed the closing quote as `\c`'s
   control target it would allow this on Windows; §4.8's mutation guards that.
+- **A decoded character outside the checker's `\w`-only path pattern does not wrongly refuse an
+  inside path (rows Q1–Q4, Round 6, design.md D6).** `cat $'sub\xd7\x2fhello.py'`,
+  `cat $'sub\cA\x2fhello.py'` and `cat $'sub \x2fhello.py'` each decode to a path genuinely
+  inside the workspace (a filename containing ×, a control byte, or a Unicode space character), and
+  are **allowed** on both platforms — this is a pre-existing gap in the checker's own path-matching
+  regex, not something this change's decoder gets wrong, but the decoder is what first makes these
+  characters reachable through an escape. Without task 2.2c's fix, these three rows would be wrongly
+  **denied** (`'/hello.py' is outside your workspace'`) even though they never leave the workspace —
+  §4.9's mutation guards that. `cat $'sub\xe9\x2fhello.py'` (Q4, é) was never affected either way —
+  it decodes to a character the checker's pattern already accepted.
 
 ## Human-only (you judge these)
 
@@ -88,6 +98,17 @@ which is inside the workspace. Before this change this was **refused** on Window
 backslash tripped the checker) — an over-refusal the fix corrects. **Judge it (task 8.2):** confirm
 it is the same file as `cat sub/hello.py`, i.e. the change made an inside path reachable, not an
 escape.
+
+### 3. A decoded character the checker's own pattern doesn't recognize still doesn't false-deny
+
+> Run `cat $'sub\xd7\x2fhello.py'`
+
+**You should see** a "file not found"-style error **from the tool itself**, not a permission
+refusal — the approval decision is allow (the path `sub×/hello.py` is inside the workspace, even
+though no such file exists), and the checker's own regex used to wrongly deny this because the `×`
+character fell outside a character class only decoded paths ever exercise. **It has gone wrong if**
+you instead see `Denied: '/hello.py' is outside your workspace` — that means task 2.2c's fix (D6)
+did not land.
 
 **It has gone wrong if** step 1 succeeds and a `stray.txt` appears in the worktrees directory, or
 step 2 is refused as outside the workspace.

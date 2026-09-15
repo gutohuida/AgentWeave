@@ -149,6 +149,27 @@ point: a row may not change answer before the decode exists.
       - Verify on both platforms exactly as 1.2's "Done" note did (`--runxfail`, record pass/xfail
         counts), and update that note's numbers in this file once done.
       - Commit alone, green, before §2 resumes.
+- [ ] 1.5 **New (Round 6, 2026-09-15) — pins Q1–Q4 (design.md D2/D6), the rule-5/6 fallthrough
+      class.** Add Q1–Q4 to the same parametrized table, `ids=` their labels. **Measure each row's
+      *today* answer against the real, unmodified `_decide` first**, same discipline as 1.4.
+      - **Q1–Q3:** today, **POSIX allow** (the raw, pre-decode word has no real `/` character at
+        all — rule 4). After §2 alone (the decoder, without 2.2c's `_PLAIN_RELATIVE_RE`
+        broadening), these wrongly **deny** (`'/…' is outside your workspace`) — this is the
+        regression D6 exists to prevent. After 2.2c lands, they return to **allow**. Mark the
+        **answer** assertion `xfail(strict=True)` on POSIX for Q1–Q3, conditioned on 2.2c not yet
+        being applied — i.e., pin the *final* asserted value as **allow** (matching the shipped
+        behavior, not the intermediate regression), so a decode that lands without 2.2c fails this
+        row loudly rather than silently shipping the regression. Windows: today **deny, unchecked**
+        (the raw word's leading `$` and, once any single backslash is present, `\`, trip rule 3) —
+        unaffected by 2.2c's absence or presence until §2's decode also lands; after both §2 and
+        2.2c, **allow** (same mechanism as POSIX). Mark the Windows answer xfail the same way.
+      - **Q4:** today and after (with or without 2.2c), **allow, unchanged, both platforms** — the
+        negative control. No mark; if this ever starts failing, 2.2c broke something it must not
+        (a decoded character already inside `\w` must never change behavior).
+      - Commit alongside 2.2c, not before — Q1–Q3's *final* pinned value only holds once 2.2c has
+        landed; do not commit this task's marks against a tree where §2's decoder exists but
+        `_PLAIN_RELATIVE_RE` has not yet been broadened, or the pin will assert the regression as
+        correct.
 
 ## 2. The decode
 
@@ -225,7 +246,12 @@ point: a row may not change answer before the decode exists.
     in both readings (locale-independent);
   - `\uHHHH`/`\UHHHHHHHH` **from 0x100 to 0x7FFFFFFF (Round 4 — replaces the R3 "always keep
     literal" rule)**: in the `"c"` reading, keep the backslash and the escape text literal
-    (return e.g. `"\\" + letter + hexdigits`); in the `"utf8"` reading, decode via `chr(value)`
+    (return `"\\" + letter + hexdigits.upper()` — **Round 6, finding 3**: bash uppercases the hex
+    digits of a kept-literal escape (`$'..߿'` renders `..߿`, measured, Git Bash
+    `LC_ALL=C`); echoing the agent's own typed casing is not byte-for-byte what bash renders,
+    which D1 says matters. No verdict changes — case does not affect component count, separator
+    identity, or `os.path.normcase` comparison — but implement the uppercase form to actually meet
+    D1's "exactly" standard); in the `"utf8"` reading, decode via `chr(value)`
     **guarded**: for `value > 0x10FFFF` (only reachable via `\U`), emit **one fixed ASCII letter**
     (e.g. `"z"`, chosen once, never derived from the input) instead of calling `chr()` at all —
     **not** an arbitrary "non-separator" character (design.md D5, Round 5): the placeholder must
@@ -276,9 +302,29 @@ point: a row may not change answer before the decode exists.
   them implements the dual reading or the ≥0x80000000 fix. `%TEMP%/f332/proto.py` (Round 4) is
   the first reference that does, but it is scratch, not the implementation. The implementation is
   held to D2's table — which now pins N2–N5 and P1–P7 — not to any prototype.
-- [ ] 2.3 Leave everything after the lexer unchanged: the six rules, `_is_own_hub`, the refusal
-  wordings, the reason bound. Confirm **no new reason string** is introduced (`grep` the refusal
-  constants; the diff is `_lex` plus a helper).
+- [ ] 2.2c **New (Round 6, 2026-09-15) — this is the one place §2.3's "leave everything after the
+  lexer unchanged" does not hold.** Broaden `_PLAIN_RELATIVE_RE` (`hub/hub/mcp_server.py:966`) from
+  its current `\w`-allowlisted interior character classes to a denylist of the platform's
+  separators (and, in the first segment only, `:`) — see design.md D6 for the exact pattern, the
+  full safety argument, and the D2 rows (Q1–Q4) it fixes:
+  ```python
+  _PLAIN_RELATIVE_RE = re.compile(
+      rf"^[\w.+][^{re.escape(_SEPARATORS)}:]*"
+      rf"(?:[{re.escape(_SEPARATORS)}][^{re.escape(_SEPARATORS)}]*)+$"
+  )
+  ```
+  **The leading-character class (`[\w.+]`, no `-`, no `@`, no `:`) MUST NOT change** — that is what
+  keeps `-o/tmp/x`, `@/etc/passwd` and `host:/x` routed to rule 6's backstop exactly as they are
+  today. Only the interior classes (after the leading character, and in every segment after the
+  first separator) broaden. Without this task, the decoder correctly produces a real separator for
+  words like `$'sub\xd7\x2fhello.py'` but rule 5 rejects the whole word (a non-`\w` byte in it) and
+  rule 6's backstop then misjudges the tail as absolute-from-drive-root, wrongly denying a path
+  that is genuinely inside the workspace — Q1–Q3 pin this, Q4 is the negative control that must
+  stay unaffected.
+- [ ] 2.3 Leave everything after the lexer unchanged, **except 2.2c above**: the six rules'
+  *decisions*, `_is_own_hub`, the refusal wordings, the reason bound are untouched. Confirm **no
+  new reason string** is introduced (`grep` the refusal constants; the diff is `_lex`, a helper,
+  and `_PLAIN_RELATIVE_RE`).
 - [ ] 2.4 Add one sentence to the reader's block comment (above `_SEPARATORS`): a shell may carry a
   quote form that *decodes* escapes into characters, not only removes them, so the word judged is
   what the shell produces.
@@ -350,6 +396,14 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
   and produces `..g` with no separator (R3 finding 2). On POSIX N5 is allow either way, so run its
   assertion on Windows (or force `os.sep`). A mutation that leaves N5 green means the closing-quote
   guard is not load-bearing.
+- [ ] 4.9 **New (Round 6) — revert `_PLAIN_RELATIVE_RE` to its pre-2.2c form** (restore the `\w`
+  allowlist in the interior classes: `r"^[\w.+][\w.+\-]*(?:[sep][\w.+\-:]*)+$"`). **Q1, Q2 and Q3
+  must each flip from allow to deny on POSIX** (the reintroduced `\w`-only class rejects rule 5
+  again, and rule 6's backstop misjudges the tail as absolute-from-drive-root, exactly D6's
+  regression). Q4 must **not** move (its decoded character was always inside `\w`) — if Q4 also
+  flips, that is a sign the mutation or the test itself is wrong, not evidence 2.2c is load-bearing.
+  A mutation that leaves Q1–Q3 green means the broadened character class is not actually doing
+  anything.
 
 ## 5. Drive it — the reason a real operator reads (Windows), POSIX proven on CI
 
@@ -394,6 +448,10 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
   - `echo hi > $'..\c'` (N5, R3 finding 2) — **refused** as outside on Windows (`\c` before the
     closing quote keeps its backslash `..\c`, a traversal). Confirm the reason names `..\c` and no
     file appears. A decoder that consumed the closing quote would have allowed it.
+  - `cat $'sub\xd7\x2fhello.py'` (Q1, Round 6, D6) — **allowed** (the approval decision, not the
+    file read — the fixture has no file literally named `sub×/hello.py`, so the tool itself then
+    reports "not found"). Confirm the *permission* decision is allow, not a refusal; a refusal here
+    (`'/hello.py' is outside your workspace`) is exactly 2.2c's regression, still present.
   - `python sub/hello.py` — allowed. `curl "$HUB_URL/api/v1/agent-actions/tasks"` — allowed.
   Record every `permission_denied` row's reason and `tool_name`; confirm `event_logs` holds the
   refusal with the same reason. Stop the Hub, confirm every run bound `claude-haiku-4-5-*` and no
