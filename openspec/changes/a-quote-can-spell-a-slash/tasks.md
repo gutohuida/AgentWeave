@@ -736,12 +736,15 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
   --target-version py311`, `mypy src/`. Use `py -3.11 -m ...` (ruff/mypy are not on PATH in Git
   Bash; the failure is silent — see DEAD-ENDS). CI's path list, not a narrower one.
   **Done 2026-09-15, re-run clean after every commit this session.**
-- [ ] 6.2 `py -3.11 -m pytest tests/ -q -p no:cacheprovider` from `hub/` (the whole Hub suite),
+- [x] 6.2 `py -3.11 -m pytest tests/ -q -p no:cacheprovider` from `hub/` (the whole Hub suite),
   never bare `python`. Run in the background or in chunks — the suite takes 15–47 min and exceeds
   the 600 s cap. Only re-run whole if something here could plausibly break it (it changes `_lex`, so
   run the whole suite once). Attribute any red by signature (F292 `database is locked`, F314 event
   loop) before blaming this change.
-  **Running 2026-09-15** — kicked off in the background; not yet complete as of this edit.
+  **Done 2026-09-15** — `4397 passed, 86 skipped, 0 failed` in 1432s (23m52s), exit code 0. The
+  trailing `PytestUnhandledThreadExceptionWarning: ... RuntimeError: Event loop is closed` noise
+  (aiosqlite worker-thread teardown, unrelated to this change) is warnings, not failures — `grep`
+  for `^FAILED|^ERROR` over the full log returns zero hits.
 - [x] 6.3 `openspec validate --strict a-quote-can-spell-a-slash` after every delta edit.
   **Done — re-run and passed after every commit this session.**
 - [x] 6.4 No migration, no API/schema/UI change. `git diff <base>.. -- hub/hub/migrations hub/hub/api
