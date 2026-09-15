@@ -531,6 +531,23 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   typography, and read each hit in context (`5775064` is the repair and shows the method). **Avoid
   it:** spell such an escape in words, or build it with `chr(92) + "u0100"` in a script. Remember
   that a heredoc halves doubled backslashes (see Shell, above).
+  **Reconfirmed 2026-09-15, a-quote-can-spell-a-slash Round 5:** it is not just the Edit tool — an
+  `old_string`/`new_string` typed directly into an **Edit call** with a literal `Ā`-style
+  token fails to match the file every time (the tool's own error names the swap it tried, and
+  neither form matches), and a **Bash heredoc** (`py -3.11 - <<'PYEOF' ... PYEOF`) whose body is
+  built with an f-string containing the same literal token is not reliably safer either — one
+  attempt that session broke with `unexpected EOF while looking for matching` even though the
+  heredoc delimiter was quoted, most likely because the Bash tool's own invocation re-parses the
+  whole command as one shell string, so a body with many literal single quotes (bash `$'...'`
+  syntax quoted as *text*, not run) can desync bracket/quote counting before the heredoc's own
+  literalness would apply. **What worked reliably, every time, the rest of that session:** build
+  the replacement text in a Python script using `chr(92)` (and `chr(0xNN)` for any other
+  character worth spelling exactly, e.g. `chr(0xe9)` for é) rather than typing the escape or the
+  character directly, **write that script to a file with the Write tool**, then run it as
+  `py -3.11 <scriptfile>` — a plain file argument, not a heredoc — with every file write using
+  `open(path, "w", encoding="utf-8", newline="\n")` to also dodge the separate CRLF trap below.
+  Verify afterward with a non-ASCII character scan (the detection method above) before trusting
+  the result.
 
 - **Driving `claude -p` from Python: pass the prompt on stdin, never as an argv element**
   *(2026-09-10, cost one full four-run measurement)*. `shutil.which("claude")` on this machine
