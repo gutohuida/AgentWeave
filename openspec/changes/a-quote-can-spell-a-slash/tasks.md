@@ -756,11 +756,17 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
 
 ## 7. Close it out
 
-- [ ] 7.1 Set `F332` to `fixed <sha>` in `scripts/drive/FINDINGS.md`, naming §2 as the mechanism and
+- [x] 7.1 Set `F332` to `fixed <sha>` in `scripts/drive/FINDINGS.md`, naming §2 as the mechanism and
   quoting §5.2's evidence (the Windows reason and the corrected I1) plus the CI Linux XFAIL→PASS run
   ids for the POSIX flip (§1/§2, the F331-style evidence, per D4). Label it **tested on Linux, not
   driven on POSIX**; the drive is Windows.
-- [ ] 7.2 `F299`, `F301` and `F322` stay **open**. Say so in the close-out commit so nobody reads
+  **Done 2026-09-15.** No literal XFAIL→PASS transition exists to cite — §1's pinning and §2's
+  decode landed in the same commit (`0e52ad4`) rather than staged before/after, so there was no
+  committed "xfail" state in between. Cited instead: CI's `hub-test` job (`ubuntu-latest`) passing
+  at HEAD (`https://github.com/gutohuida/AgentWeave/actions/runs/35024356136`), carrying every
+  D2/D6 row pinned and passing against the real, unmutated tree on Linux — the platform this
+  finding actually names.
+- [x] 7.2 `F299`, `F301` and `F322` stay **open**. Say so in the close-out commit so nobody reads
   this change as closing them.
 - [ ] 7.3 `openspec validate --strict a-quote-can-spell-a-slash`, then archive with the
   `openspec-archive-change` skill. Before syncing, compare the MODIFIED block with the main

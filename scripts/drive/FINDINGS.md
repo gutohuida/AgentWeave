@@ -26777,9 +26777,25 @@ uncommitted). The table's per-row cause is in `testbed/scratch/night0912/why_eac
 
 ## F332 (A) — on POSIX, bash's ANSI-C quoting writes a traversal no reader of the command text sees
 
-**Status:** open. Filed 2026-09-12 by the night window, while implementing `a-url-is-not-a-path`
-§2 (queue item `u2-reader`). **Measured under WSL Ubuntu, not through a live run.** Nothing
-here was driven: `_decide` was called directly, and bash was run on its own in the same WSL.
+**Status:** fixed `0e52ad4` (the decoder + `_PLAIN_RELATIVE_RE` fix; pinning and mutation
+verification in `23fd706`, the wire-shape test in `09146c6`), re-driven live `5a85863`,
+archived 2026-09-15. **Mechanism: §2 of `a-quote-can-spell-a-slash`** — `_lex` now decodes a
+bash `$'...'` ANSI-C string itself (both a C-locale and a UTF-8 reading, refusing if either
+would escape), so the six rules judge the word bash actually produces instead of its
+undecoded text. **Evidence:** the live Windows drive (§5.2) refused
+`echo hi > $'..\x2fstray.txt'` as `Denied: '../stray.txt' is outside your workspace` and
+correctly allowed the previously-over-refused inside path `cat $'sub\x2fhello.py'` (row I1).
+The POSIX flip — the actual escape this finding names — is **tested on Linux, not driven**:
+CI's `hub-test` job (`ubuntu-latest`) passing at HEAD (run `35024356136`, job `hub-test`,
+`https://github.com/gutohuida/AgentWeave/actions/runs/35024356136`) carries every row of
+design.md's D2/D6 tables — G1–G10, D1, I1, L1, N1–N5, P1–P7, Q1–Q4, S1–S3, T1–T2 — pinned
+and passing against the real, unmutated tree, on the platform this escape actually needs;
+the drive itself is Windows and cannot show the POSIX write.
+
+**Filed 2026-09-12** by the night window, while implementing `a-url-is-not-a-path` §2 (queue
+item `u2-reader`). **Measured under WSL Ubuntu, not through a live run** (original filing).
+Nothing was driven at filing time: `_decide` was called directly, and bash was run on its own
+in the same WSL.
 
 **The claim.** In bash, `$'…'` decodes backslash escapes, so `$'..\x2fstray.txt'` is the word
 `../stray.txt`. The command text contains no `/`. Run from `/tmp/ansic/ws` in bash 5.2.21,
