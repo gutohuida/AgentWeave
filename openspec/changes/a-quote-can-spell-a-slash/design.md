@@ -117,11 +117,28 @@ to consume first. Measured directly against real Git Bash and the real `_decide`
 (`%TEMP%/f332/w3.sh`, `proto.py`): R3's decoder answers **allow** where bash's real write is
 outside.
 
-**The corrected invariant is about component structure, not separator count.** The decoder is
-safe iff, for every rendering bash may produce under any locale the run's shell might use, the
-decoded word's path-component sequence — and hence the minimum directory depth reached while
-walking it, where each `..` component decrements depth and every other component increments it —
-is never *shallower* than bash's own minimum depth for that same rendering. An escape may be
+**The corrected invariant is about component structure, not separator count, and is stated
+directly in terms of the decision, not in signed depth arithmetic — Round 4's first attempt at
+this restatement used "shallower"/"deeper" language that reads oppositely depending on which sign
+convention the reader assumes, and a signed-depth phrasing is exactly the kind of restatement that
+can silently re-derive the R3 bug it replaces. Stated unambiguously:**
+
+> **The decoder may answer allow only if *every* rendering bash could actually produce — across
+> every locale the run's shell might use — would itself write inside the workspace. Equivalently:
+> the decoder must refuse if *any* reachable rendering would write outside.**
+
+This is checked by walking each candidate rendering's real path-component sequence exactly as bash
+would produce it (each `..` climbs one level, every other component descends one level from
+wherever the walk currently is) and confirming the walk never leaves the workspace subtree for
+*that* rendering. A kept-literal escape is safe only when it reproduces the same component that
+bash's real rendering has *at that position* — not merely "some extra separator", because an extra
+component in the wrong position can let a `..` climb the decoder inserted (rather than a real one)
+without ever landing outside in the decoder's own accounting, even while bash's real, shorter
+rendering does land outside. `mkdir A; echo hi > $'A\Uffffffff/../../x'` is the concrete failure of
+the old phrasing: bash's one real rendering is `A/../../x`, which walks to one level **outside**
+the workspace — so by the rule above, the decoder must refuse. R3's decoder answers allow, because
+its kept-literal `\Uffffffff` inserts a component bash's rendering never has, and the `..` that
+should have climbed past the workspace root climbs past the decoder's phantom component instead. An escape may
 **decoded to a character** (removing its backslash, contributing no separate component) only when
 that character's *component contribution* is fully determined and locale-independent: the simple
 escapes, `\NNN` octal and `\xHH` hex (byte escapes, always ≤ 0xFF, so they can decode to a real
@@ -198,10 +215,10 @@ checked)**. The **after** answer is the same on both platforms except where note
 | P1 phantom component, `\U`>=0x80000000 (Round 4) | Bash | `mkdir A; echo hi > $'A\Uffffffff/../../x'` | outside, every locale (one real component `A`, decode-to-nothing, two `..`) | (new form; not in R1-R3's table) | (new form; not in R1-R3's table) | **deny, outside, every platform.** R3's decoder (keep-literal above 0xFF, including this range) wrongly **allows**: the kept `\Uffffffff` becomes a second apparent component that absorbs one `..`, landing at depth 0 instead of bash's real depth -1. This is the case that broke R3's invariant; Round 4's decode-to-nothing rule removes the phantom component entirely and matches bash's real word (`A/../../x`) exactly |
 | P2 phantom component, `\u`/`\U` 0x100-0x7FFFFFFF (Round 4) | Bash | `mkdir A; echo hi > $'A\u0100/../../x'` | outside under a UTF-8 locale (one real component `AĀ`, the decoded character glued onto `A`, then two `..`) | (new form) | (new form) | **deny, outside.** The C-locale reading alone still shows the phantom component (`A`, `u0100`, `..`, `..` -> depth 0, allow) -- the *dual* reading is load-bearing here: the UTF-8 reading correctly computes depth -1 (outside) and the rule refuses if *either* reading refuses, so the pair together closes this case even though neither reading is individually sufficient |
 | P3 two leading components (Round 4) | Bash | `mkdir -p A/B; echo hi > $'A/B\u0100/../../../x'` | outside under a UTF-8 locale (measured) | (new form) | (new form) | **deny, outside** -- same mechanism as P2, one more `..` and one more real component; confirms the dual reading generalises past a single leading component |
-| P4 `\cX`, non-ASCII body (Round 4) | Bash | `mkdir A; echo hi > $'A\ce9/../../x'` (e9 = e-acute) | outside, every locale (`\c`+e-acute is one component, the control byte of its first UTF-8 byte; measured) | (new form) | (new form) | **deny, outside.** Confirms `\cX` for a real non-ASCII body character does not reopen the phantom-component class -- it always contributes exactly one component and can never itself be a separator byte, so no dual reading is needed here. (Restricting `\c` to an ASCII `X`, briefly tried during the night and dropped, would recreate this bug by falling back to a kept-literal, separator-producing form.) |
-| P5 keep-literal compounds stay safe (Round 4) | Bash | `mkdir A; echo hi > $'A\x/../../y1'`, `$'A\u/../../y2'`, `$'A\q/../../y3'` (digitless `\x`, digitless `\u`, unrecognized `\q`) | **inside**, every platform (measured: each is one glued component `A\x`/`A\u`/`A\q`, then `..`/`..` climbs back to exactly the workspace root) | (new forms; N2's single-component case is in the table, this is its compound form) | (new forms) | **allow (inside), every platform.** These stay keep-literal (D1) and were never a phantom-component risk in the first place -- this row exists to confirm the compound case doesn't flip them, since a decoder that over-corrected by dropping every kept backslash would wrongly deny all three |
-| P6 `$$\'...'` (Round 4) | Bash | `echo hi > $$'..\x2fq'` | inside (`$$` is the shell PID, then an ordinary single-quoted literal `..\x2fq` -- not ANSI-C at all) | deny, unchecked (`$` trips rule 3) | deny, unchecked | **unchanged: deny, cannot be checked, both platforms** -- over-refusal only, proved (not merely asserted) by Round 4: the decoder's word always starts with a literal `$` (rule 3 refuses first), and if the decode leaves no separator, no unescaped `..` component can appear after a recognized-escape backslash, so the decoder's depth can never go negative when bash's does. `$$\'x/../../q'` (bash: outside) correctly still denies |
-| P7 embedded NUL truncation (Round 4 -- see F375, filed separately) | Bash | `cp notes.md $'..\x00x'` | outside (bash truncates the word at the NUL: the real argument is `..`, which lands outside via rule 4's bare-`..` hole, not via anything this change decodes) | deny, unchecked | deny, unchecked | **Not fixed by this change -- pin as a known mismatch, not a regression.** The dual-reading correction does not truncate at NUL, so it would compute a longer word and answer allow; the real bash behaviour truncates to a bare `..`, which is outside via a *pre-existing* gap in rule 4 (a separator-free word is never checked at all), filed as **F375**, independent of ANSI-C decoding. Do not add NUL-truncation handling to this change to paper over F375 -- pin this row against the unmodified decoder as evidence the gap exists, and let F375's own change close it |
+| P4 `\cX`, non-ASCII body, corrected (Round 5 fixes a wrong command in Round 4's row) | Bash | `mkdir A; echo hi > $'A\cé/../../x'` | outside, every locale (`\c`+é is one component, the control byte of é's first UTF-8 byte; measured) | (new form; deny, unchecked, both platforms -- has no real `/`, but the leading `$` and, on Windows, the literal kept `\` of the not-yet-decoded escape both trip rule 3 today) | (new form) | **deny, outside.** Confirms `\cX` for a real non-ASCII body character does not reopen the phantom-component class -- it always contributes exactly one component and can never itself be a separator byte, so no dual reading is needed here. (Restricting `\c` to an ASCII `X`, briefly tried during the night and dropped, would recreate this bug by falling back to a kept-literal, separator-producing form. Round 4's own row pinned the ASCII form it meant to reject, not this one -- Round 5 caught it.) |
+| P5 keep-literal compounds, corrected (Round 4's "stays safe, unchanged" framing was wrong -- Round 5) | Bash | `mkdir A; echo hi > $'A\x/../../y1'`, `$'A\u/../../y2'`, `$'A\q/../../y3'` (digitless `\x`, digitless `\u`, unrecognized `\q`) | **platform-dependent, not uniformly inside.** POSIX: `\` is not a separator, so `A\x` etc. is **one** real component, then two `..` -- **outside** (measured: bash's real word `A\x/../../y1` walks to one level above root). Windows: `\` **is** a separator, splitting `A\x` into **two** components (`A`, `x`), which the same two `..` exactly absorb -- **inside** | deny, unchecked, both platforms (has a real `/`, and the leading `$` trips rule 3; unaffected by platform since the backslash question does not arise until the escape is actually decoded) | (new forms) | **Not "stays safe unchanged" -- a real, platform-split flip, same shape as N1/N2.** POSIX: **deny, outside** (reason improves from unchecked; the decoder's kept-literal rendering correctly matches bash's one-component POSIX truth, which is outside). Windows: **allow, inside** (deny-to-allow flip; the decoder's kept-literal rendering correctly matches bash's two-component Windows truth, which is inside). Both are *correct* -- the row was never wrong about the decoder matching bash, only wrong about summarising both platforms as one unchanging "inside" |
+| P6 `$$\'...'`, corrected today-POSIX (Round 4 said unchanged; Round 5 measured a real flip there) | Bash | `echo hi > $$'..\x2fq'` | inside (`$$` is the shell PID, then an ordinary single-quoted literal `..\x2fq` -- not ANSI-C at all, no escape processing) | **POSIX: allow** (the raw word `$$..\x2fq` has no `/` at all -- `\x2f` is unprocessed literal text today, not a decoded separator -- so rule 4 lets it through unchecked, same hole F375 names, reached a different way). Windows: deny, unchecked (the literal `\` counts as a separator, and the leading `$$` trips rule 3) | deny, unchecked, both platforms (the lexer's `$'` detection fires at the *second* `$`, decoding `..\x2fq` to `../q` and leaving the first `$` glued in front as `$../q` -- a real separator plus a leading `$`, rule 3 on both platforms) | **POSIX flips allow to deny (reason improves to unchecked); Windows unchanged.** Still over-refusal only where it denies, proved by Round 4's argument (the decoder's word always opens with a literal `$`, and any separator it contains trips rule 3 before depth ever matters) -- but the POSIX *today* value was wrong, not the safety conclusion. `$$\'x/../../q'` (bash: outside) correctly still denies on both platforms |
+| P7 embedded NUL, corrected (Round 4 understated this as "not fixed"; Round 5 measured this change actually flips it) | Bash | `cp notes.md $'..\x00x'` | outside (bash truncates the word at the NUL: the real argument is `..`, which lands outside via rule 4's bare-`..` hole, not via anything this change decodes) | **POSIX: allow** (the raw undecoded word has no `/`, rule 4). Windows: deny, unchecked (raw word has a literal `\`, and the leading `$` trips rule 3) | **allow, both platforms.** D5 decodes `\x00` to an actual NUL byte inside the word (`..` + NUL + `x`); that word has **no separator character at all**, so rule 4 -- "not a path" -- returns before `_where` (and its NUL-triggered `realpath` refusal) is ever reached. The NUL never gets a chance to be caught | **This is a real deny-to-allow flip on Windows, not a neutral non-fix -- say so plainly, do not pin it as unchanged.** It does not meaningfully widen exposure: the unrestricted, unescaped route to the same outcome (`cp notes.md ..`, no quoting at all) is **already allowed today**, independent of this change or of ANSI-C decoding (F375). This change removes an *accidental* block on one dressed-up spelling of a hole that was already open in plain text. **Do not add NUL-truncation handling here to make this row deny** -- that would fix one spelling of F375's hole while leaving the direct one (and any other spelling) open; F375's own change is where the real fix belongs. Pin this row's *after* value as **allow**, with a comment pointing at F375, so a future reader does not mistake the flip for a regression this change is silently responsible for |
 
 **What moves.**
 - **POSIX: G1–G5, G7–G10, D1 go from allow to deny** (ten forms), each refused as the decoded path
@@ -288,17 +305,36 @@ reading (§D1), so no value that would raise `ValueError`/`OverflowError` reache
 surrogate (`\ud800`, value 0xD800 > 0xFF) is likewise kept literal rather than passed to `chr()`.
 
 **Round 4: the UTF-8 reading reopens the trap R2 closed and R3 removed the guard for — it must be
-guarded again, separately.** The UTF-8 reading exists specifically to decode `\uHHHH`/`\UHHHHHHHH`
-from 0x100 to 0x7FFFFFFF (§D1's dual reading), and `chr()` raises `ValueError` above U+10FFFF
-(0x10FFFF) — measured, `$'\U110000'` and `$'\Uffffffff'` both raise if passed to `chr()`
-unguarded. R2's original guard (`if value > 0x10FFFF: return ""`) is not simply restored: an empty
-string is not what bash's UTF-8-locale rendering produces for a value above 0x10FFFF either — no
-locale renders a code point above 0x10FFFF, because Unicode itself has no such code point, so
-there is no real UTF-8 reading to construct there at all. **The UTF-8 reading must therefore emit
-one fixed, non-separator placeholder character for any value above 0x10FFFF**, so the dual-reading
-comparison still runs (a placeholder can never satisfy rule 1/2/3's separator checks, so it never
-itself causes a false allow), and totality holds without `chr()` ever being called outside
-`0 ≤ value ≤ 0x10FFFF`.
+guarded again, separately. Round 5 corrects Round 4's own justification for the guard, which was
+measured false.** The UTF-8 reading exists specifically to decode `\uHHHH`/`\UHHHHHHHH` from 0x100
+to 0x7FFFFFFF (§D1's dual reading), and `chr()` raises `ValueError` above U+10FFFF (0x10FFFF) —
+measured, `$'\U110000'` and `$'\Uffffffff'` both raise if passed to `chr()` unguarded. R2's
+original guard (`if value > 0x10FFFF: return ""`) is not simply restored, but **not for the reason
+Round 4 gave.** Round 4 claimed bash renders nothing above 0x10FFFF in any locale — **measured
+false by Round 5**: under a UTF-8 locale, bash mechanically applies its own (pre-RFC 3629, up to
+6-byte) UTF-8 encoding even to values Unicode itself does not define, and produces real bytes —
+`$'A\U00110000\x…'` renders `41 f4 90 80 80 …`, not nothing.
+
+**The guard is still correct, for a narrower and actually-true reason: none of those bytes can
+ever be a separator.** A UTF-8 lead byte for a 5- or 6-byte legacy sequence is always in
+`0xF8`–`0xFD`, and every continuation byte is always `0x80`–`0xBF` — neither range can ever equal
+`/` (0x2F) or `\` (0x5C). So while replicating bash's exact legacy encoding above 0x10FFFF would be
+more faithful, it is not more *safe*: whatever bash actually renders there, it is guaranteed to
+contribute a non-separator, and **exactly one** component (the bytes are contiguous with no
+separator among them) — precisely what a placeholder needs to guarantee, not what it needs to spell
+correctly. **The UTF-8 reading therefore emits one fixed placeholder character for any value above
+0x10FFFF**, so the dual-reading comparison still runs, and totality holds without `chr()` ever being
+called outside `0 ≤ value ≤ 0x10FFFF`.
+
+**The placeholder must be a plain ASCII word character (`_PLAIN_RELATIVE_RE`'s `\w` class), not an
+arbitrary "non-separator" one.** Round 5: a placeholder outside `\w` (a symbol, an unassigned code
+point) can change which of rules 5/6 a word reaches — `_judge_word` rule 5 matches
+`_PLAIN_RELATIVE_RE` first, and a non-`\w` character can fall through to rule 6's regex backstop
+instead. That never changes the *verdict* the invariant cares about (both rules call `_judge_path`
+on the same resolved path), but it can change the *refusal text* a row asserts, which would make a
+pinned test brittle for the wrong reason. Pick a single fixed ASCII letter (e.g. `"z"`, chosen once
+and never derived from the input) so the placeholder is unambiguously `\w` and every row's refusal
+text is predictable.
 
 **`\U` ≥ 0x80000000 (`\Uffffffff`) is no longer judged from a kept-literal backslash, and is no
 longer an over-refusal.** §D1 (Round 4) now decodes this range to **nothing**, exactly matching

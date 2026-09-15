@@ -107,25 +107,45 @@ point: a row may not change answer before the decode exists.
         answer, which is a real, uncaught mismatch, not a false alarm.
       - **Pin P1–P7** (design.md D2) the same way 1.1/1.2 pinned G/N: add each to the parametrized
         table, `ids=` its label. **Measure each row's *today* (unmodified lexer) answer and reason
-        first** — do not assume it matches any other row's pattern; run
-        `testbed/scratch/r1f332/reader_forms.py`-style measurement against the real, current
-        `_decide` on both POSIX (WSL) and Windows, the way 1.2's own "Done" note did, and record the
-        numbers beside this task before writing the xfail marks. Then mark exactly what design.md's
-        P1–P7 rows say moves:
-        - P1–P4: expected to move from today's answer to **deny, outside** on every platform once
-          §2 lands (mark accordingly, but only after measuring today's real baseline — do not copy
-          the G-row pattern without checking, since P1–P4's word shape differs from every existing
-          row);
-        - P5: expected to stay **allow, inside** on every platform (no answer mark; these must not
-          regress);
-        - P6: expected to stay **deny, cannot be checked** on every platform (no answer mark; reason
-          may already say *cannot be checked* today, so check whether even a reason mark is needed —
-          measure first);
-        - P7: **pin against the unmodified lexer only, with no xfail mark expecting it to change.**
-          This row exists to record a known mismatch (F375), not to track work §2 will do — §2 must
-          **not** make this row pass by accident (that would mean NUL-truncation logic crept into
-          the ANSI-C decoder, which design.md's "What round 4 changed" says not to do); if it starts
-          passing, treat that as a signal to re-check what changed, not as progress.
+        first, against the real current `_decide`, before writing any mark** — Round 4's own first
+        pass at this instruction guessed several of these wrong (design.md's rows record the
+        correction; use those values as a start, but re-measure rather than transcribe, the same
+        way 1.2's own "Done" note verified itself against real runs). What design.md's corrected
+        rows say should move:
+        - **P1–P4:** today, **deny, unchecked, both platforms** (the raw pre-decode word always
+          carries a real `/` and a `$`, tripping rule 3 regardless of platform). After, **deny,
+          outside, both platforms** — the answer does not flip; only the *reason* moves
+          (unchecked → outside), once the decoded word no longer contains a `$` and rule 5/6 takes
+          over from rule 3. Mark only the reason assertion xfail, on both platforms, for each row.
+        - **P5 (three commands, digitless `\x`/`\u`, unrecognized `\q`):** today, **deny,
+          unchecked, both platforms.** After: **POSIX — deny, outside** (reason-only mark, same
+          pattern as P1–P4: bash's real POSIX rendering is one component, genuinely outside).
+          **Windows — allow, inside**: mark the **answer** assertion xfail on Windows for all three
+          commands (bash's real Windows rendering, backslash-as-separator, is two components that
+          the same two `..` exactly absorb — this is a real deny→allow flip, not a reason
+          improvement, and must not be marked as reason-only).
+        - **P6:** today, **POSIX allow** (rule 4 — the raw, undecoded word has no real `/` at all;
+          `\x2f` is unprocessed literal text before the fix lands), **Windows deny, unchecked**
+          (the raw word's literal `\` counts as a separator there, and the leading `$$` trips rule
+          3). After: **deny, unchecked, both platforms** (the lexer's `$'` detection fires at the
+          *second* `$`, decoding to a real `/` and leaving the first `$` glued in front). Mark the
+          **answer** assertion xfail on **POSIX only** (allow→deny); no mark needed on Windows
+          (already deny, same reason, both before and after).
+        - **P7:** today, **POSIX allow** (rule 4, no real separator in the raw word), **Windows
+          deny, unchecked** (raw word's literal `\` plus leading `$`). After: **allow, both
+          platforms** — the decoded word contains an actual NUL byte but **no separator
+          character**, so rule 4 returns before the NUL is ever checked. Mark the **answer**
+          assertion xfail on **Windows only** (deny→allow; POSIX stays allow→allow, no mark). **Do
+          not treat this as a row that should stay denied** — design.md's corrected P7 explains why
+          the flip is real but does not meaningfully widen exposure (F375's unescaped route was
+          already open). Cite F375 in a comment beside this row's assertion so a future reader does
+          not mistake the flip for an unnoticed regression.
+      - **Fix N3's asserted value, not only its mark.** The committed test's N3 param currently
+        asserts the *old* after-value (deny, outside) with only a reason xfail on Windows. Change
+        the asserted Windows answer itself to **allow** (matching design.md's corrected N3 row),
+        and add `xfail(strict=True)` to that answer assertion (today's unmodified lexer still
+        answers deny there). Leaving the old assertion in place and only adding a mark would pin
+        the wrong target — the mark would apply to an assertion that already says the wrong thing.
       - Verify on both platforms exactly as 1.2's "Done" note did (`--runxfail`, record pass/xfail
         counts), and update that note's numbers in this file once done.
       - Commit alone, green, before §2 resumes.
@@ -176,15 +196,20 @@ point: a row may not change answer before the decode exists.
   as `_LITERAL_DOLLAR`, exactly as a `$` inside ordinary single quotes already is. The branch sits
   **after** the `quote == "'"` block and **before** the generic `char in "'\""` open, so `quote is
   None` is guaranteed and the opening `'` is not consumed twice.
-- [ ] 2.1b **New (Round 4).** Thread a `reading` argument (`"c"` or `"utf8"`) through `_lex` and
-  `_read_command`, **including `_read_command`'s own recursive call for a substitution's command
-  text** (`_substitution`'s caller) — a reading that stops at the top level judges a nested
-  `$(...)`'s ANSI-C content in one reading only, silently narrowing the dual check design.md's
-  D1 requires. `_decide` calls `_read_command` twice per dialect pass where the command contains
-  any `\u`/`\U` escape in 0x100–0x7FFFFFFF (the decoder helper, 2.2, can report whether it used
-  the dual-reading branch at all, so `_decide` need not always run both passes — only commands
-  that reach that branch do), and refuses if either reading's `_read_command` call returns a
-  refusal.
+- [ ] 2.1b **New (Round 4, simplified by Round 5).** Thread a `reading` argument (`"c"` or
+  `"utf8"`) through `_lex` and `_read_command`, **including `_read_command`'s own recursive call
+  for a substitution's command text** (`_substitution`'s caller) — a reading that stops at the top
+  level judges a nested `$(...)`'s ANSI-C content in one reading only, silently narrowing the dual
+  check design.md's D1 requires. **`_decide` always calls `_read_command` twice per dialect pass,
+  once per reading, unconditionally** — Round 4's draft of this task proposed having the decoder
+  helper (2.2) report back whether it actually used the dual-reading branch, so the second pass
+  could be skipped when nothing in the command needed it. Round 5: that report has nowhere safe to
+  live. `_lex` returns `Tuple[List[str], List[str]]` and `_read_command` returns
+  `Optional[Dict[str, Any]]` — neither has room for a third value without changing every caller,
+  and a module-level flag would make `_decide` read mutable state set by a previous call, which
+  breaks its own documented "pure and total" contract (`_decide`'s docstring). The unconditional
+  two-pass cost is small (one extra lex of the same, already-short command text) and keeps the
+  function pure. Refuse if either reading's `_read_command` call returns a refusal.
 - [ ] 2.2 Add the decoder helper beside `_lex`: given the text, the index of a `\`, and the
   `reading` (2.1b), return the decoded string and the next index. It must honour **the replaced
   invariant** (design D1, Round 4): an escape may be **decoded to a character** (removing its
@@ -201,11 +226,17 @@ point: a row may not change answer before the decode exists.
   - `\uHHHH`/`\UHHHHHHHH` **from 0x100 to 0x7FFFFFFF (Round 4 — replaces the R3 "always keep
     literal" rule)**: in the `"c"` reading, keep the backslash and the escape text literal
     (return e.g. `"\\" + letter + hexdigits`); in the `"utf8"` reading, decode via `chr(value)`
-    **guarded**: for `value > 0x10FFFF` (no such Unicode code point exists — this range is only
-    reachable via `\U`), emit one fixed non-separator placeholder character instead of calling
-    `chr()` at all. Do **not** return `""` (R2's old guard) — an empty string drops the kept
-    backslash the `"c"` reading needs to stay faithful, and the two readings must disagree only
-    in how they render this escape, not in whether the rest of the word around it is intact;
+    **guarded**: for `value > 0x10FFFF` (only reachable via `\U`), emit **one fixed ASCII letter**
+    (e.g. `"z"`, chosen once, never derived from the input) instead of calling `chr()` at all —
+    **not** an arbitrary "non-separator" character (design.md D5, Round 5): the placeholder must
+    fall inside `_PLAIN_RELATIVE_RE`'s `\w` class or the word can fall through from rule 5 to
+    rule 6, changing the refusal text a pinned row asserts even though the verdict is unchanged.
+    Do **not** return `""` (R2's old guard) — an empty string drops the kept backslash the `"c"`
+    reading needs to stay faithful, and the two readings must disagree only in how they render
+    this escape, not in whether the rest of the word around it is intact. (Bash itself does render
+    real bytes above 0x10FFFF under a UTF-8 locale via its own legacy encoding — design.md D5
+    explains why a placeholder is still safe without reproducing them exactly: every byte such an
+    encoding can produce is 0x80 or above, so it can never itself be a separator.);
   - `\uHHHH`/`\UHHHHHHHH` **at or above 0x80000000 (Round 4 — replaces the R3 "keep literal,
     accepted over-refusal" answer)**: decode to **nothing**, in both readings — this is
     locale-independent (bash emits nothing here in every locale, measured at the boundary
@@ -302,14 +333,17 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
   allow — the escape R2 finding 1 caught). On POSIX N2 is allow either way, so run this mutation's
   assertion on Windows (or assert the Windows *reason* under WSL by forcing `os.sep`). A mutation
   that leaves N2 green means the backslash is not actually load-bearing.
-- [ ] 4.7 **Decode `\u`/`\U` above 0xFF via `chr()`** instead of keeping the backslash literal
-  (R1/R2's behaviour — drop the `value <= 0xFF` branch and `chr(value)` for the whole range). Two
-  named rows must break: **on Windows, N4 (`$'..` + `\u0100`) flips from deny to allow** (the escape
-  R3 finding 1 caught), and **N3 (`$'\Uffffffffx'`) fails by raising** — `chr(0xffffffff)` raises
-  `OverflowError`, so `_decide` errors instead of returning a decision. Assert N4's Windows answer
-  is deny unmutated / allow mutated, and that `_decide` on N3 **returns a dict unmutated and raises
-  mutated** (this pins totality, which no outcome-only assertion would catch). On POSIX N4 is allow
-  either way, so run N4's assertion on Windows (or force `os.sep` under WSL).
+- [ ] 4.7 **Decode `\u`/`\U` above 0xFF via `chr()`** instead of applying the corrected rule
+  (drop the `value <= 0xFF` branch, the >=0x80000000 decode-to-nothing case, and the dual
+  reading; `chr(value)` for the whole range unconditionally — R1/R2's behaviour). Two named
+  rows must break: **on Windows, N4 (`$'..` + `\u0100`) flips from deny to allow** (the escape
+  R3 finding 1 caught, unaffected by Round 4/5), and **N3 (`$'\Uffffffffx'`) fails by
+  raising** — `chr(0xffffffff)` raises `OverflowError`, so `_decide` errors instead of
+  returning a decision. Assert N4's Windows answer is deny unmutated / allow mutated, and that
+  `_decide` on N3 **returns a dict unmutated (Round 4/5: this is `allow`, not `deny` — see
+  1.4's corrected N3 assertion) and raises mutated** (this pins totality, which no
+  outcome-only assertion would catch). On POSIX N4 is allow either way, so run N4's assertion
+  on Windows (or force `os.sep` under WSL).
 - [ ] 4.8 **Consume the closing quote as `\c`'s control target** (drop the "keep `\c` literal when
   the next char is the closing quote" check, R1/R2's behaviour). **On Windows, N5 (`$'..\c'`) must
   flip from deny to allow** — the decoder reads the `'` as the control char, over-runs the string,
@@ -341,12 +375,15 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
     Windows (a digitless `\x` keeps its backslash, and `\` is a separator there). Confirm the
     reason names `..\x` and no file appears in the worktrees directory. This is a Windows answer
     the fix changes — the reason improves from *cannot be checked* to *outside*.
-  - `echo hi > $'\Uffffffffx'` (N3, R3 finding 1) — **refused** as `'\Uffffffffx' is outside your
-    workspace` on Windows (a `\U` above 0xFF keeps its backslash, a separator there), and the
-    decision **returns rather than the turn erroring** (totality holds without a `chr()` guard).
-    Confirm the reason names the backslash form and no file appears. *(R2's plan expected allow
-    here; R3 finding 1 corrected it — the C-locale bash keeps the literal, so allowing would open
-    an escape.)*
+  - `echo hi > $'\Uffffffffx'` (N3) — **allowed**, and the file `x` is created (real Git
+    Bash writes it too — bash emits nothing for `\U`>=0x80000000 in every locale, so the real
+    write matches the decoder's). Confirm the file appears and the decision **returns rather
+    than the turn erroring** (totality holds via the >=0x80000000 decode-to-nothing rule, not a
+    `chr()` guard — that value is never passed to `chr()` at all). *(Round 4/5, not R3: R1
+    raised, R2 wrongly allowed for the wrong reason, R3 wrongly kept it denied believing the
+    over-refusal was safe — that belief was itself the phantom-component bug (design.md, "What
+    round 4 changed"). This is the one row in this drive where the fix's Windows answer is
+    allow, not deny — do not mistake the file's appearance for a leak; it matches bash exactly.)*
   - `echo hi > $'..\u0100'` — the command being `echo hi > $'..` then the six literal characters
     backslash-u-0-1-0-0 then `'` (N4, R3 finding 1) — **refused** as outside on Windows (a `\u`
     above 0xFF keeps its backslash). Confirm the reason names the `..\u0100` form and no file
@@ -404,4 +441,8 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
 ## 9. User test guide
 
 - [ ] 9.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
-  shipped; correct it if any reason string changes (none is expected).
+  shipped; correct it against the actual built behaviour. **Several changes are expected, not
+  none** — most rows' Windows reason improves from *cannot be checked* to *outside* (design.md D2),
+  and N3 changes more than its reason: it flips from refused to **allowed** on Windows (Round 4/5).
+  Update `test-guide.md`'s own N3/N4 rows to match design.md's corrected D2 table before calling
+  this task done — they were written against the pre-Round-4 design and are stale as of this spec.

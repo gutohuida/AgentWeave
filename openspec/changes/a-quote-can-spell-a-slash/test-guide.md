@@ -32,18 +32,27 @@ These need no operator; a test or CI settles each.
   `echo hi > $'..\x'` — bash keeps the backslash (`..\x`), which is a traversal on Windows — is
   refused as outside on Windows. Pinned in `test_permission_approver.py` (row N2). If the decoder
   dropped the backslash it would allow this on Windows; §4.6's mutation guards that.
-- **A `\u`/`\U` above 0xFF keeps its backslash — a conservative, locale-safe deny on Windows (rows N3, N4, R3 finding 1).** bash's
-  decode of a codepoint above 0xFF is locale-dependent: a UTF-8 locale emits multibyte UTF-8
-  (no backslash), and a *true C (non-UTF-8) locale* keeps the escape literal, backslash and all;
-  the checker keeps the backslash so it is safe under both. **Honesty note (pre-approval
-  review):** on this machine's Git Bash, which runs `C.UTF-8`, these would actually write a file
-  *inside* the workspace (UTF-8 bytes) if allowed, so the Windows deny is a conservative
-  over-refusal that defends against the C-locale case, not the closing of a live escape. So `echo hi > $'..\u0100'` (a `\u` whose value 0x100 is
-  above 0xFF) and `echo hi > $'\Uffffffffx'` (an overrange `\U`) are refused as *outside* on
-  Windows, because the kept backslash is a separator there. The checker also **returns a decision
-  rather than raising** on the overrange escape — it never passes a value above 0xFF to `chr()`.
-  Pinned as rows N3 and N4; §4.7's mutation (decode above 0xFF via `chr`) flips both and raises on
-  N3, proving both the safety and the totality are load-bearing.
+- **A `\u`/`\U` from 0x100 to 0x7FFFFFFF is judged under both readings a real bash shell
+  might use, and refused if either would escape (row N4, D1's dual reading).** bash's decode of
+  a codepoint in this range is locale-dependent: a UTF-8 locale emits multibyte UTF-8 (no
+  backslash), and a *true C (non-UTF-8) locale* keeps the escape literal, backslash and all —
+  and, measured, **both are genuinely reachable on this machine** depending on how the Bash
+  tool's shell is invoked, not merely a hypothetical worst case. So `echo hi > $'..\u0100'` (a
+  `\u` whose value 0x100 is above 0xFF) is refused as *outside* on Windows: the C-locale
+  reading alone already finds a traversal (the kept backslash is a separator there), so the
+  command refuses regardless of what the UTF-8 reading finds. Pinned as row N4; §4.7's mutation
+  (decode the whole range above 0xFF via `chr()` unconditionally) flips it to allow.
+- **A `\U` at or above 0x80000000 decodes to nothing, matching bash exactly, and is *allowed*
+  on Windows (row N3) — this is not a deny, and not merely a reason improving.** bash itself
+  renders nothing for this range in every locale, so `echo hi > $'\Uffffffffx'` writes a file
+  literally named `x`, inside the workspace, on every platform — and the checker now matches
+  that exactly rather than conservatively refusing it. (An earlier design kept this range's
+  backslash literal and denied it, believing that a safe over-refusal; it was not — a kept
+  backslash here can hide a real escape elsewhere in a longer path, design.md's "What round 4
+  changed".) The checker also **returns a decision rather than raising** here — the value is
+  never passed to `chr()` at all, so there is nothing to overflow. §4.7's mutation (decode this
+  range via `chr()` unconditionally) makes `_decide` **raise** on N3 instead of returning,
+  proving totality is load-bearing even though the row's own answer is allow.
 - **A `\c` before the closing quote keeps its backslash (row N5, R3 finding 2).**
   `echo hi > $'..\c'` — bash keeps `\c` literal (`..\c`) when nothing follows it before the closing
   quote — is refused as *outside* on Windows. If the decoder consumed the closing quote as `\c`'s
