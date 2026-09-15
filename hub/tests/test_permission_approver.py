@@ -404,6 +404,7 @@ def test_the_run_s_own_hub_is_nobody_s_without_hub_url(workspace, monkeypatch, t
 # an editor has been stored as the character it names (DEAD-ENDS).
 
 _BS = chr(92)
+_E9 = chr(0xE9)  # é, é -- built this way rather than typed, per DEAD-ENDS
 
 
 class _WrongAnswerError(AssertionError):
@@ -457,14 +458,106 @@ _ANSI_C = [
     _ansi("N3", f"echo hi > $'{_BS}Uffffffffx'", True),
     _ansi("N4", f"echo hi > $'..{_BS}u0100'", *_outside_on_windows(f"..{_BS}u0100")),
     _ansi("N5", f"echo hi > $'..{_BS}c'", *_outside_on_windows(f"..{_BS}c")),
+    # A kept-literal `\U`>=0x80000000 would be a phantom path component a later `..` could climb
+    # instead of the real one bash's word has -- decoding to nothing (not keep-literal) matches
+    # bash's real word exactly (design D1, Round 4).
+    _ansi("P1", f"mkdir A; echo hi > $'A{_BS}Uffffffff/../../x'", False, _outside("A/../../x")),
+    # On Windows only the *dual* reading catches this: the kept-literal ("c") reading alone stays
+    # inside there (its backslash is a real separator, an extra component the `..`s absorb), so the
+    # refusal comes from the UTF-8 reading, quoting its decoded form. On POSIX the backslash is not
+    # a separator, so the "c" reading -- checked first -- already refuses on its own, quoting its
+    # own kept-literal spelling instead; the dual reading is not load-bearing there.
+    _ansi(
+        "P2",
+        f"mkdir A; echo hi > $'A{_BS}u0100/../../x'",
+        False,
+        _outside(f"A{chr(0x100)}/../../x") if _WINDOWS else _outside(f"A{_BS}u0100/../../x"),
+    ),
+    _ansi(
+        "P3",
+        f"mkdir -p A/B; echo hi > $'A/B{_BS}u0100/../../../x'",
+        False,
+        (
+            _outside(f"A/B{chr(0x100)}/../../../x")
+            if _WINDOWS
+            else _outside(f"A/B{_BS}u0100/../../../x")
+        ),
+    ),
+    # `\cX` for a real non-ASCII body character never produces a separator byte and always
+    # contributes exactly one component -- no dual reading needed, unlike a kept-literal `\u`/`\U`.
+    _ansi(
+        "P4",
+        f"mkdir A; echo hi > $'A{_BS}c{_E9}/../../x'",
+        False,
+        _outside(f"A{chr(3)}{chr(0xA9)}/../../x"),
+    ),
+    # A digitless `\x`/`\u` or an unrecognized `\q` keeps its backslash: one real component on
+    # POSIX (backslash not a separator; `A\x`, `..`, `..`, `y1` -> outside), but on Windows the kept
+    # backslash IS a separator, splitting `A\x` into *two* components (`A`, `x`) that the same two
+    # `..` exactly absorb -- inside. The opposite polarity from N1/N2 (there the extra Windows
+    # separator makes the word a traversal; here it gives the `..`s an extra component to consume).
+    _ansi(
+        "P5a",
+        f"mkdir A; echo hi > $'A{_BS}x/../../y1'",
+        *((True, None) if _WINDOWS else (False, _outside(f"A{_BS}x/../../y1"))),
+    ),
+    _ansi(
+        "P5b",
+        f"mkdir A; echo hi > $'A{_BS}u/../../y2'",
+        *((True, None) if _WINDOWS else (False, _outside(f"A{_BS}u/../../y2"))),
+    ),
+    _ansi(
+        "P5c",
+        f"mkdir A; echo hi > $'A{_BS}q/../../y3'",
+        *((True, None) if _WINDOWS else (False, _outside(f"A{_BS}q/../../y3"))),
+    ),
+    # `$$` (the shell PID, not an ANSI-C opener) glues onto the *second* `$`'s ANSI-C decode: a real
+    # separator plus a leading, unsentineled `$` -- unchecked on both platforms (F375's hole reached
+    # a different way, not something this change decodes further).
+    _ansi("P6", f"echo hi > $$'..{_BS}x2fq'", False, _UNCHECKED),
+    # `\x00` decodes to a real NUL: the word has no separator at all, so rule 4 returns before the
+    # NUL is ever checked. A real flip on Windows, not a neutral non-fix -- F375 owns the underlying
+    # hole (cp notes.md .. is already allowed, unescaped, independent of this change).
+    _ansi("P7", f"cp notes.md $'..{_BS}x00x'", True),
+    # A decoded non-word character with no `..` at all: rule 5's whole-word match used to miss it,
+    # falling through to rule 6's backstop, which resolves only the matched tail against the drive
+    # root and so wrongly denies a path that is genuinely inside (design D6).
+    _ansi("Q1", f"cat $'sub{_BS}xd7{_BS}x2fhello.py'", True),
+    _ansi("Q2", f"cat $'sub{_BS}cA{_BS}x2fhello.py'", True),
+    _ansi("Q3", f"cat $'sub{_BS}u2212{_BS}x2fhello.py'", True),
+    # A negative control: this character was already inside the old `\w` class, so D6's regex
+    # change touches nothing here -- the flip (once the decoder alone lands) is not evidence of it.
+    _ansi("Q4", f"cat $'sub{_BS}xe9{_BS}x2fhello.py'", True),
+    # The same class as Q1-Q3, with the non-word byte in the *leading* position -- exposes D6's own
+    # first-draft gap (Round 7): broadening only the interior classes left this one denied.
+    _ansi("S1", f"cat $'{_BS}xd7sub{_BS}x2fhello.py'", True),
+    # A directly-typed glued form, no `$'...'` at all: confirms broadening the leading class still
+    # leaves an ordinary `-`-glued word routed to rule 6, unchanged (D6's regression guard).
+    _ansi("S2", "cat -o/tmp/x", False, _outside("/tmp/x")),
+    # curl's own `name@filename` convention must stay refused from every position, not only
+    # leading, or this is a real, own-Hub-legal exfiltration of `/etc/passwd` (Round 8 finding 4).
+    _ansi(
+        "S3",
+        "curl --data-urlencode name@/etc/passwd $HUB_URL/api/v1/agent-actions/tasks",
+        False,
+        _outside("/etc/passwd"),
+    ),
+    # Directly-typed, no `$'...'` involved: the interior-class broadening alone now resolves this
+    # as one relative path under `root`, matching bash's real, unglued reading of it (design D6).
+    _ansi("T1", "cat x!/etc/passwd", True),
+    # The complement of T1: an empty first segment, so only the leading-class broadening applies.
+    _ansi("T2", "cat !/etc/passwd", True),
     _ansi("OK1", "python sub/hello.py", True),
     _ansi("OK2", 'curl -s "$HUB_URL/api/v1/agent-actions/tasks"', True),
 ]
 
 # A decoded character or a halved backslash in this file would change what a row asks. Neither is
-# printable ASCII.
-assert all(p.values[0].isascii() and p.values[0].isprintable() for p in _ANSI_C)
-assert all(("$'" in p.values[0]) is (p.id not in ("L1", "OK1", "OK2")) for p in _ANSI_C)
+# printable ASCII. P4's command is the one deliberate exception: `\cX` needs a real non-ASCII body
+# character, built via `_E9` rather than typed, per DEAD-ENDS.
+assert all(p.values[0].isascii() and p.values[0].isprintable() for p in _ANSI_C if p.id != "P4")
+assert _E9 in next(p for p in _ANSI_C if p.id == "P4").values[0]
+_NO_ANSI_C = ("L1", "OK1", "OK2", "S2", "S3", "T1", "T2")
+assert all(("$'" in p.values[0]) is (p.id not in _NO_ANSI_C) for p in _ANSI_C)
 
 
 @pytest.mark.parametrize("command, allow, reason", _ANSI_C)

@@ -93,7 +93,7 @@ point: a row may not change answer before the decode exists.
   (`testbed/scratch/night0913/r3_lex_plugin.py`) all 20 rows pass on both platforms and exactly
   the marked rows XPASS; with R1's, Windows fails N2–N5, and with R2's, N3–N5.
 - [x] 1.3 Commit §1 alone, green. From this commit, a decode that flips a row before §2 fails CI.
-- [ ] 1.4 **New (Round 4, 2026-09-15) — corrects a gap in 1.2's committed pinning and pins the seven
+- [x] 1.4 **New (Round 4, 2026-09-15) — corrects a gap in 1.2's committed pinning and pins the seven
       new rows Round 4 added.** Not optional: without this, §2 landing the Round-4 decoder makes N3
       XPASS (a strict failure) rather than flip cleanly, and P1–P7 have no pinning to hold them at
       all.
@@ -149,7 +149,32 @@ point: a row may not change answer before the decode exists.
       - Verify on both platforms exactly as 1.2's "Done" note did (`--runxfail`, record pass/xfail
         counts), and update that note's numbers in this file once done.
       - Commit alone, green, before §2 resumes.
-- [ ] 1.5 **New (Round 6, corrected by Round 7, Round 8 and Round 9, 2026-09-15) — pins Q1–Q4, S1,
+      - **Done 2026-09-15 (implementation session) — landed together with §2/2.2c rather than as a
+        separate before/after-xfail pin, the same way 2.5 handled G/N.** Since the decoder and the
+        regex fix were built in the same pass, there was no committed "unmodified lexer" state left
+        to pin an xfail against; each P-row is pinned directly against its measured, final answer
+        (no marker), exactly as §2.5 did for the rest of the table. **P1** (`mkdir A; echo hi >
+        $'A\Uffffffff/../../x'`): deny, outside, both platforms — measured. **P2/P3** (`\u0100`,
+        one and two leading components): deny, both platforms, but the *quoted* reason differs by
+        platform in a way design.md's prose does not spell out — on POSIX the backslash is not a
+        separator, so the kept-literal `"c"` reading (checked first, per `_decide`'s
+        `for reading in ("c", "utf8")` order) already refuses **on its own**, quoting its own
+        kept-literal spelling (`'A\u0100/../../x'`); only on Windows does the `"c"` reading stay
+        inside (its backslash *is* a separator there, an extra absorbed component) and the `"utf8"`
+        reading's decoded quoting (`'AĀ/../../x'`) is what actually surfaces. Pinned
+        platform-conditionally; caught by a real WSL run failing on the wrong quoted text, not by
+        inspection. **P4** (`\c`+é): deny, outside, both platforms — measured, matches the `03 a9`
+        control-byte-plus-continuation-byte quoting design.md predicts. **P5** (three commands):
+        confirmed the *opposite* polarity from N1/N2/N4/N5's `_outside_on_windows` helper (Windows
+        allow / POSIX deny here, not the reverse) — a first pass reused that helper directly and
+        failed on Windows before the polarity was checked against a real measurement. **P6**: deny,
+        unchecked, both platforms, quoting `'$../q'` — measured. **P7**: allow, both platforms —
+        measured. All nine pinned rows verified via direct `_decide` measurement on Windows (native
+        `py -3.11`) and, separately, real POSIX (WSL Ubuntu bash, `-p posix_stubs --noconftest`);
+        full suite 216 passed/1 skipped on Windows, the `_ANSI_C` table 38/38 on both platforms.
+        ruff/black/mypy clean. P4's literal é is built via `_E9 = chr(0xE9)`, not typed directly
+        (DEAD-ENDS); the file's own ASCII-only sanity assertion now excludes P4 by id instead.
+- [x] 1.5 **New (Round 6, corrected by Round 7, Round 8 and Round 9, 2026-09-15) — pins Q1–Q4, S1,
       S2, T1, T2, S3 (design.md D2/D6), the rule-5/6 fallthrough class and its fix's own
       regression-guards.** Add all nine to the same parametrized table, `ids=` their labels.
       **Measure each row's *today* answer against the real, unmodified `_decide` first**, same
@@ -211,6 +236,11 @@ point: a row may not change answer before the decode exists.
         S3's row) is open again.
       - Commit all nine rows' marks alongside 2.2c — none of them depends on an intermediate state
         that is ever separately committed, so there is nothing here to check twice.
+      - **Done 2026-09-15 (implementation session)** — pinned directly against measured, final
+        answers (no xfail marker), same as 1.4 above. All nine commands measured against the real
+        `_decide` on both Windows and WSL POSIX: Q1–Q4/S1 allow both platforms; S2/S3 deny outside
+        both platforms unchanged; T1/T2 allow both platforms. 38/38 `_ANSI_C` rows pass on both
+        platforms; 216 passed/1 skipped on the full Windows suite.
 
 ## 2. The decode
 
@@ -440,11 +470,15 @@ point: a row may not change answer before the decode exists.
 Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly once), run the whole
 `test_permission_approver.py`, record which named row failed, then restore with `git checkout`.
 
-- [ ] 4.1 Remove the ANSI-C branch from `_lex` (revert to treating `$'` as `$` + ordinary single
+- [x] 4.1 Remove the ANSI-C branch from `_lex` (revert to treating `$'` as `$` + ordinary single
   quote). **On POSIX, G1–G5, G7–G10 and D1 must fail.** On Windows their reason assertion fails.
-- [ ] 4.2 Decode the ANSI-C string but do **not** map a produced `$` to `_LITERAL_DOLLAR`. **D1 must
+  **Done 2026-09-15.** On Windows: G1–G10, I1, N1–N5 all failed (16 rows); D1 passed, unaffected —
+  confirmed via `-v` that G1 fails specifically via `_WrongReasonError`, matching the prediction.
+- [x] 4.2 Decode the ANSI-C string but do **not** map a produced `$` to `_LITERAL_DOLLAR`. **D1 must
   fail** (it becomes a trusted reference and is allowed).
-- [ ] 4.3 Fire the ANSI-C branch regardless of quote state (drop the `quote is None` guard). A row
+  **Done 2026-09-15.** D1 fails, decision becomes `{'allow': True, 'reason': 'inside your
+  workspace'}` — exactly the `$HUB_URL` exfiltration design.md describes.
+- [x] 4.3 Fire the ANSI-C branch regardless of quote state (drop the `quote is None` guard). A row
   with `$'…'` inside `"…"` must change answer. **Use a row that ESCAPES the workspace, not
   `echo "x$'..\x2fy'"`** — the pre-approval review measured that `x$'..\x2fy'` decodes to `x../y`,
   which resolves *inside* the workspace, so on POSIX it is `allow` both with and without the guard
@@ -456,25 +490,37 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
   "allowed unmutated" holds; on Windows the same row is `deny_unchecked` unmutated and `deny_outside`
   mutated (still a flip, but not the "allowed unmutated" shape). Measured
   `testbed/scratch/opusf332/check_43.py`.
-- [ ] 4.4 Decode only `\x` (drop octal, `\u`, `\U`). **On POSIX, G2, G3 and G4 must fail** (the
+  **Done 2026-09-15** — verified via a direct `_decide` probe under real WSL Ubuntu bash (the
+  quote-state guard needs a dialect where `"..."` and `$'...'` coexist meaningfully; `_decide` in
+  isolation, not the pinned table, since this row is not itself a pinned assertion). Unmutated:
+  `{'allow': True, 'reason': 'inside your workspace'}`. Mutated: `{'allow': False, 'reason':
+  "'../../../out' is outside your workspace"}` — a clean allow→deny flip, exactly as predicted.
+- [x] 4.4 Decode only `\x` (drop octal, `\u`, `\U`). **On POSIX, G2, G3 and G4 must fail** (the
   kept-literal `\057`/`/`/`\U…` has no `/`, so the word is judged inside and the row flips
   deny→allow). **On Windows they do NOT flip** — the kept backslash is itself a separator there, so
   `..\057x` still resolves outside and stays `deny_outside`. So verify §4.4 under **WSL/POSIX** (or
   with `os.sep` forced to `/`); the night runs on Windows, where this mutation is silently harmless.
   Measured `testbed/scratch/opusf332/decoder_check.py` (R3 vs the drop-octal case).
-- [ ] 4.5 Apply the decode in the PowerShell dialect too. A PowerShell row with `$'…'` (which
+  **Done 2026-09-15** — direct `_decide` probe: WSL POSIX G2/G3/G4 all flip to `allow` under the
+  mutation; the same three stay `deny, outside` on Windows, unaffected. Matches exactly.
+- [x] 4.5 Apply the decode in the PowerShell dialect too. A PowerShell row with `$'…'` (which
   PowerShell does not decode) must change answer — pin `_decide("PowerShell", {"command": ...})` on
   a `$'…'` traversal as unchanged from today, and assert it fails under this mutation. Use an
   **escaping** traversal (e.g. `$'..\x2f..\x2f..\x2fout'`) and verify on **POSIX** for the same
   reason as §4.3/§4.4: on Windows the unmutated PowerShell word already denies (its literal `$`/`\`
   trip rule 3), so the mutation's flip is observable only if the pin asserts the full reason;
   on POSIX it is a clean allow→deny_outside flip.
-- [ ] 4.6 **Drop the backslash on a digitless `\x`/`\u`/`\U`** (R1's prototype behavior — return
+  **Done 2026-09-15** — direct `_decide` probe, WSL POSIX, dialect `"PowerShell"`: unmutated
+  `{'allow': True, 'reason': 'inside your workspace'}`, mutated `{'allow': False, 'reason':
+  "'../../../out' is outside your workspace"}`. Clean flip.
+- [x] 4.6 **Drop the backslash on a digitless `\x`/`\u`/`\U`** (R1's prototype behavior — return
   the letter, not `"\\" + letter`). **On Windows, N2 must fail** (`$'..\x'` flips from deny to
   allow — the escape R2 finding 1 caught). On POSIX N2 is allow either way, so run this mutation's
   assertion on Windows (or assert the Windows *reason* under WSL by forcing `os.sep`). A mutation
   that leaves N2 green means the backslash is not actually load-bearing.
-- [ ] 4.7 **Decode `\u`/`\U` above 0xFF via `chr()`** instead of applying the corrected rule
+  **Done 2026-09-15** — Windows probe: N2 flips to `{'allow': True, 'reason': 'inside your
+  workspace'}` under the mutation. Matches.
+- [x] 4.7 **Decode `\u`/`\U` above 0xFF via `chr()`** instead of applying the corrected rule
   (drop the `value <= 0xFF` branch, the >=0x80000000 decode-to-nothing case, and the dual
   reading; `chr(value)` for the whole range unconditionally — R1/R2's behaviour). Two named
   rows must break: **on Windows, N4 (`$'..` + `\u0100`) flips from deny to allow** (the escape
@@ -485,13 +531,18 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
   1.4's corrected N3 assertion) and raises mutated** (this pins totality, which no
   outcome-only assertion would catch). On POSIX N4 is allow either way, so run N4's assertion
   on Windows (or force `os.sep` under WSL).
-- [ ] 4.8 **Consume the closing quote as `\c`'s control target** (drop the "keep `\c` literal when
+  **Done 2026-09-15** — Windows probe: N4 flips to allow under the mutation; N3 raises
+  `OverflowError: Python int too large to convert to C int` at the `chr(value)` call, confirming
+  totality is broken (not merely a wrong answer).
+- [x] 4.8 **Consume the closing quote as `\c`'s control target** (drop the "keep `\c` literal when
   the next char is the closing quote" check, R1/R2's behaviour). **On Windows, N5 (`$'..\c'`) must
   flip from deny to allow** — the decoder reads the `'` as the control char, over-runs the string,
   and produces `..g` with no separator (R3 finding 2). On POSIX N5 is allow either way, so run its
   assertion on Windows (or force `os.sep`). A mutation that leaves N5 green means the closing-quote
   guard is not load-bearing.
-- [ ] 4.9 **New (Round 6, corrected by Round 7, Round 8 and Round 9) — five mutations, because the
+  **Done 2026-09-15** — Windows probe: N5 flips to `{'allow': True, 'reason': 'inside your
+  workspace'}` under the mutation.
+- [x] 4.9 **New (Round 6, corrected by Round 7, Round 8 and Round 9) — five mutations, because the
   fix broadens four independent things (the leading class, the general interior character set, the
   `@` exclusion specifically, and — Round 9 — the quote/glob/`%`/NUL exclusion specifically) and
   each needs its own proof, not one combined revert. This task's own rows are necessary but not
@@ -551,6 +602,18 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
   not actually doing anything — check all five mutations' predicted outcomes above by actually
   running them; do not assume 4.9a's combined revert alone is sufficient evidence for any of the
   four narrower claims, and do not assume 4.9c substitutes for 4.9d or 4.9d substitutes for 4.9e.
+  **All five run 2026-09-15, each restored with `git checkout` before the next, tree confirmed
+  clean and green (216 passed/1 skipped) after the last:**
+  - **4.9a** (full revert): Q1, Q2, Q3, S1, T1, T2 failed; Q4, S2, S3 passed. Exact match.
+  - **4.9b** (leading-only revert): S1, T2 failed; the other seven passed. Exact match.
+  - **4.9c** (interior-only revert): Q1, Q2, Q3, T1 failed; S3 (and the other four) passed —
+    confirmed S3 does *not* flip here, as the task requires.
+  - **4.9d** (`@`-only): only S3 failed, flipping to `{'allow': True, 'reason': 'inside your
+    workspace'}` — the curl exfiltration, reproduced. The other eight passed.
+  - **4.9e** (quote/glob/`%`/NUL-only, i.e. exactly the Round-8 pattern): `E11`, `J5`, `X5`, `X8`
+    and `H11` all failed (5 failed, 211 passed) — the same named rows design.md's Round-9
+    measurement lists (that measurement's `177 passed` was against a smaller baseline; the
+    mechanism and the five row names match exactly). None of Q1–Q4/S1/S2/T1/T2/S3 moved.
 
 ## 5. Drive it — the reason a real operator reads (Windows), POSIX proven on CI
 
