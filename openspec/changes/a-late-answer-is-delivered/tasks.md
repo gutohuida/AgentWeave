@@ -15,26 +15,31 @@ and the observed failure beside the task when ticking it.
 
 ## 1. One predicate for "still waiting" (design D1, D2)
 
-- [ ] 1.1 In `hub/hub/api/v1/questions.py`, add `_asker_still_waiting(session, question)`: blocking,
+- [x] 1.1 In `hub/hub/api/v1/questions.py`, add `_asker_still_waiting(session, question)`: blocking,
       and `wait_ended_at IS NULL`, and not `_asking_run_has_ended`. Check `wait_ended_at` before
       the run lookup. Its docstring names both arms and why `wait_expires_at` is not the test
       (the tool polls past the Hub's deadline).
-- [ ] 1.2 `answer_question` and `decline_question` call it **after** their commit and refresh
+      *Done, iteration 7:* `questions.py::_asker_still_waiting`, `wait_ended_at` checked before the run lookup; docstring names both arms and why not `wait_expires_at`. Tested through 1.2/1.3.
+- [x] 1.2 `answer_question` and `decline_question` call it **after** their commit and refresh
       (D4), replacing the expression at `:346` and `:453`.
       Test: a blocking question whose run is `running` and whose `wait_ended_at` is set is
       answered → one queue entry, one `queue_entry_queued` event, and `schedule_agent` is called.
       **Mutation:** drop the `wait_ended_at` arm → no entry.
-- [ ] 1.3 The shortcut still holds. Test: a blocking question, run `running`, `wait_expires_at`
+      *Done, iteration 7:* both routes call it after `commit` + `refresh`. `test_a_late_answer_is_delivered.py::test_an_answer_after_the_wait_ended_is_queued_while_the_run_lives` (entry, `queue_entry_queued` naming it, one wake, body `asker_waiting: false`). Mutation (drop the `wait_ended_at` arm) -> fails, `ValueError: not enough values to unpack (expected 1, got 0)` (no entry).
+- [x] 1.3 The shortcut still holds. Test: a blocking question, run `running`, `wait_expires_at`
       **passed**, `wait_ended_at` NULL, answered → no entry. This is the tool's grace window.
       **Mutation:** use `wait_has_expired` in place of `wait_ended_at` → an entry appears.
-- [ ] 1.4 A decline completing a batch whose wait ended while its run lives delivers the batch's
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_an_answer_in_the_tools_grace_window_is_not_duplicated`. Mutation (`not wait_has_expired(question)` in place of the arm) -> fails, `assert [<InboundQueueEntry>] == []`.
+- [x] 1.4 A decline completing a batch whose wait ended while its run lives delivers the batch's
       answers. **Mutation:** leave `decline_question` on the old expression.
-- [ ] 1.5 `_with_asker_state` and `_with_asker_state_one` both give `asker_waiting = False` for a
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_a_decline_that_completes_a_batch_after_the_wait_ended_delivers_its_answers`. Mutation (decline on the old `blocking and not _asking_run_has_ended` expression) -> fails, no entry.
+- [x] 1.5 `_with_asker_state` and `_with_asker_state_one` both give `asker_waiting = False` for a
       row with `wait_ended_at` set and a live run. Extend
       `hub/tests/test_asker_waiting_is_the_same_on_every_route.py` with that row, on both the list
       route and the detail route. **Mutation:** add the arm to only one of the two → the agreement
       test fails.
-- [ ] 1.6 **(Round 4 — REV, F-C) Correct two comments that state a false invariant.**
+      *Done, iteration 7:* `test_asker_waiting_is_the_same_on_every_route.py::test_the_list_and_the_detail_route_agree_once_the_wait_has_ended` (an ended-wait row and an open-wait control on one live run, both routes). Mutations (arm dropped from the bulk only; from the detail only) -> each fails the dict equality.
+- [x] 1.6 **(Round 4 — REV, F-C) Correct two comments that state a false invariant.**
       `models.py:1003-1007` and `tasks.py:447-449` say a declined question never carries
       `wait_ended_at`. Shipped code breaks that without any race: the report stamps Q, then the
       operator declines Q, and `decline_question` (`questions.py:444-446`) never reads
@@ -42,10 +47,11 @@ and the observed failure beside the task when ticking it.
       recorded as ended; a decline after the record leaves it, and the task then reads 'Proceeded
       without your answer', which is true: the run did proceed without it."* Comments only, no
       behaviour change. No test.
+      *Done, iteration 7:* both comments reworded as specified (models.py adds that an answer after the last poll is also stamped, D3). Comments only. The report's own docstring was checked for the same claim and corrected too.
 
 ## 2. The expiry report delivers what the tool never received (design D3, D4)
 
-- [ ] 2.1 In `report_wait_ended` (`agent_actions.py:642`), a question asked by the calling run that
+- [x] 2.1 In `report_wait_ended` (`agent_actions.py:642`), a question asked by the calling run that
       is **answered** with `wait_ended_at` NULL gets `wait_ended_at = now`. It is counted as
       accepted, and no release function is called. There is no `wait_has_expired` check on this
       branch. A **declined** one is accepted with no write (D3: the invariant at
@@ -59,13 +65,15 @@ and the observed failure beside the task when ticking it.
       (`:683`) and *declined* branches stop being separate code. The mutation above cannot be
       applied through a `WHERE … declined IS FALSE`. Its applicable form is: **drop the
       `declined IS FALSE` arm** → 2.7 fails.
-- [ ] 2.2 After the loop, deliver once per batch key, through `_deliver_batch_if_complete`. The
+      *Done, iteration 7:* one load-time refusal (unanswered and not expired), everything else through `record_wait_ended`; docstring rewritten. `test_a_late_answer_is_delivered.py::test_a_question_declined_before_the_report_is_accepted_and_not_called_an_absence` (2.7). Mutation (drop `declined IS FALSE`) -> fails, `wait_ended_at` is a datetime. **Also, not in the task text:** a question with no `wait_expires_at` is refused on every branch. Without it the answered branch (which skips `wait_has_expired`) would stamp and re-deliver a non-blocking note a report named. `test_a_late_answer_is_delivered.py::test_a_question_nobody_waited_on_cannot_be_reported_even_once_answered`; mutation (drop the check) -> fails, accepted `['q-…']`. **Sweep:** three tests in `test_a_task_waits_while_its_run_waits.py` encoded the old skip, and each failed on the new code. They were inverted in place with a docstring saying so: `test_an_answered_question_never_expired` became `…_the_tool_never_received_is_recorded_as_gone_ahead_without` (accepted, stamped); `test_a_declined_question_never_expired` is now accepted, still unstamped; and `test_a_batch_reports_only_the_waits_that_expired` was re-staged so its per-question refusal is an unexpired question. No other existing test changed.
+- [x] 2.2 After the loop, deliver once per batch key, through `_deliver_batch_if_complete`. The
       keys are the ones 2.9 collects (Round 2), not those read at load time. Announce and wake through the helper that 2.4
       extracts. Test: a batch of 4, 2 answered in time, 2 reported expired **after** being
       answered, all in one report → exactly one entry carrying all four, in ask order. Assert the
       event and the wake. **Mutations:** (a) deliver per question → two entries; (b) keep the old
       `continue` → no entry.
-- [ ] 2.3 **The identity-map trap (D4).** Test: within one report request, a sibling of the batch is
+      *Done, iteration 7:* `_deliver_what_the_report_found_answered`. `test_a_late_answer_is_delivered.py::test_late_answers_reported_together_are_delivered_once_with_the_whole_batch`. Mutations: (a) key per question -> fails, `too many values to unpack` (two entries); (b) the old `continue` -> fails, `accepted [] == [q3, q4]`; (c) delivery without `announce_queued_answer` -> fails, no event.
+- [x] 2.3 **The identity-map trap (D4).** Test: within one report request, a sibling of the batch is
       answered, and committed through a second session, after the route loaded it. Drive this with
       a hook on the release, or by answering between the load and the delivery. The batch must be
       judged against committed state and delivered. **Mutation:** remove `populate_existing` or the
@@ -79,12 +87,14 @@ and the observed failure beside the task when ticking it.
       `UPDATE` on Q2 (`rowcount` 0) → exactly one entry carrying Q1's answer. **Mutation:** drop
       `populate_existing` from `_completed_batch` (2.11) → no entry, because the decline route also
       reads `wait_ended_at` NULL and declines to deliver.
-- [ ] 2.4 Extract the post-delivery tail (`queue_entry_queued` persist and broadcast, then
+      *Done, iteration 7:* as re-aimed. `test_a_late_answer_is_delivered.py::test_a_sibling_declined_mid_report_does_not_strand_the_batchs_answer`. The decline goes through the real route inside the report, via a patched `AsyncSession.get` that fires right after the report loads Q2. Mutation (drop `populate_existing` from `_completed_batch`) -> fails, no entry.
+- [x] 2.4 Extract the post-delivery tail (`queue_entry_queued` persist and broadcast, then
       `schedule_agent`) from `answer_question` (`:377-399`) and `decline_question` (`:488-504`)
       into one helper in `questions.py`. All three routes call it. The existing tests in
       `test_question_batch_delivery.py`, `test_question_declined.py` and
       `test_blocking_questions.py` stay green unchanged.
-- [ ] 2.5 An entry queued for an agent with a live run waits behind that run and does not start a
+      *Done, iteration 7:* `questions.announce_queued_answer(session, project_id, question, entry, conversation)`, called by the answer, the decline and the report. `_deliver_batch_if_complete` became public `deliver_batch_if_complete` (it has a caller in `agent_actions` now). One ordering change: the answer route's persisted `question_answered` event now precedes `queue_entry_queued` (grep: no test reads that order). `test_question_batch_delivery.py`, `test_question_declined.py` and `test_blocking_questions.py` pass unchanged.
+- [x] 2.5 An entry queued for an agent with a live run waits behind that run and does not start a
       second concurrent run. R1 read it at `turn_scheduler.py:327-334`, with the re-drain at run
       end at `agent_trigger.py:2514`. Test: 1.2's fixture with the asking run still `running` → no
       new `Run` row, and `schedule_agent` answers *"agent is already running"*. If this fails,
@@ -94,17 +104,20 @@ and the observed failure beside the task when ticking it.
       re-drain (`agent_trigger.py:2514`'s call, or `schedule_agent` directly) → one turn starts,
       and its input is the entry. **Mutation:** drop the run-end re-drain (`agent_trigger.py:2514`)
       and drive the run's end through the real finalize → no turn.
-- [ ] 2.6 A second report of the same ids is accepted and delivers nothing more. **Mutation:**
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_a_turn_queued_behind_a_live_run_waits_for_it_and_then_runs`. The asking run is a real trigger whose scripted PTY blocks its first read, so it is `running` while the operator answers: one entry `queued`, no second `Run`, and the answer's wake answered `agent is already running`. It then ends through the real `_execute_run` finalize, which re-drains and starts a turn delivered that entry; the spawned argv carries `Answer: blue`. Mutation (drop the re-drain at `agent_trigger.py:2514`) -> fails, `the asking run's end started no turn`. No finding: the scheduler holds.
+- [x] 2.6 A second report of the same ids is accepted and delivers nothing more. **Mutation:**
       skip the `wait_ended_at` write on the resolved branch → a second entry.
       **(Round 3)** That mutation is stale under 2.9. Skipping the write means the first report
       stamps nothing, keys nothing, and delivers nothing, so 2.2 fails and 2.6 sees no second entry.
       The applicable mutation is: **drop the `wait_ended_at IS NULL` arm** of 2.8's `WHERE` → the
       second report's `rowcount` is 1, it re-keys, and a second entry appears. 2.9's mutation (c)
       stays as a separate check.
-- [ ] 2.7 A lone question declined after the tool's last poll, then reported: accepted, no entry,
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_a_second_report_of_the_same_ids_delivers_nothing_more`. Mutation (drop `wait_ended_at IS NULL`) -> fails, `assert 2 == 1`.
+- [x] 2.7 A lone question declined after the tool's last poll, then reported: accepted, no entry,
       `wait_ended_at` still NULL, and the bound task's `proceeded_without_answer_reason` still
       null.
-- [ ] 2.8 **(Round 2) The stamp is a guarded `UPDATE`** (design D4, *The invariant D3 leans on*).
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_a_question_declined_before_the_report_is_accepted_and_not_called_an_absence` (accepted, no entry, `wait_ended_at` NULL, task `proceeded_without_answer_reason` null). It is the test for 2.1's mutation.
+- [x] 2.8 **(Round 2) The stamp is a guarded `UPDATE`** (design D4, *The invariant D3 leans on*).
       Both branches of `report_wait_ended` write `wait_ended_at` with
       `UPDATE question SET wait_ended_at = :now WHERE id = :id AND wait_ended_at IS NULL AND
       declined IS FALSE`, in place of the ORM attribute write, and read `rowcount`.
@@ -122,7 +135,8 @@ and the observed failure beside the task when ticking it.
       `turn_scheduler.py:627` do. Measured in design D4 *Measured*: with the default sync, a
       `rowcount` of 0 still sets `wait_ended_at` on the loaded object. No route test can see that
       today, so it is a code rule stated in the helper's docstring, not a mutation.
-- [ ] 2.9 **(Round 2) Keys come from committed state, after the report's own commit** (design D4,
+      *Done, iteration 7:* `run_task_binding.record_wait_ended`, `synchronize_session=False`, with the rule in its docstring. `test_a_late_answer_is_delivered.py::test_a_decline_committed_mid_report_is_not_recorded_as_a_wait_that_ended` (a real decline route via the patched `get`). Mutation (restore `question.wait_ended_at = now`) -> fails, `wait_ended_at` is a datetime.
+- [x] 2.9 **(Round 2) Keys come from committed state, after the report's own commit** (design D4,
       *The report half*). After the loop, re-read every row whose `rowcount` was 1, with
       `populate_existing`, and take a batch key from each that is `answered`. This replaces 2.2's
       key collection from the load-time answered branch. Test: the report loads Q unanswered, then
@@ -136,7 +150,8 @@ and the observed failure beside the task when ticking it.
       `rowcount` of 0. Mutation (c) reads: key every accepted row, not only those whose `rowcount`
       was 1. Mutation (b) was observed in design D4 *Measured*: a plain re-read returned
       `answered = False` for rows answered in a second session.
-- [ ] 2.10 **(Round 3) The run-end sweep uses the same guarded write** (design D4, *The sweep is the
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_an_answer_committed_mid_report_is_delivered_by_the_report` (real answer route inside the report, asserting it queued nothing itself). Mutations: (a) key from the load-time branch -> fails, no entry; (b) re-read without `populate_existing` -> fails, no entry; (c) key every accepted row -> 2.6 fails, `assert 2 == 1`.
+- [x] 2.10 **(Round 3) The run-end sweep uses the same guarded write** (design D4, *The sweep is the
       second writer*). In `evaluate_run_end` (`run_divergence.py:730-733`), replace
       `question.wait_ended_at = question.wait_ended_at or now` with `record_wait_ended`, and call
       `release_block_for_expired_wait` only when it returns True. Test: a bound run has ended,
@@ -158,7 +173,8 @@ and the observed failure beside the task when ticking it.
       The test also asserts that the task's status, **re-read from the database** (not from the
       sweep's `task` loaded at `:702`), is not `blocked`. **Mutation:** move `question = None` under
       the helper's True branch → the task reads `blocked`.
-- [ ] 2.11 **(Round 4 — REV, F-A) Completeness is judged on fresh rows.** Add
+      *Done, iteration 7:* `run_divergence.py` in the F-B shape. `test_a_late_answer_is_delivered.py::test_a_decline_committed_mid_sweep_is_not_recorded_and_parks_nothing`. The task is released by hand while the run waits, so it is `in_progress` at the sweep and a park would move it. Mutations: (a) restore the attribute write -> fails, `wait_ended_at` set; (b) `question = None` under the True branch -> fails, `assert 'blocked' != 'blocked'`. Existing sweep tests pass unchanged.
+- [x] 2.11 **(Round 4 — REV, F-A) Completeness is judged on fresh rows.** Add
       `.execution_options(populate_existing=True)` to `_completed_batch`'s `select`
       (`questions.py:71-77`). This is safe, because it already flushes the caller's pending write
       first (`:69`). It covers the report, and the answer and decline routes too. 2.9's re-read
@@ -166,22 +182,44 @@ and the observed failure beside the task when ticking it.
       whose guarded `UPDATE` returned 0 is not re-read by 2.9, and `synchronize_session=False`
       leaves it stale in the identity map. Test: 2.3 as re-aimed. The existing batch tests in
       `test_question_batch_delivery.py` stay green unchanged.
+      *Done, iteration 7:* `_completed_batch`'s `select` has `.execution_options(populate_existing=True)`. The test and mutation are 2.3's. `test_question_batch_delivery.py` passes unchanged.
 
 ## 3. Races (design D4)
 
-- [ ] 3.1 Test both orders on committed state: answer-then-report, and report-then-answer. Each
+- [x] 3.1 Test both orders on committed state: answer-then-report, and report-then-answer. Each
       ends with exactly one entry.
-- [ ] 3.2 Interleaved: the answer route decides its predicate from a fresh read while the report
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_either_order_on_committed_state_delivers_exactly_once[answer-then-report|report-then-answer]`, each exactly one entry.
+- [x] 3.2 Interleaved: the answer route decides its predicate from a fresh read while the report
       has already committed `wait_ended_at` → an entry. Pin this by asserting the predicate is
       evaluated after `session.refresh`. **Mutation:** move 1.2's call back before the commit, and
       use a row loaded before the report committed → no entry.
+      *Done, iteration 7:* `test_a_late_answer_is_delivered.py::test_the_answer_decides_on_a_fresh_read_after_the_report_committed` (the real report route runs inside the answer route, right after its load). Mutation (predicate computed before the commit, from the loaded row) -> fails, no entry.
 
 ## 4. Gate
 
-- [ ] 4.1 `py -3.11 -m pytest hub/tests/ -q` whole and green. Record the counts.
-- [ ] 4.2 The CI lint set: `ruff check src/ hub/ tests/`,
+- [x] 4.1 `py -3.11 -m pytest hub/tests/ -q` whole and green. Record the counts.
+      *Done, iteration 8:* one run, whole: **4361 passed, 86 skipped, 16 xfailed, 0 failed** in
+      28 min 18 s. The last gate (4b59ee0) was 4345/86/16, and the +16 is exactly this change's new
+      tests (14 functions in `test_a_late_answer_is_delivered.py`, one of them parametrized twice,
+      plus one in `test_asker_waiting_is_the_same_on_every_route.py`). Taken before the F-H test
+      below existed. After it: the six question files, 122 passed.
+      **Verified on resume:** three of iteration 7's recorded mutations re-applied byte-exact
+      (1.2's `wait_ended_at` arm, 2.1's `declined IS FALSE`, 2.11's `populate_existing`), and each
+      failed its named test with the recorded failure.
+      **Round 4 F-H, completed here (iteration 8).** Iteration 7 read `run.id` into a local before
+      the report's loop, as the design asked. But `release_block_for_expired_wait` still reads
+      `run.id` and `run.agent`, and after one question's rollback `run` is expired. A probe
+      measured it: the next question's release raised `MissingGreenlet`, was caught, rolled back,
+      and was not accepted. So one failed release took every later one down with it. Fixed by
+      re-loading `run` after the rollback. Test:
+      `test_a_late_answer_is_delivered.py::test_one_failed_release_in_a_report_does_not_fail_the_next`,
+      which reports the failing question first and the real release second. Mutation (drop the
+      re-load) → fails, `assert [] == ['q-…']`.
+- [x] 4.2 The CI lint set: `ruff check src/ hub/ tests/`,
       `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, and `mypy src/`.
-- [ ] 4.3 `openspec validate a-late-answer-is-delivered --strict`.
+      *Done, iteration 8:* all three green, each run as `py -3.11 -m`, before and after the F-H edit.
+- [x] 4.3 `openspec validate a-late-answer-is-delivered --strict`.
+      *Done, iteration 8:* valid.
 
 ## 5. Drive (night-window.md; a drive Hub on a free port with a fresh profile, Haiku)
 

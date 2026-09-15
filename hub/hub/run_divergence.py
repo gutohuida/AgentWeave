@@ -50,6 +50,7 @@ from .run_task_binding import (
     announce_block,
     block_task_for_question,
     may_retry,
+    record_wait_ended,
     release_block_for_expired_wait,
     review_task_for_run,
     run_advanced_its_task,
@@ -727,9 +728,15 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         # **Before 6.1's exclusion applies to it.** `unanswered_blocking_question` skips a question
         # whose wait ended, so the sweep has to find its candidate first; once it has recorded one,
         # the next boundary will not see it again, which is what makes arriving second harmless.
+        #
+        # The record is the guarded write the report also uses (`a-late-answer-is-delivered`, D4):
+        # the question was loaded above, and a decline can commit before this writes. A declined
+        # question is not recorded as gone ahead without, so the release depends on the write.
+        # `question = None` does **not**: whatever the write returned, the question is no longer a
+        # wait, and leaving it set would park the task below on a question the operator declined.
         if question is not None and wait_has_expired(question):
-            question.wait_ended_at = question.wait_ended_at or datetime.now(timezone.utc)
-            await release_block_for_expired_wait(session, question, run)
+            if await record_wait_ended(session, question.id, datetime.now(timezone.utc)):
+                await release_block_for_expired_wait(session, question, run)
             await session.commit()
             # Not a wait any more, so not a park. The run ended holding work it did not move, which
             # is an ordinary divergence and is handled by the rest of this function.

@@ -653,9 +653,17 @@ async def test_a_run_cannot_report_another_runs_wait(app):
 
 
 @pytest.mark.asyncio
-async def test_an_answered_question_never_expired(app, auth_headers):
-    """5.7. Nothing expired, so nothing is recorded — which is what keeps the permanent statement
-    in group 8 from appearing on work the operator actually decided."""
+async def test_an_answer_the_tool_never_received_is_recorded_as_gone_ahead_without(
+    app, auth_headers
+):
+    """5.7, inverted by `a-late-answer-is-delivered` (design D3, F356).
+
+    Was `test_an_answered_question_never_expired`, which asserted that the report skipped an
+    answered question as "nothing expired". But the tool names exactly the questions it did not see
+    resolved, so a named question the Hub has answered was answered after the tool's last poll: the
+    run never received it and went ahead without it. The wait's end is recorded, so the permanent
+    statement in group 8 is true here, and the answer is delivered as queued input
+    (`test_a_late_answer_is_delivered.py`)."""
     await make_agent()
     task_id = await make_task()
     headers = await make_run(task_id=task_id)
@@ -674,14 +682,18 @@ async def test_an_answered_question_never_expired(app, auth_headers):
         headers=headers,
         json={"question_ids": [question_id]},
     )
-    assert reported.json()["accepted"] == []
-    assert (await question_row(question_id)).wait_ended_at is None
+    assert reported.json()["accepted"] == [question_id]
+    assert (await question_row(question_id)).wait_ended_at is not None
 
 
 @pytest.mark.asyncio
 async def test_a_declined_question_never_expired(app, auth_headers):
     """5.7, and design D7's reason it must not be marked: the tool returns early on a decline
-    rather than waiting out the deadline, so a decline is a decision handed back, not silence."""
+    rather than waiting out the deadline, so a decline is a decision handed back, not silence.
+
+    Accepted since `a-late-answer-is-delivered` (design D3, Round 3): the caller's assertion is
+    true, so it is accepted like an already-recorded one. Accepted is not recorded — the guarded
+    write refuses a declined row, which is what this test is for."""
     await make_agent()
     task_id = await make_task()
     headers = await make_run(task_id=task_id)
@@ -698,7 +710,7 @@ async def test_a_declined_question_never_expired(app, auth_headers):
         headers=headers,
         json={"question_ids": [question_id]},
     )
-    assert reported.json()["accepted"] == []
+    assert reported.json()["accepted"] == [question_id]
     assert (await question_row(question_id)).wait_ended_at is None
 
 
@@ -752,8 +764,12 @@ async def test_reporting_twice_is_accepted_and_changes_nothing(app):
 
 @pytest.mark.asyncio
 async def test_a_batch_reports_only_the_waits_that_expired(app, auth_headers):
-    """5.3. Refused per question, silently skipped rather than erroring the batch — because a
-    batch where one was answered and the rest expired is the ordinary case."""
+    """5.3. Refused per question, silently skipped rather than erroring the batch.
+
+    Re-staged by `a-late-answer-is-delivered` (design D3). The refused question used to be one the
+    operator had answered; an answered question the tool names is now accepted, because the tool
+    names only what it did not receive. The refusal left to exercise per question is the one that
+    keeps this a report and not a lever: an unanswered question whose deadline has not passed."""
     await make_agent()
     task_id = await make_task()
     headers = await make_run(task_id=task_id)
@@ -763,13 +779,7 @@ async def test_a_batch_reports_only_the_waits_that_expired(app, auth_headers):
         json={"questions": [one("first?"), one("second?")]},
     )
     first_id, second_id = [row["id"] for row in asked.json()["questions"]]
-    await expire_the_wait(first_id)
     await expire_the_wait(second_id)
-    await app.patch(
-        f"/api/v1/projects/proj-test/questions/{first_id}",
-        headers=auth_headers,
-        json={"answer": "blue"},
-    )
 
     reported = await app.post(
         "/api/v1/agent-actions/questions/wait-ended",

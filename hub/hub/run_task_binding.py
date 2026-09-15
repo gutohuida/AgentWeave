@@ -25,7 +25,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict, Iterable, NamedTuple, Optional, Set, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import InboundQueueEntry, Question, Run, SpecDocument, Task, TaskTransition
@@ -868,6 +868,42 @@ def wait_has_expired(question: Question, now: Optional[datetime] = None) -> bool
     return deadline <= (now or datetime.now(timezone.utc))
 
 
+async def record_wait_ended(session: AsyncSession, question_id: str, now: datetime) -> bool:
+    """Record that the wait on *question_id* ended, unless it is already recorded or declined.
+
+    Returns whether this call wrote it. The one statement both writers use — the tool's report and
+    the run-end sweep (`a-late-answer-is-delivered`, design D4) — so neither decides from a row it
+    loaded earlier.
+
+    A guarded `UPDATE` rather than an attribute write, because both writers load the question and
+    write later, and a decline can commit in between. The `WHERE` is judged against committed state
+    at the moment of the write (SQLite serialises writers), so:
+
+    * `wait_ended_at IS NULL` makes a second report, or a report after the sweep, a no-op;
+    * `declined IS FALSE` means the system does not record a wait's end on a question the operator
+      had **already** declined when the record is written. A decline is a decision handed back, not
+      silence. A decline that arrives after the record leaves it, which is true: the run did go
+      ahead without an answer.
+
+    **`synchronize_session=False` is load-bearing.** The default (`'auto'`) evaluates the `WHERE`
+    in Python against the caller's loaded object, which is the stale row this exists to ignore.
+    Measured: a refused write (`rowcount` 0) left the database NULL and the loaded object reading
+    `wait_ended_at` set. The loaded object is left as it was; a caller that needs the written value
+    re-reads with `populate_existing`.
+    """
+    result = await session.execute(
+        update(Question)
+        .where(
+            Question.id == question_id,
+            Question.wait_ended_at.is_(None),
+            Question.declined.is_(False),
+        )
+        .values(wait_ended_at=now)
+        .execution_options(synchronize_session=False)
+    )
+    return bool(result.rowcount)
+
+
 async def release_block_for_expired_wait(
     session: AsyncSession,
     question: Question,
@@ -890,8 +926,8 @@ async def release_block_for_expired_wait(
     rejected or reassigned it while it waited, and a wait ending afterwards must not drag it back.
 
     Idempotent by the caller's construction, not this function's: both callers (the tool's report
-    and the run-end sweep) check `wait_ended_at` before reaching here, and the `status != BLOCKED`
-    guard below makes a second call a no-op regardless.
+    and the run-end sweep) reach here only when `record_wait_ended` wrote the record, and the
+    `status != BLOCKED` guard below makes a second call a no-op regardless.
     """
     if not question.blocked_task_id:
         return None

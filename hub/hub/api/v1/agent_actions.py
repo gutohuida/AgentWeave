@@ -26,6 +26,7 @@ from ...db.models import Agent, CheckpointNote, Question, Run, Task
 from ...run_task_binding import (
     announce_block,
     block_task_for_question,
+    record_wait_ended,
     release_block_for_expired_wait,
     wait_has_expired,
 )
@@ -48,7 +49,7 @@ from .agent_trigger import effective_question_wait
 from .agents import AgentRequest, request_agent
 from .jobs import archive_job, create_job, delete_job, run_job, update_job
 from .messages import create_message_for_actor
-from .questions import ask_question_for_actor
+from .questions import announce_queued_answer, ask_question_for_actor, deliver_batch_if_complete
 from .tasks import (
     create_task_for_actor,
     get_task,
@@ -661,37 +662,58 @@ async def report_wait_ended(
     one question was answered and three expired is the ordinary case:
 
     * not asked by the calling run — you may only report your own wait;
-    * no `wait_expires_at`, or one that has not passed — the report must describe a fact, not
-      create one. This is the refusal that keeps this a report rather than a lever, and it is only
-      worth anything because the deadline it compares against is the Hub's own;
-    * already answered or declined — nothing expired.
+    * no `wait_expires_at` — a question nobody waited on cannot have stopped being waited on;
+    * unanswered, with a `wait_expires_at` that has not passed — the report must describe a fact,
+      not create one. This is the refusal that keeps this a report rather than a lever, and it is
+      only worth anything because the deadline it compares against is the Hub's own.
+
+    **Already answered is not a refusal** (`a-late-answer-is-delivered`, design D3). The tool names
+    exactly the questions it did not see resolved, so a named question the Hub has answered was
+    answered after the tool's last poll for it, and the run never received it. Its wait's end is
+    recorded — the task then says it went ahead without that answer, which is what happened — and
+    the answer is delivered as queued input once its batch is complete. There is no deadline check
+    on that branch: nothing is released, and the genuine tool never reports a question it received.
+
+    **Already declined, or already recorded** (by an earlier call or by the run-end sweep), is
+    accepted and changes nothing: the fact the caller asserts is true, and arriving second is the
+    normal case for a report-plus-sweep pair. A decline is a decision handed back, not silence, so
+    a question already declined when the record would be written is not recorded as a wait that
+    ended. (A decline arriving after the record leaves it: the run did go ahead without an answer.)
+
+    Every write goes through `record_wait_ended`'s guarded `UPDATE`, and **what it wrote decides
+    delivery, not what was loaded** (design D4): an answer or a decline can commit between this
+    route loading a question and writing it. So the batch keys come from the rows this request
+    stamped, re-read after commit, and whichever of the answer and this report commits second sees
+    the other's write.
 
     Returns which ids were accepted, so the tool's own behaviour is testable from the outside.
     """
     now = datetime.now(timezone.utc)
     accepted: List[str] = []
+    stamped: List[str] = []
     run = await session.get(Run, actor.run_id) if actor.run_id else None
+    # Read once, before the loop: a rollback below expires `run`, and a lazy load of its id on the
+    # next iteration would happen inside the async session (Round 4, F-H).
+    run_id = run.id if run is not None else None
 
     for question_id in body.question_ids:
         question = await session.get(Question, question_id)
         if question is None or question.project_id != actor.project_id:
             continue
-        if run is None or question.created_by_run_id != run.id:
+        if run_id is None or question.created_by_run_id != run_id:
             continue
-        if question.answered or question.declined:
+        if question.wait_expires_at is None:
             continue
-        if question.wait_ended_at is not None:
-            # Already recorded, by an earlier call or by the run-end sweep. Reported as accepted:
-            # the fact the caller is asserting is true, and arriving second is the normal case for
-            # a report-plus-sweep pair, not an error.
-            accepted.append(question_id)
-            continue
-        if not wait_has_expired(question, now):
+        # The one decision taken on the row as loaded. Stale only in the safe direction: a row
+        # answered since the load is refused here rather than let through the answered branch.
+        if not question.answered and not wait_has_expired(question, now):
             continue
 
-        question.wait_ended_at = now
         try:
-            await release_block_for_expired_wait(session, question, run)
+            if await record_wait_ended(session, question_id, now):
+                stamped.append(question_id)
+                if not question.answered:
+                    await release_block_for_expired_wait(session, question, run)
             # Committed per question rather than once at the end, so a failure on the fourth
             # cannot lose the three before it. Eight is the batch cap, so this is eight commits at
             # the very worst and the ordinary case is one.
@@ -706,10 +728,50 @@ async def report_wait_ended(
                 "Could not release the task waiting on question %s", question_id, exc_info=True
             )
             await session.rollback()
+            # The rollback expired `run`, and the next question's release reads its id and agent:
+            # left expired, that read is a lazy load inside the async session, which raises, and
+            # one failed release would take every later one with it (Round 4, F-H).
+            run = await session.get(Run, run_id)
+            if question_id in stamped:
+                stamped.remove(question_id)
             continue
         accepted.append(question_id)
 
+    await _deliver_what_the_report_found_answered(session, actor.project_id, stamped)
     return {"accepted": accepted}
+
+
+async def _deliver_what_the_report_found_answered(
+    session: AsyncSession, project_id: str, stamped: List[str]
+) -> None:
+    """Deliver, once per batch, the answers the expiry report just recorded as never received.
+
+    Keyed from the rows this request **stamped**, re-read after its commits with
+    `populate_existing` — never from the rows as loaded (`a-late-answer-is-delivered`, design D4).
+    An answer committed between the report's load and its write is answered by now; read stale, it
+    would enter no key, and the answer route, having read the wait as live, delivered nothing
+    either. A row the guarded write refused (already recorded, or declined) is not re-keyed, which
+    is what keeps a second report of the same ids from delivering twice.
+
+    One delivery per batch, not per question: two late answers from one batch reported together
+    would otherwise queue the batch twice.
+    """
+    if not stamped:
+        return
+    result = await session.execute(
+        select(Question).where(Question.id.in_(stamped)).execution_options(populate_existing=True)
+    )
+    rows = {row.id: row for row in result.scalars().all()}
+    keyed: Dict[str, Question] = {}
+    for question_id in stamped:
+        row = rows.get(question_id)
+        if row is not None and row.answered:
+            keyed.setdefault(row.batch_id or row.id, row)
+
+    for question in keyed.values():
+        delivered = await deliver_batch_if_complete(session, question, project_id)
+        if delivered is not None:
+            await announce_queued_answer(session, project_id, question, *delivered)
 
 
 @router.get("/questions/{question_id}", response_model=QuestionResponse)

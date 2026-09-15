@@ -81,6 +81,45 @@ async def test_the_list_and_the_detail_route_agree(app, auth_headers):
     ), "the detail route returned the schema default instead of computing it"
 
 
+async def test_the_list_and_the_detail_route_agree_once_the_wait_has_ended(app, auth_headers):
+    """`a-late-answer-is-delivered`, task 1.5 (design D2). The run lives on past its wait, so a live
+    run is not a waiting one: once `ask_user` has reported its wait over, an answer arrives as a
+    message, and both reads of the row have to say nobody is waiting — not only the list.
+
+    The live asker beside it is the control: the same live run with its wait still open reads
+    waiting on both routes, so neither arm can be satisfied by a constant."""
+    from datetime import datetime, timezone
+
+    async with async_session_factory() as session:
+        session.add(Run(id="run-f356-live", project_id=PROJECT, agent="builder", status="running"))
+        for qid, ended in (("q-f356-ended", True), ("q-f356-open", False)):
+            session.add(
+                Question(
+                    id=qid,
+                    project_id=PROJECT,
+                    from_agent="builder",
+                    question=f"question {qid}?",
+                    blocking=True,
+                    created_by_run_id="run-f356-live",
+                    options=[{"label": "yes"}, {"label": "no"}],
+                    wait_ended_at=datetime.now(timezone.utc) if ended else None,
+                )
+            )
+        await session.commit()
+
+    listed = await app.get(f"/api/v1/projects/{PROJECT}/questions", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    from_list = {row["id"]: row["asker_waiting"] for row in listed.json()}
+
+    from_detail = {}
+    for qid in ("q-f356-ended", "q-f356-open"):
+        detail = await app.get(f"/api/v1/projects/{PROJECT}/questions/{qid}", headers=auth_headers)
+        assert detail.status_code == 200, detail.text
+        from_detail[qid] = detail.json()["asker_waiting"]
+
+    assert from_list == from_detail == {"q-f356-ended": False, "q-f356-open": True}
+
+
 async def test_answering_reports_that_nobody_was_waiting(app, auth_headers):
     """`answer_question` computes this fact to decide whether to queue the answer as a turn, then
     returned a body contradicting it."""

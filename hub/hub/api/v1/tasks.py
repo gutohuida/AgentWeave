@@ -444,9 +444,11 @@ async def _attach_proceeded_without_answer(
     deliberately: that condition is there because a live wait needs a live run, and this record is
     permanent and looks backwards.
 
-    A **declined** question never appears here, because `wait_ended_at` is never set on one: the
-    tool returns early on a decline rather than waiting out the deadline, and a decline is a
-    decision the operator made and handed back, not silence.
+    A question declined **before** its wait was recorded as ended never appears here, because
+    `wait_ended_at` is not stamped on one (`run_task_binding.record_wait_ended`): the tool returns
+    early on a decline rather than waiting out the deadline, and a decline is a decision the
+    operator made and handed back, not silence. A decline *after* the record leaves it, and the
+    task then reads "Proceeded without your answer", which is true: the run did proceed without it.
     """
     task_ids = {response.id for response in responses}
     if not task_ids:

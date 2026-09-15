@@ -16,7 +16,7 @@ from ...conversations import (
     new_conversation,
 )
 from ...db.engine import get_session
-from ...db.models import Question, Run
+from ...db.models import Conversation, InboundQueueEntry, Question, Run
 from ...inbound_queue import new_entry
 from ...run_task_binding import release_block_for_question
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
@@ -45,6 +45,36 @@ async def _asking_run_has_ended(session: AsyncSession, question: Question) -> bo
     return run is not None and run.status != "running"
 
 
+async def _asker_still_waiting(session: AsyncSession, question: Question) -> bool:
+    """Is the asking run still holding its tool call open for this question's answer?
+
+    The one predicate every delivery decision reads (`a-late-answer-is-delivered`, design D1).
+    True only while all three hold:
+
+    * the question is **blocking** — a note has nobody waiting on it;
+    * its **wait has not ended** (`wait_ended_at IS NULL`) — `ask_user` gives up at its deadline
+      and the run carries on working, so a live run is not a waiting one. The tool reports exactly
+      the questions it stopped waiting on without receiving, and the run-end sweep records the same
+      fact if that report never landed;
+    * the **asking run has not ended** (`_asking_run_has_ended`).
+
+    **Not `wait_expires_at`.** The Hub stamps its deadline before it responds to the ask, and the
+    tool computes its own after, then sleeps between polls — so the tool keeps polling for a
+    couple of seconds past the Hub's deadline and returns an answer given in that window as its
+    result. Queuing that answer as well is the duplicate turn this shortcut exists to prevent.
+    `wait_ended_at` is the tool saying what it did *not* receive.
+
+    `wait_ended_at` is checked first, so a question the report already settled costs no run lookup.
+    Callers read this **after** committing their own write and refreshing the row (design D4), so
+    whichever of an answer and an expiry report commits second sees the other's write.
+    """
+    return (
+        question.blocking
+        and question.wait_ended_at is None
+        and not await _asking_run_has_ended(session, question)
+    )
+
+
 async def _completed_batch(session: AsyncSession, question: Question) -> Optional[List[Question]]:
     """The batch *question* belongs to, in ask order, once every one of them is resolved.
 
@@ -68,11 +98,19 @@ async def _completed_batch(session: AsyncSession, question: Question) -> Optiona
     # decline that prompted it; otherwise the batch is never complete and nothing is ever delivered.
     await session.flush()
 
+    # `populate_existing`, so completeness is judged on committed rows rather than on whatever this
+    # session loaded earlier (`a-late-answer-is-delivered`, Round 4 F-A). The session factory is
+    # `expire_on_commit=False`, and a plain `select` hands back identity-map objects without
+    # overwriting their loaded attributes: a sibling the expiry report loaded before the operator
+    # declined it would still read undeclined, the batch would read incomplete, and — the decline
+    # route having read the asker as still waiting — the batch's answers would reach nobody. Safe
+    # after the flush above: nothing pending is left for the reload to discard.
     result = await session.execute(
         select(Question)
         .where(Question.project_id == question.project_id)
         .where(Question.batch_id == question.batch_id)
         .order_by(Question.batch_index)
+        .execution_options(populate_existing=True)
     )
     rows = list(result.scalars().all())
     if any(not (row.answered or row.declined) for row in rows):
@@ -80,10 +118,13 @@ async def _completed_batch(session: AsyncSession, question: Question) -> Optiona
     return rows
 
 
-async def _deliver_batch_if_complete(
+async def deliver_batch_if_complete(
     session: AsyncSession, question: Question, project_id: str
-) -> Optional[Tuple[object, object]]:
+) -> Optional[Tuple[InboundQueueEntry, Conversation]]:
     """Queue the batch's answers if this resolution finished it. Returns `(entry, conversation)`.
+
+    Three callers: the answer, the decline, and the asking run's expiry report, which delivers an
+    answer given after the tool's last poll (`a-late-answer-is-delivered`, design D3).
 
     **Called after the answer or decline is committed, deliberately.** Two operators resolving the
     last two questions at once would otherwise each look at the batch from inside their own
@@ -126,6 +167,40 @@ async def _deliver_batch_if_complete(
     session.add(entry)
     await session.commit()
     return entry, conversation
+
+
+async def announce_queued_answer(
+    session: AsyncSession,
+    project_id: str,
+    question: Question,
+    entry: InboundQueueEntry,
+    conversation: Conversation,
+) -> None:
+    """Announce a delivery `deliver_batch_if_complete` queued, then wake the agent for it.
+
+    One tail for every route that can deliver a batch — the answer, the decline, and the asking
+    run's expiry report (`a-late-answer-is-delivered`, design D3) — so a late answer the report
+    delivers is announced and woken exactly as one the operator's answer delivers.
+
+    The wake is safe for an agent whose run is still live: the scheduler refuses an agent with a
+    `running` run, counting nothing, and that run's end re-drains the project, which is what starts
+    the turn carrying this entry.
+    """
+    from_agent = question.from_agent
+    queue_payload = {
+        "entry_id": entry.id,
+        "agent": from_agent,
+        "origin_type": "operator",
+        "hop_depth": 0,
+        "question_id": question.id,
+        "conversation_id": conversation.id,
+    }
+    await persist_event(session, project_id, "queue_entry_queued", queue_payload, agent=from_agent)
+    await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
+
+    from ...turn_scheduler import schedule_agent
+
+    await schedule_agent(project_id, from_agent)
 
 
 def _batch_delivery_text(rows: List[Question]) -> Optional[str]:
@@ -263,9 +338,10 @@ async def _with_asker_state(session: AsyncSession, rows: List[Question]) -> List
     responses = []
     for row in rows:
         response = QuestionResponse.model_validate(row, from_attributes=True)
-        # Unknown asker → presumed waiting (design D5). Only a run positively known to have ended
-        # marks the question inert.
-        response.asker_waiting = row.created_by_run_id not in ended
+        # Unknown asker → presumed waiting (design D5). Only a run positively known to have ended,
+        # or a wait positively recorded as ended, marks the question inert — the run lives on past
+        # its wait, and an answer then arrives as a message (`a-late-answer-is-delivered`, D2).
+        response.asker_waiting = row.wait_ended_at is None and row.created_by_run_id not in ended
         responses.append(response)
     return responses
 
@@ -282,9 +358,14 @@ async def _with_asker_state_one(session: AsyncSession, question: Question) -> Qu
     computations of one fact in this module — this one and `_with_asker_state`'s bulk query, which
     exists because the panel re-reads a whole page on every SSE tick — and
     `test_the_list_and_the_detail_route_agree` is what stops them drifting apart.
+
+    Both read the wait's end as well as the run's (`a-late-answer-is-delivered`, D2), and neither
+    reads `blocking` — that is `_asker_still_waiting`'s concern, not this field's.
     """
     response = QuestionResponse.model_validate(question, from_attributes=True)
-    response.asker_waiting = not await _asking_run_has_ended(session, question)
+    response.asker_waiting = question.wait_ended_at is None and not await _asking_run_has_ended(
+        session, question
+    )
     return response
 
 
@@ -329,37 +410,37 @@ async def answer_question(
     # messages or inbox-poll triggers. They resume autonomous chains in the same
     # governed path as every other operator input.
     #
-    # Skipped for a blocking question *whose asker is still running*: `ask_user` waits and returns
+    # Skipped for a blocking question *whose asker is still waiting*: `ask_user` waits and returns
     # the answer as its own tool result, so the asking agent already has it. Queuing as well told it
     # twice and cost a whole extra turn — measured live, the agent answered, then woke again and
     # restated the same directive. A non-blocking question still needs this, and so does a blocking
-    # one whose run has since ended: nothing is waiting to receive it.
-    # The answer is what releases a parked task (design D3). Done before the queue decision below,
-    # because whether the asker is still waiting is the same fact both need.
+    # one nobody is waiting on any more: nothing is there to receive it.
+    # The answer is what releases a parked task (design D3).
     released = await release_block_for_question(session, question)
-
-    # `ask_user` only holds the tool call open while the run lives. A blocking question that
-    # outlived its run — it timed out, or the run crashed — has nobody awake to receive the answer,
-    # so the "already awake" shortcut below would silently drop it and the operator's answer would
-    # reach no one. That is precisely the question that parked a task, so it is precisely the one
-    # that must not vanish.
-    asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
 
     await session.commit()
     await session.refresh(question)
+
+    # `ask_user` only holds the tool call open until its wait ends, and only while the run lives. A
+    # blocking question that outlived its wait — it timed out and the run went on without it, or the
+    # run crashed — has nobody awake to receive the answer, so the "already awake" shortcut would
+    # silently drop it and the operator's answer would reach no one. That is precisely the question
+    # that parked a task, so it is precisely the one that must not vanish.
+    #
+    # Decided **after** the commit and refresh, on committed state (`a-late-answer-is-delivered`,
+    # D4): the asking run's expiry report writes `wait_ended_at` concurrently, and whichever of the
+    # two commits second must see the other's write, or both decline to deliver.
+    asker_still_waiting = await _asker_still_waiting(session, question)
 
     # One delivery per *batch*, not per answer. Answering the first of three used to wake the agent
     # immediately, so it began work on one decision while the operator was still making the other
     # two — the interruption that asking together exists to prevent.
     #
     # After the commit above, so a concurrent resolution cannot leave a complete batch undelivered
-    # (see `_deliver_batch_if_complete`).
-    entry = None
-    conversation = None
+    # (see `deliver_batch_if_complete`).
+    delivered = None
     if not asker_still_waiting:
-        delivered = await _deliver_batch_if_complete(session, question, project_id)
-        if delivered is not None:
-            entry, conversation = delivered
+        delivered = await deliver_batch_if_complete(session, question, project_id)
 
     await sse_manager.broadcast(
         project_id, "question_answered", {"id": question_id, "answer": body.answer}
@@ -372,31 +453,16 @@ async def answer_question(
         }
         await persist_event(session, project_id, "task_unblocked", unblocked, agent=from_agent)
         await sse_manager.broadcast(project_id, "task_unblocked", unblocked)
-    # Only a queued answer has a queue event to report, or an agent to wake for it. A blocking
-    # asker is already awake and holding the tool call open.
-    if entry is not None:
-        queue_payload = {
-            "entry_id": entry.id,
-            "agent": from_agent,
-            "origin_type": "operator",
-            "hop_depth": 0,
-            "question_id": question_id,
-            "conversation_id": conversation.id,
-        }
-        await persist_event(
-            session, project_id, "queue_entry_queued", queue_payload, agent=from_agent
-        )
-        await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
     await persist_event(
         session,
         project_id,
         "question_answered",
         {"id": question_id, "answer": body.answer},
     )
-    if entry is not None:
-        from ...turn_scheduler import schedule_agent
-
-        await schedule_agent(project_id, from_agent)
+    # Only a queued answer has a queue event to report, or an agent to wake for it. A blocking
+    # asker still waiting is already awake and holding the tool call open.
+    if delivered is not None:
+        await announce_queued_answer(session, project_id, question, *delivered)
     return await _with_asker_state_one(session, question)
 
 
@@ -449,21 +515,20 @@ async def decline_question(
     # a task held waiting on this question is no longer waiting on anyone.
     released = await release_block_for_question(session, question)
 
-    from_agent = question.from_agent
-    asker_still_waiting = question.blocking and not await _asking_run_has_ended(session, question)
-
     await session.commit()
     await session.refresh(question)
+
+    # The same predicate, at the same point, as `answer_question`: after the commit, on committed
+    # state (`a-late-answer-is-delivered`, D1/D4). A decline that completes a batch whose wait
+    # ended while its run lives on is what delivers that batch's answers.
+    asker_still_waiting = await _asker_still_waiting(session, question)
 
     # A decline can complete a batch, and then the answers already given are delivered — how the
     # operator sends what they have decided without answering the rest. The decline itself is still
     # not content: a batch resolved entirely by declines delivers nothing.
-    entry = None
-    conversation = None
+    delivered = None
     if not asker_still_waiting:
-        delivered = await _deliver_batch_if_complete(session, question, project_id)
-        if delivered is not None:
-            entry, conversation = delivered
+        delivered = await deliver_batch_if_complete(session, question, project_id)
 
     payload = {"id": question_id, "agent": question.from_agent}
     await persist_event(
@@ -485,22 +550,7 @@ async def decline_question(
     # A decline that completed a batch delivers the answers already given. The decline itself is
     # still not the content — what reaches the agent is the batch — so this only fires when there
     # was something to send, which `_batch_delivery_text` decided.
-    if entry is not None:
-        queue_payload = {
-            "entry_id": entry.id,
-            "agent": from_agent,
-            "origin_type": "operator",
-            "hop_depth": 0,
-            "question_id": question_id,
-            "conversation_id": conversation.id,
-        }
-        await persist_event(
-            session, project_id, "queue_entry_queued", queue_payload, agent=from_agent
-        )
-        await sse_manager.broadcast(project_id, "queue_entry_queued", queue_payload)
-
-        from ...turn_scheduler import schedule_agent
-
-        await schedule_agent(project_id, from_agent)
+    if delivered is not None:
+        await announce_queued_answer(session, project_id, question, *delivered)
 
     return await _with_asker_state_one(session, question)

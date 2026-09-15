@@ -1003,9 +1003,14 @@ class Question(Base):
     # swept at the run's end when that report never landed. NULL on a question nobody waited on and
     # on one still being waited on.
     #
-    # A **declined** question never gets this: the tool returns early on a decline rather than
-    # waiting out the deadline, and a decline is a decision the operator made and handed back, not
-    # silence.
+    # Not stamped on a question declined **before** its wait was recorded as ended: the tool returns
+    # early on a decline rather than waiting out the deadline, and a decline is a decision the
+    # operator made and handed back, not silence. Both writers enforce that at the write
+    # (`run_task_binding.record_wait_ended`). A decline *after* the record leaves it, and the task
+    # then reads "Proceeded without your answer", which is true: the run did proceed without it.
+    #
+    # Also stamped on a question **answered** after the tool's last poll for it and before its
+    # report (`a-late-answer-is-delivered`, D3): the run never received that answer.
     wait_ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
