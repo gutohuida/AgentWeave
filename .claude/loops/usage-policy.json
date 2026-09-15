@@ -1,0 +1,36 @@
+{
+  "_about": "Read by run-iteration.ps1 before every firing. Routes the queue item named by STATE's `current` to a model and an effort. Per field, the first source that sets it wins: the item's own model/effort, then the first rule whose `match` regex (case-insensitive) matches the item id, then `default`, then STATE's top-level model. Operator decision 2026-09-15: spec rounds and the adversarial review stay on Opus; builds, drives and bookkeeping run on Sonnet. Edit this file to tune; no script change needed.",
+  "routing": [
+    {
+      "match": "-(r[0-9]+|rev|review)$",
+      "model": "opus",
+      "effort": "high",
+      "why": "Spec rounds R1-R3 and REV: the round discipline stays on Opus at full effort."
+    },
+    {
+      "match": "-impl$",
+      "model": "sonnet",
+      "effort": "high",
+      "why": "Implementation of a proposal that three Opus rounds already argued."
+    },
+    {
+      "match": "-(drive|gate|archive)$|^D-[0-9]+$|^ledger-|^compose$|^d[0-9]+[a-z]?$|^[oi][0-9]+[a-z]?$",
+      "model": "sonnet",
+      "effort": "medium",
+      "why": "Drives, gates, archives, ledger hand-checks, queue composition, the review page, read-and-sort items."
+    }
+  ],
+  "default": {
+    "model": "opus",
+    "effort": "high"
+  },
+  "max_budget_usd_per_iteration": 40,
+  "limit_cooldown_minutes": 60,
+  "claude_extra_args": [
+    "--strict-mcp-config"
+  ],
+  "env": {
+    "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS": "3600000",
+    "DISABLE_AUTOUPDATER": "1"
+  }
+}

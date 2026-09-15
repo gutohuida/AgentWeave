@@ -16,6 +16,31 @@ Map, tasks, state layout and the cycle-branch rule: `.claude/loops/README.md`.
 File contract: `spec-queue/README.md`. Design and rejected alternatives:
 `openspec/explorations/2026-09-01-a-daily-research-spec-and-build-loop.md`.
 
+## Budget discipline
+
+The subscription's weekly limit is shared with the operator and no longer fits an all-Opus window
+(`spec-queue/DECISIONS.md`, `### 2026-09-15`). Measured on 2026-09-14: ~60% of a window's cost is
+cache reads, i.e. every token in context re-read on every later call. So context is the budget.
+
+- **The driver picks your model and effort** from `.claude/loops/usage-policy.json` by the id in
+  STATE's `current`: spec rounds and REV on Opus/high, `-impl` on Sonnet/high, drives, gates,
+  archives, ledger and compose on Sonnet/medium, anything else on Opus/high. **Keep `current` equal
+  to the id `next_action` names**, or the next firing runs on the wrong model.
+- **When composing, give every item a standard suffix** (`-r1`..`-r3`, `-rev`, `-impl`, `-drive`,
+  `-gate`, `-archive`, `ledger-`), or set `model`/`effort` on it explicitly. An improvised id falls
+  to Opus/high. Escalate a genuinely hard build with `"model": "opus"` on that one item.
+- **Read by section.** Grep for the heading or symbol, then Read with `offset`/`limit`. Whole-file
+  Reads over 60 KB are refused in autonomous runs (`.claude/hooks/large-read-guard.py`). Find the
+  newest log entry by its heading. Never `cat` a spec-queue file or `FINDINGS.md`.
+- **Keep STATE small.** Each queue item is `id`, `status`, `title`, optional `model`/`effort`, and a
+  `detail` of at most ~600 characters. Results go in the log, never prepended to `detail`. Collapse
+  a done item's `detail` to one line.
+- **Subagents run in the foreground.** The adversarial REV is spawned with `model: "opus"`;
+  Explore runs on Sonnet (`.claude/agents/Explore.md`). A background subagent from a headless run is
+  waited for at most 60 minutes, then killed.
+- **Close-out:** the window's final log entry includes
+  `py -3.11 .claude/loops/usage_report.py --windows --since <today>` output for this window.
+
 ---
 
 ## Iteration 1 — compose the queue

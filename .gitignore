@@ -156,6 +156,14 @@ hub/agentweave.db
 # a lock shared through a remote would be wrong anyway. One file per window.
 .claude/autonomous/.heartbeat*
 
+# Usage metering, written by run-iteration.ps1 AFTER the iteration's own commit -- so, like the
+# driver log, a tracked copy would leave a dirty tree at every boundary and the next arm would
+# refuse to run. The ledger is one JSON line per iteration; .last-result is the raw JSON of the
+# newest run per window; .limit-hit is the cool-down sidecar after a usage-limit refusal.
+.claude/autonomous/usage-ledger.jsonl
+.claude/autonomous/.last-result*
+.claude/autonomous/.limit-hit*
+
 # Working files for the autonomous loop's own API-driving (request/response bodies), not
 # durable output - the findings/log files next to it are.
 .claude/autonomous/scratch/

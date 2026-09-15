@@ -34,7 +34,10 @@ param(
   # exactly. A checkout running more than one daily window gives each its own pair, or the second
   # window reads the first's queue and repeats work already done and pushed.
   [string] $StateFile = ".claude\autonomous\STATE.json",
-  [string] $LogFile = ".claude\autonomous\driver.log"
+  [string] $LogFile = ".claude\autonomous\driver.log",
+  # Repo-relative model/effort routing and metering settings (Claude runner only). Absent file =
+  # the previous behaviour exactly: STATE's top-level model, the user's default effort, no caps.
+  [string] $PolicyFile = ".claude\loops\usage-policy.json"
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +47,7 @@ $ErrorActionPreference = "Stop"
 # then unregisters the task over -- indistinguishable, in the log, from finishing the queue.
 if ([System.IO.Path]::IsPathRooted($StateFile)) { throw "-StateFile must be repo-relative, not absolute: $StateFile" }
 if ([System.IO.Path]::IsPathRooted($LogFile))   { throw "-LogFile must be repo-relative, not absolute: $LogFile" }
+if ([System.IO.Path]::IsPathRooted($PolicyFile)) { throw "-PolicyFile must be repo-relative, not absolute: $PolicyFile" }
 
 $driverLogPath = Join-Path $Repo $LogFile
 
@@ -180,6 +184,71 @@ if ($HeartbeatGraceMinutes -gt 0) {
   }
 }
 
+# --- usage policy: routing, caps, and the limit cool-down ---------------------------------------
+# Every call of both windows ran on Opus at high effort until 2026-09-15, when the weekly limit
+# stopped fitting. The policy file routes each queue item to a model and an effort (spec rounds on
+# Opus, builds on Sonnet -- operator, 2026-09-15). Per field, the first source that sets it wins:
+# the item's own model/effort, then the first policy rule whose regex matches the item id, then the
+# policy default, then STATE's top-level model. Claude runner only; Codex keeps STATE's model.
+$policy = $null
+$policyPath = Join-Path $Repo $PolicyFile
+if ($Runner -eq "claude" -and (Test-Path $policyPath)) {
+  try { $policy = Get-Content $policyPath -Raw | ConvertFrom-Json } catch {
+    Write-Log "$PolicyFile did not parse - refusing to launch on a route nobody chose."
+    exit 2
+  }
+}
+$windowName = if ($lockSuffix) { $lockSuffix.TrimStart('-') } else { "default" }
+$limitSidecar = Join-Path (Split-Path $stateFilePath) (".limit-hit" + $lockSuffix)
+
+# A usage-limit refusal writes a cool-down instant. Until it passes, a firing exits here without a
+# model call: firing into a spent limit every five minutes buys nothing, and a 5-hour limit resets
+# inside a window, so the window must pause rather than unregister.
+if (Test-Path $limitSidecar) {
+  try {
+    $retryAfter = [datetimeoffset]::Parse(((Get-Content $limitSidecar -TotalCount 1).Trim()), [System.Globalization.CultureInfo]::InvariantCulture)
+    if ([datetimeoffset]::Now -lt $retryAfter) {
+      Write-Log ("Usage limit cool-down until {0} - not launching." -f $retryAfter.ToString("yyyy-MM-ddTHH:mm:sszzz"))
+      exit 0
+    }
+  } catch { Write-Log "Unreadable $limitSidecar - ignoring it." }
+}
+
+$currentItemId = if ($state.current) { ([string]$state.current).Trim() } else { "" }
+$currentItem = $null
+if ($currentItemId -and $state.queue) {
+  $currentItem = @($state.queue) | Where-Object { $_.id -eq $currentItemId } | Select-Object -First 1
+}
+$routeModel = ""; $modelFrom = ""; $routeEffort = ""; $effortFrom = ""
+if ($currentItem -and $currentItem.model)  { $routeModel = ([string]$currentItem.model).Trim();   $modelFrom = "item" }
+if ($currentItem -and $currentItem.effort) { $routeEffort = ([string]$currentItem.effort).Trim(); $effortFrom = "item" }
+if ($policy) {
+  $rule = $null
+  if ($currentItemId) {
+    foreach ($candidate in @($policy.routing)) {
+      if (-not ($candidate -and $candidate.match)) { continue }
+      try { $hit = $currentItemId -match [string]$candidate.match } catch {
+        Write-Log "Policy rule /$($candidate.match)/ is not a valid regex - skipping it."
+        continue
+      }
+      if ($hit) { $rule = $candidate; break }
+    }
+  }
+  if ($rule) {
+    if (-not $modelFrom -and $rule.model)   { $routeModel = ([string]$rule.model).Trim();   $modelFrom = "rule" }
+    if (-not $effortFrom -and $rule.effort) { $routeEffort = ([string]$rule.effort).Trim(); $effortFrom = "rule" }
+  }
+  if ($policy.default) {
+    if (-not $modelFrom -and $policy.default.model)   { $routeModel = ([string]$policy.default.model).Trim();   $modelFrom = "default" }
+    if (-not $effortFrom -and $policy.default.effort) { $routeEffort = ([string]$policy.default.effort).Trim(); $effortFrom = "default" }
+  }
+}
+if (-not $modelFrom -and $stateModel) { $routeModel = $stateModel; $modelFrom = "state" }
+if ($routeEffort -and @("low", "medium", "high", "xhigh", "max") -notcontains $routeEffort.ToLowerInvariant()) {
+  Write-Log "Effort '$routeEffort' (from $effortFrom) is not a Claude effort level - dropping it."
+  $routeEffort = ""; $effortFrom = ""
+}
+
 # --- the prompt ---------------------------------------------------------------------------------
 # Deliberately short. Everything the iteration needs to know is on disk; restating it here would
 # create a second source of truth that drifts from the file the session actually maintains.
@@ -210,6 +279,13 @@ Stamp every timestamp from PowerShell (Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz'
 datetime.now().astimezone(). Git Bash `date` on this machine prints UTC but labels it +0100, so a
 lock written from it lands an hour in the future and stalls the loop until real time catches up.
 
+Usage is budgeted: this subscription's weekly limit is shared with the operator. Read files by
+section - Grep for the heading you need, then Read with offset/limit - not whole; that includes the
+log, whose newest entry you locate by its heading. Keep `current` equal to the queue id that
+next_action names: the driver chooses the next firing's model and effort from that item. Keep each
+queue item's detail short and put results in the log, not in STATE.json. Run subagents in the
+foreground.
+
 Honour the limits recorded in STATE.json. Stay on the autonomous branch. If a decision is
 genuinely the user's, add it to decisions_for_user rather than guessing.
 '@
@@ -230,7 +306,14 @@ $prompt = $prompt.Replace('.claude/autonomous/STATE.json', '<<STATE>>').
                   Replace('<<LOCK>>', $lockRelative)
 
 Set-Location $Repo
-Write-Log "--- iteration start ($Runner, $PermissionMode) ---"
+$startedIso = Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz"
+if ($Runner -eq "claude") {
+  $routeLabel = "model={0}({1}) effort={2}({3}) item={4}" -f $(if ($routeModel) { $routeModel } else { "cli-default" }), $modelFrom,
+    $(if ($routeEffort) { $routeEffort } else { "cli-default" }), $effortFrom, $(if ($currentItemId) { $currentItemId } else { "-" })
+  Write-Log "--- iteration start ($Runner, $PermissionMode, $routeLabel) ---"
+} else {
+  Write-Log "--- iteration start ($Runner, $PermissionMode) ---"
+}
 
 # Nobody is present to answer a prompt. The full-access modes below are deliberately explicit:
 # branch isolation protects Git history, but it is not a machine sandbox. Use this driver only
@@ -241,12 +324,31 @@ Write-Log "--- iteration start ($Runner, $PermissionMode) ---"
 # and use its exit code as the authority.
 $previousErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
+$claudeStdout = New-Object System.Collections.Generic.List[string]
 try {
   if ($Runner -eq "claude") {
-    if ($stateModel) {
-      & $AgentExecutable -p $prompt --model $stateModel --permission-mode bypassPermissions 2>&1 | ForEach-Object { Write-Log $_ }
-    } else {
-      & $AgentExecutable -p $prompt --permission-mode bypassPermissions 2>&1 | ForEach-Object { Write-Log $_ }
+    # --output-format json makes the run report its own usage (total_cost_usd, and modelUsage,
+    # which unlike `usage` includes subagents). The price is that nothing streams: stdout is one
+    # JSON line at the end, so it is collected here and its `result` text logged afterwards.
+    $claudeArgs = @("-p", $prompt)
+    if ($routeModel)  { $claudeArgs += @("--model", $routeModel) }
+    if ($routeEffort) { $claudeArgs += @("--effort", $routeEffort) }
+    $claudeArgs += @("--output-format", "json", "--permission-mode", "bypassPermissions")
+    if ($policy -and $policy.max_budget_usd_per_iteration) {
+      $claudeArgs += @("--max-budget-usd", ([string]$policy.max_budget_usd_per_iteration))
+    }
+    if ($policy -and $policy.claude_extra_args) { $claudeArgs += @($policy.claude_extra_args | ForEach-Object { [string]$_ }) }
+    # AW_AUTONOMOUS is the contract with .claude/hooks: guards that must never touch an
+    # interactive session key on it.
+    $env:AW_AUTONOMOUS = "1"
+    if ($policy -and $policy.env) {
+      foreach ($pair in $policy.env.PSObject.Properties) { Set-Item -Path ("env:" + $pair.Name) -Value ([string]$pair.Value) }
+    }
+    # Decode the child's stdout as UTF-8, or every non-ASCII character in the result is mangled
+    # through the OEM codepage on its way into the log.
+    try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+    & $AgentExecutable @claudeArgs 2>&1 | ForEach-Object {
+      if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Log ([string]$_) } else { $claudeStdout.Add([string]$_) }
     }
   } elseif ($PermissionMode -eq "unattended-full-access") {
     # Pipe the prompt and close stdin explicitly. A Scheduled Task has no interactive stdin, and
@@ -262,5 +364,94 @@ try {
   $ErrorActionPreference = $previousErrorActionPreference
 }
 
-Write-Log "--- iteration end (exit $code) ---"
+if ($Runner -ne "claude") {
+  Write-Log "--- iteration end (exit $code) ---"
+  exit $code
+}
+
+# --- the result, the ledger, and the limit ------------------------------------------------------
+$autonomousDir = Split-Path $stateFilePath
+$rawOut = ($claudeStdout -join "`n")
+try { [System.IO.File]::WriteAllText((Join-Path $autonomousDir (".last-result" + $lockSuffix + ".json")), $rawOut, $script:LogEncoding) } catch {}
+
+$result = $null
+foreach ($candidateJson in @($rawOut, ($claudeStdout | Where-Object { $_.TrimStart().StartsWith("{") } | Select-Object -Last 1))) {
+  if (-not $candidateJson) { continue }
+  try {
+    $parsed = $candidateJson | ConvertFrom-Json -ErrorAction Stop
+    if ($parsed -and $parsed.type -eq "result") { $result = $parsed; break }
+  } catch {}
+}
+if ($result) {
+  foreach ($line in ([string]$result.result -split "`r?`n")) { Write-Log $line }
+} else {
+  foreach ($line in $claudeStdout) { Write-Log $line }
+}
+
+# The operator's statusline persists the plan's real rate-limit percentages to this file whenever
+# an interactive session renders; headless runs never render one. Carried into the ledger so a
+# week of rows can be read against the weekly bar.
+$snapshot = $null
+$snapshotPath = Join-Path $env:USERPROFILE ".claude\usage-snapshot.json"
+if (Test-Path $snapshotPath) { try { $snapshot = Get-Content $snapshotPath -Raw | ConvertFrom-Json } catch {} }
+
+$modelUsage = [ordered]@{}
+if ($result -and $result.modelUsage) {
+  foreach ($pair in $result.modelUsage.PSObject.Properties) {
+    $u = $pair.Value
+    $modelUsage[$pair.Name] = [ordered]@{
+      cost_usd = $u.costUSD; input = $u.inputTokens; output = $u.outputTokens
+      cache_read = $u.cacheReadInputTokens; cache_write = $u.cacheCreationInputTokens
+    }
+  }
+}
+$row = [ordered]@{
+  started          = $startedIso
+  ended            = (Get-Date -Format "yyyy-MM-ddTHH:mm:sszzz")
+  window           = $windowName
+  state_file       = $stateRelative
+  branch           = $currentBranch
+  iteration        = $state.iteration
+  item             = $currentItemId
+  model            = $routeModel
+  model_from       = $modelFrom
+  effort           = $routeEffort
+  effort_from      = $effortFrom
+  exit_code        = $code
+  parsed           = [bool]$result
+  subtype          = $(if ($result) { $result.subtype } else { $null })
+  is_error         = $(if ($result) { [bool]$result.is_error } else { $null })
+  api_error_status = $(if ($result) { $result.api_error_status } else { $null })
+  num_turns        = $(if ($result) { $result.num_turns } else { $null })
+  duration_ms      = $(if ($result) { $result.duration_ms } else { $null })
+  total_cost_usd   = $(if ($result) { $result.total_cost_usd } else { $null })
+  subagents        = $(if ($result -and $result.subagent_stats) { $result.subagent_stats.spawned } else { $null })
+  model_usage      = $modelUsage
+  snapshot         = $snapshot
+}
+try {
+  [System.IO.File]::AppendAllText((Join-Path $autonomousDir "usage-ledger.jsonl"), (($row | ConvertTo-Json -Compress -Depth 8) + [Environment]::NewLine), $script:LogEncoding)
+} catch { Write-Log "Could not append to usage-ledger.jsonl: $_" }
+
+# A usage-limit refusal pauses the window rather than ending it (see the cool-down gate above).
+# Matched only on an error result, so a model that merely writes about limits cannot trip it.
+$limitText = ""
+if ($result -and $result.is_error -and ([string]$result.result -match '(?i)hit your .{0,40}limit')) {
+  $limitText = [string]$result.result
+} elseif (-not $result) {
+  $limitText = [string]($claudeStdout | Where-Object { $_ -match '(?i)hit your .{0,40}limit' } | Select-Object -First 1)
+}
+if ($limitText) {
+  $cooldown = 60
+  if ($policy -and $policy.limit_cooldown_minutes) { $cooldown = [int]$policy.limit_cooldown_minutes }
+  $retryAt = (Get-Date).AddMinutes($cooldown).ToString("yyyy-MM-ddTHH:mm:sszzz")
+  [System.IO.File]::WriteAllText($limitSidecar, $retryAt + [Environment]::NewLine + $limitText.Trim() + [Environment]::NewLine, $script:LogEncoding)
+  Write-Log "USAGE LIMIT HIT - pausing this window until $retryAt instead of firing into it: $($limitText.Trim())"
+} elseif ($result -and (Test-Path $limitSidecar)) {
+  Remove-Item $limitSidecar -ErrorAction SilentlyContinue
+}
+
+$costLabel = if ($result -and $null -ne $result.total_cost_usd) { '${0:N2} list' -f [double]$result.total_cost_usd } else { "cost unknown" }
+$turnsLabel = if ($result) { "$($result.num_turns) turns, $($result.subtype)" } else { "no result JSON" }
+Write-Log "--- iteration end (exit $code, $costLabel, $turnsLabel) ---"
 exit $code
