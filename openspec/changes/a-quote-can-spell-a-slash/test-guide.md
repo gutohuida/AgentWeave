@@ -58,15 +58,28 @@ These need no operator; a test or CI settles each.
   quote — is refused as *outside* on Windows. If the decoder consumed the closing quote as `\c`'s
   control target it would allow this on Windows; §4.8's mutation guards that.
 - **A decoded character outside the checker's `\w`-only path pattern does not wrongly refuse an
-  inside path (rows Q1–Q4, Round 6, design.md D6).** `cat $'sub\xd7\x2fhello.py'`,
-  `cat $'sub\cA\x2fhello.py'` and `cat $'sub \x2fhello.py'` each decode to a path genuinely
+  inside path (rows Q1–Q4, S1, design.md D6, corrected Round 7).** `cat $'sub\xd7\x2fhello.py'`,
+  `cat $'sub\cA\x2fhello.py'` and `cat $'sub\u2000\x2fhello.py'` each decode to a path genuinely
   inside the workspace (a filename containing ×, a control byte, or a Unicode space character), and
   are **allowed** on both platforms — this is a pre-existing gap in the checker's own path-matching
   regex, not something this change's decoder gets wrong, but the decoder is what first makes these
-  characters reachable through an escape. Without task 2.2c's fix, these three rows would be wrongly
+  characters reachable through an escape. Without task 2.2c's fix, these rows would be wrongly
   **denied** (`'/hello.py' is outside your workspace'`) even though they never leave the workspace —
-  §4.9's mutation guards that. `cat $'sub\xe9\x2fhello.py'` (Q4, é) was never affected either way —
-  it decodes to a character the checker's pattern already accepted.
+  §4.9's mutation guards that. `cat $'sub\xe9\x2fhello.py'` (Q4, é) decodes to a character the
+  checker's pattern already accepted — but its permission answer still moves, from *cannot be
+  checked* to *allowed*, once ANSI-C decoding exists at all, the same way every other over-refusal
+  in this table does; it is not affected by task 2.2c's regex change specifically. **S1**
+  (`cat $'\xd7sub\x2fhello.py'`) is the same class of path as Q1, but with the exotic byte as the
+  word's *first* character rather than an interior one — a version of the fix that only widens
+  interior character classes still wrongly denies this row; the shipped fix widens the leading
+  position too.
+- **A directly typed word with no escape at all is not caught by the same fallthrough this
+  change corrects (row T1).** `cat x@/etc/passwd` — nothing here is ANSI-C-quoted — flips
+  from refused (`'/etc/passwd' is outside your workspace'`, an over-refusal: the checker used to
+  mistake the tail for an absolute path glued onto `x@`) to **allowed** (correctly resolved as one
+  relative path, `x@/etc/passwd`, under the workspace root). This is a real, deliberate widening of
+  the fix beyond ANSI-C decoding — see design.md D6's "wider effect" note — and `cat -o/tmp/x`
+  (row S2) still correctly denies, confirming the checker still recognizes a genuinely glued form.
 
 ## Human-only (you judge these)
 

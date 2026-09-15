@@ -548,6 +548,16 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   `open(path, "w", encoding="utf-8", newline="\n")` to also dodge the separate CRLF trap below.
   Verify afterward with a non-ASCII character scan (the detection method above) before trusting
   the result.
+  **Reconfirmed again 2026-09-15, same change, Round 6's fix-writing (this session):** the trap is
+  not specific to `Ā` — a fresh Edit call typing `߿` and, separately, ` ` directly
+  each landed as the raw character in `design.md`/`tasks.md`/`test-guide.md`, discovered only
+  because this session's scan checked a wider codepoint range than the previous one used (the
+  earlier scan's exclusion list was too narrow and missed ` ` on the first pass — **scan for
+  every codepoint above 0x7F except a small, explicit allowlist of intentional typography**, not
+  for "anything past some high threshold"). A short `\x`-style two-hex token (`\xd7`, `\c` forms)
+  survived every Edit call this session without corruption; only 4-hex `\u` tokens did not. The
+  fix script method above remains the reliable one and was used again, successfully, for all three
+  files.
 
 - **Driving `claude -p` from Python: pass the prompt on stdin, never as an argv element**
   *(2026-09-10, cost one full four-run measurement)*. `shutil.which("claude")` on this machine

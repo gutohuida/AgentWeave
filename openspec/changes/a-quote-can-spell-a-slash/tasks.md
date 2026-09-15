@@ -149,27 +149,53 @@ point: a row may not change answer before the decode exists.
       - Verify on both platforms exactly as 1.2's "Done" note did (`--runxfail`, record pass/xfail
         counts), and update that note's numbers in this file once done.
       - Commit alone, green, before §2 resumes.
-- [ ] 1.5 **New (Round 6, 2026-09-15) — pins Q1–Q4 (design.md D2/D6), the rule-5/6 fallthrough
-      class.** Add Q1–Q4 to the same parametrized table, `ids=` their labels. **Measure each row's
-      *today* answer against the real, unmodified `_decide` first**, same discipline as 1.4.
-      - **Q1–Q3:** today, **POSIX allow** (the raw, pre-decode word has no real `/` character at
-        all — rule 4). After §2 alone (the decoder, without 2.2c's `_PLAIN_RELATIVE_RE`
-        broadening), these wrongly **deny** (`'/…' is outside your workspace`) — this is the
-        regression D6 exists to prevent. After 2.2c lands, they return to **allow**. Mark the
-        **answer** assertion `xfail(strict=True)` on POSIX for Q1–Q3, conditioned on 2.2c not yet
-        being applied — i.e., pin the *final* asserted value as **allow** (matching the shipped
-        behavior, not the intermediate regression), so a decode that lands without 2.2c fails this
-        row loudly rather than silently shipping the regression. Windows: today **deny, unchecked**
-        (the raw word's leading `$` and, once any single backslash is present, `\`, trip rule 3) —
-        unaffected by 2.2c's absence or presence until §2's decode also lands; after both §2 and
-        2.2c, **allow** (same mechanism as POSIX). Mark the Windows answer xfail the same way.
-      - **Q4:** today and after (with or without 2.2c), **allow, unchanged, both platforms** — the
-        negative control. No mark; if this ever starts failing, 2.2c broke something it must not
-        (a decoded character already inside `\w` must never change behavior).
-      - Commit alongside 2.2c, not before — Q1–Q3's *final* pinned value only holds once 2.2c has
-        landed; do not commit this task's marks against a tree where §2's decoder exists but
-        `_PLAIN_RELATIVE_RE` has not yet been broadened, or the pin will assert the regression as
-        correct.
+- [ ] 1.5 **New (Round 6, corrected by Round 7, 2026-09-15) — pins Q1–Q4, S1, S2, T1 (design.md
+      D2/D6), the rule-5/6 fallthrough class and its fix's own regression-guards.** Add all seven
+      to the same parametrized table, `ids=` their labels. **Measure each row's *today* answer
+      against the real, unmodified `_decide` first**, same discipline as 1.4 — Round 7 found two of
+      the marks this task originally specified were wrong against a real measurement (below);
+      re-measure rather than transcribe.
+      - **Q1–Q3:** today, **POSIX allow** (rule 4, no real `/` in the raw word), **Windows deny,
+        unchecked** (the raw word carries a literal `\` and a leading `$`, rule 3 — measured; this
+        replaces this task's original placeholder for the Windows column, which never gave a real
+        value). After **both** §2 and 2.2c land: **allow, both platforms**. Mark the **Windows**
+        answer assertion `xfail(strict=True)` (deny-unchecked → allow). **Do not mark the POSIX
+        answer** — POSIX is already `allow` today and stays `allow` after, so a POSIX `xfail` on
+        this assertion would XPASS immediately at §1 commit time (Round 7 finding 3; the original
+        task's "conditioned on 2.2c not yet being applied" instruction was not expressible in
+        pytest and is withdrawn). Q1–Q3's protection comes from §4.9's mutation, not from a POSIX
+        pin.
+      - **Q4:** today, **POSIX allow, Windows deny, unchecked** (Round 7 finding 2 — this row is
+        **not** "allow, unchanged, both platforms" as first written; its raw pre-decode word also
+        carries a literal `\` and `$`, so it is refused today on Windows exactly like every other
+        pre-decode ANSI-C row). After: **allow, both platforms** — but note this flip happens once
+        §2's decoder lands **on its own**, independent of 2.2c, because é is already inside the
+        *old*, unfixed `\w` class. Mark the **Windows** answer assertion `xfail(strict=True)`, same
+        as Q1–Q3, but do not treat this as evidence for 2.2c specifically — see §4.9's own note
+        that Q4 must not move under that mutation.
+      - **S1 (leading-position case, Round 7 finding 1):** today, **POSIX allow, Windows deny,
+        unchecked** — same reasoning as Q1. After §2 **plus 2.2c's first (interior-only) draft**:
+        still **deny** on POSIX (the fix does not yet reach this row — this is the gap Round 7
+        found). After the **corrected** 2.2c (leading class also broadened): **allow, both
+        platforms**. Mark the POSIX answer `xfail(strict=True)` (unlike Q1–Q3, POSIX *does* need a
+        mark here, because today's POSIX answer for S1 is `allow` but an intermediate,
+        interior-only fix would wrongly assert `deny` — pin the *final*, corrected value as
+        `allow` so a decode that ships with only the interior broadening fails this row loudly) and
+        the Windows answer `xfail(strict=True)` (deny-unchecked → allow).
+      - **S2 (glue-form regression guard):** today and after, **deny, outside, both platforms,
+        unchanged** — no mark. If this ever starts passing with a *different* reason or flips to
+        `allow`, the leading-class broadening went too far.
+      - **T1 (directly-typed widening, Finding 4):** today, **deny, outside, both platforms**
+        (unaffected by any decoder work — this row has no `$'…'` in it at all). After 2.2c lands:
+        **allow, both platforms** — mark **both platforms'** answer assertions `xfail(strict=True)`.
+        This row exercises no decoder, so it is unaffected by whether §2 has landed; it moves the
+        moment 2.2c's regex change lands, whenever that is.
+      - Commit Q1–Q4, S2 and T1's marks alongside 2.2c (their final values depend on it). S1's
+        intermediate-vs-final distinction means it is the one row that must be checked **twice**:
+        once right after §2+2.2c's first interior-only draft (expect `deny` on POSIX, confirming
+        the gap Round 7 found is real and reproducible) and again after the corrected regex
+        (expect `allow`) — do not skip the first check by assuming the gap is only a documentation
+        artifact.
 
 ## 2. The decode
 
@@ -247,7 +273,7 @@ point: a row may not change answer before the decode exists.
   - `\uHHHH`/`\UHHHHHHHH` **from 0x100 to 0x7FFFFFFF (Round 4 — replaces the R3 "always keep
     literal" rule)**: in the `"c"` reading, keep the backslash and the escape text literal
     (return `"\\" + letter + hexdigits.upper()` — **Round 6, finding 3**: bash uppercases the hex
-    digits of a kept-literal escape (`$'..߿'` renders `..߿`, measured, Git Bash
+    digits of a kept-literal escape (`$'..\u07ff'` renders `..\u07FF`, measured, Git Bash
     `LC_ALL=C`); echoing the agent's own typed casing is not byte-for-byte what bash renders,
     which D1 says matters. No verdict changes — case does not affect component count, separator
     identity, or `os.path.normcase` comparison — but implement the uppercase form to actually meet
@@ -302,25 +328,42 @@ point: a row may not change answer before the decode exists.
   them implements the dual reading or the ≥0x80000000 fix. `%TEMP%/f332/proto.py` (Round 4) is
   the first reference that does, but it is scratch, not the implementation. The implementation is
   held to D2's table — which now pins N2–N5 and P1–P7 — not to any prototype.
-- [ ] 2.2c **New (Round 6, 2026-09-15) — this is the one place §2.3's "leave everything after the
-  lexer unchanged" does not hold.** Broaden `_PLAIN_RELATIVE_RE` (`hub/hub/mcp_server.py:966`) from
-  its current `\w`-allowlisted interior character classes to a denylist of the platform's
-  separators (and, in the first segment only, `:`) — see design.md D6 for the exact pattern, the
-  full safety argument, and the D2 rows (Q1–Q4) it fixes:
+- [ ] 2.2c **New (Round 6, corrected by Round 7, 2026-09-15) — this is the one place §2.3's "leave
+  everything after the lexer unchanged" does not hold.** Broaden `_PLAIN_RELATIVE_RE`
+  (`hub/hub/mcp_server.py:966`) from its current `\w`-allowlisted character classes — **both
+  leading and interior** — to a denylist of the platform's separators plus exactly the small set
+  of characters that open the reader's three named glue forms. See design.md D6 for the full
+  derivation, safety argument, and the D2 rows (Q1–Q4, S1, S2, T1) it fixes and pins — **read D6's
+  own correction history before implementing**: its first version broadened only the interior
+  classes and left a real gap at the leading-character position (Round 7 finding 1), which this
+  is the corrected pattern for:
   ```python
   _PLAIN_RELATIVE_RE = re.compile(
-      rf"^[\w.+][^{re.escape(_SEPARATORS)}:]*"
+      rf"^[^{re.escape(_SEPARATORS)}:@\-][^{re.escape(_SEPARATORS)}:]*"
       rf"(?:[{re.escape(_SEPARATORS)}][^{re.escape(_SEPARATORS)}]*)+$"
   )
   ```
-  **The leading-character class (`[\w.+]`, no `-`, no `@`, no `:`) MUST NOT change** — that is what
-  keeps `-o/tmp/x`, `@/etc/passwd` and `host:/x` routed to rule 6's backstop exactly as they are
-  today. Only the interior classes (after the leading character, and in every segment after the
-  first separator) broaden. Without this task, the decoder correctly produces a real separator for
-  words like `$'sub\xd7\x2fhello.py'` but rule 5 rejects the whole word (a non-`\w` byte in it) and
-  rule 6's backstop then misjudges the tail as absolute-from-drive-root, wrongly denying a path
-  that is genuinely inside the workspace — Q1–Q3 pin this, Q4 is the negative control that must
-  stay unaffected.
+  **The leading position now excludes exactly the separators, `:`, `@` and `-`** — the characters
+  that open the three named glue forms (`-o/tmp/x`, `@/etc/passwd`, `host:/x`) — **and nothing
+  else**. This is a real, deliberate widening beyond what the interior-only draft did: a directly
+  typed word like `x@/etc/passwd` (no `$'…'` at all) now also resolves through rule 5 instead of
+  rule 6, flipping deny→allow (design.md's T1 row, Round 7 finding 4) — this is intentional and
+  documented in D6's "wider effect" note, not a regression to avoid. Do not narrow the leading
+  denylist back to `[\w.+]` in an attempt to avoid this — that reintroduces S1's gap.
+  Without the leading broadening, the decoder correctly produces a real separator for words like
+  `$'\xd7sub\x2fhello.py'` (the exotic character as the word's *first* character) but rule 5 still
+  rejects the whole word and rule 6's backstop still misjudges the tail as absolute-from-drive-root
+  — S1 pins this exact gap; Q1–Q3 pin the (already-fixed-by-the-interior-broadening-alone) interior
+  case; Q4 and S2 are negative controls that must not move.
+  **Refusal-text fidelity (Round 7 finding 5): this task changes the *wording* of two rows already
+  pinned by task 1.4, without changing their verdict.** P4 and P5(POSIX) both carry a non-`\w`/
+  non-ASCII decoded character and, before this task, are denied via rule 6's backstop (whose
+  refusal quotes only the matched absolute-looking tail, e.g. `'/../../x'`); once this task lands,
+  rule 5 resolves them directly and the refusal quotes the *whole word* instead (e.g.
+  `'A\x03©/../../x'` for P4). Both stay `deny, outside` — task 1.4's *answer* assertions for P4 and
+  P5(POSIX) are unaffected — but if 1.4's *reason* assertions were written to match a substring of
+  the old rule-6 quoting, re-check them against the actual quoted text once 2.2c lands, before
+  relying on them as passing.
 - [ ] 2.3 Leave everything after the lexer unchanged, **except 2.2c above**: the six rules'
   *decisions*, `_is_own_hub`, the refusal wordings, the reason bound are untouched. Confirm **no
   new reason string** is introduced (`grep` the refusal constants; the diff is `_lex`, a helper,
@@ -396,14 +439,20 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
   and produces `..g` with no separator (R3 finding 2). On POSIX N5 is allow either way, so run its
   assertion on Windows (or force `os.sep`). A mutation that leaves N5 green means the closing-quote
   guard is not load-bearing.
-- [ ] 4.9 **New (Round 6) — revert `_PLAIN_RELATIVE_RE` to its pre-2.2c form** (restore the `\w`
-  allowlist in the interior classes: `r"^[\w.+][\w.+\-]*(?:[sep][\w.+\-:]*)+$"`). **Q1, Q2 and Q3
-  must each flip from allow to deny on POSIX** (the reintroduced `\w`-only class rejects rule 5
-  again, and rule 6's backstop misjudges the tail as absolute-from-drive-root, exactly D6's
-  regression). Q4 must **not** move (its decoded character was always inside `\w`) — if Q4 also
-  flips, that is a sign the mutation or the test itself is wrong, not evidence 2.2c is load-bearing.
-  A mutation that leaves Q1–Q3 green means the broadened character class is not actually doing
-  anything.
+- [ ] 4.9 **New (Round 6, corrected by Round 7) — revert `_PLAIN_RELATIVE_RE` to its fully
+  unbroadened, pre-2.2c form** (restore the original `\w` allowlist in both the leading and
+  interior classes: `r"^[\w.+][\w.+\-]*(?:[sep][\w.+\-:]*)+$"`). **Q1, Q2 and Q3 must each flip
+  from allow to deny on POSIX**, and **S1 must flip from allow to deny on POSIX** too (the
+  reintroduced leading `\w`-only class reopens the gap Round 7 found — S1's non-`\w` character is
+  in the *leading* position, so it is the row that most directly proves the leading broadening is
+  load-bearing, not only the interior one). **Q4, S2 and T1 must not move**: Q4's decoded character
+  was always inside `\w`; S2's glue prefix is caught by rule 6 regardless of this mutation; T1
+  exercises no decoder but its typed `@` is now un-excluded only by the *interior* class, so check
+  whether reverting the leading class alone (leaving the interior broadened) is enough to flip T1
+  back — if it is, add a second, narrower mutation that reverts only the interior classes and
+  confirm T1 flips under *that* one specifically, so the two broadenings (leading, interior) are
+  each independently proven load-bearing rather than only jointly. A mutation that leaves Q1–Q3 or
+  S1 green means the broadened character class is not actually doing anything.
 
 ## 5. Drive it — the reason a real operator reads (Windows), POSIX proven on CI
 

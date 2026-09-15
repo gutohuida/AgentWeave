@@ -219,10 +219,13 @@ checked)**. The **after** answer is the same on both platforms except where note
 | P5 keep-literal compounds, corrected (Round 4's "stays safe, unchanged" framing was wrong -- Round 5) | Bash | `mkdir A; echo hi > $'A\x/../../y1'`, `$'A\u/../../y2'`, `$'A\q/../../y3'` (digitless `\x`, digitless `\u`, unrecognized `\q`) | **platform-dependent, not uniformly inside.** POSIX: `\` is not a separator, so `A\x` etc. is **one** real component, then two `..` -- **outside** (measured: bash's real word `A\x/../../y1` walks to one level above root). Windows: `\` **is** a separator, splitting `A\x` into **two** components (`A`, `x`), which the same two `..` exactly absorb -- **inside** | deny, unchecked, both platforms (has a real `/`, and the leading `$` trips rule 3; unaffected by platform since the backslash question does not arise until the escape is actually decoded) | (new forms) | **Not "stays safe unchanged" -- a real, platform-split flip, same shape as N1/N2.** POSIX: **deny, outside** (reason improves from unchecked; the decoder's kept-literal rendering correctly matches bash's one-component POSIX truth, which is outside). Windows: **allow, inside** (deny-to-allow flip; the decoder's kept-literal rendering correctly matches bash's two-component Windows truth, which is inside). Both are *correct* -- the row was never wrong about the decoder matching bash, only wrong about summarising both platforms as one unchanging "inside" |
 | P6 `$$\'...'`, corrected today-POSIX (Round 4 said unchanged; Round 5 measured a real flip there) | Bash | `echo hi > $$'..\x2fq'` | inside (`$$` is the shell PID, then an ordinary single-quoted literal `..\x2fq` -- not ANSI-C at all, no escape processing) | **POSIX: allow** (the raw word `$$..\x2fq` has no `/` at all -- `\x2f` is unprocessed literal text today, not a decoded separator -- so rule 4 lets it through unchecked, same hole F375 names, reached a different way). Windows: deny, unchecked (the literal `\` counts as a separator, and the leading `$$` trips rule 3) | deny, unchecked, both platforms (the lexer's `$'` detection fires at the *second* `$`, decoding `..\x2fq` to `../q` and leaving the first `$` glued in front as `$../q` -- a real separator plus a leading `$`, rule 3 on both platforms) | **POSIX flips allow to deny (reason improves to unchecked); Windows unchanged.** Still over-refusal only where it denies, proved by Round 4's argument (the decoder's word always opens with a literal `$`, and any separator it contains trips rule 3 before depth ever matters) -- but the POSIX *today* value was wrong, not the safety conclusion. `$$\'x/../../q'` (bash: outside) correctly still denies on both platforms |
 | P7 embedded NUL, corrected (Round 4 understated this as "not fixed"; Round 5 measured this change actually flips it) | Bash | `cp notes.md $'..\x00x'` | outside (bash truncates the word at the NUL: the real argument is `..`, which lands outside via rule 4's bare-`..` hole, not via anything this change decodes) | **POSIX: allow** (the raw undecoded word has no `/`, rule 4). Windows: deny, unchecked (raw word has a literal `\`, and the leading `$` trips rule 3) | **allow, both platforms.** D5 decodes `\x00` to an actual NUL byte inside the word (`..` + NUL + `x`); that word has **no separator character at all**, so rule 4 -- "not a path" -- returns before `_where` (and its NUL-triggered `realpath` refusal) is ever reached. The NUL never gets a chance to be caught | **This is a real deny-to-allow flip on Windows, not a neutral non-fix -- say so plainly, do not pin it as unchanged.** It does not meaningfully widen exposure: the unrestricted, unescaped route to the same outcome (`cp notes.md ..`, no quoting at all) is **already allowed today**, independent of this change or of ANSI-C decoding (F375). This change removes an *accidental* block on one dressed-up spelling of a hole that was already open in plain text. **Do not add NUL-truncation handling here to make this row deny** -- that would fix one spelling of F375's hole while leaving the direct one (and any other spelling) open; F375's own change is where the real fix belongs. Pin this row's *after* value as **allow**, with a comment pointing at F375, so a future reader does not mistake the flip for a regression this change is silently responsible for |
-| Q1 `\x` non-word byte, no `..` (Round 6) | Bash | `cat $'sub\xd7\x2fhello.py'` | inside (`sub×/hello.py`) | allow (rule 4 -- raw word has no real `/`) | (new form; not in R1-5's table) | **allow.** Without D6, this denies (`'/hello.py' is outside your workspace'`) -- a real regression this change would otherwise introduce, since the raw word is allowed today. See D6 |
-| Q2 `\c` ASCII control byte, no `..` (Round 6) | Bash | `cat $'sub\cA\x2fhello.py'` | inside (`sub` + `chr(1)` + `/hello.py`) | allow | (new form) | **allow.** Same mechanism and same regression as Q1 without D6 -- `\cX` for an ASCII `X` was already believed safe (P4 covers non-ASCII `X`); Round 6 found the ASCII case has the identical rule-5/6 fallthrough problem, independent of `\cX`'s own decode correctness |
-| Q3 `\u` dual reading, UTF-8 side non-word, no `..` (Round 6) | Bash | `cat $'sub \x2fhello.py'` | inside under a UTF-8 locale (`sub` + U+2000 + `/hello.py`) | allow | (new form) | **allow.** Same mechanism as Q1/Q2, reached through the dual reading's UTF-8 side instead of a direct byte escape -- confirms D6 is not limited to one decode class |
-| Q4 control -- decodes inside `\w`, no regression (Round 6) | Bash | `cat $'sub\xe9\x2fhello.py'` | inside (`sub` + é + `/hello.py`) | allow | allow | allow, unchanged -- é is a Unicode letter, already inside `\w`, so this row never exercised the bug; kept as the negative control proving D6's fix is not a blanket "always allow" |
+| Q1 `\x` non-word byte, no `..` (Round 6, Win column corrected Round 7) | Bash | `cat $'sub\xd7\x2fhello.py'` | inside (`sub×/hello.py`) | allow (rule 4 -- raw word has no real `/`) | deny, unchecked (raw word carries literal `\` and `$`, rule 3) | **allow, both platforms.** Without D6, this denies (`'/hello.py' is outside your workspace'`) on POSIX and stays denied (wrong reason) on Windows -- a real regression this change would otherwise introduce on POSIX, and a missed over-refusal correction on Windows. See D6 |
+| Q2 `\c` ASCII control byte, no `..` (Round 6, Win column corrected Round 7) | Bash | `cat $'sub\cA\x2fhello.py'` | inside (`sub` + `chr(1)` + `/hello.py`) | allow | deny, unchecked | **allow, both platforms.** Same mechanism and same regression as Q1 without D6 -- `\cX` for an ASCII `X` was already believed safe (P4 covers non-ASCII `X`); Round 6 found the ASCII case has the identical rule-5/6 fallthrough problem, independent of `\cX`'s own decode correctness |
+| Q3 `\u` dual reading, UTF-8 side non-word, no `..` (Round 6, Win column corrected Round 7) | Bash | `cat $'sub\u2000\x2fhello.py'` | inside under a UTF-8 locale (`sub` + U+2000 + `/hello.py`) | allow | deny, unchecked | **allow, both platforms.** Same mechanism as Q1/Q2, reached through the dual reading's UTF-8 side instead of a direct byte escape -- confirms D6 is not limited to one decode class |
+| Q4 control -- decodes inside `\w`, no regression (Round 6, Win column corrected Round 7) | Bash | `cat $'sub\xe9\x2fhello.py'` | inside (`sub` + é + `/hello.py`) | allow | **deny, unchecked** (raw word carries literal `\` and `$`, rule 3 -- Round 7 finding 2: this row is not "unchanged, both platforms" as first written; it flips deny-to-allow on Windows exactly like Q1-Q3, just once section 2's decoder alone lands, since é is already inside the *old*, unfixed `\w` class -- D6's regex change is not what causes Q4's flip) | **allow, both platforms.** é decodes to a Unicode letter, already inside `\w` under both the old and the corrected `_PLAIN_RELATIVE_RE`, so this row is the negative control proving D6's regex change itself touches nothing here -- but the platform table above must not claim Windows was ever "allow, unchanged" today; it was refused, for the ordinary rule-3 reason every other pre-decode ANSI-C row is refused |
+| S1 leading non-word byte -- exposes D6's own first-draft gap (Round 7 finding 1) | Bash | `cat $'\xd7sub\x2fhello.py'` | inside (`×sub/hello.py`) | allow (rule 4) | deny, unchecked | **allow, both platforms.** With D6's first (interior-only) version, this row still **denies** (`'/hello.py' is outside your workspace'`) on POSIX -- exactly Q1's regression, unfixed, because the exotic byte is the word's *first* character and `_PLAIN_RELATIVE_RE`'s leading class never moved. Closed only once the leading class is broadened too (see D6's corrected regex and the pattern's own history above) |
+| S2 glue-form regression guard (Round 7) | Bash | `cat -o/tmp/x` | (a directly-typed word, no `$'...'`; bash treats it as one literal argument `-o/tmp/x`) | deny, outside (rule 6's backstop matches `/tmp/x` as absolute-from-drive-root) | deny, outside (same mechanism, `/` is a separator on both platforms) | **unchanged, deny outside, both platforms, both before and after D6.** Pins that broadening the leading class to exclude only the separator, `:`, `@` and `-` still keeps a directly-typed `-`-glued form routed to rule 6 -- the fix must never let this row move |
+| T1 directly-typed interior widening, documented not regressed (Round 7 finding 4) | Bash | `cat x@/etc/passwd` | inside (bash: one literal argument `x@/etc/passwd`, a relative path with `@` in its first component -- not curl's own `@file` convention, which requires `@` to open the whole argument) | deny, outside (rule 6's backstop matches `/etc/passwd` as absolute-from-drive-root -- an over-refusal, unrelated to ANSI-C) | deny, outside (same mechanism) | **allow, both platforms -- a real, intentional flip with no `$'...'` involved at all**, caused by D6's interior-class broadening alone (this row exercises no decoder). Correct: rule 5 now resolves the whole word as one relative path under `root`, matching bash's real, unglued reading of it. Pinned so the widening documented in D6's "wider effect" note is under test, not merely argued |
 
 **What moves.**
 - **POSIX: G1–G5, G7–G10, D1 go from allow to deny** (ten forms), each refused as the decoded path
@@ -259,10 +262,18 @@ checked)**. The **after** answer is the same on both platforms except where note
   confirm the correction closes each one; P5 confirms the compound form of the already-safe
   keep-literal cases (N2's class) doesn't regress; P6 confirms `$$'…'` can only over-refuse; P7
   pins a mismatch this change does **not** fix — see F375 (filed separately) and D2's row above.
-- **Q1–Q4 are new (Round 6).** Q1–Q3 pin the rule-5/6 fallthrough class D6 fixes — each is a
-  genuinely inside path with a decoded non-`\w` character and no `..`, wrongly denied without D6's
-  `_PLAIN_RELATIVE_RE` broadening; Q4 is the negative control (a decoded character that already
-  falls inside `\w`), confirming the fix does not touch rows that never exercised the bug.
+- **Q1–Q4, S1, S2, T1 are new (Round 6, corrected and extended by Round 7).** Q1–Q3 pin the
+  rule-5/6 fallthrough class D6 fixes — each is a genuinely inside path with a decoded non-`\w`
+  character in an interior position and no `..`, wrongly denied without D6's `_PLAIN_RELATIVE_RE`
+  broadening; each also carries a corrected Windows *today* column (Round 7 finding 2 — the raw,
+  pre-decode word is refused *unchecked* on Windows, not "new form"). Q4 is the negative control (a
+  decoded character that already falls inside `\w`), also corrected the same way. **S1 pins the gap
+  Round 6's first version of D6 left open** — the same class of wrongly-denied word, but with the
+  non-`\w` character in the *leading* position, which only the corrected (Round 7) regex closes.
+  **S2** is the glue-form regression guard, confirming `-o/tmp/x`-shaped forms stay routed to rule
+  6 even after the leading class also broadens. **T1** pins one directly-typed representative of
+  the wider, undecoded blast radius Round 7 found (Finding 4) — a real, accepted deny-to-allow flip
+  for words that were never glued in the first place, unrelated to ANSI-C decoding at all.
 
 ## D3 — What does not escape, and stays out of scope
 
@@ -273,9 +284,18 @@ checked)**. The **after** answer is the same on both platforms except where note
   the reader sees, and a brace that expands to a traversal produces more than one word — so
   `echo hi > ..{/,}x` is a two-target redirection bash rejects (rc=1, measured). A brace form built
   on `$'…'` (`..$'\x2f'{a,b}`) is covered by D1's decode. Residual, unchanged.
-- **Tilde / glob.** A leading `~` with a separator is rule 3 already. `globskipdots` (on by default
-  in bash 5.2) stops `*` matching `.`/`..`; glob characters stay the X5 residual
-  (`a-url-is-not-a-path` D8). Unchanged.
+- **Tilde / glob.** A leading `~` with a separator is rule 3 already, unaffected by D6 (`~` is
+  excluded from `_PLAIN_RELATIVE_RE`'s broadened leading class exactly as before — it is not one
+  of the three glue characters D6 documents, but rule 3 catches it first regardless). `globskipdots`
+  (on by default in bash 5.2) stops `*` matching `.`/`..`; the glob-matching semantics itself —
+  what a glob character would expand to on the filesystem — stays the X5 residual
+  (`a-url-is-not-a-path` D8), unchanged. **Correction (Round 7): the routing of a glob-bearing word
+  between rule 5 and rule 6 is not unchanged.** A word with an interior `*` (`a*b/x`) failed the
+  pre-D6 `\w`-only interior class and fell to rule 6's drive-root backstop; after D6 it matches
+  rule 5 and is resolved directly against `root` instead — the same mechanism as T1, not a
+  decode-specific effect. The glob character itself is still never expanded by the reader (X5's own
+  residual is untouched); only which rule computes the path changes, and — as T1 pins — never
+  toward an incorrect "allow" where bash's real write lands outside.
 
 ## D4 — POSIX gets its evidence the way F331 did; a Windows drive cannot show the flip
 
@@ -344,6 +364,17 @@ pinned test brittle for the wrong reason. Pick a single fixed ASCII letter (e.g.
 and never derived from the input) so the placeholder is unambiguously `\w` and every row's refusal
 text is predictable.
 
+> **Superseded by D6 (Round 6/7): the claim "that never changes the *verdict*" above is false.**
+> Rule 5 resolves the whole word against `root`; rule 6 resolves only a matched tail against the
+> drive root — a different path, and for a word with no `..` in it, this can turn a genuinely
+> inside path into a spurious "outside" verdict (Q1–Q3, S1). D6 fixes the general case by
+> broadening `_PLAIN_RELATIVE_RE` itself, which is a stronger, repo-wide fix than keeping this one
+> placeholder inside `\w` — but the placeholder is still pinned to a fixed ASCII letter regardless
+> (D6's leading-position broadening still excludes `-`/`@`/`:`/the separators, and a placeholder
+> is guaranteed safe there without depending on which rule ends up resolving it). Read this
+> paragraph for the totality argument (why a placeholder is needed at all); read D6 for what
+> actually governs the verdict once one is chosen.
+
 **`\U` ≥ 0x80000000 (`\Uffffffff`) is no longer judged from a kept-literal backslash, and is no
 longer an over-refusal.** §D1 (Round 4) now decodes this range to **nothing**, exactly matching
 bash's own behaviour in every locale — R3's "keep literal, over-refuse" answer for this range was
@@ -352,8 +383,10 @@ the phantom-component bug Round 4 found, not a safe trade. `$'\Uffffffffx'` (D2 
 behaviour change from the R3-approved table, not merely a reworded reason; see "What round 4
 changed" and D2's revised N3 row.
 
-**Corrections to the two paragraphs above (Round 6, Finding 2 and Finding 3 — text only, no
-verdict changes).**
+**Corrections (Round 6, Finding 2 and Finding 3 — text only, no verdict changes) to the lead-byte
+claim earlier in this section and to the hex-digit casing D1 and tasks.md §2.2 specify — not to
+either paragraph immediately above (Round 7, Finding 7: the original header "the two paragraphs
+above" pointed at the wrong text; corrected here).**
 
 - **The lead-byte range was wrong.** "A UTF-8 lead byte for a 5- or 6-byte legacy sequence is
   always in `0xF8`–`0xFD`" contradicts the very example the same paragraph gives:
@@ -364,7 +397,7 @@ verdict changes).**
 - **The C-locale reading is not byte-for-byte what bash renders, and D1 claims it must be.** D1
   says decoding must match bash "**exactly**... because faithfulness to bash is the whole safety
   argument." Measured (Git Bash 5.2.37, `LC_ALL=C`): bash **uppercases** the hex digits of a
-  kept-literal `\u`/`\U` escape — `$'A߿Z'` renders `A߿Z`, `$'A\U0001f600'` renders
+  kept-literal `\u`/`\U` escape — `$'A\u07ffZ'` renders `A\u07FFZ`, `$'A\U0001f600'` renders
   `A\U0001F600`. A passthrough implementation that echoes the agent's own typed casing (as
   tasks.md §2.2 specifies, `"\\" + letter + hexdigits`) emits the *input's* casing, not bash's.
   This changes no D2 verdict — case does not change component count, byte length, or which
@@ -408,7 +441,7 @@ lands **outside**. Measured, the real `_decide`, WSL bash 5.2.21, and Git Bash o
 |---|---|---|---|---|---|---|
 | Q1 `\x` non-word byte | Bash | `cat $'sub\xd7\x2fhello.py'` | inside (`sub×/hello.py`) | allow (rule 4 — raw word has no real `/`) | **deny, `'/hello.py' is outside your workspace'`** | **allow** |
 | Q2 `\c` ASCII control | Bash | `cat $'sub\cA\x2fhello.py'` | inside (`sub` + `chr(1)` + `/hello.py`) | allow | **deny**, same reason as Q1 | **allow** |
-| Q3 `\u` dual reading, UTF-8 side non-word | Bash | `cat $'sub \x2fhello.py'` | inside under a UTF-8 locale (`sub` + U+2000 + `/hello.py`) | allow | **deny**, same reason as Q1 | **allow** |
+| Q3 `\u` dual reading, UTF-8 side non-word | Bash | `cat $'sub\u2000\x2fhello.py'` | inside under a UTF-8 locale (`sub` + U+2000 + `/hello.py`) | allow | **deny**, same reason as Q1 | **allow** |
 | Q4 control (decodes inside `\w`) | Bash | `cat $'sub\xe9\x2fhello.py'` | inside (`sub` + é + `/hello.py`) | allow | allow (é is a Unicode letter, already `\w`) | allow, unchanged |
 
 Q1–Q3 are real **regressions this change would otherwise introduce**: each is allowed today (the
@@ -424,26 +457,41 @@ now legitimately produce any of these characters from an escape an agent might p
 where before nothing on the escape-decoding path ever put a non-`\w` byte into a bash command's
 word.
 
-**Fix: broaden rule 5's interior character classes to a denylist of the platform's separators
-(and, in the first segment only, `:`), instead of an allowlist of `\w`-like characters. Leave the
-*leading* character's class exactly as narrow as it is today.**
+**Fix (first attempt, this commit's earlier version — corrected below by Round 7): broaden rule
+5's interior character classes to a denylist of the platform's separators (and, in the first
+segment only, `:`), instead of an allowlist of `\w`-like characters. Leave the *leading*
+character's class exactly as narrow as it is today.** Round 7 (verifying this fix) measured that
+the leading-character class is exactly where the class of bug D6 exists to fix is *most* reachable,
+not least: `_PLAIN_RELATIVE_RE`'s leading class stayed `[\w.+]` in the first version of this fix, so
+a word whose decoded content puts the non-`\w` character in the very first position — no real
+component before it at all — still fails rule 5 and still falls to rule 6's drive-root backstop.
+Measured (`<scratchpad>/r7_judge.py`, `r7_sweep.py`, real `_judge_word`, both platforms, both the
+old pattern and the first D6 pattern): `cat $'\xd7sub\x2fhello.py'` (bash: `×sub/hello.py`, inside)
+denies under **both** patterns, identically. A sweep placing a non-`\w` character at five positions
+in an otherwise-inside word found the fix closed only 24 of 40 cases (60%) — every position except
+"the exotic character is the word's first character" (both when it is the whole first segment and
+when it opens a later segment). **The corrected fix broadens the leading position too, to a
+denylist of exactly the three characters the three named glue forms need there:**
 
 ```python
 _PLAIN_RELATIVE_RE = re.compile(
-    rf"^[\w.+][^{re.escape(_SEPARATORS)}:]*"
+    rf"^[^{re.escape(_SEPARATORS)}:@\-][^{re.escape(_SEPARATORS)}:]*"
     rf"(?:[{re.escape(_SEPARATORS)}][^{re.escape(_SEPARATORS)}]*)+$"
 )
 ```
 
 Why this is safe, not merely more permissive:
 
-- **The leading-character class is untouched (`[\w.+]` — no `-`, no `@`, no `:`).** The three glue
-  forms rule 6 exists for are distinguished entirely by their *first* character (`-o…`, `@…`) or
-  by a colon in the first segment (`host:…`), and no D1 decode rule can ever produce `-` or `@` as
-  anything but the literal characters themselves (via `\x2d`/`\x40`) — already excluded by the
-  unchanged leading-character class, exactly as it excludes a directly-typed `-o/tmp/x` today.
-  This fix changes **only** which characters are accepted *after* the leading position; it does
-  not change what makes a word "glued" in the first place.
+- **The leading position now excludes exactly the separators, `:`, `@` and `-` — the four
+  characters that open the reader's three named glue forms — and nothing else.** `-o/tmp/x` opens
+  with `-`; `@/etc/passwd` opens with `@`; `host:/x` needs `:` excluded from the first segment
+  (already handled by the shared first-segment-interior exclusion, independent of the leading
+  position). No D1 decode rule can ever produce `-`, `@` or `:` as anything but the literal
+  character itself (via `\x2d`, `\x40`, `\x3a`) — so a decoded word can open with one of these only
+  when bash's own real rendering does too, and the word correctly still routes to rule 6 exactly as
+  a directly-typed `-o/tmp/x` does today. Measured (`r7_judge.py`, both patterns, both platforms):
+  `-o/tmp/x`, `@/etc/passwd`, `host:/x`, and the Windows form `-o..` + a literal backslash + `x` all
+  still fail rule 5 and reach rule 6 under the corrected pattern, identically to today.
 - **The first-segment interior still excludes `:`.** A decoded colon (`\x3a`) before any separator
   still routes to rule 6, exactly matching today's `host:/x` / `HEAD:x` handling — unchanged.
 - **No D1 decode rule can ever produce a separator byte where this regex needs a non-separator
@@ -451,24 +499,40 @@ Why this is safe, not merely more permissive:
   escape ≤ 0xFF that could render `/` or `\` is exactly the two bytes the reader already treats as
   a real separator; every UTF-8-encoded byte above 0xFF is ≥ 0x80, never `/` (0x2F) or `\` (0x5C);
   `\cX`'s control byte is `X`'s first byte `& 0x1F`, at most 0x1F, never a separator either. So
-  broadening the *content* class introduces no character the reader could mistake for a separator
-  it should have split on instead.
-- **No existing D2 row's verdict moves toward "allow" where bash's real write lands outside.**
-  Re-walked against every row: G1–G10, D1, I1, L1, N1–N5, OK1, OK2, P1–P3, P6, P7 never reach rule
-  5/6 with a non-`\w` interior character at all — their decoded content, where they have any, is
-  plain ASCII — so this fix is a no-op for them. P4 and P5(POSIX) do carry a non-`\w`/non-ASCII
-  decoded character and keep their pinned "deny, outside" verdict: both genuinely resolve outside
-  the workspace once rule 5 walks them directly (the same real `..` climb the table already
-  describes for them), so the fix changes *why* they deny, not *that* they deny. Only a genuinely
-  inside word with no `..` in it at all (Q1–Q3, and any real-world equivalent) flips, and only from
-  a wrong deny to the correct allow.
+  broadening the content classes — leading or interior — introduces no character the reader could
+  mistake for a separator it should have split on instead.
+- **This is not a no-op for every existing row, and D6's first version was wrong to claim it was
+  — Round 7's honest accounting:** G1–G10, D1, I1, L1, N1–N5, OK1, OK2, P1–P3, P6, P7 never carry a
+  non-`\w` interior *or* leading character, so the fix is a no-op for them, as before. P4 and
+  P5(POSIX) still keep their pinned "deny, outside" verdict, but their *refusal text* changes —
+  see the note added to task 2.2c. **The interior broadening also affects words that were never
+  decoded at all** — any directly-typed word with a punctuation character rule 6's old backstop
+  used to catch — see row T1 and the note below.
+
+**A wider effect than D6's first version admitted (Round 7, Finding 4): the interior broadening
+applies to every word the reader judges, typed or decoded, and is not limited to `..`-free
+inside words.** Measured, directly-typed commands with no `$'…'` anywhere: `cat x@/etc/passwd`,
+`cat x!/etc/passwd`, `cat x%/etc/passwd`, `cat a*b/x`, `cat head~3/x` all flip from **deny,
+outside** (today: rule 6's backstop catches the `/etc/passwd`-shaped tail and judges it
+absolute-from-drive-root) to **allow** (after: rule 5 resolves the whole word as one relative path
+under `root`, and none of these has a `..` in it). This is not a narrower fix than it looks —
+it is the *same* mechanism as Q1–Q3, just reached without any escape at all, and it is safe for
+the same reason: `_ABSOLUTE_PATH_RE`'s job was only ever to catch a *glued* absolute path, and none
+of these forms is one — bash itself treats `x@/etc/passwd` as a single ordinary argument, a
+relative path with an `@` in its first component, not as curl's own `@file`-reading convention
+(which requires the `@` to open the *entire* argument, not follow other characters first). An
+interior `-` already reached rule 5 before this change (`a-b/etc/passwd` matched the *old* pattern
+too), so treating other interior punctuation the same way is consistent with what the reader
+already accepted, not a new category of trust. **Row T1 pins one representative so the widening is
+under test, not merely argued.**
 
 **Rejected: teach rule 6 to resolve its candidate against `root` instead of the drive root.** This
-would also fix Q1–Q3, but it changes the verdict for every existing glued form rule 6 was written
-for (`-o/tmp/x` would newly resolve as `root/tmp/x` instead of the true absolute `/tmp/x` a shell
-actually opens) — a much larger, unaudited behavior change to code this change does not otherwise
-need to touch. Broadening rule 5's character class is the minimal fix: it only widens *which*
-words rule 5 claims, never what either rule *does* with a word it claims.
+would also fix Q1–Q3 and the leading-position cases, but it changes the verdict for every existing
+glued form rule 6 was written for (`-o/tmp/x` would newly resolve as `root/tmp/x` instead of the
+true absolute `/tmp/x` a shell actually opens) — a much larger, unaudited behavior change to code
+this change does not otherwise need to touch. Broadening rule 5's character classes is the minimal
+fix: it only widens *which* words rule 5 claims, never what either rule *does* with a word it
+claims.
 
 ## What round 2 changed
 
