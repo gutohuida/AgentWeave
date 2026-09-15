@@ -701,15 +701,15 @@ that day.
 - DECIDED   F332-rule  See the row under `## Open` above, now flipped: revise, one more
   verification round, then build.
 - DECIDED   split-unstaffed-review  **Approved REV's split of
-  `an-unstaffed-review-names-its-holders`.** The F353 half (task groups 3 and 4, 2.5, 2.5b, 2.12
-  and 2.13 — the refusals' remedies, F334's wording, F365's once-per-task record, the
-  `error_summary` fit F367 needs) moves into its own change directory, takes one verification
-  round there, and can be built without waiting on `F352-free`. The rung-3 naming half (D1, D2,
-  D3, D6, task 2.14) stays in the original directory and waits on `F352-free`, still open below.
+  `an-unstaffed-review-names-its-holders`, and executed** (`cba4ae2`). The F353 half (task groups
+  3 and 4, 2.5, 2.5b, 2.12 and 2.13 — the refusals' remedies, F334's wording, F365's once-per-task
+  record, the `error_summary` fit F367 needs) now lives at
+  `openspec/changes/a-refusal-names-a-remedy-that-works/`, renumbered, ready for its one
+  verification round, and does not wait on `F352-free`. The rung-3 naming half (D1, D2, D3, D6,
+  task 2.14) stays in `an-unstaffed-review-names-its-holders`, annotated stale against `F352-free`
+  (below), and needs its own re-derivation round against (f) before it can build.
 
-`F352-free` itself — what "free" means for review staffing — is **not yet decided**: the operator
-leans toward option (d), REV's recommendation, and asked for an independent Opus-model validation
-before locking it in. See `## Open` for the row once that lands.
+`F352-free` itself was decided the same day: see its own row below, **REJECT (d), go with (f)**.
 
 ### 2026-09-14 afternoon — LoopEngine stays parked, and the weekly rate-limit window needs care
 
