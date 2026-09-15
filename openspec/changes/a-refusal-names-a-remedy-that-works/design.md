@@ -75,14 +75,14 @@ is (`TaskDetailDrawer.tsx:335-369`), naming what approval still needs.
 ### D2 — the stall reason fits within its column (parent's D2, length passage)
 
 **The sentence is bounded, because one route would fail on it.** `JobRun.error_summary` is
-declared `String(500)` (`models.py:1349`), and SQLite does not enforce that. **The response does:**
+declared `String(500)` (`models.py:1362`), and SQLite does not enforce that. **The response does:**
 `JobRunResponse.error_summary` is `Field(max_length=500)` (`schemas/jobs.py:88`), and
-`GET /jobs/{job_id}/history` answers `List[JobRunResponse]` (`api/v1/jobs.py:1197`). A stall reason
+`GET /jobs/{job_id}/history` answers `List[JobRunResponse]` (`api/v1/jobs.py:1213`). A stall reason
 longer than 500 characters would be stored without complaint, and it would turn the job's history
 route into a response-validation 500 for as long as that row is among the rows it returns.
 
 - **Every `JobRun.error_summary` write is fitted to the column (at the model, not at two call
-  sites).** The column is `String(500)` (`models.py:1349`), SQLite does not enforce it, and
+  sites).** The column is `String(500)` (`models.py:1362`), SQLite does not enforce it, and
   `JobRunResponse` does (`schemas/jobs.py:88`). Confirmed with the real schema class: a
   `response_model=List[JobRunResponse]` route answers 200 at 500 characters and **500 at 501**.
   - One constant, `JOB_RUN_ERROR_SUMMARY_CHARS = 500`, beside `JobRun`, is read by the column, by
@@ -90,13 +90,19 @@ route into a response-validation 500 for as long as that row is among the rows i
     unchanged, and cuts longer text to 499 characters plus `…`.
   - `JobRun` gets `@validates("error_summary")`, which applies the helper — the column enforcing
     its own declared length, which SQLite will not. It is the first `@validates` in `hub/hub`.
-    Chosen over wrapping each call site because there are eight writes today
-    (`scheduler.py:2580, 2609, 2762, 2923, 2966, 3062`, `api/v1/jobs.py:81` and
-    `run_reconciliation.py:222`), and the next one would be written without the wrapper.
+    Chosen over wrapping each call site because there are **nine** writes today
+    (`scheduler.py:2580, 2609, 2762, 2772, 2923, 2966, 3062`, `api/v1/jobs.py:81` and
+    `run_reconciliation.py:253`), and the next one would be written without the wrapper.
+    **`scheduler.py:2772` is new since REV's round** (`run.error_summary = coalesce_reason`,
+    landed in `e1eca5b`, 2026-09-14 15:35, after REV verified at `82b58df` 11:57) — this
+    *strengthens* the argument for a model-level fit rather than per-site wrapping (the ninth
+    site would otherwise have shipped unwrapped), but the count needs restating here, and IMPL
+    should re-grep for `error_summary\s*=` before ticking, in case an eighth or tenth site has
+    landed since this round too.
   - **R3: it fires on every write this column receives, measured.** A `DeclarativeBase` model
     with `@validates` fitted both a constructor keyword and an assignment. The real `JobRun` did
     the same through the attribute `set` event with `retval=True`, which is the hook `@validates`
-    installs. That covers `api/v1/jobs.py:81`'s `JobRun(error_summary=...)`, and all seven
+    installs. That covers `api/v1/jobs.py:81`'s `JobRun(error_summary=...)`, and all eight
     assignments. The validator runs in Python when the attribute is set, so an async session
     changes nothing. Its only blind spot is a Core `update()`/`insert()`, and a grep finds none
     against `job_runs` in `hub/hub`. The column is nullable, so the helper passes `None` through.
@@ -104,13 +110,13 @@ route into a response-validation 500 for as long as that row is among the rows i
     But it leaves the attribute unfitted in memory until the row is expired, so the object and the
     row would hold two values, and a response built from the object would still carry 600
     characters. `@validates` fits the value the object holds, which is what the route reads.
-  - `_stall_run_to_increment` (`:923`) compares `latest.error_summary` with
+  - `_stall_run_to_increment` (`:961`) compares `latest.error_summary` with
     `fit_error_summary(stall_reason)`. The stored value is fitted, so comparing the raw reason
     would never match its successor, and `agent-loops`'s once-per-fact rule would record one row
     per tick.
 - **R2 answered R1's open check: an existing reason already passes 500 today.** Computed, not
   observed:
-  - **`_wedged_review_reason`** (`scheduler.py:1744-1748`) reaches `error_summary` through the
+  - **`_wedged_review_reason`** (`scheduler.py:1893-1897`) reaches `error_summary` through the
     stall write (`:2762`). It measures 551 characters with a 32-character reviewer and a
     256-character title, and passes 500 once the title reaches 206 characters. The title is quoted
     with `!r`, so escapes grow it: 256 backslashes make the sentence 807 characters long.
@@ -122,7 +128,7 @@ route into a response-validation 500 for as long as that row is among the rows i
     unbounded by construction. The fit covers them, and cutting them loses only the tail of a git
     message. **REV: not only a git message.** A non-transient refusal becomes a terminal failure
     (`turn_scheduler.py:658-672`), and D4 below's guard sentence reaches `waiting_reason` this way
-    through `agent_trigger.py:852`. The evidence-branch sentence, unfitted, measured **534**
+    through `agent_trigger.py:859`. The evidence-branch sentence, unfitted, measured **534**
     characters at a 64-character id and a 32-character name, and an earlier shape measured
     **583**. The fit would have cut the remedy off the end, so D4's sentence is worded to fit.
   - `_job_agent_skip_reason` (`:2580`), the stop reasons (`:2609`), both `_safe_error_summary`
@@ -147,7 +153,7 @@ depends on that.
 
 ### D3 — once per fact means once per task (parent's D4)
 
-`_review_unstaffed_already_stands` (`scheduler.py:1913-1941`) adds the task to its query:
+`_review_unstaffed_already_stands` (`scheduler.py:2062-2090`) adds the task to its query:
 `EventLog.data["task_id"].as_string() == task_id`, newest first, `limit(1)`. That makes it the
 newest record **for this task** in this loop, which its own docstring already claims to read.
 
@@ -161,7 +167,7 @@ into the SQLite that Python 3.11 ships. No runtime code uses a JSON path yet. Th
 migration `0083` avoids `json_extract` *in a migration*, for data-shape reasons that do not apply
 to a column written only by `persist_event`.
 
-**R2: it works.** `EventLog.data` is a SQLAlchemy `JSON` column (`models.py:1018`), and
+**R2: it works.** `EventLog.data` is a SQLAlchemy `JSON` column (`models.py:1031`), and
 `persist_event` writes the payload dict into it (`utils.py`, `data=data or {}`). Run against the
 Hub's own models on `sqlite+aiosqlite:///:memory:` under `py -3.11`, with four `review_unstaffed`
 rows alternating between two tasks, the way LoopEngine's did. The statement compiles to
@@ -186,7 +192,7 @@ reached by three audiences:
 |---|---|---|
 | the operator | `PATCH …/tasks/{id}`, including the drawer's status menu | committed, or set by the same request |
 | an agent | `update_task` over MCP; `PATCH /agent-actions/tasks/{id}` over HTTP | committed over MCP; over HTTP also set by the same request (F366) |
-| a flow or a dispatch | `enter_selected_task` writes the reviewer, then transitions as `operator()` (`scheduler.py:816-828`) | staged by this call, then discarded by the rollback (F334) |
+| a flow or a dispatch | `enter_selected_task` writes the reviewer, then transitions as `operator()` (`scheduler.py:806-856`) | staged by this call, then discarded by the rollback (F334) |
 
 **The sentence must be true in all three**, and the guard cannot tell a staged value from a
 committed one. SQLAlchemy's attribute history is cleared by any autoflush between the assignment
@@ -234,7 +240,7 @@ describes a state that does not exist.
 `actor` becomes read, **for wording only**. Its docstring's *"`actor` is deliberately unread"*
 paragraph is amended to say so. The rule still binds every actor.
 
-**`review_dispatch_refusal`** (`agent_trigger.py:497-514`) is reached only by the operator's
+**`review_dispatch_refusal`** (`agent_trigger.py:459`) is reached only by the operator's
 `POST /agent/trigger` with `review_task_id`, an API-only route (F336).
 - The author branch drops *"or clear the assignee to review it yourself"* — unrelated to a refusal
   about the *reviewer* being the completer — and gains `own_review_remedy(task)` (D1 above).
@@ -248,13 +254,17 @@ paragraph is amended to say so. The rule still binds every actor.
 
 **Two more sentences carry F353's defect, and two comments become false and are amended:**
 - The D9 refusal, *"Reassign the task if 'x' should take it over"*, appears twice:
-  `review_dispatch_refusal` (`agent_trigger.py:494`) and the dispatch path (`:840`). Its reader is
+  `review_dispatch_refusal` (`agent_trigger.py:501`) and the dispatch path (`:847`). Its reader is
   the operator, who has no reassign control — `under_review`'s only edges are `approved`,
   `revision_needed` and `rejected` (`task_transitions.py:138-142`), so no move hands a review to
   another agent, and a PATCH of the assignee alone queues no turn (the wedge above). The sentence
-  becomes *"… Let the review in flight finish, or decide it yourself"*, followed by
-  `own_review_remedy`'s `under_review` sentence.
-- `agent_trigger.py:847-849` says the guard's sentence *"already names both remedies and the cost
+  becomes *"… Let the review in flight finish."* as its own complete sentence, followed by
+  `own_review_remedy`'s `under_review` sentence as a **new** sentence. **Fixed in this split's
+  verification round:** the original drafting joined this prefix's own *"…or decide it
+  yourself"* directly onto `own_review_remedy`'s `under_review` text, which already opens with
+  *"decide it yourself: …"* — doubling the phrase. The prefix drops its own "decide it yourself"
+  and lets the helper's sentence supply it once (tasks.md 4.9).
+- `agent_trigger.py:854-858` says the guard's sentence *"already names both remedies and the cost
   of doing nothing"*, and `task_transition_service.py:405-406` says the operator *"clear[s] or
   reassign[s] `assignee` first, which is what the refusal asks for"*. Both are amended — after this
   change each would be a false statement about the guard.

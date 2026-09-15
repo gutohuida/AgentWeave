@@ -43,29 +43,53 @@ mutation and the observed failure beside the task when ticking it.
       - `fit_error_summary(text)`, which leaves text that fits unchanged and cuts longer text to
         499 characters plus `…`;
       - `@validates("error_summary")` on `JobRun`, applying it;
-      - `_stall_run_to_increment` (`:923`) comparing against `fit_error_summary(stall_reason)`.
-- [ ] 2.2 (was 2.5b) `_wedged_review_reason` (`scheduler.py:1744-1748`) shortens the quoted title
+      - `_stall_run_to_increment` (`:961`) comparing against `fit_error_summary(stall_reason)`.
+- [ ] 2.2 (was 2.5b) `_wedged_review_reason` (`scheduler.py:1893-1897`) shortens the quoted title
       so the whole sentence fits 500 characters and its remedy survives.
 - [ ] 2.3 (was 2.12) Test: a `JobRun` constructed or assigned with 600 characters of
       `error_summary` stores exactly 500, ending `…`. A 500-character value is stored unchanged,
       and `None` stays `None` (the column is nullable).
       *Mutation:* remove the `@validates`. The test must fail.
+- [ ] 2.4 **New — the verification round found 2.2 shipped with no test of its own.** REV's list
+      of what moves named `own_review_remedy`, 2.5, 2.12 and 2.13 — not 2.5b; its only coverage in
+      the parent was task 2.11, a through-a-real-firing test that depends on rung-3's own
+      wedged-review detection (F154's shape), which is not built here and is not re-derived yet.
+      Test `_wedged_review_reason` (2.2) directly instead, as a unit: a wedged review whose
+      reviewer has a 32-character name and whose task has a 256-character title. Assert the
+      returned sentence is at most 500 characters and still ends with the remedy
+      (`revision_needed.`). The parent's task 2.11 (through-a-real-firing) stays in the sibling
+      directory once it is re-derived, and re-verifies this at the integration level; it is not
+      duplicated here.
+      *Mutation:* remove 2.2's title-shortening. The test must fail.
 
 ## 3. Once per task (design D3)
 
 - [ ] 3.1 (was 3.1) `_review_unstaffed_already_stands` filters on
-      `EventLog.data["task_id"].as_string() == task_id`, against real SQLite.
+      `EventLog.data["task_id"].as_string() == task_id`, against real SQLite. **Carries REV item
+      10, missed in the first split pass:** the docstring at `scheduler.py:2067-2069` still
+      claims a condition that cleared and returned *"is news again"*, which stays untrue after
+      this fix for a loop with two stuck tasks whose reasons happen to repeat exactly (the same
+      gap REV noted, left open, and this task must not leave open silently). Amend the docstring
+      to state the narrower rule this task actually implements: newest-for-this-task, not
+      newest-for-any-change.
 - [ ] 3.2 (was 3.2) Test: one loop, **two** unstaffable tasks, five firings through the real
       route. Exactly one `review_unstaffed` per task.
       *Mutation:* revert to the loop-newest query. The test must fail, while the existing
       single-task test still passes against the mutant, which shows why it never caught this.
-- [ ] 3.3 (was 3.3) Test: two tasks; between firings, change one task's reason only, by freeing an
-      agent's holding so its clause changes. One more record for that task, and none for the
-      other. Note (was 2.11 in the parent, R2): this changes one task's reason only if the agent
-      it frees is not the other task's author — keep that agent off both tasks' author sets in
-      the fixture. This test necessarily stages an "unstaffed" condition; stage it with the
-      simplest reachable one (a holding, or a running turn) rather than depending on rung-3's own
-      clause wording, since that wording is not this change's to build.
+- [ ] 3.3 (was 3.3, **staging corrected in this split — verification round found the original
+      staging no longer produces a reason change**) Test: two tasks; between firings, change one
+      task's reason only. **Not** by freeing a holding: since `4b59ee0` (2026-09-15,
+      `_agents_that_are_free`, `scheduler.py:1125-1138`), a bare holding no longer changes
+      availability or today's fixed rung-3 sentence — only a `loop_id`-reachable holding or a
+      queued turn does, and today's sentence (`scheduler.py:1297-1301`) varies only by
+      `excluded_because` and a project-wide provider-hold clause, not by named holdings at all
+      (that naming is rung-3's own D2, not built here). Stage the reason change instead by
+      varying one task's `excluded_because` — e.g. record evidence for a non-author agent on one
+      task between firings, which changes that task's exclusion clause without touching the
+      other's. One more record for the changed task, and none for the other. Note (was 2.11 in
+      the parent, R2): this changes one task's reason only if the agent whose exclusion changes
+      is not the other task's own excluded agent — keep the fixture's two tasks' exclusions
+      independent.
       *Mutation:* drop the task filter. The test must fail.
 
 ## 4. The refusals (design D4)
@@ -91,7 +115,7 @@ mutation and the observed failure beside the task when ticking it.
       both branches end with `own_review_remedy(task)` (1.1). That gives Land it for a `completed`
       task and the three exits for an `under_review` one, **without** rung 3's freeing clause.
       - Add `own_review_remedy` to the existing module-level import from `...scheduler`
-        (`agent_trigger.py:126`). There is no cycle: `scheduler` imports nothing from
+        (`agent_trigger.py:133-138`). There is no cycle: `scheduler` imports nothing from
         `agent_trigger`.
 - [ ] 4.3 (was 4.3) Test, operator PATCH on a completed task held by its author: 403, names Land
       it and `review_task_id`, and contains none of "clear the assignee", "approves" or "name
@@ -130,7 +154,7 @@ mutation and the observed failure beside the task when ticking it.
       - the docstring of
         `test_reviewer_is_not_the_author.py::test_clearing_the_assignee_lets_the_operator_review_it_themselves`
         (`:377-378`);
-      - `api/v1/agent_trigger.py:847-849` (*"already names both remedies and the cost of doing
+      - `api/v1/agent_trigger.py:854-858` (*"already names both remedies and the cost of doing
         nothing"*) and `task_transition_service.py:405-406` (*"they clear or reassign
         `assignee` first, which is what the refusal asks for"*).
 - [ ] 4.7 (was 4.7) Test: the dispatch route's author refusal (`POST /agent/trigger` with
@@ -141,12 +165,20 @@ mutation and the observed failure beside the task when ticking it.
       dispatched to its completer. It names approve, reject and revision_needed, and does
       **not** name Land it.
       *Mutation:* always emit the `completed` remedy. The test must fail.
-- [ ] 4.9 (was 4.9) The D9 refusal, *"Reassign the task if …"*, at `agent_trigger.py:494` and
-      `:840`, becomes *"… Let the review in flight finish, or decide it yourself"* plus the
-      `under_review` sentence of `own_review_remedy`. Test both sites: dispatch a second reviewer
-      to a task under review by another. Expect 409, naming approve, reject and revision_needed,
-      and not "Reassign".
-      *Mutation:* restore one site's old sentence. The test must fail.
+- [ ] 4.9 (was 4.9, **fixed in this split — verification round found a duplication defect in the
+      original wording**) The D9 refusal, *"Reassign the task if …"*, at `agent_trigger.py:501`
+      and `:847`, becomes *"… Let the review in flight finish."* as its own complete sentence,
+      followed by `own_review_remedy(task)`'s `under_review` sentence (1.1) as a **new** sentence
+      — do **not** repeat "decide it yourself" in the D9 prefix itself; `own_review_remedy`'s
+      `under_review` branch already opens with it (1.1), and concatenating the two as originally
+      drafted (*"…or decide it yourself" plus "decide it yourself: approve, …"*) doubles the
+      phrase. Test both sites: dispatch a second reviewer to a task under review by another.
+      Expect 409, naming approve, reject and revision_needed, containing "decide it yourself"
+      **exactly once** (not "yourself decide" and not the phrase twice), and not "Reassign".
+      *Mutations:* (a) restore one site's old sentence — the test must fail; (b) restore the
+      duplicated *"or decide it yourself" + own_review_remedy* concatenation — the "exactly once"
+      assertion must fail, which is what a looser assertion (approve/reject/revision_needed
+      present, "Reassign" absent) would miss.
 - [ ] 4.10 (was 2.13) Test: the guard's operator sentence, both branches, at a 64-character task
       id and a 32-character agent name, is at most 500 characters. So is the queue entry's
       `waiting_reason` after a flow staging is refused on it, read **before** the model fit, from

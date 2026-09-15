@@ -171,7 +171,6 @@ Groups 3 and 4 (all of `own_review_remedy`'s once-per-task and refusal-wording t
 wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renumbered 3.1-3.3 and
 4.1-4.10. Built there, not here. See that directory for the full text.
 
-- [ ] 4.1 `_guard_reviewer_is_not_the_author`, both branches:
 ## 5. The board line (design D6), under the day's bundle rule
 
 - [ ] 5.1 `title={loop.stall_reason}` on the stall `<p>` in `LoopsIndexTab.tsx`, and a unit test
