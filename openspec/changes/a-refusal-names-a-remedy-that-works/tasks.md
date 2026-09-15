@@ -21,36 +21,64 @@ mutation and the observed failure beside the task when ticking it.
 
 ## 1. The remedy a refused actor can act on (design D1) — new for this split
 
-- [ ] 1.1 Add `own_review_remedy(task)` to `hub/hub/scheduler.py`, public (no leading underscore,
+- [x] 1.1 Add `own_review_remedy(task)` to `hub/hub/scheduler.py`, public (no leading underscore,
       so `agent_trigger` can import it at module level — it already imports four names from
       `scheduler`, and `scheduler` imports nothing from `agent_trigger`, so there is no cycle).
       Returns the status-only sentence (D1), asserting the task's status is one of the two below:
       - `completed`: *"Land it, on the task, to review it yourself."* No promise of approval.
       - `under_review`: *"decide it yourself: approve, reject, or send it back with
         revision_needed."* Never Land it.
-- [ ] 1.2 Test: the helper returns the right sentence for each of the two statuses.
+
+      Landed at `scheduler.py`, beside `_wedged_review_reason`. Group 4 (`4.2`) is what actually
+      wires `agent_trigger` to import it — not built yet in this firing.
+- [x] 1.2 Test: the helper returns the right sentence for each of the two statuses.
       *Mutation:* swap the two branches. The test must fail.
 
       This helper's assertion on any other status is exercised by the sibling directory's own
       task once it re-derives the divergence restaff's screening logic against `F352-free` — do
       not duplicate that test here; it belongs where the screening that triggers it lives.
 
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_completed_names_land_it` and
+      `::test_under_review_names_the_three_exits_never_land_it`. Mutation applied (swapped the
+      `if task.status == "completed"` branch to `"under_review"`): both tests failed —
+      `test_completed_names_land_it` on `'Land it...' == 'decide it yourself...'` and
+      `test_under_review_names_the_three_exits_never_land_it` on the reverse. Reverted; both pass
+      clean.
+
 ## 2. The stall reason fits within its column (design D2)
 
-- [ ] 2.1 (was 2.5) Fit `JobRun.error_summary` at the model (design D2):
+- [x] 2.1 (was 2.5) Fit `JobRun.error_summary` at the model (design D2):
       - `JOB_RUN_ERROR_SUMMARY_CHARS = 500` beside `JobRun`, read by `String(...)` and by
         `JobRunResponse.error_summary`'s `max_length`;
       - `fit_error_summary(text)`, which leaves text that fits unchanged and cuts longer text to
         499 characters plus `…`;
       - `@validates("error_summary")` on `JobRun`, applying it;
       - `_stall_run_to_increment` (`:961`) comparing against `fit_error_summary(stall_reason)`.
-- [ ] 2.2 (was 2.5b) `_wedged_review_reason` (`scheduler.py:1893-1897`) shortens the quoted title
+
+      Landed in `hub/hub/db/models.py` (constant, helper, column, validator),
+      `hub/hub/schemas/jobs.py` (`JobRunResponse.error_summary` now reads the constant), and
+      `hub/hub/scheduler.py:961` (`_stall_run_to_increment`'s comparison). Re-grepped
+      `error_summary\s*=` across `hub/hub` first: still the nine sites D2 names, all covered by
+      the model-level validator, no new site since the round.
+- [x] 2.2 (was 2.5b) `_wedged_review_reason` (`scheduler.py:1893-1897`) shortens the quoted title
       so the whole sentence fits 500 characters and its remedy survives.
-- [ ] 2.3 (was 2.12) Test: a `JobRun` constructed or assigned with 600 characters of
+
+      Implemented as an inner `_sentence(title)` closure plus a trim loop that shortens the raw
+      title one character at a time (re-`repr`ing each attempt, since `!r`'s escapes can regrow
+      the string non-monotonically) until the assembled sentence fits
+      `JOB_RUN_ERROR_SUMMARY_CHARS`, appending `…` to the trimmed title.
+- [x] 2.3 (was 2.12) Test: a `JobRun` constructed or assigned with 600 characters of
       `error_summary` stores exactly 500, ending `…`. A 500-character value is stored unchanged,
       and `None` stays `None` (the column is nullable).
       *Mutation:* remove the `@validates`. The test must fail.
-- [ ] 2.4 **New — the verification round found 2.2 shipped with no test of its own.** REV's list
+
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_a_600_character_error_summary_is_stored_at_500_ending_ellipsis`,
+      `::test_a_500_character_error_summary_is_stored_unchanged`,
+      `::test_none_error_summary_stays_none`. Mutation applied (renamed the `@validates`-decorated
+      method to `_validate_error_summary_DISABLED` without the decorator): the 600-character test
+      failed on `assert 600 == 500` (the raw, unfitted string was stored). Reverted; all three
+      pass clean.
+- [x] 2.4 **New — the verification round found 2.2 shipped with no test of its own.** REV's list
       of what moves named `own_review_remedy`, 2.5, 2.12 and 2.13 — not 2.5b; its only coverage in
       the parent was task 2.11, a through-a-real-firing test that depends on rung-3's own
       wedged-review detection (F154's shape), which is not built here and is not re-derived yet.
@@ -61,6 +89,12 @@ mutation and the observed failure beside the task when ticking it.
       directory once it is re-derived, and re-verifies this at the integration level; it is not
       duplicated here.
       *Mutation:* remove 2.2's title-shortening. The test must fail.
+
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_wedged_review_reason_fits_500_at_a_32_char_reviewer_and_256_char_title`.
+      Unmutated, at a 32-char reviewer and a 256-char title, the sentence measures 552 characters
+      (the exact wording drifted slightly from D2's 551-character measurement, same shape).
+      Mutation applied (returned `_sentence(task.title)` directly, skipping the trim loop): the
+      test failed on `assert 552 <= 500`. Reverted; passes clean.
 
 ## 3. Once per task (design D3)
 

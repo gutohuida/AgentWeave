@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from ..db.models import JOB_RUN_ERROR_SUMMARY_CHARS
 from .common import RequestModel
 
 
@@ -85,7 +86,7 @@ class JobRunResponse(BaseModel):
     status: str = Field(max_length=64)
     trigger: str = Field(max_length=64)
     session_id: Optional[str] = Field(default=None, max_length=128)
-    error_summary: Optional[str] = Field(default=None, max_length=500)
+    error_summary: Optional[str] = Field(default=None, max_length=JOB_RUN_ERROR_SUMMARY_CHARS)
     # How many firings this record stands for (`loop-notices-and-reacts` design D6). Always 1 on a
     # record of a firing that happened; more only on a stall record, where each subsequent refusal
     # for the same stall counts here instead of appending another row. Defaults to 1 rather than 0

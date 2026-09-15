@@ -18,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 
 def _now() -> datetime:
@@ -1332,6 +1332,24 @@ class AIJob(Base):
     )
 
 
+#: `JobRun.error_summary`'s column length, read by the column itself, by
+#: `JobRunResponse.error_summary`'s `max_length` and by `fit_error_summary` below — one constant
+#: rather than three numbers that could drift apart (`a-refusal-names-a-remedy-that-works` D2).
+JOB_RUN_ERROR_SUMMARY_CHARS = 500
+
+
+def fit_error_summary(text: Optional[str]) -> Optional[str]:
+    """Cut `text` to `JOB_RUN_ERROR_SUMMARY_CHARS`, ending `…` if it did not already fit.
+
+    `None` passes through unchanged — the column is nullable. Text that already fits is returned
+    unchanged, not just under-the-limit-equivalent, so a caller comparing two fitted values by
+    equality gets a stable answer.
+    """
+    if text is None or len(text) <= JOB_RUN_ERROR_SUMMARY_CHARS:
+        return text
+    return text[: JOB_RUN_ERROR_SUMMARY_CHARS - 1] + "…"
+
+
 class JobRun(Base):
     """Execution record for an AI job."""
 
@@ -1359,7 +1377,18 @@ class JobRun(Base):
         String(16), default="scheduled", nullable=False
     )  # "scheduled" or "manual"
     session_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    error_summary: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    error_summary: Mapped[Optional[str]] = mapped_column(
+        String(JOB_RUN_ERROR_SUMMARY_CHARS), nullable=True
+    )
+
+    @validates("error_summary")
+    def _validate_error_summary(self, key: str, value: Optional[str]) -> Optional[str]:
+        # The column is `String(JOB_RUN_ERROR_SUMMARY_CHARS)`; SQLite does not enforce that, and
+        # `JobRunResponse.error_summary` (`max_length=JOB_RUN_ERROR_SUMMARY_CHARS`) does, so an
+        # unfitted write here turns `GET /jobs/{id}/history` into a response-validation 500 for as
+        # long as the row is among the rows it returns (`a-refusal-names-a-remedy-that-works` D2).
+        return fit_error_summary(value)
+
     requested_by_run_id: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, index=True
     )

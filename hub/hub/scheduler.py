@@ -23,7 +23,19 @@ from .conversations import (
     new_conversation,
 )
 from .db.engine import async_session_factory
-from .db.models import Agent, AIJob, Checkpoint, JobRun, Loop, Message, Question, Run, Task
+from .db.models import (
+    JOB_RUN_ERROR_SUMMARY_CHARS,
+    Agent,
+    AIJob,
+    Checkpoint,
+    JobRun,
+    Loop,
+    Message,
+    Question,
+    Run,
+    Task,
+    fit_error_summary,
+)
 from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .provider_allowance import agents_held, hold_busy_reason, hold_coalesce_reason, provider_hold
 from .run_task_binding import (
@@ -958,7 +970,7 @@ async def _stall_run_to_increment(
     )
     if latest is None:
         return None
-    if latest.status != "skipped" or latest.error_summary != stall_reason:
+    if latest.status != "skipped" or latest.error_summary != fit_error_summary(stall_reason):
         return None
     return latest
 
@@ -1878,6 +1890,38 @@ async def _loop_stall_reason(session: AsyncSession, loop: Loop, *, agent: str) -
     return await _stall_reason_from_walk(session, loop, gated)
 
 
+def own_review_remedy(task: Task) -> str:
+    """What a refused actor can do about *this* task's own review, by status (design D1).
+
+    Public, without a leading underscore, because `agent_trigger` imports it at module level for
+    `review_dispatch_refusal` -- the same rule `enter_selected_task`'s docstring states for the
+    same situation. `scheduler` imports nothing from `agent_trigger`, so there is no cycle.
+
+    Only the status-only sentence: whether anyone else is free to take the review has no bearing on
+    a refusal aimed at one named reviewer, so that clause (rung 3's own, once re-derived) is not
+    this helper's to append.
+
+    **`completed`: names Land it, and promises nothing.** `land_task` evaluates the approval gate
+    before it moves anything, and `_check_unaccepted` refuses when evidence naming a commit is
+    still waiting to be judged and nothing else would merge -- which a flow's own arm guarantees is
+    the shape of the evidence here. Land it *reviews* the work; it does not promise to *approve* it.
+
+    **`under_review`: names the three exits, never Land it.** `land_task` refuses an `under_review`
+    task with a 409, so naming Land it there would name an action that refuses.
+
+    Asserts the task's status is one of these two -- a caller reaching this for any other status is
+    the sibling directory's own gap to close, once its rung-3 clause logic is re-derived against
+    `F352-free`, not this helper's to silently paper over.
+    """
+    assert task.status in ("completed", "under_review"), (
+        f"own_review_remedy called on task {task.id!r} with status {task.status!r}, "
+        "neither 'completed' nor 'under_review'"
+    )
+    if task.status == "completed":
+        return "Land it, on the task, to review it yourself."
+    return "decide it yourself: approve, reject, or send it back with revision_needed."
+
+
 def _wedged_review_reason(task: Task, reviewer: str) -> str:
     """What a firing says about a review with a name on it and nobody doing it (finding F154).
 
@@ -1889,12 +1933,26 @@ def _wedged_review_reason(task: Task, reviewer: str) -> str:
     picks up whatever finishes", which for this row can never come true: nothing is running, so
     nothing finishes, and every subsequent firing repeats the promise. A refusal that cannot be
     cleared by waiting must not suggest waiting.
+
+    **Shortens the quoted title to fit `JOB_RUN_ERROR_SUMMARY_CHARS`.** This reaches
+    `JobRun.error_summary` through the stall write, and `!r`'s escapes can grow a long title well
+    past what the model-level fit would leave room for -- which would cut the remedy off the end
+    instead (`a-refusal-names-a-remedy-that-works` D2). The title is what gives, not the remedy.
     """
-    return (
-        f"{reviewer} is named on {task.id} ({task.title!r}) as its reviewer and is not reviewing "
-        f"it: no turn is running on that task and none is queued. Nothing will move it on its own. "
-        f"Ask {reviewer} again, review it yourself, or send it back with revision_needed."
-    )
+
+    def _sentence(title: str) -> str:
+        return (
+            f"{reviewer} is named on {task.id} ({title!r}) as its reviewer and is not reviewing "
+            f"it: no turn is running on that task and none is queued. Nothing will move it on its own. "
+            f"Ask {reviewer} again, review it yourself, or send it back with revision_needed."
+        )
+
+    title = task.title
+    text = _sentence(title)
+    while len(text) > JOB_RUN_ERROR_SUMMARY_CHARS and title:
+        title = title[:-1]
+        text = _sentence(title + "…")
+    return text
 
 
 def _landing_stall_reason(count: int) -> str:
