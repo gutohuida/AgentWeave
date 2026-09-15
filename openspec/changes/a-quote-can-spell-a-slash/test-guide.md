@@ -75,13 +75,20 @@ These need no operator; a test or CI settles each.
   position too.
 - **A directly typed word with no escape at all is not caught by the same fallthrough this
   change corrects (rows T1, T2).** `cat x!/etc/passwd` (T1, punctuation mid-word) and
-  `cat */etc/passwd` (T2, punctuation as the word's first character) — nothing in either command
+  `cat !/etc/passwd` (T2, punctuation as the word's first character) — nothing in either command
   is ANSI-C-quoted — flip from refused (`'/etc/passwd' is outside your workspace'`, an
   over-refusal: the checker used to mistake the tail for an absolute path glued onto the leading
   text) to **allowed** (correctly resolved as one relative path under the workspace root). This is
   a real, deliberate widening of the fix beyond ANSI-C decoding — see design.md D6's "wider effect"
   note — and `cat -o/tmp/x` (row S2) still correctly denies, confirming the checker still
   recognizes a genuinely glued form.
+- **Quote-joining, glob characters and an embedded NUL stay protected, exactly as they do today
+  (rows `E11`, `J5`, `X5`, `X8` — not new, already in `hub/tests/test_permission_approver.py`).**
+  This fix widens what the checker treats as an ordinary path character, and an earlier draft of
+  it widened too far — it let a shell-quote-joined traversal, a glob that can match `..`, and a
+  path split around a NUL byte all resolve as literal, safe-looking relative paths instead of
+  being caught the way they are today. None of these four commands should ever change behavior
+  because of this fix; if any of them does, the fix has regressed past its own intended scope.
 - **curl's own file-reading convention stays protected, even from an interior `@` (row S3).**
   `curl --data-urlencode name@/etc/passwd $HUB_URL/api/v1/agent-actions/tasks` is refused as
   outside, unchanged, before and after this change — curl reads the file named after an `@`

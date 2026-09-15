@@ -149,19 +149,28 @@ point: a row may not change answer before the decode exists.
       - Verify on both platforms exactly as 1.2's "Done" note did (`--runxfail`, record pass/xfail
         counts), and update that note's numbers in this file once done.
       - Commit alone, green, before §2 resumes.
-- [ ] 1.5 **New (Round 6, corrected by Round 7 and Round 8, 2026-09-15) — pins Q1–Q4, S1, S2, T1,
-      T2, S3 (design.md D2/D6), the rule-5/6 fallthrough class and its fix's own regression-guards.**
-      Add all nine to the same parametrized table, `ids=` their labels. **Measure each row's
-      *today* answer against the real, unmodified `_decide` first**, same discipline as 1.4 —
-      Round 7 and Round 8 each found marks this task previously specified were wrong against a real
-      measurement; re-measure rather than transcribe, including the values below.
-      - **Q1–Q3:** today, **POSIX allow** (rule 4, no real `/` in the raw word), **Windows deny,
-        unchecked** (the raw word carries a literal `\` and a leading `$`, rule 3). After 2.2c
-        lands: **allow, both platforms**. Mark the **Windows** answer assertion
+- [ ] 1.5 **New (Round 6, corrected by Round 7, Round 8 and Round 9, 2026-09-15) — pins Q1–Q4, S1,
+      S2, T1, T2, S3 (design.md D2/D6), the rule-5/6 fallthrough class and its fix's own
+      regression-guards.** Add all nine to the same parametrized table, `ids=` their labels.
+      **Measure each row's *today* answer against the real, unmodified `_decide` first**, same
+      discipline as 1.4 — every round that checked this task so far found marks it previously
+      specified were wrong against a real measurement; re-measure rather than transcribe, including
+      the values below. **This task alone does not prove the fix is safe** — task 2.2c's
+      verification gate (running the *existing* `hub/tests/test_permission_approver.py` in full)
+      is what catches a too-permissive candidate; these nine rows only prove the intended cases
+      work, not that nothing else broke.
+      - **Q1, Q2, Q4:** today, **POSIX allow** (rule 4, no real `/` in the raw word), **Windows
+        deny, unchecked** (the raw word carries a literal `\` and a leading `$`, rule 3). After
+        2.2c lands: **allow, both platforms**. Mark the **Windows** answer assertion
         `xfail(strict=True)` (deny-unchecked → allow). **Do not mark the POSIX answer** — POSIX is
         already `allow` today and stays `allow` after, so a POSIX `xfail` on this assertion would
-        XPASS immediately at §1 commit time. Q1–Q3's protection comes from §4.9's mutations, not
-        from a POSIX pin.
+        XPASS immediately at §1 commit time. Their protection against a future too-narrow fix comes
+        from §4.9's mutations, not from a POSIX pin.
+      - **Q3 (Round 9: example replaced):** use `$'sub\u2212\x2fhello.py'` (U+2212, MINUS SIGN),
+        **not** the original `$'sub\u2000\x2fhello.py'` (U+2000, EN QUAD) — `_WORD_SPLIT_RE`
+        (`hub/hub/mcp_server.py:968`) is a Unicode-aware `\s` pattern and splits a word at U+2000
+        before `_judge_word` ever runs, so the original example never reached rule 5/6 at all and
+        cannot demonstrate this class of fix. Same today/after values and marks as Q1/Q2/Q4 above.
       - **Q4:** today, **POSIX allow, Windows deny, unchecked** (its raw pre-decode word also
         carries a literal `\` and `$`, refused today exactly like every other pre-decode ANSI-C
         row). After: **allow, both platforms** — this flip happens once §2's decoder lands on its
@@ -188,9 +197,11 @@ point: a row may not change answer before the decode exists.
         lands: **allow, both platforms** — mark **both platforms'** answer assertions
         `xfail(strict=True)`. Depends on the interior broadening only (its leading character `x`
         was always inside the old leading class) — see §4.9's mutation split.
-      - **T2 (directly-typed leading widening — `cat */etc/passwd`):** today, **deny, outside,
-        both platforms**. After 2.2c: **allow, both platforms** — mark both platforms' answer
-        assertions `xfail(strict=True)`. Depends on the leading broadening only (its first segment
+      - **T2 (directly-typed leading widening — `cat !/etc/passwd`, not the original
+        `*/etc/passwd`; Round 9 found `*` needed excluding everywhere too, X5's glob concern):**
+        today, **deny, outside, both platforms**. After 2.2c: **allow, both platforms** — mark
+        both platforms' answer assertions `xfail(strict=True)`. Depends on the leading broadening
+        only (its first segment
         is empty, so the interior classes are never exercised) — the complement of T1; see §4.9.
       - **S3 (curl `name@filename` convention stays protected):** today and after, **deny, outside,
         both platforms, unchanged** — no mark. This is the row that would have moved to `allow`
@@ -332,42 +343,53 @@ point: a row may not change answer before the decode exists.
   them implements the dual reading or the ≥0x80000000 fix. `%TEMP%/f332/proto.py` (Round 4) is
   the first reference that does, but it is scratch, not the implementation. The implementation is
   held to D2's table — which now pins N2–N5 and P1–P7 — not to any prototype.
-- [ ] 2.2c **New (Round 6, corrected by Round 7 and Round 8, 2026-09-15) — this is the one place
-  §2.3's "leave everything after the lexer unchanged" does not hold.** Broaden
-  `_PLAIN_RELATIVE_RE` (`hub/hub/mcp_server.py:966`) from its current `\w`-allowlisted character
-  classes — **leading, first-segment interior, and every later segment** — to a denylist naming
-  exactly the characters the reader's named glue forms and conventions need excluded. See
-  design.md D6 for the full derivation, safety argument, and the D2 rows (Q1–Q4, S1, S2, T1, T2,
-  S3) it fixes and pins — **read D6's own two-round correction history before implementing**: its
-  first version broadened only the interior classes (left a leading-position gap, Round 7 finding
-  1); its second version excluded `@` from the leading position only (left curl's own
-  `name@filename` reading convention exploitable from any interior position, Round 8 finding 4).
-  This is the twice-corrected pattern:
+- [ ] 2.2c **New (Round 6, corrected by Round 7, Round 8 and Round 9, 2026-09-15) — this is the
+  one place §2.3's "leave everything after the lexer unchanged" does not hold, and the one task
+  whose "done" bar is different from every other task in this file: it is not done until the
+  *existing* test file passes, not only the new rows.** Broaden `_PLAIN_RELATIVE_RE`
+  (`hub/hub/mcp_server.py:966`) from its current `\w`-allowlisted character classes to a denylist.
+  See design.md D6 for the full derivation and the D2 rows (Q1–Q4, S1, S2, T1, T2, S3) it fixes
+  and pins — **read D6's own three-round correction history before implementing**: broadening only
+  the interior classes left a leading-position gap (Round 7); excluding `@` from the leading
+  position only left curl's `name@filename` convention open from any interior position (Round 8);
+  and **the whole "enumerate what's dangerous" approach, checked only against constructed cases,
+  missed that the reader's own already-shipped test suite depends on the *narrow* regex to keep
+  five pinned rows safe — two of them real escapes, not documentation gaps (Round 9).** This is
+  the three-times-corrected pattern:
   ```python
+  _PLAIN_RELATIVE_EVERYWHERE = "\"'`{}[]()<>|;&@*?%\x00"
   _PLAIN_RELATIVE_RE = re.compile(
-      rf"^[^{re.escape(_SEPARATORS)}:@\-][^{re.escape(_SEPARATORS)}:@]*"
-      rf"(?:[{re.escape(_SEPARATORS)}][^{re.escape(_SEPARATORS)}@]*)+$"
+      rf"^[^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}:\-]"
+      rf"[^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}:]*"
+      rf"(?:[{re.escape(_SEPARATORS)}][^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}]*)+$"
   )
   ```
-  **The leading position excludes the separators, `:`, `@` and `-`** — the characters that open
-  the three named glue forms (`-o/tmp/x`, `@/etc/passwd`, `host:/x`). **`@` is additionally
-  excluded from every interior position, first segment and every later segment** — unlike `:`,
-  which stays first-segment-only (its two glue forms, `host:/x` and `HEAD:x`, are both specifically
-  about a colon *before the first separator*; curl's `name@filename` reading has no such
-  restriction — an `@` anywhere in the argument value triggers it, verified against curl's own
-  `--data-urlencode` documentation and measured through the real `_decide`, design.md S3's row).
-  This is a real, deliberate widening beyond what either earlier draft did: a directly typed word
-  like `x!/etc/passwd` or a leading `*/etc/passwd` (no `$'…'` at all) now also resolves through
-  rule 5 instead of rule 6, flipping deny→allow (design.md's T1 and T2 rows) — this is intentional
-  and documented in D6's "wider effect" note, not a regression to avoid. `x@/etc/passwd` and
-  `name@/etc/passwd` do **not** flip — `@` is excluded everywhere, not narrowed to the leading
-  position; **do not** re-narrow the `@` exclusion back to leading-only in an attempt to simplify
-  the pattern — that reopens S3's curl exfiltration path.
-  Without the leading broadening, the decoder correctly produces a real separator for words like
-  `$'\xd7sub\x2fhello.py'` (the exotic character as the word's *first* character) but rule 5 still
-  rejects the whole word and rule 6's backstop still misjudges the tail as absolute-from-drive-root
-  — S1 pins this exact gap; Q1–Q3 pin the (already-fixed-by-the-interior-broadening-alone) interior
-  case; Q4, S2 and S3 are negative controls that must not move.
+  `_PLAIN_RELATIVE_EVERYWHERE` is every character in `_WORD_TRIM` (`hub/hub/mcp_server.py:972` —
+  defined *after* this regex in the file, so it cannot be referenced directly; the set is restated
+  literally) except `:` (scoped separately, unchanged), plus `@` (Round 8, curl), `*` and `?`
+  (X5's pre-existing, deliberate glob-character exclusion — `[` and `]` are already in
+  `_WORD_TRIM`), `%` (tied to `_CMD_VARIABLE_RE`'s own `%NAME%` expansion syntax a few lines below
+  this regex), and a NUL byte (row `X8`). Every one of these is excluded from **every** position —
+  leading, first segment, every later segment — because none of the reasons behind any of them is
+  specific to where in the word the character sits. `:` stays first-segment-only and `-` stays
+  leading-only, both unchanged from every earlier version — see design.md D6.
+  **Verification gate — this is not optional and is separate from §6.2's later, whole-suite run:**
+  before considering this task done, patch the candidate regex into a real checkout of
+  `hub/hub/mcp_server.py` and run `hub/tests/test_permission_approver.py` **in full, unfiltered**
+  (`py -3.11 -m pytest tests/test_permission_approver.py -q` from `hub/`). It must return exactly
+  the baseline count the unmodified tree returns (currently `182 passed, 1 skipped, 16 xfailed` —
+  re-measure this exact count against the tree at implementation time, since §1's pinning adds to
+  it; the point is *zero regressions among rows this task did not intend to touch*, not a specific
+  number). **Rows `E11`, `J5`, `X5`, `X8` and `H11` are the ones a too-permissive candidate breaks
+  first** — `E11` and `J5` are real escapes if they flip (an inner-shell quote-join traversal and
+  an absolute-path write, respectively; see design.md D6's account of each), not merely wrong
+  reasons. If any of them move, the candidate regex is still too permissive — go back to D6's
+  derivation and find what character class it omits; do not special-case these rows out of the
+  suite run to make it pass. This is why 2.2c's regex is derived from `_WORD_TRIM` and the file's
+  own other special-character constants (above), rather than from constructing new adversarial
+  cases round after round — that approach found a new gap on average once per round today, and
+  running the existing suite is what actually catches the class of thing three rounds of
+  construction missed.
   **Refusal-text fidelity: this task changes the *wording* of two rows already pinned by task
   1.4, without changing their verdict.** P4 and P5(POSIX) both carry a non-`\w`/non-ASCII decoded
   character and, before this task, are denied via rule 6's backstop (whose refusal quotes only the
@@ -452,9 +474,13 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
   and produces `..g` with no separator (R3 finding 2). On POSIX N5 is allow either way, so run its
   assertion on Windows (or force `os.sep`). A mutation that leaves N5 green means the closing-quote
   guard is not load-bearing.
-- [ ] 4.9 **New (Round 6, corrected by Round 7 and Round 8) — four mutations, because the fix
-  broadens three independent things (the leading class, the general interior character set, and
-  the `@` exclusion specifically) and each needs its own proof, not one combined revert.**
+- [ ] 4.9 **New (Round 6, corrected by Round 7, Round 8 and Round 9) — five mutations, because the
+  fix broadens four independent things (the leading class, the general interior character set, the
+  `@` exclusion specifically, and — Round 9 — the quote/glob/`%`/NUL exclusion specifically) and
+  each needs its own proof, not one combined revert. This task's own rows are necessary but not
+  sufficient — task 2.2c's gate (running the existing `hub/tests/test_permission_approver.py`
+  against the real candidate regex) is the one that actually proved 4.9e is needed at all; do not
+  treat passing 4.9a–4.9d as evidence the regex is complete.**
   - **4.9a — full revert** (restore the original `\w`-only pattern:
     `r"^[\w.+][\w.+\-]*(?:[sep][\w.+\-:]*)+$"`). **Q1, Q2, Q3, S1, T1 and T2 must each flip from
     allow to deny** (S1, T2 on the leading class reverting; Q1–Q3, T1 on the interior class
@@ -490,10 +516,24 @@ Apply each mutation alone (UTF-8 in and out; assert the edit matched exactly onc
     real regression — the interior denylist gaining `@` back while everything else about D6
     stays fixed — pass unnoticed. 4.9d is the only mutation that actually exercises the fix Round
     8 added.
+  - **4.9e — the quote/glob/`%`/NUL-exclusion-only mutation (Round 9), and the one that proves
+    this task's own biggest fix** (leave the leading class, the general interior broadening, and
+    the `@` exclusion exactly as shipped; remove `_PLAIN_RELATIVE_EVERYWHERE`'s other members —
+    the quote characters, `{}[]()<>`, `|;&`, `*?`, `%` and NUL — from every position, i.e. revert
+    to exactly the Round-8 pattern this task's own history describes as broken). **The reader's
+    own pre-existing, already-shipped rows `E11`, `J5`, `X5` and `X8`
+    (`hub/tests/test_permission_approver.py`) must each flip from deny to allow under this
+    mutation** — this is not a new row this change adds, it is proof that the fix, if shipped
+    without the quote/glob/`%`/NUL exclusions, reopens rows that were never part of F332 at all.
+    **Q1–Q4, S1, S2, T1, T2 and S3 must not move** — none of them involves a quote, glob, `%` or
+    NUL character. If 4.9e's named rows do not flip, the mutation was not applied correctly (it
+    should reproduce exactly the Round-9 measurement in design.md D6 — `182 passed` becomes
+    `5 failed, 177 passed` under this exact mutation) — re-check the edit before concluding the
+    fix is safe without this exclusion.
   A mutation that leaves its own named rows green means the broadening it is supposed to prove is
-  not actually doing anything — check all four mutations' predicted outcomes above by actually
+  not actually doing anything — check all five mutations' predicted outcomes above by actually
   running them; do not assume 4.9a's combined revert alone is sufficient evidence for any of the
-  three narrower claims, and do not assume 4.9c substitutes for 4.9d.
+  four narrower claims, and do not assume 4.9c substitutes for 4.9d or 4.9d substitutes for 4.9e.
 
 ## 5. Drive it — the reason a real operator reads (Windows), POSIX proven on CI
 
