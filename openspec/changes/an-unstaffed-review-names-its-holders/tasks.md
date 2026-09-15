@@ -1,17 +1,29 @@
 # Tasks — an unstaffed review names its holders
 
-> **STOPPED AT REV, 2026-09-14. Do not build any task here** until the operator answers
-> `F352-free` and the split question (proposal.md, top). If the operator approves REV's split, the
-> F353 half (groups 3 and 4, 2.5, 2.5b, 2.12 and 2.13) moves to its own change directory and takes
-> one verification round there before it is built. REV (2026-09-14) revised 2.6, 4.1, 4.3, 4.4, 4.5,
-> 4.6 and 4.7, and added 2.13, 2.14 and 4.9. 2.14 belongs to the rung-3 half.
+> **STOPPED AT REV, 2026-09-14. Do not build any task here.** The operator decided both questions
+> on 2026-09-15 (`spec-queue/DECISIONS.md`, `### 2026-09-15, later` and the `F352-free` row):
+> - **The split is approved and done.** Groups 3 and 4, 2.5, 2.5b, 2.12 and 2.13 moved to
+>   `openspec/changes/a-refusal-names-a-remedy-that-works/`, renumbered there. **Do not build them
+>   from this file — it is stale for them.** They are struck through below for that reason, not
+>   removed, so a diff against `fb469e2`/`82b58df` still shows where they went.
+> - **`F352-free` is decided: option (f), reachability, not (d) and not the (e) this file's
+>   remaining tasks (1-2.4, 2.6-2.11, 2.14, 5) were written against.** (f) already shipped
+>   (`4b59ee0`, archived `2026-09-15-a-task-nothing-will-move-holds-nobody`,
+>   `hub/hub/scheduler.py:1138`). **Every remaining decision below (D1, D2's clause/prefix/budget
+>   logic, D3, D6) needs re-deriving against (f) before any task here is built** — this file and
+>   `design.md` still describe (e). That re-derivation is its own round, not done in this pass.
+>
+> 2.14 stays here (it always belonged to this half, REV 2026-09-14).
 
-Findings: F353, F334, F365, F367 (retired by this change); F352 (the visibility half only; stays
-open); F366 (stays open; D5 stops relying on it). R2 (2026-09-14) revised 1.2, 2.1-2.5, 2.7, 2.10,
-4.1, 4.2, 4.4 and 4.7, and added 1.4, 2.5b, 2.11, 2.12 and 4.8. R3 (2026-09-14) revised 2.3, 2.4,
-2.6, 2.12, 4.2 and 4.6, and added 2.9b.
-Build day 2026-09-14. Day rules: no `hub/hub/mcp_server.py`, no migration, and the UI bundle only
-under group 5's condition. Tests run under `py -3.11`. `black` needs `--target-version py311`.
+Findings: F352 (the visibility half only; stays open, now waiting on the re-derivation above, not
+on an operator answer); F366 (stays open; D5's replacement in the sibling directory stops relying
+on it, does not close it). R2 (2026-09-14) revised 1.2, 2.1-2.5, 2.7, 2.10, 4.1, 4.2, 4.4 and 4.7,
+and added 1.4, 2.5b, 2.11, 2.12 and 4.8. R3 (2026-09-14) revised 2.3, 2.4, 2.6, 2.12, 4.2 and 4.6,
+and added 2.9b. **F353, F334, F365 and F367 moved with groups 3-4/2.5/2.5b/2.12/2.13 to the
+sibling directory** and are retired there, not here.
+
+**Not a build day.** Tests, when this resumes, run under `py -3.11`. `black` needs
+`--target-version py311`.
 
 Each test named below must **fail with its mutation applied** before it counts. Record the
 mutation and the observed failure beside the task when ticking it.
@@ -75,15 +87,12 @@ mutation and the observed failure beside the task when ticking it.
       "; and N more agents are excluded, busy or unbound" and the remedy still fit.
       - A holds clause that would not fit is retried with two named tasks, then one, counting the
         rest as "and N more". Only then is its agent left to the tail (R3).
-- [ ] 2.5 Fit `JobRun.error_summary` at the model (design D2):
-      - `JOB_RUN_ERROR_SUMMARY_CHARS = 500` beside `JobRun`, read by `String(...)` and by
-        `JobRunResponse.error_summary`'s `max_length`;
-      - `fit_error_summary(text)`, which leaves text that fits unchanged and cuts longer text to
-        499 characters plus `…`;
-      - `@validates("error_summary")` on `JobRun`, applying it;
-      - `_stall_run_to_increment` (`:923`) comparing against `fit_error_summary(stall_reason)`.
-- [ ] 2.5b `_wedged_review_reason` (`scheduler.py:1744-1748`) shortens the quoted title so the whole
-      sentence fits 500 characters and its remedy survives.
+~~- [ ] 2.5~~ **MOVED 2026-09-15** to `a-refusal-names-a-remedy-that-works/tasks.md` task 2.1
+      (Fit `JobRun.error_summary` at the model). Built there, not here.
+~~- [ ] 2.5b~~ **MOVED 2026-09-15** to the same directory's task 2.2 (`_wedged_review_reason`'s
+      title fit). Built there, not here. **This half's own tasks (2.6, 2.9, 2.9b, 2.11) still
+      depend on that fit existing** — it is a model-level `@validates`, so it applies to every
+      write regardless of which change added it, and the sibling directory builds first.
 - [ ] 2.6 Test, LoopEngine-shaped, through a real firing (`POST …/jobs/{id}/run`), reading the
       `review_unstaffed` event **and** `LoopSummary.stall_reason`. Four agents: the author; one
       holding an `under_review` task; one holding five `pending` tasks; one holding an
@@ -120,8 +129,8 @@ mutation and the observed failure beside the task when ticking it.
         remedy;
       - `GET …/jobs/{id}/history` answers **200** with the stall row in it.
 
-      *Mutation:* remove the bound (2.4) and the fit (2.5). The history route must fail, which
-      proves the test reaches `JobRunResponse`.
+      *Mutation:* remove the bound (2.4) and the fit (sibling directory's 2.1, once built). The
+      history route must fail, which proves the test reaches `JobRunResponse`.
 - [ ] 2.9b Test (R3): the first agent in name order holds three tasks with 64-character
       caller-chosen ids (created through `POST …/tasks` with `id`), and its name is 32 characters.
       Assert:
@@ -141,116 +150,28 @@ mutation and the observed failure beside the task when ticking it.
       - the stall row's reason is at most 500 characters and still ends with the remedy
         (`revision_needed.`).
 
-      *Mutations:* (a) remove 2.5b, so the history still answers 200 but the remedy is cut; (b)
-      remove the `@validates` as well, so the route answers 500.
-- [ ] 2.12 Test: a `JobRun` constructed or assigned with 600 characters of `error_summary` stores
-      exactly 500, ending `…`. A 500-character value is stored unchanged, and `None` stays `None`
-      (R3: the column is nullable).
-      *Mutation:* remove the `@validates`. The test must fail.
-- [ ] 2.13 (REV) Test: the guard's operator sentence, both branches, at a 64-character task id and
-      a 32-character agent name, is at most 500 characters. So is the queue entry's
-      `waiting_reason` after a flow staging is refused on it, read **before** the model fit, from
-      the event or the entry and not from `JobRun`, or the validator hides the overflow. The remedy
-      survives whole.
-      *Mutation:* restore R2's D5 evidence-branch explanation (583 characters at those ids). The
-      test must fail.
+      *Mutations:* (a) remove the sibling directory's title fit (its task 2.2), so the history
+      still answers 200 but the remedy is cut; (b) remove the `@validates` as well (its task
+      2.1), so the route answers 500.
+~~- [ ] 2.12~~ **MOVED 2026-09-15** to `a-refusal-names-a-remedy-that-works/tasks.md` task 2.3.
+      Built there, not here.
+~~- [ ] 2.13~~ **MOVED 2026-09-15** to the same directory's task 4.10 (it tests D5's guard
+      sentence, which moved with group 4). Built there, not here.
 - [ ] 2.14 (REV) The divergence restaff returns `None` for a task whose status is no longer
       `completed` or `under_review`, at the same screen as `blocked` (`run_divergence.py:746`).
-      `own_review_remedy` asserts one of the two statuses. Test: the operator moves a task to
-      `revision_needed` while its review run is live, and the run then ends without a verdict. No
-      `review_unstaffed` is recorded and no reviewer is staffed.
+      `own_review_remedy` (built by the sibling directory's task 1.1 — depends on it landing
+      first) asserts one of the two statuses. Test: the operator moves a task to `revision_needed`
+      while its review run is live, and the run then ends without a verdict. No `review_unstaffed`
+      is recorded and no reviewer is staffed.
       *Mutation:* drop the new screen. The test must fail.
 
-## 3. Once per task (design D4)
+## 3. ~~Once per task (design D4)~~ MOVED 2026-09-15
 
-- [ ] 3.1 `_review_unstaffed_already_stands` filters on
-      `EventLog.data["task_id"].as_string() == task_id`, against real SQLite.
-- [ ] 3.2 Test: one loop, **two** unstaffable tasks, five firings through the real route. Exactly
-      one `review_unstaffed` per task.
-      *Mutation:* revert to the loop-newest query. The test must fail, while the existing
-      single-task test still passes against the mutant, which shows why it never caught this.
-- [ ] 3.3 Test: two tasks; between firings, change one task's reason only, by freeing an agent's
-      holding so its clause changes. One more record for that task, and none for the other.
-      *Mutation:* drop the task filter. The test must fail.
-
-## 4. The refusals (design D5)
+Groups 3 and 4 (all of `own_review_remedy`'s once-per-task and refusal-wording tasks) moved
+wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renumbered 3.1-3.3 and
+4.1-4.10. Built there, not here. See that directory for the full text.
 
 - [ ] 4.1 `_guard_reviewer_is_not_the_author`, both branches:
-      - word it true for a staged or a committed assignee, as *"Cannot move task T to
-        'under_review' with 'dev' as its holder: …"* (REV), with no "is assigned to", no "still
-        assigned", no "holding it" and no "held by";
-      - choose the remedy by `actor.is_operator`, in D5's REV wording:
-        - operator: Land it with no promise of approval, or dispatching another agent's review
-          turn (`POST /agent/trigger` with `review_task_id`). **Not** the PATCH that sets assignee
-          and status together, which queues no turn and wedges (REV);
-        - agent: "None of the task tools you are offered reassigns a task" and who can move it on,
-          never "no agent can" and never "none of your tools changes who holds a task" (REV:
-          `create_task` takes an assignee);
-      - the operator branch fits 500 characters at a 64-character id and a 32-character name, in
-        both branches (see 2.13);
-      - drop "Left as is…";
-      - amend the docstring's *"`actor` is deliberately unread"* paragraph.
-
-      The decision is unchanged.
-- [ ] 4.2 `review_dispatch_refusal`: the author branch drops "clear the assignee", and both
-      branches end with `own_review_remedy(task)`. That gives Land it for a `completed` task and the
-      three exits for an `under_review` one, **without** rung 3's freeing clause (R3).
-      - Add `own_review_remedy` to the existing module-level import from `...scheduler`
-        (`agent_trigger.py:126`). There is no cycle: `scheduler` imports nothing from
-        `agent_trigger`.
-- [ ] 4.3 Test, operator PATCH on a completed task held by its author: 403, names Land it and
-      `review_task_id`, and contains none of "clear the assignee", "approves" or "name that agent as
-      the assignee" (REV).
-      *Mutation:* restore the old sentence. The test must fail.
-- [ ] 4.4 Test, agent PATCH through `/agent-actions/tasks/{id}` with a run token, by a non-author on
-      a completed task held by its author. Expect 403, with "none of the task tools you are
-      offered", and none of "clear the assignee", "assign a different reviewer", "no agent can",
-      "changes who holds" or "API".
-      *Mutation:* ignore `actor`. The test must fail.
-- [ ] 4.5 Test, F334's shape: a queued review for an agent that recorded evidence during its own
-      turn, delivered and refused. The entry's `waiting_reason` and `abandoned_reason` do not say
-      the task "is assigned to" that agent, and the task's assignee is unchanged.
-      *Mutation (REV):* restore "it is assigned to {assignee!r}" in the evidence branch. The test
-      must fail.
-- [ ] 4.6 Update any existing test asserting the old sentences, and list each one here when ticking.
-      R3's grep found these fragment assertions, and D2's and D5's wording keeps every fragment, so
-      each should pass unchanged. Confirm it:
-      - `test_flow_fires_a_review_turn.py:357`, `test_reviewer_ladder.py:174` and
-        `test_the_evidence_names_the_author.py:692`: `could not staff this step`;
-      - `test_the_evidence_names_the_author.py:693` and
-        `test_a_flow_names_what_it_cannot_staff.py:719`: `has worked on this task`;
-      - `test_a_flow_names_what_it_cannot_staff.py:733`: `is the one that completed this task`;
-      - `test_reviewer_is_not_the_author.py:82, 340`: `review it yourself`, as operator;
-      - **two absence assertions:** `"completed" not in reason` at
-        `test_a_flow_names_what_it_cannot_staff.py:720` and
-        `test_the_evidence_names_the_author.py:694`. They constrain the wording. Neither remedy nor
-        the freeing clause may contain the word "completed", and a holds clause never does,
-        because `completed` is not in `LIVE_STATUSES`. On the second test's fixture, `WORKER` is in
-        the author set through its bound run and reads "has worked on this task". `SILENT` reads
-        "recorded no verdict". Both fragments still hold.
-
-      **Amend three comments that state the old remedy in the present tense** (R3). After D5 each
-      would be false about the guard. F78's behaviour, clearing then entering review, stays:
-      - `api/v1/tasks.py:1259-1268`;
-      - `schemas/tasks.py:124-127`;
-      - the docstring of `test_reviewer_is_not_the_author.py::test_clearing_the_assignee_lets_the_operator_review_it_themselves`
-        (`:377-378`);
-      - **REV, two more:** `api/v1/agent_trigger.py:847-849` (*"already names both remedies and the
-        cost of doing nothing"*) and `task_transition_service.py:405-406` (*"they clear or
-        reassign `assignee` first, which is what the refusal asks for"*).
-- [ ] 4.7 Test: the dispatch route's author refusal (`POST /agent/trigger` with `review_task_id`) on
-      a `completed` task names Land it and does not contain "clear the assignee".
-      *Mutation (REV):* restore "or clear the assignee to review it yourself". The test must fail.
-- [ ] 4.8 Test: the same refusal on an `under_review` task that nobody holds, dispatched to its
-      completer. It names approve, reject and revision_needed, and does **not** name Land it.
-      *Mutation:* always emit the `completed` remedy. The test must fail.
-- [ ] 4.9 (REV) The D9 refusal, *"Reassign the task if …"*, at `agent_trigger.py:494` and `:840`,
-      becomes *"… Let the review in flight finish, or decide it yourself"* plus the `under_review`
-      sentence of `own_review_remedy`. Test both sites: dispatch a second reviewer to a task under
-      review by another. Expect 409, naming approve, reject and revision_needed, and not
-      "Reassign".
-      *Mutation:* restore one site's old sentence. The test must fail.
-
 ## 5. The board line (design D6), under the day's bundle rule
 
 - [ ] 5.1 `title={loop.stall_reason}` on the stall `<p>` in `LoopsIndexTab.tsx`, and a unit test
@@ -284,7 +205,10 @@ mutation and the observed failure beside the task when ticking it.
 
       Leave no job enabled.
 - [ ] 6.4 Archive:
-      - sync the three deltas into `openspec/specs/`;
-      - move the change to `archive/2026-09-14-an-unstaffed-review-names-its-holders`;
-      - in FINDINGS, mark F353, F334, F365 and F367 `fixed <sha>`, and add a dated note to F352 that
-        its visibility half shipped and its definition half waits on the operator.
+      - sync the `agent-flows` delta into `openspec/specs/` (the only one still owned by this
+        directory — `agent-loops` and `task-lifecycle-governance` moved with the split and are
+        synced by the sibling directory instead);
+      - move the change to `archive/<date>-an-unstaffed-review-names-its-holders`;
+      - in FINDINGS, add a dated note to F352 that its visibility half shipped (`F352-free`
+        decided (f), and the rung-3 half here re-derived and built against it). F353, F334, F365
+        and F367 are marked `fixed <sha>` by the sibling directory instead.

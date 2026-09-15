@@ -1,5 +1,12 @@
 # Design — an unstaffed review names its holders
 
+**2026-09-15: read `proposal.md`'s top banner first.** D4 and D5 below (and the `own_review_remedy`
+/ length-fit passages inside D2) moved verbatim to
+`openspec/changes/a-refusal-names-a-remedy-that-works/design.md` — kept here only as history. D1,
+the rest of D2, D3 and D6 are what remains to build, and they need re-deriving against
+`F352-free`'s decision (option (f), reachability, `4b59ee0`) before any of it is trustworthy: this
+text still argues from option (e), which did not ship.
+
 R1, 2026-09-14. Line numbers are at `2d5674c`. R2, 2026-09-14, re-derived at `e8ea490`: every
 decision it changed is marked **R2**, and *Round 2* at the end lists what changed and why. R3,
 2026-09-14, re-derived at `fb469e2`: marked **R3**, listed in *Round 3* at the end. REV,

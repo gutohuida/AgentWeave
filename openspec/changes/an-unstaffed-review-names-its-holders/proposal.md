@@ -1,6 +1,34 @@
 # Proposal — an unstaffed review names its holders
 
-## STOPPED AT REV, 2026-09-14 — specced, unbuilt, waiting on the operator
+## STOPPED, 2026-09-15 — the split shipped; this half now needs re-deriving, not un-blocking
+
+**Both questions this file raised are decided** (`spec-queue/DECISIONS.md`, `### 2026-09-15,
+later` and the `F352-free` row).
+
+- **The split is done.** The F353 half — D4, D5, `own_review_remedy`, the `error_summary` model
+  fit, and their tests — now lives in `openspec/changes/a-refusal-names-a-remedy-that-works/`,
+  ready for its one verification round. `tasks.md`, `design.md` and `specs/` here have had that
+  content removed; read the sibling directory for it, not here.
+- **`F352-free` is decided: option (f), reachability — not (d), and not the (e) this file's
+  remaining half (D1, D2's naming/clause/prefix/budget logic, D3, D6) was written against.**
+  Option (f) already shipped, independently of this change: `4b59ee0`
+  (`openspec/changes/archive/2026-09-15-a-task-nothing-will-move-holds-nobody`),
+  `hub/hub/scheduler.py:1138`. An independent adversarial (Opus) review, asked to validate (d)
+  once (f) was found to have shipped, rejected (d) in (f)'s favour — its full reasoning is in
+  `spec-queue/DECISIONS.md`'s `F352-free` row.
+
+**What is left here is real, undone work, not a resolved blocker: rung-3's naming needs
+re-deriving against (f), from scratch, through its own R1.** (f) redefines *holding* itself
+(a task holds its agent only if a live loop still walks it or a queued turn names it), which is
+upstream of everything D1–D3 below say about clauses, exclusions and the prefix sentence. That
+re-derivation has not been done in this pass — it is the next round to run on this directory, not
+a mechanical find-and-replace of "(e)" with "(f)".
+
+The rest of this file (below) is the REV-era text, kept for provenance. Read it as history: the
+OPERATOR QUESTION section's options (a)-(e) no longer include the option that shipped, and the
+"Why it stopped" reasoning below is superseded by the decisions above.
+
+## STOPPED AT REV, 2026-09-14 — specced, unbuilt, waiting on the operator (superseded, kept for provenance)
 
 The adversarial review (REV, an Opus subagent, 2026-09-14 ~12:15) read this change and the
 decisions it rests on, and **stopped it**. Nothing here is built, and no task in `tasks.md` is
