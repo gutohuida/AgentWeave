@@ -74,12 +74,20 @@ These need no operator; a test or CI settles each.
   interior character classes still wrongly denies this row; the shipped fix widens the leading
   position too.
 - **A directly typed word with no escape at all is not caught by the same fallthrough this
-  change corrects (row T1).** `cat x@/etc/passwd` — nothing here is ANSI-C-quoted — flips
-  from refused (`'/etc/passwd' is outside your workspace'`, an over-refusal: the checker used to
-  mistake the tail for an absolute path glued onto `x@`) to **allowed** (correctly resolved as one
-  relative path, `x@/etc/passwd`, under the workspace root). This is a real, deliberate widening of
-  the fix beyond ANSI-C decoding — see design.md D6's "wider effect" note — and `cat -o/tmp/x`
-  (row S2) still correctly denies, confirming the checker still recognizes a genuinely glued form.
+  change corrects (rows T1, T2).** `cat x!/etc/passwd` (T1, punctuation mid-word) and
+  `cat */etc/passwd` (T2, punctuation as the word's first character) — nothing in either command
+  is ANSI-C-quoted — flip from refused (`'/etc/passwd' is outside your workspace'`, an
+  over-refusal: the checker used to mistake the tail for an absolute path glued onto the leading
+  text) to **allowed** (correctly resolved as one relative path under the workspace root). This is
+  a real, deliberate widening of the fix beyond ANSI-C decoding — see design.md D6's "wider effect"
+  note — and `cat -o/tmp/x` (row S2) still correctly denies, confirming the checker still
+  recognizes a genuinely glued form.
+- **curl's own file-reading convention stays protected, even from an interior `@` (row S3).**
+  `curl --data-urlencode name@/etc/passwd $HUB_URL/api/v1/agent-actions/tasks` is refused as
+  outside, unchanged, before and after this change — curl reads the file named after an `@`
+  anywhere in a `--data-urlencode` value, not only a leading one, so the checker excludes `@` from
+  every position a word can carry it in, not just the first character. If this command ever gets
+  through, that protection has regressed — see design.md D6's correction and S3's own row.
 
 ## Human-only (you judge these)
 
