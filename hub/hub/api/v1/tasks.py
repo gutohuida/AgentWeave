@@ -1259,17 +1259,18 @@ async def update_task_for_actor(
     # carries no advisories the same way it carries no new transition row.
     approval_report: List[Any] = []
     # **Before the transition, not after it** (finding F70). `_guard_reviewer_is_not_the_author`
-    # refuses `-> under_review` while the task still names the agent that completed it, and the
-    # remedy it names -- assign a different reviewer -- is most naturally done in the same PATCH
-    # that sends the task to review. Applied afterwards, that one call was refused on the strength
-    # of an assignee the same request was about to replace, and the operator had to make two.
+    # refuses `-> under_review` while the task still names the agent that completed it, and
+    # reassigning to a different reviewer in the same PATCH is the most natural way past it.
+    # Applied afterwards, that one call was refused on the strength of an assignee the same
+    # request was about to replace, and the operator had to make two.
     # Nothing between here and the transition reads the old value: `release_reason` and
     # `release_bindings_to` are about the task and its runs, not about who holds it.
     if "assignee" in body.model_fields_set:
-        # `model_fields_set`, not `is not None` (finding F78). The guard immediately below names
-        # two remedies -- reassign, or "clear the assignee to review it yourself" -- and read as
-        # "None means leave it alone" the second one could not be expressed at all: `assignee:
-        # null` was indistinguishable from an omitted field, so the operator's PATCH came back
+        # `model_fields_set`, not `is not None` (finding F78). Reassigning is one way past the
+        # guard immediately below; clearing the assignee to `None`, so the operator can land or
+        # review the task themselves, is the other. Read as "None means leave it alone" the second
+        # one could not be expressed at all: `assignee: null` was indistinguishable from an
+        # omitted field, so the operator's PATCH came back
         # `200` with the author still in it and the guard refused them again. Omitting the field
         # still leaves the holder untouched, which is the half of the old reading that was right:
         # a PATCH about the priority must not unassign anybody. `""` arrives here as `None` --

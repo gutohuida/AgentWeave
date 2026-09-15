@@ -499,8 +499,8 @@ async def review_dispatch_refusal(
     ):
         return (
             status.HTTP_409_CONFLICT,
-            f"Task {task.id} is already under review by {task.assignee!r}. Reassign the task if "
-            f"{reviewer!r} should take it over, or let the review in flight finish.",
+            f"Task {task.id} is already under review by {task.assignee!r}. Let the review in "
+            f"flight finish. {own_review_remedy(task)}",
         )
     completing_agent = await agent_that_completed(session, task.id)
     if completing_agent is not None and completing_agent == reviewer:
@@ -845,18 +845,18 @@ async def trigger_agent_directly(
             raise TriggerAgentError(
                 status.HTTP_409_CONFLICT,
                 f"Task {review_task.id} is already under review by {review_task.assignee!r}. "
-                f"Reassign the task if {agent!r} should take it over, or let the review in flight "
-                f"finish.",
+                f"Let the review in flight finish. {own_review_remedy(review_task)}",
                 request_level=True,
             )
         try:
             await enter_selected_task(session, review_task, agent=agent, is_review=True)
         except TransitionRefusedError as exc:
-            # The guard's own sentence, not a restatement of it: it already names both remedies and
-            # the cost of doing nothing, and the operator meets the same words here as they would
-            # attempting the transition directly. This is the case where the named reviewer is the
-            # task's own author -- `enter_selected_task` writes the assignee first, so what
-            # `_guard_reviewer_is_not_the_author` compares against is the reviewer being dispatched.
+            # The guard's own sentence, not a restatement of it: it already names the remedy for
+            # whichever actor is asking (design D4), and the operator meets the same words here as
+            # they would attempting the transition directly. This is the case where the named
+            # reviewer is the task's own author -- `enter_selected_task` writes the assignee first,
+            # so what `_guard_reviewer_is_not_the_author` compares against is the reviewer being
+            # dispatched.
             raise TriggerAgentError(
                 status.HTTP_403_FORBIDDEN, str(exc), request_level=True
             ) from exc

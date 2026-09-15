@@ -245,7 +245,7 @@ mutation and the observed failure beside the task when ticking it.
       evidence…"` in the evidence branch): failed on `"is assigned to" not in waiting_reason` —
       every one of the five recorded passes read *"it is assigned to 'rr-reviewer'"*. Reverted;
       passes clean, `entry.abandoned_reason` and `task.assignee` (`None`) both clean too.
-- [ ] 4.6 (was 4.6) Update any existing test asserting the old sentences, and list each one here
+- [x] 4.6 (was 4.6) Update any existing test asserting the old sentences, and list each one here
       when ticking. D1's and D4's wording keeps every fragment below, so each should pass
       unchanged. Confirm it:
       - `test_flow_fires_a_review_turn.py:357`, `test_reviewer_ladder.py:174` and
@@ -270,15 +270,48 @@ mutation and the observed failure beside the task when ticking it.
       - `api/v1/agent_trigger.py:854-858` (*"already names both remedies and the cost of doing
         nothing"*) and `task_transition_service.py:405-406` (*"they clear or reassign
         `assignee` first, which is what the refusal asks for"*).
-- [ ] 4.7 (was 4.7) Test: the dispatch route's author refusal (`POST /agent/trigger` with
+
+      **Confirmed unchanged** (re-grepped, still passing, current line numbers matched what was
+      cited): all six assertions above, at the same lines.
+
+      **One test not on this list was broken by group 4a and only surfaced running the broader
+      suite for this task**: `test_the_evidence_names_the_author.py:434`
+      (`test_the_evidence_author_cannot_be_entered_as_the_reviewer`) asserted the evidence branch's
+      *pre*-D4 wording, `"No agent is recorded as completing it"`, which 4.1's rewording dropped in
+      favour of `"with no completer recorded"`. Not named at split time because the split's list
+      was built from the design's own before/after wording rather than a fresh grep of every test
+      touching this guard's message — noted here rather than silently fixed, since the same gap
+      could recur. Fixed to assert the new fragment; the rest of that test (which checks
+      `"completed" not in detail`) needed no change, since `"completer"` does not contain
+      `"completed"` as a substring.
+
+      **Amended all five comments**: the
+      "assign a different reviewer" / "clear the assignee to review it yourself" wording in
+      `api/v1/tasks.py:1261-1272`, `schemas/tasks.py:123-128` and
+      `test_reviewer_is_not_the_author.py:374-378`'s docstring now describes the mechanism (PATCH
+      reassigning, or clearing to `None`) rather than quoting a sentence the guard no longer says;
+      `api/v1/agent_trigger.py:853-859`'s "already names both remedies" became "already names the
+      remedy for whichever actor is asking (design D4)"; `task_transition_service.py:401-406`'s
+      "they clear or reassign `assignee` first" became "the refusal's own remedy (design D4,
+      below) names how".
+- [x] 4.7 (was 4.7) Test: the dispatch route's author refusal (`POST /agent/trigger` with
       `review_task_id`) on a `completed` task names Land it and does not contain "clear the
       assignee".
       *Mutation:* restore "or clear the assignee to review it yourself". The test must fail.
-- [ ] 4.8 (was 4.8) Test: the same refusal on an `under_review` task that nobody holds,
+
+      Done: `test_the_dispatch_routes_author_refusal_names_land_it`
+      (`hub/tests/test_a_refusal_names_a_remedy_that_works.py`). *Mutation applied* (appended the
+      old clause to `own_review_remedy`'s `completed` branch): failed on
+      `"clear the assignee" not in detail`. Reverted.
+- [x] 4.8 (was 4.8) Test: the same refusal on an `under_review` task that nobody holds,
       dispatched to its completer. It names approve, reject and revision_needed, and does
       **not** name Land it.
       *Mutation:* always emit the `completed` remedy. The test must fail.
-- [ ] 4.9 (was 4.9, **fixed in this split — verification round found a duplication defect in the
+
+      Done: `test_the_dispatch_routes_completer_refusal_never_names_land_it`. *Mutation applied*
+      (`own_review_remedy` always returns the `completed` sentence): failed on
+      `"approve" in detail` (got the Land-it sentence instead). Reverted.
+- [x] 4.9 (was 4.9, **fixed in this split — verification round found a duplication defect in the
       original wording**) The D9 refusal, *"Reassign the task if …"*, at `agent_trigger.py:501`
       and `:847`, becomes *"… Let the review in flight finish."* as its own complete sentence,
       followed by `own_review_remedy(task)`'s `under_review` sentence (1.1) as a **new** sentence
@@ -292,13 +325,40 @@ mutation and the observed failure beside the task when ticking it.
       duplicated *"or decide it yourself" + own_review_remedy* concatenation — the "exactly once"
       assertion must fail, which is what a looser assertion (approve/reject/revision_needed
       present, "Reassign" absent) would miss.
-- [ ] 4.10 (was 2.13) Test: the guard's operator sentence, both branches, at a 64-character task
+
+      Done. Both sites dropped the "Reassign the task if..." clause entirely (it named an action
+      neither site actually offers a path to from this response) and now read
+      `f"Task {id} is already under review by {assignee!r}. Let the review in flight finish. "
+      f"{own_review_remedy(task)}"`. Two tests:
+      `test_the_precheck_names_the_remedy_exactly_once` (site 1, `review_dispatch_refusal`, via
+      `POST /agent/trigger`'s route-level precheck) and
+      `test_the_dispatch_itself_names_the_remedy_exactly_once` (site 2, `trigger_agent_directly`'s
+      own D9 check, reached by calling it directly so the precheck above does not intercept
+      first). *Mutation (a) applied* at site 1 (restored the old sentence, no `own_review_remedy`
+      appended): failed on `"approve" in detail`. *Mutation (b) applied* at site 1 (restored
+      `"...or decide it yourself. " + own_review_remedy(task)`): failed on
+      `detail.count("decide it yourself") == 1` (got 2) — exactly the duplication this task
+      predicted, and exactly what a looser assertion would have missed. Both reverted.
+- [x] 4.10 (was 2.13) Test: the guard's operator sentence, both branches, at a 64-character task
       id and a 32-character agent name, is at most 500 characters. So is the queue entry's
       `waiting_reason` after a flow staging is refused on it, read **before** the model fit, from
       the event or the entry and not from `JobRun`, or the validator hides the overflow. The
       remedy survives whole.
       *Mutation:* restore the earlier, unfitted evidence-branch explanation (583 characters at
       those ids). The test must fail.
+
+      Done. `test_the_guards_sentence_fits_at_worst_case_ids` calls
+      `_guard_reviewer_is_not_the_author` directly for all four combinations (F70 completer /
+      F306 evidence-author branch, × operator / agent actor) at a 64-char task id and 32-char
+      agent name, asserting `len(message) <= 500` and that the actor's remedy fragment survives
+      whole. `test_the_dispatched_refusal_at_worst_case_ids_also_fits` reaches the same guard
+      through the real dispatch route (`enter_selected_task` -> `TransitionRefusedError`,
+      `agent_trigger.py`'s `except TransitionRefusedError` site) at the same worst-case ids,
+      reading the length off the route's own 403 response rather than `JobRun.error_summary` (D2
+      already fits that column separately, which is exactly what would hide this bug if the test
+      read it from there instead). *Mutation applied* (lengthened the evidence branch's f-string
+      to restore something in the shape of the pre-fit wording, measured 681 chars at these ids):
+      the direct test failed on `len(message) <= 500`. Reverted.
 
 ## 5. Verify
 

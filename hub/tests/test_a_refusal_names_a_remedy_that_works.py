@@ -10,6 +10,8 @@ them. Group 4 (D4, F353/F334): `_guard_reviewer_is_not_the_author` and `review_d
 choose the remedy by `actor.is_operator` instead of naming an assignment the rollback discards.
 """
 
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy import select
 
@@ -473,3 +475,300 @@ async def test_a_changed_evidence_authors_refusal_never_claims_an_assignment_the
     async with async_session_factory() as db:
         task = await db.get(Task, task_id)
         assert task.assignee is None, "the guard's own refusal never actually assigns the task"
+
+
+# ---------------------------------------------------------------------------
+# 4.7-4.8 — the dispatch route's own refusals (`review_dispatch_refusal`) name the same remedy
+# ---------------------------------------------------------------------------
+
+AUTHOR_4B = "author4b"
+
+
+async def _document(db, doc_id):
+    db.add(
+        SpecDocument(
+            id=doc_id,
+            project_id="proj-test",
+            path=f"spec/{doc_id}.html",
+            title=doc_id,
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
+
+
+async def test_the_dispatch_routes_author_refusal_names_land_it(app, auth_headers, bind_runner):
+    """4.7. `POST /agent/trigger` naming a `review_task_id` that is `completed` and still held by
+    its own author: 403, naming Land it, none of the old "clear the assignee" wording.
+
+    *Mutation:* restore "or clear the assignee to review it yourself" in
+    `own_review_remedy`'s `completed` branch. The test must fail.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR_4B)
+    async with async_session_factory() as db:
+        await _document(db, "doc-4b-completed")
+        task = await _completed_by_author(db, "task-4b-completed", author=AUTHOR_4B)
+        await _evidence(
+            db, task.id, suffix="4b-completed", agent=AUTHOR_4B, document_id="doc-4b-completed"
+        )
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={
+            "agent": AUTHOR_4B,
+            "message": "review it",
+            "review_task_id": task.id,
+            "session_mode": "new",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"]
+    assert "Land it" in detail
+    assert "clear the assignee" not in detail
+
+
+async def test_the_dispatch_routes_completer_refusal_never_names_land_it(
+    app, auth_headers, bind_runner
+):
+    """4.8. The same route's refusal on an `under_review` task nobody currently holds, dispatched
+    to the agent recorded as completing it: 403, naming approve, reject and revision_needed, and
+    never Land it.
+
+    *Mutation:* always emit the `completed` remedy from `own_review_remedy`. The test must fail.
+    """
+    await _roster(app, auth_headers, bind_runner, AUTHOR_4B)
+    async with async_session_factory() as db:
+        await _document(db, "doc-4b-underreview")
+        task = await _completed_by_author(db, "task-4b-underreview", author=AUTHOR_4B)
+        await _evidence(
+            db, task.id, suffix="4b-underreview", agent=AUTHOR_4B, document_id="doc-4b-underreview"
+        )
+        task.status = "under_review"
+        task.assignee = None
+        await db.commit()
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={
+            "agent": AUTHOR_4B,
+            "message": "review it",
+            "review_task_id": task.id,
+            "session_mode": "new",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"]
+    assert "approve" in detail
+    assert "reject" in detail
+    assert "revision_needed" in detail
+    assert "Land it" not in detail
+
+
+# ---------------------------------------------------------------------------
+# 4.9 — the D9 refusal names its remedy once, at both sites
+# ---------------------------------------------------------------------------
+
+REVIEWER_A_49 = "reviewer-a-49"
+REVIEWER_B_49 = "reviewer-b-49"
+
+
+async def test_the_precheck_names_the_remedy_exactly_once(app, auth_headers, bind_runner):
+    """4.9, site 1 (`review_dispatch_refusal`, the route's read-only precheck). Dispatching a
+    second reviewer to a task already under review by another: 409, naming approve, reject and
+    revision_needed, containing "decide it yourself" exactly once — the D9 prefix's own wording
+    must not repeat the phrase `own_review_remedy`'s `under_review` branch opens with — and never
+    "Reassign".
+
+    *Mutations:* (a) restore the old sentence at this site (no `own_review_remedy` appended) —
+    the "decide it yourself" assertion must fail; (b) restore the original, duplicated wording
+    ("...or decide it yourself. decide it yourself: approve, ...") — the "exactly once" assertion
+    must fail, which a looser assertion (the words present, "Reassign" absent) would miss.
+    """
+    await _roster(app, auth_headers, bind_runner, REVIEWER_A_49, REVIEWER_B_49)
+    async with async_session_factory() as db:
+        await _document(db, "doc-4b-precheck")
+        task = Task(
+            id="task-4b-precheck",
+            project_id="proj-test",
+            title="held by another reviewer",
+            status="under_review",
+            assignee=REVIEWER_A_49,
+        )
+        db.add(task)
+        await db.commit()
+        await _evidence(
+            db, task.id, suffix="4b-precheck", agent=REVIEWER_A_49, document_id="doc-4b-precheck"
+        )
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={
+            "agent": REVIEWER_B_49,
+            "message": "review it",
+            "review_task_id": task.id,
+            "session_mode": "new",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert "approve" in detail
+    assert "reject" in detail
+    assert "revision_needed" in detail
+    assert detail.count("decide it yourself") == 1, detail
+    assert "yourself decide" not in detail
+    assert "Reassign" not in detail
+
+
+async def test_the_dispatch_itself_names_the_remedy_exactly_once(app, auth_headers, bind_runner):
+    """4.9, site 2 (`trigger_agent_directly`'s own D9 check — the authority `turn_scheduler`
+    reaches after the route's precheck already ran). Same shape, same assertions, reached by
+    calling the function directly so the route-level precheck above is bypassed and this site's
+    own wording is what gets measured.
+
+    *Mutations:* same as the precheck's test, applied at this site instead.
+    """
+    from hub.api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
+    from hub.conversations import new_conversation
+
+    reviewer_a, reviewer_b = "reviewer-a-49b", "reviewer-b-49b"
+    await _roster(app, auth_headers, bind_runner, reviewer_a, reviewer_b)
+    async with async_session_factory() as session:
+        await _document(session, "doc-4b-site2")
+        task = Task(
+            id="task-4b-site2",
+            project_id="proj-test",
+            title="held by another reviewer",
+            status="under_review",
+            assignee=reviewer_a,
+        )
+        session.add(task)
+        await session.commit()
+        await _evidence(
+            session, task.id, suffix="4b-site2", agent=reviewer_a, document_id="doc-4b-site2"
+        )
+        conversation = new_conversation(project_id="proj-test", agent=reviewer_b, origin="operator")
+        session.add(conversation)
+        await session.commit()
+
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with pytest.raises(TriggerAgentError) as excinfo:
+                await trigger_agent_directly(
+                    project_id="proj-test",
+                    agent=reviewer_b,
+                    message="review it",
+                    conversation_id=conversation.id,
+                    session=session,
+                    review_task_id=task.id,
+                )
+
+    detail = excinfo.value.detail
+    assert excinfo.value.status_code == 409
+    assert "approve" in detail
+    assert "reject" in detail
+    assert "revision_needed" in detail
+    assert detail.count("decide it yourself") == 1, detail
+    assert "yourself decide" not in detail
+    assert "Reassign" not in detail
+
+
+# ---------------------------------------------------------------------------
+# 4.10 — the guard's sentence fits its column even at worst-case ids
+# ---------------------------------------------------------------------------
+
+
+def _padded(prefix: str, length: int) -> str:
+    assert len(prefix) <= length
+    return (prefix + "z" * length)[:length]
+
+
+async def test_the_guards_sentence_fits_at_worst_case_ids(app):
+    """4.10. `_guard_reviewer_is_not_the_author`'s own sentence, both raise branches (F70's
+    completer, F306's evidence author), both actor kinds, at a 64-character task id and a
+    32-character reviewer name: at most 500 characters, and the remedy (design D4) survives whole.
+
+    *Mutation:* restore the earlier, unfitted evidence-branch explanation (measured 583 characters
+    at these ids). The test must fail.
+    """
+    from hub.task_transition_service import (
+        ActorNotPermittedError,
+        _guard_reviewer_is_not_the_author,
+    )
+
+    async def _message(db, *, evidence_branch: bool, combo: str, actor) -> str:
+        task_id = _padded(f"task410{combo}", 64)
+        agent_name = _padded(f"a410{combo}", 32)
+        task = Task(id=task_id, project_id="proj-test", title="t", status="in_progress")
+        db.add(task)
+        await db.commit()
+        if evidence_branch:
+            await apply_transition(db, task, "completed", operator())
+            task.assignee = agent_name
+            await db.commit()
+            await _document(db, f"doc-410-{combo}")
+            await _evidence(
+                db, task.id, suffix=f"410-{combo}", agent=agent_name, document_id=f"doc-410-{combo}"
+            )
+        else:
+            task.assignee = agent_name
+            await apply_transition(db, task, "completed", run_actor(f"run-{task_id}", agent_name))
+            await db.commit()
+        try:
+            await _guard_reviewer_is_not_the_author(db, task, "under_review", actor)
+        except ActorNotPermittedError as exc:
+            return str(exc)
+        raise AssertionError("expected a refusal")
+
+    async with async_session_factory() as db:
+        for evidence_branch, branch_tag in ((False, "comp"), (True, "evid")):
+            for actor, actor_tag, remedy_fragment in (
+                (operator(), "op", "Land it, on the task, to review it yourself"),
+                (
+                    run_actor("run-other", "some-other-agent"),
+                    "ag",
+                    "None of the task tools you are offered reassigns a task",
+                ),
+            ):
+                message = await _message(
+                    db, evidence_branch=evidence_branch, combo=branch_tag + actor_tag, actor=actor
+                )
+                assert len(message) <= 500, (evidence_branch, actor.kind, len(message), message)
+                assert remedy_fragment in message, message
+
+
+async def test_the_dispatched_refusal_at_worst_case_ids_also_fits(app, auth_headers, bind_runner):
+    """4.10, the queue-facing half. The same guard, reached through the real dispatch route
+    (`enter_selected_task` -> `TransitionRefusedError`, `agent_trigger.py`'s
+    `except TransitionRefusedError` site) rather than called directly, at the same worst-case
+    ids — read from the route's own 403 response, before any `JobRun.error_summary` fitting could
+    hide an overflow.
+
+    *Mutation:* same as above. The test must fail.
+    """
+    author = _padded("author410b", 32)
+    await _roster(app, auth_headers, bind_runner, author)
+    async with async_session_factory() as db:
+        task_id = _padded("task410dispatch", 64)
+        await _document(db, "doc-410-dispatch")
+        task = await _completed_by_author(db, task_id, author=author)
+        await _evidence(
+            db, task.id, suffix="410-dispatch", agent=author, document_id="doc-410-dispatch"
+        )
+
+    response = await app.post(
+        "/api/v1/projects/proj-test/agent/trigger",
+        json={
+            "agent": author,
+            "message": "review it",
+            "review_task_id": task.id,
+            "session_mode": "new",
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"]
+    assert len(detail) <= 500, (len(detail), detail)
+    assert "Land it" in detail

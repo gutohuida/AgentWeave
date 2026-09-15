@@ -403,7 +403,7 @@ async def _guard_reviewer_is_not_the_author(
     exempt because a single-operator project must be able to approve anything. This one is about
     the *state the move produces*, which is a lie about the world no matter who writes it: it says
     a reviewer holds the task while naming the author. An operator reviewing the work themselves is
-    still free to; they clear or reassign `assignee` first, which is what the refusal asks for.
+    still free to; the refusal's own remedy (design D4, below) names how.
 
     Two permissive cases, both deliberate:
 

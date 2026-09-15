@@ -122,10 +122,10 @@ class TaskUpdate(RequestModel):
     priority: Optional[str] = Field(default=None, max_length=64)
     # `None` means *clear it*, not *leave it alone* — the difference is carried by
     # `model_fields_set`, exactly as `escalation_agent` below carries it.
-    # `update_task_for_actor` read this field as "unset when None" until F78, which made the
-    # remedy `_guard_reviewer_is_not_the_author` names — "clear the assignee to review it
-    # yourself" — unreachable, and unreachable *silently*: the PATCH returned 200 with the old
-    # holder still in it.
+    # `update_task_for_actor` read this field as "unset when None" until F78, which made clearing
+    # the assignee — one way past the refusal `_guard_reviewer_is_not_the_author` raises —
+    # unreachable, and unreachable *silently*: the PATCH returned 200 with the old holder still
+    # in it.
     assignee: Optional[str] = Field(default=None, max_length=64)
     description: Optional[str] = Field(default=None, max_length=10000)
     notes: Optional[Any] = None

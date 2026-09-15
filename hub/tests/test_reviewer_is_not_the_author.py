@@ -374,9 +374,10 @@ async def test_a_refused_review_move_does_not_leave_the_assignee_changed(app, au
 async def test_clearing_the_assignee_lets_the_operator_review_it_themselves(app, auth_headers):
     """F78, found live 2026-08-27 driving `proj-46b602c1f3cb` to integration.
 
-    `_guard_reviewer_is_not_the_author` names two remedies: *"Assign a different reviewer, or clear
-    the assignee to review it yourself."* Only the first had a test, and only the first worked.
-    `TaskUpdate.assignee` is `Optional[str] = None`, and `update_task_for_actor` read it as
+    Two things could get the operator past `_guard_reviewer_is_not_the_author`: reassign the task
+    to a different reviewer, or clear the assignee and review it themselves. Only the first had a
+    test, and only the first worked. `TaskUpdate.assignee` is `Optional[str] = None`, and
+    `update_task_for_actor` read it as
     ``if body.assignee is not None`` — so `{"assignee": null}` was indistinguishable from the field
     being omitted. The operator followed the refusal's own instruction, got `200 OK` back with the
     author still in the response body, and was refused again by the same guard.
