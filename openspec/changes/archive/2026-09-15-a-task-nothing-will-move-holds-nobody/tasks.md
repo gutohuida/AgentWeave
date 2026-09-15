@@ -286,25 +286,30 @@ wrote three `JobRun`s, and Run answered 200.
 
 ## 5. Drive and archive (design, *Test plan*)
 
-- [ ] 5.1 Start a drive Hub on a free port against a **fresh** `profiles/drive0915/` database, from
+- [x] 5.1 Start a drive Hub on a free port against a **fresh** `profiles/drive0915/` database, from
       `hub/`, from source. Every runner binds `claude-haiku-4-5`. Never use `:8000`,
       `proj-5e960453` or `proj-18e5d4e0`.
-- [ ] 5.2 **The LoopEngine shape, live.** Stage 3.1's board through the real routes: agents, a
+      *Done, iteration 6:* port 8013 (only :8000 was listening), fresh `profiles/drive0915/agentweave.db` migrated to `0103`, launched from `hub/` from source with a named `AW_BOOTSTRAP_API_KEY`; no `.py` under `hub/hub` or `src` newer than the process start. Project `proj-4297ab5fd02c` in a fresh temporary repository. One runner, `claude-haiku-4-5-20251001` (the bare `claude-haiku-4-5` is refused: *"is not a model 'claude' declares"*). Harness `scripts/drive/t_d0915_reachability.py`.
+- [x] 5.2 **The LoopEngine shape, live.** Stage 3.1's board through the real routes: agents, a
       document, approval, a flow, tasks, evidence. Give `B` and `C` their out-of-loop tasks through
       `POST /tasks`, with an assignee and no `loop_id`, which is the route the Architect used. Fire
       the flow. The review is staffed and a real Haiku turn runs it, with no `review_unstaffed`
       recorded for the task.
-- [ ] 5.3 **The control.** Put `B`'s and `C`'s tasks in a second live loop, or stage them there
+      *Done, iteration 6:* four one-task flows on `alpha`, each task authored in a real Haiku turn with evidence naming a commit, before `beta`/`gamma` existed (an operator-walked completion names no author and would put the job agent on the ladder). Then `beta` (`in_progress`) and `gamma` (`pending`) given tasks by `POST /tasks` with an assignee and no `loop_id`; the roster counted each (`active_task_count` 1). Fire: **200**, the task went `under_review` to `beta`, `beta` ran a real Haiku turn and recorded `revision_needed` (a trailing-newline objection, a real verdict), and **no `review_unstaffed`** exists for the task.
+- [x] 5.3 **The control.** Put `B`'s and `C`'s tasks in a second live loop, or stage them there
       fresh. Fire. The review is `review_unstaffed`, and the sentence is today's.
-- [ ] 5.4 **Paused and ended.** Pause that second loop: still unstaffed. End it: staffed.
+      *Done, iteration 6:* a plain loop holding one `assigned` task each for `beta` and `gamma`. Fire: **409** *"could not staff this step: no agent is free to take it. Every agent on the roster is either running a turn, already holding active work, or is the one that completed this task and so may not review it."* One `review_unstaffed` recorded with that sentence; the task stayed `completed / alpha`.
+- [x] 5.4 **Paused and ended.** Pause that second loop: still unstaffed. End it: staffed.
       *(Round 2)* **Archived.** Stage a third loop with the tasks again. Archive its job through
       `POST /jobs/{id}/archive` without stopping it first, confirm with `GET /loops/{id}` that
       `ending_state` is null, and fire: the review is staffed.
-- [ ] 5.4b *(Round 2)* **Past the hop budget.** With `B`'s task outside every loop, send `B` a peer
+      *Done, iteration 6:* **paused** (`PATCH enabled:false`): **409**, the same sentence, and the flow's `stall_reason` carries it. **Ended** (`PATCH stop_reason`, `ending_state: stopped`): **200**, staffed with `beta`. **Archived:** a third holding loop; fired first as its own control (**409**, unstaffed); `POST /jobs/{id}/archive` without a stop; `GET /loops/{id}` read `archived_at=2026-09-15T00:52:01Z`, `ending_state=None`; fired: **200**, staffed with `beta`. Between lanes, a flow whose finished review a reviewer still held (`revision_needed`/`under_review`, in a live loop, holding them correctly) was ended with a stop reason, so each lane starts with both bookmark holders holding nothing in a live loop (checked).
+- [x] 5.4b *(Round 2)* **Past the hop budget.** With `B`'s task outside every loop, send `B` a peer
       message naming that task through `POST /messages` with a `task_id` and no run, which
       `create_message` queues at `hop_budget + 1`. Fire the flow: `B` is still staffed. That is the
       LoopEngine Q6 shape.
-- [ ] 5.4c *(Round 3)* **A busy agent's empty loop (D8).** Create a plain loop on `A` with no
+      *Done, iteration 6:* `POST /messages` `gamma -> beta` with `beta`'s bookmark as `task_id` and no run: one entry, `hop_depth` 7 against `hop_budget` 6, `state: queued`, never delivered. Fire: **200**, staffed with `beta`. The harness's first check read `task_id` off `GET /queue/{agent}`, which does not expose it, and failed; the entry's `task_id` was confirmed `task-7aec1c02e253` (the bookmark) by a `mode=ro` read of the drive database, and the check now reads the message and the queue settings instead.
+- [x] 5.4c *(Round 3)* **A busy agent's empty loop (D8).** Create a plain loop on `A` with no
       tasks. While `A` has a real turn running, press Run on that loop. The staging:
       - `B` holds only its out-of-loop task;
       - `A`'s turn is long enough to hold open, for example a Haiku turn asked to list and summarise
@@ -313,8 +318,10 @@ wrote three `JobRun`s, and Run answered 200.
       The answer is 409 naming `A`, and `GET` on `A`'s queue shows no new job entry. If a turn cannot
       be held open long enough to press Run inside it, say so in the log. Task 3b.6 is then this
       step's only evidence. Do not report the step as driven.
-- [ ] 5.5 Confirm every job the drive created is disabled, and stop the drive Hub.
-- [ ] 5.6 Archive:
+      *Done, iteration 6, **driven** (not only 3b.6):* an empty plain loop on `alpha`; `alpha` triggered on a directory-summary errand; with `alpha` `running` and `beta`/`gamma` idle, Run answered **409** *"alpha is already running a turn, and this loop's queue holds no open task for another agent to take. Nothing was started."* `alpha` was still `running` when the answer came back. The only new entry on `alpha`'s queue is the operator's own trigger (`origin_type: operator`); the job's history is empty.
+- [x] 5.5 Confirm every job the drive created is disabled, and stop the drive Hub.
+      *Done, iteration 6:* all seven jobs the drive created read `enabled = 0` (checked in the database, the archived one included; the route hides archived jobs unless `include_archived=true`, which the harness teardown now passes). Drive Hub stopped; :8013 no longer listening.
+- [x] 5.6 Archive:
       - sync the `agent-flows` delta into `openspec/specs/`;
       - move the change to `openspec/changes/archive/`;
       - in the same commit, set F352's Status line to record its definition half fixed at the
@@ -327,3 +334,4 @@ wrote three `JobRun`s, and Run answered 200.
       - *(Round 3)* set F372's Status line to *fixed* at the implementation's sha;
       - *(Round 3)* add a dated note to F373 saying this change widened its reach (design D3,
         Round 3). It stays open.
+      *Done, iteration 6, in the archive commit:* both deltas hand-synced (one ADDED and one MODIFIED requirement into `agent-flows`, two MODIFIED into `agent-loops`), then `openspec archive --skip-specs`. F352's Status records the definition half fixed at `4b59ee0`, open for the visibility half; F372 fixed at `4b59ee0`; dated notes on F128 and F373 (widened, still open); F370 and F371 untouched and open. The drive's own finding, F374, is filed, not fixed.

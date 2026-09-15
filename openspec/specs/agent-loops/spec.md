@@ -802,6 +802,14 @@ defines, so this refusal and the scheduler cannot disagree about whether the age
 This requirement does not state which agent a firing staffs when another agent in the project is
 free. `agent-flows` governs that.
 
+**Another agent being free SHALL NOT let a firing queue input for the loop's own agent while that
+agent is running a turn or held.** Where the loop's queue holds no task in a non-terminal status,
+there is nothing another agent could be given, and the only input the firing could queue is a
+briefing for the busy agent to fill the queue. The Hub SHALL refuse that firing exactly as it
+refuses one where nobody else is free: before it records anything or queues any input. A briefing
+queued for a busy agent to fill an empty queue is as stale by the time it is read as any other, and
+one queued per firing is the accumulation this requirement exists to stop.
+
 Where the loop's summary reports why the loop is not proceeding, and this refusal would refuse the
 loop's next firing, the summary SHALL report this refusal's reason. It SHALL NOT report a stalled
 queue with no claimable task, since the next firing is refused before it looks at the queue.
@@ -841,6 +849,18 @@ agent is free.
 
 - **WHEN** a loop's agent's hold has ended and the loop's job fires with claimable work
 - **THEN** the firing proceeds and claims a task
+
+#### Scenario: An empty queue is refused while its agent is busy, whoever else is free
+
+- **WHEN** a loop's agent has a running turn, the loop's queue holds no task in a non-terminal status, another agent in the project is free, and the loop's job fires several times
+- **THEN** every one of those firings is refused
+- **AND** no inbound queue entry is created for the loop's agent
+- **AND** the loop's execution history gains no entries from those firings
+
+#### Scenario: An empty queue still fires its agent once the agent is free
+
+- **WHEN** no task has ever named a loop, its agent is running no turn and is not held, and the loop's job fires
+- **THEN** the firing proceeds and queues one briefing for the loop's agent
 
 ### Requirement: A firing is refused while its queue is stalled
 
@@ -1413,9 +1433,13 @@ is still queued, and SHALL fit the firing record's summary field whole.
 
 The Hub SHALL answer an operator's manual firing of a loop that the loop's busy guard refused with a conflict that names the reason the guard gave, and SHALL NOT answer it as a failure to fire.
 
-The busy guard refuses a firing when the job's agent is running a turn or its queue is held, and no
-other agent in the project is free. It records nothing, deliberately, so there is no firing record
-to read a reason from, and the most recent record is some earlier firing's.
+The busy guard refuses a firing when the job's agent is running a turn or its queue is held, and
+either no other agent in the project is free or the loop's queue holds no task in a non-terminal
+status. It records nothing, deliberately, so there is no firing record to read a reason from, and
+the most recent record is some earlier firing's.
+
+The answer SHALL say which of those two held. Stating that no other agent is free when one is free
+tells the operator to free an agent, which would change nothing; what the loop lacks is work.
 
 The route SHALL answer from a firing record only when the manual firing wrote that record. Where it
 wrote none, the route SHALL ask the guard again before anything else, because the guard is the
@@ -1433,6 +1457,13 @@ start until the hold ends.
 - **WHEN** a loop's agent is running a turn, no other agent in the project is free, and the operator presses Run
 - **THEN** the answer is a conflict naming the agent that is running
 - **AND** it is not a server error reading "Failed to fire job"
+
+#### Scenario: Run while the loop's agent is mid-turn and its queue is empty
+
+- **WHEN** a loop's agent is running a turn, the loop's queue holds no task in a non-terminal status, another agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent that is running
+- **AND** it does not state that no other agent is free
+- **AND** no inbound queue entry is created for the loop's agent
 
 #### Scenario: Run while the loop's agent is held
 
@@ -1454,4 +1485,3 @@ start until the hold ends.
 
 - **WHEN** Run is pressed on a loop and the firing writes no record
 - **THEN** no earlier firing's record has its requester changed
-

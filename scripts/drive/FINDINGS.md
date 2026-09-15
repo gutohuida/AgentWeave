@@ -488,6 +488,16 @@ open as D by that change's close-out. Stripped of line offsets, every other list
 `F327` and `F328` stay open, as that change said they would; so do `F333` and `F334`, which its
 drive found.
 
+**Revised 2026-09-15 (night window, `a-task-nothing-will-move-holds-nobody-drive`): the open
+severity-A set is five: `F299`, `F301`, `F325`, `F332`, `F352`.** The paragraph above said four. It
+was already one short before tonight's edit: `F352` was filed as A on 2026-09-13 and never entered
+here, while the classifier counted it. `F352` stays open: the definition half shipped in `4b59ee0`
+(reachability, driven and archived tonight), and the visibility half is still
+`an-unstaffed-review-names-its-holders`. Under `F313`'s rule, the classifier was run before and after
+the edit. Exactly `F372` (B, fixed by the same change) moved from `OPEN` to `RESOLVED`, and the only
+new verdict is `F374`, filed open as B by the drive. Stripped of line offsets, every other list
+matches, the A lists included.
+
 ### Two more defects, found the same day by an adversarial review that was told to falsify
 
 **The first three below were found by me. These two were found by an Opus review agent spawned at
@@ -9801,6 +9811,16 @@ unassigned task whose job agent is held now staffs another free agent (`decide_f
 branch requires the default agent to be neither running nor held). The two-task case already reached
 every documentless loop, busy agent or not, before this change. The operator's decision is
 unchanged, and still open.
+
+**Note, 2026-09-15 (`a-task-nothing-will-move-holds-nobody`, design D3 Round 2, fix `4b59ee0`,
+archived).** Until this change, a sibling holding **any** live task shielded a loop from this
+substitution. Now only a sibling holding **reachable** work does: a task in a loop that has neither
+ended nor been archived, or one a turn within the hop budget is queued to work. In a
+LoopEngine-shaped project, where every sibling holds only out-of-loop tasks, the substitution could
+not fire before and can now. For example, a plain loop whose agent is mid-turn now hands its next
+pending task to such a sibling. D8 of the same change narrows the other way: a busy agent's **empty**
+loop now fires nobody, whoever is free. Where it fires changed; the decision did not. Still yours, and
+still open.
 
 ## F129 (B) — requirement drift works, and the app cannot reach any of it
 
@@ -27735,8 +27755,10 @@ on the operator, not this finding.
 
 ## F352 (A) — a flow counts an agent busy for holding any live task anywhere in the project, so backlog outside the flow starves it of reviewers — and the reason it gives names nobody
 
-**Status:** open; the operator's flow was unblocked by hand. Reported by the operator 2026-09-13:
-*"The loop got stuck because of task assignment."*
+**Status:** open for the visibility half; **the definition half is fixed `4b59ee0`**
+(`a-task-nothing-will-move-holds-nobody`, driven and archived 2026-09-15). The operator's flow was
+unblocked by hand. Reported by the operator 2026-09-13: *"The loop got stuck because of task
+assignment."*
 
 **Measured on the operator's Hub (LoopEngine, `loop-103ecb8aeb89`).** Fourteen firings, 21:20 to
 22:30 UTC, each recorded `review_unstaffed` for the two finished tasks the rest of the flow waited on
@@ -27803,6 +27825,28 @@ that the rung-3 half is written against today's definition of free: under the re
 sentence would name holdings that are not reasons. Nothing is built. REV recommends a split to the
 operator: build the F353 half as its own change after one verification round, and hold the rung-3
 naming for the answer (`decisions_for_user`, `F352-split`).
+
+**Definition half fixed and driven, 2026-09-15** (`a-task-nothing-will-move-holds-nobody`, fix
+`4b59ee0`, archived with this note). The operator set the direction on 2026-09-14 at 23:30 as a sixth
+option, **(f) reachability**: an assigned task holds its assignee only while its loop has neither
+ended nor been archived, or while a turn within the hop budget is queued for that agent naming it.
+Driven on a fresh drive Hub (`:8013`, `profiles/drive0915`, project `proj-4297ab5fd02c`, Haiku
+throughout; harness `scripts/drive/t_d0915_reachability.py`):
+
+| lane | staging | answer |
+|---|---|---|
+| LoopEngine's shape | `alpha` authored the task in a real turn with evidence naming a commit; `beta` `in_progress` and `gamma` `pending` on tasks from `POST /tasks` with an assignee and no loop | **200**, review staffed with `beta`, a real Haiku review turn, **no `review_unstaffed`** |
+| control | both holding tasks in a second **live** loop | **409**, today's rung-3 sentence, one `review_unstaffed` |
+| paused | that loop's job disabled | **409**, the same sentence (design D2: a pause holds) |
+| ended | that loop stopped (`ending_state: stopped`) | **200**, staffed |
+| archived | a third live loop, archived through `POST /jobs/{id}/archive` without a stop; `ending_state` still null | **409** before the archive, **200** and staffed after |
+| past the budget | `POST /messages` naming `beta`'s out-of-loop task: `hop_depth` 7, budget 6, `queued` | **200**, still staffed with `beta` |
+| D8 | an empty loop on `alpha`, Run pressed while `alpha`'s real turn ran and `beta`/`gamma` were idle | **409** *"alpha is already running a turn, and this loop's queue holds no open task for another agent to take. Nothing was started."*; no job entry, no history |
+
+**Still open here: the visibility half.** The sentence still names nobody, as the control and paused
+rows show. That is `an-unstaffed-review-names-its-holders`, and its rung-3 half must be re-derived
+against (f) before it is built: it would now name only reachable holdings. The drive also found
+**F374**, below.
 
 ## F353 (B) — the product tells the operator to "clear the assignee", and nothing in the app can; the one action that would work, "Land it", is never named
 
@@ -28480,8 +28524,13 @@ deliverable input: the pairs from `a-task-nothing-will-move-holds-nobody`'s task
 
 ## F372 (B) — a loop whose agent is mid-turn queues a briefing for it on every firing when its queue is empty and another agent is free
 
-**Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r3`,
-which folds the repair into that change (its design D8). **Measured** with a throwaway test through
+**Status:** fixed `4b59ee0` (`a-task-nothing-will-move-holds-nobody` design D8, archived 2026-09-15).
+Tests 3b.2-3b.6, each with a mutation reproducing the measurement below. **Driven** on the drive Hub
+on 2026-09-15: Run on an empty loop while its agent's real turn ran and two agents were idle answered
+**409** *"alpha is already running a turn, and this loop's queue holds no open task for another agent
+to take. Nothing was started."*, with no job entry and no history row. Filed 2026-09-15 by the night
+window's `a-task-nothing-will-move-holds-nobody-r3`, which folds the repair into that change (its
+design D8). **Measured** with a throwaway test through
 the real firing and the real Run route, deleted before the commit.
 
 **The mechanism.** `_loop_flow_busy_reason` (`hub/hub/scheduler.py:282-308`) refuses a firing only
@@ -28558,3 +28607,60 @@ Answer from that row only where it is new, or where its `tick_count` moved. Othe
 the in-flight question. Route-only.
 
 **Related:** F369 (the same comparison, for stamping), F48, F23, F127.
+
+**Note, 2026-09-15 (`a-task-nothing-will-move-holds-nobody` archived, fix `4b59ee0`, design D3
+Round 3).** That change widens this finding's reach. The in-flight decline was already reachable
+wherever a free agent existed. It now also reaches projects where the only free agents hold nothing
+but out-of-loop tasks, because those agents are now free. Not repaired there, and still open.
+
+## F374 (B) — a review refused by the evidence gate is re-staffed to a second reviewer, who meets the same gate, and the surfaced reason blames staffing
+
+**Status:** open. Filed 2026-09-15 by the night window's drive of
+`a-task-nothing-will-move-holds-nobody` (drive Hub `:8013`, `profiles/drive0915`, project
+`proj-4297ab5fd02c`, task `task-f3bb989a5b1c`). **Measured live, twice** (the control and archived
+lanes), in real Haiku turns. Not caused by that change; it widens the reach (below).
+
+**What happened.** A flow's task was completed by `alpha`, with evidence naming a commit left
+`awaiting`, because the drive never accepted it. `beta` was staffed for the review, read the spec,
+verified the file, and called `update_task(status="approved")` three times. Each was refused 409 by
+the shipped gate: *"This task's work has been recorded and nobody has judged it: FR-1 at 0000dd23c0e0.
+… both are the operator's, so an agent reading this has to ask for one rather than take it."* `beta`
+then did what F152's drive says it should: it stopped, and messaged `alpha` that the review was
+complete. The turn ended with the task still `under_review`, so it was divergent, and the review
+policy (`run_divergence.py:430-471`) **re-staffed it to `gamma`** (`run_diverged`: `outcome:
+restaffed`, `response_agent: gamma`). `gamma` read the spec, verified, called
+`update_task(approved)`, got the identical 409, and stopped. Its divergence was surfaced with:
+
+> could not staff this step: no agent is free to take it. Every agent on the roster is either
+> running a turn, already holding active work, or is the one that completed this task and so may not
+> review it.
+
+**Three things wrong at that seam:**
+1. **A second review turn is spent on a refusal that no reviewer can clear.** The gate names a
+   remedy that belongs only to the operator. The re-staff never asks why the first review ended
+   without a verdict.
+2. **The surfaced reason is false for this task.** `beta` was idle, and holding only an out-of-loop
+   task. It was barred as a reviewer that gave no verdict (`_reviewers_that_gave_no_verdict`, `:430`),
+   which the sentence does not list. The blocker is unjudged evidence, and the sentence does not name
+   it.
+3. **The operator is told about staffing, not about the evidence waiting for them.** What would
+   move the task is accepting the evidence.
+
+**Why this change widens it.** Under the old rule, `gamma` held a `pending` out-of-loop task and
+counted as busy, so the re-staff would have been surfaced at once. Under reachability, `gamma` is
+free, so the wasted turn happens. That matters in the week the rate-limit window counts.
+
+**A repair has to decide, not proposed:** whether a review turn whose approval the evidence gate
+refused counts as *"ended without a verdict"* at all, or as a verdict the reviewer could not record.
+If the second, the divergence would surface the gate's own sentence to the operator, and not
+re-staff.
+
+**Also seen, and correct as designed:** in a project with several documents, `record_evidence` without a
+document answers 422 *"FR-1 is declared by more than one document in this project. Name the document
+it belongs to."* The reviewer did not retry with a document, and nothing required it to.
+
+**Reproduce:** `scripts/drive/t_d0915_reachability.py`, the `control` lane with its evidence left
+`awaiting`. Then `GET /projects/{P}/logs?event_type=run_diverged`.
+
+**Related:** F152 (the gate's sentence reaches the agent), F154/F167 (a review with no verdict),
+F352 (the rung-3 sentence names nobody), F316 (the re-staff's exclusion set).

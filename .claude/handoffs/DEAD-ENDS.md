@@ -318,6 +318,18 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   **`state`**, not `status`, and its values are `queued`/`delivered`/`withdrawn`. `tasks` has
   `updated`, not `updated_at`. The reliable move remains `pragma table_info(<t>)` first, and
   `select name from sqlite_master where type='table'` before assuming a table exists at all.)*
+- **A drive runner's Haiku is `claude-haiku-4-5-20251001`, not `claude-haiku-4-5`** *(2026-09-15,
+  cost one launch)*. `POST /projects/{P}/runners` with the bare name answers 400 *"'claude-haiku-4-5'
+  is not a model 'claude' declares"* — the catalog (`hub/hub/model_catalog.py`) holds the dated id,
+  with `haiku` as its alias. The playbook and change tasks say "`claude-haiku-4-5`" as prose; write
+  the dated id in a harness.
+- **Three drive-harness reads that return less than they look like** *(2026-09-15)*.
+  `GET /projects/{P}/jobs` hides archived jobs unless `?include_archived=true`, so a "no job left
+  enabled" teardown over the default listing cannot see one. `GET /projects/{P}/queue/{agent}` does
+  not expose an entry's `task_id` (read it off the message, or `inbound_queue_entries.task_id`
+  `mode=ro` on the drive database). A flow's task whose evidence is left `awaiting` cannot be approved
+  by any reviewer, so a drive that is about *staffing* should expect `run_diverged` re-staffs after
+  each review (F374), not verdicts.
 
 ## SQLAlchemy and Hub test patterns
 
