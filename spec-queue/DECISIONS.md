@@ -20,11 +20,13 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-### a-quote-can-spell-a-slash stopped at §2 — 2026-09-13 night
+### a-quote-can-spell-a-slash stopped at §2 — 2026-09-13 night, DECIDED 2026-09-15
 
-- OPEN      F332-rule  `a-quote-can-spell-a-slash` is APPROVED, but its §2 decode rule opens a
-  Windows escape. Mark it **REVISING** so the day window takes another round, or decide the
-  correction here.
+- DECIDED    F332-rule  **REVISING — take the night's candidate correction (below) through one
+  more verification round, then build.** Decided 2026-09-15, by the operator, in an interactive
+  session. *Rejected:* the blunter "refuse every codepoint escape above 0xFF on Windows" option —
+  it needs a new `_UNCHECKED` reason string, which §2.3 forbids, so it is not actually cheaper, it
+  just moves the cost onto a different rule.
 
 **What was found.** The rule was built exactly as tasks §2.2 states (not committed), then measured
 through `_decide` and real Git Bash. It **allows two writes outside the workspace that today's lexer
@@ -65,6 +67,17 @@ stays on the branch. Its N3 *after* answer on Windows is wrong under the correct
 changes that row. The night queue's f332-s4…s7 are blocked on this row. Its CI XFAIL half of 7.1
 is collected: run `34786122094`, `hub-test` job `103801807485`, green with 11 xfailed. The 11 are
 G1–G10 and D1, the same set WSL measured.
+
+### F352-free — what "free" means for review staffing, raised 2026-09-14 by REV
+
+- OPEN      F352-free  `an-unstaffed-review-names-its-holders` proposal.md, *OPERATOR QUESTION —
+  what "free" means*: should review-staffing use a looser availability rule than new-work-staffing?
+  Five options (a)–(e); REV recommends **(d)**, a review asks a different question from new work —
+  free for review iff not running a turn and not already reviewing another `under_review` task;
+  new-work availability (D4, `loop-becomes-a-flow`) is unchanged. The operator leans (d) and asked
+  for an independent Opus-model adversarial validation before deciding; running 2026-09-15. The
+  rung-3 half of `an-unstaffed-review-names-its-holders` (see the split decision above) is blocked
+  on this row.
 
 ---
 
@@ -661,6 +674,24 @@ morning of a week resetting Sunday. Three decisions, chosen from options put to 
 
 This closes `weekly-window-care` below: the throttle is routing + trimming now, and a cap after
 calibration.
+
+### 2026-09-15, later — the build queue: F332-rule and the review-staffing split
+
+**DECIDED 2026-09-15, by the operator, in an interactive session**, with no daily window running
+that day.
+
+- DECIDED   F332-rule  See the row under `## Open` above, now flipped: revise, one more
+  verification round, then build.
+- DECIDED   split-unstaffed-review  **Approved REV's split of
+  `an-unstaffed-review-names-its-holders`.** The F353 half (task groups 3 and 4, 2.5, 2.5b, 2.12
+  and 2.13 — the refusals' remedies, F334's wording, F365's once-per-task record, the
+  `error_summary` fit F367 needs) moves into its own change directory, takes one verification
+  round there, and can be built without waiting on `F352-free`. The rung-3 naming half (D1, D2,
+  D3, D6, task 2.14) stays in the original directory and waits on `F352-free`, still open below.
+
+`F352-free` itself — what "free" means for review staffing — is **not yet decided**: the operator
+leans toward option (d), REV's recommendation, and asked for an independent Opus-model validation
+before locking it in. See `## Open` for the row once that lands.
 
 ### 2026-09-14 afternoon — LoopEngine stays parked, and the weekly rate-limit window needs care
 
