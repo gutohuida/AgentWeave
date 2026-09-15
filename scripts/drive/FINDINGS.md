@@ -26908,6 +26908,33 @@ divergence was a `\c` escape; following one of them led to the phantom-level cla
 day window through `spec-queue/DECISIONS.md` (*a-quote-can-spell-a-slash stopped at §2*). The
 stopped implementation is at `testbed/scratch/night0913/s2/s2-stopped.patch`.
 
+**Implementation and drive note (2026-09-15).** The design went through five more adversarial
+rounds this day (Round 4 replaced the phantom-component invariant above with a dual-reading rule;
+Rounds 6-9 found and fixed a separate, pre-existing rule-5/6 fallthrough over-refusal the decoder
+newly made reachable -- see `design.md`'s D1 and D6), then was implemented in full: the ANSI-C
+decoder and the `_PLAIN_RELATIVE_RE` broadening both landed in `hub/hub/mcp_server.py`. Every row
+of design.md's D2/D6 tables is pinned in `hub/tests/test_permission_approver.py` and verified on
+both Windows and real POSIX (WSL Ubuntu bash); all 13 mutation checks (Section 4) confirmed
+load-bearing; the whole Hub suite is green (4397 passed, 0 failed). Driven live on Windows against
+a real `claude-haiku-4-5` agent, pre-fix and post-fix (tasks.md Section 5): 27 of 28 checks matched
+the predicted table exactly, including the traversal refusal, the `I1` over-refusal correction, and
+`N3`'s real allow-flip with a file actually created.
+
+**One row's live drive evidence is the model's own behavior, not the fix.** `N4`
+(`echo hi > $'..\u0100'`, a `\uHHHH` escape above 0xFF that should keep its backslash and be
+refused as a Windows traversal) was never denied in the drive -- because Haiku resolved the
+`\uHHHH` text into the actual Unicode character before ever constructing its own Bash tool call,
+reproduced twice, including with an explicit instruction not to. Ruled out as a transport or
+`mcp_server.py` defect: a controlled JSON-RPC probe sending the literal six-character escape text
+through a correct `json.dumps`/`json.loads` round trip denies exactly as `N4`'s unit test predicts
+(`Denied: '..\u0100' is outside your workspace.`). The resolution happens in the model's own text
+generation, before the escape ever reaches this repo's code. Not a defect in this fix --
+`_decide` and the real spawned server were already verified directly against the literal escape
+text at the unit and wire level, both platforms -- and arguably a narrowing of the exploit surface
+in practice: a compliant agent tends to self-decode this escape class rather than reproduce it
+verbatim for an attacker to rely on. No F-number filed for this; recorded here as the reason `N4`'s
+only evidence is the unit/wire-level tests, not the live turn.
+
 ## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
 
 **Status:** open. **Rendered 2026-09-13 by the day window's `d1-drive`**, in Chromium against the
