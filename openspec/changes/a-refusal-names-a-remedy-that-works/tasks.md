@@ -98,7 +98,7 @@ mutation and the observed failure beside the task when ticking it.
 
 ## 3. Once per task (design D3)
 
-- [ ] 3.1 (was 3.1) `_review_unstaffed_already_stands` filters on
+- [x] 3.1 (was 3.1) `_review_unstaffed_already_stands` filters on
       `EventLog.data["task_id"].as_string() == task_id`, against real SQLite. **Carries REV item
       10, missed in the first split pass:** the docstring at `scheduler.py:2067-2069` still
       claims a condition that cleared and returned *"is news again"*, which stays untrue after
@@ -106,11 +106,32 @@ mutation and the observed failure beside the task when ticking it.
       gap REV noted, left open, and this task must not leave open silently). Amend the docstring
       to state the narrower rule this task actually implements: newest-for-this-task, not
       newest-for-any-change.
-- [ ] 3.2 (was 3.2) Test: one loop, **two** unstaffable tasks, five firings through the real
+
+      Landed at `scheduler.py:2120-2148` (line numbers moved from groups 1-2's ~40 added lines,
+      re-grepped before editing). Added `.where(EventLog.data["task_id"].as_string() == task_id)`
+      to the query and dropped the now-redundant `data.get("task_id") == task_id` from the
+      Python-side check (`reason` alone, since the query already scopes to this task). Docstring
+      rewritten: states the query is scoped to this task's own newest record, not the loop's
+      (F365), and explicitly disclaims the "cleared and returned is news again" property — there
+      is no "cleared" event, so a task whose newest record still reads the same reason looks
+      unbroken-standing whether the condition was continuous or recurred; names this as REV item
+      10, left open.
+- [x] 3.2 (was 3.2) Test: one loop, **two** unstaffable tasks, five firings through the real
       route. Exactly one `review_unstaffed` per task.
       *Mutation:* revert to the loop-newest query. The test must fail, while the existing
       single-task test still passes against the mutant, which shows why it never caught this.
-- [ ] 3.3 (was 3.3, **staging corrected in this split — verification round found the original
+
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_two_unstaffable_tasks_each_get_exactly_one_review_unstaffed`.
+      Two operator-completed, single-agent-roster tasks (both excluded via
+      `agents_that_may_have_authored`, evidenced from setup so both reach the exclusion branch
+      immediately), five firings through `POST /jobs/{id}/run`. Mutation applied (dropped the
+      `task_id` filter, restored the old `data.get("task_id") == task_id` check): task a recorded
+      5 events instead of 1 (one new row every firing, since each firing's freshly-written row for
+      the *other* task always shadows the next check). `test_an_unchanged_wedge_is_recorded_once_not_once_per_tick`
+      (`test_a_review_nobody_is_doing.py`, one task, five firings) was re-run against the same
+      mutant and still passed, confirming why a single-task fixture never caught this. Reverted;
+      both pass clean, 1 event per task.
+- [x] 3.3 (was 3.3, **staging corrected in this split — verification round found the original
       staging no longer produces a reason change**) Test: two tasks; between firings, change one
       task's reason only. **Not** by freeing a holding: since `4b59ee0` (2026-09-15,
       `_agents_that_are_free`, `scheduler.py:1125-1138`), a bare holding no longer changes
@@ -125,6 +146,17 @@ mutation and the observed failure beside the task when ticking it.
       is not the other task's own excluded agent — keep the fixture's two tasks' exclusions
       independent.
       *Mutation:* drop the task filter. The test must fail.
+
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_a_changed_reason_is_recorded_again_for_only_the_task_that_changed`.
+      Task `a` starts with no evidence at all (refused before `resolve_reviewer` at the
+      `commit_for_task_review` gate, a different sentence entirely); task `b` is worked by the
+      same author and never gets evidence. Between firings, evidence for `a` is recorded by a
+      second roster agent that did not work `a` -- resolving the commit gate and (via
+      `agents_that_recorded_evidence_for`) adding that agent to `a`'s exclusion, so the now-full
+      two-agent roster still can't staff it, with the exclusion-branch reason instead. Mutation
+      applied (same as 3.2's): task `b` recorded 2 events instead of 1 (its unchanged "no commit"
+      reason no longer suppressed, because the loop-newest check now compares against `a`'s
+      just-written row). Reverted; `a` records 2 events with different reasons, `b` records 1.
 
 ## 4. The refusals (design D4)
 

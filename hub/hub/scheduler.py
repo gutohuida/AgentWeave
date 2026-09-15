@@ -2122,9 +2122,14 @@ async def _review_unstaffed_already_stands(
 ) -> bool:
     """Whether the newest `review_unstaffed` for this task already says exactly this.
 
-    Narrow in the same two directions as `_stall_run_to_increment`: the **most recent** record for
-    this task, so a condition that cleared and returned is news again, and the **same reason**, so
-    a condition that changed shape stays visible rather than hiding inside a silence.
+    Narrower than `_stall_run_to_increment`'s equivalent check, and in one direction only: the
+    query is scoped to this **task's own** newest record, not the loop's -- two tasks stuck at
+    once no longer share a single "already stands" verdict just because one of them fired more
+    recently (F365; `a-refusal-names-a-remedy-that-works` design D3). It does **not** detect a
+    condition that cleared and came back with the same reason: there is no "cleared" event to mark
+    the gap, so a task whose newest record still reads this reason looks unbroken-standing whether
+    the condition was continuous or recurred. That narrower rule -- newest-for-this-task, not
+    newest-for-any-change -- is what this actually implements; REV's item 10 leaves the gap open.
     """
     from .db.models import EventLog
 
@@ -2135,6 +2140,7 @@ async def _review_unstaffed_already_stands(
                 .where(EventLog.project_id == loop.project_id)
                 .where(EventLog.event_type == "review_unstaffed")
                 .where(EventLog.loop_id == loop.id)
+                .where(EventLog.data["task_id"].as_string() == task_id)
                 .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
                 .limit(1)
             )
@@ -2145,7 +2151,7 @@ async def _review_unstaffed_already_stands(
     if latest is None:
         return False
     data = latest.data or {}
-    return data.get("task_id") == task_id and data.get("reason") == reason
+    return data.get("reason") == reason
 
 
 async def _emit_review_unstaffed(
