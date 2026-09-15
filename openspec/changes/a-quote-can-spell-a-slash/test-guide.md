@@ -59,8 +59,8 @@ These need no operator; a test or CI settles each.
   control target it would allow this on Windows; §4.8's mutation guards that.
 - **A decoded character outside the checker's `\w`-only path pattern does not wrongly refuse an
   inside path (rows Q1–Q4, S1, design.md D6, corrected Round 7).** `cat $'sub\xd7\x2fhello.py'`,
-  `cat $'sub\cA\x2fhello.py'` and `cat $'sub\u2000\x2fhello.py'` each decode to a path genuinely
-  inside the workspace (a filename containing ×, a control byte, or a Unicode space character), and
+  `cat $'sub\cA\x2fhello.py'` and `cat $'sub\u2212\x2fhello.py'` each decode to a path genuinely
+  inside the workspace (a filename containing ×, a control byte, or U+2212 MINUS SIGN), and
   are **allowed** on both platforms — this is a pre-existing gap in the checker's own path-matching
   regex, not something this change's decoder gets wrong, but the decoder is what first makes these
   characters reachable through an escape. Without task 2.2c's fix, these rows would be wrongly

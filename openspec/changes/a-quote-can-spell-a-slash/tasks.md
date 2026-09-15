@@ -673,18 +673,24 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
 
 ## 6. The gate
 
-- [ ] 6.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+- [x] 6.1 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
   --target-version py311`, `mypy src/`. Use `py -3.11 -m ...` (ruff/mypy are not on PATH in Git
   Bash; the failure is silent — see DEAD-ENDS). CI's path list, not a narrower one.
+  **Done 2026-09-15, re-run clean after every commit this session.**
 - [ ] 6.2 `py -3.11 -m pytest tests/ -q -p no:cacheprovider` from `hub/` (the whole Hub suite),
   never bare `python`. Run in the background or in chunks — the suite takes 15–47 min and exceeds
   the 600 s cap. Only re-run whole if something here could plausibly break it (it changes `_lex`, so
   run the whole suite once). Attribute any red by signature (F292 `database is locked`, F314 event
   loop) before blaming this change.
-- [ ] 6.3 `openspec validate --strict a-quote-can-spell-a-slash` after every delta edit.
-- [ ] 6.4 No migration, no API/schema/UI change. `git diff <base>.. -- hub/hub/migrations hub/hub/api
+  **Running 2026-09-15** — kicked off in the background; not yet complete as of this edit.
+- [x] 6.3 `openspec validate --strict a-quote-can-spell-a-slash` after every delta edit.
+  **Done — re-run and passed after every commit this session.**
+- [x] 6.4 No migration, no API/schema/UI change. `git diff <base>.. -- hub/hub/migrations hub/hub/api
   hub/ui` is empty. The whole product diff is `hub/hub/mcp_server.py` and
   `hub/tests/test_permission_approver.py`.
+  **Done** — confirmed empty across this session's full range (`8e51390..HEAD`); the only files
+  this session touched are `hub/hub/mcp_server.py`, `hub/tests/test_permission_approver.py`,
+  `.claude/handoffs/DEAD-ENDS.md`, and this change's own `design.md`/`tasks.md`/`test-guide.md`.
 
 ## 7. Close it out
 
@@ -712,9 +718,18 @@ chosen that night, fresh profile, started from `hub/` with uvicorn **from source
 
 ## 9. User test guide
 
-- [ ] 9.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
+- [x] 9.1 `test-guide.md` in this change is the operator's walkthrough. Keep it true to what
   shipped; correct it against the actual built behaviour. **Several changes are expected, not
   none** — most rows' Windows reason improves from *cannot be checked* to *outside* (design.md D2),
   and N3 changes more than its reason: it flips from refused to **allowed** on Windows (Round 4/5).
   Update `test-guide.md`'s own N3/N4 rows to match design.md's corrected D2 table before calling
   this task done — they were written against the pre-Round-4 design and are stale as of this spec.
+  **Done 2026-09-15** — N3/N4's prose already matched the corrected (allowed / refused-outside)
+  behaviour from an earlier round; the one real staleness found was Q3's example, still quoting
+  the invalid pre-Round-9 ` ` form (Unicode whitespace, split out of the word before it can
+  reach rule 5/6) instead of the corrected `−`. Fixed via a script (DEAD-ENDS): typing the fix
+  directly through the Edit tool's `old_string`/`new_string` corrupted the *search* string itself
+  into a literal U+2000 character, so the match silently failed twice before the trap was
+  recognized — a variant worth noting: this trap can hit the string you are searching for, not
+  only the one you are writing. Verified against every row now pinned in the test suite; the
+  guide's opening line ("every row in D2 gets the answer and reason written there") is true.

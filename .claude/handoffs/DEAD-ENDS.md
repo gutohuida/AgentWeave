@@ -558,6 +558,16 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   survived every Edit call this session without corruption; only 4-hex `\u` tokens did not. The
   fix script method above remains the reliable one and was used again, successfully, for all three
   files.
+  **Reconfirmed 2026-09-15, F332 implementation session — the trap can hit the SEARCH string, not
+  only the replacement.** An `Edit` call whose `old_string` contained a typed ` ` token (meant
+  to match six literal characters already in `test-guide.md`) silently failed to match, twice, even
+  though the target text was visibly present on a `Read` of the same lines. The tool's own mismatch
+  diagnostic showed the string it had actually tried to match with the escape already collapsed to
+  the raw character — i.e. the corruption happened to the argument as typed in the tool call itself,
+  before any comparison against the file. A `Read` of the file is not proof the corruption is only
+  in what gets written; check what the Edit tool reports it searched for, or skip straight to the
+  Write-a-script method for any edit that needs to reference an existing `\uXXXX`/`\UXXXXXXXX` token
+  by name, not only for the ones being newly inserted.
 
 - **Driving `claude -p` from Python: pass the prompt on stdin, never as an argv element**
   *(2026-09-10, cost one full four-run measurement)*. `shutil.which("claude")` on this machine
