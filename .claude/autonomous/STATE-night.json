@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-16T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-15-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "remedy-g4a-impl",
-    "next_action": "Run openspec-apply-change on a-refusal-names-a-remedy-that-works, task group 4a only (4.1-4.5, the refusals, F353/F334). Re-grep every cited line number before editing (scheduler.py and task_transition_service.py have moved since groups 1-3 added lines above the cited spots -- same drift warning that was correct for group 3's :2067-2069). Read tasks.md 4.1-4.5's text directly, not the parent's original wording -- 4.1 and 4.2 change _guard_reviewer_is_not_the_author (task_transition_service.py) and review_dispatch_refusal (agent_trigger.py) together, and 4.2 wires the own_review_remedy import group 1 left unwired. Apply each named mutation, watch the named test fail, record it beside the tick. Run the touched test files, ruff and black on touched files. Commit, push.",
+    "current": "remedy-g4b-impl",
+    "next_action": "Run openspec-apply-change on a-refusal-names-a-remedy-that-works, task group 4b (4.6-4.10, tasks.md). Re-grep every cited line number first -- 4.6 lists old-sentence assertions across five test files plus five comments to amend (api/v1/tasks.py:1259-1268, schemas/tasks.py:124-127, test_reviewer_is_not_the_author.py:377-378, agent_trigger.py:854-858, task_transition_service.py:405-406), all of which may have moved since group 4a's edit. 4.7-4.8 are new tests on the dispatch route's own refusals at agent_trigger.py (the author branch and the under_review-nobody-holds case). 4.9 fixes the D9 'Reassign the task if...' duplication bug at agent_trigger.py:501 and :847 (own_review_remedy's under_review branch already opens with 'decide it yourself', so the D9 prefix must not repeat it) -- both mutations (a) restore one site's old sentence, (b) restore the duplicated phrase, must make the 'exactly once' assertion fail. 4.10 is the 500-char fit test at a 64-char id/32-char name for the guard's operator sentence AND the queue entry's waiting_reason, read before the model-level fit. Apply each named mutation, watch the named test fail, record it beside the tick. Run the touched test files, ruff and black on touched files. Commit, push.",
     "queue": [
         {
             "id": "compose",
@@ -35,9 +35,9 @@
         },
         {
             "id": "remedy-g4a-impl",
-            "status": "open",
+            "status": "done",
             "title": "a-refusal-names-a-remedy-that-works: 4.1-4.5 (the refusals, F353/F334)",
-            "detail": "openspec/changes/a-refusal-names-a-remedy-that-works/tasks.md 4.1-4.5: _guard_reviewer_is_not_the_author both branches, review_dispatch_refusal, and their three tests."
+            "detail": "Done at iteration 4. _guard_reviewer_is_not_the_author (task_transition_service.py) both branches share one remedy string chosen once by actor.is_operator: operator gets 'Land it... or dispatch a different agent's review turn (POST /agent/trigger with review_task_id)', agent gets 'None of the task tools you are offered reassigns a task; the operator can move it on.' Message shape 'Cannot move task {id} to under_review with {assignee!r} as its holder: ...', no 'is assigned to'/'still assigned'/'holding it'/'held by'/'Left as is'. review_dispatch_refusal (agent_trigger.py) both branches now end with own_review_remedy(task); own_review_remedy imported at module level (no cycle, task.status always completed/under_review at both call sites per the function's own status guard). Three new tests in hub/tests/test_a_refusal_names_a_remedy_that_works.py (4.3 operator PATCH, 4.4 agent PATCH via run token, 4.5 F334's shape reusing test_a_refused_review_leaves_nothing_behind.py's _leg_a harness). All three named mutations applied and verified to fail, then reverted. 12/12 new-file tests pass; 96 related tests (test_reviewer_is_not_the_author.py, test_a_refused_review_leaves_nothing_behind.py, test_a_task_waits_while_its_run_waits.py) pass; 85 more (test_agent_trigger.py, test_review_turn.py, test_review_divergence.py) pass. ruff/black clean."
         },
         {
             "id": "remedy-g4b-impl",

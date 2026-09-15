@@ -135,6 +135,7 @@ from ...scheduler import (
     WITH_REVIEWER_LOOP_TASK_STATUSES,
     enter_selected_task,
     finalize_job_run_for_conversation,
+    own_review_remedy,
 )
 from ...schemas.common import RequestModel
 from ...spec_manifest import SpecPathError, validate_spec_path
@@ -506,8 +507,8 @@ async def review_dispatch_refusal(
         return (
             status.HTTP_403_FORBIDDEN,
             f"Cannot review task {task.id} as {reviewer!r}: that is the agent recorded as "
-            f"completing it, so the review would claim its own author is reviewing it. Dispatch a "
-            f"different reviewer, or clear the assignee to review it yourself.",
+            f"completing it, so the review would claim its own author is reviewing it. "
+            f"{own_review_remedy(task)}",
         )
     if completing_agent is None and reviewer in await agents_that_recorded_evidence_for(
         session, task.id
@@ -517,7 +518,7 @@ async def review_dispatch_refusal(
             f"Cannot review task {task.id} as {reviewer!r}: that agent recorded evidence for this "
             f"task, which claims the work as its own, and no agent is recorded as completing it, "
             f"so the evidence is the record of who wrote it. Its verdict would be refused, so the "
-            f"review could never end. Dispatch a different reviewer, or review it yourself.",
+            f"review could never end. {own_review_remedy(task)}",
         )
     return None
 

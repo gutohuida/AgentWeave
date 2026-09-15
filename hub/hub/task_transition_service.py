@@ -435,32 +435,37 @@ async def _guard_reviewer_is_not_the_author(
     only case the evidence fallback reads — the reviewer it writes is never an evidence author,
     because the ladder's exclusion on that arm (`agents_that_may_have_authored`) contains every one.
 
-    **`actor` is deliberately unread**, and keeping it in the signature is the point rather than an
-    oversight: this is one of the three actor-entitlement guards `apply_transition` calls in a row,
-    so it takes their shape — and the fact that the parameter goes unused is exactly the paragraph
-    above, in code. Nobody is exempt because the rule is not about who is asking.
+    **`actor` decides the remedy, not the refusal** (design D4): the edge is false no matter who
+    asks, so nobody is exempt — this guard still takes the shape of the three actor-entitlement
+    guards `apply_transition` calls in a row, and reads `actor` only to phrase what happens next.
+    An operator can act directly (land the work themselves, or dispatch another agent's review
+    turn); an agent holds no tool that reassigns a task, so its remedy names the operator instead
+    of a PATCH it cannot make.
     """
     if to_status != "under_review" or not task.assignee:
         return
+    remedy = (
+        "Land it, on the task, to review it yourself, or dispatch a different agent's "
+        "review turn (POST /agent/trigger with review_task_id)."
+        if actor.is_operator
+        else "None of the task tools you are offered reassigns a task; the operator can move "
+        "it on."
+    )
     completing_agent = await agent_that_completed(session, task.id)
     if completing_agent is not None and completing_agent == task.assignee:
         raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to 'under_review': it is still assigned to "
-            f"{task.assignee!r}, the agent recorded as completing it, so the move would claim its "
-            f"own author is reviewing it. Assign a different reviewer, or clear the assignee to "
-            f"review it yourself. Left as is, the task is claimable by nobody and "
-            f"{task.assignee!r} counts as busy for every other review in this project."
+            f"Cannot move task {task.id} to 'under_review' with {task.assignee!r} as its "
+            f"holder: it is the agent recorded as completing this task, so the move would "
+            f"claim its own author is reviewing it. {remedy}"
         )
     if completing_agent is None and task.assignee in await agents_that_recorded_evidence_for(
         session, task.id
     ):
         raise ActorNotPermittedError(
-            f"Cannot move task {task.id} to 'under_review': it is assigned to "
-            f"{task.assignee!r}, which recorded evidence for this task and so claims the work as "
-            f"its own. No agent is recorded as completing it, so the evidence is the record of "
-            f"who wrote it, and the move would claim its own author is reviewing it — an author "
-            f"may not approve, reject or return its own work, so the review could never end. "
-            f"Assign a different reviewer, or clear the assignee to review it yourself."
+            f"Cannot move task {task.id} to 'under_review' with {task.assignee!r} as its "
+            f"holder: it recorded evidence for this task and claims the work as its own; "
+            f"with no completer recorded, the evidence is the record of who wrote it, and "
+            f"an author may not review its own work. {remedy}"
         )
 
 

@@ -160,7 +160,7 @@ mutation and the observed failure beside the task when ticking it.
 
 ## 4. The refusals (design D4)
 
-- [ ] 4.1 (was 4.1) `_guard_reviewer_is_not_the_author`, both branches:
+- [x] 4.1 (was 4.1) `_guard_reviewer_is_not_the_author`, both branches:
       - word it true for a staged or a committed assignee, as *"Cannot move task T to
         'under_review' with 'dev' as its holder: …"*, with no "is assigned to", no "still
         assigned", no "holding it" and no "held by";
@@ -177,27 +177,74 @@ mutation and the observed failure beside the task when ticking it.
       - amend the docstring's *"`actor` is deliberately unread"* paragraph.
 
       The decision is unchanged.
-- [ ] 4.2 (was 4.2) `review_dispatch_refusal`: the author branch drops "clear the assignee", and
+
+      Landed at `task_transition_service.py:443-465`, both raise sites (completer and evidence
+      branches share one `remedy` string, chosen once by `actor.is_operator` before either
+      branch). Message shape: *"Cannot move task {id} to 'under_review' with {assignee!r} as
+      its holder: …"*; operator remedy *"Land it, on the task, to review it yourself, or
+      dispatch a different agent's review turn (POST /agent/trigger with review_task_id)."*;
+      agent remedy *"None of the task tools you are offered reassigns a task; the operator can
+      move it on."* Neither remedy suggests the PATCH that sets assignee and status together.
+      Measured at a 64-char id and 32-char name (both raise sites, both actor kinds): 392,
+      346, 468, 422 characters — all under 500 (4.10's own test, group 4b, is the one that
+      pins this at the real call sites). Docstring's *"actor is deliberately unread"* paragraph
+      rewritten to state actor now drives the remedy, not the refusal.
+- [x] 4.2 (was 4.2) `review_dispatch_refusal`: the author branch drops "clear the assignee", and
       both branches end with `own_review_remedy(task)` (1.1). That gives Land it for a `completed`
       task and the three exits for an `under_review` one, **without** rung 3's freeing clause.
       - Add `own_review_remedy` to the existing module-level import from `...scheduler`
         (`agent_trigger.py:133-138`). There is no cycle: `scheduler` imports nothing from
         `agent_trigger`.
-- [ ] 4.3 (was 4.3) Test, operator PATCH on a completed task held by its author: 403, names Land
+
+      Landed: import added (`agent_trigger.py:133-138`); both `return` statements
+      (`:504-511`, `:512-521`) now end with `{own_review_remedy(task)}` in place of their old
+      "Dispatch a different reviewer, or …" sentences, and the completer branch's "clear the
+      assignee" clause is gone. `task.status` is always `"completed"` or `"under_review"` at
+      both call sites — `review_dispatch_refusal`'s own status guard (`:487-493`) filters to
+      exactly `REVIEWABLE_LOOP_TASK_STATUSES + WITH_REVIEWER_LOOP_TASK_STATUSES` before either
+      branch is reachable — so `own_review_remedy`'s assertion cannot fire here.
+- [x] 4.3 (was 4.3) Test, operator PATCH on a completed task held by its author: 403, names Land
       it and `review_task_id`, and contains none of "clear the assignee", "approves" or "name
       that agent as the assignee".
       *Mutation:* restore the old sentence. The test must fail.
-- [ ] 4.4 (was 4.4) Test, agent PATCH through `/agent-actions/tasks/{id}` with a run token, by a
+
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_the_operator_refusal_names_land_it_and_review_task_id`.
+      *Mutation applied* (swapped the `if actor.is_operator` condition so the operator gets the
+      agent-shaped remedy): failed on `'Land it' in detail` — the response instead read "None of
+      the task tools you are offered reassigns a task; the operator can move it on." Reverted;
+      passes clean.
+- [x] 4.4 (was 4.4) Test, agent PATCH through `/agent-actions/tasks/{id}` with a run token, by a
       non-author on a completed task held by its author. Expect 403, with "none of the task tools
       you are offered", and none of "clear the assignee", "assign a different reviewer", "no
       agent can", "changes who holds" or "API".
       *Mutation:* ignore `actor`. The test must fail.
-- [ ] 4.5 (was 4.5) Test, F334's shape: a queued review for an agent that recorded evidence
+
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_the_agent_refusal_names_no_tool_that_reassigns`.
+      *Mutation applied* (same swap as 4.3 — the agent branch's own remedy selection is what
+      "ignoring `actor`" collapses to, since the guard reads `actor` for nothing else): failed on
+      `'None of the task tools you are offered reassigns a task' in detail` — the response
+      instead named Land it and `review_task_id`. Reverted; passes clean.
+- [x] 4.5 (was 4.5) Test, F334's shape: a queued review for an agent that recorded evidence
       during its own turn, delivered and refused. The entry's `waiting_reason` and
       `abandoned_reason` do not say the task "is assigned to" that agent, and the task's assignee
       is unchanged.
       *Mutation:* restore "it is assigned to {assignee!r}" in the evidence branch. The test must
       fail.
+
+      `hub/tests/test_a_refusal_names_a_remedy_that_works.py::test_a_changed_evidence_authors_refusal_never_claims_an_assignment_the_rollback_discarded`.
+      Reuses `test_a_refused_review_leaves_nothing_behind.py`'s `_leg_a` (§1.4 of that change),
+      which already reproduces F334's exact shape — a review queued behind the reviewer's own
+      running turn, evidence recorded for the task by that same agent before its turn ends, then
+      `DELIVERY_ATTEMPT_LIMIT` delivery attempts through `schedule_agent`. `enter_selected_task`
+      always calls `apply_transition` with `operator()` (unchanged, `scheduler.py:878` — staffing
+      is a Hub-internal act, not the reviewer's own), so every pass reads the operator remedy;
+      the test only pins the absence of "is assigned to" and that the task's assignee stays
+      `None` through every pass (the staged assignee is rolled back with the refused
+      transition — `turn_scheduler`'s rollback runs before it records `entry.waiting_reason`).
+      *Mutation applied* (restored `f"it is assigned to {task.assignee!r}, which recorded
+      evidence…"` in the evidence branch): failed on `"is assigned to" not in waiting_reason` —
+      every one of the five recorded passes read *"it is assigned to 'rr-reviewer'"*. Reverted;
+      passes clean, `entry.abandoned_reason` and `task.assignee` (`None`) both clean too.
 - [ ] 4.6 (was 4.6) Update any existing test asserting the old sentences, and list each one here
       when ticking. D1's and D4's wording keeps every fragment below, so each should pass
       unchanged. Confirm it:

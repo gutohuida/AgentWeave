@@ -1,17 +1,19 @@
-"""`a-refusal-names-a-remedy-that-works` groups 1-3 — the remedy, the column it fits in, and once
-per task.
+"""`a-refusal-names-a-remedy-that-works` groups 1-4 — the remedy, the column it fits in, once per
+task, and the refusals themselves.
 
 Group 1 (D1): `own_review_remedy(task)` names what a refused actor can do about a task's own
 review, by status alone. Group 2 (D2): `JobRun.error_summary` is fitted to its column at the
 model, and `_wedged_review_reason` shortens the one sentence measured to overflow it. Group 3
 (D3, F365): `_review_unstaffed_already_stands` compares a task's own newest `review_unstaffed`
 record, not the loop's — a loop with two tasks stuck at once no longer shares one verdict between
-them.
+them. Group 4 (D4, F353/F334): `_guard_reviewer_is_not_the_author` and `review_dispatch_refusal`
+choose the remedy by `actor.is_operator` instead of naming an assignment the rollback discards.
 """
 
 import pytest
 from sqlalchemy import select
 
+from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import (
     AIJob,
@@ -20,6 +22,7 @@ from hub.db.models import (
     JobRun,
     Loop,
     RequirementEvidence,
+    Run,
     SpecDocument,
     SpecRequirement,
     Task,
@@ -28,6 +31,9 @@ from hub.db.models import (
 from hub.scheduler import _wedged_review_reason, own_review_remedy
 from hub.task_transition_service import apply_transition
 from hub.task_transitions import operator, run_actor
+
+from .test_a_refused_review_leaves_nothing_behind import _leg_a as _f334_leg_a
+from .test_a_refused_review_leaves_nothing_behind import _row as _f334_row
 
 # ---------------------------------------------------------------------------
 # 1.2 — own_review_remedy names the right action for each status
@@ -357,3 +363,113 @@ async def test_a_changed_reason_is_recorded_again_for_only_the_task_that_changed
     assert "no recorded evidence" in a_events[0].data["reason"]
     assert "has worked on this task" in a_events[1].data["reason"]
     assert a_events[0].data["reason"] != a_events[1].data["reason"]
+
+
+# ---------------------------------------------------------------------------
+# 4 — the refusals (D4): the remedy is chosen by `actor.is_operator`, not by naming a holder
+# ---------------------------------------------------------------------------
+
+AUTHOR_4 = "author4"
+NONAUTHOR_4 = "nonauthor4"
+
+
+async def _completed_by_author(session, task_id, *, author):
+    """A `completed` task real transitions attribute to *author*, still its assignee."""
+    task = Task(id=task_id, project_id="proj-test", title=f"work {task_id}", status="in_progress")
+    session.add(task)
+    await session.flush()
+    task.assignee = author
+    await apply_transition(session, task, "completed", run_actor(f"run-{task_id}", author))
+    await session.commit()
+    return task
+
+
+async def test_the_operator_refusal_names_land_it_and_review_task_id(app, auth_headers):
+    """4.3. Operator PATCH on a completed task still held by its author: 403, naming Land it and
+    `review_task_id`, and none of the old remedy's words.
+
+    *Mutation:* restore the old sentence. The test must fail.
+    """
+    async with async_session_factory() as session:
+        await _completed_by_author(session, "task-4a-op", author=AUTHOR_4)
+
+    response = await app.patch(
+        "/api/v1/projects/proj-test/tasks/task-4a-op",
+        json={"status": "under_review"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"]
+    assert "Land it" in detail
+    assert "review_task_id" in detail
+    assert "clear the assignee" not in detail
+    assert "approves" not in detail
+    assert "name that agent as the assignee" not in detail
+
+
+async def test_the_agent_refusal_names_no_tool_that_reassigns(app, auth_headers):
+    """4.4. Agent PATCH through `/agent-actions/tasks/{id}` with a run token, by a non-author, on a
+    completed task still held by its author: 403, naming that none of the task tools it is offered
+    reassigns a task, and none of the operator remedy's words.
+
+    *Mutation:* ignore `actor`. The test must fail.
+    """
+    async with async_session_factory() as session:
+        await _completed_by_author(session, "task-4a-agent", author=AUTHOR_4)
+
+    token = "aw_run_task-4a-nonauthor-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-4a-nonauthor",
+                project_id="proj-test",
+                agent=NONAUTHOR_4,
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+
+    response = await app.patch(
+        "/api/v1/agent-actions/tasks/task-4a-agent",
+        json={"status": "under_review"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 403, response.text
+    detail = response.json()["detail"]
+    assert "None of the task tools you are offered reassigns a task" in detail
+    assert "clear the assignee" not in detail
+    assert "Assign a different reviewer" not in detail
+    assert "no agent can" not in detail
+    assert "changes who holds" not in detail
+    assert "API" not in detail
+
+
+async def test_a_changed_evidence_authors_refusal_never_claims_an_assignment_the_rollback_discarded(
+    app, auth_headers, bind_runner
+):
+    """4.5 (F334's shape). A review queued for an agent behind its own turn, which then records
+    evidence for the task it is about to review: every delivery is refused by the evidence-author
+    half of the guard, and the refusal must not say the task "is assigned to" that agent -- the
+    staged assignee is rolled back with the refused transition, so the task never actually holds
+    it. Reuses `test_a_refused_review_leaves_nothing_behind._leg_a`, which builds exactly this
+    shape (§1.4, leg A) and is already pinned on "recorded evidence for this task" -- unaffected by
+    this task's wording change.
+
+    *Mutation:* restore "it is assigned to {assignee!r}" in the evidence branch. The test must
+    fail.
+    """
+    task_id, before, entry_id, passes = await _f334_leg_a(app, auth_headers, bind_runner)
+
+    assert passes, "the delivery limit must be reached at least once for this to mean anything"
+    for snapshot, waiting_reason in passes:
+        assert "is assigned to" not in waiting_reason, waiting_reason
+        assert snapshot == before, "a refusal must not leave the rolled-back assignee behind"
+
+    entry = await _f334_row(entry_id)
+    assert "is assigned to" not in (entry.abandoned_reason or ""), entry.abandoned_reason
+
+    async with async_session_factory() as db:
+        task = await db.get(Task, task_id)
+        assert task.assignee is None, "the guard's own refusal never actually assigns the task"
