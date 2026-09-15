@@ -68,9 +68,11 @@ changes that row. The night queue's f332-s4…s7 are blocked on this row. Its CI
 is collected: run `34786122094`, `hub-test` job `103801807485`, green with 11 xfailed. The 11 are
 G1–G10 and D1, the same set WSL measured.
 
-### F352-free — what "free" means for review staffing, raised 2026-09-14 by REV, premise overtaken 2026-09-15
+### F352-free — what "free" means for review staffing, raised 2026-09-14 by REV, DECIDED 2026-09-15
 
-- OPEN      F352-free  **The five-option frame (a)-(e) is stale — verify before acting on it.** The
+- DECIDED    F352-free  **Reject (d). Go with (f), already shipped.** Decided 2026-09-15, by the
+  operator, in an interactive session, after the Opus validation below. **The five-option frame
+  (a)-(e) put to the operator was stale.** The
   2026-09-15 night shipped `4b59ee0` (`a-task-nothing-will-move-holds-nobody`, archived), which
   replaces D4's blanket "any active task holds" rule with **option (f), reachability**:
   `hub/hub/scheduler.py:1138`, `loop_id in live or (task_id, assignee) in queued` — a holding counts
@@ -90,10 +92,10 @@ G1–G10 and D1, the same set WSL measured.
   `test_two_tasks_held_by_one_agent_conflict_as_two_workspaces`) that (f) cannot reach, because (f)
   still holds an agent with a real in-progress in-loop task. Verdict text and citations verified
   directly against the code and commit by this session, not taken on the subagent's word alone.
-  **Recommended, awaiting the operator's final word:** REJECT (d); build the F353 half
-  (`F352-split`, already approved above) now; re-derive the rung-3 naming half against **(f)**, not
-  the stale (e) the change was written against (`proposal.md:187`, *"the rung-3 half is written
-  against (e) today, and the answer re-derives it"*).
+  **Decided:** REJECT (d); build the F353 half (`F352-split`, already approved above) now;
+  re-derive the rung-3 naming half against **(f)**, not the stale (e) the change was written
+  against (`proposal.md:187`, *"the rung-3 half is written against (e) today, and the answer
+  re-derives it"*). This closes `F352-free`.
 
 ---
 
