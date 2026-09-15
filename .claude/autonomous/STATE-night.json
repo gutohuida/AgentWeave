@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-16T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-15-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "remedy-g4b-impl",
-    "next_action": "Run openspec-apply-change on a-refusal-names-a-remedy-that-works, task group 4b (4.6-4.10, tasks.md). Re-grep every cited line number first -- 4.6 lists old-sentence assertions across five test files plus five comments to amend (api/v1/tasks.py:1259-1268, schemas/tasks.py:124-127, test_reviewer_is_not_the_author.py:377-378, agent_trigger.py:854-858, task_transition_service.py:405-406), all of which may have moved since group 4a's edit. 4.7-4.8 are new tests on the dispatch route's own refusals at agent_trigger.py (the author branch and the under_review-nobody-holds case). 4.9 fixes the D9 'Reassign the task if...' duplication bug at agent_trigger.py:501 and :847 (own_review_remedy's under_review branch already opens with 'decide it yourself', so the D9 prefix must not repeat it) -- both mutations (a) restore one site's old sentence, (b) restore the duplicated phrase, must make the 'exactly once' assertion fail. 4.10 is the 500-char fit test at a 64-char id/32-char name for the guard's operator sentence AND the queue entry's waiting_reason, read before the model-level fit. Apply each named mutation, watch the named test fail, record it beside the tick. Run the touched test files, ruff and black on touched files. Commit, push.",
+    "current": "remedy-gate",
+    "next_action": "a-refusal-names-a-remedy-that-works 5.1-5.2 (tasks.md): 5.1 is CI's documented lint set over exactly CI's paths -- `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/` (the touched files were already spot-checked per-file across iterations 2-5; this is the full documented command set, which may surface something a narrower run did not). 5.2 is `py -3.11 -m pytest hub/tests/ -q`, full, backgrounded (15-47 min per STATE's own estimate) -- record pass/fail counts, classify any failure against DEAD-ENDS (F292/F314 signatures) before calling it unrelated to this change. If both are clean, tick 5.1-5.2 in tasks.md, commit, push, and move current/next_action on to remedy-drive (5.3, tasks.md: a fresh drive Hub on a free port, profiles/ database drive0916 since drive0915/0915b are used, runners bound to claude-haiku-4-5-20251001, AW_BOOTSTRAP_API_KEY named, no job left enabled -- see the limits list below and night-window.md's Driving section).",
     "queue": [
         {
             "id": "compose",
@@ -41,9 +41,9 @@
         },
         {
             "id": "remedy-g4b-impl",
-            "status": "open",
+            "status": "done",
             "title": "a-refusal-names-a-remedy-that-works: 4.6-4.10",
-            "detail": "openspec/changes/a-refusal-names-a-remedy-that-works/tasks.md 4.6-4.10: update old-sentence tests (list each), dispatch-route tests, 4.9's once-only phrase, 4.10's 64-char title."
+            "detail": "Done at iteration 5 (commit 7343200). 4.6: confirmed six wording assertions unchanged; amended five stale comments; fixed one test not on the split's own list (test_the_evidence_names_the_author.py:434) broken by group 4a, surfaced only by the broader-suite run. 4.7/4.8: two new tests on review_dispatch_refusal (the route's own precheck) -- author-completed branch names Land it, completer-on-under_review branch never does. 4.9: fixed the D9 duplication defect at both sites (review_dispatch_refusal and trigger_agent_directly) -- dropped the 'Reassign the task if...' clause entirely per the task's own 'not Reassign' assertion, both now read '...Let the review in flight finish. {own_review_remedy(task)}'; two tests, one per site. 4.10: two tests measuring the guard's sentence at a 64-char task id/32-char agent name, both raise branches x both actor kinds, direct call and through the real dispatch route. All five named mutations applied and verified to fail, then reverted. 18 tests in test_a_refusal_names_a_remedy_that_works.py pass; 363 across the related suite pass (13 files). ruff/black clean."
         },
         {
             "id": "remedy-gate",
