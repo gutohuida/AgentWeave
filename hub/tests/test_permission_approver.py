@@ -815,6 +815,14 @@ def test_the_run_s_own_hub_is_allowed_on_the_wire():
     assert answer["updatedInput"] == {"command": 'curl -s "$HUB_URL/api/v1/agent-actions/tasks"'}
 
 
+def test_an_ansi_c_traversal_is_refused_on_the_wire():
+    """The ANSI-C decoder (a-quote-can-spell-a-slash, §2/2.2c) reaches through the real spawn, not
+    only `_decide` -- and the wire carries no `structuredContent` for this refusal either."""
+    answer = _shell_answer_over_stdio(f"echo hi > $'..{_BS}x2fstray.txt'")
+    assert answer["behavior"] == "deny"
+    assert answer["message"].startswith("Denied: '../stray.txt' is outside")
+
+
 def test_tool_use_id_is_accepted():
     """Claude always sends it. A signature omitting it fails every call with a validation error,
     which the model reports as a broken approval system rather than a refusal."""

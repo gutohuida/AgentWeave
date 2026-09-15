@@ -459,11 +459,15 @@ point: a row may not change answer before the decode exists.
 
 ## 3. The wire shape
 
-- [ ] 3.1 Beside `_call_tool_over_stdio`, add one case through a **real spawn** of `mcp_server.py`
+- [x] 3.1 Beside `_call_tool_over_stdio`, add one case through a **real spawn** of `mcp_server.py`
   with `AW_WORKSPACE_DIR` and `HUB_URL` in the child's environment: `echo hi > $'..\x2fstray.txt'`
   answers `behavior: deny` on POSIX with a message beginning `Denied: '../stray.txt' is outside`.
   On Windows the same command already denies (as *cannot be checked* before, *outside* after), so
   assert the deny and, after §2, the *outside* reason. The result carries **no** `structuredContent`.
+  **Done 2026-09-15** — `test_an_ansi_c_traversal_is_refused_on_the_wire`, using the existing
+  `_shell_answer_over_stdio` helper. Passes through a real spawn on both Windows and WSL Ubuntu
+  bash (POSIX), asserting the deny and the `outside` reason on both. Full suite 217 passed/1
+  skipped. ruff/black clean.
 
 ## 4. Mutation checks — the decode must be load-bearing
 
