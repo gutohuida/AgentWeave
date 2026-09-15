@@ -944,7 +944,9 @@ _PATH_KEYS = ("file_path", "path", "notebook_path")
 # the tool's dialect (quotes removed, what they join joined, substitutions marked), split into
 # words at the characters that survive, and each word judged by the first of six rules that
 # matches it. `shlex` is not used: it raises on an unbalanced quote, and every input must get an
-# answer.
+# answer. Some quote forms (bash's `$'...'`) decode escapes into characters rather than only
+# removing the quote, so the word judged is what the shell's decode actually produces
+# (a-quote-can-spell-a-slash, design D1).
 
 # `\` separates path components where the platform says so: on Windows `..\x` is a traversal, on
 # POSIX it is a file name with a backslash in it. `os.path` answers the same way.
@@ -963,7 +965,17 @@ _URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*://")
 # Word characters, `.`, `+`, `-` and separators, not starting with `-`, and `:` only after the
 # first separator: a colon in the first segment is where a host (`host:/x`) or a revision
 # (`HEAD:x`) goes, and those are left to the backstop.
-_PLAIN_RELATIVE_RE = re.compile(rf"^[\w.+][\w.+\-]*(?:[{re.escape(_SEPARATORS)}][\w.+\-:]*)+$")
+# Everything `_WORD_TRIM` (below) treats as quote/bracket/pipe/control syntax, minus `:` (scoped
+# separately below), plus `@` (curl's `name@filename` convention), `*`/`?` (bash glob expansion --
+# `[`/`]` are already in `_WORD_TRIM`), `%` (`_CMD_VARIABLE_RE`'s own expansion syntax), and a NUL
+# byte. Excluded at every position, not only leading: none of these reasons is position-specific
+# (design D6).
+_PLAIN_RELATIVE_EVERYWHERE = "\"'`{}[]()<>|;&@*?%\x00"
+_PLAIN_RELATIVE_RE = re.compile(
+    rf"^[^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}:\-]"
+    rf"[^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}:]*"
+    rf"(?:[{re.escape(_SEPARATORS)}][^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}]*)+$"
+)
 _CMD_VARIABLE_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
 _WORD_SPLIT_RE = re.compile(r"[\s=,]+")
 _WORD_TRIM = "\"'`{}[]()<>|;&:"
@@ -1155,6 +1167,118 @@ def _judge_word(
     return None
 
 
+# Escapes ANSI-C quoting decodes outright, independent of `reading`: bash renders each of these
+# identically in every locale (a-quote-can-spell-a-slash, design D1).
+_ANSI_C_SIMPLE_ESCAPES = {
+    "a": "\a",
+    "b": "\b",
+    "e": "\x1b",
+    "E": "\x1b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+    "\\": "\\",
+    "'": "'",
+    '"': '"',
+    "?": "?",
+}
+_HEX_DIGITS = "0123456789abcdefABCDEF"
+
+
+def _hex_digits(text: str, index: int, max_len: int) -> str:
+    """Up to `max_len` consecutive hex digits of `text` starting at `index`; "" if none."""
+    end = index
+    while end < len(text) and end - index < max_len and text[end] in _HEX_DIGITS:
+        end += 1
+    return text[index:end]
+
+
+def _ansi_c_escape(text: str, index: int, reading: str) -> Tuple[str, int]:
+    """Decode the ANSI-C escape at `text[index]` (a backslash), for `reading` ("c" or "utf8").
+
+    Returns the decoded text and the index just past what the escape consumes. Total: never
+    raises, including on an out-of-range `\\u`/`\\U` value (design D1/D5). An escape decodes to a
+    character only when that character's contribution to the word's path-component structure is
+    determined for `reading`; every other case keeps the backslash literal, because bash may keep
+    it, and on Windows a kept backslash is itself a path separator.
+    """
+    letter_index = index + 1
+    if letter_index >= len(text):
+        return "\\", letter_index  # a trailing backslash is literal
+    letter = text[letter_index]
+    simple = _ANSI_C_SIMPLE_ESCAPES.get(letter)
+    if simple is not None:
+        return simple, letter_index + 1
+    if letter in "01234567":
+        digits = letter
+        pos = letter_index + 1
+        while len(digits) < 3 and pos < len(text) and text[pos] in "01234567":
+            digits += text[pos]
+            pos += 1
+        return chr(int(digits, 8) % 256), pos
+    if letter == "x":
+        digits = _hex_digits(text, letter_index + 1, 2)
+        if not digits:
+            return "\\x", letter_index + 1  # digitless: keep the backslash literal
+        return chr(int(digits, 16)), letter_index + 1 + len(digits)
+    if letter in "uU":
+        width = 4 if letter == "u" else 8
+        digits = _hex_digits(text, letter_index + 1, width)
+        if not digits:
+            return "\\" + letter, letter_index + 1  # digitless: keep the backslash literal
+        end = letter_index + 1 + len(digits)
+        value = int(digits, 16)
+        if value <= 0xFF:
+            return chr(value), end  # a byte escape: locale-independent, decode outright
+        if value >= 0x80000000:
+            return "", end  # bash emits nothing here, in every locale (design D1, Round 4)
+        # 0x100..0x7FFFFFFF renders differently by locale -- judge both readings (design D1).
+        if reading == "c":
+            return "\\" + letter + digits.upper(), end  # bash uppercases a kept-literal escape
+        # utf8 reading: chr() is bounded by U+10FFFF; above it, a fixed non-separator stand-in
+        # (design D5) -- never derived from the input, and never the dropped-empty-string R2 used,
+        # which would lose the "c" reading's kept backslash where one is real.
+        return (chr(value) if value <= 0x10FFFF else "z"), end
+    if letter == "c":
+        body_index = letter_index + 1
+        if body_index >= len(text) or text[body_index] == "'":
+            # nothing to control: keep literal, and never consume the closing quote as the target
+            return "\\c", letter_index + 1
+        body_bytes = text[body_index].encode("utf-8", "surrogatepass")
+        control = "".join(
+            chr(byte & 0x1F if position == 0 else byte) for position, byte in enumerate(body_bytes)
+        )
+        return control, body_index + 1
+    return "\\" + letter, letter_index + 1  # an unrecognized escape keeps its backslash
+
+
+def _ansi_c_string(command: str, start: int, reading: str) -> Tuple[str, int]:
+    """The decoded text of a bash ANSI-C `$'...'` string, `start` just past the opening `$'`.
+
+    Returns the decoded text and the index just past the closing `'` -- or past the end of the
+    text if it never closes, keeping the lexer total (design D1). A produced literal `$` is not
+    re-expanded by ANSI-C quoting, so it becomes the same sentinel an ordinary single-quoted `$`
+    already does.
+    """
+    decoded: List[str] = []
+    index = start
+    while index < len(command):
+        char = command[index]
+        if char == "'":
+            return "".join(decoded), index + 1
+        if char == "\\":
+            piece, index = _ansi_c_escape(command, index, reading)
+            # A `$` an escape decodes to (`\x24`, `\044`, a low `$`) is just as literal as one
+            # typed directly, so it gets the same sentinel (design D1).
+            decoded.append(piece.replace("$", _LITERAL_DOLLAR))
+            continue
+        decoded.append(_LITERAL_DOLLAR if char == "$" else char)
+        index += 1
+    return "".join(decoded), index
+
+
 def _substitution(text: str, start: int, closer: str) -> Tuple[str, int]:
     """The command text of a substitution opened just before `start`, and where lexing resumes.
     Unbalanced, it runs to the end of the text."""
@@ -1171,14 +1295,16 @@ def _substitution(text: str, start: int, closer: str) -> Tuple[str, int]:
     return text[start:], len(text)
 
 
-def _lex(command: str, bash: bool) -> Tuple[List[str], List[str]]:
+def _lex(command: str, bash: bool, reading: str) -> Tuple[List[str], List[str]]:
     """The arguments the shell will produce from `command`, and its substitutions' command texts.
 
     Bash: single quotes are literal; inside double quotes a backslash escapes only `$`, a
     backtick, `"`, a backslash and a newline, and is kept before anything else; outside quotes
     `\\c` is `c`. PowerShell: single quotes are literal (`''` is one quote), and the escape is a
-    backtick, not a backslash. Unquoted whitespace and `| ; & < > ( )` end an argument. Total: an
-    unbalanced quote runs to the end of the text, and nothing raises.
+    backtick, not a backslash. Unquoted whitespace and `| ; & < > ( )` end an argument. Bash also
+    decodes a `$'...'` ANSI-C string when no quote is open, judged under `reading` (design D1) --
+    `"$'...'"` is a literal `$` then a literal `'`, not this branch, because a quote is already
+    open there. Total: an unbalanced quote runs to the end of the text, and nothing raises.
     """
     escape = "\\" if bash else "`"
     arguments: List[str] = []
@@ -1233,6 +1359,11 @@ def _lex(command: str, bash: bool) -> Tuple[List[str], List[str]]:
                 current.append(char)
             index += 1
             continue
+        if bash and char == "$" and following == "'":  # quote is None here (design D1)
+            text, index = _ansi_c_string(command, index + 2, reading)
+            current.append(text)
+            started = True
+            continue
         if char in "'\"":
             quote, started = char, True
             index += 1
@@ -1270,9 +1401,15 @@ def _words(arguments: List[str]) -> List[Tuple[str, str, bool]]:
 
 
 def _read_command(
-    command: str, root: str, dialect: str, depth: int = 0
+    command: str, root: str, dialect: str, reading: str, depth: int = 0
 ) -> Optional[Dict[str, Any]]:
-    """The first refusal that reading `command` in `dialect` finds, or None."""
+    """The first refusal that reading `command` in `dialect` under `reading` finds, or None.
+
+    `reading` ("c" or "utf8") picks which rendering a `$'...'` ANSI-C escape from 0x100 to
+    0x7FFFFFFF decodes to (design D1) -- every other decode rule renders the same in both. It must
+    reach a nested substitution's own recursive call, or a reading that stops at the top level
+    would judge that substitution's ANSI-C content in one reading only.
+    """
     if depth > _MAX_NESTING:
         # Nested past what is lexed: the backstop over the whole text, which is how every command
         # was once read, so nesting cannot hide a path from both readings.
@@ -1281,7 +1418,7 @@ def _read_command(
             if refusal:
                 return refusal
         return None
-    arguments, nested = _lex(command, dialect == "bash")
+    arguments, nested = _lex(command, dialect == "bash", reading)
     words = _words(arguments)
     references = sum(1 for word, _, _ in words if _HUB_REFERENCE_RE[dialect].match(word))
     # A reference is trusted only when the command names `HUB_URL` nowhere else. That refuses
@@ -1292,7 +1429,7 @@ def _read_command(
         if refusal:
             return refusal
     for inner in nested:
-        refusal = _read_command(inner, root, dialect, depth + 1)
+        refusal = _read_command(inner, root, dialect, reading, depth + 1)
         if refusal:
             return refusal
     return None
@@ -1340,9 +1477,12 @@ def _decide(tool_name: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:
         # word by word (the reader above). Relative words resolve against the workspace root,
         # which is where the run started; the shell's current directory is not seen.
         for dialect in _TOOL_DIALECTS.get(tool_name, ("bash", "powershell")):
-            refusal = _read_command(command, root, dialect)
-            if refusal:
-                return refusal
+            # Two passes, unconditionally: a `$'...'` escape from 0x100 to 0x7FFFFFFF renders
+            # differently by locale, and both renderings must be judged (design D1, Round 4).
+            for reading in ("c", "utf8"):
+                refusal = _read_command(command, root, dialect, reading)
+                if refusal:
+                    return refusal
 
     return {"allow": True, "reason": "inside your workspace"}
 

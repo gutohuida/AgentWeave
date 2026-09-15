@@ -251,14 +251,14 @@ point: a row may not change answer before the decode exists.
 > `testbed/scratch/night0913/s2/s2-stopped.patch` — do not build from it as written; it predates
 > the dual-reading rule and the \U≥0x80000000 fix.
 
-- [ ] 2.1 In `hub/hub/mcp_server.py` `_lex`, add a branch: **in the bash dialect, when no quote is
+- [x] 2.1 In `hub/hub/mcp_server.py` `_lex`, add a branch: **in the bash dialect, when no quote is
   open**, `$` immediately followed by `'` opens an ANSI-C string. Consume the `$` and the `'`,
   decode until the closing `'` (or end of text — stay total), consume the closing `'`, and append
   the decoded characters to the current word (`started = True`). A produced literal `$` is appended
   as `_LITERAL_DOLLAR`, exactly as a `$` inside ordinary single quotes already is. The branch sits
   **after** the `quote == "'"` block and **before** the generic `char in "'\""` open, so `quote is
   None` is guaranteed and the opening `'` is not consumed twice.
-- [ ] 2.1b **New (Round 4, simplified by Round 5).** Thread a `reading` argument (`"c"` or
+- [x] 2.1b **New (Round 4, simplified by Round 5).** Thread a `reading` argument (`"c"` or
   `"utf8"`) through `_lex` and `_read_command`, **including `_read_command`'s own recursive call
   for a substitution's command text** (`_substitution`'s caller) — a reading that stops at the top
   level judges a nested `$(...)`'s ANSI-C content in one reading only, silently narrowing the dual
@@ -272,7 +272,7 @@ point: a row may not change answer before the decode exists.
   breaks its own documented "pure and total" contract (`_decide`'s docstring). The unconditional
   two-pass cost is small (one extra lex of the same, already-short command text) and keeps the
   function pure. Refuse if either reading's `_read_command` call returns a refusal.
-- [ ] 2.2 Add the decoder helper beside `_lex`: given the text, the index of a `\`, and the
+- [x] 2.2 Add the decoder helper beside `_lex`: given the text, the index of a `\`, and the
   `reading` (2.1b), return the decoded string and the next index. It must honour **the replaced
   invariant** (design D1, Round 4): an escape may be **decoded to a character** (removing its
   backslash, contributing no separate path component) only when that character's contribution to
@@ -343,7 +343,7 @@ point: a row may not change answer before the decode exists.
   them implements the dual reading or the ≥0x80000000 fix. `%TEMP%/f332/proto.py` (Round 4) is
   the first reference that does, but it is scratch, not the implementation. The implementation is
   held to D2's table — which now pins N2–N5 and P1–P7 — not to any prototype.
-- [ ] 2.2c **New (Round 6, corrected by Round 7, Round 8 and Round 9, 2026-09-15) — this is the
+- [x] 2.2c **New (Round 6, corrected by Round 7, Round 8 and Round 9, 2026-09-15) — this is the
   one place §2.3's "leave everything after the lexer unchanged" does not hold, and the one task
   whose "done" bar is different from every other task in this file: it is not done until the
   *existing* test file passes, not only the new rows.** Broaden `_PLAIN_RELATIVE_RE`
@@ -399,16 +399,33 @@ point: a row may not change answer before the decode exists.
   `deny, outside` — task 1.4's *answer* assertions for P4 and P5(POSIX) are unaffected — but if
   1.4's *reason* assertions were written to match a substring of the old rule-6 quoting, re-check
   them against the actual quoted text once 2.2c lands, before relying on them as passing.
-- [ ] 2.3 Leave everything after the lexer unchanged, **except 2.2c above**: the six rules'
+- [x] 2.3 Leave everything after the lexer unchanged, **except 2.2c above**: the six rules'
   *decisions*, `_is_own_hub`, the refusal wordings, the reason bound are untouched. Confirm **no
   new reason string** is introduced (`grep` the refusal constants; the diff is `_lex`, a helper,
   and `_PLAIN_RELATIVE_RE`).
-- [ ] 2.4 Add one sentence to the reader's block comment (above `_SEPARATORS`): a shell may carry a
+  **Done 2026-09-15 (implementation session).** `git diff hub/mcp_server.py` shows every changed
+  `def`/const line: `_PLAIN_RELATIVE_EVERYWHERE`, `_PLAIN_RELATIVE_RE`, `_ANSI_C_SIMPLE_ESCAPES`,
+  `_HEX_DIGITS`, `_hex_digits`, `_ansi_c_escape`, `_ansi_c_string`, `_lex`'s signature. No
+  `_refuse(` call site, and none of `_OUTSIDE`/`_UNCHECKED`/`_NETWORK`/`_UNRESOLVED`, appears in
+  the diff at all (grepped for both, zero hits).
+- [x] 2.4 Add one sentence to the reader's block comment (above `_SEPARATORS`): a shell may carry a
   quote form that *decodes* escapes into characters, not only removes them, so the word judged is
   what the shell produces.
-- [ ] 2.5 Remove every §1 `xfail` marker. The whole table is green on both platforms with no marker
+- [x] 2.5 Remove every §1 `xfail` marker. The whole table is green on both platforms with no marker
   left; `grep -n "a-quote-can-spell-a-slash" hub/tests/test_permission_approver.py` shows no xfail.
-- [ ] 2.6 Commit §2, green.
+  **Done 2026-09-15.** Also fixed task 1.4's known-stale N3 assertion in the same edit (the
+  committed row still asserted the pre-Round-4 "deny, outside" value on Windows; changed to
+  `True` — allow, unmarked — matching design.md's corrected N3 row): with the decoder built,
+  keeping the old assertion would have been a real, silent wrong-answer bug in the test itself,
+  not a thing worth pinning as-is first and fixing separately.
+- [x] 2.6 Commit §2, green. **Done 2026-09-15** — `py -3.11 -m pytest tests/test_permission_approver.py -q`
+  from `hub/`: **198 passed, 1 skipped, 0 xfailed** (Windows) — exactly the pre-existing 182 plus
+  the 16 rows §1 had marked xfail, all now passing for real, none left marked. Also run under WSL
+  Ubuntu bash (`-p posix_stubs --noconftest -k quote_is_judged`, since the Hub's full dependency
+  set is not installed there): **20 passed** — all of `_ANSI_C`'s rows, confirmed on real POSIX,
+  not just simulated via `_outside_on_windows`'s branching. A full-file WSL run shows 194 passed /
+  2 failed (both `sse_starlette.event` import errors, an environment gap unrelated to this change)
+  / 1 skipped — no regression among rows this task did not intend to touch.
 
 ## 3. The wire shape
 

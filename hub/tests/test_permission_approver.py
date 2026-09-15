@@ -399,11 +399,9 @@ def test_the_run_s_own_hub_is_nobody_s_without_hub_url(workspace, monkeypatch, t
 # --- A quote that spells a separator (a-quote-can-spell-a-slash, design D2) -------------------
 #
 # bash decodes the escapes inside an ANSI-C quote, so `$'..\x2fstray.txt'` is `../stray.txt` to the
-# shell. Every row of D2, with its answer *after* the decode. The rows the decode moves are pinned
-# as strict xfails against the lexer that does not decode yet, scoped to the platform and to the
-# assertion that moves: a row already refused, whose reason improves, fails only its reason. The
-# commands are built from `_BS` rather than written with backslashes, because a four-hex escape
-# written through an editor has been stored as the character it names (DEAD-ENDS).
+# shell. Every row of D2, with its answer once the lexer decodes `$'...'` (§2). The commands are
+# built from `_BS` rather than written with backslashes, because a four-hex escape written through
+# an editor has been stored as the character it names (DEAD-ENDS).
 
 _BS = chr(92)
 
@@ -416,18 +414,8 @@ class _WrongReasonError(AssertionError):
     """The answer is the row's; the reason is not."""
 
 
-def _until_decoded(on: bool, wrong: type[AssertionError]):
-    return pytest.mark.xfail(on, reason="a-quote-can-spell-a-slash §2", strict=True, raises=wrong)
-
-
-_POSIX_ANSWER = _until_decoded(not _WINDOWS, _WrongAnswerError)
-_POSIX_REASON = _until_decoded(not _WINDOWS, _WrongReasonError)
-_WINDOWS_ANSWER = _until_decoded(_WINDOWS, _WrongAnswerError)
-_WINDOWS_REASON = _until_decoded(_WINDOWS, _WrongReasonError)
-
-
-def _ansi(label, command, allow, reason=None, *marks):
-    return pytest.param(command, allow, reason, id=label, marks=marks)
+def _ansi(label, command, allow, reason=None):
+    return pytest.param(command, allow, reason, id=label)
 
 
 def _outside_on_windows(word: str) -> tuple:
@@ -437,97 +425,38 @@ def _outside_on_windows(word: str) -> tuple:
 
 
 _ANSI_C = [
-    _ansi(
-        "G1",
-        f"echo hi > $'..{_BS}x2fstray.txt'",
-        False,
-        _outside("../stray.txt"),
-        _POSIX_ANSWER,
-        _WINDOWS_REASON,
-    ),
-    _ansi(
-        "G2", f"echo hi > $'..{_BS}057x'", False, _outside("../x"), _POSIX_ANSWER, _WINDOWS_REASON
-    ),
-    _ansi(
-        "G3", f"echo hi > $'..{_BS}u002fx'", False, _outside("../x"), _POSIX_ANSWER, _WINDOWS_REASON
-    ),
-    _ansi(
-        "G4",
-        f"echo hi > $'..{_BS}U0000002fx'",
-        False,
-        _outside("../x"),
-        _POSIX_ANSWER,
-        _WINDOWS_REASON,
-    ),
-    _ansi(
-        "G5",
-        f"echo hi > $'{_BS}x2e{_BS}x2e{_BS}x2fx'",
-        False,
-        _outside("../x"),
-        _POSIX_ANSWER,
-        _WINDOWS_REASON,
-    ),
-    # Refused today on both platforms, as *cannot be checked*: the reader sees `$../x`.
-    _ansi("G6", "echo hi > $'..'/x", False, _outside("../x"), _POSIX_REASON, _WINDOWS_REASON),
-    _ansi(
-        "G7", f"echo hi > '.'$'.{_BS}x2f'x", False, _outside("../x"), _POSIX_ANSWER, _WINDOWS_REASON
-    ),
-    _ansi(
-        "G8",
-        f"echo hi > $'..{_BS}x2f'\"x\"",
-        False,
-        _outside("../x"),
-        _POSIX_ANSWER,
-        _WINDOWS_REASON,
-    ),
-    _ansi(
-        "G9",
-        f"echo hi | tee $'..{_BS}x2fx'",
-        False,
-        _outside("../x"),
-        _POSIX_ANSWER,
-        _WINDOWS_REASON,
-    ),
-    _ansi(
-        "G10",
-        f"cp notes.md $'..{_BS}x2fx'",
-        False,
-        _outside("../x"),
-        _POSIX_ANSWER,
-        _WINDOWS_REASON,
-    ),
+    _ansi("G1", f"echo hi > $'..{_BS}x2fstray.txt'", False, _outside("../stray.txt")),
+    _ansi("G2", f"echo hi > $'..{_BS}057x'", False, _outside("../x")),
+    _ansi("G3", f"echo hi > $'..{_BS}u002fx'", False, _outside("../x")),
+    _ansi("G4", f"echo hi > $'..{_BS}U0000002fx'", False, _outside("../x")),
+    _ansi("G5", f"echo hi > $'{_BS}x2e{_BS}x2e{_BS}x2fx'", False, _outside("../x")),
+    # Refused on both platforms: the reader sees `..`, then `/x`, decoded and joined into `../x`.
+    _ansi("G6", "echo hi > $'..'/x", False, _outside("../x")),
+    _ansi("G7", f"echo hi > '.'$'.{_BS}x2f'x", False, _outside("../x")),
+    _ansi("G8", f"echo hi > $'..{_BS}x2f'\"x\"", False, _outside("../x")),
+    _ansi("G9", f"echo hi | tee $'..{_BS}x2fx'", False, _outside("../x")),
+    _ansi("G10", f"cp notes.md $'..{_BS}x2fx'", False, _outside("../x")),
     # A `$` the quote produces is literal: bash writes into a directory named `$HUB_URL` and climbs
-    # out of it. Windows already refuses it for the reason it keeps, so it moves on POSIX only.
+    # out of it.
     _ansi(
         "D1",
         f"echo hi > $'{_BS}x24HUB_URL{_BS}x2f..{_BS}x2f..{_BS}x2fx'",
         False,
         _UNCHECKED,
-        _POSIX_ANSWER,
     ),
-    # An inside path spelled with an escape: refused on Windows today, for a `$` and a `\`.
-    _ansi("I1", f"cat $'sub{_BS}x2fhello.py'", True, None, _WINDOWS_ANSWER),
-    # A locale string translates; it does not decode. Unchanged on both platforms.
-    _ansi(
-        "L1",
-        f'echo hi > $"..{_BS}x2fx"',
-        not _WINDOWS,
-        _UNCHECKED if _WINDOWS else None,
-    ),
+    # An inside path spelled with an escape.
+    _ansi("I1", f"cat $'sub{_BS}x2fhello.py'", True),
+    # A locale string translates; it does not decode.
+    _ansi("L1", f'echo hi > $"..{_BS}x2fx"', not _WINDOWS, _UNCHECKED if _WINDOWS else None),
     # A backslash in the decoded word, by decoding one or by keeping one: a name on POSIX, a
-    # traversal on Windows. Each is refused on Windows today as *cannot be checked*.
-    _ansi("N1", f"echo hi > $'..{_BS}x5cx'", *_outside_on_windows(f"..{_BS}x"), _WINDOWS_REASON),
-    _ansi("N2", f"echo hi > $'..{_BS}x'", *_outside_on_windows(f"..{_BS}x"), _WINDOWS_REASON),
-    _ansi(
-        "N3",
-        f"echo hi > $'{_BS}Uffffffffx'",
-        *_outside_on_windows(f"{_BS}Uffffffffx"),
-        _WINDOWS_REASON,
-    ),
-    _ansi(
-        "N4", f"echo hi > $'..{_BS}u0100'", *_outside_on_windows(f"..{_BS}u0100"), _WINDOWS_REASON
-    ),
-    _ansi("N5", f"echo hi > $'..{_BS}c'", *_outside_on_windows(f"..{_BS}c"), _WINDOWS_REASON),
+    # traversal on Windows.
+    _ansi("N1", f"echo hi > $'..{_BS}x5cx'", *_outside_on_windows(f"..{_BS}x")),
+    _ansi("N2", f"echo hi > $'..{_BS}x'", *_outside_on_windows(f"..{_BS}x")),
+    # `\U` >= 0x80000000 decodes to nothing (design D1, Round 4): the word is just `x`, no
+    # separator at all, on either platform.
+    _ansi("N3", f"echo hi > $'{_BS}Uffffffffx'", True),
+    _ansi("N4", f"echo hi > $'..{_BS}u0100'", *_outside_on_windows(f"..{_BS}u0100")),
+    _ansi("N5", f"echo hi > $'..{_BS}c'", *_outside_on_windows(f"..{_BS}c")),
     _ansi("OK1", "python sub/hello.py", True),
     _ansi("OK2", 'curl -s "$HUB_URL/api/v1/agent-actions/tasks"', True),
 ]
