@@ -7557,7 +7557,9 @@ Hub on 8011 is left running on this branch's code; 8000 and 8010 were never cont
 
 ## F108 (B) — a permanently refused request answers `200 {"success": true}`
 
-**Status:** **closed as a class** (2026-08-28), and **the class was not the one described below.**
+**Status:** fixed `e8c32f4` (route) and `2234bf1` (the operator's view), change `2026-08-28-a-refused-request-says-so`, archived `8f00866` and merged `c994af5`; `hub/tests/test_a_refused_request_says_so.py` passed 11 of 11 on `48eede3` 2026-09-15. Hand-checked because the census read it only through two lines in other sections, both about something else (F76's drive, F110's own status line); the verdict they pointed at is right, and their evidence was not.
+
+**Status as written 2026-08-28:** **closed as a class**, and **the class was not the one described below.**
 See *What the class actually turned out to be* at the end of this section before trusting the
 paragraph that opens it.
 
@@ -10437,6 +10439,8 @@ GET   /api/v1/projects/<p>/agents/agent-context?agent=<a>
 
 ## F135 (C) — the sweep harness reported its own wrong turn as a product defect, for the second time
 
+**Status:** fixed `ca0dc52` (row 3 probes `agents/agent-context`, `t_sweep_surface.py:67-76`) and `26967b0` (the four items under *continued*: `t_row13_row14.py:75-102` requires a question new to the snapshot and `from_agent == agent`, `:129-130` waits for idle and returns SKIPPED, `:168` sends the `allow` boolean the route takes, `t_row13_questions.py:21` reads `AW_DRIVE_DIR`), every one still present on `48eede3` 2026-09-15; a harness defect throughout, so nothing under `hub/` moved; row 3's hard-coded `driver` agents are kept on purpose, as stated below.
+
 **Corrected 2026-08-30, iteration 11.** Recorded because `t_sweep_surface.py`'s own docstring
 already warns about exactly this — *"the first pass of this script guessed six of them and reported
 five false 404s"* — and it happened again in a different way.
@@ -13061,6 +13065,8 @@ three transitions.
 
 ## F164 (D) — the flow still lands its work after groups 4 and 5, and F154's cause fired again on the way
 
+**Status:** RETIRED 2026-09-15, a drive record that owns no defect of its own: its pass condition held (the fixture repository's `6e1dbac` merged when its reviewer approved), and the five checks that did not hold belong to F152, F154 (`001a07d`) and F155 (`0373867`), each fixed and driven since; its one claim of its own, that *intermittent* is the wrong word, is taken back by its continuation heading below.
+
 `DRIVE-2` item 3, 2026-08-31: `t_drive1_flow_lands.py` re-run against a fresh project
 (`proj-60c8c49372ce`) because D-IMPL groups 4 and 5 moved the code every flow's approval runs
 through — `merge_targets`, `_merge_situation`, the integration preview, `_prerequisite_commits`.
@@ -14766,6 +14772,8 @@ named entries (`row4-08-picker.png`, both UI runs). It is selectable and it says
 the response echoes `"name": "   "`.
 
 ## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
+
+**Status:** open, reproduced 2026-09-15 on `48eede3` in-process (register `aq2`, bind the charter, archive 200, `GET /agents` omits `aq2`, `DELETE` answers 409 *"Charter is bound to agent(s): aq2. Unbind before deleting."*); `charters.py:95-98` is unchanged since `dbdf486` and `agent_lifecycle.archive` (`:64-67`) still leaves `charter_id` bound; the remedy, clearing bindings on archive, is decided at `spec-queue/DECISIONS.md:586` and has no change directory.
 
 **Severity:** B. The operator is stopped by a name they cannot find.
 
@@ -19264,6 +19272,8 @@ dated ids only.
 
 ## F266 (C, was B) — a post-commit `db.refresh` can fail a run that already succeeded, and the queue then runs the agent's turn a second time
 
+**Status:** fixed `d9ad1e0` (2026-09-04, where the same shared connection was filed as F285): the suite left `:memory:` for a per-process file database, so `AsyncAdaptedQueuePool` replaced the one DBAPI connection the settled section below names, and `test_suite_database_isolation.py` asserts the pool is not a StaticPool; this entry's test passed on `48eede3` 2026-09-15 and in the whole-suite gate of `d16a76a` (4361 passed, 0 failed); harness only, and the product residual stays open as F273.
+
 > **Settled 2026-09-03 (night window, iteration 8), by the experiments recorded under F272 — and the heading above is wrong in one word.** The run had *not* already succeeded: its output row was never committed. This is the in-memory test harness's single shared DBAPI connection, not a product defect, and no configuration the Hub ships in can produce it. See the addendum at the end of this entry.
 
 **This is N-2's open question, settled**, and it is not a flake. `hub/tests/` reds on exactly one
@@ -20078,6 +20088,10 @@ The same correction applies to one line of `spec-queue/DECISIONS.md`'s R-1 evide
 
 
 ## F272 (C, was B) — the terminal status row phase 2 exists to persist is silently lost ~10% of the time, because `record_agent_output` cannot re-read the row it just committed
+
+**Status:** fixed `d9ad1e0` (2026-09-04, where the same shared connection was filed as F285), the file-backed candidate the settled section below left standing, taken with `assert_engine_is_disposable` re-expressed as *inside the directory this process created* (`conftest.py:614`); re-measured 2026-09-15 on `48eede3` with this entry's own load arm, four concurrent processes of `test_a_turn_says_how_it_ended.py` for six rounds, **0 / 24** failed against the in-memory arm's 5 / 24; harness only, and the product residual stays open as F273.
+
+Read with that line: `890cf40` (2026-09-05) later removed the `db.refresh(row)` this entry calls the only detector of a lost write, after measuring that it could not mask another defect. So the traceback above can no longer appear at all. A lost row would now show only as the test's own read-back of `[]`, and all 24 re-measured runs read the row back.
 
 > **Settled 2026-09-03 (night window, iteration 8): this is the test harness, not the product.** The heading above is the shape as it was first seen and is kept for searchability; read the **SETTLED** section at the end of this entry before acting on anything above it. Severity dropped **B → C** on the measurement recorded there.
 

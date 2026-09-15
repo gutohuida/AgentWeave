@@ -8,12 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-15T07:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-14-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "ledger-unclassified",
-    "next_action": "Do ledger-unclassified: classify the UNCLASSIFIED sections that scripts/classify_findings.py reports for scripts/drive/FINDINGS.md (at 23:00 they were F185 B, F135 C, F266 C, F272 C, F164 D - re-run the classifier first, the list may have moved) and hand-check F108's RESOLVED_ELSEWHERE lead. Same method as iteration 9's ledger-conflicts (see its log entry): read each section, establish from code/git/CI what is true, and give it a one-line **Status:** declaration with its evidence. Documentation only - no product code. Capture the classifier output before and after (F313's rule): only the sections you meant to move may move. A false lead in ANOTHER section may be re-wrapped or re-quoted without changing words, as iteration 9 did, and the log must say so. Then write the window's FINAL entry per .claude/loops/night-window.md 'Ending the window' (what changed / proven / open / decisions / distrust), set next_action to null, commit and push. Window stop_at 07:00+01:00: if under ~20 minutes remain, skip straight to the final entry.",
+    "current": null,
+    "next_action": null,
+    "window_closed": "2026-09-15T04:15:00+01:00 - queue empty before stop_at; final entry is the last section of the log ('THE WINDOW'S FINAL ENTRY')",
     "queue": [
         {
             "id": "compose",
@@ -65,9 +66,9 @@
         },
         {
             "id": "ledger-unclassified",
-            "status": "open",
+            "status": "done",
             "title": "Classify the 5 UNCLASSIFIED sections (F185 B, F135 C, F266 C, F272 C, F164 D) and F108's RESOLVED_ELSEWHERE lead, then close the window",
-            "detail": "DEPRIORITISED by the operator's 23:30 redirect - this was the default queue composed at 23:00 when APPROVALS carried no token. Still legitimate backlog: do it only if the ORDER: items above are all finished or genuinely blocked. Original detail follows. Same method as ledger-conflicts. This firing also writes the window's final entry (what changed / proven / open / decisions / distrust) and sets next_action to null."
+            "detail": "Done iteration 10. Classifier re-run first: list unchanged. F185 (B) OPEN, reproduced in-process on 48eede3 (archive 200, roster omits aq2, DELETE 409 naming aq2; charters.py:95-98 unchanged since dbdf486; remedy decided DECISIONS.md:586, no change dir). F135 (C) fixed ca0dc52 + 26967b0, harness only, every fix still in the scripts. F164 (D) RETIRED, a drive record owning no defect (its misses are F152/F154/F155, all fixed). F266 (C) and F272 (C) fixed d9ad1e0 (same StaticPool defect, refiled as F285): re-measured with F272's own arm, 4 concurrent processes x 6 rounds, 0/24 failed vs the in-memory arm's 5/24. F108 (B) fixed e8c32f4 + 2234bf1 (change 2026-08-28-a-refused-request-says-so), 11/11 tests pass; its RESOLVED_ELSEWHERE lead was right in conclusion and false in evidence. Census moved by exactly those six verdicts; no CONFLICT, UNCLASSIFIED or RESOLVED_ELSEWHERE left anywhere; open-A unchanged at five; test_classify_findings 23 passed. Final window entry written. Original detail follows. DEPRIORITISED by the operator's 23:30 redirect - this was the default queue composed at 23:00 when APPROVALS carried no token. Still legitimate backlog: do it only if the ORDER: items above are all finished or genuinely blocked. Original detail follows. Same method as ledger-conflicts. This firing also writes the window's final entry (what changed / proven / open / decisions / distrust) and sets next_action to null."
         }
     ],
     "decisions_for_user": [
@@ -80,7 +81,9 @@
         "F370 (B, filed R2): today's held-resume arm (c8e3bbd, scheduler.py:1506) re-briefs a held assignee every firing when input for an agent whose name sorts first also names its task. One-line repair once the reachability change's pair function exists; not in tonight's ORDER, so not built.",
         "Design D2 of that change: a PAUSED loop's tasks still hold their agents (only an ended loop frees them). If the operator wants a pause to free agents, it is one clause (AIJob.enabled) and task 1.4's test flips.",
         "an-unstaffed-review-names-its-holders' rung-3 half was written against option (e); under (f) it would name only reachable holdings, so it must be re-derived before it is built (the F352-split decision in STATE-day.json already anticipates this).",
-        "Still carried in STATE-day.json decisions_for_user: F332-rule, F352-split."
+        "Still carried in STATE-day.json decisions_for_user: F332-rule, F352-split.",
+        "F185 (B) + F181 (C), surfaced by iteration 10's ledger pass: re-measured open tonight (a charter held only by an archived agent cannot be deleted, and the 409 names an agent the roster hides). The remedy - clear bindings on archive, and have unarchive say they are gone - has been decided in spec-queue/DECISIONS.md:586 since D-7 and has no change directory. Small, self-contained, no Hub-restart hazard: a candidate for a day-window spec loop if you want it queued.",
+        "F52's residual (allows leave no record, agent_actions.py:940) is named in F52's RETIRED line (iteration 9) but not filed as its own finding. Whether it deserves a number is yours."
     ],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
