@@ -1270,8 +1270,8 @@ def _ansi_c_string(command: str, start: int, reading: str) -> Tuple[str, int]:
             return "".join(decoded), index + 1
         if char == "\\":
             piece, index = _ansi_c_escape(command, index, reading)
-            # A `$` an escape decodes to (`\x24`, `\044`, a low `$`) is just as literal as one
-            # typed directly, so it gets the same sentinel (design D1).
+            # A `$` an escape decodes to (`\x24`, `\044`, or a low-codepoint `\u`/`\U`) is just as
+            # literal as one typed directly, so it gets the same sentinel (design D1).
             decoded.append(piece.replace("$", _LITERAL_DOLLAR))
             continue
         decoded.append(_LITERAL_DOLLAR if char == "$" else char)
