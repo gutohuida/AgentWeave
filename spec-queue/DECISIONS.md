@@ -68,16 +68,32 @@ changes that row. The night queue's f332-s4…s7 are blocked on this row. Its CI
 is collected: run `34786122094`, `hub-test` job `103801807485`, green with 11 xfailed. The 11 are
 G1–G10 and D1, the same set WSL measured.
 
-### F352-free — what "free" means for review staffing, raised 2026-09-14 by REV
+### F352-free — what "free" means for review staffing, raised 2026-09-14 by REV, premise overtaken 2026-09-15
 
-- OPEN      F352-free  `an-unstaffed-review-names-its-holders` proposal.md, *OPERATOR QUESTION —
-  what "free" means*: should review-staffing use a looser availability rule than new-work-staffing?
-  Five options (a)–(e); REV recommends **(d)**, a review asks a different question from new work —
-  free for review iff not running a turn and not already reviewing another `under_review` task;
-  new-work availability (D4, `loop-becomes-a-flow`) is unchanged. The operator leans (d) and asked
-  for an independent Opus-model adversarial validation before deciding; running 2026-09-15. The
-  rung-3 half of `an-unstaffed-review-names-its-holders` (see the split decision above) is blocked
-  on this row.
+- OPEN      F352-free  **The five-option frame (a)-(e) is stale — verify before acting on it.** The
+  2026-09-15 night shipped `4b59ee0` (`a-task-nothing-will-move-holds-nobody`, archived), which
+  replaces D4's blanket "any active task holds" rule with **option (f), reachability**:
+  `hub/hub/scheduler.py:1138`, `loop_id in live or (task_id, assignee) in queued` — a holding counts
+  only if a live loop still walks it or a queued turn names it. (f) was not one of the five options
+  put to the operator; it answers a different, narrower question (unreachable phantom holdings) than
+  D4's "should review use a looser rule than new work" — but it resolves the LoopEngine snapshot
+  that motivated the question: the eight NULL-`loop_id` holdings on `dev`/`dev_2` are now reachable-
+  free, proven by `hub/tests/test_a_task_nothing_will_move_holds_nobody.py:307`
+  (`test_the_loopengine_shape_staffs_its_review`). Architect and tester correctly stay held — their
+  tasks are in-loop, real queued work.
+  An independent Opus adversarial review (2026-09-15), asked to validate (d) against this corrected
+  premise, **rejects (d) in favour of (f)**: (d)'s "not already reviewing another `under_review`
+  task" throttles concurrency, not sequence, so an agent with five in-loop `pending` tasks stays
+  permanently review-eligible under (d) — D4's pile-up recreated under (f) wouldn't arise, since a
+  real in-loop holding still counts. (d) also offers reviews into an unresolved worktree-collision
+  gap (`hub/tests/test_task_worktrees.py:434`,
+  `test_two_tasks_held_by_one_agent_conflict_as_two_workspaces`) that (f) cannot reach, because (f)
+  still holds an agent with a real in-progress in-loop task. Verdict text and citations verified
+  directly against the code and commit by this session, not taken on the subagent's word alone.
+  **Recommended, awaiting the operator's final word:** REJECT (d); build the F353 half
+  (`F352-split`, already approved above) now; re-derive the rung-3 naming half against **(f)**, not
+  the stale (e) the change was written against (`proposal.md:187`, *"the rung-3 half is written
+  against (e) today, and the answer re-derives it"*).
 
 ---
 
