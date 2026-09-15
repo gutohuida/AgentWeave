@@ -330,6 +330,18 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
   `mode=ro` on the drive database). A flow's task whose evidence is left `awaiting` cannot be approved
   by any reviewer, so a drive that is about *staffing* should expect `run_diverged` re-staffs after
   each review (F374), not verdicts.
+- **A driven agent's own tool call can silently resolve an escape before it ever reaches the
+  sandbox check** *(2026-09-15, F332's live drive)*. Asked to run `echo hi > $'..\u0100'` — a bash
+  `\uHHHH` escape meant to reach `mcp_server.py`'s reader as six literal ASCII characters — Haiku's
+  actual `tool_use` payload carried the *decoded* Unicode character instead, reproduced twice,
+  including with an explicit "type the six literal characters, do not resolve this" instruction.
+  Confirmed the cause is the model's own text generation, not the transport: a controlled JSON-RPC
+  probe sending the literal six-character text through a correct `json.dumps`/`json.loads` round
+  trip denies exactly as the unit test predicts. **A live drive cannot exercise a `\u`/`\U`-shaped
+  escape (or likely any input an LLM would plausibly "helpfully" normalize) as literal text** —
+  design the row's evidence at the unit/wire level instead, and expect the live turn to show
+  something else. Not a defect in the sandbox code; recorded as a limit of what natural-language
+  agent instruction can deliver verbatim.
 
 ## SQLAlchemy and Hub test patterns
 
