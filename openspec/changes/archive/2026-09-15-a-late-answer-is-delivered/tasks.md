@@ -223,32 +223,63 @@ and the observed failure beside the task when ticking it.
 
 ## 5. Drive (night-window.md; a drive Hub on a free port with a fresh profile, Haiku)
 
-- [ ] 5.1 Start a drive Hub from source on a free port in 8011–8019. Use a fresh
+- [x] 5.1 Start a drive Hub from source on a free port in 8011–8019. Use a fresh
       `profiles/drive<date>/` profile, and set the agent's `question_timeout_seconds` to the
       smallest the setting allows. Use one Haiku runner and one agent.
-- [ ] 5.2 Ask the agent to call `ask_user` with two questions, then after it returns run a shell
+      *Done, iteration 8:* `:8014` (8011–8019 all free), from `hub/`, fresh
+      `profiles/drive0915b` migrated to `0103`, a named key, and no `.py` newer than the start.
+      Project `proj-4b7ded73f250`, runner `claude-haiku-4-5-20251001`, agent `asker` with
+      `bypassPermissions` (the lanes run a shell wait) and `question_timeout_seconds=10` (the
+      minimum, `MIN_WAITING_SECONDS`). Harness `scripts/drive/t_d0915b_late_answer.py`, written by
+      iteration 7. Iteration 8 added the permission, and changed the shell wait from `sleep N` to
+      a Python sleep. **22/22.**
+- [x] 5.2 Ask the agent to call `ask_user` with two questions, then after it returns run a shell
       `sleep` long enough to outlive the wait by a minute. Do not answer in time. Observe
       `wait_ended_at` set on both, and the run still `running`. Then check that the
       `GET /questions` list and the detail route both read `asker_waiting: false`.
-- [ ] 5.3 Answer both while the run lives. Observe one `inbound_queue_entries` row carrying both
+      *Done, iteration 8:* the tool's report stamped both at deadline +0.07 s. `run-e4492220d8cf`
+      was `running`, and list and detail both read `false` for each question.
+- [x] 5.3 Answer both while the run lives. Observe one `inbound_queue_entries` row carrying both
       answers. After the run ends, observe one new turn whose prompt carries both, and nothing
       else queued.
-- [ ] 5.4 Control: answer a fresh question **inside** the wait. The tool returns it, and no entry
+      *Done, iteration 8:* one entry (`entry-cf03b72e0ce2`) carrying `blue` and `large`, `queued`
+      while the run lived. It was delivered into `run-3b71a903bdf8`, which started 0.21 s after the
+      asking run ended and replied *"the banner should be blue and large"*. Nothing else queued.
+- [x] 5.4 Control: answer a fresh question **inside** the wait. The tool returns it, and no entry
       is queued.
-- [ ] 5.5 Only if the grace window can be hit by hand within the poll interval: answer 1–2 s after
+      *Done, iteration 8:* the tool returned `pear` (the turn said so). No `wait_ended_at`, no entry.
+- [x] 5.5 Only if the grace window can be hit by hand within the poll interval: answer 1–2 s after
       `wait_expires_at`. Record whether the tool returned it and whether an entry appeared. If it
       cannot be hit, say so. Do not claim it.
-- [ ] 5.6 The 2.2 window (an answer after the tool's last poll and before its report, about a
+      *Done, iteration 8, and **not hit**:* answered at deadline +0.32 s, but the tool's report had
+      landed at +0.04 s. So the answer route read the wait as ended and queued it: one entry,
+      delivered in a new turn, after the asking turn had said nobody answered. That is 1.2's path
+      driven a second time. It is not the grace window. The tool returning a grace-window answer is
+      covered by unit test 1.3 only.
+- [x] 5.6 The 2.2 window (an answer after the tool's last poll and before its report, about a
       second) is not reliably hittable live. It is covered by 2.2 and 2.3. The drive report says
       so, rather than implying the drive exercised it.
-- [ ] 5.7 Stop the drive Hub. Leave no run `running`.
+      *Done, iteration 8:* said so, in the night log and in F356's retirement note. That path is
+      unit-tested only.
+- [x] 5.7 Stop the drive Hub. Leave no run `running`.
+      *Done, iteration 8:* no run `running`, and no job exists. The Hub was stopped and `:8014`
+      closed. `:8000` was never touched. The Hub started before the F-H re-load line was written,
+      a line that runs only after a failed release, which the drive never provoked.
 
 ## 6. Archive
 
-- [ ] 6.1 Archive and sync `run-task-binding`. Retire F356 as `fixed <sha>` in
+- [x] 6.1 Archive and sync `run-task-binding`. Retire F356 as `fixed <sha>` in
       `scripts/drive/FINDINGS.md`.
-- [ ] 6.2 Record D5's residual (report lost, answer inside the run's remaining life) as an open
+      *Done, iteration 8:* the MODIFIED requirement was hand-synced into
+      `openspec/specs/run-task-binding/spec.md` (22 requirements before and after, `--strict
+      --type spec` valid), then archived with `--skip-specs`. F356's Status line reads `fixed
+      d16a76a`, with a retirement note (drive table, F-H). `classify_findings.py` census: exactly
+      F356 moved from OPEN B to RESOLVED.
+- [x] 6.2 Record D5's residual (report lost, answer inside the run's remaining life) as an open
       note on F356's retirement line, so that it is not mistaken for closed.
       **(Round 4 — REV, F-F)** The note carries D5's route table as REV corrected it: route 1
       includes a report whose write was rolled back, and a candidate route 4 (the MCP client
       abandons the tool call before its deadline) is read, not measured.
+      *Done, iteration 8:* a *Residual, left in place deliberately* paragraph and a four-row route
+      table sit directly under F356's Status line, not on it. An "open" on a Status line reads as
+      CONFLICT to the classifier, so the word stays off that line.

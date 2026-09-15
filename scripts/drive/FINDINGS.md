@@ -28078,7 +28078,22 @@ stayed raised throughout, so each reset delivered into another refusal and renew
 
 ## F356 (B) — an answer given after `ask_user`'s wait ended, while the asking run is still alive, is delivered to nobody
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed d16a76a (`a-late-answer-is-delivered`, 2026-09-15; driven live on `:8014`, 22/22). Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+
+**Residual, left in place deliberately (design D5; the operator chooses whether it needs a receipt
+stamp).** This fix closes the loss that cost the operator on 09-13, and the fourth loss Round 4
+found. It does **not** close these routes, and nobody should read the line above as closing them:
+
+| Route | After this fix |
+|---|---|
+| 1. The tool's expiry report is lost, **or its write was rolled back** (`agent_actions.py`, the release's `except`), and the answer arrives later in the run's life | lost |
+| 2. The question timeout is lengthened mid-run, so the report is refused | lost |
+| 3. An answer commits inside the wait, and the run dies before the tool's next poll (up to 2 s) | lost — pre-existing |
+| 4. (candidate, read, not measured) The runner's MCP client abandons the tool call before the tool's own deadline, so no report is sent. Plausible for Codex, which is undrivable | as route 1 |
+
+A receipt stamp (a migration, plus a write when `get_own_question` serves a resolved row to its run)
+closes all four at the run's end. A no-migration run-end delivery closes 1 and 2, leaves 3, and
+duplicates a grace-window answer. Both are follow-ons; see the design's D5 table.
 
 **What happened.** The Architect asked 22 questions in 9 `ask_user` calls. Three batches were
 answered **after** the 240 s wait had ended:
@@ -28146,6 +28161,36 @@ change. It found three problems, and each is fixed in the proposal:
 - **The "a declined question never carries `wait_ended_at`" comments are false in shipped code.**
   A decline *after* the report keeps the stamp. The guard encodes the narrower rule, and task 1.6
   corrects `models.py:1003-1007` and `tasks.py:447-449`.
+
+**Fixed d16a76a, 2026-09-15 (night iteration 8).** Implemented as proposed: 31 tasks and one addition
+(Round 4 F-H, below). Every tick carries a mutation that fails a named test. The whole hub suite ran
+4361 passed, 86 skipped, 16 xfailed, 0 failed.
+
+**Driven live** on `:8014` (fresh `profiles/drive0915b`, `proj-4b7ded73f250`, Haiku
+`claude-haiku-4-5-20251001`, harness `scripts/drive/t_d0915b_late_answer.py`): **22/22**.
+
+| Step | Observed |
+|---|---|
+| 5.2 Two questions, 10 s wait, then an 85 s shell wait | The tool's report stamped both 0.07 s after the Hub's deadline. The run was `running`, and the list and detail routes both read `asker_waiting: false` for each |
+| 5.3 Both answered while the run lived | **One** entry carrying both answers, `queued` behind the live run. Delivered into a new turn 0.21 s after the asking run ended (the run-end re-drain), which replied *"the banner should be blue and large"*. Nothing else was queued |
+| 5.4 Control: answered inside the wait | The tool returned `pear`. No `wait_ended_at`, and no entry |
+| 5.5 Answered 0.32 s after the Hub's deadline | **The grace window was not hit.** The report had landed at +0.04 s, before the answer, so the answer route read the wait as ended and queued it (1.2's path, not the report's). The agent said nobody answered, then the next turn got `two`. Where the tool *returns* a grace-window answer, that is covered by unit test 1.3 only |
+| 5.7 | No run left `running`, no job exists, and the drive Hub is stopped |
+
+- **The report-delivers-it path (2.2, 2.3, 2.9) was not driven.** It needs an answer committed in
+  the ~1 s between the tool's last poll and its report, which cannot be hit reliably by hand. Unit
+  tests cover it through the real routes, interleaved inside the report.
+- **The drive Hub started before the F-H line below was written.** That line runs only after a
+  release raises, which the drive never provoked. So the drive exercised the committed code on
+  every path it took.
+
+**Round 4 F-H, completed in d16a76a.** The design recorded it as pre-existing and unverified, and
+asked the rewrite to read `run.id` into a local. That was done, but `release_block_for_expired_wait`
+still reads `run.id` and `run.agent`. A probe measured the consequence: after one question's release
+raised and rolled back, the next question's release raised `MissingGreenlet` on the expired run,
+and it too was not accepted. One failed release in a report took every later one with it. Fixed by
+re-loading the run after the rollback. Test:
+`test_one_failed_release_in_a_report_does_not_fail_the_next`, whose mutation fails it.
 
 ## F357 (B) — a flow's review turn tells its reviewer to approve, and says nothing about the evidence gate that will refuse it
 
