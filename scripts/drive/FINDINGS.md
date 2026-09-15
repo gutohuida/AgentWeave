@@ -28739,3 +28739,49 @@ it belongs to."* The reviewer did not retry with a document, and nothing require
 
 **Related:** F152 (the gate's sentence reaches the agent), F154/F167 (a review with no verdict),
 F352 (the rung-3 sentence names nobody), F316 (the re-staff's exclusion set).
+
+## F375 (A) — a bare `..` argument has no separator, so rule 4 calls it "not a path" and never checks it
+
+**Status:** open. Filed 2026-09-15, found by an adversarial verification round measuring
+`a-quote-can-spell-a-slash`'s candidate correction against real Git Bash — unrelated to that
+change's own ANSI-C question, and not fixed by it.
+
+**The mechanism.** `_judge_word` (`hub/hub/mcp_server.py:1129-1155`) checks six rules in order
+against each word of a shell command, and rule 4 reads:
+
+```python
+has_separator = any(separator in word for separator in _SEPARATORS)
+...
+if not has_separator:  # 4: not a path
+    return None
+```
+
+`..` contains no `/` or `\`, so `has_separator` is `False`, and rule 4 waves it through with no
+call to `_where` at all — no resolution against the workspace root, no `commonpath` check,
+nothing. Every other rule that could catch a traversal (5, the plain-relative path judge; 6, the
+backstop regex) is gated behind `has_separator`, so none of them ever see a bare `..`.
+
+**Measured** (real Git Bash, workspace a subdirectory with `notes.md` inside): `cp notes.md ..`
+is answered **allow, "inside your workspace"**, and the copy lands one level above the workspace
+root — outside, on every platform, with no escape, no quoting, and no locale dependency. `mv`,
+`cat >>`, and any other tool that takes a bare `..` as a path argument have the identical hole,
+since they all route through the same `_judge_word`.
+
+**Why this was not caught by four rounds of `a-quote-can-spell-a-slash` review.** That change's
+whole argument is about what an *escape sequence* can decode to; a literal, unescaped `..` with
+no separator character was never a form any of its test rows constructed, because the change's
+own scope is ANSI-C decoding, not the six-rule judge's separator gate. The verification round
+that found this was adversarially testing the *ANSI-C* correction's compound-path cases and
+constructed `cp notes.md $'..\x00x'` as one of them; the NUL only mattered because it truncates
+the word down to `..` — the truncation exposed a hole in rule 4 itself that has nothing to do with
+NUL, ANSI-C, or the escape decoder. **Do not fix this inside `a-quote-can-spell-a-slash`** — that
+change should pin the truncated-word row as evidence the hole exists, but the repair belongs to
+rule 4 itself: a bare `..` (and, by the same gap, a bare `.`, and any word that is *only* `.`/`..`
+segments joined by nothing, though only `..` moves the boundary) needs to be judged by resolving
+it against the workspace root exactly as rule 5 already does, not exempted as "not a path".
+
+**Reach.** Every project, every runner, every tool that accepts a bare `..` as an argument —
+`cp`, `mv`, `cat`, `tee`, any shell redirect target. No special crafting needed; this is the
+plainest possible traversal and the sandbox does not check it at all today.
+
+**Related:** F332 (the ANSI-C decode question this was found alongside, and does not fix this).

@@ -93,6 +93,42 @@ point: a row may not change answer before the decode exists.
   (`testbed/scratch/night0913/r3_lex_plugin.py`) all 20 rows pass on both platforms and exactly
   the marked rows XPASS; with R1's, Windows fails N2–N5, and with R2's, N3–N5.
 - [x] 1.3 Commit §1 alone, green. From this commit, a decode that flips a row before §2 fails CI.
+- [ ] 1.4 **New (Round 4, 2026-09-15) — corrects a gap in 1.2's committed pinning and pins the seven
+      new rows Round 4 added.** Not optional: without this, §2 landing the Round-4 decoder makes N3
+      XPASS (a strict failure) rather than flip cleanly, and P1–P7 have no pinning to hold them at
+      all.
+      - **N3's Windows mark is wrong as committed.** 1.2 marked only N3's *reason* assertion xfail
+        on Windows, because at the time the Round-3 decoder was believed to keep N3 denied (an
+        accepted over-refusal). Round 4 found that belief was the bug: the corrected decoder decodes
+        `\U`≥0x80000000 to nothing, and N3 **answers allow on Windows** once §2 lands (design.md,
+        D2's revised N3 row). Add `xfail(strict=True)` to N3's Windows **answer** assertion too (not
+        only its reason), matching the pattern already used for I1 and N1. Until this lands, §2
+        cannot be committed clean — N3 would XPASS its reason mark alone while still failing its
+        answer, which is a real, uncaught mismatch, not a false alarm.
+      - **Pin P1–P7** (design.md D2) the same way 1.1/1.2 pinned G/N: add each to the parametrized
+        table, `ids=` its label. **Measure each row's *today* (unmodified lexer) answer and reason
+        first** — do not assume it matches any other row's pattern; run
+        `testbed/scratch/r1f332/reader_forms.py`-style measurement against the real, current
+        `_decide` on both POSIX (WSL) and Windows, the way 1.2's own "Done" note did, and record the
+        numbers beside this task before writing the xfail marks. Then mark exactly what design.md's
+        P1–P7 rows say moves:
+        - P1–P4: expected to move from today's answer to **deny, outside** on every platform once
+          §2 lands (mark accordingly, but only after measuring today's real baseline — do not copy
+          the G-row pattern without checking, since P1–P4's word shape differs from every existing
+          row);
+        - P5: expected to stay **allow, inside** on every platform (no answer mark; these must not
+          regress);
+        - P6: expected to stay **deny, cannot be checked** on every platform (no answer mark; reason
+          may already say *cannot be checked* today, so check whether even a reason mark is needed —
+          measure first);
+        - P7: **pin against the unmodified lexer only, with no xfail mark expecting it to change.**
+          This row exists to record a known mismatch (F375), not to track work §2 will do — §2 must
+          **not** make this row pass by accident (that would mean NUL-truncation logic crept into
+          the ANSI-C decoder, which design.md's "What round 4 changed" says not to do); if it starts
+          passing, treat that as a signal to re-check what changed, not as progress.
+      - Verify on both platforms exactly as 1.2's "Done" note did (`--runxfail`, record pass/xfail
+        counts), and update that note's numbers in this file once done.
+      - Commit alone, green, before §2 resumes.
 
 ## 2. The decode
 
@@ -115,11 +151,23 @@ point: a row may not change answer before the decode exists.
 > is kept literal (backslash included) under C or an unset `LANG`, and encoded under C.UTF-8 and
 > en_US.UTF-8; `\U80000000` and `\Uffffffff` are empty in all four; `\u00ff` is `ff` or `c3 bf`;
 > `\cA`, `\c/` and `\c` + é are `01`, `0f` and `03 a9` in all four. No single rendering of a `\u`
-> above 0xFF is safe in every locale. The candidate correction goes to the day window (see
-> `spec-queue/DECISIONS.md`, *a-quote-can-spell-a-slash stopped at §2*): judge both readings of a
-> codepoint escape between 0x100 and 0x7FFFFFFF, render `\U` ≥ 0x80000000 as nothing, and decode
-> `\cX` from X's first UTF-8 byte. That changes N3's Windows answer and adds rows. The stopped
-> implementation is kept, unapplied, at `testbed/scratch/night0913/s2/s2-stopped.patch`.
+> above 0xFF is safe in every locale.
+>
+> **Round 4, 2026-09-15, confirmed and completed the candidate correction — see design.md's
+> replaced invariant (D1) and "What round 4 changed".** It is no longer a sketch: judge both
+> readings of a codepoint escape between 0x100 and 0x7FFFFFFF, refusing if either would escape;
+> render `\U` ≥ 0x80000000 as nothing (not kept literal — Round 4 found the R3 "keep it, call it
+> a safe over-refusal" answer was itself the phantom-component bug, not a safe trade); decode
+> `\cX` from X's first UTF-8 byte for **any** real body character, not only ASCII (restricting to
+> ASCII was tried and re-broken, same mechanism). Two things Round 4 added that 2.2 below now
+> carries: the UTF-8 reading needs its own `chr()`-overflow guard (a fixed placeholder above
+> U+10FFFF, not R2's dropped-empty-string answer, which loses bash's kept backslash where one is
+> real); and the reading flag must reach `_read_command`'s own recursive call for a nested
+> `$(...)` substitution, or it silently narrows to one reading inside one. This changes N3's
+> Windows answer (deny→allow) and adds D2 rows P1–P7 (task 1.4 pins them). The stopped
+> implementation from the night is kept, unapplied and now superseded, at
+> `testbed/scratch/night0913/s2/s2-stopped.patch` — do not build from it as written; it predates
+> the dual-reading rule and the \U≥0x80000000 fix.
 
 - [ ] 2.1 In `hub/hub/mcp_server.py` `_lex`, add a branch: **in the bash dialect, when no quote is
   open**, `$` immediately followed by `'` opens an ANSI-C string. Consume the `$` and the `'`,
@@ -128,38 +176,75 @@ point: a row may not change answer before the decode exists.
   as `_LITERAL_DOLLAR`, exactly as a `$` inside ordinary single quotes already is. The branch sits
   **after** the `quote == "'"` block and **before** the generic `char in "'\""` open, so `quote is
   None` is guaranteed and the opening `'` is not consumed twice.
-- [ ] 2.2 Add the decoder helper beside `_lex`: given the text and the index of a `\`, return the
-  decoded string and the next index. It must honour **one invariant** (design D1): an escape may be
-  **decoded to a character** (removing its backslash) only when that character is determined and
-  **locale-independent**; **in every other case keep the backslash literal**, because bash may keep
-  it and on Windows a backslash is a path separator. Concretely:
+- [ ] 2.1b **New (Round 4).** Thread a `reading` argument (`"c"` or `"utf8"`) through `_lex` and
+  `_read_command`, **including `_read_command`'s own recursive call for a substitution's command
+  text** (`_substitution`'s caller) — a reading that stops at the top level judges a nested
+  `$(...)`'s ANSI-C content in one reading only, silently narrowing the dual check design.md's
+  D1 requires. `_decide` calls `_read_command` twice per dialect pass where the command contains
+  any `\u`/`\U` escape in 0x100–0x7FFFFFFF (the decoder helper, 2.2, can report whether it used
+  the dual-reading branch at all, so `_decide` need not always run both passes — only commands
+  that reach that branch do), and refuses if either reading's `_read_command` call returns a
+  refusal.
+- [ ] 2.2 Add the decoder helper beside `_lex`: given the text, the index of a `\`, and the
+  `reading` (2.1b), return the decoded string and the next index. It must honour **the replaced
+  invariant** (design D1, Round 4): an escape may be **decoded to a character** (removing its
+  backslash, contributing no separate path component) only when that character's contribution to
+  the word's component structure is determined **for the reading in effect**; **in every other
+  case keep the backslash literal**, because bash may keep it and on Windows a backslash is a
+  path separator. Concretely:
   - simple escapes decode: `\a \b \e \E \f \n \r \t \v \\ \' \" \?`;
   - `\NNN` octal (1–3 digits, value mod 256 — `\457` is `/`) and `\xHH` hex (1–2 digits) decode via
-    `chr(value)` — they are *byte* escapes, always ≤ 0xFF, locale-independent;
-  - `\uHHHH` (1–4 digits) / `\UHHHHHHHH` (1–8 digits): decode via `chr(value)` **only when
-    `value <= 0xFF`**; **when `value > 0xFF`, keep the backslash and the escape text literal**
-    (return e.g. `"\\" + letter + hexdigits`);
-  - `\cX` control (`\c@` is a NUL) decodes **only when `X` is a real body character**; a `\c`
-    immediately before the closing quote (or at end of text) **keeps its backslash literal** and the
-    decode **MUST NOT consume the closing quote** as `X`;
+    `chr(value)` — they are *byte* escapes, always ≤ 0xFF, locale-independent, same in both
+    readings;
+  - `\uHHHH` (1–4 digits) / `\UHHHHHHHH` (1–8 digits) **at or below 0xFF**: decode via `chr(value)`
+    in both readings (locale-independent);
+  - `\uHHHH`/`\UHHHHHHHH` **from 0x100 to 0x7FFFFFFF (Round 4 — replaces the R3 "always keep
+    literal" rule)**: in the `"c"` reading, keep the backslash and the escape text literal
+    (return e.g. `"\\" + letter + hexdigits`); in the `"utf8"` reading, decode via `chr(value)`
+    **guarded**: for `value > 0x10FFFF` (no such Unicode code point exists — this range is only
+    reachable via `\U`), emit one fixed non-separator placeholder character instead of calling
+    `chr()` at all. Do **not** return `""` (R2's old guard) — an empty string drops the kept
+    backslash the `"c"` reading needs to stay faithful, and the two readings must disagree only
+    in how they render this escape, not in whether the rest of the word around it is intact;
+  - `\uHHHH`/`\UHHHHHHHH` **at or above 0x80000000 (Round 4 — replaces the R3 "keep literal,
+    accepted over-refusal" answer)**: decode to **nothing**, in both readings — this is
+    locale-independent (bash emits nothing here in every locale, measured at the boundary
+    `\U7fffffff` kept / `\U80000000` nothing), so it needs no reading distinction at all;
+  - `\cX` control (`\c@` is a NUL) decodes **only when `X` is a real body character, of any byte
+    length** — do not restrict to ASCII (Round 4: restricting it re-creates a phantom component
+    the same way a restricted `\u`/`\U` rule does). The control byte is X's *first* UTF-8 byte
+    `& 0x1F`; X's remaining bytes, if any, are kept literal after it. A `\c` immediately before
+    the closing quote (or at end of text) **keeps its backslash literal** and the decode **MUST
+    NOT consume the closing quote** as `X`;
   - unrecognized escape keeps its backslash; a trailing `\` is literal;
   - a **digitless** `\x`/`\u`/`\U` (no hex digit follows) keeps its backslash.
-  It MUST NOT raise on any input. Note `chr()` is therefore called **only for values ≤ 0xFF**, so it
-  cannot raise on a codepoint above U+10FFFF — no separate overflow guard is needed (this replaces
-  R2's `if value > 0x10FFFF: return ""`, which was measured wrong on Windows — design D5/finding 1).
-  **Four rules R1 and R2 got wrong — implement bash, not the prototype:**
-  - **Digitless `\x`/`\u`/`\U` keeps its backslash** (R2 finding 1): R1 returns just the letter,
-    dropping a Windows separator and allowing an escape refused today (row N2).
-  - **`\u`/`\U` above 0xFF keeps its backslash** (R3 finding 1): R1 and R2 decode it to one
-    character; the C locale Git Bash uses by default keeps it literal, so on Windows `$'..` + a `\u`
-    above 0xFF is a traversal, and decoding it away allows an escape refused today (rows N3, N4).
-  - **`\c` before the closing quote keeps its backslash** (R3 finding 2): R1 and R2 read the closing
-    `'` as `\c`'s control target, over-run the string, and allow `$'..\c'` on Windows (row N5).
+  It MUST NOT raise on any input, **in either reading**. The `"c"` reading's `chr()` calls are
+  bounded exactly as R3 derived (only for values ≤ 0xFF, so U+10FFFF cannot be exceeded); the
+  `"utf8"` reading's `chr()` calls are bounded by the placeholder guard above, added by Round 4 —
+  do not assume R3's "no guard needed" conclusion still holds for this reading, it does not.
+  **Rules Round 4 changed from R1/R2/R3 — implement the corrected version, not any prototype:**
+  - **Digitless `\x`/`\u`/`\U` keeps its backslash** (R2 finding 1, unchanged): R1 returns just
+    the letter, dropping a Windows separator and allowing an escape refused today (row N2).
+  - **`\u`/`\U` from 0x100 to 0x7FFFFFFF gets a dual reading, not an unconditional keep-literal**
+    (Round 4 replaces R3 finding 1): R1 and R2 decode it to one character unconditionally; R3
+    always keeps it literal; both are wrong inside a longer path with a real component before the
+    escape and enough `..` after it (design.md P1–P3) — see 2.1b.
+  - **`\u`/`\U` at or above 0x80000000 decodes to nothing, not keep-literal** (Round 4 — this
+    range was inside R3 finding 1's scope but R3's answer for it was itself the bug; see D2 row
+    N3, design.md P1).
+  - **`\c` before the closing quote keeps its backslash** (R3 finding 2, unchanged): R1 and R2
+    read the closing `'` as `\c`'s control target, over-run the string, and allow `$'..\c'` on
+    Windows (row N5).
+  - **`\cX` is never restricted to an ASCII `X`** (Round 4 — the night's build briefly did this
+    and reopened the phantom-component class in a new shape; design.md P4 pins the non-ASCII
+    case).
   - **Never consume the closing quote** for any escape while decoding the body.
-  `testbed/scratch/r1f332/prototype.py` and `testbed/scratch/r2f332/fix_probe.py` are references
-  **each with defects still in them** (R1: all four; R2: the two R3 findings);
-  `testbed/scratch/r3f332/three_decoders.py` holds the corrected decoder beside them. The
-  implementation is held to D2's table — which now pins N2, N3, N4, N5 — not to any prototype.
+  `testbed/scratch/r1f332/prototype.py`, `testbed/scratch/r2f332/fix_probe.py` and
+  `testbed/scratch/r3f332/three_decoders.py` are references **each with defects still in them**
+  (R1: all four rules above; R2: the R3-and-Round-4 rules; R3: the two Round-4 rules) — none of
+  them implements the dual reading or the ≥0x80000000 fix. `%TEMP%/f332/proto.py` (Round 4) is
+  the first reference that does, but it is scratch, not the implementation. The implementation is
+  held to D2's table — which now pins N2–N5 and P1–P7 — not to any prototype.
 - [ ] 2.3 Leave everything after the lexer unchanged: the six rules, `_is_own_hub`, the refusal
   wordings, the reason bound. Confirm **no new reason string** is introduced (`grep` the refusal
   constants; the diff is `_lex` plus a helper).
