@@ -993,6 +993,64 @@ separate ways in one afternoon. These are about measuring prose, not about any o
   deletion is already staged by the `git rm --cached`, so the `git add` is both unnecessary and
   fatal. To stage a deletion of a tracked file, `git rm <path>` alone is enough.
 
+## Reading the live Hub's own data, and the traps in it
+
+Added 2026-09-16 while measuring where a project's token budget actually went.
+
+- **`turn_usage` in the operator's live database is the authoritative per-run token and cost
+  record**, and reading it read-only is safe and sanctioned: open
+  `~/.agentweave/hub/data/agentweave.db` as `file:<path>?mode=ro` with `uri=True`. One row per
+  Hub-owned run, with `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`
+  and `api_equivalent_usd_micros` as the runner reported them. A "turn" is one run, which is many
+  provider API calls internally, so per-turn input routinely exceeds any context window - that is
+  correct, not a bug in the data. *(verified 2026-09-16)*
+- **23% of measured rows carry a NULL `model` and zero tokens.** They are skewed toward same-agent
+  continuation turns. Averages over measured rows are sound; **totals are understated**, and any
+  claim of the form "N of M turns" must say whether M is the measured population or the subset you
+  could classify. Getting this wrong produced a wrong sentence in a proposal this session.
+  *(verified 2026-09-16)*
+- **`agent_outputs.payload` names the tool under the key `tool`, not `name`, and its `input` is a
+  JSON string inside the JSON** - double-encoded. A parser that looks for `name` and reads `input`
+  as a dict silently finds nothing, or worse, finds a fallback. This session drew a confident,
+  wrong conclusion from exactly that mistake before checking a raw row. Dump one payload before
+  trusting any aggregate over this table. *(verified 2026-09-16)*
+- **`<project>/.agentweave/tasks/<task-id>/src` is PRODUCT SOURCE, not scratch.** Agents work in a
+  per-task worktree under `.agentweave/`. A path classifier that treats everything under
+  `.agentweave/` as temporary will report that developers never touched product code. Real scratch
+  is `.tmp/`, `.aw_tmp/` and `reviews/<agent>/.scratch-*`. *(verified 2026-09-16)*
+- **Agents write into Claude Code's own memory directory**
+  (`~/.claude/projects/<mangled-project-path>/memory/`), out of band and invisible to the Hub. In
+  one project a reviewing agent had put 60 writes across 16 files there, including per-task review
+  notes. If you are auditing what an agent did, that directory is part of the evidence and no Hub
+  query will show it to you. *(verified 2026-09-16)*
+
+## Measurement methodology traps
+
+Added 2026-09-16 after one of these reached a committed specification.
+
+- **Never multiply independent marginal maxima and call the product an observed worst case.** A
+  figure of "~13,032 characters, observed, from real documents" was written into a proposal and a
+  design this session. It was `362 (max criterion length) x 12 (max criteria per requirement) x 3
+  (max requirements per task)` - three maxima that co-occur in no document. The real measured worst
+  case over the same corpus was 5,462, a 2.4x overstatement, and it had been used to justify adding
+  a whole capability to a change. **If a number is a product of other numbers, say so, and measure
+  the joint quantity directly.** *(2026-09-16)*
+- **Check that the corpus contains an instance of the thing you are sizing.** The same measurement
+  sampled 41 spec payloads to size what a *declared task* would carry - and none of those 41
+  documents declared any tasks. *(2026-09-16)*
+- **A subagent's finding is a claim, not a result.** Three adversarial reviews this session each
+  found real blocking defects, and each also asserted at least one thing that did not survive
+  checking. Verify a finding before acting on it, especially one you are about to write into a
+  spec. *(2026-09-16)*
+
+## Python stdout encoding when printing repository content
+
+- **A `py -3.11` heredoc that prints text drawn from the repo or the database will die on cp1252**
+  with `UnicodeEncodeError: 'charmap' codec can't encode character ...`, because the console
+  encoding is not UTF-8. It kills the script mid-output, so you get a partial result that looks
+  like a short answer. Start any such script with
+  `import sys; sys.stdout.reconfigure(encoding="utf-8", errors="replace")`. *(verified 2026-09-16)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
