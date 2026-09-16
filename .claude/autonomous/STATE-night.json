@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "31dcb3f",
   "stop_at": "2026-09-17T07:00:00+01:00",
-  "iteration": 3,
+  "iteration": 4,
   "log_file": ".claude/autonomous/2026-09-16-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "amtci-mutations",
-  "next_action": "Do section 4 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md: all 17 mutations (4.1-4.17 as listed), one at a time. For each: apply the mutation to hub/hub/spec_tasks.py or hub/hub/spec_reading.py, run `py -3.11 -m pytest tests/test_spec_criteria_reach_the_task.py -q` from hub/, record WHICH tests failed (not just that some did) against the test the row names, then revert with `git checkout -- <file>` BEFORE applying the next one. The implementation must be byte-identical to HEAD at the end -- verify with `git status --short` and `git diff --stat` before committing. Each row's Done note names the mutation applied, the tests that flipped, and whether that matches what the row predicted. Iteration 3 already ran a two-mutation smoke test (rank = 0, and both isinstance guards replaced by `or []`) and saw exactly 3.11/3.15/3.18/3.22/3.24/3.25 flip -- that is informative for 4.8b/4.10/4.16 but does NOT substitute for applying them individually. EXPECT AT LEAST ONE MUTATION TO FLIP NOTHING: that is a finding about the tests, recorded in scripts/drive/FINDINGS.md and in the row's Done note, NOT a reason to weaken the mutation or to quietly retarget it. 4.5 and 4.11 are the two most likely to be already-satisfied by the prescribed implementation -- read them carefully before claiming a flip. Commit when done.",
+  "current": "amtci-gate",
+  "next_action": "Do section 5 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md, the gates. 5.1: `py -3.11 -m pytest tests/ -q` from hub/ -- the full suite takes 15-47 minutes, so START IT IN THE BACKGROUND FIRST and do 5.2-5.4 while it runs; record the counts and compare them against the green baseline in spec-queue/APPROVALS.md, because 'zero NEW failures' is the bar, not zero failures. 5.2: `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311`, `mypy src/`. 5.3: `npx openspec validate a-materialised-task-carries-its-criteria --strict` (already passed at the end of iteration 4 -- re-run it, do not assume). 5.4 is the one with real work in it: take a REAL approved document (read-only, and never proj-5e960453 or proj-18e5d4e0 or anything on port 8000's database except through a mode=ro URI), compose a briefing, and record the CHARACTER COUNT the criteria block contributes against _LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000 at scheduler.py:2043. Do not assume MAX_REQUIREMENTS_PER_TASK = 3 bounds it -- that cap is enforced only on the transition to `proposed`, and an adopted document never passed it. Record the number; propose a bound ONLY if the measurement asks for one -- R3 already decided in task 1.6 that no agent-loops delta is needed, and a third review removed a delta added on a `362 x 12 x 3` figure that was arithmetic rather than an observation. Do NOT write a migration and do NOT touch hub/ui/ -- if you find yourself doing either you have misread the change. No implementation file should change in this iteration; if a gate fails, fix it and say so in the log rather than ticking around it. Commit when done.",
   "queue": [
     {
       "id": "amtci-impl",
@@ -29,9 +29,9 @@
     },
     {
       "id": "amtci-mutations",
-      "status": "open",
+      "status": "done",
       "title": "\u00a74 -- 17 mutations",
-      "detail": "Apply each, run, record, git checkout to revert. Expect at least one to fail to flip -- that is a finding about the tests, not a reason to weaken the mutation."
+      "detail": "Done iteration 4: all 17 applied individually via testbed/scratch/mutate_amtci.py (exact-anchor replacement with a uniqueness assert, run, parse FAILED lines, git checkout revert). EVERY mutation flipped its named target; none flipped nothing, so no finding was recorded. Baseline 25 passed / 14.10s. 4.8 aborted once on an ambiguous anchor (`for entry in raw:` occurs twice in spec_reading.py) and was re-anchored. Three unpredicted results recorded in the rows: 4.16's retarget reason is wrong (materialise_quietly does not protect 3.24, it empties the board and 3.24 fails too) though the retarget stands; 4.8 mutates toward an algorithm D7 forecloses and needed cross-module scaffolding, so 4.8b is what actually pins the ordering; 4.7/4.3 flip 17/15 rows because rendering is a whole-string choke point. 4.11 and 4.5, flagged as likely already-satisfied, both flipped. Implementation byte-identical to HEAD afterwards (git status/diff --stat clean); 45 passed across the three neighbouring suites; openspec validate --strict passes. tasks.md section 4 ticked, 17 per-row Done notes plus a section note."
     },
     {
       "id": "amtci-gate",

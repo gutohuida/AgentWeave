@@ -279,43 +279,137 @@ Each mutation is applied to the implementation, the suite is run, the result rec
 mutation reverted with `git checkout`. A mutation that flips no test means the tests above do not
 pin what they claim to.
 
-- [ ] 4.1 Match criteria on the resolved row's `.key` instead of the entry's `named` → 3.7 fails.
-- [ ] 4.6 Let a malformed criterion entry raise instead of being skipped → 3.11 fails by producing
+**Section note — all seventeen were applied individually and every one flipped its named target;
+none flipped nothing.** Harness: `testbed/scratch/mutate_amtci.py` (throwaway, gitignored) applies
+one mutation's edits by exact-anchor replacement, runs
+`py -3.11 -m pytest tests/test_spec_criteria_reach_the_task.py -q --no-header -rf` from `hub/`,
+parses the `FAILED`/`ERROR` lines, then `git checkout -- hub/hub/spec_tasks.py
+hub/hub/spec_reading.py` before the next. Baseline before the run: **25 passed in 14.10s**. After
+the run `git status --short` and `git diff --stat` are both empty — the implementation is
+byte-identical to HEAD. Rows below name the rows that flipped, not only the target; a mutation
+reaching more than its target is reported as measured rather than trimmed.
+
+- [x] 4.1 Match criteria on the resolved row's `.key` instead of the entry's `named` → 3.7 fails.
+      **Done — 3.7 flipped, and only 3.7** (1 failed, 24 passed). Mutation: in `materialise()`,
+      resolve `row` first and `names.append(row.key if row is not None else named)`.
+- [x] 4.6 Let a malformed criterion entry raise instead of being skipped → 3.11 fails by producing
       **no tasks at all**. Corrected: an earlier wording expected a committed partial board, which
       contradicted design D6 as corrected — with the index built once before the loop (task 2.2) a
       payload-level malformation raises before the first `session.add`/`flush`
       (`spec_tasks.py:218-219`), so a prefix is not reachable.
-- [ ] 4.7 Render without the criterion key → 3.13 fails.
-- [ ] 4.8 Order criteria by raw `payload.acceptance_criteria` position instead of by requirement
+      **Done — 3.11 flipped, and only 3.11** (1 failed, 24 passed). Mutation: removed
+      `if not isinstance(entry, dict): continue` from `criteria_by_requirement_key`'s loop, so
+      `"abc"` and `["ac-alpha", 7]` reach `entry.get`. The failure is exactly the predicted shape —
+      3.11 asserts both declared tasks exist on every malformed shape and got an empty board,
+      because the `AttributeError` escapes the index build and `materialise_quietly` swallows it.
+- [x] 4.7 Render without the criterion key → 3.13 fails.
+      **Done — 3.13 flipped** (17 failed, 8 passed). Mutation: `_render_criterion` returns `body`
+      unconditionally. It reaches far beyond its target — 3.1, 3.2, 3.3, 3.5, 3.6, 3.7, 3.9, 3.10,
+      3.13, 3.14, 3.15, 3.17, 3.19, 3.21, 3.23, 3.24, 3.26 — because `RENDERED_ALPHA` and its
+      siblings carry the handle and nearly every assertion compares whole rendered strings. Breadth
+      is not weakness here: 3.13 is the row that states *why* the handle is there (design D2), and
+      it fails.
+- [x] 4.8 Order criteria by raw `payload.acceptance_criteria` position instead of by requirement
       → 3.15 fails. **Inverted from its original form**, which mutated toward grouping and would
       have been satisfied by the prescribed implementation itself once D7 mandated the helper — the
       contradiction the second review found.
-- [ ] 4.12 Skip the de-duplication of an entry's repeated requirement names → 3.14 fails.
-- [ ] 4.9 Always prefix the handle, including when it is absent → 3.16 fails (the string contains
+      **Done — 3.15 flipped, and 3.23 with it** (2 failed, 23 passed). Mutation needed **two**
+      files: `criteria_by_requirement_key` had to stamp `_raw_position` onto each grouped criterion
+      (`for _raw_position, entry in enumerate(raw)`) before `_criteria_for_entry` could
+      `collected.sort(key=lambda item: item[1].get("_raw_position", 0))`. **Recorded as measured:
+      raw-payload order is not reachable inside the helper boundary D7 prescribes** — the grouped
+      dicts carry only `key`/`given`/`when`/`then`, so this alternative implementation cannot be
+      written without changing `spec_reading` too. That makes 4.8 a weaker discriminator than it
+      reads: the algorithm it mutates toward is one D7 already forecloses. 4.8b, which needs no
+      such scaffolding, is what actually pins the ordering. 3.23 flipping alongside is correct —
+      its absent-requirement criterion is written first in the document, which is precisely the
+      fixture built to catch raw-document order.
+- [x] 4.12 Skip the de-duplication of an entry's repeated requirement names → 3.14 fails.
+      **Done — 3.14 flipped, and only 3.14** (1 failed, 24 passed). Mutation:
+      `for name in dict.fromkeys(names)` → `for name in names`.
+- [x] 4.9 Always prefix the handle, including when it is absent → 3.16 fails (the string contains
       `None:`).
-- [ ] 4.10 Remove the `isinstance(..., list)` guard from task 2.1 → 3.18 fails, and fails by
+      **Done — 3.16 flipped, and only 3.16** (1 failed, 24 passed). Mutation: `_render_criterion`
+      returns `f"{key}: {body}"` without the `isinstance(key, str) and key.strip()` test, so a
+      handle-less criterion renders the literal `None:` — the D8 hole reproduced deliberately.
+- [x] 4.10 Remove the `isinstance(..., list)` guard from task 2.1 → 3.18 fails, and fails by
       creating no tasks, which is D6's failure mode reproduced deliberately.
-- [ ] 4.11 Attach criteria that state nothing → 3.17 fails.
-- [ ] 4.2 Attach every criterion in the document regardless of requirement → 3.2 fails.
-- [ ] 4.3 Drop the `then` from the rendered string → 3.8 fails.
-- [ ] 4.4 Sort criteria by key within a requirement instead of keeping written order → 3.6 fails.
-- [ ] 4.8b Order by the ENTRY's requirement list instead of `payload.requirements` → 3.15 fails.
+      **Done — 3.18 flipped, with 3.11 and 3.22** (3 failed, 22 passed). Mutation:
+      `raw = payload.get("acceptance_criteria") or []` in `criteria_by_requirement_key`. All three
+      are the same hole seen from three angles: 3.18 through `materialise()` (empty board), 3.11
+      through `materialise_quietly` (same), 3.22 through `requirement_view`, which has no `try`
+      and so surfaces the `TypeError: 'int' object is not iterable` task 1.8 measured.
+- [x] 4.11 Attach criteria that state nothing → 3.17 fails.
+      **Done — 3.17 flipped, with 3.11** (2 failed, 23 passed). Mutation: removed
+      `if not parts: return None` from `_render_criterion`, so a criterion with no given/when/then
+      renders as `"ac-empty: "` and is attached. **This row was flagged in `next_action` as one of
+      the two most likely to be already satisfied by the prescribed implementation; it is not** —
+      the skip is a real decision with a real test behind it. 3.11 comes along because one of its
+      five malformed shapes yields criteria that state nothing.
+- [x] 4.2 Attach every criterion in the document regardless of requirement → 3.2 fails.
+      **Done — 3.2 flipped, with 3.1, 3.4, 3.12, 3.19, 3.21** (6 failed, 19 passed). Mutation:
+      `for name in dict.fromkeys(list(names) + list(criteria_index))` in `_criteria_for_entry`.
+      The five companions are the rows that assert a task carries a *specific* list: attaching
+      everything breaks each of them, including 3.4 (a task naming nothing now carries the lot) and
+      3.12 (the different-namespace file now attaches criteria it must not).
+- [x] 4.3 Drop the `then` from the rendered string → 3.8 fails.
+      **Done — 3.8 flipped** (15 failed, 10 passed). Mutation: removed the `then` block from
+      `_render_criterion`. Same breadth as 4.7 and for the same reason — whole-string comparisons
+      against `RENDERED_ALPHA`. 3.8 is the row that states the clause-level requirement, and it
+      fails on its own `f"then {AC_ALPHA['then']}" in line` assertion.
+- [x] 4.4 Sort criteria by key within a requirement instead of keeping written order → 3.6 fails.
+      **Done — 3.6 flipped, and only 3.6** (1 failed, 24 passed). Mutation:
+      `collected.sort(key=lambda item: (item[0], str(item[1].get("key"))))`. 3.6's deliberately
+      non-alphabetical keys (`zebra, apple, mango`) are what make it the single discriminator.
+- [x] 4.8b Order by the ENTRY's requirement list instead of `payload.requirements` → 3.15 fails.
       Without this the ordering is unpinned: 4.8 mutates toward a third algorithm (raw payload
       position) and does not discriminate the entry-order implementation from the correct one.
-- [ ] 4.14 Drop criteria whose requirement is absent from `payload.requirements` instead of sorting
+      **Done — 3.15 flipped, and only 3.15** (1 failed, 24 passed). Mutation:
+      `for rank, name in enumerate(dict.fromkeys(names))`, dropping the `position` lookup entirely.
+      This is the row that carries the ordering: it needs no cross-module scaffolding, it mutates
+      toward an implementation a reasonable author would actually write, and exactly one test
+      stands between the two.
+- [x] 4.14 Drop criteria whose requirement is absent from `payload.requirements` instead of sorting
       them last → 3.23 fails.
-- [ ] 4.15 Move the guard from inside the helper to this change's call site → 3.22 fails.
-- [ ] 4.16 Remove the guard from `statements_by_key` → **3.25** fails. Retargeted from 3.24, which
+      **Done — 3.23 flipped, with 3.24** (2 failed, 23 passed). Mutation:
+      `if name not in position: continue` replacing the `position.get(name, len(position))`
+      fallback. 3.24 comes along necessarily: its `requirements` block is a scalar, so `position`
+      is empty and *every* name is "absent" — under this mutation a scalar `requirements` costs the
+      criteria as well as the ordering, which is exactly the conjunction 3.24 exists to deny.
+- [x] 4.15 Move the guard from inside the helper to this change's call site → 3.22 fails.
+      **Done — 3.22 flipped, and only 3.22** (1 failed, 24 passed). Mutation: guard removed from
+      `criteria_by_requirement_key` and re-added around `materialise()`'s `criteria_index =` call.
+      3.18 and 3.11 correctly stay green — the call site protects `materialise()` — and 3.22, which
+      goes through `requirement_view`, is left exposed. This is D7's argument measured rather than
+      asserted: the guard has to live in the helper because `materialise()` is not its only caller.
+- [x] 4.16 Remove the guard from `statements_by_key` → **3.25** fails. Retargeted from 3.24, which
       exercises `materialise()` and is therefore protected by `materialise_quietly`'s catch-all; 3.25
       goes through `requirement_view`, which has no `try`/`except` and is where removing the guard
       actually surfaces.
-- [ ] 4.17 Build the `position` map with a bare `{r["key"]: i for i, r in enumerate(raw)}` over a
+      **Done — 3.25 flipped, and 3.24 with it** (2 failed, 23 passed). Mutation:
+      `raw = payload.get("requirements") or []`. **The retarget was right and its stated reason is
+      wrong, as measured**: `materialise_quietly`'s catch-all does not protect 3.24, it converts the
+      raise into an empty board, and 3.24 asserts the tasks exist — so it fails too, just not by
+      raising. The retarget still stands on its real merit: 3.25 is the row where the `TypeError`
+      itself reaches the caller. Noted here rather than silently corrected, per the round
+      discipline — an argument can be wrong while everything it argues about is right.
+- [x] 4.17 Build the `position` map with a bare `{r["key"]: i for i, r in enumerate(raw)}` over a
       `raw` guarded only against not being a list, instead of through `statements_by_key` (task 2.7)
       → **3.26** fails. This is the one behavioural difference between the two readings: a list
       holding a non-dict element passes an `isinstance(raw, list)` guard and then raises
       `TypeError: string indices must be integers`, which `statements_by_key`'s per-element
       `isinstance(entry, dict)` skip does not.
-- [ ] 4.5 Attach criteria to tasks resolving no requirement → 3.4 fails.
+      **Done — 3.26 flipped, and only 3.26** (1 failed, 24 passed). Mutation written exactly as the
+      row describes, `isinstance(_raw, list)` guard included. The prediction holds to the letter:
+      3.24 (scalar `requirements`) stays green because the list guard catches it, and only 3.26's
+      `["not a requirement", ALPHA]` gets through to raise. The row is the whole justification for
+      task 2.7 and it discriminates on one test.
+- [x] 4.5 Attach criteria to tasks resolving no requirement → 3.4 fails.
+      **Done — 3.4 flipped, and only 3.4** (1 failed, 24 passed). Mutation:
+      `_criteria_for_entry(names or list(criteria_index), criteria_index, position)`, so an entry
+      with no `requirements` falls back to the whole document. **Also flagged in `next_action` as
+      likely already-satisfied; it is not** — 3.4 asserts `acceptance_criteria is None`, the unset
+      state task 1.7 measured on all 32 existing rows, and the mutation makes it a populated list.
 
 ## 5. Whole-suite and quality gates
 
