@@ -183,7 +183,97 @@ one big agent" — which the Sonnet row above shows is its own trap. The operato
 
 ---
 
-## 6. What the outside evidence says
+## 6. What the agents actually did with their tools
+
+Cost tells you the flow is expensive; it does not tell you what the roles *were*. Profiling every
+`tool_use` row (4,827 of them) by agent answers that, and it produced the two most surprising
+results in this file.
+
+```
+  dev (2467 calls)          tester (1190 calls)       Architect (764 calls)
+    708  Bash                217  PowerShell            154  Grep
+    447  Read                212  Read                   95  Bash
+    386  Grep                159  Grep                   80  Read
+    373  Edit                134  Bash                   78  send_message
+     79  Write               102  Edit                   73  PowerShell
+     71  record_evidence      61  Write                  47  ToolSearch
+     64  get_task             60  decide_evidence        45  update_task
+     56  update_task          58  send_message           33  get_task
+     39  send_message         51  list_evidence          26  Write
+     36  submit_checkpoint    49  get_task               20  Edit
+                                                         18  create_task
+```
+
+**Correction to this file's own first pass.** An initial classification of Edit/Write targets
+reported that dev touched product code only 3 times. That was wrong: it treated everything under
+`.agentweave/` as scratch, when `.agentweave/tasks/<task-id>/src` **is** the product source — agents
+work in a per-task worktree. The directory shapes actually written to, across all agents:
+
+```
+  192  LoopEngine/.agentweave/tasks/task-<ID>/src        <-- product source
+  174  LoopEngine/.agentweave/tasks/task-<ID>/test
+   84  ~/.claude/projects/...-LoopEngine/memory          <-- see below
+   46  LoopEngine/.agentweave/tasks/task-<ID>
+   31  LoopEngine/.agentweave/worktrees/dev/src
+```
+
+### 6a. Writes are not single-threaded — the tester is a second developer
+
+**The tester edited `engine.js`, LoopEngine's core product source, 31 times, plus `server.js` 3
+times** — 34 writes into a task worktree's `src/`, on top of 12 into `test/`.
+
+This is the precise condition Cognition names as what breaks multi-agent systems: *writes must stay
+single-threaded and additional agents must contribute intelligence rather than actions.* AgentWeave
+has **four writers**. The role labelled "tester" is not a reviewer that reports defects — it is a
+second implementer, invoked in a cold context, doing the first implementer's job after paying the
+4.2x re-derivation toll measured in §5.
+
+This strengthens the operator's proposal rather than complicating it. "Get rid of the tester" is not
+removing a safeguard; much of what that role does is *implementation that is happening in the most
+expensive possible place*. What must survive is narrower and cheaper than the role: the tester also
+made **60 `decide_evidence` and 51 `list_evidence` calls**, which is genuine adjudication and is
+what `reviewer_is_not_the_author` and the evidence gate depend on. That part is read-only, belongs
+at the end of a task, and costs almost nothing.
+
+So the recommendation sharpens from *collapse the tester* to **split it**: return the writing to the
+owner's loop, keep the adjudication as a read-only end-of-task gate.
+
+### 6b. The agents already built the checkpoint the architecture never gave them
+
+**The tester wrote 60 files into Claude Code's own memory directory** — outside the Hub, invisible to
+it — across 16 distinct files:
+
+```
+   22x MEMORY.md                        3x  fr70-missing-state-pending.md
+   10x sandbox-shell-quirks.md          3x  review-watchlist-missed-windows.md
+    3x d8d4b-rule-checks-review.md      3x  partial-evidence-gated-tasks.md
+    3x c6548-failure-backoff-review.md  2x  fr31-review-gate.md
+    3x approve-needs-reassign.md        1x  dont-complete-tasks-you-review.md
+```
+
+Those names are per-task review state (`d8d4b-...-review.md` is task `task-d8d4b03d722b`), pending
+findings, and — in `dont-complete-tasks-you-review.md` — **a rule about its own role that it kept
+forgetting between cold starts.**
+
+Nobody designed this. The agent invented a private checkpoint store because the architecture kept
+destroying its context and gave it no durable place to stand. It is the strongest available evidence
+for the checkpoint half of the proposed shape: the need is real enough that an agent built a worse
+version of it by hand, out of band, where the Hub cannot read it, review it, or show it to the
+operator — while the Hub's own checkpoint tools sat available and nearly unused:
+
+```
+  submit_checkpoint_notes    dev 36    Architect 2    tester 1    dev_2 0   = 39 writes
+  list_checkpoints           dev  1    Architect 1    tester 2    dev_2 0   =  4
+  read_checkpoint                      Architect 1                          =  1 READ
+```
+
+**Checkpoints were written 39 times and read once, in the entire corpus.** The mechanism the
+proposed shape depends on already exists, is already being written to, and is being read by nobody —
+because nothing in the flow makes the next turn start from it. That is a strong signal that the
+gap is not missing machinery but a missing *contract*: no turn is required to begin from the last
+checkpoint, so every turn begins from the repository instead, and pays §5's re-derivation toll.
+
+## 7. What the outside evidence says
 
 - **[Why Do Multi-Agent LLM Systems Fail? (Cemri et al., Berkeley, arXiv:2503.13657)](https://arxiv.org/abs/2503.13657)**
   — 1600+ annotated traces across 7 frameworks; 14 failure modes in 3 clusters, two of which are
@@ -209,7 +299,7 @@ one big agent" — which the Sonnet row above shows is its own trap. The operato
   localize/repair/validate pipeline with no agent loop beat SWE-agent (50.8% vs 33.6%) at lower cost
   per issue. Structure beat autonomy.
 
-## 7. How Claude Code's subagents differ, since the topologies look alike
+## 8. How Claude Code's subagents differ, since the topologies look alike
 
 ```
   AGENTWEAVE TODAY                      CLAUDE CODE SUBAGENTS
@@ -240,7 +330,7 @@ cost in §5. Context is not compressed, it is **duplicated per hop**.
 Note also *what* Claude Code delegates: overwhelmingly read-only search and exploration. Which is
 where Cognition independently landed.
 
-## 8. The shape this suggests
+## 9. The shape this suggests
 
 Nothing here is proposed; this is the shape the evidence points at, for a later change to argue
 properly.
@@ -290,18 +380,20 @@ staffing and sequencing are deterministic; the Hub already holds the task graph 
 `create_flow`, `create_loop` and the scheduler. **Orchestration should be code, not a model.** This
 is ~29% of the budget and is independent of whether the iteration loop is adopted.
 
-## 9. What would falsify this, and the honest counter-arguments
+## 10. What would falsify this, and the honest counter-arguments
 
 - **Author bias is real and this weakens a real defence.** An implementer that writes both the code
   and the tests can write a test that passes. This repo has already built machinery specifically for
   that (`reviewer_is_not_the_author`, the evidence and requirement gates). The answer is to keep an
   independent check and change its *frequency*, not to delete it. Any proposal that quietly drops it
   should be rejected.
-- **The tester's critiques may have been load-bearing.** This measurement counts the tester's cost;
-  it does **not** measure whether its findings were real defects that dev would otherwise have
-  shipped. *That measurement has not been done and it is the single biggest gap.* If the tester's
-  bug reports were mostly genuine and mostly missed by dev, collapsing the role is dangerous
-  regardless of price.
+- **The tester's critiques may have been load-bearing.** Partly answered by §6a and partly still
+  open. What is now measured: the tester wrote product source 34 times and adjudicated evidence 60
+  times, so the role is demonstrably two jobs, one of which is misplaced. What is **still not
+  measured**: whether its *findings* — the defects it reported rather than the code it wrote — were
+  real and would otherwise have shipped. Nobody has read its `send_message` bodies (58 of them). If
+  those reports were mostly genuine and mostly missed by dev, the adjudication half must survive in
+  a stronger form than a cheap end-of-task gate. **This is now the single biggest remaining gap.**
 - **One project, one window, one runner mix.** 274 turns from LoopEngine only. The AgentWeave
   project (`proj-06d090fb`) was not analysed, and no other harness was.
 - **The 23 unstarted tasks are the F352 staffing bug, not the cost.** Any argument that leans on
@@ -309,10 +401,12 @@ is ~29% of the budget and is independent of whether the iteration loop is adopte
 - **The `TATATATATATA` traces may encode a real bug** (a dispatch loop) rather than a design flaw.
   Not investigated. If so, its fix is small and separate.
 
-## 10. Open questions for the operator
+## 11. Open questions for the operator
 
-1. **Did the tester earn its $76?** Nobody has read its outputs to ask whether its findings were
-   real. This is the measurement that decides whether the role collapses or merely moves.
+1. **Did the tester earn its $76?** Half-answered by §6a: it spent much of it writing product source
+   in a cold context, which is the expensive way to do the implementer's job. The unanswered half is
+   whether its *reported defects* were real — 58 `send_message` bodies nobody has read. Cheap to
+   settle, and it decides whether the adjudication half stays a light gate or needs real teeth.
 2. **Is the Architect making judgements, or routing?** 96 turns. If routing, it is code. Sampling
    its outputs would settle it.
 3. **Scope:** does this become one change (collapse verification), several (full topology rework),
@@ -320,7 +414,7 @@ is ~29% of the budget and is independent of whether the iteration loop is adopte
 4. **Does the spec-to-task layer stay untouched?** This file assumes yes — it is the part the
    operator said works, and it sits above the boundary being discussed.
 
-## 11. The decision, in one line
+## 12. The decision, in one line
 
 Approving this means a spec loop on a named day for **one** of: the per-iteration budget and
 mandatory checkpoint (smallest, unblocks measurement); collapsing verification into the owner's loop
