@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-16T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-15-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "remedy-archive",
-    "next_action": "a-refusal-names-a-remedy-that-works 5.4 (tasks.md, openspec/changes/a-refusal-names-a-remedy-that-works/): hand-sync the agent-loops and task-lifecycle-governance deltas into openspec/specs/, move the change directory to archive/2026-09-16-a-refusal-names-a-remedy-that-works, and in scripts/drive/FINDINGS.md mark F353, F334, F365 and F367 Status: fixed <sha> (the sha of the commit that lands this task), correcting each finding's index paragraph to say so. Commit and push, then move current/next_action to close (tasks.md's own item is already queued next).",
+    "current": "close",
+    "next_action": "Close the window per night-window.md 'Ending the window': run py -3.11 scripts/usage_report.py --windows --since 2026-09-15, append it and a final log entry summarizing the night (a-refusal-names-a-remedy-that-works fully archived at b29c096/c282793, queue empty), commit and push, then set next_action to null.",
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "remedy-archive",
-            "status": "open",
+            "status": "done",
             "title": "a-refusal-names-a-remedy-that-works: 5.4 archive",
-            "detail": "Hand-sync deltas, archive, set F353/F334/F365/F367 Status to fixed <sha> in the same commit, correct the index paragraph."
+            "detail": "Done at iteration 8. Hand-synced the agent-loops and task-lifecycle-governance deltas into openspec/specs/ (validated 45/45 --strict --all); archived via 'openspec archive --yes --skip-specs' to archive/2026-09-16-a-refusal-names-a-remedy-that-works (commit b29c096). Marked F353, F334, F365, F367 Status: fixed in scripts/drive/FINDINGS.md, each naming its actual implementing commit (a2b947a groups 1-2, cf93ab6 group 3, 4515728+7343200 groups 4a-4b) plus the archiving commit b29c096; corrected F352's own paragraph to say its visibility half is now fixed and only its rung-3 half stays open; corrected two stale 'not yet archived' phrases from iteration 7's write-up (commit c282793)."
         },
         {
             "id": "close",
