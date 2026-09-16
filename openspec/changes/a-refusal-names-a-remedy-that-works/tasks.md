@@ -379,7 +379,7 @@ mutation and the observed failure beside the task when ticking it.
       `RuntimeError: <asyncio.locks.Lock …> is bound to a different event loop`, which is
       DEAD-ENDS' F314 signature verbatim (a documented pre-existing flake, unrelated to any
       Python this change touches). Tree is green for the purposes of this gate.
-- [ ] 5.3 Drive (night-window.md, *Driving*): a drive Hub on a free port with a fresh
+- [x] 5.3 Drive (night-window.md, *Driving*): a drive Hub on a free port with a fresh
       `profiles/` database; runners bound to `claude-haiku-4-5-20251001`; a flow with a document.
       Read:
       - `GET …/jobs/{id}/history` → 200 after a wedged review with a long title;
@@ -389,6 +389,46 @@ mutation and the observed failure beside the task when ticking it.
         text it received, read from its tool result.
 
       Leave no job enabled.
+
+      Done. `:8011`, profile `drive0916`, new harness `scripts/drive/t_d0916_refusal_remedy.py`.
+      One correction found live and applied before this ran clean: `TaskCreate.title` caps at 256
+      characters (measured: a 306-char `initial_tasks` title answered `422 string_too_long` before
+      any population could be built at all), so the drive's "long title" is 256 -- the product's
+      own maximum, matching task 2.4's own unit test rather than the ≥300 this task suggested.
+
+      CHECK 1: a loop's task, seeded at the 256-char title, wedged by hand to `under_review` under
+      a non-author reviewer (`rev`), no turn ever run. Firing answered `409` naming the task and
+      the reviewer; `GET .../jobs/{id}/history` answered **200**, carrying one `JobRun` whose
+      `error_summary` measured 486 characters (under the 500-char column). Recorded in FINDINGS.md
+      under F367 with a caveat: `rev`'s short name kept the assembled sentence under 500 without
+      needing 2.2's trim loop, so this proves the outcome (200, not 500, a clamped column) rather
+      than the trim path itself -- task 2.4's unit test already covers that at the real worst case.
+
+      CHECKS 2 and 3 share one population: a task authored, worked and completed by a real Haiku
+      turn (`dev`), through the ordinary flow route, so `agent_that_completed` genuinely names
+      `dev` (not an operator-walked completion, which F167 already shows this guard cannot
+      recognise). CHECK 2, real Chromium against the served bundle: the drawer's status menu still
+      offers `Move to under review` from `completed`; clicking it rendered, at
+      `task-status-refusal-{id}`, *"Cannot move task task-63648ee4f3cb to 'under_review' with
+      'dev' as its holder: it is the agent recorded as completing this task, so the move would
+      claim its own author is reviewing it. Land it, on the task, to review it yourself, or
+      dispatch a different agent's review turn (POST /agent/trigger with review_task_id)."*,
+      beside a visible `Land it` button. CHECK 3, a real Haiku turn asked through a plain prompt to
+      call `update_task` on its own held task: its tool result (read off
+      `GET /agent/dev/chat/{conversation_id}`, `output_kind == "tool_result"`) carried *"Error
+      calling tool 'update_task': Hub rejected PATCH /tasks/task-63648ee4f3cb (403): Cannot move
+      task task-63648ee4f3cb to 'under_review' with 'dev' as its holder: ... None of the task
+      tools you are offered reassigns a task; the operator can move it on."* -- the agent remedy,
+      not the operator's, exactly as D4 specifies by actor. Recorded in FINDINGS.md under F353.
+
+      One interruption during the run: a background process managing this drive was killed
+      mid-settle after the self-held task's authoring turn had already finished (queue showed
+      `completed: 1`, both agents idle) but before the script's own teardown ran, leaving
+      `job-56b808b3904d` briefly enabled. Found and disabled by a direct `GET /jobs` query before
+      checks 2-3 ran, and confirmed again at the end across every project the drive Hub held
+      (`GET /projects` × `GET .../jobs?include_archived=true`, two projects, zero enabled jobs).
+      The drive Hub process on `:8011` was then stopped. Neither `:8000` nor `:8010` was touched;
+      project ids were `proj-2da3edf9339c` and `proj-d156af755303`, neither forbidden.
 - [ ] 5.4 Archive:
       - sync `agent-loops` and `task-lifecycle-governance` deltas into `openspec/specs/`;
       - move the change to `archive/<date>-a-refusal-names-a-remedy-that-works`;

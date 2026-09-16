@@ -27956,6 +27956,39 @@ REV with F352). REV found two more places with this finding's shape, code-read:
 The change's remedy is now Land it, or a review dispatch (`POST /agent/trigger` with
 `review_task_id`).
 
+**DRIVE, 2026-09-16 (`a-refusal-names-a-remedy-that-works`, task 5.3, `:8011`, profile
+`drive0916`).** Built, unit-tested, not yet archived — this drive is task 5.3's own live check of
+D1/D4, the fix this finding names, against a real Hub, a real Chromium session and a real Haiku
+turn (`scripts/drive/t_d0916_refusal_remedy.py`). Population: one task authored, worked and
+completed by a real Haiku agent (`dev`) through the ordinary flow route, so `agent_that_completed`
+(the guard's own read of `TaskTransition.actor_agent`) genuinely names `dev` — not an
+operator-walked completion, which F167 already shows this guard cannot recognise as authored.
+
+CHECK 2 (real Chromium against the served bundle, `hub/hub/static/ui`, not a transcription): the
+drawer's status menu still offers `Move to under review` from `completed` — the transition map does
+not know who authored what — and clicking it renders, at `task-status-refusal-{id}`, verbatim:
+*"Cannot move task task-63648ee4f3cb to 'under_review' with 'dev' as its holder: it is the agent
+recorded as completing this task, so the move would claim its own author is reviewing it. Land it,
+on the task, to review it yourself, or dispatch a different agent's review turn (POST /agent/trigger
+with review_task_id)."* — beside a visible, enabled `Land it` button (`task-land-{id}`) in the same
+field. F353's whole complaint (a remedy naming a control the app does not have, with the one action
+that would work never named) is answered on screen: the sentence names Land it, and Land it sits
+right beside it.
+
+CHECK 3 (a real Haiku turn, not a guess): the same agent, in a fresh conversation, asked through a
+plain prompt to call `update_task` on the very task it holds. Its own `update_task` tool result
+(read off `GET /agent/dev/chat/{conversation_id}`, `output_kind == "tool_result"`) came back:
+*"Error calling tool 'update_task': Hub rejected PATCH /tasks/task-63648ee4f3cb (403): Cannot move
+task task-63648ee4f3cb to 'under_review' with 'dev' as its holder: it is the agent recorded as
+completing this task, so the move would claim its own author is reviewing it. None of the task
+tools you are offered reassigns a task; the operator can move it on."* — the agent remedy, not the
+operator's, exactly as D4 specifies by actor. The agent's own next turn-text correctly summarised
+this back in prose without being told to.
+
+Nothing here disproves what groups 1 and 4 claimed; both remedies fired for real, for the actor
+they are supposed to fire for, in the two surfaces (browser, agent tool result) a unit test cannot
+reach.
+
 ## F354 (B) — the operator's live agents launch the MCP server from the development working tree, so an unattended loop's uncommitted edits reach them mid-edit
 
 **Status:** open. Found 2026-09-13 on the operator's Hub.
@@ -28518,6 +28551,26 @@ stderr and two absolute paths (`hub/hub/api/v1/agent_trigger.py:966, 970`).
 
 **Observed so far:** nothing has failed. The `:8000` database's longest `error_summary` is 276
 characters over 43 rows, and the trial Hub's 3 rows are empty (mode=ro, `%TEMP%\f352r2\len.py`).
+
+**DRIVE, 2026-09-16 (`a-refusal-names-a-remedy-that-works`, task 5.3, `:8011`, profile
+`drive0916`).** Not yet fixed here (task 5.4, the archive step, does that) — this drive is
+task 5.3's own verification that the built D2 repair actually works live, not a unit test's
+transcription of it. `scripts/drive/t_d0916_refusal_remedy.py`, CHECK 1: a loop's one task, seeded
+at 256 characters — `TaskCreate.title`'s own maximum, confirmed live (`POST /jobs` with a 306-char
+`initial_tasks` title answered **422**, `string_too_long`, before this drive's first attempt could
+even build the population — so 256 is the worst case the product can ever hand this code, matching
+what task 2.4's own unit test used) — wedged by hand to `under_review` under a non-author reviewer,
+no turn ever run. Firing the job answered `409` naming the task and the reviewer, and
+`GET /jobs/{job_id}/history` answered **200** afterward, carrying one `JobRun` whose
+`error_summary` measured 486 characters — under the 500-char column and not itself truncated with
+`…`. **One caveat on what this does and does not prove:** the reviewer name used here (`rev`, 3
+characters) keeps the assembled sentence under 500 without the trim loop (`hub/hub/scheduler.py`'s
+`_wedged_review_reason`) ever having to act, so this drive proves the *outcome* D2 exists for
+(200, not 500, a clamped column) but does not itself exercise the trim path — that is exactly what
+task 2.4's unit test already covers directly, at the real worst case (32-char reviewer, 256-char
+title, 552 characters unmutated). Nothing here disproves group 2's claims; it confirms the
+end-to-end behaviour the unit tests inferred, through the real route, for the population the
+product can actually produce.
 
 **Related:** F108 (a route's return, not read by the rounds), F154 (the wedged-review sentence).
 

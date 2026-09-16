@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-16T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-15-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "remedy-drive",
-    "next_action": "a-refusal-names-a-remedy-that-works 5.3 (tasks.md, night-window.md's Driving section): a fresh drive Hub on a free port (never 8000/8010) with a fresh profiles/ database named drive0916 (drive0915/0915b are used), AW_BOOTSTRAP_API_KEY named explicitly, runners bound to claude-haiku-4-5-20251001 only, a flow with a document. Drive: GET .../jobs/{id}/history returns 200 after a wedged review with a long title; the drawer's status menu shows under_review on the author-held task with the refusal rendered beside 'Land it' (Chromium); one real Haiku agent turn asked to move that task to under_review, and the refusal text it actually received read from its tool result. Record findings in scripts/drive/FINDINGS.md. Leave no job enabled when done -- verify with a direct query, not by assumption. Then tick 5.3, commit, push, and move current/next_action on to remedy-archive (5.4: hand-sync agent-loops and task-lifecycle-governance deltas into openspec/specs/, move the change to archive/<date>-a-refusal-names-a-remedy-that-works, mark F353/F334/F365/F367 fixed <sha> in FINDINGS.md, correct the index paragraph).",
+    "current": "remedy-archive",
+    "next_action": "a-refusal-names-a-remedy-that-works 5.4 (tasks.md, openspec/changes/a-refusal-names-a-remedy-that-works/): hand-sync the agent-loops and task-lifecycle-governance deltas into openspec/specs/, move the change directory to archive/2026-09-16-a-refusal-names-a-remedy-that-works, and in scripts/drive/FINDINGS.md mark F353, F334, F365 and F367 Status: fixed <sha> (the sha of the commit that lands this task), correcting each finding's index paragraph to say so. Commit and push, then move current/next_action to close (tasks.md's own item is already queued next).",
     "queue": [
         {
             "id": "compose",
@@ -53,9 +53,9 @@
         },
         {
             "id": "remedy-drive",
-            "status": "open",
+            "status": "done",
             "title": "a-refusal-names-a-remedy-that-works: 5.3 drive",
-            "detail": "Fresh profile drive0916 (drive0915/0915b are used), free port (never 8000/8010), AW_BOOTSTRAP_API_KEY named, Haiku only, no job left enabled. Record in FINDINGS.md."
+            "detail": "Done at iteration 7. Drive Hub :8011, profile drive0916, new harness scripts/drive/t_d0916_refusal_remedy.py. Found live: TaskCreate.title caps at 256 chars (306 answered 422), so the drive's 'long title' is 256, the product's real max. Check 1 (F367/D2): wedged review under a 3-char reviewer name, fired 409, GET .../jobs/{id}/history -> 200, error_summary 486 chars (<500) -- proves the outcome, not the trim path itself (2.2's loop never had to fire at this length; task 2.4's unit test already covers the true worst case). Check 2 (F353/D1/D4, real Chromium against the served bundle): a task authored+completed by a real Haiku turn (dev, not operator-walked); the drawer's status menu still offers under_review, and the refusal at task-status-refusal-{id} names Land it verbatim beside a visible Land it button. Check 3 (F353/D4): the same agent's own update_task tool result, read from GET /agent/dev/chat/{conversation_id}, carried the distinct agent remedy ('None of the task tools you are offered reassigns a task; the operator can move it on.'). One interruption (a killed background process left one job briefly enabled) was found by direct query and fixed before checks 2-3 ran; re-verified zero enabled jobs across every project at the end. :8000/:8010 untouched; :8011 stopped afterward. Recorded in FINDINGS.md under F367 and F353, and in tasks.md (5.3 ticked)."
         },
         {
             "id": "remedy-archive",
