@@ -25,15 +25,15 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
-## 2026-09-17
+## 2026-09-16
 
-DAY WINDOW: 09:00-17:00
+DAY WINDOW: 10:15-17:00
 
 **Written 2026-09-16 by an interactive session, at the operator's instruction, after checking
-today's candidates directly against the code rather than trusting `FINDINGS.md` prose alone. Dated
-2026-09-17 rather than the day it was written: `AgentWeaveArmDay` was re-enabled at 09:16-09:59
-2026-09-16, already past that day's 08:55 trigger, so the window's first live firing under this
-section is the next morning.** No
+today's candidates directly against the code rather than trusting `FINDINGS.md` prose alone.
+`AgentWeaveArmDay`'s daily trigger was moved to 10:15 the same session, at the operator's
+instruction ("fire today"), so this window's first firing under this section is today, not
+tomorrow. The trigger stays at 10:15 going forward unless changed again.** No
 override to the day's default shape — compose the queue per `day-window.md` step 6 as usual. The
 drain count is **1** (`an-unstaffed-review-names-its-holders`, still unbuilt, still blocked on the
 operator's own decision — see below), so the default already gives exactly **one** spec loop
