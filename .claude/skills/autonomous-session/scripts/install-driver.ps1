@@ -185,9 +185,26 @@ $action = New-ScheduledTaskAction `
 # operator arming at 22:00 for an 08:00 start means the morning, and a trigger resolved against
 # today's date would be in the past and fire immediately -- which for an unattended run is the
 # difference between working while they sleep and working while they are still deciding.
+#
+# But "already passed" needs a grace period, or the rule eats its own trigger. arm-cycle.ps1 can
+# fire the SAME HH:mm it passes as -StartAtHHmm (an arm task scheduled to fire exactly when its
+# window opens, rather than a few minutes early) -- by the time this line runs, scheduler latency
+# and the checks above have already put "now" a few seconds or minutes past that HH:mm, so the
+# naive rule rolled the start to TOMORROW and then threw "no window" against TODAY's stop, because
+# tomorrow's start is always after today's stop. Measured 2026-09-16: AgentWeaveArmDay's trigger
+# was moved to fire at the day window's own 10:15 open, and this silently cost the entire
+# afternoon -- arm-cycle.ps1 wrote the state file, committed and pushed, then this threw and the
+# driver task was never registered, with no visible error anywhere an operator would look. A short
+# grace period distinguishes that race (seconds to minutes late) from the genuine overnight case
+# (hours late, meaning tomorrow): within it, start now instead of rolling a day.
+$startGraceMinutes = 15
 if ($StartAtHHmm) {
   $startInstant = [datetime]::ParseExact($StartAtHHmm, "HH:mm", [System.Globalization.CultureInfo]::InvariantCulture)
-  if ($startInstant -le (Get-Date)) { $startInstant = $startInstant.AddDays(1) }
+  if ($startInstant -le (Get-Date) -and $startInstant -gt (Get-Date).AddMinutes(-$startGraceMinutes)) {
+    $startInstant = (Get-Date).AddMinutes(1)
+  } elseif ($startInstant -le (Get-Date)) {
+    $startInstant = $startInstant.AddDays(1)
+  }
   if ($startInstant -ge $stopInstant) {
     throw "Start $($startInstant.ToString('yyyy-MM-dd HH:mm')) is not before stop $($stopInstant.ToString('yyyy-MM-dd HH:mm')); the run would have no window."
   }
