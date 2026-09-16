@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import requirement_links, spec_identity, task_dependency_writer
+from . import requirement_links, spec_identity, spec_reading, task_dependency_writer
 from .db.models import (
     Loop,
     SpecDocument,
@@ -91,6 +91,65 @@ def _title_for(entry: Dict[str, Any]) -> str:
     if isinstance(declared, str) and declared.strip():
         return declared.strip()[:MAX_TITLE].rstrip()
     return _title_from(entry.get("description") or "")
+
+
+def _render_criterion(criterion: Dict[str, Any]) -> Optional[str]:
+    """One line per criterion, or `None` for one that states no standard (design D8).
+
+    Never emits the literal `None`: a part that is absent or empty is left out rather than
+    stringified, and a criterion missing all three parts is skipped by the caller.
+    """
+    parts: List[str] = []
+    given = criterion.get("given")
+    if isinstance(given, str) and given.strip():
+        parts.append(f"Given {given}")
+    when = criterion.get("when")
+    if isinstance(when, str) and when.strip():
+        parts.append(f"when {when}")
+    then = criterion.get("then")
+    if isinstance(then, str) and then.strip():
+        parts.append(f"then {then}")
+    if not parts:
+        return None
+    parts[0] = parts[0][:1].upper() + parts[0][1:]
+    body = ", ".join(parts)
+
+    key = criterion.get("key")
+    if isinstance(key, str) and key.strip():
+        return f"{key}: {body}"
+    return body
+
+
+def _criteria_for_entry(
+    names: List[str],
+    criteria_index: Dict[str, List[Dict[str, Any]]],
+    position: Dict[str, int],
+) -> List[str]:
+    """The rendered criteria for a declared task's own `requirements` names (design D3/D4).
+
+    Collected under each name the entry gave — a repeated name contributes its group once
+    (`dict.fromkeys`, not a `set`: set iteration order for strings is not stable across processes,
+    which would store two approvals of the same file in different orders). Then one stable sort by
+    the position of the *name a criterion was grouped under* in the document's own requirement
+    order, falling back to last place for a name the document's requirement list no longer holds —
+    matching `spec_render._acceptance`.
+    """
+    collected: List[Tuple[int, Dict[str, Any]]] = []
+    for name in dict.fromkeys(names):
+        group = criteria_index.get(name)
+        if not group:
+            continue
+        rank = position.get(name, len(position))
+        for criterion in group:
+            collected.append((rank, criterion))
+    collected.sort(key=lambda item: item[0])
+
+    rendered: List[str] = []
+    for _, criterion in collected:
+        line = _render_criterion(criterion)
+        if line is not None:
+            rendered.append(line)
+    return rendered
 
 
 async def materialise(
@@ -168,6 +227,12 @@ async def materialise(
     # still created — see `test_re_approving_creates_no_duplicates`.
     already_served = await requirement_links.hand_made_requirement_ids(session, document.project_id)
 
+    # Built once, before the loop, through the same guarded helpers `criteria_by_requirement_key`
+    # uses (design D6/D7): a payload this code cannot read must fail the same way for every entry,
+    # not part-way through a committed partial board.
+    position = {key: index for index, key in enumerate(spec_reading.statements_by_key(payload))}
+    criteria_index = spec_reading.criteria_by_requirement_key(payload)
+
     created: List[Task] = []
     for entry in declared:
         if not isinstance(entry, dict):
@@ -184,9 +249,11 @@ async def materialise(
         wanted = entry.get("requirements")
         requirements: List[SpecRequirement] = []
         unresolved: List[str] = []
+        names: List[str] = []
         for named in wanted if isinstance(wanted, list) else []:
             if not isinstance(named, str) or not named:
                 continue
+            names.append(named)
             row = by_key.get(named) or by_identifier.get(identities.get(named, ""))
             if row is not None:
                 requirements.append(row)
@@ -202,6 +269,7 @@ async def materialise(
             continue
 
         description = entry.get("description") or ""
+        criteria = _criteria_for_entry(names, criteria_index, position)
         task = Task(
             id=f"task-{short_id()}",
             project_id=document.project_id,
@@ -214,6 +282,7 @@ async def materialise(
             spec_document_id=document.id,
             spec_task_key=key,
             loop_id=owning_loop.id if owning_loop is not None else None,
+            acceptance_criteria=criteria or None,
         )
         session.add(task)
         await session.flush()

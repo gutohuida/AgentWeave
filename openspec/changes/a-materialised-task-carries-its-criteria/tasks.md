@@ -89,14 +89,14 @@ in the task's own Done note.
 
 ## 2. Implementation
 
-- [ ] 2.1 Add the `isinstance(..., list)` guard **inside** `spec_reading.criteria_by_requirement_key`
+- [x] 2.1 Add the `isinstance(..., list)` guard **inside** `spec_reading.criteria_by_requirement_key`
       (`hub/hub/spec_reading.py:98`) **and inside `statements_by_key` (`:72`)**, not at this
       change's call site (design D7). Two reasons, both found by review: the helper's other caller,
       `requirement_view` at `:130` reached from `read_spec_document`
       (`api/v1/agent_actions.py:1399`), parses the same unvalidated file with no `try`/`except`, so
       a call-site guard leaves the identical `TypeError` returning a 500 there; and task 2.2's
       ordering now reads `payload["requirements"]`, whose `or []` at `:72` is the same hole.
-- [ ] 2.2 Call `criteria_by_requirement_key(payload)` **once, before the per-entry loop** (design
+- [x] 2.2 Call `criteria_by_requirement_key(payload)` **once, before the per-entry loop** (design
       D6/D7). For each created task: reduce its entry's `requirements` names with
       **`dict.fromkeys(...)`**, preserving first-appearance order — **not a `set`**, whose iteration
       order for strings varies between processes, so two approvals of the same file would store the
@@ -118,7 +118,7 @@ in the task's own Done note.
       groups in the entry's own order**: that drops any criterion whose requirement is absent from
       `payload["requirements"]`, which the `len(position)` fallback deliberately keeps, sorted last.
       Match on `named`, the payload key, **not** the resolved row's `.key` (design D3).
-- [ ] 2.7 Build the `position` map by enumerating the keys of
+- [x] 2.7 Build the `position` map by enumerating the keys of
       **`spec_reading.statements_by_key(payload)`** — not by iterating `payload["requirements"]`
       directly. Three reasons: that helper already carries task 2.1's guard, so the map is built
       through one guarded read rather than a second hand-rolled one; it returns only entries that are
@@ -129,17 +129,17 @@ in the task's own Done note.
       words "a guarded read" while leaving the helper's own hole open and 4.16 flipping nothing.
       `materialise()` has never read `requirements` before this change, so this is new exposure, not
       existing behaviour.
-- [ ] 2.3 Render each criterion to one string per design D2 and D8: prefix the handle
+- [x] 2.3 Render each criterion to one string per design D2 and D8: prefix the handle
       **only when it is a non-empty string** (`<key>: Given ..., when ..., then ...`), otherwise
       render `Given ..., when ..., then ...` with no prefix. Never emit the literal `None` for an
       absent part.
-- [ ] 2.6 Skip a criterion whose `given`, `when` and `then` are all **absent or empty** (design D8) —
+- [x] 2.6 Skip a criterion whose `given`, `when` and `then` are all **absent or empty** (design D8) —
       it states no standard. `spec_payload.py:96-100` sets no `min_length` on any of the three, so
       `""` passes `validate_payload` and a test written against `is None` alone would emit
       `"Given , when , then "`. A partially absent one is still attached, with the parts it has.
-- [ ] 2.5 Make the whole path total (design D6): no indexing that can raise, no assumption that the
+- [x] 2.5 Make the whole path total (design D6): no indexing that can raise, no assumption that the
       stored payload's `acceptance_criteria` is present, is a list, or holds well-formed entries.
-- [ ] 2.4 Leave `acceptance_criteria` unset when a task resolves no requirement, or when no
+- [x] 2.4 Leave `acceptance_criteria` unset when a task resolves no requirement, or when no
       criterion names any of its requirements — not an empty list where `None` is today's value,
       unless a test establishes that readers cannot tell the difference.
 

@@ -68,8 +68,11 @@ def statements_by_key(payload: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, 
     """`{requirement key: {statement, modal, rationale, party}}` as the document states it."""
     if not isinstance(payload, dict):
         return {}
+    raw = payload.get("requirements")
+    if not isinstance(raw, list):
+        return {}
     indexed: Dict[str, Dict[str, Any]] = {}
-    for entry in payload.get("requirements") or []:
+    for entry in raw:
         if not isinstance(entry, dict):
             continue
         key = entry.get("key")
@@ -95,7 +98,10 @@ def criteria_by_requirement_key(
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     if not isinstance(payload, dict):
         return grouped
-    for entry in payload.get("acceptance_criteria") or []:
+    raw = payload.get("acceptance_criteria")
+    if not isinstance(raw, list):
+        return grouped
+    for entry in raw:
         if not isinstance(entry, dict):
             continue
         owner = entry.get("requirement")

@@ -8,18 +8,18 @@
     "parent_branch":  "master",
     "parent_sha":  "31dcb3f",
     "stop_at":  "2026-09-17T07:00:00+01:00",
-    "iteration":  1,
+    "iteration":  2,
     "log_file":  ".claude/autonomous/2026-09-16-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "amtci-impl",
-    "next_action":  "Do section 2 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md: implement spec_tasks.materialise() in hub/hub/spec_tasks.py plus the two isinstance guards in hub/hub/spec_reading.py (:72, :98). Read design.md's Round log first, and note task order is 2.1, 2.2, 2.7, 2.3, 2.6, 2.5, 2.4 -- 2.7 builds the position map 2.2 consumes, read both before starting either. Match on what the entry NAMES not the resolved row's .key (D3). Use dict.fromkeys, not a set (2.2). Guards go INSIDE spec_reading.py's helpers, not the call site (D7). Commit when done.",
+    "current":  "amtci-tests",
+    "next_action":  "Do section 3 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md: write the ~22 tests (3.1-3.26 as listed, skip none). Implementation from §2 is done in hub/hub/spec_tasks.py (_render_criterion, _criteria_for_entry, materialise()) and hub/hub/spec_reading.py (guards in statements_by_key and criteria_by_requirement_key) -- read that code first, then hub/tests/test_spec_declared_tasks.py and hub/tests/test_spec_reading.py for the existing fixture/helper conventions before adding new tests. Several tests carry an explicit MUST clause on the fixture (e.g. 3.6's keys must not be alphabetical, 3.15's entry must list requirements in REVERSE of payload.requirements order, 3.11/3.26 must hold a non-dict list element) -- honour each literally, they exist to discriminate a naive implementation from the correct one. Run the new tests after writing them; do not just write and move on. Commit when done.",
     "queue":  [
                   {
                       "id":  "amtci-impl",
-                      "status":  "open",
+                      "status":  "done",
                       "title":  "§2 -- implement materialise() + spec_reading.py guards",
-                      "detail":  "ORDER: a-materialised-task-carries-its-criteria (operator-approved 2026-09-16). One function in hub/hub/spec_tasks.py + 2 isinstance guards in hub/hub/spec_reading.py. Read design.md Round log first -- 8 rounds argued this function."
+                      "detail":  "Done iteration 2: _render_criterion + _criteria_for_entry added to hub/hub/spec_tasks.py, materialise() wired (position map, criteria_index, per-entry names/acceptance_criteria); isinstance(list) guards added inside statements_by_key and criteria_by_requirement_key in hub/hub/spec_reading.py. Verified by execution (rendering, ordering, guard degradation) plus existing suites test_spec_declared_tasks.py + test_spec_reading.py (20 passed) and ruff/black on both files. tasks.md §2 (2.1,2.2,2.7,2.3,2.6,2.5,2.4) ticked."
                   },
                   {
                       "id":  "amtci-tests",
