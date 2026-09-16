@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "31dcb3f",
   "stop_at": "2026-09-17T07:00:00+01:00",
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-09-16-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "amtci-gate",
-  "next_action": "Do section 5 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md, the gates. 5.1: `py -3.11 -m pytest tests/ -q` from hub/ -- the full suite takes 15-47 minutes, so START IT IN THE BACKGROUND FIRST and do 5.2-5.4 while it runs; record the counts and compare them against the green baseline in spec-queue/APPROVALS.md, because 'zero NEW failures' is the bar, not zero failures. 5.2: `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311`, `mypy src/`. 5.3: `npx openspec validate a-materialised-task-carries-its-criteria --strict` (already passed at the end of iteration 4 -- re-run it, do not assume). 5.4 is the one with real work in it: take a REAL approved document (read-only, and never proj-5e960453 or proj-18e5d4e0 or anything on port 8000's database except through a mode=ro URI), compose a briefing, and record the CHARACTER COUNT the criteria block contributes against _LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000 at scheduler.py:2043. Do not assume MAX_REQUIREMENTS_PER_TASK = 3 bounds it -- that cap is enforced only on the transition to `proposed`, and an adopted document never passed it. Record the number; propose a bound ONLY if the measurement asks for one -- R3 already decided in task 1.6 that no agent-loops delta is needed, and a third review removed a delta added on a `362 x 12 x 3` figure that was arithmetic rather than an observation. Do NOT write a migration and do NOT touch hub/ui/ -- if you find yourself doing either you have misread the change. No implementation file should change in this iteration; if a gate fails, fix it and say so in the log rather than ticking around it. Commit when done.",
+  "current": "amtci-drive",
+  "next_action": "Do sections 6-7 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md, ONLY IF THEY GENUINELY FIT before stop_at (2026-09-17T07:00:00+01:00). If they don't fit, stop immediately, say so in the log, and set next_action to null -- leave the change unarchived for a later window; §5's gates are already green and committed, so nothing is lost by stopping here. 6.1: on the TRIAL Hub (:8010, from source per .claude/reference/hubs.md -- never :8000), approve a document declaring a task with criteria and confirm the created task carries them -- the trial Hub's spec_documents table is currently empty, so this requires actually creating and approving one, not just reading. 6.2: fire a loop on that task and read the briefing the agent actually received (not the model field). 6.3: confirm the task drawer renders the criteria in the UI without a bundle change. 6.4: confirm a briefing with a large criteria block still spawns a run -- scheduler.py:3088 / runner_commands.py:268 pass the briefing as one command-line argument, and pty_runner.py:68-88 records a prior incident on that path, so measure it, don't reason about it. 6.5: add one sentence to submit_spec_document's docstring in hub/hub/mcp_server.py (the acceptance-criteria counterpart to the existing tasks-creation sentence at mcp_server.py:1731-1735) -- .claude/rules/ loads extra rules for mcp_server.py edits, read them first, and commit in the same pass, never leave mid-edit uncommitted. 7.1: update openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md section 12 to record item 1 as built (note the effect is only measurable on tasks created after this ships, per design D5). 7.2: `openspec archive` is the OPERATOR's call, not this window's -- do not run it; leave the change approved-and-built for the operator to archive.",
   "queue": [
     {
       "id": "amtci-impl",
@@ -35,9 +35,9 @@
     },
     {
       "id": "amtci-gate",
-      "status": "open",
+      "status": "done",
       "title": "\u00a75 -- gates",
-      "detail": "Full suite from hub/ (background it, 15-47min), ruff/black --target-version py311/mypy, openspec validate --strict, 5.4's measurement. No migration, no UI bundle expected -- if you're editing hub/ui/ or writing a migration you've misread the change."
+      "detail": "Done iteration 5: full suite from hub/ -- 4440 passed, 86 skipped, 0 failed, 42:02, vs the 4415/86/0/27:46 baseline (+25 = exactly \u00a73's new test file, zero new failures). ruff/black --target-version py311/mypy all clean. openspec validate --strict passes. 5.4 measured against the real (and only) approved document in port 8000's database, spdoc-97d90a3506f5, via a mode=ro SQLite read of its already-materialised tasks.acceptance_criteria (real materialise() output, not a reconstruction): largest rendered block 1,307 characters, 33% of the 4,000-char checkpoint bound; no bound proposed, residual recorded. Found and discarded an uncommitted, unverified prior edit to tasks.md's \u00a75 (its own 5.1 note cited a section note that didn't exist) before redoing the section for real -- see iteration 5's log entry. No implementation file touched. Committed."
     },
     {
       "id": "amtci-drive",

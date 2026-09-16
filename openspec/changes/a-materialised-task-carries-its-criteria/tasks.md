@@ -413,17 +413,49 @@ reaching more than its target is reported as measured rather than trimmed.
 
 ## 5. Whole-suite and quality gates
 
-- [ ] 5.1 `py -3.11 -m pytest tests/ -q` from `hub/` — full suite, zero new failures. Record the
+- [x] 5.1 `py -3.11 -m pytest tests/ -q` from `hub/` — full suite, zero new failures. Record the
       counts.
-- [ ] 5.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+      **Done.** `py -3.11 -m pytest tests/ -q` from `hub/`, backgrounded so §5.2-5.4 ran while it
+      executed: **4440 passed, 86 skipped, 0 failed, 42:02** (2522.39s). Against the guarded
+      green-tree baseline recorded at the top of tonight's log (4415 passed, 86 skipped, 0 failed,
+      27:46 at `6d70710`): **+25 passed** — exactly the new `test_spec_criteria_reach_the_task.py`
+      file added in §3, nothing else moved — **86 skipped unchanged, 0 failed both times.** Zero
+      new failures, the actual bar, not zero failures. The longer wall-clock is this machine's own
+      variance run to run, not a regression signal by itself; the counts are what the bar measures.
+      Some `RuntimeError: Event loop is closed` warnings appear during teardown of unrelated
+      previously-existing tests (aiosqlite worker-thread cleanup racing an already-closed loop) —
+      cosmetic pytest teardown noise counted in the 261 warnings, not a failure, and not touched by
+      this change's files.
+- [x] 5.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
       --target-version py311`, `mypy src/` — clean.
-- [ ] 5.3 `openspec validate --strict a-materialised-task-carries-its-criteria` — passes.
-- [ ] 5.4 Measure what this actually adds to a briefing (carried from R3's task 1.6): for a real
+      **Done.** `ruff check src/ hub/ tests/` — "All checks passed!". `black --check src/ hub/hub/
+      hub/tests/ tests/ --target-version py311` — "578 files would be left unchanged." `mypy src/`
+      — "Success: no issues found in 22 source files."
+- [x] 5.3 `openspec validate --strict a-materialised-task-carries-its-criteria` — passes.
+      **Done.** `npx openspec validate a-materialised-task-carries-its-criteria --strict` —
+      "Change 'a-materialised-task-carries-its-criteria' is valid."
+- [x] 5.4 Measure what this actually adds to a briefing (carried from R3's task 1.6): for a real
       approved document, record the character count the criteria block contributes against the
       4,000-character checkpoint bound it sits beside. The ceiling is three requirements' worth of
       criteria (`spec_completeness.MAX_REQUIREMENTS_PER_TASK = 3`), but that cap is enforced only on
       the transition to `proposed`, so do not assume it for an adopted document. Record the number;
       propose a bound only if the measurement asks for one.
+      **Done.** Port 8000's database (`~/.agentweave/hub/data/agentweave.db`) holds exactly one
+      `approved`-phase document, `spdoc-97d90a3506f5` ("Loop engine with a dashboard for agent
+      loops") — read via a `mode=ro` SQLite URI only (`projects`, `spec_documents`, `tasks`
+      tables), never started/migrated/written. Rather than re-deriving the render from the raw
+      spec payload, measured the *actual persisted* `tasks.acceptance_criteria` for every task
+      already materialised from that document (the real output of `materialise()` on a real
+      approval, not a reconstruction) and rendered each exactly as `_compose_loop_briefing` does
+      (`"Acceptance criteria:"` + one `"- {criterion}"` line per entry, joined with `\n`,
+      `scheduler.py:2456-2460`). 13 of the document's materialised tasks carry criteria (2-9
+      criteria each). **Largest block: 1,307 characters** (`task-0be2ed219dd8`, 9 criteria) —
+      **33% of the 4,000-character checkpoint bound**, well clear of it. No bound is being
+      proposed: the measurement does not ask for one at today's real scale, and per task 1.6 the
+      criteria block sits beside the checkpoint's own budget rather than inside it, so it cannot
+      displace the checkpoint either way. Recorded as the residual task 1.6 already named: a
+      future document with more or larger criteria per task could still push a single block close
+      to or past 4,000 characters — unmeasured until a document that large actually exists.
 
 ## 6. Drive
 
