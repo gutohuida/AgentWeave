@@ -25,6 +25,79 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-17
+
+DAY WINDOW: 09:00-17:00
+
+**Written 2026-09-16 by an interactive session, at the operator's instruction, after checking
+today's candidates directly against the code rather than trusting `FINDINGS.md` prose alone. Dated
+2026-09-17 rather than the day it was written: `AgentWeaveArmDay` was re-enabled at 09:16-09:59
+2026-09-16, already past that day's 08:55 trigger, so the window's first live firing under this
+section is the next morning.** No
+override to the day's default shape — compose the queue per `day-window.md` step 6 as usual. The
+drain count is **1** (`an-unstaffed-review-names-its-holders`, still unbuilt, still blocked on the
+operator's own decision — see below), so the default already gives exactly **one** spec loop
+today. This section answers the one question the default leaves open: which finding it targets.
+
+### Point today's spec loop at F375
+
+**D-2/D-3/D-4 (R1/R2/R3): `F375` (A) — a bare `..` argument has no separator character, so rule 4
+inside `_judge_word` (`hub/hub/mcp_server.py`, currently lines 1141-1167) calls it "not a path" and
+lets it stand with no resolution against the workspace root — real traversal, on every platform, no
+escaping needed.** Filed 2026-09-15 by the verification round on `a-quote-can-spell-a-slash`; not
+fixed there by design (that change owns ANSI-C decoding, not the six-rule judge itself — its own
+entry says so explicitly). Re-confirmed this session by loading the module fresh off `HEAD`
+(`31dcb3f`) and calling `_judge_word('..', 'cp notes.md ..', False, root, dialect, trusted=True)`
+directly: returns `None` (**allowed**, no rule ever checks it) on both `bash` and `powershell`
+dialects. No decision blocks this — build it.
+
+- R1 reads `FINDINGS.md`'s F375 entry in full first. It already names the shape ("a bare `.`, and
+  any word that is *only* `.`/`..` segments joined by nothing, though only `..` moves the
+  boundary") and the fix direction: resolve it against `root` the way rule 5 already does for a
+  plain relative path, rather than exempting a no-separator word from every rule that could catch
+  it.
+- **This touches `hub/hub/mcp_server.py`, the file F354 (B, open) warns about**: the operator's
+  live `:8000` Hub spawns it fresh, uncommitted mid-edit included, on every real turn. A spec round
+  only reads the file, so this does not bite today — flag it for whichever night eventually
+  implements, so the edit lands in one committed pass rather than sitting uncommitted while live
+  turns are firing.
+- Same round discipline as `F332`: R1 explores and proposes, R2 and R3 each independently re-derive
+  the argument against the code — not against R1's prose.
+
+### Do not re-open these — they are blocked on a decision, not a proposal gap
+
+Checked against `openspec/changes/` this session; recording it so today's one slot is not spent
+re-deriving what already stalled:
+
+- **F352 rung-3** (`an-unstaffed-review-names-its-holders`) — already carried through R1/R2/R3/REV.
+  Stopped because its argument rests on an F352-free option (e) that needs re-derivation against
+  option (f). That is the operator's call, unanswered across five-plus handoffs — see
+  `decisions_for_user` in `.claude/autonomous/STATE-night.json`.
+- **F299 / F301** (the access-path question, bundled with F339/F340) — F299's own proposal
+  (`an-absent-approver-is-not-named`) was rejected 2026-09-13 and archived unbuilt; F301's own
+  entry says explicitly "Not fixed here." Both wait on the same open access-path decision from
+  2026-09-13, still unanswered.
+
+### Next, once a future day's slot is free
+
+**F215** (B) — the operator's screen shows evidence waiting for a decision and gives no control to
+accept or reject it. `POST /spec/evidence`, `GET /spec/evidence`,
+`POST /spec/evidence/{id}/decision` all exist and work
+(`hub/hub/api/v1/agent_actions.py:1148,1211`; registered in `agents.py:1178`); zero references
+anywhere in `hub/ui/src` or the served bundle, confirmed this session by grep against both. Never
+proposed — `openspec/changes/archive/` has no F215 hit. First item of the "work-lands arc"
+(`openspec/explorations/2026-08-30-release-roadmap.md`); F124 (a loop's work never reaching `main`)
+is the item after it and should not be picked up before F215 exists. Take this the next day the
+drain count allows a fresh proposal.
+
+### Standing note
+
+`AgentWeaveArmDay` is `Disabled` as of this writing. This section takes effect whenever the day
+window next fires — whether by re-enabling the scheduled task or by running the playbook by hand —
+not automatically.
+
+---
+
 ## 2026-09-14
 
 DAY WINDOW: 09:00-19:00
