@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-16T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-15-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "close",
-    "next_action": "Close the window per night-window.md 'Ending the window': run py -3.11 scripts/usage_report.py --windows --since 2026-09-15, append it and a final log entry summarizing the night (a-refusal-names-a-remedy-that-works fully archived at b29c096/c282793, queue empty), commit and push, then set next_action to null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -65,11 +65,11 @@
         },
         {
             "id": "close",
-            "status": "open",
+            "status": "done",
             "model": "sonnet",
             "effort": "medium",
             "title": "Close the window",
-            "detail": "Final log entry per night-window.md 'Ending the window', usage_report.py --windows --since 2026-09-15 output; next_action null."
+            "detail": "Done at iteration 9. Final log entry written (usage: night total ~$27.17 list across both dates, 11 iterations). Queue empty; next_action null."
         }
     ],
     "decisions_for_user": [
