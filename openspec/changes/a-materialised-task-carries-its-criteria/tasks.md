@@ -54,6 +54,12 @@ in the task's own Done note.
       applies to the checkpoint alone. And the existing requirement is justified by growth *over
       time* ("a long-running loop's accumulated history"), which criteria do not do — they are fixed
       by the document. Residual length growth is accepted and recorded; the measurement moves to 5.4.
+      **Annotated after the third review: this conclusion is right and its reasoning was incomplete.**
+      The design's own test had two clauses -- displace the checkpoint *or overrun the job message* --
+      and this answered only the first. The second review answered the second clause and added an
+      `agent-loops` delta; the third review showed the figure justifying it was `362 x 12 x 3`
+      rather than an observation, and the delta was removed. Net effect is this row's answer, but
+      nobody should read it as having been established here.
 - [x] 1.7 **R3**: confirm the corpus measurement independently.
       **Done — holds, and more precisely than R1 stated it.** Re-run read-only against the live
       database: hand-made n=18 with 0 NULL and 0 `[]`; spec-materialised n=32 with **32 NULL and 0
@@ -84,19 +90,24 @@ in the task's own Done note.
 ## 2. Implementation
 
 - [ ] 2.1 Add the `isinstance(..., list)` guard **inside** `spec_reading.criteria_by_requirement_key`
-      (`hub/hub/spec_reading.py:98`), not at this change's call site (design D7, corrected by the
-      second review): the helper's other caller, `requirement_view` at `:130` reached from
-      `read_spec_document` (`api/v1/agent_actions.py:1399`), parses the same unvalidated file with
-      no `try`/`except`, so guarding only the new call site leaves the same `TypeError` returning a
-      500 there. `hub/tests/test_spec_reading.py:213` already covers the helper.
+      (`hub/hub/spec_reading.py:98`) **and inside `statements_by_key` (`:72`)**, not at this
+      change's call site (design D7). Two reasons, both found by review: the helper's other caller,
+      `requirement_view` at `:130` reached from `read_spec_document`
+      (`api/v1/agent_actions.py:1399`), parses the same unvalidated file with no `try`/`except`, so
+      a call-site guard leaves the identical `TypeError` returning a 500 there; and task 2.2's
+      ordering now reads `payload["requirements"]`, whose `or []` at `:72` is the same hole.
 - [ ] 2.2 Call `criteria_by_requirement_key(payload)` **once, before the per-entry loop** (design
-      D6/D7). For each created task, take its entry's `requirements` names — de-duplicated,
-      first-appearance order — and concatenate their groups **in `payload.requirements` declaration
-      order**, keeping each group's internal order (design D4 as reversed by the second review, to
-      match `spec_render._acceptance` at `hub/hub/spec_render.py:305-318`). Match on `named`, the
-      payload key, **not** the resolved row's `.key` (design D3). A repeated name is not refused
-      anywhere — `spec_payload.py:279-285` checks membership only, and the approval path does not
-      validate — so the de-duplication is load-bearing, not tidiness.
+      D6/D7). For each created task: reduce its entry's `requirements` names to a **set**, collect
+      every criterion belonging to any of them, then apply **one stable sort** keyed by
+      `position.get(criterion_requirement, len(position))`, where `position` maps each key in
+      `payload.requirements` to its index — i.e. the exact algorithm of `spec_render._acceptance`
+      (`hub/hub/spec_render.py:314-318`), not a paraphrase of it. **Do not concatenate per-requirement
+      groups**: that drops any criterion whose requirement is absent from `payload.requirements`,
+      which the `len(position)` fallback deliberately keeps (sorted last). Match on `named`, the
+      payload key, **not** the resolved row's `.key` (design D3).
+- [ ] 2.7 Build the `position` map through a guarded read of `payload["requirements"]` (task 2.1),
+      never a bare iteration — `materialise()` has never read that key before this change, so this
+      is new exposure, not existing behaviour.
 - [ ] 2.3 Render each criterion to one string per design D2 and D8: prefix the handle
       **only when it is a non-empty string** (`<key>: Given ..., when ..., then ...`), otherwise
       render `Given ..., when ..., then ...` with no prefix. Never emit the literal `None` for an
@@ -118,32 +129,43 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
 - [ ] 3.3 A task naming several requirements carries all their criteria.
 - [ ] 3.4 A task naming no requirement carries no criteria, and approval is not refused.
 - [ ] 3.5 A requirement with no criteria contributes nothing, and approval is not refused.
-- [ ] 3.6 Criterion order follows the document (design D4).
+- [ ] 3.6 Criteria for a SINGLE requirement keep the order the document wrote them in (the stable
+      half of design D4). The cross-requirement half is 3.15's; an earlier wording said only "order
+      follows the document", which became ambiguous when D4 was reversed.
 - [ ] 3.7 A requirement whose row `key` has drifted from the payload key still gets its criteria —
       the case D3 now turns on. Replaces R1's key-vs-identifier test, which pinned a case task 1.3
       measured to be impossible.
 - [ ] 3.11 A stored payload whose `acceptance_criteria` is malformed (absent, not a list, a scalar,
       or holding entries without the expected fields) still creates its tasks, with no criteria and
       no raise (design D6/D7). Assert through `materialise_quietly`, since that is the path approval
-      uses and the one that would hide a raise. **The document MUST declare at least two tasks with
-      the fault reachable on the second**, and the test MUST assert that *both* exist — a
-      single-entry fixture passes accidentally and proves nothing, because the flush is inside the
-      per-entry loop (`spec_tasks.py:218-219`). **A payload that never passed `validate_payload` is
-      the realistic case, not a contrived one** — see task 1.5.
+      uses and the one that would hide a raise. **The document MUST declare at least two tasks and
+      the test MUST assert that both exist** — that is what proves totality. (An earlier wording
+      required "the fault reachable on the second entry"; that is unconstructible, because a
+      payload-level malformation is uniform across entries and, with the index built once before
+      the loop, raises before any `session.add`.) **A payload that never passed `validate_payload`
+      is the realistic case, not a contrived one** — see task 1.5.
 - [ ] 3.13 A task's criteria carry the criterion key, and two criteria on the same requirement are
       distinguishable from one another (design D2). Without this, D2's decision — argued as
       irreversible because D5 forbids backfill — is pinned by nothing.
 - [ ] 3.14 An entry naming the same requirement twice attaches that requirement's criteria once,
       not twice (task 2.2).
-- [ ] 3.15 Criteria that interleave in the document are attached **grouped by requirement, in
-      `payload.requirements` declaration order, stable within a requirement** — the same order
-      `spec_render._acceptance` renders the document's own acceptance table in (design D4 as
-      reversed). **This test is inverted from its original form**, which asserted payload order.
-- [ ] 3.20 A criteria block longer than the bound is included up to it and the truncation is
-      visible, not silently dropped (the `agent-loops` delta). Assert on the composed briefing.
+- [ ] 3.15 Criteria interleaved in the document are attached in `payload.requirements` declaration
+      order, stable within a requirement — the order `spec_render._acceptance` uses. **The entry
+      MUST list its requirements in the reverse of `payload.requirements` order**, or the test does
+      not discriminate: a naive entry-order implementation and the correct one agree whenever the
+      two orders coincide. (Inverted from its original form, which asserted payload order.)
 - [ ] 3.21 An entry whose requirements are all already served by existing work creates no task, and
       the approval is not refused — the `already_served` skip at `spec_tasks.py:169,196-202`, which
       no round had named and which makes scenario 1's premise satisfiable while its conclusion fails.
+- [ ] 3.22 `requirement_view` over a payload whose `acceptance_criteria` is a scalar returns rather
+      than raising — the `read_spec_document` path (`api/v1/agent_actions.py:1399`). Without this,
+      nothing distinguishes D7's guard-in-the-helper from a guard at the call site, since 3.18
+      passes either way.
+- [ ] 3.23 A criterion whose `requirement` is absent from `payload.requirements` is still attached,
+      sorted last — the `len(position)` fallback `spec_render._acceptance` uses and the group
+      concatenation dropped.
+- [ ] 3.24 A payload whose `requirements` is a scalar creates every declared task with no criteria
+      and no raise (task 2.7's new exposure, the `statements_by_key` hole).
 - [ ] 3.16 A criterion with no handle is attached with its given/when/then and **no `None` appears
       anywhere in the rendered string** (design D8). Assert on the string, not on the model field —
       the defect is in what a reader sees.
@@ -169,17 +191,17 @@ mutation reverted with `git checkout`. A mutation that flips no test means the t
 pin what they claim to.
 
 - [ ] 4.1 Match criteria on the resolved row's `.key` instead of the entry's `named` → 3.7 fails.
-- [ ] 4.6 Let a malformed criterion entry raise instead of being skipped → 3.11 fails, **and fails
-      by leaving a committed partial board** (the entries before the fault, with no dependency
-      edges), not by producing no tasks. Record which rows survived: that is the observation the
-      mutation exists to make, and the reason 3.11 needs two entries.
+- [ ] 4.6 Let a malformed criterion entry raise instead of being skipped → 3.11 fails by producing
+      **no tasks at all**. Corrected: an earlier wording expected a committed partial board, which
+      contradicted design D6 as corrected — with the index built once before the loop (task 2.2) a
+      payload-level malformation raises before the first `session.add`/`flush`
+      (`spec_tasks.py:218-219`), so a prefix is not reachable.
 - [ ] 4.7 Render without the criterion key → 3.13 fails.
 - [ ] 4.8 Order criteria by raw `payload.acceptance_criteria` position instead of by requirement
       → 3.15 fails. **Inverted from its original form**, which mutated toward grouping and would
       have been satisfied by the prescribed implementation itself once D7 mandated the helper — the
       contradiction the second review found.
 - [ ] 4.12 Skip the de-duplication of an entry's repeated requirement names → 3.14 fails.
-- [ ] 4.13 Remove the criteria bound from the briefing → 3.20 fails.
 - [ ] 4.9 Always prefix the handle, including when it is absent → 3.16 fails (the string contains
       `None:`).
 - [ ] 4.10 Remove the `isinstance(..., list)` guard from task 2.1 → 3.18 fails, and fails by
@@ -187,7 +209,14 @@ pin what they claim to.
 - [ ] 4.11 Attach criteria that state nothing → 3.17 fails.
 - [ ] 4.2 Attach every criterion in the document regardless of requirement → 3.2 fails.
 - [ ] 4.3 Drop the `then` from the rendered string → 3.8 fails.
-- [ ] 4.4 Sort criteria by key instead of document order → 3.6 fails.
+- [ ] 4.4 Sort criteria by key within a requirement instead of keeping written order → 3.6 fails.
+- [ ] 4.8b Order by the ENTRY's requirement list instead of `payload.requirements` → 3.15 fails.
+      Without this the ordering is unpinned: 4.8 mutates toward a third algorithm (raw payload
+      position) and does not discriminate the entry-order implementation from the correct one.
+- [ ] 4.14 Drop criteria whose requirement is absent from `payload.requirements` instead of sorting
+      them last → 3.23 fails.
+- [ ] 4.15 Move the guard from inside the helper to this change's call site → 3.22 fails.
+- [ ] 4.16 Remove the guard from `statements_by_key` → 3.24 fails.
 - [ ] 4.5 Attach criteria to tasks resolving no requirement → 3.4 fails.
 
 ## 5. Whole-suite and quality gates
@@ -215,7 +244,9 @@ pin what they claim to.
 
 ## 7. Close-out
 
-- [ ] 6.4 Confirm the briefing still spawns with a large criteria block: drive a task whose criteria
+- [ ] 6.4 Confirm the briefing still spawns with a large criteria block. No bound is being added
+      (design open question 2), so this is the check that the accepted residual risk is really
+      benign: drive a task whose criteria
       approach the bound and verify the run starts. The briefing reaches the runner as one
       command-line argument (`scheduler.py:3088`, `runner_commands.py:268`), and `pty_runner.py:68-88`
       records a prior incident on that path — measure it, do not reason about it.

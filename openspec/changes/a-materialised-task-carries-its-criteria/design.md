@@ -215,8 +215,22 @@ unvalidated file this change insists must not cost a document its tasks.
 
 One line inside the helper — `raw = payload.get("acceptance_criteria")`, return early unless it is a
 list — fixes both callers, and is what CLAUDE.md's "cleanest solution wins" argues for.
-`hub/tests/test_spec_reading.py:213` already exercises the helper's grouping, so the change is
-covered there.
+
+**The same guard is needed on `statements_by_key`, and the D4 reversal is what makes it necessary —
+found by the third review.** `spec_reading.py:72` reads `for entry in payload.get("requirements") or
+[]`, character-for-character the hole being closed at `:98`. Until the reversal this did not matter
+to this change, because **`materialise()` never reads `payload["requirements"]` at all** — it uses
+the database rows (`spec_tasks.py:149-159`) and `spec_identity.read_identity`, which is total
+(measured: `read_identity({"requirements": 5})` returns `({}, 0)`). D4's reversal introduces the
+first raw read of that key, so it introduces the hazard with it. Under `materialise_quietly` the
+resulting `TypeError` produces **zero tasks with the approval reporting success** — what this design
+calls its most serious risk, reintroduced by a later decision in new code.
+
+**A guard is not pinned by a test that passes either way.** Test 3.18 asserts through
+`materialise_quietly` and passes identically whether the guard sits in the helper or at this
+change's call site, so it does not pin D7's relocation at all — the same "pinned by nothing" defect
+the first review fixed for D2. `hub/tests/test_spec_reading.py:205-215` exercises grouping order
+only and nothing reaches `requirement_view` with a scalar. Task 3.22 closes that.
 
 CLAUDE.md's standing preference is that the cleanest solution wins; a second grouping of the same
 data, differing from this one in the interleaving case its docstring names, is the opposite of that.
@@ -285,9 +299,38 @@ the question the other way, after a real incident. `criteria_by_requirement_key`
 the same side, calling per-caller re-derivation *"wrong, for a document whose criteria interleave"*
 (`spec_reading.py:91-93`).
 
-**Match `spec_render._acceptance` exactly**: requirements in declaration order, criteria stable
-within a requirement. A task's criteria then read in the same order as the rows of the document's
-own acceptance table, which is what R1 was reaching for and got backwards.
+**Match `spec_render._acceptance` exactly — and "exactly" means its algorithm, not a paraphrase of
+its effect.** It builds a position map from `payload.requirements` and applies **one stable sort**:
+
+```python
+position = {r.key: i for i, r in enumerate(payload.requirements)}
+ordered = sorted(criteria, key=lambda c: position.get(c.requirement, len(position)))
+```
+
+**The third review found that the paraphrase this design first shipped does not reproduce it.**
+"De-duplicate the entry's names, then concatenate their groups in `payload.requirements` order"
+differs in two ways, both measured:
+
+- **It silently drops criteria whose requirement is missing from `payload.requirements`.**
+  `position.get(..., len(position))` sorts such a criterion *last but keeps it*; a
+  concatenation-of-groups never visits it. Executed: `_acceptance` yields
+  `['ac2','ac1','ac3','ac4']` where the group concatenation yields `['ac2','ac1','ac3']`. This is
+  reachable exactly where D3 and D6 say the interesting cases are — the approval route parses an
+  unvalidated file, so a hand-edited document can name a requirement in `tasks[].requirements` and
+  in a criterion while the `requirements` list no longer holds it. The task still resolves it from
+  the database rows (`spec_tasks.py:190`) and its criteria vanish — violating this change's own
+  first SHALL.
+- **The sentence named two orderings at once** — "de-duplicated, first-appearance order" *and* "in
+  `payload.requirements` declaration order" — which are different results whenever an entry lists
+  its requirements in a different order from the document: `['ac1','ac3','ac2']` against
+  `['ac2','ac1','ac3']`.
+
+So the rule is: collect the criteria for the entry's requirement names, then apply that one stable
+sort with `len(position)` as the fallback. Not a concatenation of groups.
+
+**Repeated names still de-duplicate.** An entry naming the same requirement twice is not refused
+anywhere (measured: `requirements: ["req-a", "req-a"]` is accepted), so the names are reduced to a
+set before their criteria are collected — otherwise the criteria appear twice.
 
 **This reversal also dissolves a contradiction the second review found (its F1).** D7 mandates
 reusing `criteria_by_requirement_key`, which returns `{requirement key: [criterion, ...]}` and
@@ -380,15 +423,37 @@ Two consequences:
    **13,032** — more than three times the cap the checkpoint beside it gets, from real documents
    rather than a contrived one.
 
-   **Decision: bound the criteria block, truncating rather than omitting**, following the pattern
-   this very capability already uses for the checkpoint — *"An oversized prior checkpoint is
-   truncated, not omitted"* (`openspec/specs/agent-loops/spec.md:286-291`). A standard the agent can
-   partly read beats a turn that fails to spawn, and beats silently dropping the standard entirely.
+   **Decision, after the third review: no bound in this change, and no second capability.** A
+   bound was added on the strength of that ~13,032 figure and has been removed, because the figure
+   did not survive checking: it is exactly `362 × 12 × 3` — three independent marginal maxima
+   multiplied — and was presented in this design and in the proposal as an *observed* worst case
+   "from real documents rather than a contrived one". It was neither observed nor from any one
+   document.
 
-   **This adds a second modified capability.** `agent-loops` gains a delta spec, reversing R3's
-   answer. The proposal's Capabilities section is corrected accordingly, and this is a real scope
-   increase over what R1 through R4 believed they were proposing — recorded plainly rather than
-   folded in quietly.
+   **The measured worst real three-requirement block over the same corpus is 5,462 characters**
+   (`spec/capabilities/agent-conversation-workspace/spec.html`), 1.37× the checkpoint's cap rather
+   than "more than three times" it, against a 32,767-character `CreateProcess` ceiling. The typical
+   figure was likewise a product of means (`164 × 2.92 × 3 = 1,437`). And the corpus declares **zero
+   tasks**, so it contains no instance of the quantity being sized at all.
+
+   Three further defects in the bound as drafted, each sufficient on its own:
+
+   - **It had no implementation task.** `tasks.md` §2 edited only `spec_reading.py` and
+     `spec_tasks.py`; nothing created the cap, while test 3.20 and mutation 4.13 referenced it.
+   - **The proposal forbade it** — Non-goals said "no new briefing section, no new scheduler
+     branch", Impact listed neither `scheduler.py` nor `spec_reading.py`, and Goals still said
+     "confined to one function".
+   - **It contradicted D8.** Slicing a block to a character cap lands mid-criterion, presenting a
+     criterion whose `then` has been cut off as though it were whole — precisely the harm D8 exists
+     to prevent. Nothing said to truncate at a criterion boundary; "the fixed size bound" named two
+     different bounds in one requirement; and "SHALL make the truncation visible" contradicted the
+     checkpoint's deliberately invisible truncation (`scheduler.py:2469-2470`) that the same
+     requirement kept unchanged.
+
+   **The residual risk is therefore accepted and unmitigated, as R3 originally had it** — but now
+   with a real number behind it rather than an absent one. A criteria bound may still be worth
+   having on context-cost grounds. That is a different argument, it needs its own evidence, and it
+   belongs in its own change.
 
    ~~R3's two reasons, kept because both are still true and neither answers the question:~~
    - **No displacement is possible.** The criteria block (`scheduler.py:2456-2460`) and the prior
@@ -480,6 +545,28 @@ Two consequences:
   mutation 4.10**, the `already_served` skip makes scenario 1's conclusion false while its premise
   holds, two SHALLs were over-broad, and the ordering decision was pinned by nothing durable — the
   same defect the first review fixed for D2 and left here.
+
+- **Third adversarial review** (Opus, over the state the second review left, which had had no
+  verification pass at all). Verdict: **do not approve**. It found that the `agent-loops` scope
+  increase **had no implementation task** while three places in the proposal and design forbade the
+  edit it needed; that the D4 reversal introduced a **new unguarded read of `payload["requirements"]`**
+  — `materialise()` had never read that key, and `statements_by_key` (`spec_reading.py:72`) carries
+  the identical hole D7 closes at `:98`, so the reversal reintroduced this design's own worst
+  failure in new code; that task 2.2's algorithm **did not match `spec_render._acceptance`** and
+  silently dropped criteria whose requirement is absent from `payload.requirements`, while naming
+  two different orderings in one sentence; that test 3.15 and mutation 4.8 **did not discriminate**
+  the correct ordering from the naive one; that mutation 4.6 contradicted D6 as corrected and test
+  3.11's fixture was unconstructible; that D7's guard relocation was **pinned by no test**; and —
+  most seriously — that **the ~13,032-character figure justifying the whole scope increase was
+  `362 × 12 × 3`**, a product of three independent marginal maxima, presented in the proposal as an
+  observation "from real documents". The real worst three-requirement block is 5,462 characters, the
+  corpus declares zero tasks, and the `agent-loops` delta was removed.
+
+  It also **confirmed** that the D4 reversal itself is correct (and found it is a shipped
+  requirement, `openspec/specs/spec-document-authority/spec.md:756-779`, citing the same incident),
+  and that **the common case survives all six passes' accumulated guards** — a document declaring
+  one to three requirements with criteria still produces a task whose criteria render under "What
+  the author was asked to build" for a loop- or flow-fired review.
 
 **What this round discipline caught that a single pass would not:** R1 named a hazard that does not
 exist and prescribed the wrong remedy for it; R2 removed the hazard but justified the remedy with a

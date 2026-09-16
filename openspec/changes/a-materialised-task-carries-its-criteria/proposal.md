@@ -82,21 +82,24 @@ None.
   the name the board shows"* (`openspec/specs/spec-document-authority/spec.md:541`), which governs
   the same `materialise()` path and is the pattern to follow.
 
-- `agent-loops`: the briefing's bound extends to a claimed item's acceptance criteria, truncating
-  rather than omitting them, following the pattern that capability already uses for the prior
-  checkpoint.
+**A second capability was added and then removed, and the reason is recorded so it is not re-added
+without new evidence.** The second adversarial review re-opened whether the briefing needs a bound on
+criteria, correctly observing that R3 had answered only half the design's own two-part test. It is
+true that the briefing reaches the Claude runner as a single command-line argument
+(`hub/hub/scheduler.py:3088`, `hub/hub/runner_commands.py:268`), that nothing truncates it, and that
+`MAX_REQUIREMENTS_PER_TASK = 3` bounds requirements rather than the count or length of their
+criteria. But the figure that justified acting on it — a "~13,032-character observed worst case" —
+**was not an observation.** The third review showed it is exactly `362 × 12 × 3`: the maximum
+criterion length, times the maximum criteria per requirement, times the requirement cap — three
+independent marginal maxima that co-occur in no document.
 
-**This second capability is a scope increase over what R1 through R4 believed they were proposing,
-and it is recorded here rather than folded in quietly.** R1 raised the question, R3 answered "no
-bound needed", and the second adversarial review found that answer addressed only half of it: the
-design's own test was whether a document could *"displace the prior checkpoint **or overrun the job
-message**"*, and only displacement was checked. The briefing reaches the runner as a single
-command-line argument (`hub/hub/scheduler.py:3088`, `hub/hub/runner_commands.py:268`), nothing
-truncates it, and `MAX_REQUIREMENTS_PER_TASK = 3` bounds requirements rather than the number or
-length of their criteria. Measured over this repository's own 1,319 acceptance criteria, a
-three-requirement task contributes about 1,438 characters typically and about **13,032** at the
-observed worst case — against a 4,000-character cap for the checkpoint beside it. See design.md's
-open question 2.
+**Measured properly over the same 41 payloads and 1,319 criteria, the worst real three-requirement
+block is 5,462 characters** (`spec/capabilities/agent-conversation-workspace/spec.html`), against a
+32,767-character `CreateProcess` ceiling. That does not support a delivery-failure argument, and the
+corpus contains **zero declared tasks**, so it never held an instance of the thing being sized. A
+criteria bound may still be worth having on context-cost grounds — a different argument, needing its
+own evidence — and it belongs in its own change rather than riding this one on a number that did not
+survive checking.
 
 ## Impact
 
