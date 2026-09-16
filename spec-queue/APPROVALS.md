@@ -46,6 +46,19 @@ ones do, all 32 NULL.
 Earlier handoffs carried it as an open question inferred from "do R1->R2->R3 ourselves". It is not
 open any more; do not re-raise it, and do not re-author this change in the trial Hub.
 
+### The tree was green at 22:46, so step 3 is already done
+
+`py -3.11 -m pytest tests/ -q` from `hub/`, run by the interactive session that wrote this section:
+**4415 passed, 86 skipped, 0 failed, 27:46**, pytest exit 0. Measured at commit **`6d70710`**, which
+is this branch's tip and carries **no product code** — everything since `2a9d536` is
+`openspec/` and `spec-queue/` prose. So it is a true baseline for tonight's build.
+
+**Skip `night-window.md` step 3's own green-tree run and spend the 15-47 minutes on the change
+instead** — but only if `git log` still shows `6d70710` as the last commit touching `hub/` or `src/`
+when you compose. If anything else has landed, the measurement is stale: run the gate yourself and
+say so in the log. The suite emits a `RuntimeError: Event loop is closed` warning during teardown;
+that is pre-existing noise on a green run, not a failure, and it is not yours.
+
 ### Read this before writing a line of it
 
 **`design.md`'s Round log, all of it, first.** Eight passes have argued about this one function, and
