@@ -36,14 +36,29 @@ in the task's own Done note.
 - [x] 1.4b **R2**: new finding — `materialise_quietly` catches every exception and returns `[]`
       (`spec_tasks.py:416-423`), so a raise inside criteria-matching creates **no tasks at all**
       while the approval reports success. Recorded as design D6; adds tasks 2.5 and 3.11.
-- [ ] 1.5 **R3**: re-derive independently of R2 — a fresh comparison of the proposal against the
-      code, not a re-read of R2's notes. Report anything R2 confirmed that does not hold.
-- [ ] 1.6 **R3**: measure the worst-case briefing a *valid* document can produce (most criteria
-      attachable to one task) and decide whether `agent-loops`' briefing bound must be modified. If
-      yes, this change gains a delta spec for `agent-loops` and the proposal's Capabilities section
-      is corrected.
-- [ ] 1.7 **R3**: confirm the corpus measurement independently — re-run the 18/18 vs 0/32 split
-      read-only against the live database, and say whether it still holds.
+- [x] 1.5 **R3**: re-derive independently of R2.
+      **Done — R2's central justification does not hold.** R2 argued that the criterion's
+      `requirement` and the entry's `requirements` "cannot disagree" because both are validated
+      against the same `known` set. But the approval route reads the file and parses it with
+      `extract_payload`, **not** `validate_payload` (`api/v1/spec.py:1533-1537`), and
+      `spec_adoption.py` never validates at all (`:39,190-230`). `validate_payload` therefore
+      constrains what can be *saved through the Hub* and says nothing about what `materialise()`
+      receives. D3's conclusion (match on `named`) survives on the replacement reason recorded in
+      design: both fields come from the same file and are self-consistent within it. D6 is upgraded
+      from prudent to load-bearing. New accepted consequence + test 3.12.
+- [x] 1.6 **R3**: decide whether `agent-loops`' briefing bound must be modified.
+      **Done — no, and the proposal's Capabilities section stands unchanged.** The criteria block
+      (`scheduler.py:2456-2460`) and the prior checkpoint (`:2462-2471`) are appended to the same
+      `lines` list in sequence, so criteria cannot displace or truncate the checkpoint; the only cap
+      in `_compose_loop_briefing` is `_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000` (`:2043`) and it
+      applies to the checkpoint alone. And the existing requirement is justified by growth *over
+      time* ("a long-running loop's accumulated history"), which criteria do not do — they are fixed
+      by the document. Residual length growth is accepted and recorded; the measurement moves to 5.4.
+- [x] 1.7 **R3**: confirm the corpus measurement independently.
+      **Done — holds, and more precisely than R1 stated it.** Re-run read-only against the live
+      database: hand-made n=18 with 0 NULL and 0 `[]`; spec-materialised n=32 with **32 NULL and 0
+      `[]`**. The field is never written by `materialise()` rather than written empty, which
+      independently confirms task 2.4's instruction to leave it unset.
 
 ## 2. Implementation
 
@@ -76,7 +91,10 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
 - [ ] 3.11 A stored payload whose `acceptance_criteria` is malformed (absent, not a list, or holding
       entries without the expected fields) still creates its tasks, with no criteria and no raise
       (design D6). Assert through `materialise_quietly`, since that is the path approval uses and
-      the one that would hide a raise.
+      the one that would hide a raise. **A payload that never passed `validate_payload` is the
+      realistic case, not a contrived one** — see task 1.5.
+- [ ] 3.12 A file whose task entries and criteria use different namespaces attaches no criteria to
+      those tasks, creates them anyway, and does not raise (design D3's accepted consequence).
 - [ ] 3.8 Every attached criterion carries its given, its when and its then.
 - [ ] 3.9 Re-approval does not revisit or duplicate criteria on an already-created task (design D5).
 - [ ] 3.10 A created task's criteria render into a loop briefing as one line per criterion — the
@@ -103,6 +121,10 @@ pin what they claim to.
 - [ ] 5.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
       --target-version py311`, `mypy src/` — clean.
 - [ ] 5.3 `openspec validate --strict a-materialised-task-carries-its-criteria` — passes.
+- [ ] 5.4 Measure what this actually adds to a briefing (carried from R3's task 1.6): for a real
+      approved document, record the character count the criteria block contributes against the
+      4,000-character checkpoint bound it sits beside. Record the number; propose a bound only if
+      the measurement asks for one.
 
 ## 6. Drive
 

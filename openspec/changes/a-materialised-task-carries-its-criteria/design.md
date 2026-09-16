@@ -103,10 +103,31 @@ halves are wrong:
 **And the row's key is exactly the thing that can drift.** `spec_index.py:216-218` says so in its
 own comment — *"The key can move: an agent may rename its handle while the statement stands. The
 identifier is what everything points at"* — and assigns `row.key = declared.key` on every reindex.
-Matching on `row.key` therefore couples this change to index freshness for no benefit, while
-matching on `named` stays inside one namespace: **the criterion's `requirement` and the entry's
-`requirements` are both payload keys, validated against the same `known` set in the same call.**
-They cannot disagree.
+Matching on `row.key` therefore couples this change to index freshness for no benefit.
+
+**R3 correction — the conclusion stands, R2's reason for it does not.** R2 justified matching on
+`named` by saying the criterion's `requirement` and the entry's `requirements` are *"both payload
+keys, validated against the same `known` set in the same call"*. That is false for the payload
+`materialise()` actually receives:
+
+- The approval route reads the **file** and parses it with `extract_payload`, **not**
+  `validate_payload` (`hub/hub/api/v1/spec.py:1533-1537`), then hands the result straight to
+  `materialise_quietly`.
+- `spec_adoption.py` never calls `validate_payload` at all — it uses `extract_payload` plus its own
+  title/kind checks (`:39,190-230`).
+
+So `validate_payload` constrains what can be **saved through the Hub**, and guarantees nothing about
+what `materialise()` is given. A hand-edited or adopted file can hold anything.
+
+**The right reason to match on `named` is simpler and survives that:** the criterion's `requirement`
+and the entry's `requirements` come from **the same file**, so whatever namespace that file uses, it
+uses consistently. Matching stays inside one document. Matching against the DB row's `key` crosses
+into a namespace the file does not control and the index can move underneath.
+
+**Accepted consequence:** a file that names its task requirements in one namespace and its criteria
+in another attaches no criteria to those tasks. That is a silent miss, and it is deliberately
+preferred to a wrong attribution — it degrades to exactly today's behaviour, which is the state this
+change improves on rather than a regression. Task 3.12 pins it.
 
 `unresolved` names (`:194`, absorbed as free text at `:227-229`) contribute no criteria. Under the
 validation above an unresolved name should be unreachable for a validated payload, so this needs no
@@ -125,12 +146,18 @@ log nobody reads."
 
 So the implementation must be total over any shape the stored payload can hold: no `[...]` indexing
 that can `KeyError`, no assumption that `payload["acceptance_criteria"]` is present, is a list, or
-holds dicts with the expected fields. The payload reaching `materialise()` is the **stored** dict
-(`materialise(session, document, payload...)`, `spec_tasks.py:99`), not a validated `SpecPayload`,
-and `_Part` keeps unknown fields (`spec_payload.py:58-68`), so a document written under another
-schema version can carry shapes this code has never seen.
+holds dicts with the expected fields.
 
-A test should assert that a malformed `acceptance_criteria` block does not prevent task creation.
+**R3 upgraded this from prudent to load-bearing.** R2 justified D6 by noting that `materialise()`
+receives the stored dict rather than a validated `SpecPayload`, and that `_Part` keeps unknown
+fields (`spec_payload.py:58-68`). R3 found the stronger fact: the payload is parsed off **the file
+on disk at approval time** with `extract_payload` (`api/v1/spec.py:1533-1537`), and the adoption
+path never validates at all. Nothing anywhere guarantees that the dict reaching this code has ever
+satisfied `validate_payload`. A document a person edited in their editor between save and approval
+is an ordinary case, not a pathological one.
+
+A test should assert that a malformed `acceptance_criteria` block does not prevent task creation,
+and it must run through `materialise_quietly`, because that is the path that would hide the raise.
 
 ### D4 — Ordering follows the document
 
@@ -179,11 +206,24 @@ on tasks created after it ships.
 ## Open Questions
 
 1. ~~D2's key prefix~~ — **closed by R2**: include it, on the lossy-and-unbackfillable asymmetry.
-2. **Does the briefing need a criteria bound?** Still open. **R3 owns this**, and it is now the only
-   question that could still add a second modified capability to this change. R1's note that
-   `agent-loops`' bound covers the prior checkpoint alone was confirmed by R2 at
-   `openspec/specs/agent-loops/spec.md:274-291` and `scheduler.py:2468-2471`, but nobody has yet
-   measured the worst case a *valid* document can produce.
+2. ~~Does the briefing need a criteria bound?~~ — **closed by R3: no, and `agent-loops` is not
+   modified.** Two independent reasons:
+   - **No displacement is possible.** The criteria block (`scheduler.py:2456-2460`) and the prior
+     checkpoint (`:2462-2471`) are both appended to the same `lines` list, in that order. They do
+     not compete for a budget; criteria cannot truncate or evict the checkpoint. The only cap in
+     `_compose_loop_briefing` is `_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000` (`:2043`), and it applies
+     to the checkpoint alone.
+   - **It is a different hazard from the one that requirement exists for.** `agent-loops`' bound is
+     justified by *"so that a long-running loop's accumulated history cannot grow the size of what a
+     single firing is asked to read"* — growth over **time**. A task's criteria are fixed by its
+     document and do not grow with the loop's history. Extending a requirement about accumulation to
+     cover something that does not accumulate would blur what it protects.
+
+   **Residual, accepted and stated rather than hidden:** total briefing length now grows with the
+   document. A task naming many requirements with many criteria each lengthens every firing for that
+   task. This is bounded by the document's own size, which a person wrote, and the alternative is
+   the re-derivation this change exists to remove. Task 1.6's measurement is carried into
+   implementation as task 5.4 rather than being dropped.
 3. ~~Is `spec_payload`'s referential check sufficient?~~ — **closed by R2, by running it.** It
    refuses both a criterion and a task entry that names a requirement the document does not define.
 
@@ -198,5 +238,19 @@ on tasks created after it ships.
   **added D6** (`materialise_quietly` swallows every exception, so a bug here empties the board
   rather than the criteria list), **closed D2** for inclusion of the criterion key, and **verified**
   the referential-integrity claim R1 had only inferred.
-- **R3** — not yet run. Owns open question 2, and should re-derive independently rather than
-  checking R2's work.
+- **R3** re-derived independently and **overturned R2's reasoning on its central point**. R2 had
+  justified D3 by appeal to `validate_payload`; R3 found that the approval route parses the file
+  with `extract_payload` (`api/v1/spec.py:1533-1537`) and that adoption never validates, so
+  `validate_payload` constrains saving and not materialising. **D3's conclusion survives on a better
+  reason** (both fields come from the same file, so they are self-consistent within it), **D6 is
+  upgraded from prudent to load-bearing**, and a new accepted consequence is recorded with a test
+  (3.12). R3 also **closed open question 2** — no `agent-loops` change, because the two blocks are
+  concatenated rather than competing and criteria do not accumulate over time — and independently
+  **re-measured the corpus**: all 32 spec-materialised tasks are `acceptance_criteria IS NULL`, none
+  `[]`, which also confirms task 2.4's instruction to leave the field unset.
+
+**What this round discipline caught that a single pass would not:** R1 named a hazard that does not
+exist and prescribed the wrong remedy for it; R2 removed the hazard but justified the remedy with a
+guarantee that does not hold where it matters; R3 kept the remedy and replaced the guarantee. The
+instruction in the code has been the same since R2 — the *reason* for it was wrong until R3, and
+the reason is what the next person edits against.
