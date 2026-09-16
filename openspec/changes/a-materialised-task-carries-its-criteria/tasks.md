@@ -60,6 +60,27 @@ in the task's own Done note.
       `[]`**. The field is never written by `materialise()` rather than written empty, which
       independently confirms task 2.4's instruction to leave it unset.
 
+- [x] 1.8 **R4**: probe the reused helper (design D7) directly against hostile payloads rather than
+      trusting the review's read of it. **Done.** Ran `criteria_by_requirement_key` from `hub/`
+      over ten shapes. `None`, a non-dict payload, an absent key, `None`, a string, a dict and a
+      list of scalars all degrade to `{}`; **`{"acceptance_criteria": 5}` raises
+      `TypeError: 'int' object is not iterable`**, confirming the review's hole and making task
+      2.1's `isinstance` guard load-bearing.
+- [x] 1.9 **R4**: new finding — the helper preserves a missing handle as `None`, so D2's rendering
+      emits the literal `"None: Given g, when w, then t"`, and a criterion declaring nothing at all
+      emits `"None: Given None, when None, then None"`. Neither raises; **both violate the
+      identifiability requirement the review's own fix added**, and the second injects noise into
+      the reviewer's briefing. Recorded as design D8; changes task 2.3 and the delta spec.
+- [x] 1.10 **R4**: check whether anything can overwrite a task's criteria after creation.
+      **Done — nothing can.** `acceptance_criteria` is on `TaskCreate` only
+      (`schemas/tasks.py:45,64`, written at `api/v1/tasks.py:770`); it is absent from `TaskUpdate`
+      (`:120-142`) and from MCP `update_task(task_id, status, notes)`. The hazard of an agent
+      clearing its own standard does not exist. But D5 is thereby **permanent** for the 32 existing
+      tasks: no supported route can ever give them criteria.
+- [x] 1.11 **R4**: the review's new scenario *"Attaching criteria changes nothing about which tasks
+      exist"* was phrased as approving one document twice, which `existing_keys` makes a no-op and
+      therefore vacuous. Reworded to two documents, and it now pins counts, titles and keys.
+
 ## 2. Implementation
 
 - [ ] 2.1 Use the existing `spec_reading.criteria_by_requirement_key(payload)`
@@ -75,8 +96,12 @@ in the task's own Done note.
       it attaches a requirement's criteria twice when an entry names it twice. A repeated name is
       not refused anywhere — `spec_payload.py:279-285` checks membership only, and the approval path
       does not validate at all.
-- [ ] 2.3 Render each criterion to one string per design D2, prefixed with the criterion key
-      (`<key>: Given ..., when ..., then ...`) per task 1.2.
+- [ ] 2.3 Render each criterion to one string per design D2 and D8: prefix the handle
+      **only when it is a non-empty string** (`<key>: Given ..., when ..., then ...`), otherwise
+      render `Given ..., when ..., then ...` with no prefix. Never emit the literal `None` for an
+      absent part.
+- [ ] 2.6 Skip a criterion whose `given`, `when` and `then` are all absent (design D8) — it states
+      no standard. A partially absent one is still attached, with the parts it has.
 - [ ] 2.5 Make the whole path total (design D6): no indexing that can raise, no assumption that the
       stored payload's `acceptance_criteria` is present, is a list, or holds well-formed entries.
 - [ ] 2.4 Leave `acceptance_criteria` unset when a task resolves no requirement, or when no
@@ -112,6 +137,17 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
 - [ ] 3.15 Criteria that interleave in the document (two requirements' criteria alternating) are
       attached in document order, not grouped by requirement (design D4). Test 3.6 with a single
       requirement cannot catch this.
+- [ ] 3.16 A criterion with no handle is attached with its given/when/then and **no `None` appears
+      anywhere in the rendered string** (design D8). Assert on the string, not on the model field —
+      the defect is in what a reader sees.
+- [ ] 3.17 A criterion with no given, no when and no then is not attached, and the task is still
+      created (design D8, task 2.6).
+- [ ] 3.18 A payload whose `acceptance_criteria` is a scalar (`5`) creates every declared task with
+      no criteria and no raise — the exact `TypeError` task 1.8 measured, through
+      `materialise_quietly`.
+- [ ] 3.19 Two documents declaring the same tasks, one with criteria and one without, create the
+      same tasks with the same titles and keys, differing only in criteria (the review's scenario as
+      R4 reworded it — the one-document phrasing was vacuous under `existing_keys`).
 - [ ] 3.12 A file whose task entries and criteria use different namespaces attaches no criteria to
       those tasks, creates them anyway, and does not raise (design D3's accepted consequence).
 - [ ] 3.8 Every attached criterion carries its given, its when and its then.
@@ -133,6 +169,11 @@ pin what they claim to.
 - [ ] 4.7 Render without the criterion key → 3.13 fails.
 - [ ] 4.8 Group criteria by requirement instead of walking the document once → 3.15 fails, and 3.14
       fails too if the grouping is concatenated per named requirement.
+- [ ] 4.9 Always prefix the handle, including when it is absent → 3.16 fails (the string contains
+      `None:`).
+- [ ] 4.10 Remove the `isinstance(..., list)` guard from task 2.1 → 3.18 fails, and fails by
+      creating no tasks, which is D6's failure mode reproduced deliberately.
+- [ ] 4.11 Attach criteria that state nothing → 3.17 fails.
 - [ ] 4.2 Attach every criterion in the document regardless of requirement → 3.2 fails.
 - [ ] 4.3 Drop the `then` from the rendered string → 3.8 fails.
 - [ ] 4.4 Sort criteria by key instead of document order → 3.6 fails.

@@ -26,9 +26,16 @@ something the document did not say.
 
 Attaching criteria SHALL NOT change which tasks are created, their identity, or their titles.
 
-An attached criterion SHALL be identifiable as the criterion the document declared, so that anything
-later reporting on one can say which it was. A criterion that arrives unidentifiable cannot be
-matched back to the document, and nothing that already exists can recover the link afterwards.
+An attached criterion that declares a handle SHALL carry it, so that anything later reporting on one can say which it was.
+
+A criterion that arrives unidentifiable cannot be matched back to the document, and nothing that
+already exists can recover the link afterwards — a task's criteria can only be set when the task is
+created, so what is lost here is lost permanently. Where a document declares no handle for a
+criterion, the criterion SHALL still be attached: its statement is the part the work is judged
+against, and withholding it to punish a missing handle would trade the standard for the label.
+
+A criterion that states no starting state, no event and no outcome SHALL NOT be attached. It carries
+no standard, and presenting it to a reader as though it did is worse than its absence.
 
 A document whose acceptance criteria cannot be read SHALL still have its declared tasks created.
 Criteria state a standard for work; failing to read them is a reason to create the work without its
@@ -83,10 +90,24 @@ standard, never a reason to create less of the work than the document declared.
 
 #### Scenario: An attached criterion says which criterion it is
 
-- **WHEN** a document declares two criteria against the same requirement
+- **WHEN** a document declares two criteria against the same requirement, each with its own handle
 - **AND** a task naming that requirement is created
-- **THEN** each attached criterion identifies which declared criterion it came from
+- **THEN** each attached criterion carries the handle the document gave it
 - **AND** the two are distinguishable from one another without re-reading the document
+
+#### Scenario: A criterion with no handle is still attached, and says nothing false about its identity
+
+- **WHEN** a document declares a criterion with a starting state, an event and an outcome but no handle
+- **AND** a task naming its requirement is created
+- **THEN** the criterion is attached with its starting state, event and outcome
+- **AND** nothing in what the task carries presents a handle the document did not declare
+
+#### Scenario: A criterion stating nothing is not attached
+
+- **WHEN** a document declares a criterion against a requirement with no starting state, no event and no outcome
+- **AND** a task naming that requirement is created
+- **THEN** that criterion is not among the task's criteria
+- **AND** the task is still created
 
 #### Scenario: Unreadable criteria do not cost the document its tasks
 
@@ -97,5 +118,7 @@ standard, never a reason to create less of the work than the document declared.
 
 #### Scenario: Attaching criteria changes nothing about which tasks exist
 
-- **WHEN** a document is approved with acceptance criteria and again without them, all else equal
-- **THEN** the same tasks are created in both cases, with the same identities and the same titles
+- **WHEN** two documents declare the same tasks against the same requirements, and one declares acceptance criteria while the other declares none
+- **AND** both are approved
+- **THEN** each creates the same number of tasks, with the same titles and the same declared keys
+- **AND** the tasks differ only in the criteria they carry

@@ -203,6 +203,44 @@ data, differing from this one in the interleaving case its docstring names, is t
 **The index is built once, before the per-entry loop**, for the reason in D6: a payload this code
 cannot read must fail the same way for every entry, not part-way through.
 
+### D8 — Rendering must be total in output, not only in control flow — **added by R4**
+
+R4 probed `criteria_by_requirement_key` directly against ten hostile payloads. Two results matter.
+
+**The scalar hole is real**, confirming the review rather than taking it on trust:
+`{"acceptance_criteria": 5}` raises `TypeError: 'int' object is not iterable`. `{"...": "abc"}`,
+`{"...": {"a": 1}}` and `{"...": [1, 2]}` all degrade harmlessly to `{}`. So the
+`isinstance(..., list)` guard in task 2.1 is load-bearing, not decoration.
+
+**And a case neither the rounds nor the review reached: the helper preserves a missing handle as
+`None`.** `{"requirement": "r1", "key": None, "given": "g", "when": "w", "then": "t"}` returns
+`{'key': None, 'given': 'g', ...}`, and `{"requirement": "r1"}` alone returns all four as `None`.
+
+Under D2's `<key>: Given ..., when ..., then ...` those render as the literal strings
+`"None: Given g, when w, then t"` and `"None: Given None, when None, then None"`. **Neither raises,
+and both violate the requirement the review's own fix added** — a criterion rendered `None:` does
+not carry the handle the document gave it, and two handle-less criteria render identically, so they
+are not distinguishable. The second is worse: a line of pure noise inserted into the reviewer's
+briefing under the heading "Acceptance criteria", which is the opposite of this change's purpose.
+
+Reachable exactly where D6 says: `AcceptanceCriterion.key` is a required `str` under
+`validate_payload` (`spec_payload.py:92`), and the approval path does not validate.
+
+**Decisions:**
+
+- Render the handle **only when it is a non-empty string**. Otherwise render
+  `Given ..., when ..., then ...` with no prefix. Attaching the criterion still beats withholding
+  it: the statement is what the work is judged against, and the handle is the label.
+- **Skip a criterion whose `given`, `when` and `then` are all absent.** It states no standard, and a
+  `Given None, when None, then None` line is worse than its absence.
+- Render a *partially* absent criterion with the parts it has, rather than dropping it — the spec's
+  "binary outcome" scenario is about not discarding the `then` in favour of the `when`, not about
+  refusing an incomplete declaration.
+
+This is why D6's "total" is stated as totality of **output**, not merely absence of an exception. A
+function that cannot raise but emits `"None: Given None"` has satisfied the letter of D6 and
+defeated the change.
+
 ### D4 — Ordering follows the document
 
 Criteria are attached in the order they appear in `payload.acceptance_criteria`, not grouped by
@@ -216,10 +254,24 @@ the tests depend on.
 re-approval never revisits a task it created earlier. Tasks that exist today keep empty criteria.
 
 This is a deliberate limit, not an oversight: a backfill would have to decide what to do about a
-task whose document has since been revised, and about criteria an operator or agent has edited by
-hand since. **The consequence is that this change does nothing for the 32 tasks that motivated it**
-— it changes what happens next, not what already happened. Anyone measuring its effect must measure
-on tasks created after it ships.
+task whose document has since been revised. **The consequence is that this change does nothing for
+the 32 tasks that motivated it** — it changes what happens next, not what already happened. Anyone
+measuring its effect must measure on tasks created after it ships.
+
+**R4 found that this is stronger than "not backfilled": `acceptance_criteria` is write-once.** It is
+a field of `TaskCreate` (`hub/hub/schemas/tasks.py:45,64`), written at `api/v1/tasks.py:770`, and it
+appears on **no** update path — not on `TaskUpdate` (`schemas/tasks.py:120-142`), and not in the MCP
+surface, whose `update_task(task_id, status, notes)` (`mcp_server.py`) cannot reach it.
+
+Two consequences:
+
+- **A hazard that does not exist, checked and recorded so nobody re-checks it:** no agent can
+  overwrite or clear the criteria it is being judged against. The standard is immutable once set.
+- **The 32 existing tasks can never acquire criteria through any supported route** — not by the
+  operator in the UI, not by an agent, not by re-approval. Only a direct database write, or deleting
+  them so a re-approval re-materialises them. D5's limit is therefore permanent for those rows, and
+  R2's irreversibility argument for D2 is not merely supported by "no backfill" but by "no write
+  path at all".
 
 ## Risks / Trade-offs
 
@@ -314,6 +366,18 @@ on tasks created after it ships.
   name (now task 2.2, tests 3.14/3.15, mutation 4.8). It also found the bound that closes open
   question 2 properly (`MAX_REQUIREMENTS_PER_TASK = 3`) and one inaccurate statistic in the
   proposal, both since corrected.
+
+- **R4** (after the review, at the operator's instruction) probed the reused helper by execution
+  rather than trusting the review's read of it. It **confirmed** the scalar hole
+  (`TypeError: 'int' object is not iterable`) and **confirmed a hazard does not exist** —
+  `acceptance_criteria` appears on no update path, so no agent can clear the standard it is judged
+  against. It found two things the review did not: **a handle-less criterion renders as the literal
+  `"None: …"`**, violating the identifiability requirement the review's own fix had just added and,
+  in the all-absent case, injecting `"Given None, when None, then None"` into the reviewer's
+  briefing (now D8, tests 3.16-3.18, mutations 4.9-4.11); and **the review's new "changes nothing
+  about which tasks exist" scenario was vacuous**, because approving one document twice creates
+  nothing under `existing_keys` (now reworded to two documents). It also sharpened D5: the 32
+  existing tasks are permanently unfixable, not merely un-backfilled.
 
 **What this round discipline caught that a single pass would not:** R1 named a hazard that does not
 exist and prescribed the wrong remedy for it; R2 removed the hazard but justified the remedy with a
