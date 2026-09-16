@@ -97,23 +97,46 @@ in the task's own Done note.
       a call-site guard leaves the identical `TypeError` returning a 500 there; and task 2.2's
       ordering now reads `payload["requirements"]`, whose `or []` at `:72` is the same hole.
 - [ ] 2.2 Call `criteria_by_requirement_key(payload)` **once, before the per-entry loop** (design
-      D6/D7). For each created task: reduce its entry's `requirements` names to a **set**, collect
-      every criterion belonging to any of them, then apply **one stable sort** keyed by
-      `position.get(criterion_requirement, len(position))`, where `position` maps each key in
-      `payload.requirements` to its index — i.e. the exact algorithm of `spec_render._acceptance`
-      (`hub/hub/spec_render.py:314-318`), not a paraphrase of it. **Do not concatenate per-requirement
-      groups**: that drops any criterion whose requirement is absent from `payload.requirements`,
-      which the `len(position)` fallback deliberately keeps (sorted last). Match on `named`, the
-      payload key, **not** the resolved row's `.key` (design D3).
-- [ ] 2.7 Build the `position` map through a guarded read of `payload["requirements"]` (task 2.1),
-      never a bare iteration — `materialise()` has never read that key before this change, so this
-      is new exposure, not existing behaviour.
+      D6/D7). For each created task: reduce its entry's `requirements` names with
+      **`dict.fromkeys(...)`**, preserving first-appearance order — **not a `set`**, whose iteration
+      order for strings varies between processes, so two approvals of the same file would store the
+      criteria in different orders (against the delta spec's ordering requirement). Collect every
+      criterion the helper grouped under any of those names, then apply **one stable sort** keyed by
+      `position.get(<the requirement key the criterion was grouped under>, len(position))`, where
+      `position` comes from task 2.7. **The criterion dicts the helper returns do not carry their
+      requirement** — `spec_reading.py:104-111` builds `key`/`given`/`when`/`then` only — so the sort
+      key must come from the group the criterion was collected from, not from a field of it. A
+      literal reading that looks for `criterion["requirement"]` gets `None` for every criterion, every
+      key collapses to `len(position)`, and no sorting happens.
+      **Relationship to `spec_render._acceptance`** (`hub/hub/spec_render.py:314-318`): same sort key,
+      same `len(position)` fallback, and identical output for any document that ever passed
+      `validate_payload`. It is **not** the same function — `_acceptance` sorts the flat criteria
+      list while D7's helper groups first, so where **two or more** of an entry's requirements are
+      absent from `payload["requirements"]` they share the `len(position)` tie key and this groups
+      them by requirement where `_acceptance` would interleave them. That divergence is accepted and
+      is what the delta spec's ordering requirement now states. **Do not concatenate per-requirement
+      groups in the entry's own order**: that drops any criterion whose requirement is absent from
+      `payload["requirements"]`, which the `len(position)` fallback deliberately keeps, sorted last.
+      Match on `named`, the payload key, **not** the resolved row's `.key` (design D3).
+- [ ] 2.7 Build the `position` map by enumerating the keys of
+      **`spec_reading.statements_by_key(payload)`** — not by iterating `payload["requirements"]`
+      directly. Three reasons: that helper already carries task 2.1's guard, so the map is built
+      through one guarded read rather than a second hand-rolled one; it returns only entries that are
+      dicts with a non-empty string `key`, so a malformed element cannot raise here (a bare
+      `{r["key"]: i for i, r in enumerate(payload["requirements"])}` raises
+      `TypeError: string indices must be integers` on a string element); and it is what makes
+      mutation 4.16 discriminating — an inline `isinstance` guard at this call site would satisfy the
+      words "a guarded read" while leaving the helper's own hole open and 4.16 flipping nothing.
+      `materialise()` has never read `requirements` before this change, so this is new exposure, not
+      existing behaviour.
 - [ ] 2.3 Render each criterion to one string per design D2 and D8: prefix the handle
       **only when it is a non-empty string** (`<key>: Given ..., when ..., then ...`), otherwise
       render `Given ..., when ..., then ...` with no prefix. Never emit the literal `None` for an
       absent part.
-- [ ] 2.6 Skip a criterion whose `given`, `when` and `then` are all absent (design D8) — it states
-      no standard. A partially absent one is still attached, with the parts it has.
+- [ ] 2.6 Skip a criterion whose `given`, `when` and `then` are all **absent or empty** (design D8) —
+      it states no standard. `spec_payload.py:96-100` sets no `min_length` on any of the three, so
+      `""` passes `validate_payload` and a test written against `is None` alone would emit
+      `"Given , when , then "`. A partially absent one is still attached, with the parts it has.
 - [ ] 2.5 Make the whole path total (design D6): no indexing that can raise, no assumption that the
       stored payload's `acceptance_criteria` is present, is a list, or holds well-formed entries.
 - [ ] 2.4 Leave `acceptance_criteria` unset when a task resolves no requirement, or when no
@@ -131,13 +154,19 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
 - [ ] 3.5 A requirement with no criteria contributes nothing, and approval is not refused.
 - [ ] 3.6 Criteria for a SINGLE requirement keep the order the document wrote them in (the stable
       half of design D4). The cross-requirement half is 3.15's; an earlier wording said only "order
-      follows the document", which became ambiguous when D4 was reversed.
+      follows the document", which became ambiguous when D4 was reversed. **The fixture's criterion
+      keys MUST NOT be in alphabetical order**, or mutation 4.4 (sort by key within a requirement)
+      produces the same list and flips nothing.
 - [ ] 3.7 A requirement whose row `key` has drifted from the payload key still gets its criteria —
       the case D3 now turns on. Replaces R1's key-vs-identifier test, which pinned a case task 1.3
       measured to be impossible.
 - [ ] 3.11 A stored payload whose `acceptance_criteria` is malformed (absent, not a list, a scalar,
       or holding entries without the expected fields) still creates its tasks, with no criteria and
-      no raise (design D6/D7). Assert through `materialise_quietly`, since that is the path approval
+      no raise (design D6/D7). **One of the shapes MUST be a list holding a NON-DICT element** (a
+      string, say — or `acceptance_criteria: "abc"`, whose characters iterate as non-dicts).
+      `spec_reading.py:105-111` reads every field with `.get()`, so a dict merely missing `key`,
+      `given`, `when` or `then` raises nothing even with the skip removed, and mutation 4.6 would
+      flip on no shape in the list. Assert through `materialise_quietly`, since that is the path approval
       uses and the one that would hide a raise. **The document MUST declare at least two tasks and
       the test MUST assert that both exist** — that is what proves totality. (An earlier wording
       required "the fault reachable on the second entry"; that is unconstructible, because a
@@ -161,11 +190,31 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
       than raising — the `read_spec_document` path (`api/v1/agent_actions.py:1399`). Without this,
       nothing distinguishes D7's guard-in-the-helper from a guard at the call site, since 3.18
       passes either way.
-- [ ] 3.23 A criterion whose `requirement` is absent from `payload.requirements` is still attached,
-      sorted last — the `len(position)` fallback `spec_render._acceptance` uses and the group
-      concatenation dropped.
-- [ ] 3.24 A payload whose `requirements` is a scalar creates every declared task with no criteria
-      and no raise (task 2.7's new exposure, the `statements_by_key` hole).
+- [ ] 3.23 A criterion whose `requirement` is absent from `payload["requirements"]` is still
+      attached, sorted last — the `len(position)` fallback `spec_render._acceptance` uses and the
+      group concatenation dropped. **The document MUST write the absent-requirement criterion BEFORE
+      the present-requirement one**, or the test passes under a raw-document-order implementation too
+      and discriminates nothing. Pins the delta spec's *"A criterion whose requirement the document
+      no longer lists is still attached"* scenario — which exists because the spec's own "attaches
+      no others" sentence had to be reworded from *resolves* to *names* for this case to be legal at
+      all (fourth review, B1).
+- [ ] 3.24 A payload whose `requirements` is a scalar creates every declared task **carrying the
+      criteria its entries name** and does not raise (task 2.7's new exposure, the
+      `statements_by_key` hole). **The fixture MUST declare criteria that match the entry's names**,
+      or the test does not reach the guard: matching is on `named` (design D3) and is independent of
+      `payload["requirements"]`, so an implementation short-circuiting on an empty criteria set never
+      builds the `position` map at all. An earlier wording asserted "with no criteria", which is
+      wrong on both counts — a scalar `requirements` costs the ordering, not the criteria.
+- [ ] 3.26 A payload whose `requirements` is a **list holding a non-dict element** creates every
+      declared task, carrying the criteria its entries name, and does not raise. Distinct from 3.24:
+      this shape passes an `isinstance(raw, list)` guard and only a per-element check survives it.
+      Pins task 2.7's choice of `statements_by_key` over a hand-rolled comprehension, which 3.24 and
+      3.25 cannot — they are satisfied by either.
+- [ ] 3.25 `requirement_view` over a payload whose `requirements` is a scalar returns rather than
+      raising — the same `read_spec_document` path as 3.22 (`api/v1/agent_actions.py:1399` →
+      `spec_reading.py:129`, which calls `statements_by_key` with no `try`/`except`). 3.22 covers
+      only the `acceptance_criteria` half of D7's guard-in-the-helper argument; without this the
+      `statements_by_key` half is pinned by nothing and the 500 stands.
 - [ ] 3.16 A criterion with no handle is attached with its given/when/then and **no `None` appears
       anywhere in the rendered string** (design D8). Assert on the string, not on the model field —
       the defect is in what a reader sees.
@@ -182,7 +231,11 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
 - [ ] 3.8 Every attached criterion carries its given, its when and its then.
 - [ ] 3.9 Re-approval does not revisit or duplicate criteria on an already-created task (design D5).
 - [ ] 3.10 A created task's criteria render into a loop briefing as one line per criterion — the
-      `scheduler.py:2456-2460` path, not only the model field.
+      `scheduler.py:2456-2460` path, not only the model field. **Assert
+      `all(isinstance(c, str) for c in task.acceptance_criteria)` here**: the delta spec's *"a form
+      the existing readers of that field already accept"* is otherwise pinned by nothing executable,
+      since `scheduler.py:2459`'s f-string stringifies any object and the only other check is the
+      human drive at 6.3.
 
 ## 4. Mutation checks
 
@@ -216,7 +269,16 @@ pin what they claim to.
 - [ ] 4.14 Drop criteria whose requirement is absent from `payload.requirements` instead of sorting
       them last → 3.23 fails.
 - [ ] 4.15 Move the guard from inside the helper to this change's call site → 3.22 fails.
-- [ ] 4.16 Remove the guard from `statements_by_key` → 3.24 fails.
+- [ ] 4.16 Remove the guard from `statements_by_key` → **3.25** fails. Retargeted from 3.24, which
+      exercises `materialise()` and is therefore protected by `materialise_quietly`'s catch-all; 3.25
+      goes through `requirement_view`, which has no `try`/`except` and is where removing the guard
+      actually surfaces.
+- [ ] 4.17 Build the `position` map with a bare `{r["key"]: i for i, r in enumerate(raw)}` over a
+      `raw` guarded only against not being a list, instead of through `statements_by_key` (task 2.7)
+      → **3.26** fails. This is the one behavioural difference between the two readings: a list
+      holding a non-dict element passes an `isinstance(raw, list)` guard and then raises
+      `TypeError: string indices must be integers`, which `statements_by_key`'s per-element
+      `isinstance(entry, dict)` skip does not.
 - [ ] 4.5 Attach criteria to tasks resolving no requirement → 3.4 fails.
 
 ## 5. Whole-suite and quality gates

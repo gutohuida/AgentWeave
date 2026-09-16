@@ -417,11 +417,15 @@ Two consequences:
    sets no `max_items` on `acceptance_criteria` and no `max_length` on `given`/`when`/`then`, so
    three requirements' worth of an unbounded number of unbounded strings is unbounded.
 
-   **Measured over this repository's own 1,319 real acceptance criteria**, rendered as D2 specifies:
-   mean 164 characters, p90 220, max 362; criteria per requirement mean 2.92, max 12. A typical
-   three-requirement task contributes about 1,438 characters; the observed worst case is about
-   **13,032** — more than three times the cap the checkpoint beside it gets, from real documents
-   rather than a contrived one.
+   **[SUPERSEDED — the two derived figures in this paragraph are fabricated. Read the decision
+   below before quoting anything from it.]** *Measured over this repository's own 1,319 real
+   acceptance criteria*, rendered as D2 specifies: mean 164 characters, p90 220, max 362; criteria
+   per requirement mean 2.92, max 12. *A typical three-requirement task contributes about 1,438
+   characters; the observed worst case is about 13,032 — more than three times the cap the checkpoint
+   beside it gets, from real documents rather than a contrived one.* The four marginal statistics are
+   real and were re-measured by the fourth review (which counted 46 payloads / 1,337 criteria against
+   this paragraph's 41 / 1,319 — corpus growth, since every derived figure agrees). **The 1,438 and
+   the 13,032 are not measurements at all**; see below.
 
    **Decision, after the third review: no bound in this change, and no second capability.** A
    bound was added on the strength of that ~13,032 figure and has been removed, because the figure
@@ -567,6 +571,46 @@ Two consequences:
   and that **the common case survives all six passes' accumulated guards** — a document declaring
   one to three requirements with criteria still produces a task whose criteria render under "What
   the author was asked to build" for a loop- or flow-fired review.
+
+- **Fourth adversarial review** (Opus, over the state the third review left — which, like the second,
+  had had no verification pass). Verdict: **approve with fixes**, the first non-blocking verdict this
+  change has had. Every fix is local to `tasks.md` and the delta spec; none reopens a decision. It
+  found three blocking defects, all in the third review's own additions:
+
+  **B1 — the delta spec forbade what `tasks.md` requires.** The spec said criteria attach to every
+  requirement a task *resolves*; D3 and task 2.2 match on what its entry *names*. Those diverge:
+  `spec_tasks.py:187-194` puts an unresolvable name in `unresolved` while still creating the task, so
+  an entry naming a requirement with no stored row produced a task that resolves nothing and carries
+  a criterion — against the spec's own "and SHALL attach no others". Test 3.23 *required* that
+  behaviour, and no scenario covered it, so at archive (when `tasks.md` is discarded) the only
+  durable statement of it would have been the one forbidding it. Reworded to *names*, with the
+  reasoning stated and a scenario added.
+
+  **B2 — the `statements_by_key` guard was pinned by nothing.** Task 2.7's "a guarded read of
+  `payload["requirements"]`" is satisfied by an inline `isinstance`, leaving mutation 4.16 flipping
+  no test; and test 3.24 asserted the wrong outcome, since matching on `named` (D3) is independent of
+  `payload["requirements"]` — a scalar there costs the ordering, not the criteria. Nothing covered
+  `requirement_view` with a scalar `requirements`, which is the exact 500 D7's guard-in-the-helper
+  argument exists to prevent. Task 2.7 now names the helper, 3.24 is restated, and 3.25 / 3.26 /
+  4.17 were added.
+
+  **B3 — "the exact algorithm of `_acceptance`" was false, and the prescribed `set` was
+  nondeterministic.** `spec_render._acceptance` sorts the flat criteria list; D7's helper groups
+  first. Filtering commutes with a stable sort, so they agree for any document that ever passed
+  `validate_payload` — but where **two or more** of an entry's requirements are absent from
+  `payload["requirements"]` both take the `len(position)` tie key and the two orders differ
+  (demonstrated by execution). And "reduce to a set" made the tie order depend on set iteration,
+  which varies per process for strings, so two approvals of one file could store different orders.
+  Now `dict.fromkeys`, with the divergence stated honestly instead of denied.
+
+  It also found that the helper's criterion dicts **do not carry their `requirement`**
+  (`spec_reading.py:104-111`), so task 2.2's sort key read as a field that does not exist — a literal
+  implementation would have sorted nothing. And it **confirmed** the premise, both helper holes by
+  execution, the D4 reversal, that 3.15/4.8/4.8b genuinely discriminate (three distinct orderings,
+  worked by hand), that 3.11's fixture is constructible, every line citation it spot-checked, and the
+  5,462 figure **to the character**. Its one unresolved item is the proposal's "62 measured turns /
+  47 classified / 1,898,949 average", which it could not reconstruct under any filter — unverified
+  rather than refuted, and recorded as such.
 
 **What this round discipline caught that a single pass would not:** R1 named a hazard that does not
 exist and prescribed the wrong remedy for it; R2 removed the hazard but justified the remedy with a

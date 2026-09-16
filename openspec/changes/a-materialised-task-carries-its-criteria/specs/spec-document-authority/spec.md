@@ -4,7 +4,7 @@
 
 ### Requirement: A materialised task carries the criteria of the requirements it serves
 
-When a declared task is materialised, the system SHALL attach to it the acceptance criteria of every requirement that task resolves, and SHALL attach no others.
+When a declared task is materialised, the system SHALL attach to it the acceptance criteria of every requirement its entry names, and SHALL attach no others.
 
 A document states its acceptance criteria once, against requirements, and its tasks against the same
 requirements. The link between them is already known at the moment the task is created: the
@@ -20,9 +20,16 @@ nothing, and the standard is re-derived from the code instead of read.
 Criteria SHALL be attached in a form the existing readers of that field already accept, so that
 stating the standard does not require a change to how it is displayed or consumed.
 
-A task that resolves no requirement SHALL carry no criteria, and this SHALL NOT be an error: a
+A task whose entry names no requirement SHALL carry no criteria, and this SHALL NOT be an error: a
 declared task may legitimately name no requirement, and inventing a standard for it would assert
 something the document did not say.
+
+The test is what the entry **names**, not what those names resolve to. A name that resolves to no
+stored requirement still creates its task, and the criteria the document wrote against that name are
+still the standard its author set for that work. Matching on the resolved row instead would drop the
+standard in exactly the case where the document and the stored requirements have drifted apart —
+which is the case the standard is most needed in, and the one nothing downstream can repair, since a
+task's criteria can only be set when the task is created.
 
 Attaching criteria SHALL NOT change which tasks are created, their identity, or their titles.
 
@@ -43,8 +50,12 @@ work without its standard, never a reason to create less of the work than the do
 This is stated against what the system would otherwise create, because a declared entry may already
 be represented by existing work, and attaching criteria changes nothing about that.
 
-Attached criteria SHALL be ordered as the document's own acceptance table orders them, so that a
-reader holding the task beside the document is reading one sequence rather than two.
+Attached criteria SHALL be grouped by the requirement they belong to, in the order the document
+declares its requirements, keeping within each requirement the order the document wrote them in —
+the order the document's own acceptance table is rendered in, so that a reader holding the task
+beside the document is reading one sequence rather than two. A criterion whose requirement the
+document's requirement list does not hold SHALL be ordered after those that are, since there is no
+declared position to place it at.
 
 #### Scenario: A task's criteria follow its requirements
 
@@ -59,6 +70,13 @@ reader holding the task beside the document is reading one sequence rather than 
 - **AND** a task naming both requirements is created
 - **THEN** the task's criteria are grouped by requirement, in the order the document declares its requirements
 - **AND** within one requirement they keep the order the document wrote them in
+
+#### Scenario: A criterion whose requirement the document no longer lists is still attached
+
+- **WHEN** a document declares a criterion against a requirement name its own requirement list does not hold
+- **AND** a task entry naming that requirement is created
+- **THEN** the criterion is still attached to that task
+- **AND** it is ordered after the criteria of the requirements the document does list
 
 #### Scenario: An entry whose work already exists attaches criteria to nothing
 

@@ -37,7 +37,13 @@ and the reviewing agent averaged **1,898,949 input tokens per turn** across the 
 carried usage and could be classified by their tool calls. (That agent has 62 measured turns in
 total; 47 of them could be classified this way, of which 42 executed something. The 42-of-47 figure
 is a subset statistic and is stated as one here — the earlier phrasing implied 47 was its whole
-measured population, which it is not.) The full measurement, its method and its blind spots are in
+measured population, which it is not.) **Unverified as of the fourth review:** that review could not
+reconstruct the 62 / 47 / 42 counts or the 1,898,949 average under any filter it tried — `tester`
+has 63 rows of which 48 carry non-zero input — because it did not reproduce the `agent_outputs`
+tool-call classification the figures depend on. Treat them as unconfirmed, not as refuted, and
+re-derive the classification before quoting them anywhere else. The three figures this change
+actually rests on — the 18/32 split, the 0.77%, and the 5,462-character worst case — were each
+re-measured independently and hold. The full measurement, its method and its blind spots are in
 `openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md`.
 
 Why now: the explorations that follow this one (an iteration budget, a single end-of-task gate, and
