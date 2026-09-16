@@ -1,90 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-14-daily",
-    "parent_branch": "master",
-    "parent_sha": "f28bc31",
-    "stop_at": "2026-09-16T07:00:00+01:00",
-    "iteration": 9,
-    "log_file": ".claude/autonomous/2026-09-15-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": null,
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose the queue (reconciled a stale 09-14 ORDER; see log iteration 1)",
-            "detail": "Done at iteration 1."
-        },
-        {
-            "id": "remedy-g12-impl",
-            "status": "done",
-            "title": "a-refusal-names-a-remedy-that-works: groups 1-2 (own_review_remedy; error_summary fit)",
-            "detail": "Done at iteration 2. own_review_remedy added to scheduler.py; JOB_RUN_ERROR_SUMMARY_CHARS/fit_error_summary/@validates added to models.py; JobRunResponse.error_summary and _stall_run_to_increment updated; _wedged_review_reason shortens its quoted title. New test file hub/tests/test_a_refusal_names_a_remedy_that_works.py, 7 tests, all four named mutations verified to fail before revert. ruff/black clean on touched files."
-        },
-        {
-            "id": "remedy-g3-impl",
-            "status": "done",
-            "title": "a-refusal-names-a-remedy-that-works: group 3 (once per task, F365)",
-            "detail": "Done at iteration 3. _review_unstaffed_already_stands now filters EventLog.data[\"task_id\"].as_string() == task_id; docstring corrected to disclaim the 'cleared and returned is news again' claim (REV item 10, left open). Two new tests in hub/tests/test_a_refusal_names_a_remedy_that_works.py drive POST /jobs/{id}/run for real: two unstaffable tasks over 5 firings get exactly 1 review_unstaffed each (3.2), and one task's reason changing via evidence leaves the other's untouched (3.3). Both mutations applied and verified to fail (5 events instead of 1; 2 instead of 1), then reverted. 112 related tests pass; ruff/black clean."
-        },
-        {
-            "id": "remedy-g4a-impl",
-            "status": "done",
-            "title": "a-refusal-names-a-remedy-that-works: 4.1-4.5 (the refusals, F353/F334)",
-            "detail": "Done at iteration 4. _guard_reviewer_is_not_the_author (task_transition_service.py) both branches share one remedy string chosen once by actor.is_operator: operator gets 'Land it... or dispatch a different agent's review turn (POST /agent/trigger with review_task_id)', agent gets 'None of the task tools you are offered reassigns a task; the operator can move it on.' Message shape 'Cannot move task {id} to under_review with {assignee!r} as its holder: ...', no 'is assigned to'/'still assigned'/'holding it'/'held by'/'Left as is'. review_dispatch_refusal (agent_trigger.py) both branches now end with own_review_remedy(task); own_review_remedy imported at module level (no cycle, task.status always completed/under_review at both call sites per the function's own status guard). Three new tests in hub/tests/test_a_refusal_names_a_remedy_that_works.py (4.3 operator PATCH, 4.4 agent PATCH via run token, 4.5 F334's shape reusing test_a_refused_review_leaves_nothing_behind.py's _leg_a harness). All three named mutations applied and verified to fail, then reverted. 12/12 new-file tests pass; 96 related tests (test_reviewer_is_not_the_author.py, test_a_refused_review_leaves_nothing_behind.py, test_a_task_waits_while_its_run_waits.py) pass; 85 more (test_agent_trigger.py, test_review_turn.py, test_review_divergence.py) pass. ruff/black clean."
-        },
-        {
-            "id": "remedy-g4b-impl",
-            "status": "done",
-            "title": "a-refusal-names-a-remedy-that-works: 4.6-4.10",
-            "detail": "Done at iteration 5 (commit 7343200). 4.6: confirmed six wording assertions unchanged; amended five stale comments; fixed one test not on the split's own list (test_the_evidence_names_the_author.py:434) broken by group 4a, surfaced only by the broader-suite run. 4.7/4.8: two new tests on review_dispatch_refusal (the route's own precheck) -- author-completed branch names Land it, completer-on-under_review branch never does. 4.9: fixed the D9 duplication defect at both sites (review_dispatch_refusal and trigger_agent_directly) -- dropped the 'Reassign the task if...' clause entirely per the task's own 'not Reassign' assertion, both now read '...Let the review in flight finish. {own_review_remedy(task)}'; two tests, one per site. 4.10: two tests measuring the guard's sentence at a 64-char task id/32-char agent name, both raise branches x both actor kinds, direct call and through the real dispatch route. All five named mutations applied and verified to fail, then reverted. 18 tests in test_a_refusal_names_a_remedy_that_works.py pass; 363 across the related suite pass (13 files). ruff/black clean."
-        },
-        {
-            "id": "remedy-gate",
-            "status": "done",
-            "title": "a-refusal-names-a-remedy-that-works: 5.1-5.2 lint + full hub suite",
-            "detail": "Done at iteration 6. 5.1: ruff/black/mypy all clean over CI's full documented paths. 5.2, first full run: 1 failed, 4414 passed, 86 skipped (52:10) -- test_review_dispatch_staffs_the_task.py::test_naming_the_author_as_its_own_reviewer_is_refused_before_the_turn asserted pre-4.1 guard wording, a stale-wording gap in a file group 4a's related-test run never covered (same class as the 4.6 gap). Fixed the assertion to the current wording + operator remedy fragment; verified load-bearing by mutating the guard string back (test failed at the same line) and reverting (git diff empty after). Second full run: 1 failed, 4414 passed, 86 skipped (37:19) -- the fix holds; the sole remaining failure (test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call, asyncio Lock cross-event-loop RuntimeError) is DEAD-ENDS' F314 signature verbatim, a documented pre-existing flake unrelated to this change's files. Tree treated as green."
-        },
-        {
-            "id": "remedy-drive",
-            "status": "done",
-            "title": "a-refusal-names-a-remedy-that-works: 5.3 drive",
-            "detail": "Done at iteration 7. Drive Hub :8011, profile drive0916, new harness scripts/drive/t_d0916_refusal_remedy.py. Found live: TaskCreate.title caps at 256 chars (306 answered 422), so the drive's 'long title' is 256, the product's real max. Check 1 (F367/D2): wedged review under a 3-char reviewer name, fired 409, GET .../jobs/{id}/history -> 200, error_summary 486 chars (<500) -- proves the outcome, not the trim path itself (2.2's loop never had to fire at this length; task 2.4's unit test already covers the true worst case). Check 2 (F353/D1/D4, real Chromium against the served bundle): a task authored+completed by a real Haiku turn (dev, not operator-walked); the drawer's status menu still offers under_review, and the refusal at task-status-refusal-{id} names Land it verbatim beside a visible Land it button. Check 3 (F353/D4): the same agent's own update_task tool result, read from GET /agent/dev/chat/{conversation_id}, carried the distinct agent remedy ('None of the task tools you are offered reassigns a task; the operator can move it on.'). One interruption (a killed background process left one job briefly enabled) was found by direct query and fixed before checks 2-3 ran; re-verified zero enabled jobs across every project at the end. :8000/:8010 untouched; :8011 stopped afterward. Recorded in FINDINGS.md under F367 and F353, and in tasks.md (5.3 ticked)."
-        },
-        {
-            "id": "remedy-archive",
-            "status": "done",
-            "title": "a-refusal-names-a-remedy-that-works: 5.4 archive",
-            "detail": "Done at iteration 8. Hand-synced the agent-loops and task-lifecycle-governance deltas into openspec/specs/ (validated 45/45 --strict --all); archived via 'openspec archive --yes --skip-specs' to archive/2026-09-16-a-refusal-names-a-remedy-that-works (commit b29c096). Marked F353, F334, F365, F367 Status: fixed in scripts/drive/FINDINGS.md, each naming its actual implementing commit (a2b947a groups 1-2, cf93ab6 group 3, 4515728+7343200 groups 4a-4b) plus the archiving commit b29c096; corrected F352's own paragraph to say its visibility half is now fixed and only its rung-3 half stays open; corrected two stale 'not yet archived' phrases from iteration 7's write-up (commit c282793)."
-        },
-        {
-            "id": "close",
-            "status": "done",
-            "model": "sonnet",
-            "effort": "medium",
-            "title": "Close the window",
-            "detail": "Done at iteration 9. Final log entry written (usage: night total ~$27.17 list across both dates, 11 iterations). Queue empty; next_action null."
-        }
-    ],
-    "decisions_for_user": [
-        "an-unstaffed-review-names-its-holders (rung-3 half, 0/24) still argues from F352-free option (e); it needs a re-derivation round against (f) before any window can build it. Day-window work, not queued tonight."
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-14-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "31dcb3f",
+    "stop_at":  "2026-09-17T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-16-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
