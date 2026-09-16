@@ -16,6 +16,86 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-16
+
+Written 2026-09-16 ~22:20 by an interactive session, **on the operator's explicit instruction in
+session** ("apply the fixes and approve. I want the night window to build this tonight"). No FILL
+window ran today — `AgentWeaveArmDay` fired at 10:15 and `install-driver.ps1` self-cancelled, so
+`STATE-day.json` still reads `iteration: 0` and there is no review page behind this row. The
+approval is the operator's own, given after reading the fourth adversarial review's verdict.
+
+- APPROVED  a-materialised-task-carries-its-criteria   build §2-§5 tonight; §6-§7 only if they fit
+
+ORDER: a-materialised-task-carries-its-criteria
+
+**This is the whole queue for tonight.** The default backlog shape is ignored.
+
+### What was approved, and at which commit
+
+`a-materialised-task-carries-its-criteria` as of **`2de0233`** — R1-R4 plus **four** independent
+adversarial Opus reviews. The fourth returned *approve with fixes*; its three blocking findings were
+each verified against the code and applied in `2de0233`. `openspec validate --strict` passes.
+
+The change: `spec_tasks.materialise()` builds its `Task(...)` at `:205-217` with nine fields and
+never `acceptance_criteria`, while `scheduler.py:2456-2460` renders that field to the implementer
+**and** the reviewer, introducing it to a reviewer as *"the standard you check their work against"* —
+then shows nothing. Measured: 18 of 18 hand-made tasks carry criteria, **0 of 32** spec-materialised
+ones do, all 32 NULL.
+
+**Its home is openspec, and that is now decided** — the operator confirmed it in the same session.
+Earlier handoffs carried it as an open question inferred from "do R1->R2->R3 ourselves". It is not
+open any more; do not re-raise it, and do not re-author this change in the trial Hub.
+
+### Read this before writing a line of it
+
+**`design.md`'s Round log, all of it, first.** Eight passes have argued about this one function, and
+each of the last four found that the previous pass's *fix* introduced a new defect. The log is the
+only record of which arguments are already refuted. Re-proposing one costs the night.
+
+Three things the log will tell you that are easy to get backwards:
+
+- **Match on what the entry `names`, never on the resolved row's `.key`** (design D3). The delta
+  spec was reworded from *resolves* to *names* in `2de0233` precisely because they diverge.
+- **`dict.fromkeys`, not a `set`** (task 2.2). A `set` makes the stored order vary between
+  processes.
+- **The guards go INSIDE `spec_reading.py`'s helpers** (`:72` and `:98`), not at this change's call
+  site (design D7). `requirement_view` reaches `statements_by_key` with no `try`/`except`, so a
+  call-site guard leaves a 500 standing on the `read_spec_document` path.
+
+### Shape of the work, ordered so stopping anywhere leaves something complete
+
+1. **§2 — implementation.** One function in `hub/hub/spec_tasks.py` plus two `isinstance` guards in
+   `hub/hub/spec_reading.py`. Note §2's task numbers run `2.1, 2.2, 2.7, 2.3, 2.6, 2.5, 2.4` —
+   that is accretion order, not dependency order. **2.7 builds the `position` map that 2.2
+   consumes**; read both before starting either.
+2. **§3 — about 22 tests.** Several carry an explicit `MUST` clause on the fixture. Those clauses
+   are the difference between a test that discriminates and one that passes under the naive
+   implementation too — honour them literally.
+3. **§4 — 17 mutations.** Apply, run, record, `git checkout` to revert. A mutation that flips no
+   test means §3 does not pin what it claims. **Expect at least one to fail to flip** and treat that
+   as a finding about the tests, not a reason to weaken the mutation.
+4. **§5 — gates.** Full suite from `hub/`, `ruff`/`black`/`mypy`, `openspec validate --strict`, and
+   5.4's measurement. **Background the suite** — it is 15-47 minutes and exceeds the 600s cap.
+5. **§6-§7 — drive and close-out, only if they genuinely fit.** If they do not, stop after §5, say
+   so in the log, and leave the change unarchived for a later window. A half-driven change is worse
+   than an undriven one.
+
+### Two hazards specific to this build
+
+- **`py -3.11`, never bare `python`.** Bare `python` is a venv that produces three phantom
+  `pty_runner` failures on a green tree and will send you hunting a breakage you did not cause.
+- **Task 6.5 edits `hub/hub/mcp_server.py`** (one docstring sentence). F354 (B, open) records that
+  the operator's live `:8000` Hub spawns that file fresh — **uncommitted mid-edit included** — on
+  every real turn. If you reach 6.5, make the edit and commit it in one pass; never leave it
+  uncommitted between iterations. If the night ends before 6.5, leave the file untouched.
+
+**No migration. No UI bundle.** `models.py:684` is already `JSON, nullable=True` and
+`hub/ui/src/api/tasks.ts:18` already types the field `string[]` — which is exactly why D1 chose
+rendered strings. If you find yourself editing `hub/ui/` or writing a migration, you have
+misread the change; stop and log it.
+
+---
+
 ## 2026-09-14
 
 Written by the FILL window, 2026-09-14, from `review/review-2026-09-14.html`. **No status token is
