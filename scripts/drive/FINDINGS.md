@@ -27006,8 +27006,11 @@ of `~/.agentweave/hub/profiles/drive0913s/r8-fixed-transcripts/r8f-drive.out` ha
 
 ## F334 (B) — the author guard's refusal of a dispatched review names an assignment the rollback discarded
 
-**Status:** open. Filed 2026-09-13 by the night window, from the same drive as F333 (§5.3, leg A).
-**Measured on a live Hub.** This is a new consequence of F319's fix, and out of that change's scope.
+**Status:** fixed `4515728` + `7343200` (`a-refusal-names-a-remedy-that-works` groups 4a-4b),
+archived `b29c096` 2026-09-16. Filed 2026-09-13 by the night window, from the same drive as F333
+(§5.3, leg A). **Measured on a live Hub, then driven live again against the fix** (task 5.3,
+`:8011`, profile `drive0916`, below and under F353). This is a new consequence of F319's fix, and
+was out of that change's scope.
 
 **The claim.** A review queued for agent X behind X's own turn, during which X records evidence,
 is refused at every delivery by `_guard_evidence_author_not_reviewer`
@@ -27886,11 +27889,14 @@ unstaffed sentence.
 **Split by R1, 2026-09-14** (`openspec/changes/an-unstaffed-review-names-its-holders`).
 - **The visibility half is taken into that change,** with F353, F334 and the new F365. It covers
   the sentence naming each agent and its holdings, a remedy that exists, and one record per task.
+  **That half is fixed** — `a-refusal-names-a-remedy-that-works`, `b29c096`, archived 2026-09-16;
+  see F353's and F334's and F365's own Status lines.
 - **The definition of "free" is not taken.** `agent-flows` states the project-wide rule, and its
   design rejected *not running* alone on the operator's own pile-up objection. So which holdings
   count is an **OPERATOR QUESTION**, laid out with five options and a recommendation in that
   change's `proposal.md`.
-- **This finding stays open** until the question is answered and built.
+- **This finding stays open** for the rung-3 half only, until the question above is answered and
+  built.
 
 **Stopped at REV, 2026-09-14.** The adversarial review read DIRECTION's *"the change stops after
 REV, unbuilt"* as covering the change, because R1 found the operator's question. It also found
@@ -27923,7 +27929,9 @@ against (f) before it is built: it would now name only reachable holdings. The d
 
 ## F353 (B) — the product tells the operator to "clear the assignee", and nothing in the app can; the one action that would work, "Land it", is never named
 
-**Status:** open. Found 2026-09-13 unblocking F352.
+**Status:** fixed `4515728` + `7343200` (`a-refusal-names-a-remedy-that-works` groups 4a-4b),
+archived `b29c096` 2026-09-16, driven live at `:8011` (task 5.3, below) before archiving. Found
+2026-09-13 unblocking F352.
 
 The task drawer renders **Assignee** read-only (`TaskDetailDrawer.tsx` ~L380). The operator's
 `PATCH …/tasks/{id}` accepts `assignee` (F78), but no control sends it, and the agents'
@@ -27957,7 +27965,7 @@ The change's remedy is now Land it, or a review dispatch (`POST /agent/trigger` 
 `review_task_id`).
 
 **DRIVE, 2026-09-16 (`a-refusal-names-a-remedy-that-works`, task 5.3, `:8011`, profile
-`drive0916`).** Built, unit-tested, not yet archived — this drive is task 5.3's own live check of
+`drive0916`).** Built, unit-tested, and archived at 5.4 (`b29c096`, above) — this drive is task 5.3's own live check of
 D1/D4, the fix this finding names, against a real Hub, a real Chromium session and a real Haiku
 turn (`scripts/drive/t_d0916_refusal_remedy.py`). Population: one task authored, worked and
 completed by a real Haiku agent (`dev`) through the ordinary flow route, so `agent_that_completed`
@@ -28494,9 +28502,13 @@ states none of the caps (`mcp_server.py:511-535`), and that half is not edited o
 
 ## F365 (B) — a loop with two stuck reviews records both on every firing, because "unchanged" is judged against the loop's newest record rather than the task's
 
-**Status:** open. Filed 2026-09-14 by the day window's `f352-r1`, from LoopEngine on `:8000`
+**Status:** fixed `cf93ab6` (`a-refusal-names-a-remedy-that-works` group 3), archived `b29c096`
+2026-09-16 — see iteration 3 of `.claude/autonomous/2026-09-15-night-log.md` for the live-fired
+`POST /jobs/{id}/run` verification: two unstaffable tasks over 5 firings recorded exactly 1
+`review_unstaffed` each. Filed 2026-09-14 by the day window's `f352-r1`, from LoopEngine on `:8000`
 (read-only, mode=ro, `%TEMP%\f352\q1.py`). **Measured.** Taken into
-`an-unstaffed-review-names-its-holders`.
+`an-unstaffed-review-names-its-holders`, then split out and built as
+`a-refusal-names-a-remedy-that-works` (group 3).
 
 **What happened.** `review_unstaffed` fired **357** times on `loop-103ecb8aeb89`. **347** of those
 repeat their own task's previous reason word for word. `agent-loops` *"A surfaced step is recorded
@@ -28528,8 +28540,10 @@ driven.
 
 ## F367 (B) — a stall reason longer than 500 characters is stored, and then the job's run history answers 500
 
-**Status:** open. Filed 2026-09-14 by the day window's `f352-r2`. **Computed and mechanism-proven,
-not observed.** Taken into `an-unstaffed-review-names-its-holders` (design D2).
+**Status:** fixed `a2b947a` (`a-refusal-names-a-remedy-that-works` groups 1-2), archived `b29c096`
+2026-09-16, driven live at `:8011` (task 5.3, CHECK 1, below) before archiving. Filed 2026-09-14 by
+the day window's `f352-r2`. Taken into `an-unstaffed-review-names-its-holders` (design D2), then
+split out and built as `a-refusal-names-a-remedy-that-works`.
 
 **The mechanism, proven.** `JobRun.error_summary` is `String(500)` (`hub/hub/db/models.py:1349`),
 which SQLite does not enforce. `JobRunResponse.error_summary` is `Field(max_length=500)`
@@ -28553,8 +28567,8 @@ stderr and two absolute paths (`hub/hub/api/v1/agent_trigger.py:966, 970`).
 characters over 43 rows, and the trial Hub's 3 rows are empty (mode=ro, `%TEMP%\f352r2\len.py`).
 
 **DRIVE, 2026-09-16 (`a-refusal-names-a-remedy-that-works`, task 5.3, `:8011`, profile
-`drive0916`).** Not yet fixed here (task 5.4, the archive step, does that) — this drive is
-task 5.3's own verification that the built D2 repair actually works live, not a unit test's
+`drive0916`).** Fixed and archived at 5.4 (`b29c096`, above) — this drive is task 5.3's own
+verification that the built D2 repair actually works live, not a unit test's
 transcription of it. `scripts/drive/t_d0916_refusal_remedy.py`, CHECK 1: a loop's one task, seeded
 at 256 characters — `TaskCreate.title`'s own maximum, confirmed live (`POST /jobs` with a 306-char
 `initial_tasks` title answered **422**, `string_too_long`, before this drive's first attempt could
