@@ -147,20 +147,38 @@ in the task's own Done note.
 
 Each pins a scenario from `specs/spec-document-authority/spec.md`.
 
-- [ ] 3.1 A task's criteria follow its requirements.
-- [ ] 3.2 Criteria belonging to other requirements are not attached.
-- [ ] 3.3 A task naming several requirements carries all their criteria.
-- [ ] 3.4 A task naming no requirement carries no criteria, and approval is not refused.
-- [ ] 3.5 A requirement with no criteria contributes nothing, and approval is not refused.
-- [ ] 3.6 Criteria for a SINGLE requirement keep the order the document wrote them in (the stable
+**Done, all 25.** Written as `hub/tests/test_spec_criteria_reach_the_task.py`.
+`py -3.11 -m pytest tests/test_spec_criteria_reach_the_task.py -q` from `hub/` — **25 passed**;
+with the two neighbouring suites (`test_spec_declared_tasks.py`, `test_spec_reading.py`) — **45
+passed, 0 failed**. `ruff check` and `black --check --target-version py311` on the new file — clean.
+A section that passes on its first run pins nothing until it has been shown able to fail, so before
+closing this: two mutations applied together — `rank = 0` in `_criteria_for_entry` (4.8b's shape)
+and both `isinstance(raw, list)` guards replaced by `or []` (4.10/4.16's shape) — flipped **exactly
+six**: 3.11, 3.15, 3.18, 3.22, 3.24, 3.25, and nothing else. Reverted with `git checkout`; the
+suite is green again at 45. That is a smoke test of the section, not §4 — §4 applies all seventeen
+properly, one at a time.
+
+- [x] 3.1 A task's criteria follow its requirements.
+      **Done** — `test_3_1_a_tasks_criteria_follow_its_requirements`.
+- [x] 3.2 Criteria belonging to other requirements are not attached.
+      **Done** — `test_3_2_criteria_belonging_to_other_requirements_are_not_attached`.
+- [x] 3.3 A task naming several requirements carries all their criteria.
+      **Done** — `test_3_3_a_task_naming_several_requirements_carries_all_their_criteria`.
+- [x] 3.4 A task naming no requirement carries no criteria, and approval is not refused.
+      **Done** — `test_3_4_a_task_naming_no_requirement_carries_no_criteria`.
+- [x] 3.5 A requirement with no criteria contributes nothing, and approval is not refused.
+      **Done** — `test_3_5_a_requirement_with_no_criteria_contributes_nothing`.
+- [x] 3.6 Criteria for a SINGLE requirement keep the order the document wrote them in (the stable
       half of design D4). The cross-requirement half is 3.15's; an earlier wording said only "order
       follows the document", which became ambiguous when D4 was reversed. **The fixture's criterion
       keys MUST NOT be in alphabetical order**, or mutation 4.4 (sort by key within a requirement)
       produces the same list and flips nothing.
-- [ ] 3.7 A requirement whose row `key` has drifted from the payload key still gets its criteria —
+      **Done** — `test_3_6_criteria_for_one_requirement_keep_the_order_the_document_wrote`.
+- [x] 3.7 A requirement whose row `key` has drifted from the payload key still gets its criteria —
       the case D3 now turns on. Replaces R1's key-vs-identifier test, which pinned a case task 1.3
       measured to be impossible.
-- [ ] 3.11 A stored payload whose `acceptance_criteria` is malformed (absent, not a list, a scalar,
+      **Done** — `test_3_7_a_requirement_whose_row_key_has_drifted_still_gets_its_criteria`.
+- [x] 3.11 A stored payload whose `acceptance_criteria` is malformed (absent, not a list, a scalar,
       or holding entries without the expected fields) still creates its tasks, with no criteria and
       no raise (design D6/D7). **One of the shapes MUST be a list holding a NON-DICT element** (a
       string, say — or `acceptance_criteria: "abc"`, whose characters iterate as non-dicts).
@@ -173,24 +191,30 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
       payload-level malformation is uniform across entries and, with the index built once before
       the loop, raises before any `session.add`.) **A payload that never passed `validate_payload`
       is the realistic case, not a contrived one** — see task 1.5.
-- [ ] 3.13 A task's criteria carry the criterion key, and two criteria on the same requirement are
+      **Done** — `test_3_11_a_malformed_criteria_block_still_creates_every_declared_task`.
+- [x] 3.13 A task's criteria carry the criterion key, and two criteria on the same requirement are
       distinguishable from one another (design D2). Without this, D2's decision — argued as
       irreversible because D5 forbids backfill — is pinned by nothing.
-- [ ] 3.14 An entry naming the same requirement twice attaches that requirement's criteria once,
+      **Done** — `test_3_13_criteria_carry_their_key_and_are_distinguishable`.
+- [x] 3.14 An entry naming the same requirement twice attaches that requirement's criteria once,
       not twice (task 2.2).
-- [ ] 3.15 Criteria interleaved in the document are attached in `payload.requirements` declaration
+      **Done** — `test_3_14_an_entry_naming_a_requirement_twice_attaches_its_criteria_once`.
+- [x] 3.15 Criteria interleaved in the document are attached in `payload.requirements` declaration
       order, stable within a requirement — the order `spec_render._acceptance` uses. **The entry
       MUST list its requirements in the reverse of `payload.requirements` order**, or the test does
       not discriminate: a naive entry-order implementation and the correct one agree whenever the
       two orders coincide. (Inverted from its original form, which asserted payload order.)
-- [ ] 3.21 An entry whose requirements are all already served by existing work creates no task, and
+      **Done** — `test_3_15_interleaved_criteria_follow_the_documents_requirement_order`.
+- [x] 3.21 An entry whose requirements are all already served by existing work creates no task, and
       the approval is not refused — the `already_served` skip at `spec_tasks.py:169,196-202`, which
       no round had named and which makes scenario 1's premise satisfiable while its conclusion fails.
-- [ ] 3.22 `requirement_view` over a payload whose `acceptance_criteria` is a scalar returns rather
+      **Done** — `test_3_21_an_entry_already_served_by_hand_made_work_creates_no_task`.
+- [x] 3.22 `requirement_view` over a payload whose `acceptance_criteria` is a scalar returns rather
       than raising — the `read_spec_document` path (`api/v1/agent_actions.py:1399`). Without this,
       nothing distinguishes D7's guard-in-the-helper from a guard at the call site, since 3.18
       passes either way.
-- [ ] 3.23 A criterion whose `requirement` is absent from `payload["requirements"]` is still
+      **Done** — `test_3_22_requirement_view_survives_a_scalar_criteria_block`.
+- [x] 3.23 A criterion whose `requirement` is absent from `payload["requirements"]` is still
       attached, sorted last — the `len(position)` fallback `spec_render._acceptance` uses and the
       group concatenation dropped. **The document MUST write the absent-requirement criterion BEFORE
       the present-requirement one**, or the test passes under a raw-document-order implementation too
@@ -198,44 +222,56 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
       no longer lists is still attached"* scenario — which exists because the spec's own "attaches
       no others" sentence had to be reworded from *resolves* to *names* for this case to be legal at
       all (fourth review, B1).
-- [ ] 3.24 A payload whose `requirements` is a scalar creates every declared task **carrying the
+      **Done** — `test_3_23_a_criterion_whose_requirement_is_no_longer_listed_is_attached_last`.
+- [x] 3.24 A payload whose `requirements` is a scalar creates every declared task **carrying the
       criteria its entries name** and does not raise (task 2.7's new exposure, the
       `statements_by_key` hole). **The fixture MUST declare criteria that match the entry's names**,
       or the test does not reach the guard: matching is on `named` (design D3) and is independent of
       `payload["requirements"]`, so an implementation short-circuiting on an empty criteria set never
       builds the `position` map at all. An earlier wording asserted "with no criteria", which is
       wrong on both counts — a scalar `requirements` costs the ordering, not the criteria.
-- [ ] 3.26 A payload whose `requirements` is a **list holding a non-dict element** creates every
+      **Done** — `test_3_24_a_scalar_requirements_block_costs_the_ordering_not_the_criteria`.
+- [x] 3.26 A payload whose `requirements` is a **list holding a non-dict element** creates every
       declared task, carrying the criteria its entries name, and does not raise. Distinct from 3.24:
       this shape passes an `isinstance(raw, list)` guard and only a per-element check survives it.
       Pins task 2.7's choice of `statements_by_key` over a hand-rolled comprehension, which 3.24 and
       3.25 cannot — they are satisfied by either.
-- [ ] 3.25 `requirement_view` over a payload whose `requirements` is a scalar returns rather than
+      **Done** — `test_3_26_a_requirements_list_holding_a_non_dict_element_still_materialises`.
+- [x] 3.25 `requirement_view` over a payload whose `requirements` is a scalar returns rather than
       raising — the same `read_spec_document` path as 3.22 (`api/v1/agent_actions.py:1399` →
       `spec_reading.py:129`, which calls `statements_by_key` with no `try`/`except`). 3.22 covers
       only the `acceptance_criteria` half of D7's guard-in-the-helper argument; without this the
       `statements_by_key` half is pinned by nothing and the 500 stands.
-- [ ] 3.16 A criterion with no handle is attached with its given/when/then and **no `None` appears
+      **Done** — `test_3_25_requirement_view_survives_a_scalar_requirements_block`.
+- [x] 3.16 A criterion with no handle is attached with its given/when/then and **no `None` appears
       anywhere in the rendered string** (design D8). Assert on the string, not on the model field —
       the defect is in what a reader sees.
-- [ ] 3.17 A criterion with no given, no when and no then is not attached, and the task is still
+      **Done** — `test_3_16_a_criterion_with_no_handle_renders_without_the_literal_none`.
+- [x] 3.17 A criterion with no given, no when and no then is not attached, and the task is still
       created (design D8, task 2.6).
-- [ ] 3.18 A payload whose `acceptance_criteria` is a scalar (`5`) creates every declared task with
+      **Done** — `test_3_17_a_criterion_that_states_nothing_is_not_attached`.
+- [x] 3.18 A payload whose `acceptance_criteria` is a scalar (`5`) creates every declared task with
       no criteria and no raise — the exact `TypeError` task 1.8 measured, through
       `materialise_quietly`.
-- [ ] 3.19 Two documents declaring the same tasks, one with criteria and one without, create the
+      **Done** — `test_3_18_a_scalar_criteria_block_creates_every_task_with_no_criteria`.
+- [x] 3.19 Two documents declaring the same tasks, one with criteria and one without, create the
       same tasks with the same titles and keys, differing only in criteria (the review's scenario as
       R4 reworded it — the one-document phrasing was vacuous under `existing_keys`).
-- [ ] 3.12 A file whose task entries and criteria use different namespaces attaches no criteria to
+      **Done** — `test_3_19_attaching_criteria_changes_nothing_about_which_tasks_exist`.
+- [x] 3.12 A file whose task entries and criteria use different namespaces attaches no criteria to
       those tasks, creates them anyway, and does not raise (design D3's accepted consequence).
-- [ ] 3.8 Every attached criterion carries its given, its when and its then.
-- [ ] 3.9 Re-approval does not revisit or duplicate criteria on an already-created task (design D5).
-- [ ] 3.10 A created task's criteria render into a loop briefing as one line per criterion — the
+      **Done** — `test_3_12_a_file_whose_tasks_and_criteria_use_different_namespaces`.
+- [x] 3.8 Every attached criterion carries its given, its when and its then.
+      **Done** — `test_3_8_every_attached_criterion_carries_its_given_its_when_and_its_then`.
+- [x] 3.9 Re-approval does not revisit or duplicate criteria on an already-created task (design D5).
+      **Done** — `test_3_9_re_approval_does_not_revisit_or_duplicate_criteria`.
+- [x] 3.10 A created task's criteria render into a loop briefing as one line per criterion — the
       `scheduler.py:2456-2460` path, not only the model field. **Assert
       `all(isinstance(c, str) for c in task.acceptance_criteria)` here**: the delta spec's *"a form
       the existing readers of that field already accept"* is otherwise pinned by nothing executable,
       since `scheduler.py:2459`'s f-string stringifies any object and the only other check is the
       human drive at 6.3.
+      **Done** — `test_3_10_criteria_render_into_a_loop_briefing_one_line_each`.
 
 ## 4. Mutation checks
 
