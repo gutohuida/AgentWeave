@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f28bc31",
     "stop_at": "2026-09-16T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-15-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "remedy-gate",
-    "next_action": "a-refusal-names-a-remedy-that-works 5.1-5.2 (tasks.md): 5.1 is CI's documented lint set over exactly CI's paths -- `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/` (the touched files were already spot-checked per-file across iterations 2-5; this is the full documented command set, which may surface something a narrower run did not). 5.2 is `py -3.11 -m pytest hub/tests/ -q`, full, backgrounded (15-47 min per STATE's own estimate) -- record pass/fail counts, classify any failure against DEAD-ENDS (F292/F314 signatures) before calling it unrelated to this change. If both are clean, tick 5.1-5.2 in tasks.md, commit, push, and move current/next_action on to remedy-drive (5.3, tasks.md: a fresh drive Hub on a free port, profiles/ database drive0916 since drive0915/0915b are used, runners bound to claude-haiku-4-5-20251001, AW_BOOTSTRAP_API_KEY named, no job left enabled -- see the limits list below and night-window.md's Driving section).",
+    "current": "remedy-drive",
+    "next_action": "a-refusal-names-a-remedy-that-works 5.3 (tasks.md, night-window.md's Driving section): a fresh drive Hub on a free port (never 8000/8010) with a fresh profiles/ database named drive0916 (drive0915/0915b are used), AW_BOOTSTRAP_API_KEY named explicitly, runners bound to claude-haiku-4-5-20251001 only, a flow with a document. Drive: GET .../jobs/{id}/history returns 200 after a wedged review with a long title; the drawer's status menu shows under_review on the author-held task with the refusal rendered beside 'Land it' (Chromium); one real Haiku agent turn asked to move that task to under_review, and the refusal text it actually received read from its tool result. Record findings in scripts/drive/FINDINGS.md. Leave no job enabled when done -- verify with a direct query, not by assumption. Then tick 5.3, commit, push, and move current/next_action on to remedy-archive (5.4: hand-sync agent-loops and task-lifecycle-governance deltas into openspec/specs/, move the change to archive/<date>-a-refusal-names-a-remedy-that-works, mark F353/F334/F365/F367 fixed <sha> in FINDINGS.md, correct the index paragraph).",
     "queue": [
         {
             "id": "compose",
@@ -47,9 +47,9 @@
         },
         {
             "id": "remedy-gate",
-            "status": "open",
+            "status": "done",
             "title": "a-refusal-names-a-remedy-that-works: 5.1-5.2 lint + full hub suite",
-            "detail": "CI lint set; full py -3.11 hub suite backgrounded to a file (15-47 min), counts recorded; classify any failure (F292/F314 known flakes)."
+            "detail": "Done at iteration 6. 5.1: ruff/black/mypy all clean over CI's full documented paths. 5.2, first full run: 1 failed, 4414 passed, 86 skipped (52:10) -- test_review_dispatch_staffs_the_task.py::test_naming_the_author_as_its_own_reviewer_is_refused_before_the_turn asserted pre-4.1 guard wording, a stale-wording gap in a file group 4a's related-test run never covered (same class as the 4.6 gap). Fixed the assertion to the current wording + operator remedy fragment; verified load-bearing by mutating the guard string back (test failed at the same line) and reverting (git diff empty after). Second full run: 1 failed, 4414 passed, 86 skipped (37:19) -- the fix holds; the sole remaining failure (test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call, asyncio Lock cross-event-loop RuntimeError) is DEAD-ENDS' F314 signature verbatim, a documented pre-existing flake unrelated to this change's files. Tree treated as green."
         },
         {
             "id": "remedy-drive",

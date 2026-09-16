@@ -252,7 +252,8 @@ async def test_naming_the_author_as_its_own_reviewer_is_refused_before_the_turn(
             await _dispatch_review(db, reviewer=AUTHOR, task_id=task.id, suffix="author")
 
     assert excinfo.value.status_code == 403
-    assert "the agent recorded as completing it" in excinfo.value.detail
+    assert "the agent recorded as completing this task" in excinfo.value.detail
+    assert "Land it" in excinfo.value.detail
 
     async with async_session_factory() as db:
         # The staffing writes the assignee before the guard reads it, so what must be proven is

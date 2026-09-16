@@ -362,12 +362,23 @@ mutation and the observed failure beside the task when ticking it.
 
 ## 5. Verify
 
-- [ ] 5.1 CI's lint set:
-      - `ruff check src/ hub/ tests/`;
-      - `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`;
-      - `mypy src/`.
-- [ ] 5.2 `py -3.11 -m pytest hub/tests/ -q`, full. Record pass and fail counts. Classify any
-      failure against DEAD-ENDS (F292 and F314 signatures) before calling it unrelated.
+- [x] 5.1 CI's lint set, run in full over exactly CI's paths: `ruff check src/ hub/ tests/`
+      (all checks passed), `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`
+      (577 files unchanged), `mypy src/` (no issues, 22 source files). All three clean.
+- [x] 5.2 `py -3.11 -m pytest hub/tests/ -q`, full, twice. **First run:** 1 failed, 4414 passed,
+      86 skipped (52:10) — `test_review_dispatch_staffs_the_task.py::test_naming_the_author_as_its_own_reviewer_is_refused_before_the_turn`
+      asserted the pre-4.1 guard wording (`"the agent recorded as completing it"`), broken by
+      group 4a's message rewrite and missed by the split's own audit (the same class of gap as
+      the 4.6 finding, in a file group 4a's related-test run never included). Fixed the assertion
+      to the current wording (`"the agent recorded as completing this task"`, plus `"Land it"` for
+      the operator-actor remedy); verified by mutating the guard's string back and confirming the
+      test fails (`AssertionError` at the same line), then reverting — `git diff` on
+      `task_transition_service.py` empty afterward. **Second run (full suite again):** 1 failed,
+      4414 passed, 86 skipped (37:19) — the fixed test now passes; the sole failure is
+      `test_flow_holds_the_loop_requirements.py::test_a_wide_flows_state_is_still_one_call` with
+      `RuntimeError: <asyncio.locks.Lock …> is bound to a different event loop`, which is
+      DEAD-ENDS' F314 signature verbatim (a documented pre-existing flake, unrelated to any
+      Python this change touches). Tree is green for the purposes of this gate.
 - [ ] 5.3 Drive (night-window.md, *Driving*): a drive Hub on a free port with a fresh
       `profiles/` database; runners bound to `claude-haiku-4-5-20251001`; a flow with a document.
       Read:
