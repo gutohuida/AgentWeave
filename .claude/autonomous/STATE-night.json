@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "31dcb3f",
   "stop_at": "2026-09-17T07:00:00+01:00",
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-09-16-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "amtci-drive",
-  "next_action": "Do sections 6-7 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md, ONLY IF THEY GENUINELY FIT before stop_at (2026-09-17T07:00:00+01:00). If they don't fit, stop immediately, say so in the log, and set next_action to null -- leave the change unarchived for a later window; §5's gates are already green and committed, so nothing is lost by stopping here. 6.1: on the TRIAL Hub (:8010, from source per .claude/reference/hubs.md -- never :8000), approve a document declaring a task with criteria and confirm the created task carries them -- the trial Hub's spec_documents table is currently empty, so this requires actually creating and approving one, not just reading. 6.2: fire a loop on that task and read the briefing the agent actually received (not the model field). 6.3: confirm the task drawer renders the criteria in the UI without a bundle change. 6.4: confirm a briefing with a large criteria block still spawns a run -- scheduler.py:3088 / runner_commands.py:268 pass the briefing as one command-line argument, and pty_runner.py:68-88 records a prior incident on that path, so measure it, don't reason about it. 6.5: add one sentence to submit_spec_document's docstring in hub/hub/mcp_server.py (the acceptance-criteria counterpart to the existing tasks-creation sentence at mcp_server.py:1731-1735) -- .claude/rules/ loads extra rules for mcp_server.py edits, read them first, and commit in the same pass, never leave mid-edit uncommitted. 7.1: update openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md section 12 to record item 1 as built (note the effect is only measurable on tasks created after this ships, per design D5). 7.2: `openspec archive` is the OPERATOR's call, not this window's -- do not run it; leave the change approved-and-built for the operator to archive.",
+  "current": null,
+  "next_action": null,
   "queue": [
     {
       "id": "amtci-impl",
@@ -41,12 +41,14 @@
     },
     {
       "id": "amtci-drive",
-      "status": "open",
+      "status": "done",
       "title": "\u00a76-\u00a77 -- drive and close-out, only if it fits",
-      "detail": "If it doesn't genuinely fit before stop_at, stop after gate, say so in the log, leave the change unarchived for a later window. Task 6.5 edits hub/hub/mcp_server.py (one docstring sentence, F354) -- commit in the same pass, never leave mid-edit uncommitted."
+      "detail": "Done iteration 6: it fit (checked at ~00:40 against 07:00 stop_at). 6.1 approved spdoc-b903644b6bb6 on the trial Hub, materialised task-f08fecf7d087, confirmed its acceptance_criteria via GET. 6.2 pre-declared a Loop as the document's owner before approval (Task.loop_id is write-once), auto-staffed the materialised task, fired a real run on claude-haiku-4-5-20251001, read the stored briefing from inbound_queue_entries (1,639 chars) and it carried the criterion verbatim. 6.3 screenshotted the task drawer via the already-built UI bundle (no npm run build) showing the rendered criterion. 6.4 fired a real run on a 9-criterion task (3,467-char block, 87% of the 4,000-char reference bound; full briefing 4,871 chars) and both run and task reached completed -- the scheduler.py:3088/runner_commands.py:268 single-arg path held, pty_runner.py:68-88's prior incident did not recur. 6.5 added one sentence to submit_spec_document's docstring in hub/hub/mcp_server.py after reading .claude/rules/mcp-server.md. 7.1 updated the exploration doc's section 12 item 1 with the D5 caveat. 7.2 deliberately left undone -- operator's call. All cleanup verified (throwaway spec/changes/* docs deleted, three test jobs disabled, trial-Hub uvicorn process stopped by this iteration). Committed c255148, pushed. Queue finished; next_action set to null."
     }
   ],
-  "decisions_for_user": [],
+  "decisions_for_user": [
+    "a-materialised-task-carries-its-criteria is fully built, tested (25 tests + 17/17 mutations confirmed), gated green (full suite + lint + mypy + openspec validate), and driven end to end on the trial Hub (approval, a real haiku run reading the rendered criteria in its briefing, a UI screenshot, and a large-criteria-block run). Task 7.2 (`openspec archive`) is ready whenever you want to take it -- deliberately left to you per CLAUDE.md and the change's own tasks.md."
+  ],
   "limits": [
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
