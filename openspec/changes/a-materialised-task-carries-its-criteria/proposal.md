@@ -31,11 +31,14 @@ and description to apply it with. The standard has to be re-derived from the cod
 | hand-made (`spec_task_key IS NULL`) | 18 | **18** |
 | spec-materialised (`spec_task_key IS NOT NULL`) | 32 | **0** |
 
-Not one spec-materialised task in that corpus carried a criterion. Over the same window the
-reviewing agent averaged **1,898,949 input tokens per turn** across the 42 of its 47 measured turns
-that executed anything, and the whole project's turns spent 470M of 481M input tokens on cached
-re-reads to produce 3.7M output tokens — 0.77%. The full measurement, its method and its blind
-spots are in `openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md`.
+Not one spec-materialised task in that corpus carried a criterion. Over the same window the project
+spent **470M of its 481M input tokens on cached re-reads** to produce 3.7M output tokens — 0.77% —
+and the reviewing agent averaged **1,898,949 input tokens per turn** across the 42 turns that both
+carried usage and could be classified by their tool calls. (That agent has 62 measured turns in
+total; 47 of them could be classified this way, of which 42 executed something. The 42-of-47 figure
+is a subset statistic and is stated as one here — the earlier phrasing implied 47 was its whole
+measured population, which it is not.) The full measurement, its method and its blind spots are in
+`openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md`.
 
 Why now: the explorations that follow this one (an iteration budget, a single end-of-task gate, and
 moving orchestration out of the coordinating agent) all assume a task states its own standard. None

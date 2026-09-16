@@ -26,6 +26,14 @@ something the document did not say.
 
 Attaching criteria SHALL NOT change which tasks are created, their identity, or their titles.
 
+An attached criterion SHALL be identifiable as the criterion the document declared, so that anything
+later reporting on one can say which it was. A criterion that arrives unidentifiable cannot be
+matched back to the document, and nothing that already exists can recover the link afterwards.
+
+A document whose acceptance criteria cannot be read SHALL still have its declared tasks created.
+Criteria state a standard for work; failing to read them is a reason to create the work without its
+standard, never a reason to create less of the work than the document declared.
+
 #### Scenario: A task's criteria follow its requirements
 
 - **WHEN** a document declares a task naming a requirement
@@ -72,3 +80,22 @@ Attaching criteria SHALL NOT change which tasks are created, their identity, or 
 - **WHEN** a criterion declared with a starting state, an event and an observable outcome is attached to a task
 - **THEN** all three are present in what the task carries
 - **AND** the outcome is not discarded in favour of the event alone
+
+#### Scenario: An attached criterion says which criterion it is
+
+- **WHEN** a document declares two criteria against the same requirement
+- **AND** a task naming that requirement is created
+- **THEN** each attached criterion identifies which declared criterion it came from
+- **AND** the two are distinguishable from one another without re-reading the document
+
+#### Scenario: Unreadable criteria do not cost the document its tasks
+
+- **WHEN** a document declares several tasks
+- **AND** its acceptance criteria cannot be read
+- **THEN** every task the document declares is still created
+- **AND** those tasks carry no criteria
+
+#### Scenario: Attaching criteria changes nothing about which tasks exist
+
+- **WHEN** a document is approved with acceptance criteria and again without them, all else equal
+- **THEN** the same tasks are created in both cases, with the same identities and the same titles

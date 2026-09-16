@@ -112,9 +112,11 @@ keys, validated against the same `known` set in the same call"*. That is false f
 
 - The approval route reads the **file** and parses it with `extract_payload`, **not**
   `validate_payload` (`hub/hub/api/v1/spec.py:1533-1537`), then hands the result straight to
-  `materialise_quietly`.
-- `spec_adoption.py` never calls `validate_payload` at all — it uses `extract_payload` plus its own
-  title/kind checks (`:39,190-230`).
+  `materialise_quietly`. This is the only production call site of `materialise` in the Hub.
+- A file can also come to exist without ever passing `validate_payload`: `spec_adoption.py` uses
+  `extract_payload` plus its own title/kind checks (`:39,190-230`). **Adoption does not itself call
+  `materialise()`** — the adopted file reaches it later, through the same approval route above — so
+  this explains where an unvalidated file comes from, and is not a second path to guard.
 
 So `validate_payload` constrains what can be **saved through the Hub**, and guarantees nothing about
 what `materialise()` is given. A hand-edited or adopted file can hold anything.
@@ -139,10 +141,28 @@ Approval calls `materialise_quietly()`, which catches **every** exception and re
 (`spec_tasks.py:416-423`), by deliberate design: *"Failing that decision because the board could not
 be populated would make an unrelated problem look like a refusal to approve."*
 
-The consequence for this change is severe and R1 missed it entirely: **if criteria-matching raises,
-no tasks are created at all, and the approval reports success.** The failure mode of a bug here is
-not "tasks without criteria" — it is "an approved document with an empty board and a warning in a
-log nobody reads."
+**The adversarial review corrected what that failure actually is, and it is worse than R2 and R3
+both wrote.** R2/R3 stated it as "no tasks are created at all". That holds only if the raise happens
+before the first task is flushed. It does not, because `session.add(task)` and `await
+session.flush()` sit **inside** the per-entry loop (`spec_tasks.py:218-219`), and
+`materialise_quietly` catches without rolling back, after which `api/v1/spec.py:1537-1541` commits.
+
+So a raise while processing entry *k* of *N* leaves **a committed partial board**: entries 1..k-1
+exist, k..N do not. Three consequences follow that no round had named:
+
+1. `_materialise_edges` (`spec_tasks.py:235`) sits after the loop and never runs, so **none** of the
+   committed tasks receive dependency edges — a silent graph hole that survives until someone
+   re-approves.
+2. `created` is `[]`, so the route reports `tasks_created: []` and broadcasts no `task_updated`
+   event (`api/v1/spec.py:1544-1546`). **The API response and the database disagree**, and the
+   operator's board does not refresh to show the rows that do exist.
+3. A mutation check that asserts "no tasks" would pass accidentally on a single-entry fixture and
+   mean nothing. Test 3.11 must use two or more declared entries with the fault on the second.
+
+**The design consequence:** do not merely make rendering total — build the criteria index **once,
+before the loop** (D7), so that a payload this code cannot read fails identically for every entry
+instead of part-way through. That converts the failure from a prefix into "every task created, none
+with criteria", which is the behaviour the spec now requires.
 
 So the implementation must be total over any shape the stored payload can hold: no `[...]` indexing
 that can `KeyError`, no assumption that `payload["acceptance_criteria"]` is present, is a list, or
@@ -158,6 +178,30 @@ is an ordinary case, not a pathological one.
 
 A test should assert that a malformed `acceptance_criteria` block does not prevent task creation,
 and it must run through `materialise_quietly`, because that is the path that would hide the raise.
+
+### D7 — Reuse `spec_reading.criteria_by_requirement_key`, and build the index once before the loop
+
+**Added after the adversarial review, which found that all three rounds proposed writing a function
+this repository already has.** `hub/hub/spec_reading.py:86-112` is
+`criteria_by_requirement_key(payload) -> {requirement key: [criterion, ...]}` — exactly what task
+2.1 described. Its own docstring states the reason it exists: *"the join happens once here rather
+than being re-derived — wrongly, for a document whose criteria interleave — by each caller."*
+
+It is also already total in the way D6 demands: it returns `{}` for a non-dict payload (`:96-97`),
+skips a non-dict entry (`:99-100`), skips a non-string or empty `requirement` (`:101-103`), and uses
+`.get()` for `key`/`given`/`when`/`then` so a missing field becomes `None` rather than a `KeyError`
+(`:105-111`).
+
+**One hole remains and must be closed rather than assumed away:** `payload.get("acceptance_criteria")
+or []` at `:98` iterates whatever it finds. A string or dict degrades harmlessly to "no criteria",
+but a scalar (`"acceptance_criteria": 5`) raises `TypeError` — which is precisely D6's failure. So
+this change reuses the helper **and** guards its input with an `isinstance(..., list)` check.
+
+CLAUDE.md's standing preference is that the cleanest solution wins; a second grouping of the same
+data, differing from this one in the interleaving case its docstring names, is the opposite of that.
+
+**The index is built once, before the per-entry loop**, for the reason in D6: a payload this code
+cannot read must fail the same way for every entry, not part-way through.
 
 ### D4 — Ordering follows the document
 
@@ -219,11 +263,18 @@ on tasks created after it ships.
      document and do not grow with the loop's history. Extending a requirement about accumulation to
      cover something that does not accumulate would blur what it protects.
 
-   **Residual, accepted and stated rather than hidden:** total briefing length now grows with the
-   document. A task naming many requirements with many criteria each lengthens every firing for that
-   task. This is bounded by the document's own size, which a person wrote, and the alternative is
-   the re-derivation this change exists to remove. Task 1.6's measurement is carried into
-   implementation as task 5.4 rather than being dropped.
+   **Residual — and the adversarial review found the bound all three rounds missed.**
+   `spec_completeness.MAX_REQUIREMENTS_PER_TASK = 3` (`hub/hub/spec_completeness.py:39`, enforced at
+   `:220-226`) is itself a stated requirement of the capability this change modifies —
+   *"A declared task's requirement span is capped, and the Hub enforces it"*. A declared task can
+   therefore contribute **at most three requirements' worth** of criteria, so open question 2's
+   answer is right for a stronger reason than R3 gave, and task 5.4 has a concrete ceiling to
+   measure against rather than an open-ended one.
+
+   **The one gap in that bound:** it is enforced on the transition to `proposed`, so a document
+   adopted from disk already at `proposed` or later, and then approved, is never checked against it.
+   That is the same unvalidated-file window D6 covers, and it needs no separate remedy — but it does
+   mean the cap is a strong norm rather than an invariant, and task 5.4 should not assume it.
 3. ~~Is `spec_payload`'s referential check sufficient?~~ — **closed by R2, by running it.** It
    refuses both a criterion and a task entry that names a requirement the document does not define.
 
@@ -249,8 +300,25 @@ on tasks created after it ships.
   **re-measured the corpus**: all 32 spec-materialised tasks are `acceptance_criteria IS NULL`, none
   `[]`, which also confirms task 2.4's instruction to leave the field unset.
 
+- **Adversarial review** (Opus, after R3, at the operator's standing instruction). Verdict: approve
+  with fixes. It confirmed the premise, the reviewer-briefing benefit path, D1, D3, D5 and the
+  corpus measurement by independent re-derivation — including that no competing review-briefing path
+  exists (`api/v1/agent_trigger.py:852` dispatches through a turn context, `api/v1/agents.py:1614-1650`,
+  that names the task and commit but no criteria). It then found five things three rounds had not:
+  **D6's failure mode was wrong** (a committed partial board with no dependency edges, not an empty
+  one — now D6 and D7); **`spec_reading.criteria_by_requirement_key` already exists** and all three
+  rounds proposed rewriting it (now D7); **D2's key decision was pinned by nothing** (now a spec
+  scenario, test 3.13, mutation 4.7); **D6 had no requirement text or scenario** and would have been
+  lost when `tasks.md` is discarded at archive (now two scenarios); and **tasks 2.1 and D4
+  prescribed opposite iteration directions**, which silently duplicates on a repeated requirement
+  name (now task 2.2, tests 3.14/3.15, mutation 4.8). It also found the bound that closes open
+  question 2 properly (`MAX_REQUIREMENTS_PER_TASK = 3`) and one inaccurate statistic in the
+  proposal, both since corrected.
+
 **What this round discipline caught that a single pass would not:** R1 named a hazard that does not
 exist and prescribed the wrong remedy for it; R2 removed the hazard but justified the remedy with a
-guarantee that does not hold where it matters; R3 kept the remedy and replaced the guarantee. The
-instruction in the code has been the same since R2 — the *reason* for it was wrong until R3, and
-the reason is what the next person edits against.
+guarantee that does not hold where it matters; R3 kept the remedy and replaced the guarantee; the
+adversarial review found that the remedy's own failure mode had been mis-stated by all three, and
+that the function they were specifying was already in the repository. The instruction in the code
+has been the same since R2 — everything after it has been about whether the *reasons* survive, and
+the reasons are what the next person edits against.

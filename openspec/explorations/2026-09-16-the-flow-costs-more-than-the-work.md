@@ -319,8 +319,16 @@ whether it executed or wrote anything:
   READ ONLY (no exec, no write)     5       259,391      0.31     $ 1.57
 ```
 
-**42 of 47 measured tester turns ran something.** Across all agents the split is 154 grounded
+**42 of 47 classifiable tester turns ran something.** Across all agents the split is 154 grounded
 ($257.02) against 43 read-only ($24.22).
+
+**Correction, found by the adversarial review of the change this file motivated:** these counts are
+a *subset*, and an earlier phrasing of this section called them "measured turns", which they are
+not. `turn_usage` holds **62** measured tester turns and **274** across all agents; the
+classification above joins usage rows to per-run tool profiles and covers 47 tester turns and 197
+overall. The 77 turns it does not reach are mostly the zero-token, NULL-model rows §1 already lists
+as a blind spot. The direction of the finding is unaffected — an unclassified turn is not a
+read-only one — but the denominators are the classifiable population, not the measured one.
 
 **This neither confirms nor refutes the concern, and should not be cited as if it did.** There is no
 population of *thorough read-only reviews* in this corpus to compare against — the 5 read-only turns

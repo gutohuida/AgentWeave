@@ -62,11 +62,19 @@ in the task's own Done note.
 
 ## 2. Implementation
 
-- [ ] 2.1 Read the document's `acceptance_criteria` inside `materialise()`, indexed by the
-      requirement key each names.
-- [ ] 2.2 For each created task, attach the criteria whose `requirement` is one of the names in that
-      entry's own `requirements` list — `named`, **not** the resolved row's `.key` (design D3 as
-      corrected by R2) — in document order (design D4).
+- [ ] 2.1 Use the existing `spec_reading.criteria_by_requirement_key(payload)`
+      (`hub/hub/spec_reading.py:86-112`) rather than writing a second grouping (design D7). Guard
+      its input with an `isinstance(..., list)` check, because `:98`'s
+      `payload.get("acceptance_criteria") or []` raises `TypeError` on a scalar. Build it **once,
+      before the per-entry loop** (design D6/D7).
+- [ ] 2.2 For each created task, iterate **`payload["acceptance_criteria"]` once in document order**
+      (design D4) and keep the criteria whose `requirement` is in the **set** of names in that
+      entry's own `requirements` list — `named`, **not** the resolved row's `.key` (design D3).
+      Iterating the entry's requirements and concatenating per-requirement lists is the wrong
+      direction: it yields entry order rather than document order whenever criteria interleave, and
+      it attaches a requirement's criteria twice when an entry names it twice. A repeated name is
+      not refused anywhere — `spec_payload.py:279-285` checks membership only, and the approval path
+      does not validate at all.
 - [ ] 2.3 Render each criterion to one string per design D2, prefixed with the criterion key
       (`<key>: Given ..., when ..., then ...`) per task 1.2.
 - [ ] 2.5 Make the whole path total (design D6): no indexing that can raise, no assumption that the
@@ -88,11 +96,22 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
 - [ ] 3.7 A requirement whose row `key` has drifted from the payload key still gets its criteria —
       the case D3 now turns on. Replaces R1's key-vs-identifier test, which pinned a case task 1.3
       measured to be impossible.
-- [ ] 3.11 A stored payload whose `acceptance_criteria` is malformed (absent, not a list, or holding
-      entries without the expected fields) still creates its tasks, with no criteria and no raise
-      (design D6). Assert through `materialise_quietly`, since that is the path approval uses and
-      the one that would hide a raise. **A payload that never passed `validate_payload` is the
-      realistic case, not a contrived one** — see task 1.5.
+- [ ] 3.11 A stored payload whose `acceptance_criteria` is malformed (absent, not a list, a scalar,
+      or holding entries without the expected fields) still creates its tasks, with no criteria and
+      no raise (design D6/D7). Assert through `materialise_quietly`, since that is the path approval
+      uses and the one that would hide a raise. **The document MUST declare at least two tasks with
+      the fault reachable on the second**, and the test MUST assert that *both* exist — a
+      single-entry fixture passes accidentally and proves nothing, because the flush is inside the
+      per-entry loop (`spec_tasks.py:218-219`). **A payload that never passed `validate_payload` is
+      the realistic case, not a contrived one** — see task 1.5.
+- [ ] 3.13 A task's criteria carry the criterion key, and two criteria on the same requirement are
+      distinguishable from one another (design D2). Without this, D2's decision — argued as
+      irreversible because D5 forbids backfill — is pinned by nothing.
+- [ ] 3.14 An entry naming the same requirement twice attaches that requirement's criteria once,
+      not twice (task 2.2).
+- [ ] 3.15 Criteria that interleave in the document (two requirements' criteria alternating) are
+      attached in document order, not grouped by requirement (design D4). Test 3.6 with a single
+      requirement cannot catch this.
 - [ ] 3.12 A file whose task entries and criteria use different namespaces attaches no criteria to
       those tasks, creates them anyway, and does not raise (design D3's accepted consequence).
 - [ ] 3.8 Every attached criterion carries its given, its when and its then.
@@ -107,8 +126,13 @@ mutation reverted with `git checkout`. A mutation that flips no test means the t
 pin what they claim to.
 
 - [ ] 4.1 Match criteria on the resolved row's `.key` instead of the entry's `named` → 3.7 fails.
-- [ ] 4.6 Let a malformed criterion entry raise instead of being skipped → 3.11 fails, and fails by
-      producing *no tasks*, which is the point of D6.
+- [ ] 4.6 Let a malformed criterion entry raise instead of being skipped → 3.11 fails, **and fails
+      by leaving a committed partial board** (the entries before the fault, with no dependency
+      edges), not by producing no tasks. Record which rows survived: that is the observation the
+      mutation exists to make, and the reason 3.11 needs two entries.
+- [ ] 4.7 Render without the criterion key → 3.13 fails.
+- [ ] 4.8 Group criteria by requirement instead of walking the document once → 3.15 fails, and 3.14
+      fails too if the grouping is concatenated per named requirement.
 - [ ] 4.2 Attach every criterion in the document regardless of requirement → 3.2 fails.
 - [ ] 4.3 Drop the `then` from the rendered string → 3.8 fails.
 - [ ] 4.4 Sort criteria by key instead of document order → 3.6 fails.
@@ -123,8 +147,10 @@ pin what they claim to.
 - [ ] 5.3 `openspec validate --strict a-materialised-task-carries-its-criteria` — passes.
 - [ ] 5.4 Measure what this actually adds to a briefing (carried from R3's task 1.6): for a real
       approved document, record the character count the criteria block contributes against the
-      4,000-character checkpoint bound it sits beside. Record the number; propose a bound only if
-      the measurement asks for one.
+      4,000-character checkpoint bound it sits beside. The ceiling is three requirements' worth of
+      criteria (`spec_completeness.MAX_REQUIREMENTS_PER_TASK = 3`), but that cap is enforced only on
+      the transition to `proposed`, so do not assume it for an adopted document. Record the number;
+      propose a bound only if the measurement asks for one.
 
 ## 6. Drive
 
