@@ -335,8 +335,39 @@ This rule binds **every actor, including the operator**, and that is what distin
 author/reviewer separation above. That rule is about authority — who is entitled to sign work off —
 and exempts the operator because a single-operator project must be able to approve anything. This
 rule is about the state the move produces, which misdescribes the world whoever writes it: it
-asserts that a reviewer holds the task while naming its author. An operator who intends to review
-the work themselves SHALL do so by clearing or reassigning the assignee, which the refusal states.
+asserts that a reviewer holds the task while naming its author.
+
+**The refusal SHALL name a remedy the refused actor can take, and SHALL NOT name a control that
+actor does not have.**
+- **To the operator,** it SHALL name the landing action as the way to review the work themselves,
+  and SHALL NOT promise that landing approves it, because landing is subject to the approval gate.
+  It SHALL also name dispatching a different agent's review turn as the way to have another agent
+  review it, stated as an API request rather than as a control in the app. It SHALL NOT offer a
+  request that changes the holder and the status without starting that agent's turn: a task left
+  under review by an agent with no turn is a review nobody is doing.
+- **To an agent,** it SHALL state that none of the task tools the agent is offered reassigns a task,
+  and SHALL name who can move the work on. It SHALL NOT tell the agent to change the task's holder
+  by any route.
+
+The refusal SHALL keep its remedy whole wherever it is recorded, so it SHALL fit the shortest
+surface that records it at the longest task identifier and agent name the Hub accepts.
+
+Measured on the operator's own project: agents met this refusal eight times and could act on none
+of them. Its remedy, *"clear the assignee"*, is a field no agent tool carries and no control in the
+app sends. The action that works sat unnamed beside it.
+
+A refusal that tells an agent no agent *can* change a task's holder would be false. The agents'
+HTTP task route accepts an assignee today, though neither rendering of the agent's tool surface
+offers one. The refusal describes the surface the agent is given.
+
+**A review dispatched by the operator and refused because the reviewer is the task's author SHALL
+name a remedy that exists for the task's status**: the landing action for a `completed` task, and
+the operator's own decision for an `under_review` task, which landing refuses.
+
+**The refusal SHALL be true whether the assignee it judges was already recorded or was set by the
+same operation**, and SHALL NOT state that the task is assigned to that agent. A dispatch writes the
+reviewer before it transitions. A refused dispatch then discards that write, so a sentence saying
+the task *is assigned to* the agent describes an assignment nobody can see.
 
 **Where no completer is recorded, the system SHALL refuse the transition when the assignee is
 recorded as having produced evidence for that task, and SHALL permit it otherwise.** The
@@ -367,6 +398,49 @@ reviewer and sending the task to review is accepted rather than refused on the a
 
 - **WHEN** the operator makes that same move
 - **THEN** it is refused on the same grounds
+
+#### Scenario: The operator's refusal names the landing action
+
+- **WHEN** the operator's move of a completed task still held by its author to `under_review` is
+  refused
+- **THEN** the refusal names the landing action as the way to review the work themselves
+- **AND** it names dispatching another agent's review turn as the way to have another agent review it
+- **AND** it does not tell the operator to clear the assignee
+- **AND** it does not state that landing approves the work
+
+#### Scenario: The operator's refusal keeps its remedy at the longest identifiers
+
+- **WHEN** the operator's move is refused for a task whose identifier and author name are the
+  longest the Hub accepts
+- **THEN** the refusal fits the length the loop's run history accepts
+- **AND** its remedy is present in full
+
+#### Scenario: An agent's refusal does not offer it a control it lacks
+
+- **WHEN** an agent's move of a completed task held by that task's author to `under_review` is
+  refused
+- **THEN** the refusal states that none of the task tools the agent is offered reassigns a task
+- **AND** it does not tell the agent to clear the assignee or to assign a reviewer
+
+#### Scenario: A dispatch refused for an under-review task does not name landing
+
+- **WHEN** the operator dispatches a review of an `under_review` task to the agent recorded as
+  completing it
+- **THEN** the refusal names approving, rejecting or returning the task for revision
+- **AND** it does not name the landing action
+
+#### Scenario: A dispatch refused for a completed task names landing
+
+- **WHEN** the operator dispatches a review of a `completed` task to the agent recorded as
+  completing it
+- **THEN** the refusal names the landing action
+- **AND** it does not tell the operator to clear the assignee
+
+#### Scenario: A refused dispatch does not claim an assignment it discarded
+
+- **WHEN** a dispatch staffs the task's author as its reviewer and the transition is refused
+- **THEN** the recorded reason does not state that the task is assigned to that agent
+- **AND** the task's assignee is what it was before the dispatch
 
 #### Scenario: Naming a reviewer in the same request succeeds
 

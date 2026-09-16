@@ -429,7 +429,17 @@ mutation and the observed failure beside the task when ticking it.
       (`GET /projects` × `GET .../jobs?include_archived=true`, two projects, zero enabled jobs).
       The drive Hub process on `:8011` was then stopped. Neither `:8000` nor `:8010` was touched;
       project ids were `proj-2da3edf9339c` and `proj-d156af755303`, neither forbidden.
-- [ ] 5.4 Archive:
+- [x] 5.4 Archive:
       - sync `agent-loops` and `task-lifecycle-governance` deltas into `openspec/specs/`;
       - move the change to `archive/<date>-a-refusal-names-a-remedy-that-works`;
       - in FINDINGS, mark F353, F334, F365 and F367 `fixed <sha>`.
+
+      Deltas hand-synced into `openspec/specs/agent-loops/spec.md` (new requirement "A firing's
+      recorded reason never makes the loop's history unreadable"; the "unchanged" scenarios added
+      to "A surfaced step is recorded once, not once per tick") and
+      `openspec/specs/task-lifecycle-governance/spec.md` (the actor-specific remedy text and its
+      seven new scenarios folded into "A task entering review must not still name its author as
+      its holder"). `openspec validate --strict --all` passes, 45/45. Archived with
+      `openspec archive --yes --skip-specs` (specs already applied by hand) to
+      `archive/2026-09-16-a-refusal-names-a-remedy-that-works`. FINDINGS.md status lines updated
+      in the following commit, referencing this commit's sha.
