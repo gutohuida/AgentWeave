@@ -159,10 +159,19 @@ exist, k..N do not. Three consequences follow that no round had named:
 3. A mutation check that asserts "no tasks" would pass accidentally on a single-entry fixture and
    mean nothing. Test 3.11 must use two or more declared entries with the fault on the second.
 
-**The design consequence:** do not merely make rendering total — build the criteria index **once,
-before the loop** (D7), so that a payload this code cannot read fails identically for every entry
-instead of part-way through. That converts the failure from a prefix into "every task created, none
-with criteria", which is the behaviour the spec now requires.
+**The design consequence:** build the criteria index **once, before the loop** (D7), *and* make it
+total (the guard, D7/D8). The two do different jobs, and an earlier draft of this paragraph confused
+them — corrected by the second review:
+
+- **Position** converts a *prefix* failure into an *all-or-nothing* failure. A raise before the loop
+  means `materialise()` returns nothing and `materialise_quietly` swallows it, so **no task is
+  created** — bad, but recoverable by re-approval, and free of the silent dependency-edge hole a
+  committed prefix leaves behind.
+- **Totality** is what actually delivers the spec's outcome, "every task created, none with
+  criteria". Position alone does not; the guard does.
+
+Mutation 4.10 already states this correctly (*"Remove the `isinstance` guard → 3.18 fails, and fails
+by creating no tasks"*), and the earlier wording here contradicted it.
 
 So the implementation must be total over any shape the stored payload can hold: no `[...]` indexing
 that can `KeyError`, no assumption that `payload["acceptance_criteria"]` is present, is a list, or
@@ -194,8 +203,20 @@ skips a non-dict entry (`:99-100`), skips a non-string or empty `requirement` (`
 
 **One hole remains and must be closed rather than assumed away:** `payload.get("acceptance_criteria")
 or []` at `:98` iterates whatever it finds. A string or dict degrades harmlessly to "no criteria",
-but a scalar (`"acceptance_criteria": 5`) raises `TypeError` — which is precisely D6's failure. So
-this change reuses the helper **and** guards its input with an `isinstance(..., list)` check.
+but a scalar (`"acceptance_criteria": 5`) raises `TypeError` — which is precisely D6's failure.
+
+**The guard goes inside the helper, not at this change's call site — corrected by the second
+review.** D7 originally put it at `materialise()`. The helper's other caller is
+`spec_reading.requirement_view` (`spec_reading.py:130`), reached from `read_spec_document`
+(`hub/hub/api/v1/agent_actions.py:1399`), which parses the same file with the same unvalidating
+`extract_payload` and has no `try`/`except`. Guarding only the new call site leaves the identical
+`TypeError` reachable there, turning an agent's `read_spec_document` into a 500 for exactly the
+unvalidated file this change insists must not cost a document its tasks.
+
+One line inside the helper — `raw = payload.get("acceptance_criteria")`, return early unless it is a
+list — fixes both callers, and is what CLAUDE.md's "cleanest solution wins" argues for.
+`hub/tests/test_spec_reading.py:213` already exercises the helper's grouping, so the change is
+covered there.
 
 CLAUDE.md's standing preference is that the cleanest solution wins; a second grouping of the same
 data, differing from this one in the interleaving case its docstring names, is the opposite of that.
@@ -241,12 +262,43 @@ This is why D6's "total" is stated as totality of **output**, not merely absence
 function that cannot raise but emits `"None: Given None"` has satisfied the letter of D6 and
 defeated the change.
 
-### D4 — Ordering follows the document
+### D4 — Ordering is grouped by requirement, in requirement declaration order — **reversed by the second review**
 
-Criteria are attached in the order they appear in `payload.acceptance_criteria`, not grouped by
-requirement or sorted by key. The document's order is the author's, and a reader comparing the task
-against the document should see the same sequence. This also makes the result deterministic, which
-the tests depend on.
+Criteria are attached **grouped by the requirement they belong to, in `payload.requirements`
+declaration order, stable within each requirement**.
+
+**R1 decided the opposite and its reason was false.** R1 wrote that criteria should follow
+`payload.acceptance_criteria` order because *"a reader comparing the task against the document
+should see the same sequence"*, and R2, R3, the first adversarial review and R4 all left it
+standing. The document that reader actually sees does **not** use payload order —
+`hub/hub/spec_render.py:305-318` sorts criteria into requirement order before rendering the table,
+and says why in its own comment:
+
+> *"Grouped by the requirement each criterion belongs to, in requirement order. Submission order is
+> the author's and is not this order: the first agent-authored document listed FR-8, FR-8, FR-7, and
+> a reader scanning the table by requirement lost their place. The sort is stable, so criteria for
+> one requirement keep the order they were written in — that order carries the author's emphasis and
+> is theirs to choose."*
+
+So payload order is the one sequence the reader will never see, and this repository already settled
+the question the other way, after a real incident. `criteria_by_requirement_key`'s docstring takes
+the same side, calling per-caller re-derivation *"wrong, for a document whose criteria interleave"*
+(`spec_reading.py:91-93`).
+
+**Match `spec_render._acceptance` exactly**: requirements in declaration order, criteria stable
+within a requirement. A task's criteria then read in the same order as the rows of the document's
+own acceptance table, which is what R1 was reaching for and got backwards.
+
+**This reversal also dissolves a contradiction the second review found (its F1).** D7 mandates
+reusing `criteria_by_requirement_key`, which returns `{requirement key: [criterion, ...]}` and
+therefore *cannot* reproduce cross-requirement payload order — while task 2.2, as written after the
+first review, forbade exactly the grouping D7 requires, and mutation 4.8 would have been satisfied
+by the prescribed implementation itself. No implementation could satisfy both. With D4 reversed the
+helper is the right tool, the grouping is the wanted behaviour, and the contradiction is gone.
+
+**Repeated names still de-duplicate.** An entry naming the same requirement twice is not refused
+anywhere (measured: `requirements: ["req-a", "req-a"]` is accepted), so the entry's names are
+reduced to a set — preserving first-appearance order — before their groups are concatenated.
 
 ### D5 — Already-materialised tasks are not backfilled
 
@@ -302,8 +354,43 @@ Two consequences:
 ## Open Questions
 
 1. ~~D2's key prefix~~ — **closed by R2**: include it, on the lossy-and-unbackfillable asymmetry.
-2. ~~Does the briefing need a criteria bound?~~ — **closed by R3: no, and `agent-loops` is not
-   modified.** Two independent reasons:
+2. **Does the briefing need a criteria bound?** — **RE-OPENED by the second review, and now answered
+   YES.** R3 closed this, and its closure answered only half the question the design itself had
+   asked. The original test was: *"confirm that a pathological document cannot produce a briefing
+   that displaces the prior checkpoint **or overruns the job message**."* R3 answered displacement
+   and nobody answered the second clause.
+
+   **The briefing is delivered as a command-line argument.** `scheduler.py:3088` builds
+   `content = f"{briefing}\n{job.message}"`, and `runner_commands.py:268` emits `cmd += ["-p",
+   prompt]` (Codex, `:337`, passes it positionally). Windows caps a command line at 32,767
+   characters, and a run routed through `cmd.exe` at 8,191. `pty_runner.py:68-88` records that this
+   repository has already been burned on this exact delivery path.
+
+   **Nothing truncates `content`.** The only cap in `_compose_loop_briefing` is
+   `_LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000`, for the checkpoint alone.
+
+   **And the "concrete ceiling" this design previously cited is not one.**
+   `MAX_REQUIREMENTS_PER_TASK = 3` bounds how many *requirements* an entry may name. `spec_payload`
+   sets no `max_items` on `acceptance_criteria` and no `max_length` on `given`/`when`/`then`, so
+   three requirements' worth of an unbounded number of unbounded strings is unbounded.
+
+   **Measured over this repository's own 1,319 real acceptance criteria**, rendered as D2 specifies:
+   mean 164 characters, p90 220, max 362; criteria per requirement mean 2.92, max 12. A typical
+   three-requirement task contributes about 1,438 characters; the observed worst case is about
+   **13,032** — more than three times the cap the checkpoint beside it gets, from real documents
+   rather than a contrived one.
+
+   **Decision: bound the criteria block, truncating rather than omitting**, following the pattern
+   this very capability already uses for the checkpoint — *"An oversized prior checkpoint is
+   truncated, not omitted"* (`openspec/specs/agent-loops/spec.md:286-291`). A standard the agent can
+   partly read beats a turn that fails to spawn, and beats silently dropping the standard entirely.
+
+   **This adds a second modified capability.** `agent-loops` gains a delta spec, reversing R3's
+   answer. The proposal's Capabilities section is corrected accordingly, and this is a real scope
+   increase over what R1 through R4 believed they were proposing — recorded plainly rather than
+   folded in quietly.
+
+   ~~R3's two reasons, kept because both are still true and neither answers the question:~~
    - **No displacement is possible.** The criteria block (`scheduler.py:2456-2460`) and the prior
      checkpoint (`:2462-2471`) are both appended to the same `lines` list, in that order. They do
      not compete for a budget; criteria cannot truncate or evict the checkpoint. The only cap in
@@ -378,6 +465,21 @@ Two consequences:
   about which tasks exist" scenario was vacuous**, because approving one document twice creates
   nothing under `existing_keys` (now reworded to two documents). It also sharpened D5: the 32
   existing tasks are permanently unfixable, not merely un-backfilled.
+
+- **Second adversarial review** (Opus, independent of the first, over the state R4 left). Verdict:
+  **do not approve** — two blocking findings, both verified here before being acted on. It found
+  that **D7 and task 2.2 prescribed mutually exclusive implementations**, with mutation 4.8
+  satisfied by the very implementation D7 mandated; and that **D4's justification was refuted by the
+  codebase**, since `spec_render._acceptance` (`spec_render.py:305-318`) already groups criteria by
+  requirement and rejects submission order, citing the real incident that settled it. Reversing D4
+  dissolved the contradiction. It also **re-opened open question 2**, showing R3 had answered only
+  the displacement half while the briefing reaches the runner through argv with nothing truncating
+  it, and measured this repository's own 1,319 criteria to put the worst case at ~13,032 characters
+  — which adds `agent-loops` as a second modified capability. Further: the `isinstance` guard was in
+  the wrong layer (the helper's other caller would still 500), **D6's stated consequence contradicted
+  mutation 4.10**, the `already_served` skip makes scenario 1's conclusion false while its premise
+  holds, two SHALLs were over-broad, and the ordering decision was pinned by nothing durable — the
+  same defect the first review fixed for D2 and left here.
 
 **What this round discipline caught that a single pass would not:** R1 named a hazard that does not
 exist and prescribed the wrong remedy for it; R2 removed the hazard but justified the remedy with a

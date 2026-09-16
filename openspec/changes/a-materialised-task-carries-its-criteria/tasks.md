@@ -83,19 +83,20 @@ in the task's own Done note.
 
 ## 2. Implementation
 
-- [ ] 2.1 Use the existing `spec_reading.criteria_by_requirement_key(payload)`
-      (`hub/hub/spec_reading.py:86-112`) rather than writing a second grouping (design D7). Guard
-      its input with an `isinstance(..., list)` check, because `:98`'s
-      `payload.get("acceptance_criteria") or []` raises `TypeError` on a scalar. Build it **once,
-      before the per-entry loop** (design D6/D7).
-- [ ] 2.2 For each created task, iterate **`payload["acceptance_criteria"]` once in document order**
-      (design D4) and keep the criteria whose `requirement` is in the **set** of names in that
-      entry's own `requirements` list — `named`, **not** the resolved row's `.key` (design D3).
-      Iterating the entry's requirements and concatenating per-requirement lists is the wrong
-      direction: it yields entry order rather than document order whenever criteria interleave, and
-      it attaches a requirement's criteria twice when an entry names it twice. A repeated name is
-      not refused anywhere — `spec_payload.py:279-285` checks membership only, and the approval path
-      does not validate at all.
+- [ ] 2.1 Add the `isinstance(..., list)` guard **inside** `spec_reading.criteria_by_requirement_key`
+      (`hub/hub/spec_reading.py:98`), not at this change's call site (design D7, corrected by the
+      second review): the helper's other caller, `requirement_view` at `:130` reached from
+      `read_spec_document` (`api/v1/agent_actions.py:1399`), parses the same unvalidated file with
+      no `try`/`except`, so guarding only the new call site leaves the same `TypeError` returning a
+      500 there. `hub/tests/test_spec_reading.py:213` already covers the helper.
+- [ ] 2.2 Call `criteria_by_requirement_key(payload)` **once, before the per-entry loop** (design
+      D6/D7). For each created task, take its entry's `requirements` names — de-duplicated,
+      first-appearance order — and concatenate their groups **in `payload.requirements` declaration
+      order**, keeping each group's internal order (design D4 as reversed by the second review, to
+      match `spec_render._acceptance` at `hub/hub/spec_render.py:305-318`). Match on `named`, the
+      payload key, **not** the resolved row's `.key` (design D3). A repeated name is not refused
+      anywhere — `spec_payload.py:279-285` checks membership only, and the approval path does not
+      validate — so the de-duplication is load-bearing, not tidiness.
 - [ ] 2.3 Render each criterion to one string per design D2 and D8: prefix the handle
       **only when it is a non-empty string** (`<key>: Given ..., when ..., then ...`), otherwise
       render `Given ..., when ..., then ...` with no prefix. Never emit the literal `None` for an
@@ -134,9 +135,15 @@ Each pins a scenario from `specs/spec-document-authority/spec.md`.
       irreversible because D5 forbids backfill — is pinned by nothing.
 - [ ] 3.14 An entry naming the same requirement twice attaches that requirement's criteria once,
       not twice (task 2.2).
-- [ ] 3.15 Criteria that interleave in the document (two requirements' criteria alternating) are
-      attached in document order, not grouped by requirement (design D4). Test 3.6 with a single
-      requirement cannot catch this.
+- [ ] 3.15 Criteria that interleave in the document are attached **grouped by requirement, in
+      `payload.requirements` declaration order, stable within a requirement** — the same order
+      `spec_render._acceptance` renders the document's own acceptance table in (design D4 as
+      reversed). **This test is inverted from its original form**, which asserted payload order.
+- [ ] 3.20 A criteria block longer than the bound is included up to it and the truncation is
+      visible, not silently dropped (the `agent-loops` delta). Assert on the composed briefing.
+- [ ] 3.21 An entry whose requirements are all already served by existing work creates no task, and
+      the approval is not refused — the `already_served` skip at `spec_tasks.py:169,196-202`, which
+      no round had named and which makes scenario 1's premise satisfiable while its conclusion fails.
 - [ ] 3.16 A criterion with no handle is attached with its given/when/then and **no `None` appears
       anywhere in the rendered string** (design D8). Assert on the string, not on the model field —
       the defect is in what a reader sees.
@@ -167,8 +174,12 @@ pin what they claim to.
       edges), not by producing no tasks. Record which rows survived: that is the observation the
       mutation exists to make, and the reason 3.11 needs two entries.
 - [ ] 4.7 Render without the criterion key → 3.13 fails.
-- [ ] 4.8 Group criteria by requirement instead of walking the document once → 3.15 fails, and 3.14
-      fails too if the grouping is concatenated per named requirement.
+- [ ] 4.8 Order criteria by raw `payload.acceptance_criteria` position instead of by requirement
+      → 3.15 fails. **Inverted from its original form**, which mutated toward grouping and would
+      have been satisfied by the prescribed implementation itself once D7 mandated the helper — the
+      contradiction the second review found.
+- [ ] 4.12 Skip the de-duplication of an entry's repeated requirement names → 3.14 fails.
+- [ ] 4.13 Remove the criteria bound from the briefing → 3.20 fails.
 - [ ] 4.9 Always prefix the handle, including when it is absent → 3.16 fails (the string contains
       `None:`).
 - [ ] 4.10 Remove the `isinstance(..., list)` guard from task 2.1 → 3.18 fails, and fails by
@@ -204,6 +215,16 @@ pin what they claim to.
 
 ## 7. Close-out
 
+- [ ] 6.4 Confirm the briefing still spawns with a large criteria block: drive a task whose criteria
+      approach the bound and verify the run starts. The briefing reaches the runner as one
+      command-line argument (`scheduler.py:3088`, `runner_commands.py:268`), and `pty_runner.py:68-88`
+      records a prior incident on that path — measure it, do not reason about it.
+- [ ] 6.5 Add one sentence to `submit_spec_document`'s docstring in `hub/hub/mcp_server.py` saying
+      that a requirement's acceptance criteria become the standard rendered into the implementer's
+      and the reviewer's turn — the parallel of the existing "approving the document creates these
+      as real tasks" line for `tasks` (`mcp_server.py:1731-1735`), which has no counterpart for
+      `acceptance_criteria`. **`.claude/rules/` loads extra rules for `mcp_server.py` edits — read
+      them first.**
 - [ ] 7.1 Update `openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md` §12 to
       record item 1 as built, and note that per design D5 the effect is only measurable on tasks
       created after this ships.

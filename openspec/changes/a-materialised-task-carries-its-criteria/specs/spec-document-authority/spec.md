@@ -37,16 +37,36 @@ against, and withholding it to punish a missing handle would trade the standard 
 A criterion that states no starting state, no event and no outcome SHALL NOT be attached. It carries
 no standard, and presenting it to a reader as though it did is worse than its absence.
 
-A document whose acceptance criteria cannot be read SHALL still have its declared tasks created.
-Criteria state a standard for work; failing to read them is a reason to create the work without its
-standard, never a reason to create less of the work than the document declared.
+A document whose acceptance criteria cannot be read SHALL still create every task it would otherwise
+have created. Criteria state a standard for work; failing to read them is a reason to create the
+work without its standard, never a reason to create less of the work than the document declared.
+This is stated against what the system would otherwise create, because a declared entry may already
+be represented by existing work, and attaching criteria changes nothing about that.
+
+Attached criteria SHALL be ordered as the document's own acceptance table orders them, so that a
+reader holding the task beside the document is reading one sequence rather than two.
 
 #### Scenario: A task's criteria follow its requirements
 
 - **WHEN** a document declares a task naming a requirement
 - **AND** that document declares an acceptance criterion against the same requirement
-- **AND** the document is approved
+- **AND** the document is approved and a task is created for that entry
 - **THEN** the created task carries that criterion
+
+#### Scenario: Criteria are ordered the way the document's acceptance table is ordered
+
+- **WHEN** a document declares criteria for two requirements, interleaved in its own declaration of them
+- **AND** a task naming both requirements is created
+- **THEN** the task's criteria are grouped by requirement, in the order the document declares its requirements
+- **AND** within one requirement they keep the order the document wrote them in
+
+#### Scenario: An entry whose work already exists attaches criteria to nothing
+
+- **WHEN** a declared task names only requirements that existing work already serves
+- **AND** the document declares criteria against those requirements
+- **AND** the document is approved
+- **THEN** no task is created for that entry, as before
+- **AND** the approval is not refused
 
 #### Scenario: Criteria belonging to other requirements are not attached
 
@@ -111,9 +131,9 @@ standard, never a reason to create less of the work than the document declared.
 
 #### Scenario: Unreadable criteria do not cost the document its tasks
 
-- **WHEN** a document declares several tasks
+- **WHEN** a document declares several tasks that would otherwise all be created
 - **AND** its acceptance criteria cannot be read
-- **THEN** every task the document declares is still created
+- **THEN** all of those tasks are still created
 - **AND** those tasks carry no criteria
 
 #### Scenario: Attaching criteria changes nothing about which tasks exist

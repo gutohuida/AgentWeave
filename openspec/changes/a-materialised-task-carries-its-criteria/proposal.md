@@ -82,11 +82,21 @@ None.
   the name the board shows"* (`openspec/specs/spec-document-authority/spec.md:541`), which governs
   the same `materialise()` path and is the pattern to follow.
 
-**Considered and deliberately not modified:** `agent-loops`' *"A firing's briefing is bounded"*
-(`openspec/specs/agent-loops/spec.md:274`) bounds the **prior checkpoint** only, and this change adds
-content outside that bound. Whether criteria need their own bound is a real question and is raised
-in design.md rather than settled here — if the answer is yes, this proposal must gain a second
-modified capability, and R2/R3 should check that rather than inherit this sentence.
+- `agent-loops`: the briefing's bound extends to a claimed item's acceptance criteria, truncating
+  rather than omitting them, following the pattern that capability already uses for the prior
+  checkpoint.
+
+**This second capability is a scope increase over what R1 through R4 believed they were proposing,
+and it is recorded here rather than folded in quietly.** R1 raised the question, R3 answered "no
+bound needed", and the second adversarial review found that answer addressed only half of it: the
+design's own test was whether a document could *"displace the prior checkpoint **or overrun the job
+message**"*, and only displacement was checked. The briefing reaches the runner as a single
+command-line argument (`hub/hub/scheduler.py:3088`, `hub/hub/runner_commands.py:268`), nothing
+truncates it, and `MAX_REQUIREMENTS_PER_TASK = 3` bounds requirements rather than the number or
+length of their criteria. Measured over this repository's own 1,319 acceptance criteria, a
+three-requirement task contributes about 1,438 characters typically and about **13,032** at the
+observed worst case — against a 4,000-character cap for the checkpoint beside it. See design.md's
+open question 2.
 
 ## Impact
 
