@@ -183,7 +183,7 @@ one big agent" — which the Sonnet row above shows is its own trap. The operato
 
 ---
 
-## 6. What the agents actually did with their tools
+## 6. What the agents actually did
 
 Cost tells you the flow is expensive; it does not tell you what the roles *were*. Profiling every
 `tool_use` row (4,827 of them) by agent answers that, and it produced the two most surprising
@@ -272,6 +272,114 @@ proposed shape depends on already exists, is already being written to, and is be
 because nothing in the flow makes the next turn start from it. That is a strong signal that the
 gap is not missing machinery but a missing *contract*: no turn is required to begin from the last
 checkpoint, so every turn begins from the repository instead, and pays §5's re-derivation toll.
+
+### 6c. The tester's findings were real, and they were experiments rather than opinions
+
+All 59 of the tester's messages were read (192 messages in the project, 245,000 characters in total —
+about 61k tokens, which is 0.013% of the bill; **the messages are not the cost, they are the fuse
+that detonates a re-deriving turn**). Five representative findings, quoted in substance:
+
+- **A DNS-rebinding hole reached `main` with its evidence already rejected.** *"A DNS-rebound page
+  gets same-origin GETs with no Origin header, `originAllowed()` allows a missing Origin, and Host
+  is never checked. So `GET /` hands the page the token, and `GET /api/projects` returns data. I
+  reproduced this at `a212df9`, and main's `src/`, `bin/` and `public/` are byte-identical to that
+  commit."* It also corrected the task's own review note, which claimed the Origin check *"correctly
+  survives DNS rebinding"*, and flagged the process bug behind it: an approval merged while a
+  requirement's evidence was rejected.
+- **A route guard that trusted a self-declared label, found by mutation.** *"It checks `route.kind`,
+  which the author of the route writes, so a data route labelled 'static' gets through... `{ GET
+  '/api/leaky', gated:false, kind:'static', handler:handleProjects }`: 11/11 pass, and the route
+  serves project data with no token."* With a concrete fix: assert the handler by identity, not the
+  label.
+- **A state-persistence gap on `main`, found with a virtual-clock probe.** `closedWindow` was held in
+  memory while its siblings `barredWindow` and `lateRunConsidered` were persisted, so a restart
+  inside the same window started a second run. Demonstrated by stopping Engine A and starting
+  Engine B: *"starts go from 1 to 2."*
+- **A test asserting the opposite of its own criterion**, plus an FR-33 regression measured at
+  *"0 starts on your branch and 15 on main."*
+- **A rework that was never committed.** *"Your fix never got committed... your turn was cut off, so
+  the Hub's end-of-turn auto-commit probably never ran."* It then refused three evidence rows that
+  pointed at a commit not containing the work, *"because accepting them could let an approval merge
+  the known-bad commit."*
+
+**Verdict on open question 1: the tester earned its $76 in findings.** These are reproducible,
+commit-pinned, mutation-driven results, several of them catching defects already on `main` and one
+catching a governance failure in the approval path itself. **What it did not earn is its place in
+the topology** — every one of those findings cost a cold-context re-derivation first.
+
+### 6d. The tester was never the read-only critic the literature warns about
+
+The concern that a judge-only agent burns tokens to produce worse results is about agents that
+*read code and opine*. That is not what this one did. Classifying every measured tester turn by
+whether it executed or wrote anything:
+
+```
+                                    n     avg input     $/turn    total
+  RAN things (exec or write)       42     1,898,949      1.77     $74.42
+  READ ONLY (no exec, no write)     5       259,391      0.31     $ 1.57
+```
+
+**42 of 47 measured tester turns ran something.** Across all agents the split is 154 grounded
+($257.02) against 43 read-only ($24.22).
+
+**This neither confirms nor refutes the concern, and should not be cited as if it did.** There is no
+population of *thorough read-only reviews* in this corpus to compare against — the 5 read-only turns
+are short status checks, not deep code readings. What the corpus does establish is that the tester's
+value came from **execution**, which is exactly the condition under which the self-correction
+literature says critique works at all (Huang et al.).
+
+**The design consequence is direct: do not build a gate that reads a diff and passes judgement.
+Build a gate that runs things.** A judgement needs the whole codebase in context; a probe run needs
+the probe.
+
+### 6e. The keystone: the acceptance criteria are already the probe definitions
+
+This is where the part of the product that works meets the part that costs.
+
+**Of 50 tasks, 18 carry acceptance criteria and 0 carry requirements.** The criteria that do exist
+are already very close to executable:
+
+> *"A test sends `GET /` and `GET /api/projects` with `Host: evil.example:<port>`, no Origin, and a
+> valid token, and asserts both are refused."*
+
+> *"With the health route temporarily made to refuse, the single-instance tests fail within their
+> timeout rather than hanging, and no loopengine process is left running."*
+
+The second is a **mutation-test specification**: it names the mutation and the expected outcome. It
+is the same technique the tester independently reinvented in §6c's route-guard finding, at a cost of
+roughly 1.9M input tokens of re-derivation per turn.
+
+**The tester spent its context re-deriving the codebase in order to invent probes that the
+acceptance criteria had already described.** A gate handed executable criteria does not need to
+understand the code — which is why it can be cheap, and why it can run at the end of a task rather
+than in the middle of every attempt.
+
+That also answers *when* verification happens, and it is not "the tester evaluates the code":
+
+```
+  ITERATION N  (owner: implement, run tests, fix -- one context)
+        |
+        |  emits: diff + test output + checkpoint
+        v
+  GATE  run the task's acceptance criteria as executable checks
+        + the adversarial mutations they imply
+        needs: the criteria, the diff, a shell.   NOT the codebase.
+        |
+        +-- all pass --> adjudicate evidence (read-only) --> MERGE
+        +-- any fail --> verdict into the checkpoint --> ITERATION N+1
+                         (same owner, fresh context, reads the verdict)
+```
+
+Which makes the 18-of-50 number the most actionable defect in this file: **the cheap gate is
+unavailable on 64% of tasks because nothing required the criteria to exist.**
+
+### 6f. One corpus, and no generalization check is possible
+
+The live Hub's other project (`proj-06d090fb`, "huida") has **0 runs and 0 tasks**. The trial Hub's
+database holds 26 runs worth $0.63, all from drive-test agents (`mcpagent`, `httpagent`), not a
+development corpus. **Every number in this file therefore comes from LoopEngine alone** — one
+project, one four-day window, one roster of four agents. That limitation cannot be measured away
+from here; it can only be reduced by running a second project.
 
 ## 7. What the outside evidence says
 
@@ -387,13 +495,15 @@ is ~29% of the budget and is independent of whether the iteration loop is adopte
   that (`reviewer_is_not_the_author`, the evidence and requirement gates). The answer is to keep an
   independent check and change its *frequency*, not to delete it. Any proposal that quietly drops it
   should be rejected.
-- **The tester's critiques may have been load-bearing.** Partly answered by §6a and partly still
-  open. What is now measured: the tester wrote product source 34 times and adjudicated evidence 60
-  times, so the role is demonstrably two jobs, one of which is misplaced. What is **still not
-  measured**: whether its *findings* — the defects it reported rather than the code it wrote — were
-  real and would otherwise have shipped. Nobody has read its `send_message` bodies (58 of them). If
-  those reports were mostly genuine and mostly missed by dev, the adjudication half must survive in
-  a stronger form than a cheap end-of-task gate. **This is now the single biggest remaining gap.**
+- **The tester's critiques were load-bearing — answered, in §6c.** All 59 messages were read. The
+  findings are real, reproducible and commit-pinned, and several caught defects already on `main`
+  including a DNS-rebinding hole and an approval that merged over rejected evidence. **Any proposal
+  that removes this capability rather than relocating it should be rejected.** What §6e shows is
+  that the capability does not require the topology: the findings came from probes and mutations,
+  and the acceptance criteria already describe those probes.
+- **One corpus.** Every number here is LoopEngine, four days, four agents. The only other projects
+  available hold 0 and 26 runs (§6f). Nothing here has been shown to generalize, and the honest way
+  to fix that is a second project, not more analysis of this one.
 - **One project, one window, one runner mix.** 274 turns from LoopEngine only. The AgentWeave
   project (`proj-06d090fb`) was not analysed, and no other harness was.
 - **The 23 unstarted tasks are the F352 staffing bug, not the cost.** Any argument that leans on
@@ -403,10 +513,10 @@ is ~29% of the budget and is independent of whether the iteration loop is adopte
 
 ## 11. Open questions for the operator
 
-1. **Did the tester earn its $76?** Half-answered by §6a: it spent much of it writing product source
-   in a cold context, which is the expensive way to do the implementer's job. The unanswered half is
-   whether its *reported defects* were real — 58 `send_message` bodies nobody has read. Cheap to
-   settle, and it decides whether the adjudication half stays a light gate or needs real teeth.
+1. ~~**Did the tester earn its $76?**~~ **Answered** (§6a, §6c, §6d). In findings, yes — they are
+   real, reproducible and caught defects on `main`. In topology, no — it paid a cold-context
+   re-derivation for each one, and wrote product source 34 times while doing it. The capability
+   relocates; it does not disappear.
 2. **Is the Architect making judgements, or routing?** 96 turns. If routing, it is code. Sampling
    its outputs would settle it.
 3. **Scope:** does this become one change (collapse verification), several (full topology rework),
@@ -416,7 +526,17 @@ is ~29% of the budget and is independent of whether the iteration loop is adopte
 
 ## 12. The decision, in one line
 
-Approving this means a spec loop on a named day for **one** of: the per-iteration budget and
-mandatory checkpoint (smallest, unblocks measurement); collapsing verification into the owner's loop
-with a single end-of-task gate; or moving orchestration out of the Architect and into the scheduler
-(largest single saving, independent of the other two).
+Approving this means a spec loop on a named day for **one** of these, in the order the measurements
+now recommend:
+
+1. **Acceptance criteria become mandatory and executable** (§6e). Today 18 of 50 tasks carry them,
+   and nothing runs them. This is the cheapest change, it is additive, it breaks nothing, and every
+   other item below depends on it — a gate with no criteria to run is just another code reader.
+2. **The per-iteration budget plus a mandatory checkpoint on exhaustion** (§5, control 1). Makes the
+   31M-token turn structurally impossible and gives the next iteration something to start from.
+   Independent of everything else.
+3. **Split the tester** (§6a, §6c): writing returns to the owner's loop; adjudication becomes a
+   read-only end-of-task gate that runs the criteria from item 1.
+4. **Move orchestration out of the Architect and into the scheduler** (§4). Largest single saving
+   (~29%), largest blast radius, and it should go last because items 1-3 change what there is to
+   orchestrate.
