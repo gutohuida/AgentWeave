@@ -25,6 +25,95 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-17
+
+DAY WINDOW: 10:15-17:00
+
+**Written 2026-09-16 ~22:20 by an interactive session, at the operator's instruction, in the same
+sitting that approved `a-materialised-task-carries-its-criteria` for tonight.** Read the section
+below this one as history only — **its F375 instruction was never executed**, and it is restated
+here rather than left to be inherited.
+
+### Why yesterday produced nothing, so iteration 1 does not re-derive it
+
+`AgentWeaveArmDay` fired at 10:15 on 2026-09-16 and `LastTaskResult` was **1**. `arm-cycle.ps1`
+wrote `STATE-day.json`, committed and pushed (`6a73803`), and then `install-driver.ps1` threw:
+its "a start time already past today means tomorrow" rule rolled the driver's first firing to
+tomorrow, whose start is after today's stop, so it threw "no window" and `AgentWeaveDayLoop` was
+never registered. **No iteration ran all afternoon, and nothing surfaced the failure** — Task
+Scheduler records only `LastTaskResult: 1`, with no message. `STATE-day.json` still reads
+`iteration: 0`.
+
+`22822bc` fixed it with a 15-minute grace period, **after** that morning's arm had already fired.
+**Today is the first firing under the fix, and therefore its only real evidence.** If iteration 1 is
+running at all, the fix worked; say so explicitly in the first log entry, because nothing else
+records it. If the window is again absent, the grace period is not the whole story and that is the
+day's first finding, ahead of any spec work.
+
+### First: gate and drive what the night built
+
+Tonight's FIX window has `ORDER: a-materialised-task-carries-its-criteria` and the operator's own
+`APPROVED` row (`spec-queue/APPROVALS.md`, `## 2026-09-16`). Expect product code on this branch for
+the first time in three days.
+
+- **Read the night's log before composing.** If the night stopped after §5 of `tasks.md` — which is
+  the likely outcome, as §6-§7 were marked "only if they genuinely fit" — then **§6's drive is the
+  day's first item**, and it is what decides whether the change can be archived at all.
+- The drive runs against the **trial Hub on `:8010`, from source**, per `.claude/reference/hubs.md`.
+  **Never `:8000`.** Approve a document declaring a task with criteria, confirm the created task
+  carries them, then fire a loop on that task and read the briefing the agent actually received —
+  `tasks.md` 6.2 is explicit that inferring it from the model field does not count.
+- If the night left the suite red, that is the first item instead. A day that builds on a red tree
+  cannot tell its breakage from the one it inherited.
+- **Do not re-open the change's design.** It has had four rounds and four adversarial reviews; the
+  Round log records what is already refuted. If the drive finds a defect, file it and fix the
+  defect — do not restart the argument.
+
+### Then: the day's spec loop, still F375
+
+**F375 (A)** — a bare `..` argument has no separator character, so rule 4 inside `_judge_word`
+(`hub/hub/mcp_server.py`) calls it "not a path" and lets it stand with no resolution against the
+workspace root: real traversal, on every platform, no escaping needed. Filed 2026-09-15 by the
+verification round on `a-quote-can-spell-a-slash`, deliberately not fixed there. It was yesterday's
+target and yesterday never ran, so **it is undischarged, not stale** — but re-confirm it against
+`HEAD` before proposing, since `HEAD` has moved since the check that found it.
+
+Same round discipline: R1 explores and proposes; R2 and R3 each independently re-derive the argument
+**against the code**, not against R1's prose.
+
+**It touches `hub/hub/mcp_server.py`, which F354 (B, open) warns about**: the operator's live `:8000`
+Hub spawns that file fresh, uncommitted mid-edit included, on every real turn. A spec round only
+reads it, so this does not bite today — but flag it for whichever night implements, so the edit
+lands in one committed pass.
+
+### Budget note, and it is new
+
+The weekly window is metered now and shared with the operator (`DECISIONS.md`, `### 2026-09-15`).
+Tonight spends a full build window on the approved change. **If the drive and F375's three rounds
+will not both fit, do the drive and stop** — the drive closes a change the operator has already paid
+four reviews for, while F375 only starts another. Say in the log which you chose and why.
+
+### Do not re-open these — blocked on a decision, not a proposal gap
+
+Unchanged from yesterday's section, and still true:
+
+- **F352 rung-3** (`an-unstaffed-review-names-its-holders`) — carried through R1/R2/R3/REV, stopped
+  because its argument rests on an F352-free option (e) needing re-derivation against option (f).
+  The operator's call, unanswered across six-plus handoffs.
+- **F299 / F301** (the access-path question, with F339/F340) — F299's proposal was rejected
+  2026-09-13 and archived unbuilt; F301's entry says "Not fixed here." Both wait on the same open
+  access-path decision.
+
+### Next, once a future day's slot is free
+
+**F215** (B) — the operator's screen shows evidence waiting for a decision and gives no control to
+accept or reject it. The three routes exist and work (`api/v1/agent_actions.py:1148,1211`); zero
+references in `hub/ui/src`. Never proposed. First item of the work-lands arc
+(`openspec/explorations/2026-08-30-release-roadmap.md`); F124 is the item after it and should not be
+taken first.
+
+---
+
 ## 2026-09-16
 
 DAY WINDOW: 10:15-17:00
