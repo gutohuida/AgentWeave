@@ -8,33 +8,57 @@
     "parent_branch":  "master",
     "parent_sha":  "31dcb3f",
     "stop_at":  "2026-09-17T07:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-16-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "current":  "amtci-impl",
+    "next_action":  "Do section 2 of openspec/changes/a-materialised-task-carries-its-criteria/tasks.md: implement spec_tasks.materialise() in hub/hub/spec_tasks.py plus the two isinstance guards in hub/hub/spec_reading.py (:72, :98). Read design.md's Round log first, and note task order is 2.1, 2.2, 2.7, 2.3, 2.6, 2.5, 2.4 -- 2.7 builds the position map 2.2 consumes, read both before starting either. Match on what the entry NAMES not the resolved row's .key (D3). Use dict.fromkeys, not a set (2.2). Guards go INSIDE spec_reading.py's helpers, not the call site (D7). Commit when done.",
     "queue":  [
                   {
-                      "id":  "compose",
+                      "id":  "amtci-impl",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "§2 -- implement materialise() + spec_reading.py guards",
+                      "detail":  "ORDER: a-materialised-task-carries-its-criteria (operator-approved 2026-09-16). One function in hub/hub/spec_tasks.py + 2 isinstance guards in hub/hub/spec_reading.py. Read design.md Round log first -- 8 rounds argued this function."
+                  },
+                  {
+                      "id":  "amtci-tests",
+                      "status":  "open",
+                      "title":  "§3 -- ~22 tests",
+                      "detail":  "Several tests carry an explicit MUST clause on the fixture -- honour literally, they discriminate the naive implementation."
+                  },
+                  {
+                      "id":  "amtci-mutations",
+                      "status":  "open",
+                      "title":  "§4 -- 17 mutations",
+                      "detail":  "Apply each, run, record, git checkout to revert. Expect at least one to fail to flip -- that is a finding about the tests, not a reason to weaken the mutation."
+                  },
+                  {
+                      "id":  "amtci-gate",
+                      "status":  "open",
+                      "title":  "§5 -- gates",
+                      "detail":  "Full suite from hub/ (background it, 15-47min), ruff/black --target-version py311/mypy, openspec validate --strict, 5.4's measurement. No migration, no UI bundle expected -- if you're editing hub/ui/ or writing a migration you've misread the change."
+                  },
+                  {
+                      "id":  "amtci-drive",
+                      "status":  "open",
+                      "title":  "§6-§7 -- drive and close-out, only if it fits",
+                      "detail":  "If it doesn't genuinely fit before stop_at, stop after gate, say so in the log, leave the change unarchived for a later window. Task 6.5 edits hub/hub/mcp_server.py (one docstring sentence, F354) -- commit in the same pass, never leave mid-edit uncommitted."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
