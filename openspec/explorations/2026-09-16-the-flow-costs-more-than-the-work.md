@@ -540,6 +540,18 @@ now recommend:
 1. **Acceptance criteria become mandatory and executable** (§6e). Today 18 of 50 tasks carry them,
    and nothing runs them. This is the cheapest change, it is additive, it breaks nothing, and every
    other item below depends on it — a gate with no criteria to run is just another code reader.
+   **The "carry" half is built**, in `openspec/changes/a-materialised-task-carries-its-criteria/`:
+   `materialise()` now attaches a requirement's rendered acceptance criteria to the task that
+   satisfies it, they render into the implementer's and the reviewer's loop briefing
+   (`scheduler.py`'s `_compose_loop_briefing`), and the task drawer shows them in the committed UI
+   bundle with no rebuild. Driven end to end on the trial Hub (`:8010`) 2026-09-17: an approved
+   document's task carried its criteria, a real `claude-haiku-4-5` turn's stored briefing rendered
+   them as dash-prefixed lines, and a 3,467-character criteria block still spawned a run
+   successfully. Per this change's design D5, **the effect is only measurable on tasks created
+   after this ships** — nothing backfills the criteria field on a task materialised before it, so
+   the 18-of-50 figure above does not move for existing work, only for what a document approves
+   from here on. "Mandatory and executable" is not yet built: nothing refuses an approval for
+   missing criteria, and nothing runs them as a gate — that is future scope, not this change's.
 2. **The per-iteration budget plus a mandatory checkpoint on exhaustion** (§5, control 1). Makes the
    31M-token turn structurally impossible and gives the next iteration something to start from.
    Independent of everything else.

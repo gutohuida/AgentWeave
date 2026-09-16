@@ -459,30 +459,101 @@ reaching more than its target is reported as measured rather than trimmed.
 
 ## 6. Drive
 
-- [ ] 6.1 On the **trial** Hub (`:8010`, from source, per `.claude/reference/hubs.md`) — never
+- [x] 6.1 On the **trial** Hub (`:8010`, from source, per `.claude/reference/hubs.md`) — never
       `:8000` — approve a document declaring a task with criteria, and confirm the created task
       carries them.
-- [ ] 6.2 Confirm they reach a real turn: fire a loop on that task and read the briefing the agent
+      **Done.** Trial Hub started from `hub/` against
+      `~/.agentweave/hub/profiles/trial/agentweave.db` (confirmed via `GET /health` and the
+      registered project `proj-d85a82bf4216`, working directory this repo root). Created
+      `change-spec` document `spdoc-b903644b6bb6` (path `spec/changes/maroon-sphinx/spec.html`)
+      via `POST .../project/documents`, wrote its content via `PUT .../content` with requirement
+      `req-drive`, one acceptance criterion `ac-drive-1` naming it, and task `task-drive` naming
+      the requirement; `close-exploration` → `propose` → `phase?to=approved` (all 200s, no
+      blocking). Approval returned `tasks_created: ["task-f08fecf7d087"]`. `GET
+      .../tasks/task-f08fecf7d087` shows `"acceptance_criteria":["ac-drive-1: Given an approved
+      document with this requirement, when the task naming it is materialised, then the task's
+      acceptance_criteria contains this criterion's rendered text"]` — the rendered criterion,
+      present on the real row, matching design D2/D8's format exactly.
+- [x] 6.2 Confirm they reach a real turn: fire a loop on that task and read the briefing the agent
       actually received, rather than inferring it from the model field.
-- [ ] 6.3 Confirm the task drawer renders them in the UI without a bundle change.
-
-## 7. Close-out
-
-- [ ] 6.4 Confirm the briefing still spawns with a large criteria block. No bound is being added
+      **Done.** `Task.loop_id` is write-once at creation (task 1.10), so a fresh document
+      (`spdoc-12e3246c9f72`, task `task-loop` / criterion `ac-loop-1`) was approved with its
+      `Loop` already declared as the document's owner (`POST /jobs` with `spec_document_id` set
+      *before* approval), per `spec_tasks.py:172-187`'s "a loop that declared this document as
+      its source owns materialised tasks". This staffed `task-366e4b6579f4` onto
+      `loop-d63294661472` automatically (`loop_id` set on creation, confirmed via `GET
+      /tasks/task-366e4b6579f4`). Created agent `drivehaiku` bound to provider `claude`, model
+      `claude-haiku-4-5-20251001` (the catalog's dated id for the requested `claude-haiku-4-5`;
+      `hub/hub/model_catalog.py:164-166`) via `POST /agents`. Enabled the job and fired it with
+      `POST /jobs/job-ee9831848a79/run` — real MCP tool calls were observed in the Hub's own log
+      (`mcp-adapter-online`, `permission-decisions`, `PATCH
+      /api/v1/agent-actions/tasks/task-366e4b6579f4`) and the run completed (`history[0].status
+      == "completed"` after polling). Read the **actual stored briefing**, not the model field,
+      from `inbound_queue_entries` (`hub/hub/inbound_queue.py`'s `new_entry`, written at
+      `scheduler.py:3088`'s `content = f"{briefing}\n{job.message}"`) via a read-only
+      `mode=ro` SQLite query against the trial DB: entry `entry-20df6716b57c` (1,639 chars)
+      contains, verbatim,
+      `Acceptance criteria:\n- ac-loop-1: Given a task materialised from this document and staffed
+      onto a loop, when the loop fires a real turn, then the briefing the agent receives contains
+      this criterion rendered as a dash-prefixed line` — the criterion attached in this task's own
+      document, rendered exactly as `_compose_loop_briefing` (`scheduler.py:2456-2460`) is
+      specified to, in a briefing a real agent turn actually received. Job disabled afterward
+      (`PATCH /jobs/job-ee9831848a79 {"enabled": false}`).
+- [x] 6.3 Confirm the task drawer renders them in the UI without a bundle change.
+      **Done — real screenshot, no rebuild.** Used the trial Hub's already-committed
+      `hub/hub/static/ui` bundle (no `npm run build`, no bundle change) at `:8010`. A throwaway
+      Playwright script (`testbed/scratch/uishot_task_drawer.py`, gitignored) seeded
+      `sessionStorage['agentweave-session']` and `localStorage['agentweave-selected-project']`
+      before the app booted (matching `hub/ui/src/store/configStore.ts:34-47`'s read), navigated
+      to `http://127.0.0.1:8010`, opened the Tasks tab, and clicked
+      `[data-testid="task-open-task-f08fecf7d087"]` (the 6.1 task) to open
+      `[data-testid="task-drawer-task-f08fecf7d087"]`. The screenshot
+      (`testbed/scratch/task_drawer.png`) shows an "ACCEPTANCE CRITERIA" section reading
+      `ac-drive-1: Given an approved document with this requirement, when the task naming it is
+      materialised, then the task's acceptance_criteria contains this criterion's rendered text`
+      — the exact criterion from 6.1, confirmed both visually and against
+      `TaskDetailDrawer.tsx:612-620`'s `task.acceptance_criteria.map(...)` render.
+- [x] 6.4 Confirm the briefing still spawns with a large criteria block. No bound is being added
       (design open question 2), so this is the check that the accepted residual risk is really
       benign: drive a task whose criteria
       approach the bound and verify the run starts. The briefing reaches the runner as one
       command-line argument (`scheduler.py:3088`, `runner_commands.py:268`), and `pty_runner.py:68-88`
       records a prior incident on that path — measure it, do not reason about it.
-- [ ] 6.5 Add one sentence to `submit_spec_document`'s docstring in `hub/hub/mcp_server.py` saying
+      **Done — measured, not reasoned.** Built a document (`spdoc-7b6cfa5678d6`, requirement
+      `req-large`, task `task-large`) with 9 acceptance criteria, each padded so the rendered
+      `Acceptance criteria:` block is **3,467 characters** (87% of the 4,000-char checkpoint bound
+      task 5.4 measured against; per task 1.6 the criteria block sits beside that budget, not
+      inside it, so this is a stress figure, not a bound violation). Approved with the loop
+      pre-declared as in 6.2 (`loop-28d69f3e4752`, task `task-4492729159ae`), enabled the job,
+      fired `POST /jobs/job-688470e65946/run`. Polled `GET /jobs/job-688470e65946` — the run
+      (`run-13c8029c7044`) reached `status: "completed"` and the task's own status is
+      `"completed"`. The stored `inbound_queue_entries` row for this run is **4,871 characters**
+      total (whole briefing plus the job's own message) — a single command-line argument of that
+      size reached the runner and the run finished normally, which is the actual claim task 1.6
+      left unmeasured. Job disabled afterward.
+- [x] 6.5 Add one sentence to `submit_spec_document`'s docstring in `hub/hub/mcp_server.py` saying
       that a requirement's acceptance criteria become the standard rendered into the implementer's
       and the reviewer's turn — the parallel of the existing "approving the document creates these
       as real tasks" line for `tasks` (`mcp_server.py:1731-1735`), which has no counterpart for
       `acceptance_criteria`. **`.claude/rules/` loads extra rules for `mcp_server.py` edits — read
       them first.**
-- [ ] 7.1 Update `openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md` §12 to
+      **Done.** Read `.claude/rules/mcp-server.md` first (stdlib+fastmcp import restriction, the
+      `approve_tool_call` annotation trap — neither touched by this edit). Added one sentence to
+      the `acceptance_criteria` paragraph (`mcp_server.py`, now around line 1728-1731): "A
+      requirement's criteria become the standard rendered into the implementer's and the
+      reviewer's turn once a task satisfying it is materialised." No test pins the docstring's
+      exact prose (checked: no match for "become the standard" or "binary pass or fail" under
+      `hub/tests/`), so nothing else needed updating.
+
+## 7. Close-out
+
+- [x] 7.1 Update `openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md` §12 to
       record item 1 as built, and note that per design D5 the effect is only measurable on tasks
       created after this ships.
+      **Done.** Added a paragraph under §12 item 1 recording that the "carry" half is built (this
+      change), summarizing the 6.1-6.4 drive evidence, and stating explicitly that per design D5
+      the 18-of-50 figure does not move for existing work — only documents approved from here on
+      get the effect — and that "mandatory and executable" (a refusal gate) remains future scope.
 - [ ] 7.2 `openspec archive` once the operator has approved.
 
 ## 8. Human-only, not agent-verifiable

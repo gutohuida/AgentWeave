@@ -1726,7 +1726,9 @@ def submit_spec_document(
                  do with it). Collapsing them hides which side of a boundary a defect is on.
 
     `acceptance_criteria` — objects with `key`, `requirement` (a requirement's key), and
-      `given`/`when`/`then`. One per behaviour, binary pass or fail.
+      `given`/`when`/`then`. One per behaviour, binary pass or fail. A requirement's criteria
+      become the standard rendered into the implementer's and the reviewer's turn once a task
+      satisfying it is materialised.
 
     `tasks` — objects with `key`, `description` (one concrete unit of work, not "build the whole
       thing"), `requirements` (keys this task satisfies; at least one, or it is work nobody
