@@ -28946,6 +28946,9 @@ plainest possible traversal and the sandbox does not check it at all today.
 **Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2`
 (`proj-f90d219dd68c`) on `:8000`, read-only.
 
+**Source:** drive — found by exercising the product and reading what it actually recorded.
+**Theme:** Flows & loops
+
 **What happened.** At 17:36 the operator told the Architect *"spec approved is the flow ready? If
 it's not please create it and send distribute the tasks and start the development. I'm leaving for
 a little bit."* The Architect called `create_flow` at **17:37:45** and was refused:
@@ -29002,6 +29005,9 @@ F361 and F363 (both reproduced by this same run).
 
 **Status:** open. Filed 2026-09-17 by an interactive session, alongside F376.
 
+**Source:** operator — the operator asked for this in session; it is a requested improvement, not a defect found by driving.
+**Theme:** Flows & loops
+
 **Measured against `hub/ui/src`.** `create_flow` — the tool that decomposes an approved
 specification document and staffs every task whose prerequisites are met — appears in
 `hub/hub/mcp_server.py`, `hub/hub/scheduler.py` and `hub/hub/api/v1/agents.py`, and in **no UI
@@ -29024,6 +29030,9 @@ what happened in F376, and it was refused by a setting with no visible state.
 ## F378 (B) — `request_agent` reads templates from a table no surface writes, and it is empty in every project on this Hub
 
 **Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
+
+**Source:** drive — found by exercising the product and reading what it actually recorded.
+**Theme:** Agents & runners
 
 **What happened.** At 16:34 the operator asked the Architect *"Okay two developers set what else?"*
 The Architect called `request_agent` at **16:35:39**:
@@ -29059,6 +29068,9 @@ one is a working tool whose only input has no producer.
 ## F379 (B) — the five settings that decide whether a collaboration can run are indistinguishable from the ones that pick a title style
 
 **Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
+
+**Source:** operator — the operator asked for this in session; it is a requested improvement, not a defect found by driving.
+**Theme:** Operator surfaces
 
 **The measurement.** `ProjectSettingsPanel.tsx` renders **16 `SettingsRow`s under one heading**,
 `"Settings"`, in one undifferentiated flat list with no grouping. Five of those rows decide whether
@@ -29109,6 +29121,9 @@ is legible at a glance, an empty input is not — and leave them editable where 
 
 **Status:** open. Filed 2026-09-18 00:15 by an interactive session, from the live scheduled tasks
 and `arm-cycle.ps1` / `install-driver.ps1` on this machine.
+
+**Source:** drive — found by exercising the product and reading what it actually recorded.
+**Theme:** Flows & loops
 
 **Three consecutive days produced no FILL window, for three different reasons, and all three look
 identical from outside: `STATE-day.json` reads `iteration: 0` and nothing else says anything.**
@@ -29161,9 +29176,13 @@ carries a `DAY WINDOW:` line** that happens to match the trigger. That is how 20
 to work, and it is a daily manual step nobody is reminded of: a section written for tomorrow that
 omits the line disarms tomorrow, silently, and the omission looks like nothing at all.
 
-**The decision is the operator's and it is one line either way** — move the trigger to 08:55 to
-mirror the night, or change the standard window to start at 10:15 and move the trigger to 10:10.
-What must not stay is the current arrangement, where the two disagree and a prose file bridges them.
+**DECIDED by the operator 2026-09-18 00:30: return the day to 09:00.** `install-tasks.ps1` had
+declared `AgentWeaveArmDay` at **08:55** for an 09:00-17:00 window all along — the live trigger at
+10:15 was undocumented drift from a one-off. Re-running `install-tasks.ps1` restored it; the task
+now fires 08:55, five minutes ahead of its window, exactly as `AgentWeaveArmNight` sits five minutes
+ahead of 23:00. The `DAY WINDOW` line was removed from `DIRECTION.md ## 2026-09-18` in the same
+sitting, and is now what it was meant to be: a way to move a day deliberately, not a prop that
+arming depends on. **(b) is closed. (a) and the silence below are still open.**
 
 ### What is common to all three, and is the actual severity-A part
 

@@ -1,6 +1,6 @@
 ---
 name: backlog
-description: Regenerate spec-queue/BACKLOG.html — the standing orientation page showing open findings by severity, the drain, what each loop window is holding, and which file is the authority for what. Reports what moved since the last generation and triages the ledger's own inconsistencies. Use when the user says "update the backlog", "refresh the backlog page", "regenerate BACKLOG.html", "what's open", "how many findings are open", "what is the backlog", or after anything that changes the ledger — filing a finding, closing one, proposing a change, archiving a change, or a loop window finishing. Callable by the FILL and FIX windows at close.
+description: Regenerate spec-queue/BACKLOG.html — the standing, interactive orientation page merging open findings and operator requests, each tagged with where it came from (found by driving, found by reading code, or asked for by the operator), whether it is ready to work, and its theme. Reports what moved since the last generation and triages the ledger's own inconsistencies. Use when the user says "update the backlog", "refresh the backlog page", "regenerate BACKLOG.html", "what's open", "how many findings are open", "what is the backlog", "add this to the backlog", or after anything that changes the ledger — filing a finding, closing one, proposing a change, archiving a change, or a loop window finishing. Callable by the FILL and FIX windows as step 0.
 ---
 
 Regenerate the backlog page and say what changed. The page is derived, never authored.
@@ -8,11 +8,44 @@ Regenerate the backlog page and say what changed. The page is derived, never aut
 ## The one rule
 
 **Never edit `spec-queue/BACKLOG.html` by hand.** It is generated from `scripts/drive/FINDINGS.md`,
-`openspec/changes/`, `spec-queue/` and the two `STATE-*.json`. A hand edit is lost on the next
-generation and, worse, makes the page disagree with the ledgers it claims to summarise — which is
-the exact failure `night-window.md` names: *"a backlog that cannot say what is done is read as a
-backlog of everything."* If the page is wrong, the fix is in `scripts/backlog_page.py` or in the
-source ledger, never in the HTML.
+`spec-queue/REQUESTS.md`, `openspec/changes/`, `spec-queue/` and the two `STATE-*.json`. A hand edit
+is lost on the next generation and, worse, makes the page disagree with the ledgers it claims to
+summarise — which is the exact failure `night-window.md` names: *"a backlog that cannot say what is
+done is read as a backlog of everything."* If the page is wrong, the fix is in
+`scripts/backlog_page.py` or in the source ledger, never in the HTML.
+
+## The two ledgers it merges
+
+| | |
+|---|---|
+| `scripts/drive/FINDINGS.md` | **defects.** Something the product does wrong, with a reproduction. Severity A/B/C/D. |
+| `spec-queue/REQUESTS.md` | **what the operator asked for.** Not a defect — work wanted because they want it. `R<n>` ids. |
+
+They are separate files on purpose: filing a request as a finding makes it pretend to be a defect,
+and filing a defect as a request hides it from the night window's severity queue.
+
+**A request that names a `Finding:` does not become its own row.** It re-sources that finding as
+operator-originated and lends it the operator's own words. That is what stops an ask which has
+already been measured into a finding from being counted twice. When the operator asks for something
+new, add a request section — `REQUESTS.md` documents the format, and nothing else is required.
+
+## The three columns the page adds
+
+Neither ledger states these; the generator derives them, and each has an escape hatch.
+
+- **Source** — `operator` · `drive` · `audit` · `review` · `unknown`. Inferred by scoring the
+  Status line *and the body*, because for most of the corpus the Status line records fix state
+  ("open (no fix commit references it)") and says nothing about how the finding was found. A
+  `**Source:** <value>` line in the body overrides it.
+- **Ready** — `proposed` · `ready` · `parked` · `triage` · `thinking`. **`proposed` is computed,
+  never claimed**: a live change directory naming the F-number is the only thing that sets it, and
+  it is the column that says whether the night window could actually build the item. A
+  `**Ready:**` line overrides.
+- **Theme** — keyword-scored into twelve groups. A `**Theme:**` line overrides. A wrong guess costs
+  a reader one glance, which is why this is a reading aid and not a taxonomy.
+
+When you file a finding whose provenance you know, **write the `**Source:**` and `**Theme:**` lines
+in** rather than leaving them to inference. Inference is for the 370 findings that predate them.
 
 ---
 
@@ -92,19 +125,33 @@ reported as `current` — there is nothing worth committing. Say so and leave th
 Other skills and the loop windows may invoke this:
 
 ```
-skill: "backlog"              regenerate, report, offer to commit
+skill: "backlog"                    regenerate, report, offer to commit
 skill: "backlog", args: "--check"   report only; non-zero exit means the ledger moved
 ```
 
-**For the FILL and FIX windows:** call this at close, after the last queue item and before the
-final log entry. The window has just changed the ledger — filed findings, ticked tasks, maybe
-archived a change — and the page is the cheapest place the next reader learns that. Use the plain
-form so the delta lands in the log.
+**Both windows run `--check` as step 0 of iteration 1** (`day-window.md`, `night-window.md`). It is
+one tool call and it stops the two failures this loop keeps having: filing something already filed,
+and queueing a finding that has no proposal and therefore cannot be built.
 
-**Before proposing anything:** run `--check` and read the page first. It is the cheapest way to
-find out that what you are about to file is already F-something. Two of the four findings filed on
-2026-09-17 turned out to be re-discoveries of F361 and F363, found only because the ledger was
+**Never `cat` the HTML.** It is ~300 KB and reading it burns the context the iteration needs. The
+printed report is the interface; the page is for the operator's browser.
+
+**Call it again at close**, after the last queue item and before the final log entry — the window
+has just changed the ledger, and the delta belongs in the log.
+
+**Before proposing anything:** run `--check` and read the report. Two of the four findings filed on
+2026-09-17 turned out to be re-discoveries of F361 and F363, caught only because the ledger was
 searched first — and they were three days old.
+
+## What the operator gets in the browser
+
+Worth knowing, because it changes what is worth saying in chat. The page is interactive: filter
+chips for source / ready / severity, a text filter over id, title and theme, a group-by toggle
+between theme and severity, and collapsible groups. **Groups are closed at rest** and open
+automatically while a filter is live — a 217-row page that opened flat was 17,000px of wall.
+
+So do not read long lists out loud. Give them the delta, the warnings that matter, and let the page
+carry the enumeration.
 
 ---
 
@@ -112,6 +159,8 @@ searched first — and they were three days old.
 
 ```
 spec-queue/BACKLOG.html          the page — open it in a browser
+spec-queue/REQUESTS.md           what the operator asked for; add asks here
+scripts/drive/FINDINGS.md        defects; add findings here
 scripts/backlog_page.py          the generator — edit this, not the page
 spec-queue/README.md             the spec-queue contract, including this file's row
 ```

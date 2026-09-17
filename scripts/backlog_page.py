@@ -29,12 +29,54 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FINDINGS = ROOT / "scripts" / "drive" / "FINDINGS.md"
+REQUESTS = ROOT / "spec-queue" / "REQUESTS.md"
 CHANGES = ROOT / "openspec" / "changes"
 QUEUE = ROOT / "spec-queue"
 STATE_DIR = ROOT / ".claude" / "autonomous"
 OUT = QUEUE / "BACKLOG.html"
 
 SEV_ORDER = {"A": 0, "B": 1, "C": 2, "D": 3, "?": 4}
+
+#: Where an item came from. The operator asked for the distinction between *"things found on the
+#: run"* and *"improvements requested by me"*, and it is a real one: a defect found by driving is
+#: evidence, a request is a preference, and the two earn their place in a queue differently.
+SOURCES = {
+    "operator": "you asked for it",
+    "drive": "found by exercising the product",
+    "audit": "found by reading code, routes or the bundle",
+    "review": "found by an adversarial round on a proposal",
+    "unknown": "the Status line does not say",
+}
+
+#: How close an item is to being workable. `proposed` is computed from `openspec/changes/`, the
+#: rest are read off the ledger. The night window cannot build a finding with no proposal --
+#: `night-window.md` is explicit -- so this column is what says whether an A is actually available.
+READY = {
+    "proposed": "a change directory names it",
+    "ready": "measured, severity set — a spec loop could take it",
+    "triage": "missing a Status line or a severity",
+    "parked": "waiting on a decision",
+    "thinking": "an idea, not yet worked out",
+}
+
+#: Theme keywords, scored against title (weight 3) and status/body head (weight 1); highest score
+#: wins, ties broken by the order here. Deliberately a flat keyword map and not a taxonomy: it is a
+#: reading aid for a 200-row page, and a wrong guess costs a reader one glance. `**Theme:**` in a
+#: finding's body overrides it outright, which is the escape hatch for anything this misreads.
+THEMES: dict[str, tuple[str, ...]] = {
+    "Flows & loops": ("flow", "loop", "job", "scheduler", "firing", "cron", "window", "staffs", "staffed", "dispatch"),
+    "Task ledger": ("task", "transition", "assignee", "dependency", "prerequisite", "under_review", "approval", "approved", "board", "ledger"),
+    "Spec & requirements": ("spec", "document", "requirement", "phase", "proposal", "coverage", "drift", "rigor", "capability"),
+    "Evidence": ("evidence", "digest", "footprint", "decide_evidence"),
+    "Agents & runners": ("agent", "runner", "charter", "catalog", "roster", "model", "template", "launchability"),
+    "Messaging & queue": ("message", "queue", "hop", "delivery", "delivered", "conversation", "inbound", "recipient", "sender"),
+    "Workspace & permissions": ("workspace", "permission", "sandbox", "guard", "boundary", "posture", "outside your workspace", "allow"),
+    "Git & worktrees": ("git", "worktree", "branch", "commit", "merge", "conflict", "checkout", "rebase"),
+    "Operator surfaces": ("ui", "screen", "panel", "page", "button", "dialog", "renders", "surface", "operator surface", "no operator", "settings", "card", "badge"),
+    "Runs & turns": ("run", "turn", "session", "checkpoint", "context", "transcript", "spawn", "pid", "heartbeat"),
+    "Harness & CI": ("test", "suite", "ci", "harness", "lint", "flake", "mutation", "pytest", "fixture"),
+    "Hub plumbing": ("sse", "event", "route", "api", "500", "database", "lock", "migration", "endpoint", "serialise", "pydantic"),
+}
 
 
 # --------------------------------------------------------------------------- findings
@@ -65,17 +107,153 @@ def parse_findings() -> list[dict]:
         status = re.search(r"\*\*Status:\*\*\s*(.+)", body)
         raw = status.group(1).strip() if status else ""
         title = m.group(3).strip()
+        state = classify(raw, title)
+        sev = recover_sev(m.group(2), title, body)
         out.append(
             {
+                "kind": "finding",
                 "id": fid,
                 "num": int(re.sub(r"\D", "", fid) or 0),
-                "sev": recover_sev(m.group(2), title, body),
+                "sev": sev,
                 "title": title,
                 "status": raw,
-                "state": classify(raw, title),
+                "state": state,
+                "source": classify_source(body, raw),
+                "theme": classify_theme(body, title, raw),
+                "ready": classify_ready(body, raw, state, sev),
+                "note": "",
             }
         )
     return out
+
+
+def classify_source(body: str, status: str) -> str:
+    """Where an item came from. An explicit `**Source:**` line wins; otherwise infer.
+
+    Inference reads the Status line, which by convention names who filed it and how ("Filed
+    2026-09-15 by the night window's drive of…", "found by an adversarial verification round…").
+    It is a convention and not a schema, so this is a best guess and says `unknown` when it has
+    none — never a confident wrong answer.
+    """
+    explicit = re.search(r"^\*\*Source:\*\*\s*(\w+)", body, re.M)
+    if explicit and explicit.group(1).lower() in SOURCES:
+        return explicit.group(1).lower()
+
+    t = re.sub(r"[*_`]", "", status + " " + body[:1500]).lower()
+    if "operator" in t[:200] and any(k in t[:200] for k in ("asked", "requested", "wants")):
+        return "operator"
+
+    # Read the body, not only the Status line. The Status line records *fix* state -- "open (no fix
+    # commit references it)" -- and for most of the older corpus says nothing about how the finding
+    # was found. The body does: a drive says it reproduced something, an audit says it measured a
+    # count against a path. Scored, because a single keyword is not enough; `audit` and `review`
+    # carry double weight because their phrases are specific while `drive`'s are ordinary words.
+    scores = {
+        "review": sum(2 for k in _REVIEW_WORDS if k in t),
+        "audit": sum(2 for k in _AUDIT_WORDS if k in t),
+        "drive": sum(1 for k in _DRIVE_WORDS if k in t),
+    }
+    best = max(scores, key=lambda k: scores[k])
+    return best if scores[best] > 0 else "unknown"
+
+
+_DRIVE_WORDS = (
+    "drove", "driven", "driving", "drive", "reproduc", "live", "real turn", "probe", "e2e",
+    "measured on", "observed", "hub restarted", "from loopengine", "on :8000", "ran the",
+    "watched", "fired",
+)
+_AUDIT_WORDS = (
+    "measured against", "occurrences anywhere", "read, not driven", "code read", "grep",
+    "sweep", "audit", "reachability", "row-9", "static", "bundle this hub actually serves",
+    "substring hits",
+)
+_REVIEW_WORDS = (
+    "adversarial", "verification round", "review round", "-r2", "-r3", "opus review",
+)
+
+
+def classify_theme(body: str, title: str, status: str) -> str:
+    explicit = re.search(r"^\*\*Theme:\*\*\s*(.+)$", body, re.M)
+    if explicit:
+        return explicit.group(1).strip()
+    hay_title = title.lower()
+    hay_rest = (status + " " + body[:600]).lower()
+    best, best_score = "Unclassified", 0
+    for theme, words in THEMES.items():
+        score = sum(3 for w in words if w in hay_title) + sum(1 for w in words if w in hay_rest)
+        if score > best_score:
+            best, best_score = theme, score
+    return best
+
+
+def classify_ready(body: str, status: str, state: str, sev: str) -> str:
+    explicit = re.search(r"^\*\*Ready:\*\*\s*(\w+)", body, re.M)
+    if explicit and explicit.group(1).lower() in READY:
+        return explicit.group(1).lower()
+    t = re.sub(r"[*_`]", "", status).lower()
+    if state == "no-status" or sev == "?":
+        return "triage"
+    if any(k in t for k in ("parked", "deferred", "undecided", "operator's call", "operator's undecided")):
+        return "parked"
+    return "ready"
+
+
+def parse_requests() -> list[dict]:
+    """`spec-queue/REQUESTS.md` — what the operator asked for, which is not a defect ledger.
+
+    A request naming a `Finding:` does **not** become its own row; it re-sources that finding as
+    operator-originated and lends it the operator's own words. That is what keeps an ask that has
+    already been measured into a finding from being counted twice.
+    """
+    if not REQUESTS.exists():
+        return []
+    text = REQUESTS.read_text(encoding="utf-8", errors="replace")
+    pat = re.compile(r"^##\s*(R\d+)\s*.\s*(.+)$", re.M)
+    hits = list(pat.finditer(text))
+    out: list[dict] = []
+    for i, m in enumerate(hits):
+        end = hits[i + 1].start() if i + 1 < len(hits) else len(text)
+        body = text[m.end() : end]
+
+        def field(name: str, default: str = "") -> str:
+            f = re.search(rf"^\*\*{name}:\*\*\s*(.+)$", body, re.M)
+            return f.group(1).strip() if f else default
+
+        prose = re.sub(r"^\*\*\w+:\*\*.*$", "", body, flags=re.M).strip()
+        prose = re.sub(r"\s+", " ", prose.split("---")[0]).strip()
+        out.append(
+            {
+                "kind": "request",
+                "id": m.group(1),
+                "num": int(re.sub(r"\D", "", m.group(1)) or 0),
+                "sev": "—",
+                "title": m.group(2).strip(),
+                "status": f"asked {field('Asked', 'date not given')}",
+                "state": "open",
+                "source": "operator",
+                "theme": field("Theme", "Unclassified"),
+                "ready": (field("Ready", "thinking").lower() if field("Ready") else "thinking"),
+                "finding": field("Finding"),
+                "note": prose[:400],
+            }
+        )
+    return out
+
+
+def proposed_findings() -> set[str]:
+    """F-numbers named by a live (non-archived) change directory — those have a proposal already."""
+    named: set[str] = set()
+    if not CHANGES.is_dir():
+        return named
+    for d in CHANGES.iterdir():
+        if not d.is_dir() or d.name == "archive":
+            continue
+        for f in d.rglob("*.md"):
+            try:
+                named.update(re.findall(r"\bF\d{1,3}\b", f.read_text(encoding="utf-8", errors="replace")))
+            except Exception:
+                continue
+    return named
 
 
 def recover_sev(paren: str | None, title: str, body: str) -> str:
@@ -297,19 +475,54 @@ def consistency_warnings(findings: list[dict], changes: list[dict]) -> list[str]
             f"drain: {', '.join(stopped)}"
         )
     return warn
-
-
 def build() -> tuple[str, dict, list[dict], list[dict]]:
-    """Returns (html, snapshot, findings, changes) — the snapshot is what the next run compares to."""
+    """Returns (html, snapshot, items, changes) — the snapshot is what the next run compares to."""
     findings = parse_findings()
+    requests = parse_requests()
+
+    # A request that names a finding re-sources that finding rather than adding a row (see
+    # `parse_requests`). Its prose is lent to the finding so the operator's own words survive.
+    by_id = {f["id"]: f for f in findings}
+    standalone: list[dict] = []
+    for r in requests:
+        target = by_id.get(r.get("finding") or "")
+        if target is not None:
+            target["source"] = "operator"
+            target["note"] = r["note"]
+            target["request_id"] = r["id"]
+            if r["ready"] in READY:
+                target["ready"] = r["ready"]
+            if r["theme"] and r["theme"] != "Unclassified":
+                target["theme"] = r["theme"]
+        else:
+            standalone.append(r)
+
+    # `proposed` is computed, never claimed: a change directory naming the finding is the only
+    # thing that makes it buildable by the night window.
+    proposed = proposed_findings()
+    for f in findings:
+        if f["id"] in proposed and f["state"] in ("open", "no-status"):
+            f["ready"] = "proposed"
+
     openf = [f for f in findings if f["state"] in ("open", "no-status")]
-    openf.sort(key=lambda f: (SEV_ORDER.get(f["sev"], 9), -f["num"]))
+    items = openf + standalone
+    items.sort(key=lambda f: (SEV_ORDER.get(f["sev"], 9), -f["num"]))
+
     by_sev: dict[str, list[dict]] = {}
     for f in openf:
         by_sev.setdefault(f["sev"], []).append(f)
-
     counts = {k: len(v) for k, v in by_sev.items()}
+
+    src_counts: dict[str, int] = {}
+    ready_counts: dict[str, int] = {}
+    theme_counts: dict[str, int] = {}
+    for f in items:
+        src_counts[f["source"]] = src_counts.get(f["source"], 0) + 1
+        ready_counts[f["ready"]] = ready_counts.get(f["ready"], 0) + 1
+        theme_counts[f["theme"]] = theme_counts.get(f["theme"], 0) + 1
+
     total_open = len(openf)
+    total_items = len(items)
     total_fixed = sum(1 for f in findings if f["state"] == "fixed")
     total_retired = sum(1 for f in findings if f["state"] == "retired")
 
@@ -331,31 +544,91 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
     loops = 2 if len(drain) == 0 else (1 if len(drain) == 1 else 0)
     loop_word = {0: "no spec loop", 1: "one spec loop", 2: "two spec loops"}[loops]
 
-    # ---- fragments -------------------------------------------------------
+    # ---- rows ------------------------------------------------------------
 
-    def sev_block(letter: str, label: str, blurb: str) -> str:
-        items = by_sev.get(letter, [])
-        if not items:
-            return ""
-        badge = '<span class="nostatus">no status line</span>'
-        lis = "\n".join(
-            '<li class="fnd"><span class="fid">{}</span><span class="ftitle">{}</span>{}</li>'.format(
-                esc(f["id"]),
-                esc(f["title"]),
-                badge if f["state"] == "no-status" else "",
-            )
-            for f in items
+    def row(f: dict) -> str:
+        sev = f["sev"]
+        note = (
+            f'<p class="i-note">{esc(f["note"])}</p>'
+            if f.get("note")
+            else ""
         )
-        return f"""
-      <section class="sev" data-sev="{letter}">
-        <header class="sev-head">
-          <span class="sev-mark">{letter}</span>
-          <h3>{esc(label)}</h3>
-          <span class="sev-n">{len(items)}</span>
-        </header>
-        <p class="sev-blurb">{esc(blurb)}</p>
-        <ul class="fnds">{lis}</ul>
-      </section>"""
+        req = (
+            f'<span class="chip c-req">{esc(f["request_id"])}</span>'
+            if f.get("request_id")
+            else ""
+        )
+        return (
+            f'<article class="item" data-sev="{esc(sev)}" data-source="{esc(f["source"])}" '
+            f'data-ready="{esc(f["ready"])}" data-theme="{esc(f["theme"])}" '
+            f'data-kind="{esc(f["kind"])}" '
+            f'data-text="{esc((f["id"] + " " + f["title"] + " " + f["theme"]).lower())}">'
+            f'<div class="i-head">'
+            f'<span class="i-id">{esc(f["id"])}</span>'
+            f'<span class="chip c-sev" data-sev="{esc(sev)}">{esc(sev)}</span>'
+            f'<span class="chip c-src" data-source="{esc(f["source"])}">{esc(f["source"])}</span>'
+            f'<span class="chip c-rdy" data-ready="{esc(f["ready"])}">{esc(f["ready"])}</span>'
+            f"{req}"
+            f"</div>"
+            f'<p class="i-title">{esc(f["title"])}</p>'
+            f"{note}"
+            f"</article>"
+        )
+
+    theme_groups = []
+    for theme in sorted(theme_counts, key=lambda t: (-theme_counts[t], t)):
+        members = [f for f in items if f["theme"] == theme]
+        inner = "\n".join(row(f) for f in members)
+        theme_groups.append(
+            f'<section class="group collapsed" data-group="{esc(theme)}">'
+            f'<button class="g-head" type="button" aria-expanded="false">'
+            f'<span class="g-caret" aria-hidden="true">▾</span>'
+            f'<span class="g-name">{esc(theme)}</span>'
+            f'<span class="g-n"><b class="g-shown">{len(members)}</b> of {len(members)}</span>'
+            f"</button>"
+            f'<div class="g-body">{inner}</div>'
+            f"</section>"
+        )
+
+    sev_labels = {
+        "A": "Wrong behaviour an operator will act on",
+        "B": "Wrong or misleading surface",
+        "C": "Friction and vestige",
+        "D": "Minor",
+        "?": "No severity declared",
+        "—": "Requests (not defects)",
+    }
+    sev_groups = []
+    for sev in sorted({f["sev"] for f in items}, key=lambda s: SEV_ORDER.get(s, 9)):
+        members = [f for f in items if f["sev"] == sev]
+        inner = "\n".join(row(f) for f in members)
+        sev_groups.append(
+            f'<section class="group collapsed" data-group="{esc(sev)}">'
+            f'<button class="g-head" type="button" aria-expanded="false">'
+            f'<span class="g-caret" aria-hidden="true">▾</span>'
+            f'<span class="g-name">{esc(sev)} — {esc(sev_labels.get(sev, ""))}</span>'
+            f'<span class="g-n"><b class="g-shown">{len(members)}</b> of {len(members)}</span>'
+            f"</button>"
+            f'<div class="g-body">{inner}</div>'
+            f"</section>"
+        )
+
+    def filter_chips(name: str, counts_map: dict, order_keys, describe: dict) -> str:
+        out = [f'<button class="f-chip is-on" data-filter="{name}" data-value="" type="button">all</button>']
+        for k in order_keys:
+            if not counts_map.get(k):
+                continue
+            out.append(
+                f'<button class="f-chip" data-filter="{name}" data-value="{esc(k)}" '
+                f'type="button" title="{esc(describe.get(k, ""))}">{esc(k)}'
+                f'<span class="f-n">{counts_map[k]}</span></button>'
+            )
+        return "".join(out)
+
+    source_chips = filter_chips("source", src_counts, ["operator", "drive", "audit", "review", "unknown"], SOURCES)
+    ready_chips = filter_chips("ready", ready_counts, ["proposed", "ready", "parked", "triage", "thinking"], READY)
+    sev_chips = filter_chips("sev", {k: len([f for f in items if f["sev"] == k]) for k in sev_labels},
+                             ["A", "B", "C", "D", "?", "—"], sev_labels)
 
     change_rows = (
         "\n".join(
@@ -389,24 +662,20 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
         if counts.get(k)
     )
 
-    newest = sorted(findings, key=lambda f: -f["num"])[:6]
-    newest_html = "\n".join(
-        f'<li class="fnd"><span class="fid">{esc(f["id"])}</span>'
-        f'<span class="sev-tag" data-sev="{esc(f["sev"])}">{esc(f["sev"])}</span>'
-        f'<span class="ftitle">{esc(f["title"])}</span></li>'
-        for f in newest
-    )
-
     snapshot = {
         "generated": now.isoformat(timespec="seconds"),
         "branch": branch,
         "sha": sha,
         "open": total_open,
+        "items": total_items,
+        "requests": len(standalone),
         "fixed": total_fixed,
         "retired": total_retired,
         "filed": len(findings),
         "drain": len(drain),
         **{f"sev_{k}": counts.get(k, 0) for k in ("A", "B", "C", "D", "?")},
+        **{f"src_{k}": src_counts.get(k, 0) for k in SOURCES},
+        **{f"rdy_{k}": ready_counts.get(k, 0) for k in READY},
         "ids": sorted(f["id"] for f in findings),
         "open_ids": sorted(f["id"] for f in openf),
     }
@@ -418,18 +687,21 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
         sha=esc(sha or "?"),
         tree=("uncommitted changes present" if dirty else "clean"),
         total_open=total_open,
+        total_items=total_items,
+        n_requests=len(standalone),
         total_fixed=total_fixed,
         total_retired=total_retired,
         total_all=len(findings),
         drain_n=len(drain),
         loop_word=esc(loop_word),
         a_count=counts.get("A", 0),
+        n_proposed=ready_counts.get("proposed", 0),
+        n_operator=src_counts.get("operator", 0),
         bars=bars,
         change_rows=change_rows,
         approval_rows=approval_rows,
         ap_date=esc(ap_date or "none"),
         di_date=esc(di_date or "none"),
-        order=esc(order) if order else "",
         order_row=(
             f'<div class="directive"><span class="tok">ORDER</span><code>{esc(order)}</code></div>'
             if order
@@ -447,12 +719,11 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
         day_iter=esc(day.get("iteration", "?")),
         day_branch=esc(day.get("branch", "?")),
         day_stop=esc(day.get("stop_at", "?")),
-        sev_a=sev_block("A", "Wrong behaviour an operator will act on", "The queue the night window drains first. A finding with no proposal needs the day window before it can be built."),
-        sev_b=sev_block("B", "Wrong or misleading surface", "Something the product shows, says or refuses that is not true of what it does."),
-        sev_c=sev_block("C", "Friction and vestige", "Real, reproduced, and cheap to leave. Most of the ledger lives here."),
-        sev_d=sev_block("D", "Minor", "Filed for completeness."),
-        sev_q=sev_block("?", "No severity declared anywhere", "Neither the heading nor the body states one. Shown rather than hidden: an unrated finding is not a closed one, and dropping it is how a ledger comes to under-report itself."),
-        newest_html=newest_html,
+        source_chips=source_chips,
+        ready_chips=ready_chips,
+        sev_chips=sev_chips,
+        theme_groups="\n".join(theme_groups),
+        sev_groups="\n".join(sev_groups),
     )
     return page, snapshot, findings, changes
 
@@ -471,6 +742,7 @@ TEMPLATE = """<title>AgentWeave Backlog</title>
   --sevB:#8A5F14; --sevB-soft:#F7EEDA;
   --sevC:#3F6E52; --sevC-soft:#E4EFE8;
   --sevD:#606878; --sevD-soft:#E9EBF0;
+  --op:#7A3E86;   --op-soft:#F2E7F5;
   --day:#C8922E; --night:#4A57A0;
   --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
   --serif:'IBM Plex Serif',Georgia,serif;
@@ -487,6 +759,7 @@ TEMPLATE = """<title>AgentWeave Backlog</title>
     --sevB:#D5A64A; --sevB-soft:#2E2514;
     --sevC:#7FB795; --sevC-soft:#16261C;
     --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --op:#C79AD2;   --op-soft:#2A1B2E;
     --day:#DEAE52; --night:#8E9BDE;
     color-scheme:dark;
   }}
@@ -500,6 +773,7 @@ TEMPLATE = """<title>AgentWeave Backlog</title>
   --sevB:#D5A64A; --sevB-soft:#2E2514;
   --sevC:#7FB795; --sevC-soft:#16261C;
   --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --op:#C79AD2;   --op-soft:#2A1B2E;
   --day:#DEAE52; --night:#8E9BDE;
   color-scheme:dark;
 }}
@@ -508,6 +782,7 @@ body{{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans)
 .wrap{{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:40px 72px}}
 a{{color:var(--accent)}}
 code{{font-family:var(--mono);font-size:.88em}}
+:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
 
 .top{{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:26px}}
 h1{{font-size:clamp(28px,5vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.05;margin:0}}
@@ -515,7 +790,6 @@ h1{{font-size:clamp(28px,5vw,40px);font-weight:700;letter-spacing:-.025em;line-h
 .stamp{{font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--ink-3);text-align:right}}
 .stamp b{{color:var(--ink-2);font-weight:500}}
 
-/* cycle clock */
 .clock{{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:18px 20px 20px;margin-bottom:26px}}
 .clock h2{{font-size:12px;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px;font-weight:500}}
 .track{{position:relative;display:flex;height:42px;border-radius:2px;overflow:hidden;border:1px solid var(--rule)}}
@@ -535,18 +809,17 @@ h1{{font-size:clamp(28px,5vw,40px);font-weight:700;letter-spacing:-.025em;line-h
 #nowlabel{{margin-top:9px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}}
 #nowlabel b{{color:var(--ink)}}
 
-/* figures */
 .figs{{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:3px;margin-bottom:34px;overflow:hidden}}
 .fig{{background:var(--surface);padding:16px 16px 14px}}
 .fig b{{display:block;font-family:var(--mono);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1}}
 .fig span{{display:block;margin-top:7px;font-size:11.5px;line-height:1.4;color:var(--ink-3)}}
 .fig[data-t="a"] b{{color:var(--sevA)}}
+.fig[data-t="op"] b{{color:var(--op)}}
 
 h2.sec{{font-size:19px;font-weight:700;letter-spacing:-.015em;margin:0 0 4px;padding-bottom:10px;border-bottom:2px solid var(--ink)}}
 .lede{{font-family:var(--serif);font-size:15.5px;line-height:1.6;color:var(--ink-2);max-width:68ch;margin:14px 0 20px}}
 section.block{{margin-top:44px}}
 
-/* two-up */
 .two{{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}}
 .panel{{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:18px 18px 16px}}
 .panel h3{{font-size:13px;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin:0 0 4px;font-weight:500}}
@@ -572,7 +845,6 @@ section.block{{margin-top:44px}}
 .chg-count b{{display:block;font-family:var(--mono);font-size:19px;font-variant-numeric:tabular-nums;line-height:1}}
 .chg-count span{{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}}
 
-/* bars */
 .bars{{display:flex;flex-direction:column;gap:7px;margin:18px 0 8px}}
 .bar-row{{display:flex;align-items:center;gap:11px}}
 .bar-lab{{font-family:var(--mono);font-size:12px;font-weight:600;width:14px;flex-shrink:0}}
@@ -585,37 +857,59 @@ section.block{{margin-top:44px}}
 .bar-fill[data-sev="?"]{{background:repeating-linear-gradient(45deg,var(--sevD),var(--sevD) 3px,var(--sunk) 3px,var(--sunk) 6px)}}
 .bar-n{{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-2);width:34px;text-align:right;flex-shrink:0}}
 
-/* severity groups */
-.sev{{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--rule-2);border-radius:2px;padding:16px 18px 14px;margin-bottom:12px}}
-.sev[data-sev="A"]{{border-left-color:var(--sevA)}}
-.sev[data-sev="B"]{{border-left-color:var(--sevB)}}
-.sev[data-sev="C"]{{border-left-color:var(--sevC)}}
-.sev[data-sev="D"]{{border-left-color:var(--sevD)}}
-.sev[data-sev="?"]{{border-left-color:var(--sevD);border-left-style:dashed}}
-.sev[data-sev="?"] .sev-mark{{background:var(--sevD-soft);color:var(--sevD)}}
-.sev-tag[data-sev="?"]{{background:var(--sevD-soft);color:var(--sevD)}}
-.sev-head{{display:flex;align-items:center;gap:10px;flex-wrap:wrap}}
-.sev-head h3{{font-size:15px;font-weight:600;margin:0;flex:1;min-width:0}}
-.sev-mark{{font-family:var(--mono);font-size:12px;font-weight:600;width:22px;height:22px;display:grid;place-items:center;border-radius:2px;flex-shrink:0}}
-.sev[data-sev="A"] .sev-mark{{background:var(--sevA-soft);color:var(--sevA)}}
-.sev[data-sev="B"] .sev-mark{{background:var(--sevB-soft);color:var(--sevB)}}
-.sev[data-sev="C"] .sev-mark{{background:var(--sevC-soft);color:var(--sevC)}}
-.sev[data-sev="D"] .sev-mark{{background:var(--sevD-soft);color:var(--sevD)}}
-.sev-n{{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-3)}}
-.sev-blurb{{font-size:12.5px;color:var(--ink-3);margin:7px 0 12px;max-width:70ch}}
-.fnds{{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}}
-.fnd{{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-top:1px solid var(--rule);font-size:13px;line-height:1.45}}
-.fnd:first-child{{border-top:0}}
-.fid{{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--accent);width:48px;flex-shrink:0}}
-.ftitle{{min-width:0;overflow-wrap:anywhere}}
-.nostatus{{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--sevB);border:1px solid var(--sevB);padding:1px 4px;border-radius:2px;white-space:nowrap;flex-shrink:0;align-self:center}}
-.sev-tag{{font-family:var(--mono);font-size:10px;font-weight:600;padding:1px 5px;border-radius:2px;flex-shrink:0}}
-.sev-tag[data-sev="A"]{{background:var(--sevA-soft);color:var(--sevA)}}
-.sev-tag[data-sev="B"]{{background:var(--sevB-soft);color:var(--sevB)}}
-.sev-tag[data-sev="C"]{{background:var(--sevC-soft);color:var(--sevC)}}
-.sev-tag[data-sev="D"]{{background:var(--sevD-soft);color:var(--sevD)}}
+/* ---------------- controls ---------------- */
+.controls{{position:sticky;top:0;z-index:5;background:var(--ground);border-bottom:1px solid var(--rule);padding-block:12px;margin-bottom:16px}}
+.ctl-row{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}}
+.ctl-row:last-child{{margin-bottom:0}}
+.ctl-lab{{font-family:var(--mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);width:54px;flex-shrink:0}}
+.f-chip{{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:2px;border:1px solid var(--rule-2);background:var(--surface);color:var(--ink-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}}
+.f-chip:hover{{border-color:var(--accent);color:var(--ink)}}
+.f-chip.is-on{{background:var(--accent);border-color:var(--accent);color:#fff}}
+.f-n{{font-variant-numeric:tabular-nums;opacity:.65;font-size:10px}}
+#q{{flex:1;min-width:180px;font-family:var(--mono);font-size:12.5px;padding:6px 10px;border:1px solid var(--rule-2);border-radius:2px;background:var(--surface);color:var(--ink)}}
+#q::placeholder{{color:var(--ink-3)}}
+.seg-toggle{{display:inline-flex;border:1px solid var(--rule-2);border-radius:2px;overflow:hidden}}
+.seg-toggle button{{font-family:var(--mono);font-size:11px;padding:5px 11px;border:0;background:var(--surface);color:var(--ink-2);cursor:pointer}}
+.seg-toggle button.is-on{{background:var(--accent);color:#fff}}
+#count{{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-left:auto;font-variant-numeric:tabular-nums}}
+#count b{{color:var(--ink)}}
+.linkish{{font-family:var(--mono);font-size:11px;background:none;border:0;color:var(--accent);cursor:pointer;text-decoration:underline;padding:0}}
 
-/* authority map */
+/* ---------------- groups and items ---------------- */
+.group{{margin-bottom:10px;border:1px solid var(--rule);border-radius:2px;background:var(--surface);overflow:hidden}}
+.group[hidden]{{display:none}}
+.g-head{{width:100%;display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--surface-2);border:0;border-bottom:1px solid var(--rule);cursor:pointer;text-align:left;font-family:inherit}}
+.g-caret{{font-size:10px;color:var(--ink-3);transition:transform .12s ease}}
+.group.collapsed .g-caret{{transform:rotate(-90deg)}}
+.group.collapsed .g-body{{display:none}}
+.g-name{{font-size:13.5px;font-weight:600;color:var(--ink);flex:1;min-width:0}}
+.g-n{{font-family:var(--mono);font-size:11px;color:var(--ink-3);font-variant-numeric:tabular-nums}}
+.g-n b{{color:var(--ink-2)}}
+.g-body{{padding:2px 0}}
+
+.item{{display:block;padding:9px 14px;border-bottom:1px solid var(--rule)}}
+.item:last-child{{border-bottom:0}}
+.item[hidden]{{display:none}}
+.i-head{{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px}}
+.i-id{{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--accent)}}
+.i-title{{margin:0;font-size:13.5px;line-height:1.45;overflow-wrap:anywhere}}
+.i-note{{margin:5px 0 0;font-family:var(--serif);font-size:12.5px;line-height:1.5;color:var(--ink-2);border-left:2px solid var(--op);padding-left:9px}}
+.chip{{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.05em;padding:2px 5px;border-radius:2px;white-space:nowrap}}
+.c-sev[data-sev="A"]{{background:var(--sevA-soft);color:var(--sevA)}}
+.c-sev[data-sev="B"]{{background:var(--sevB-soft);color:var(--sevB)}}
+.c-sev[data-sev="C"]{{background:var(--sevC-soft);color:var(--sevC)}}
+.c-sev[data-sev="D"]{{background:var(--sevD-soft);color:var(--sevD)}}
+.c-sev[data-sev="?"]{{background:var(--sevD-soft);color:var(--sevD)}}
+.c-sev[data-sev="—"]{{background:var(--op-soft);color:var(--op)}}
+.c-src{{background:var(--surface-2);color:var(--ink-3)}}
+.c-src[data-source="operator"]{{background:var(--op-soft);color:var(--op)}}
+.c-src[data-source="drive"]{{background:var(--sevC-soft);color:var(--sevC)}}
+.c-rdy{{border:1px solid var(--rule-2);color:var(--ink-3);background:transparent}}
+.c-rdy[data-ready="proposed"]{{border-color:var(--sevC);color:var(--sevC)}}
+.c-rdy[data-ready="triage"]{{border-color:var(--sevB);color:var(--sevB)}}
+.c-req{{background:var(--op);color:#fff}}
+#noresults{{padding:26px 14px;text-align:center;color:var(--ink-3);font-size:13px}}
+
 .map{{width:100%;border-collapse:collapse;font-size:13px}}
 .map th{{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500;padding:0 12px 8px 0;border-bottom:1px solid var(--rule-2)}}
 .map td{{padding:9px 12px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top}}
@@ -627,7 +921,10 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
 @media (max-width:640px){{
   .top{{align-items:flex-start}} .stamp{{text-align:left}}
   .seg span{{display:none}}
+  .ctl-lab{{width:auto}}
+  #count{{margin-left:0;width:100%}}
 }}
+@media (prefers-reduced-motion: reduce){{ *{{transition:none!important}} }}
 </style>
 
 <div class="wrap">
@@ -640,7 +937,7 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
     <div class="stamp">
       generated <b>{generated}</b><br>
       branch <b>{branch}</b> @ <b>{sha}</b> · {tree}<br>
-      regenerate: <b>py -3.11 scripts/backlog_page.py</b>
+      regenerate: <b>/backlog</b>
     </div>
   </div>
 
@@ -658,10 +955,48 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
 
   <div class="figs">
     <div class="fig" data-t="a"><b>{a_count}</b><span>open severity&nbsp;A</span></div>
-    <div class="fig"><b>{total_open}</b><span>open findings of {total_all} filed</span></div>
-    <div class="fig"><b>{total_fixed}</b><span>fixed and recorded</span></div>
+    <div class="fig"><b>{total_items}</b><span>open items — {total_open} findings + {n_requests} requests</span></div>
+    <div class="fig" data-t="op"><b>{n_operator}</b><span>you asked for</span></div>
+    <div class="fig"><b>{n_proposed}</b><span>have a proposal, so the night can build them</span></div>
     <div class="fig"><b>{drain_n}</b><span>unbuilt changes — tomorrow runs {loop_word}</span></div>
   </div>
+
+  <section class="block">
+    <h2 class="sec">The backlog</h2>
+    <p class="lede">
+      Everything open, from both ledgers. <b>Source</b> says where an item came from — whether it
+      was found by exercising the product or asked for by you — because those earn a place in a
+      queue differently. <b>Ready</b> says whether anyone could pick it up: the night window cannot
+      build a finding with no proposal, so an <code>A</code> that reads <code>ready</code> still
+      needs a spec loop before it is available.
+    </p>
+
+    <div class="controls">
+      <div class="ctl-row">
+        <span class="ctl-lab">source</span>{source_chips}
+      </div>
+      <div class="ctl-row">
+        <span class="ctl-lab">ready</span>{ready_chips}
+      </div>
+      <div class="ctl-row">
+        <span class="ctl-lab">severity</span>{sev_chips}
+      </div>
+      <div class="ctl-row">
+        <span class="ctl-lab">find</span>
+        <input id="q" type="search" placeholder="filter by id, words in the title, or theme…" autocomplete="off">
+        <span class="seg-toggle" role="group" aria-label="Group by">
+          <button type="button" id="by-theme" class="is-on">by theme</button>
+          <button type="button" id="by-sev">by severity</button>
+        </span>
+        <button type="button" class="linkish" id="toggle-all">expand all</button>
+        <span id="count"></span>
+      </div>
+    </div>
+
+    <div id="groups-theme">{theme_groups}</div>
+    <div id="groups-sev" hidden>{sev_groups}</div>
+    <p id="noresults" hidden>Nothing matches those filters.</p>
+  </section>
 
   <section class="block">
     <h2 class="sec">What the windows are holding</h2>
@@ -697,25 +1032,13 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
   </section>
 
   <section class="block">
-    <h2 class="sec">Findings</h2>
+    <h2 class="sec">Findings by severity</h2>
     <p class="lede">
-      Severity <b>A</b> is wrong behaviour an operator will act on, <b>B</b> a wrong or misleading
-      surface, <b>C</b> friction or vestige. The night window drains A before B before C — but
-      <em>a finding with no proposal needs the day window first</em>, so an A here is not by itself
-      buildable tonight. {total_retired} findings are retired and are not counted below.
+      <b>A</b> is wrong behaviour an operator will act on, <b>B</b> a wrong or misleading surface,
+      <b>C</b> friction or vestige. {total_fixed} are fixed and {total_retired} retired, of
+      {total_all} ever filed; neither is counted here.
     </p>
     <div class="bars">{bars}</div>
-
-    <div class="panel" style="margin:20px 0 26px">
-      <h3>Newest filed</h3>
-      <ul class="fnds">{newest_html}</ul>
-    </div>
-
-    {sev_a}
-    {sev_b}
-    {sev_c}
-    {sev_d}
-    {sev_q}
   </section>
 
   <section class="block">
@@ -732,6 +1055,7 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
           <tr><td><code>spec-queue/APPROVALS.md</code></td><td>what the FIX window may build tonight. The status token is the authority; there is deliberately no checkbox.</td><td>the DECIDE session, on the operator's instruction</td></tr>
           <tr><td><code>spec-queue/DIRECTION.md</code></td><td>what the FILL window does tomorrow. Overrides the drain-count shape in either direction. May not approve a change.</td><td>the operator, or DECIDE on their behalf</td></tr>
           <tr><td><code>spec-queue/DECISIONS.md</code></td><td>questions a window may not answer alone. Only the operator marks one DECIDED.</td><td>both windows append; operator decides</td></tr>
+          <tr><td><code>spec-queue/REQUESTS.md</code></td><td>what the operator asked for. Not a defect ledger — a request naming a <code>Finding:</code> re-sources that finding instead of adding a row.</td><td>the operator</td></tr>
           <tr><td><code>scripts/drive/FINDINGS.md</code></td><td>every defect ever filed, and its <code>**Status:**</code> line. Findings live nowhere else.</td><td>any window that drives</td></tr>
           <tr><td><code>openspec/changes/&lt;name&gt;/</code></td><td>specs, design and tasks for work in flight. Never in two systems at once.</td><td>the FILL window's spec loop</td></tr>
           <tr><td><code>openspec/specs/</code></td><td>current shipped behaviour. The 30 accumulated capability documents stay here until the operator migrates them.</td><td>archive-change and sync-specs</td></tr>
@@ -764,25 +1088,25 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
 
   <footer>
     Generated by scripts/backlog_page.py — do not edit this file by hand; edit the generator.<br>
-    Sources: scripts/drive/FINDINGS.md · openspec/changes/ · spec-queue/{{APPROVALS,DIRECTION}}.md · .claude/autonomous/STATE-{{day,night}}.json<br>
-    The cycle marker above is computed in your browser, so it stays true even when the counts are a day old.
+    Sources: scripts/drive/FINDINGS.md · spec-queue/REQUESTS.md · openspec/changes/ · spec-queue/{{APPROVALS,DIRECTION}}.md · .claude/autonomous/STATE-{{day,night}}.json<br>
+    The cycle marker is computed in your browser, so it stays true even when the counts are a day old.
   </footer>
 </div>
 
 <script>
 (function () {{
+  /* ---- cycle clock ---- */
   var track = document.getElementById('track');
   var line = document.getElementById('nowline');
   var label = document.getElementById('nowlabel');
-  if (!track || !line || !label) return;
 
   function place() {{
+    if (!track || !line || !label) return;
     var segs = Array.prototype.slice.call(track.querySelectorAll('.seg'));
     var now = new Date();
     var h = now.getHours() + now.getMinutes() / 60;
     var total = track.clientWidth;
     var x = 0, current = null, acc = 0;
-
     for (var i = 0; i < segs.length; i++) {{
       var s = segs[i];
       var from = parseFloat(s.dataset.from), to = parseFloat(s.dataset.to);
@@ -798,19 +1122,118 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
     }}
     if (!current) {{ current = segs[segs.length - 1]; x = acc; }}
     line.style.left = Math.max(0, Math.min(x, total)) + 'px';
-
-    var name = current.querySelector('b').textContent;
     var pretty = now.toLocaleTimeString([], {{ hour: '2-digit', minute: '2-digit' }});
-    label.innerHTML = 'Now <b>' + pretty + '</b> — in the <b>' + name + '</b> window.';
+    label.innerHTML = 'Now <b>' + pretty + '</b> — in the <b>' + current.querySelector('b').textContent + '</b> window.';
   }}
-
   place();
   window.addEventListener('resize', place);
   setInterval(place, 60000);
+
+  /* ---- filtering ---- */
+  var filters = {{ source: '', ready: '', sev: '' }};
+  var query = '';
+  var panes = {{ theme: document.getElementById('groups-theme'), sev: document.getElementById('groups-sev') }};
+  var mode = 'theme';
+  var wasFiltered = false;
+  var countEl = document.getElementById('count');
+  var noResults = document.getElementById('noresults');
+  var toggleAll = document.getElementById('toggle-all');
+
+  function store(k, v) {{ try {{ localStorage.setItem('aw-backlog-' + k, v); }} catch (e) {{}} }}
+  function recall(k) {{ try {{ return localStorage.getItem('aw-backlog-' + k); }} catch (e) {{ return null; }} }}
+
+  function apply() {{
+    var pane = panes[mode];
+    var shown = 0, total = 0;
+    var groups = pane.querySelectorAll('.group');
+    for (var g = 0; g < groups.length; g++) {{
+      var items = groups[g].querySelectorAll('.item');
+      var visible = 0;
+      for (var i = 0; i < items.length; i++) {{
+        var el = items[i];
+        var ok = (!filters.source || el.dataset.source === filters.source)
+              && (!filters.ready || el.dataset.ready === filters.ready)
+              && (!filters.sev || el.dataset.sev === filters.sev)
+              && (!query || el.dataset.text.indexOf(query) !== -1);
+        el.hidden = !ok;
+        if (ok) visible++;
+        total++;
+      }}
+      groups[g].hidden = visible === 0;
+      var n = groups[g].querySelector('.g-shown');
+      if (n) n.textContent = visible;
+      shown += visible;
+    }}
+    countEl.innerHTML = '<b>' + shown + '</b> of ' + total + ' shown';
+    noResults.hidden = shown !== 0;
+
+    /* A filtered view that stays shut shows nothing, and a 217-row page that opens flat is a
+       wall rather than an index. So: closed at rest, open automatically while a filter is live,
+       closed again when it clears. Between those, a manual toggle is left alone. */
+    var live = !!(filters.source || filters.ready || filters.sev || query);
+    if (live !== wasFiltered) {{
+      for (var k = 0; k < groups.length; k++) {{
+        groups[k].classList.toggle('collapsed', !live);
+        var hh = groups[k].querySelector('.g-head');
+        if (hh) hh.setAttribute('aria-expanded', live ? 'true' : 'false');
+      }}
+      toggleAll.textContent = live ? 'collapse all' : 'expand all';
+      wasFiltered = live;
+    }}
+  }}
+
+  document.addEventListener('click', function (ev) {{
+    var chip = ev.target.closest ? ev.target.closest('.f-chip') : null;
+    if (chip) {{
+      var f = chip.dataset.filter;
+      filters[f] = chip.dataset.value;
+      var siblings = chip.parentNode.querySelectorAll('.f-chip[data-filter="' + f + '"]');
+      for (var i = 0; i < siblings.length; i++) siblings[i].classList.remove('is-on');
+      chip.classList.add('is-on');
+      apply();
+      return;
+    }}
+    var head = ev.target.closest ? ev.target.closest('.g-head') : null;
+    if (head) {{
+      var grp = head.parentNode;
+      var collapsed = grp.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    }}
+  }});
+
+  var q = document.getElementById('q');
+  q.addEventListener('input', function () {{ query = q.value.trim().toLowerCase(); apply(); }});
+
+  function setMode(next) {{
+    mode = next;
+    panes.theme.hidden = next !== 'theme';
+    panes.sev.hidden = next !== 'sev';
+    document.getElementById('by-theme').classList.toggle('is-on', next === 'theme');
+    document.getElementById('by-sev').classList.toggle('is-on', next === 'sev');
+    store('mode', next);
+    apply();
+  }}
+  document.getElementById('by-theme').addEventListener('click', function () {{ setMode('theme'); }});
+  document.getElementById('by-sev').addEventListener('click', function () {{ setMode('sev'); }});
+
+  toggleAll.addEventListener('click', function () {{
+    var pane = panes[mode];
+    var groups = pane.querySelectorAll('.group');
+    var anyOpen = false;
+    for (var i = 0; i < groups.length; i++) if (!groups[i].classList.contains('collapsed')) anyOpen = true;
+    for (var j = 0; j < groups.length; j++) {{
+      groups[j].classList.toggle('collapsed', anyOpen);
+      var h = groups[j].querySelector('.g-head');
+      if (h) h.setAttribute('aria-expanded', anyOpen ? 'false' : 'true');
+    }}
+    toggleAll.textContent = anyOpen ? 'expand all' : 'collapse all';
+  }});
+
+  var saved = recall('mode');
+  if (saved === 'sev') setMode('sev'); else apply();
 }})();
 </script>
 """
-
 
 def main(argv: list[str] | None = None) -> int:
     import argparse

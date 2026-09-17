@@ -51,6 +51,24 @@ cache reads, i.e. every token in context re-read on every later call. So context
 Only the first firing of the window does this. It ends by writing a full `queue` into
 `STATE-day.json`, so every later firing just reads `next_action`.
 
+0. **Read the backlog page first — `spec-queue/BACKLOG.html`.** One command, before anything
+   else in this iteration:
+
+   ```bash
+   py -3.11 scripts/backlog_page.py --check
+   ```
+
+   Non-zero means the ledger has moved since the page was built; run it without `--check` to
+   refresh, and read the `SINCE LAST GENERATION` block it prints. That block is the cheapest
+   orientation there is: what is open by severity, **where each item came from** (found by driving,
+   found by reading code, or asked for by the operator), **whether it is ready** for anyone to pick
+   up, the drain, and what each window is holding. Reading it costs one tool call and stops the two
+   failures this loop keeps having — filing something already filed, and queueing a finding that
+   has no proposal and therefore cannot be built.
+
+   **Never `cat` the HTML.** It is 300 KB and reading it burns the context this iteration needs.
+   The printed report is the interface; the page is for the operator's browser.
+
 1. **Land yesterday's cycle before starting today's — the merge gate.** This step exists because
    nothing else in the routine was responsible for finishing. Between 2026-09-01 and 2026-09-03 the
    cycle branch reached 173 commits over 114 files, was never merged, and — because CI triggered

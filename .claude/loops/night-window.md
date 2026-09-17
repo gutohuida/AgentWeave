@@ -47,6 +47,24 @@ cache reads, i.e. every token in context re-read on every later call. So context
 
 Only the first firing of the window does this.
 
+0. **Read the backlog page first — `spec-queue/BACKLOG.html`.** One command, before anything
+   else in this iteration:
+
+   ```bash
+   py -3.11 scripts/backlog_page.py --check
+   ```
+
+   Non-zero means the ledger has moved since the page was built; run it without `--check` to
+   refresh, and read the `SINCE LAST GENERATION` block it prints. That block is the cheapest
+   orientation there is: what is open by severity, **where each item came from** (found by driving,
+   found by reading code, or asked for by the operator), **whether it is ready** for anyone to pick
+   up, the drain, and what each window is holding. Reading it costs one tool call and stops the two
+   failures this loop keeps having — filing something already filed, and queueing a finding that
+   has no proposal and therefore cannot be built.
+
+   **Never `cat` the HTML.** It is 300 KB and reading it burns the context this iteration needs.
+   The printed report is the interface; the page is for the operator's browser.
+
 1. **Confirm the branch.** `git branch --show-current` must match `STATE-night.json`'s `branch` —
    the driver already checked, but check again against `git log`, and reconcile out loud in the log
    if they disagree. Never cut a branch here; the day window owns that.

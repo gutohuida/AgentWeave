@@ -27,18 +27,16 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ## 2026-09-18
 
-DAY WINDOW: 10:15-17:00
-
 **Written 2026-09-17 evening by an interactive session, at the operator's instruction, after an
 end-to-end read of the `LoopEngine_2` run (`proj-f90d219dd68c`) on `:8000`.**
 
-**The `DAY WINDOW` line above is load-bearing and is not a preference.** `AgentWeaveArmDay` fires
-at **10:15**, while `arm-cycle.ps1`'s standard day window is **09:00-17:00**. Without a line here
-dated today, the arm computes a 09:00 start that is 75 minutes past, which is far outside
-`install-driver.ps1`'s 15-minute grace, so it rolls the start to tomorrow, finds tomorrow's start
-after today's stop, and throws *"the run would have no window"* — the 2026-09-16 failure exactly.
-Matching the line to the trigger time puts the start inside the grace instead. See F380; until that
-is decided, **every day's section needs this line.** That read produced
+**No `DAY WINDOW` line, deliberately — the window is back to the standard 09:00-17:00.** The
+operator decided F380(b) at 00:30: `AgentWeaveArmDay`'s trigger had drifted to **10:15** while
+`install-tasks.ps1` has always declared **08:55** for an 09:00 window, and the mismatch meant the
+day armed only when a section dated today happened to carry a matching `DAY WINDOW` line. Re-running
+`install-tasks.ps1` restored 08:55, five minutes ahead of the window exactly as `AgentWeaveArmNight`
+sits five minutes ahead of 23:00. **A future section needs this line only to move the window
+deliberately, never to make arming work.** That read produced
 four new findings — **F376 (A), F377 (B), F378 (B), F379 (B)** — and reproduced two existing ones.
 Everything below refers to them; they are in `scripts/drive/FINDINGS.md` with the measurements
 already taken.

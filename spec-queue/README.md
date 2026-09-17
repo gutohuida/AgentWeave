@@ -23,7 +23,14 @@ Design: `openspec/explorations/2026-09-01-a-daily-research-spec-and-build-loop.m
 | `DECISIONS.md` | both windows *add* rows; only the operator marks one DECIDED | the DECIDE session, and any window deciding what it may take alone |
 | `research/YYYY-MM-DD.md` | the FILL window | the DECIDE session, and tomorrow's FILL |
 | `review/review-YYYY-MM-DD.html` | the FILL window | the operator, via an Artifact published in the DECIDE session |
+| `REQUESTS.md` | the operator | `scripts/backlog_page.py`, and any window reading the backlog |
 | `BACKLOG.html` | **nobody — `scripts/backlog_page.py` generates it** | the operator, and any agent orienting itself |
+
+`REQUESTS.md` is the operator's own channel into the backlog. `FINDINGS.md` is a defect ledger —
+every row is something the product does wrong. A request is work nobody has established is broken,
+wanted because the operator wants it; filing one as a finding forces it to pretend to be a defect.
+A request naming a `Finding:` re-sources that finding as operator-originated instead of adding a
+second row. Format and rules: the file's own header.
 
 `BACKLOG.html` is the standing orientation page: open findings by severity, the drain, what each
 window is holding, and which file is the authority for what. **Never edit it by hand** — it is
