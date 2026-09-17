@@ -554,7 +554,11 @@ reaching more than its target is reported as measured rather than trimmed.
       change), summarizing the 6.1-6.4 drive evidence, and stating explicitly that per design D5
       the 18-of-50 figure does not move for existing work — only documents approved from here on
       get the effect — and that "mandatory and executable" (a refusal gate) remains future scope.
-- [ ] 7.2 `openspec archive` once the operator has approved.
+- [x] 7.2 `openspec archive` once the operator has approved.
+      **Done.** Operator approved via /resume session, 2026-09-17. Delta spec synced into
+      `openspec/specs/spec-document-authority/spec.md` (new requirement + 14 scenarios, verified
+      `openspec validate --strict --all` — 45/45), then the change directory moved to
+      `openspec/changes/archive/2026-09-17-a-materialised-task-carries-its-criteria/`.
 
 ## 8. Human-only, not agent-verifiable
 
