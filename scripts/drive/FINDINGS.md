@@ -28435,6 +28435,25 @@ released at 06:10. **The other 20 were still `queued` 2–13 hours later, and ev
 and the operator was shown no reason on the entry. Whether the UI shows the suspension any other way
 is left to R1.
 
+
+### Reproduced 2026-09-17 on a second project, unchanged
+
+`LoopEngine_2` (`proj-f90d219dd68c`), same Hub, three days after filing. **6 entries suspended at
+`hop_depth 7` against `hop_budget 6`** between 18:10:55 and 18:19:40 — 3 addressed to `Developer`,
+3 to `Teste`. Every one still `state='queued'` with `waiting_reason` NULL and `abandoned_reason`
+NULL when read at 22:53. Each sender's `send_message` returned success; no later briefing mentioned
+a suspension. `inbound_queue.can_start` (`any(entry.hop_depth <= hop_budget)`) then started no turn
+for either agent, and the collaboration ended silently with all 21 runs `completed`, `exit_code 0`.
+
+**One entry makes the cost concrete.** `entry-f510b9edb0f4`, suspended 18:17:09, carried
+*"Teste accepted all six evidence rows and ran the suite itself, 39/39 … then start t-create."*
+That is the message that would have started the next task. Nothing anywhere said it had not
+arrived.
+
+This run reached hop 7 in **one unbroken chain off a single operator message** because no flow
+existed to reset it (F376). The two findings compound: F376 is why the chain never resets, F361 is
+why its exhaustion is invisible.
+
 ## F362 (B) — on Windows, the workspace guard reads the tail of any relative word that contains a `/` as an absolute path
 
 **Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
@@ -28483,6 +28502,29 @@ raised by `spec_manifest.py:72`.
 
 **Why B.** The one route the product names for reading the approved specification cannot deliver
 it. **Not built on 2026-09-14**, because the tool is in `mcp_server.py` (F354).
+
+
+### Reproduced 2026-09-17 on a second project, unchanged
+
+`LoopEngine_2` (`proj-f90d219dd68c`), three days after filing. **6 oversized `read_spec_document`
+results** across `Developer` and `Teste`, at **180,097** and **143,746** characters. Each was
+spilled to `~/.claude/projects/C--Users-huida-Documents-projects-LoopEngine-2/<session>/tool-results/
+mcp-agentweave-read_spec_document-*.txt`, and the agents' follow-up `Read` of that path was refused
+by the workspace guard every time:
+
+```
+17:38:35  read_spec_document -> "Error: result exceeds maximum allowed tokens. Output saved to ...txt"
+17:38:49  Read that file     -> "Denied: '...tool-results\...txt' is outside your workspace."
+17:39:00  Read that file     -> "Denied: ..."
+```
+
+The spec is the approved document the whole build was working from. `Developer`'s turn that
+followed recorded **16,104,082 input tokens**, the largest of the run.
+
+**The two mechanisms are each behaving as designed and the combination is unusable**: the harness
+spills an oversized tool result outside the project directory, and the workspace guard exists to
+refuse exactly that path. Neither side is wrong on its own, which is why this will not be fixed by
+tightening either one.
 
 ## F364 (C) — `submit_checkpoint_notes` enforces caps its description never states, and the refusal names neither the entry nor the overshoot
 
@@ -28895,3 +28937,167 @@ it against the workspace root exactly as rule 5 already does, not exempted as "n
 plainest possible traversal and the sandbox does not check it at all today.
 
 **Related:** F332 (the ANSI-C decode question this was found alongside, and does not fix this).
+
+
+---
+
+## F376 (A) — `create_flow` is refused for a setting the operator was never asked about, and the refusal promises an approval that is never requested
+
+**Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2`
+(`proj-f90d219dd68c`) on `:8000`, read-only.
+
+**What happened.** At 17:36 the operator told the Architect *"spec approved is the flow ready? If
+it's not please create it and send distribute the tasks and start the development. I'm leaving for
+a little bit."* The Architect called `create_flow` at **17:37:45** and was refused:
+
+```
+Error calling tool 'create_flow': Hub rejected POST /jobs (403):
+Scheduled work from agents requires operator approval or an enabled allowance
+```
+
+**Thirty-seven seconds later** it sent the first of what became 20 hand-driven `send_message`
+calls, because a message is the only dispatch left to an agent that cannot create a job.
+
+**The refusal names an approval path that does not exist.** `permission_requests` holds **zero
+rows** for this project. No card reached Needs-you, no event was broadcast, and the operator —
+who had just said they were leaving — had nothing waiting for them on return. The refusal exists
+only inside the Architect's own transcript, where nothing reads it.
+
+**The cause is `projects.allow_agent_jobs`, default `0`.** It is `1` on the operator's older
+`LoopEngine` project, so this is specifically what a *new* project gets.
+
+**What it cost, measured on the same database.** Everything below follows from those 37 seconds:
+
+- `loops` and `ai_jobs` hold **0 rows** for the project. No flow ever existed.
+- A flow firing enters the queue at `hop_depth=0` (`scheduler.py:3111`, `:3443`), so each firing
+  resets the hop chain. Hand-driven messages inherit `+1` and never reset. The whole build ran as
+  one chain off the operator's 17:36 message and died at hop 7 against a budget of 6 — **6 entries
+  suspended**, including *"Teste accepted all six evidence rows … then start t-create"*, the one
+  message that would have advanced the build.
+- Only a flow dispatch writes a reviewer into `assignee` and enters a task at `under_review`
+  (`scheduler.py:838-849`). Reviews arriving as messages move no task state, so `t-package` stayed
+  `completed`, `_guard_reviewer_is_not_the_author` then refused every `completed → under_review`
+  move **including the operator's**, and `dependency_gate.MET_STATUS = "approved"` froze all 31
+  remaining tasks behind it. The ledger deadlocked at **17:56**, 23 minutes into a 2h22m session.
+- **0 of 32 tasks reached `approved`.** $26.81 of API-equivalent spend across 21 runs.
+
+**Where.**
+- `hub/hub/api/v1/agents.py` — the `POST /jobs` allowance check that raises the 403.
+- `hub/hub/db/models.py:Project.allow_agent_jobs` — `default=False, server_default="0"`.
+- `hub/ui/src/components/environment/ProjectSettingsPanel.tsx:146` — the only control that sets
+  it, row 6 of 16 in one flat list, in the 8th of 8 Environment sections, and Environment is not
+  one of the five project tabs (`lib/navigation.ts:26`).
+
+**Two repairs, and they are not the same repair.** Either the 403 writes a `permission_requests`
+row so the sentence becomes true, or its wording stops promising an approval and instead names the
+setting and where it lives. Doing neither leaves a refusal that sends the operator looking for an
+approval that was never going to arrive.
+
+**Related:** F377 (no operator surface creates a flow at all), F379 (the setting's invisibility),
+F361 and F363 (both reproduced by this same run).
+
+---
+
+## F377 (B) — no operator surface creates a flow, and the one loop form cannot name a specification document
+
+**Status:** open. Filed 2026-09-17 by an interactive session, alongside F376.
+
+**Measured against `hub/ui/src`.** `create_flow` — the tool that decomposes an approved
+specification document and staffs every task whose prerequisites are met — appears in
+`hub/hub/mcp_server.py`, `hub/hub/scheduler.py` and `hub/hub/api/v1/agents.py`, and in **no UI
+component**. The only operator-facing surface that creates a loop is the *"Make this a loop"*
+section of `components/jobs/JobForm.tsx`, collapsed by default, inside a cron-job form — and
+`JobForm.tsx` contains **no `spec_document` field of any kind**, so a loop an operator creates
+cannot be bound to the document it implements.
+
+On the spec page itself, `components/spec/LoopTab.tsx` and `LoopsIndexTab.tsx` only *display*
+loops. Neither carries a create action.
+
+**Consequence.** From an approved specification document — the one place a flow obviously belongs —
+the operator's only route to start one is to ask an agent to call `create_flow`. That is exactly
+what happened in F376, and it was refused by a setting with no visible state.
+
+**Related:** F376, F206 and F211 (the same shape for the spec flow's own routes), F28.
+
+---
+
+## F378 (B) — `request_agent` reads templates from a table no surface writes, and it is empty in every project on this Hub
+
+**Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
+
+**What happened.** At 16:34 the operator asked the Architect *"Okay two developers set what else?"*
+The Architect called `request_agent` at **16:35:39**:
+
+```
+Error calling tool 'request_agent': Hub rejected POST /agents/request (400):
+Agent template 'developer' is not pre-approved for this project
+```
+
+The operator created `Developer_2` by hand instead, at 16:34:13.
+
+**Why it can never succeed.** `hub/hub/api/v1/agents.py:2051-2058` reads templates from
+`_get_session_data(project_id)`, backed by the `project_sessions` table. No route under
+`hub/ui/src` writes that table, and:
+
+```
+select count(*) from project_sessions;                     -> 0
+select count(*) from project_sessions where project_id=?;  -> 0
+```
+
+**Zero rows across the entire Hub**, not merely this project. `templates.get(body.template)` is
+therefore `None` for every template name, on every project that exists, so the 400 is the only
+answer this route can give. The tool is described to agents in `agents.py` as *"Request a new agent
+from a pre-approved template under the project agent budget"* and is shipped in the MCP surface.
+
+**This is not the same defect as F377.** That one is a missing control for a working backend; this
+one is a working tool whose only input has no producer.
+
+**Related:** F376, F377, F3 (which mentions `request_agent` for a different reason).
+
+---
+
+## F379 (B) — the five settings that decide whether a collaboration can run are indistinguishable from the ones that pick a title style
+
+**Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2` on `:8000`.
+
+**The measurement.** `ProjectSettingsPanel.tsx` renders **16 `SettingsRow`s under one heading**,
+`"Settings"`, in one undifferentiated flat list with no grouping. Five of those rows decide whether
+agents can collaborate at all; ten are preferences. They are rendered identically.
+
+| row | field | default | what it gates |
+|---|---|---|---|
+| 2 | `hop_budget` | `6` | agent-to-agent chain length; one build + one review round + one follow-up is six |
+| 3 | `turn_delivery_cap` | `10` | how much of a frozen backlog clears per turn |
+| 4 | `agent_budget` | `8` | parallelism ceiling a flow can use |
+| 5 | `token_budget` | `null` | **uncapped by default** |
+| 6 | `allow_agent_jobs` | **`0`** | whether any agent may create a flow at all (F376) |
+
+Reaching them: Environment is **not** one of the five project tabs
+(`PROJECT_TABS = ['overview','tasks','spec','jobs','activity']`, `lib/navigation.ts:26`); it is a
+sidebar rail destination, and `settings` is the **8th of 8** `ENVIRONMENT_SECTIONS`.
+
+**The per-agent half is worse, because it varies silently between agents.** `can_accept_evidence`,
+`can_read_checkpoints` and `can_recall` all default to closed and live in `Access`, the **6th of 7**
+`AGENT_SETTINGS_SECTIONS`. Measured on this project:
+
+```
+Architect     0  0  0        charter: charter-a10e3ea6d59c
+Developer     0  0  0        charter: charter-c6943c48d0a7
+Developer_2   0  0  0        charter: charter-c6943c48d0a7
+Teste         1  1  1        charter: NULL
+```
+
+Only Teste could decide evidence, so **every** evidence decision round-tripped to Teste — and each
+round trip spent two of the six hops F376 describes. Teste also ran the entire review programme
+with no charter while both developers had one. Nothing on the roster, the overview or the agent
+list shows either fact.
+
+**Not the same as F237**, which is about two controls writing `token_budget` through different
+routes and leaving surfaces stale. This is about where the controls sit and that their state is
+invisible until opened.
+
+**Shape of the repair, for the proposal to argue with.** Surface the five project-level controls
+and the per-agent grants on the project's own page **as live values rather than as fields** — `Off`
+is legible at a glance, an empty input is not — and leave them editable where they already are.
+
+**Related:** F376, F377, F378, F237, F39, F88.

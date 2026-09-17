@@ -25,6 +25,93 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-18
+
+**Written 2026-09-17 evening by an interactive session, at the operator's instruction, after an
+end-to-end read of the `LoopEngine_2` run (`proj-f90d219dd68c`) on `:8000`.** That read produced
+four new findings — **F376 (A), F377 (B), F378 (B), F379 (B)** — and reproduced two existing ones.
+Everything below refers to them; they are in `scripts/drive/FINDINGS.md` with the measurements
+already taken.
+
+### The one thing not to spend the day on
+
+**Do not re-derive the diagnosis.** F376 already carries the full causal chain, measured against
+the database: the 403 at 17:37:45, the fallback 37 seconds later, `loops`/`ai_jobs` empty, the hop
+chain that never resets, the `under_review` guard, the dependency gate, 0 of 32 tasks approved,
+$26.81. R1's job is to explore **the repair**, not to rediscover the cause. If a round disagrees
+with a measurement, re-measure that one thing and say so — do not restart the argument.
+
+### The spec loop: take `a-refused-capability-reaches-the-operator` first
+
+**Drain was 1 at 2026-09-17 ~23:00**, so this is one loop. If tonight's FIX window closes
+`an-unstaffed-review-names-its-holders` the drain is 0 and you get the second loop — then take
+item 2 below, whose blast radius shares no file with item 1's.
+
+**Item 1 — `a-refused-capability-reaches-the-operator` (F376, with F378's refusal shape).**
+An agent capability refused for a project setting must reach the operator, or stop claiming an
+approval exists. Today the 403 says *"requires operator approval or an enabled allowance"* and
+writes no `permission_requests` row — measured zero for the project — so the sentence is false and
+the operator, who had just said they were leaving, came back to nothing.
+
+The decision R1 owes an argument for is **which of the two repairs**, and they are genuinely
+different products:
+
+- **(a) Raise the request.** The 403 writes a `permission_requests` row so the promised approval
+  becomes real and the operator can grant it from Needs-you without leaving the run. Makes the
+  existing sentence true. Costs a new write path on a refusal path, and an answer to *what happens
+  to the agent's turn while it waits* — which is the question that decides whether this is worth
+  doing at all.
+- **(b) Tell the truth instead.** The refusal names the setting, its current value, and where it
+  lives, and stops mentioning approval. Cheaper, changes no state, and leaves the operator a manual
+  trip to Environment › Settings.
+
+Do not assume (a). It is the more ambitious reading and it is the one the current wording implies,
+but (b) may be the honest fit — decide it on the argument, and record the rejected one.
+
+**Blast radius, for the collision check:** `hub/hub/api/v1/agents.py` (the `POST /jobs` allowance
+check), and whatever raises the request. It shares no file with item 2.
+
+**Item 2 — `the-controls-that-gate-collaboration-are-visible` (F379).** Only if the drain gives you
+a second loop. The five project-level settings that decide whether a collaboration can run are
+rendered identically to the ten that are preferences, in one flat list of sixteen, in the 8th of 8
+Environment sections, behind a rail destination that is not one of the five project tabs. The
+per-agent grants are worse because they vary silently between agents: on this project only `Teste`
+could accept evidence, so every evidence decision cost two of the six hops, and `Teste` ran the
+whole review programme with no charter while both developers had one.
+
+The shape to argue with, **not** to assume: surface them on the project's own page **as live values
+rather than as fields**, editable where they already are. `Off` read at a glance is the whole
+point; another form to fill in is not.
+
+**Blast radius:** `hub/ui/src/components/` — overview and the agent roster, plus whatever read
+route serves the values. No overlap with item 1.
+
+**Not tomorrow, and deliberately: `a-flow-starts-from-the-document-it-implements` (F377).** It is
+the operator's own next want and it is the right change, but it is third because both items above
+are strictly smaller and item 1 is the one that actually cost the night. Queue it for the day after.
+F378 rides with it — that change is where `request_agent` gets repaired or retired, and *retired* is
+a live option: its template table has zero rows on every project on this Hub, so nothing is in use.
+
+### Two findings reproduced, and they are not tomorrow's work
+
+**F361 and F363 were both reproduced unchanged on 2026-09-17**, three days after they were filed
+from `LoopEngine`, on a second project. Reproduction blocks are appended to each. They are recorded
+here so that no window files them a third time as new — **not** as a claim on tomorrow's queue.
+
+F363 is worth one line of warning for whoever eventually takes it: the harness spills an oversized
+tool result outside the project directory, and the workspace guard exists to refuse exactly that
+path. Both mechanisms are behaving as designed, so it will not be fixed by tightening either one.
+
+### The drive, when there is one
+
+Trial Hub on **`:8010`, from source**, per `.claude/reference/hubs.md`. **Never `:8000`** — that is
+the operator's real instance and it is what the `LoopEngine_2` evidence above was read from,
+read-only. A new project on `:8010` reproduces F376 in one step: create it, ask an agent to call
+`create_flow`, and read what the operator's screen shows. If the answer is "nothing", that is the
+finding, live.
+
+---
+
 ## 2026-09-17
 
 DAY WINDOW: 10:15-17:00

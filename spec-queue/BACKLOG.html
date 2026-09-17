@@ -1,0 +1,618 @@
+<title>AgentWeave Backlog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;1,400&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2; --sunk:#E1E4EC;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --rule-2:#C2C7D6;
+  --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3;
+  --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8;
+  --sevD:#606878; --sevD-soft:#E9EBF0;
+  --day:#C8922E; --night:#4A57A0;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --serif:'IBM Plex Serif',Georgia,serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C; --sunk:#12151B;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --rule-2:#39404E;
+    --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19;
+    --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C;
+    --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --day:#DEAE52; --night:#8E9BDE;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C; --sunk:#12151B;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --rule-2:#39404E;
+  --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19;
+  --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C;
+  --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --day:#DEAE52; --night:#8E9BDE;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:40px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.88em}
+
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:26px}
+h1{font-size:clamp(28px,5vw,40px);font-weight:700;letter-spacing:-.025em;line-height:1.05;margin:0}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+.stamp{font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--ink-3);text-align:right}
+.stamp b{color:var(--ink-2);font-weight:500}
+
+/* cycle clock */
+.clock{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:18px 20px 20px;margin-bottom:26px}
+.clock h2{font-size:12px;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 14px;font-weight:500}
+.track{position:relative;display:flex;height:42px;border-radius:2px;overflow:hidden;border:1px solid var(--rule)}
+.seg{display:flex;flex-direction:column;justify-content:center;padding:0 10px;min-width:0;overflow:hidden}
+.seg b{font-size:11px;font-weight:600;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg span{font-family:var(--mono);font-size:9.5px;color:var(--ink-3);white-space:nowrap}
+.seg[data-w="fill"]{background:var(--sevB-soft);flex:8}
+.seg[data-w="fill"] b{color:var(--day)}
+.seg[data-w="decide"]{background:var(--accent-soft);flex:6}
+.seg[data-w="decide"] b{color:var(--accent)}
+.seg[data-w="fix"]{background:var(--sunk);flex:8}
+.seg[data-w="fix"] b{color:var(--night)}
+.seg[data-w="margin"]{background:var(--surface-2);flex:2}
+.seg[data-w="margin"] b{color:var(--ink-3)}
+#nowline{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink);z-index:2}
+#nowline::after{content:'';position:absolute;top:-4px;left:-3px;width:8px;height:8px;border-radius:50%;background:var(--ink)}
+#nowlabel{margin-top:9px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+#nowlabel b{color:var(--ink)}
+
+/* figures */
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:3px;margin-bottom:34px;overflow:hidden}
+.fig{background:var(--surface);padding:16px 16px 14px}
+.fig b{display:block;font-family:var(--mono);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1}
+.fig span{display:block;margin-top:7px;font-size:11.5px;line-height:1.4;color:var(--ink-3)}
+.fig[data-t="a"] b{color:var(--sevA)}
+
+h2.sec{font-size:19px;font-weight:700;letter-spacing:-.015em;margin:0 0 4px;padding-bottom:10px;border-bottom:2px solid var(--ink)}
+.lede{font-family:var(--serif);font-size:15.5px;line-height:1.6;color:var(--ink-2);max-width:68ch;margin:14px 0 20px}
+section.block{margin-top:44px}
+
+/* two-up */
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:18px 18px 16px}
+.panel h3{font-size:13px;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);margin:0 0 4px;font-weight:500}
+.panel .when{font-family:var(--mono);font-size:11px;color:var(--accent);margin:0 0 12px}
+.empty{font-size:13px;color:var(--ink-3);font-style:italic;margin:6px 0 0}
+
+.apr{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:7px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.apr:last-child{border-bottom:0}
+.tok{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;padding:2px 6px;border-radius:2px;background:var(--surface-2);color:var(--ink-2)}
+.apr[data-tok="APPROVED"] .tok{background:var(--sevC-soft);color:var(--sevC)}
+.apr[data-tok="REVISING"] .tok{background:var(--sevB-soft);color:var(--sevB)}
+.apr[data-tok="REJECTED"] .tok{background:var(--sevA-soft);color:var(--sevA)}
+.apr-note{font-size:12px;color:var(--ink-3)}
+.directive{display:flex;align-items:baseline;gap:9px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--rule-2);font-size:12.5px;flex-wrap:wrap}
+.directive[data-stop="1"] .tok{background:var(--sevA-soft);color:var(--sevA)}
+
+.chg{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:11px 0;border-bottom:1px solid var(--rule)}
+.chg:last-child{border-bottom:0}
+.chg-main{min-width:0}
+.chg-name{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.chg-note{margin:5px 0 0;font-size:11.5px;line-height:1.45;color:var(--sevB)}
+.chg-count{text-align:right;flex-shrink:0}
+.chg-count b{display:block;font-family:var(--mono);font-size:19px;font-variant-numeric:tabular-nums;line-height:1}
+.chg-count span{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}
+
+/* bars */
+.bars{display:flex;flex-direction:column;gap:7px;margin:18px 0 8px}
+.bar-row{display:flex;align-items:center;gap:11px}
+.bar-lab{font-family:var(--mono);font-size:12px;font-weight:600;width:14px;flex-shrink:0}
+.bar-track{flex:1;height:14px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.bar-fill{height:100%}
+.bar-fill[data-sev="A"]{background:var(--sevA)}
+.bar-fill[data-sev="B"]{background:var(--sevB)}
+.bar-fill[data-sev="C"]{background:var(--sevC)}
+.bar-fill[data-sev="D"]{background:var(--sevD)}
+.bar-fill[data-sev="?"]{background:repeating-linear-gradient(45deg,var(--sevD),var(--sevD) 3px,var(--sunk) 3px,var(--sunk) 6px)}
+.bar-n{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-2);width:34px;text-align:right;flex-shrink:0}
+
+/* severity groups */
+.sev{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--rule-2);border-radius:2px;padding:16px 18px 14px;margin-bottom:12px}
+.sev[data-sev="A"]{border-left-color:var(--sevA)}
+.sev[data-sev="B"]{border-left-color:var(--sevB)}
+.sev[data-sev="C"]{border-left-color:var(--sevC)}
+.sev[data-sev="D"]{border-left-color:var(--sevD)}
+.sev[data-sev="?"]{border-left-color:var(--sevD);border-left-style:dashed}
+.sev[data-sev="?"] .sev-mark{background:var(--sevD-soft);color:var(--sevD)}
+.sev-tag[data-sev="?"]{background:var(--sevD-soft);color:var(--sevD)}
+.sev-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sev-head h3{font-size:15px;font-weight:600;margin:0;flex:1;min-width:0}
+.sev-mark{font-family:var(--mono);font-size:12px;font-weight:600;width:22px;height:22px;display:grid;place-items:center;border-radius:2px;flex-shrink:0}
+.sev[data-sev="A"] .sev-mark{background:var(--sevA-soft);color:var(--sevA)}
+.sev[data-sev="B"] .sev-mark{background:var(--sevB-soft);color:var(--sevB)}
+.sev[data-sev="C"] .sev-mark{background:var(--sevC-soft);color:var(--sevC)}
+.sev[data-sev="D"] .sev-mark{background:var(--sevD-soft);color:var(--sevD)}
+.sev-n{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;color:var(--ink-3)}
+.sev-blurb{font-size:12.5px;color:var(--ink-3);margin:7px 0 12px;max-width:70ch}
+.fnds{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.fnd{display:flex;gap:10px;align-items:baseline;padding:5px 0;border-top:1px solid var(--rule);font-size:13px;line-height:1.45}
+.fnd:first-child{border-top:0}
+.fid{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--accent);width:48px;flex-shrink:0}
+.ftitle{min-width:0;overflow-wrap:anywhere}
+.nostatus{font-family:var(--mono);font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--sevB);border:1px solid var(--sevB);padding:1px 4px;border-radius:2px;white-space:nowrap;flex-shrink:0;align-self:center}
+.sev-tag{font-family:var(--mono);font-size:10px;font-weight:600;padding:1px 5px;border-radius:2px;flex-shrink:0}
+.sev-tag[data-sev="A"]{background:var(--sevA-soft);color:var(--sevA)}
+.sev-tag[data-sev="B"]{background:var(--sevB-soft);color:var(--sevB)}
+.sev-tag[data-sev="C"]{background:var(--sevC-soft);color:var(--sevC)}
+.sev-tag[data-sev="D"]{background:var(--sevD-soft);color:var(--sevD)}
+
+/* authority map */
+.map{width:100%;border-collapse:collapse;font-size:13px}
+.map th{text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:500;padding:0 12px 8px 0;border-bottom:1px solid var(--rule-2)}
+.map td{padding:9px 12px 9px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.map td:first-child{white-space:nowrap}
+.map code{font-size:12px}
+.scroll{overflow-x:auto}
+
+footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-family:var(--mono);font-size:11px;line-height:1.75;color:var(--ink-3)}
+@media (max-width:640px){
+  .top{align-items:flex-start} .stamp{text-align:left}
+  .seg span{display:none}
+}
+</style>
+
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <p class="eyebrow">AgentWeave · standing orientation</p>
+      <h1>Backlog</h1>
+    </div>
+    <div class="stamp">
+      generated <b>2026-09-17 23:51 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>f4ff939</b> · uncommitted changes present<br>
+      regenerate: <b>py -3.11 scripts/backlog_page.py</b>
+    </div>
+  </div>
+
+  <div class="clock">
+    <h2>The cycle</h2>
+    <div class="track" id="track">
+      <div class="seg" data-w="fill"   data-from="9"  data-to="17"><b>FILL</b><span>09–17 · day window proposes</span></div>
+      <div class="seg" data-w="decide" data-from="17" data-to="23"><b>DECIDE</b><span>17–23 · you approve</span></div>
+      <div class="seg" data-w="fix"    data-from="23" data-to="7"><b>FIX</b><span>23–07 · night window builds</span></div>
+      <div class="seg" data-w="margin" data-from="7"  data-to="9"><b>margin</b><span>07–09</span></div>
+      <div id="nowline" style="left:0"></div>
+    </div>
+    <p id="nowlabel">&nbsp;</p>
+  </div>
+
+  <div class="figs">
+    <div class="fig" data-t="a"><b>11</b><span>open severity&nbsp;A</span></div>
+    <div class="fig"><b>215</b><span>open findings of 377 filed</span></div>
+    <div class="fig"><b>144</b><span>fixed and recorded</span></div>
+    <div class="fig"><b>1</b><span>unbuilt changes — tomorrow runs one spec loop</span></div>
+  </div>
+
+  <section class="block">
+    <h2 class="sec">What the windows are holding</h2>
+    <p class="lede">
+      Each window reads exactly one file to learn what you said, and only that file's newest dated
+      section. Everything below the newest section is history and is not read.
+    </p>
+    <div class="two">
+      <div class="panel">
+        <h3>Tonight · FIX builds</h3>
+        <p class="when">reads spec-queue/APPROVALS.md § 2026-09-16</p>
+        <div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>a-materialised-task-carries-its-criteria</code><span class="apr-note">build §2-§5 tonight; §6-§7 only if they fit</span></div>
+        <div class="directive"><span class="tok">ORDER</span><code>a-materialised-task-carries-its-criteria</code></div>
+        
+      </div>
+      <div class="panel">
+        <h3>Tomorrow · FILL proposes</h3>
+        <p class="when">reads spec-queue/DIRECTION.md § 2026-09-18</p>
+        <p style="font-size:13px;margin:0 0 10px">Drain is <b>1</b>, so the day runs <b>one spec loop</b>. A dated section overrides that shape in either direction.</p>
+        <p class="empty">Read the section itself before composing — it is the only operator channel the day window has.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="sec">Unbuilt changes</h2>
+    <p class="lede">
+      A change directory with at least one unticked task. This count is the throttle: <b>2 or more</b>
+      and no spec loop runs at all, <b>1</b> gives one loop, <b>0</b> gives two. It is what stops the
+      proposing rate outrunning the building rate.
+    </p>
+    <div class="panel"><div class="chg">
+              <div class="chg-main">
+                <code class="chg-name">an-unstaffed-review-names-its-holders</code>
+                <p class="chg-note">STOPPED, 2026-09-15 — the split shipped; this half now needs re-deriving, not un-blocking</p>
+              </div>
+              <div class="chg-count"><b>24</b><span>unticked</span></div>
+            </div></div>
+  </section>
+
+  <section class="block">
+    <h2 class="sec">Findings</h2>
+    <p class="lede">
+      Severity <b>A</b> is wrong behaviour an operator will act on, <b>B</b> a wrong or misleading
+      surface, <b>C</b> friction or vestige. The night window drains A before B before C — but
+      <em>a finding with no proposal needs the day window first</em>, so an A here is not by itself
+      buildable tonight. 9 findings are retired and are not counted below.
+    </p>
+    <div class="bars"><div class="bar-row"><span class="bar-lab">A</span><div class="bar-track"><div class="bar-fill" data-sev="A" style="width:5.1%"></div></div><span class="bar-n">11</span></div>
+<div class="bar-row"><span class="bar-lab">B</span><div class="bar-track"><div class="bar-fill" data-sev="B" style="width:42.3%"></div></div><span class="bar-n">91</span></div>
+<div class="bar-row"><span class="bar-lab">C</span><div class="bar-track"><div class="bar-fill" data-sev="C" style="width:38.6%"></div></div><span class="bar-n">83</span></div>
+<div class="bar-row"><span class="bar-lab">D</span><div class="bar-track"><div class="bar-fill" data-sev="D" style="width:10.2%"></div></div><span class="bar-n">22</span></div>
+<div class="bar-row"><span class="bar-lab">?</span><div class="bar-track"><div class="bar-fill" data-sev="?" style="width:3.7%"></div></div><span class="bar-n">8</span></div></div>
+
+    <div class="panel" style="margin:20px 0 26px">
+      <h3>Newest filed</h3>
+      <ul class="fnds"><li class="fnd"><span class="fid">F379</span><span class="sev-tag" data-sev="B">B</span><span class="ftitle">the five settings that decide whether a collaboration can run are indistinguishable from the ones that pick a title style</span></li>
+<li class="fnd"><span class="fid">F378</span><span class="sev-tag" data-sev="B">B</span><span class="ftitle">`request_agent` reads templates from a table no surface writes, and it is empty in every project on this Hub</span></li>
+<li class="fnd"><span class="fid">F377</span><span class="sev-tag" data-sev="B">B</span><span class="ftitle">no operator surface creates a flow, and the one loop form cannot name a specification document</span></li>
+<li class="fnd"><span class="fid">F376</span><span class="sev-tag" data-sev="A">A</span><span class="ftitle">`create_flow` is refused for a setting the operator was never asked about, and the refusal promises an approval that is never requested</span></li>
+<li class="fnd"><span class="fid">F375</span><span class="sev-tag" data-sev="A">A</span><span class="ftitle">a bare `..` argument has no separator, so rule 4 calls it &quot;not a path&quot; and never checks it</span></li>
+<li class="fnd"><span class="fid">F374</span><span class="sev-tag" data-sev="B">B</span><span class="ftitle">a review refused by the evidence gate is re-staffed to a second reviewer, who meets the same gate, and the surfaced reason blames staffing</span></li></ul>
+    </div>
+
+    
+      <section class="sev" data-sev="A">
+        <header class="sev-head">
+          <span class="sev-mark">A</span>
+          <h3>Wrong behaviour an operator will act on</h3>
+          <span class="sev-n">11</span>
+        </header>
+        <p class="sev-blurb">The queue the night window drains first. A finding with no proposal needs the day window before it can be built.</p>
+        <ul class="fnds"><li class="fnd"><span class="fid">F376</span><span class="ftitle">`create_flow` is refused for a setting the operator was never asked about, and the refusal promises an approval that is never requested</span></li>
+<li class="fnd"><span class="fid">F375</span><span class="ftitle">a bare `..` argument has no separator, so rule 4 calls it &quot;not a path&quot; and never checks it</span></li>
+<li class="fnd"><span class="fid">F352</span><span class="ftitle">a flow counts an agent busy for holding any live task anywhere in the project, so backlog outside the flow starves it of reviewers — and the reason it gives names nobody</span></li>
+<li class="fnd"><span class="fid">F325</span><span class="ftitle">on Codex&#x27;s default transport a run never receives its canonical context, so a bound charter reaches no Codex agent</span></li>
+<li class="fnd"><span class="fid">F301</span><span class="ftitle">on the `cli` access path a `claude` run has no tool that can make the request it is told to make</span></li>
+<li class="fnd"><span class="fid">F299</span><span class="ftitle">a `claude` run whose harness has no MCP cannot write a file, and blames the operator&#x27;s machine for it</span></li>
+<li class="fnd"><span class="fid">F155</span><span class="ftitle">&quot;Resolve the conflict on the branch, then approve&quot; cannot be followed, by anybody</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F154</span><span class="ftitle">a review that ends without a verdict wedges the task forever, and the flow answers &quot;nothing is wrong&quot;</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F142</span><span class="ftitle">a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F140</span><span class="ftitle">a flow&#x27;s briefing tells the agent to &quot;finish the task and stop&quot;, and never tells it, or the Hub, what finishing means</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F60</span><span class="ftitle">An unanswered `ask_user` question that resolves itself mid-turn leaves the task reading `completed`, and the operator can still &quot;answer&quot; it afterward into a state that contradicts the code that shipped</span><span class="nostatus">no status line</span></li></ul>
+      </section>
+    
+      <section class="sev" data-sev="B">
+        <header class="sev-head">
+          <span class="sev-mark">B</span>
+          <h3>Wrong or misleading surface</h3>
+          <span class="sev-n">91</span>
+        </header>
+        <p class="sev-blurb">Something the product shows, says or refuses that is not true of what it does.</p>
+        <ul class="fnds"><li class="fnd"><span class="fid">F379</span><span class="ftitle">the five settings that decide whether a collaboration can run are indistinguishable from the ones that pick a title style</span></li>
+<li class="fnd"><span class="fid">F378</span><span class="ftitle">`request_agent` reads templates from a table no surface writes, and it is empty in every project on this Hub</span></li>
+<li class="fnd"><span class="fid">F377</span><span class="ftitle">no operator surface creates a flow, and the one loop form cannot name a specification document</span></li>
+<li class="fnd"><span class="fid">F374</span><span class="ftitle">a review refused by the evidence gate is re-staffed to a second reviewer, who meets the same gate, and the surfaced reason blames staffing</span></li>
+<li class="fnd"><span class="fid">F373</span><span class="ftitle">pressing Run on a loop whose work is in flight answers with an earlier firing&#x27;s stall reason</span></li>
+<li class="fnd"><span class="fid">F370</span><span class="ftitle">a held assignee is re-briefed every firing when input for an agent whose name sorts first also names its task</span></li>
+<li class="fnd"><span class="fid">F368</span><span class="ftitle">a flow re-briefs an assigned, idle agent on every tick while that agent&#x27;s queued turn cannot start</span></li>
+<li class="fnd"><span class="fid">F363</span><span class="ftitle">`read_spec_document` cannot return a real specification in one tool result, and it refuses the document id the other tools take</span></li>
+<li class="fnd"><span class="fid">F362</span><span class="ftitle">on Windows, the workspace guard reads the tail of any relative word that contains a `/` as an absolute path</span></li>
+<li class="fnd"><span class="fid">F361</span><span class="ftitle">a peer message past the hop budget is suspended with no reason on its entry, and its sender is told it was sent</span></li>
+<li class="fnd"><span class="fid">F360</span><span class="ftitle">the checkpoint probe asks for the tasks &quot;assigned to this agent&quot; while a loop checkpoint lists the loop&#x27;s whole queue, so half of a flow&#x27;s checkpoints are marked failed</span></li>
+<li class="fnd"><span class="fid">F359</span><span class="ftitle">a run killed by the Hub&#x27;s own write is marked failed without the snapshot or re-point a finished run gets</span></li>
+<li class="fnd"><span class="fid">F358</span><span class="ftitle">evidence can be decided while the run that recorded it is still live, so the reviewer judges a commit the Hub is about to replace</span></li>
+<li class="fnd"><span class="fid">F357</span><span class="ftitle">a flow&#x27;s review turn tells its reviewer to approve, and says nothing about the evidence gate that will refuse it</span></li>
+<li class="fnd"><span class="fid">F354</span><span class="ftitle">the operator&#x27;s live agents launch the MCP server from the development working tree, so an unattended loop&#x27;s uncommitted edits reach them mid-edit</span></li>
+<li class="fnd"><span class="fid">F349</span><span class="ftitle">two agent triggers at the same moment can answer 500 &quot;database is locked&quot; while the message is delivered anyway</span></li>
+<li class="fnd"><span class="fid">F348</span><span class="ftitle">following switches itself off during every running turn, so the newest text drifts below the fold (and under the question tray)</span></li>
+<li class="fnd"><span class="fid">F347</span><span class="ftitle">a project whose repository has no commit yet refuses every agent turn with git&#x27;s plumbing error, including the message asking the agent to fix it</span></li>
+<li class="fnd"><span class="fid">F340</span><span class="ftitle">the Hub&#x27;s MCP grounds are positive-only and permanent, while the harness reports the server&#x27;s state on every run and the Hub parses none of it</span></li>
+<li class="fnd"><span class="fid">F339</span><span class="ftitle">`acceptEdits` is path-confined by Claude Code on a headless run, and four places in the repository, one of them a binding verdict&#x27;s reason, say it checks nothing</span></li>
+<li class="fnd"><span class="fid">F333</span><span class="ftitle">a `continue` whose pass gives up its conversation&#x27;s input answers that the conversation &quot;had nothing queued&quot;</span></li>
+<li class="fnd"><span class="fid">F327</span><span class="ftitle">a review a flow staffed and whose dispatch is then refused leaves the flow&#x27;s reviewer holding the task, reported as in flight until the input is given up</span></li>
+<li class="fnd"><span class="fid">F322</span><span class="ftitle">on Codex, &quot;Workspace only&quot; decides a command&#x27;s network access by its working directory, so the same posture will answer a URL oppositely on the two runners</span></li>
+<li class="fnd"><span class="fid">F314</span><span class="ftitle">`test_flow_holds_the_loop_requirements.py` fails about one run in eight under random ordering, on an unmodified tree</span></li>
+<li class="fnd"><span class="fid">F308</span><span class="ftitle">pinning CI to the resolution buys agreement by spending the drift alarm, and nothing replaced it</span></li>
+<li class="fnd"><span class="fid">F307</span><span class="ftitle">a confirmation dialog&#x27;s first Tab leaves the panel, into the editor behind the scrim</span></li>
+<li class="fnd"><span class="fid">F305</span><span class="ftitle">a decision the operator has answered is re-asked, because the authority file is not what the windows read</span></li>
+<li class="fnd"><span class="fid">F302</span><span class="ftitle">an agent&#x27;s *first* turn is told &quot;no MCP tools this turn&quot; while it is holding them, and one measured turn believed it</span></li>
+<li class="fnd"><span class="fid">F297</span><span class="ftitle">`agentweave stop` on Windows force-kills the Hub, so nothing the shutdown sequence does ever runs</span></li>
+<li class="fnd"><span class="fid">F294</span><span class="ftitle">two cutover presses at the same instant both succeed: the guard reads the lifecycle it is about to write, with nothing serialising the two</span></li>
+<li class="fnd"><span class="fid">F293</span><span class="ftitle">the F126 guard is on the predecessor&#x27;s lifecycle, so following the refusal&#x27;s own advice mints the duplicate successor it was built to prevent</span></li>
+<li class="fnd"><span class="fid">F292</span><span class="ftitle">the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold</span></li>
+<li class="fnd"><span class="fid">F288</span><span class="ftitle">a Hub restart ends a run without releasing anything but that run&#x27;s own agent, so an agent parked on the crashed run&#x27;s task checkout is stranded</span></li>
+<li class="fnd"><span class="fid">F283</span><span class="ftitle">the Permissions pill sits on &quot;Edit files&quot; while the run it describes is spawned under &quot;Workspace only&quot;</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F281</span><span class="ftitle">a shell command&#x27;s writes are never recorded, in any posture, and the boundary that refuses some of them is the only thing that ever sees one</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F273</span><span class="ftitle">the one write whose purpose is to outlive the process is the one whose failure nothing surfaces</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F268</span><span class="ftitle">the runner-binding select renders `name (cli)`, so the spec&#x27;s own &quot;second runner with a different model&quot; is unpickable</span></li>
+<li class="fnd"><span class="fid">F267</span><span class="ftitle">the model catalog is a compile-time literal behind a closed door, and it is already 28 days stale</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F265</span><span class="ftitle">an agent&#x27;s `create_loop` with `initial_tasks` is refused 403 *after* the loop and job it refused have been committed and left enabled</span></li>
+<li class="fnd"><span class="fid">F264</span><span class="ftitle">the query that decides what a loop is waiting on has no project filter, and the flag it depends on is never set</span></li>
+<li class="fnd"><span class="fid">F259</span><span class="ftitle">nothing in the product ever marks a message read, so the StatusBar&#x27;s `N msgs` chip only ever counts up</span></li>
+<li class="fnd"><span class="fid">F258</span><span class="ftitle">every message the operator sends through `POST /messages` is born one hop past the budget, and waits there until somebody releases it by hand</span></li>
+<li class="fnd"><span class="fid">F253</span><span class="ftitle">a subscriber that falls behind loses events silently: 1,426 of 3,000, twice, with no gap on the wire and no disconnect</span></li>
+<li class="fnd"><span class="fid">F252</span><span class="ftitle">the Logs screen renders the oldest 500 events a project ever recorded, and can never show a newer one</span></li>
+<li class="fnd"><span class="fid">F251</span><span class="ftitle">the Hub broadcasts 17 event names the client discards before any listener, 9 of them into handling code written for them</span></li>
+<li class="fnd"><span class="fid">F245</span><span class="ftitle">the conflict check never compares a task branch against the branch it will merge into</span></li>
+<li class="fnd"><span class="fid">F242</span><span class="ftitle">one PATCH moves an agent off isolation mid-task, and its next task-bound turn writes uncommitted into the operator&#x27;s checkout</span></li>
+<li class="fnd"><span class="fid">F241</span><span class="ftitle">the conflict report is computed, correct, and read by nothing</span></li>
+<li class="fnd"><span class="fid">F240</span><span class="ftitle">with the budget exhausted and &quot;spending is paused&quot; on screen, the Hub spent $0.042 that reaches no total and no budget</span></li>
+<li class="fnd"><span class="fid">F237</span><span class="ftitle">two controls set the project&#x27;s token budget; the one in Settings leaves every surface that displays it stale</span></li>
+<li class="fnd"><span class="fid">F227</span><span class="ftitle">the operator declines a question, then answers it, and a real turn is spent on it</span></li>
+<li class="fnd"><span class="fid">F222</span><span class="ftitle">an archived job can be switched back on, and an archived loop then works a real task</span></li>
+<li class="fnd"><span class="fid">F215</span><span class="ftitle">the operator&#x27;s screen tells them evidence is waiting for them and gives them nothing to press</span></li>
+<li class="fnd"><span class="fid">F206</span><span class="ftitle">five of the spec flow&#x27;s operator-only routes have no operator surface</span></li>
+<li class="fnd"><span class="fid">F202</span><span class="ftitle">the Overview says &quot;100 tasks&quot; about a project with 241, and the board silently drops the newest work</span></li>
+<li class="fnd"><span class="fid">F197</span><span class="ftitle">the settings page has no error state, so a failing settings query renders a loading skeleton forever</span></li>
+<li class="fnd"><span class="fid">F196</span><span class="ftitle">one route writes a value another route&#x27;s response model cannot serialise, and the project settings page is then unreachable in both directions</span></li>
+<li class="fnd"><span class="fid">F193</span><span class="ftitle">an open conversation whose agent is archived vanishes from one rail view, survives in the other, and opens on the words &quot;Agent unavailable.&quot;</span></li>
+<li class="fnd"><span class="fid">F189</span><span class="ftitle">the Workspace section shows a path that does not exist, and calls it where the work happened</span></li>
+<li class="fnd"><span class="fid">F187</span><span class="ftitle">the charter form swallows its own refusal: the operator clicks Save and is told nothing</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F186</span><span class="ftitle">the charter screen destroys authored text on one click, with no confirmation and no undo</span></li>
+<li class="fnd"><span class="fid">F185</span><span class="ftitle">a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show</span></li>
+<li class="fnd"><span class="fid">F179</span><span class="ftitle">an agent that cannot run at all is presented as a neutral dropdown value</span></li>
+<li class="fnd"><span class="fid">F178</span><span class="ftitle">the collaboration-readiness report the Hub computes on every call reaches no screen, and has not since 2026-08-08</span></li>
+<li class="fnd"><span class="fid">F174</span><span class="ftitle">the Codex catalog has drifted from the file it says it is copied from, and the drift includes the default</span></li>
+<li class="fnd"><span class="fid">F172</span><span class="ftitle">relocating onto a path another project still claims answers a bare 500</span></li>
+<li class="fnd"><span class="fid">F171</span><span class="ftitle">the identity-conflict screen offers the right remedy under the wrong explanation</span></li>
+<li class="fnd"><span class="fid">F158</span><span class="ftitle">a task branch cut before its prerequisite was approved never gets that prerequisite&#x27;s work</span></li>
+<li class="fnd"><span class="fid">F156</span><span class="ftitle">`integration-preview` says `will_merge: true` for a task approval refuses outright</span></li>
+<li class="fnd"><span class="fid">F152</span><span class="ftitle">every gate refusal reaches an agent as a Python dict repr, and the fix is three lines — FIXED</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F147</span><span class="ftitle">the startup pass that re-queues a crashed job firing writes that firing off as failed one line later, and nothing ever corrects it</span></li>
+<li class="fnd"><span class="fid">F146</span><span class="ftitle">the operator&#x27;s own question route accepts `blocking`, tells the panel an agent is waiting, and throws the answer away</span></li>
+<li class="fnd"><span class="fid">F143</span><span class="ftitle">the reviewer is told to build the thing it is reviewing, and said so itself</span></li>
+<li class="fnd"><span class="fid">F139</span><span class="ftitle">the agent reached for the host&#x27;s `SendMessage`, and reported AgentWeave&#x27;s own roster as unreachable</span></li>
+<li class="fnd"><span class="fid">F138</span><span class="ftitle">three drive harnesses are hard-wired to a forbidden project, and one of them writes</span></li>
+<li class="fnd"><span class="fid">F136</span><span class="ftitle">the fix that stopped the Hub naming a binary after your agent does not cover the agents that most need it</span></li>
+<li class="fnd"><span class="fid">F134</span><span class="ftitle">a charter with no content is injected as a bare heading, and the agent is reported fully configured</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F133</span><span class="ftitle">the operator&#x27;s own message erases the reason their agent is stalled</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F129</span><span class="ftitle">requirement drift works, and the app cannot reach any of it</span></li>
+<li class="fnd"><span class="fid">F128</span><span class="ftitle">a loop runs on an agent its job does not name, whenever its own agent is busy</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F124</span><span class="ftitle">a loop&#x27;s work can never reach the main branch, and the card offers a retry that cannot succeed</span></li>
+<li class="fnd"><span class="fid">F122</span><span class="ftitle">a flow drives a task to `approved` by itself, and the work never reaches the branch — FIXED, NOT YET DRIVEN</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F119</span><span class="ftitle">F31&#x27;s repair landed in one of three copies of the same regex</span></li>
+<li class="fnd"><span class="fid">F117</span><span class="ftitle">`PATCH /agents/{name}` takes an untyped body: a misspelled setting answers 200 and changes nothing</span></li>
+<li class="fnd"><span class="fid">F113</span><span class="ftitle">`propose` promises &quot;every check that refuses it&quot; and omits one of them</span></li>
+<li class="fnd"><span class="fid">F111</span><span class="ftitle">a self-registered agent with no runner is told to install a binary named after itself</span></li>
+<li class="fnd"><span class="fid">F68</span><span class="ftitle">two spellings of one severity, and the louder event is the one that renders as routine</span></li>
+<li class="fnd"><span class="fid">F61</span><span class="ftitle">every flow conversation has the same title, and no API says which turn is a review</span></li>
+<li class="fnd"><span class="fid">F53</span><span class="ftitle">archiving a loop that never fired still permanently, irrevocably claims its spec document; the tasks it &quot;adopted&quot; have no recovery path</span></li>
+<li class="fnd"><span class="fid">F21</span><span class="ftitle">A Haiku agent cannot reach `record_evidence`, and burns a whole turn trying</span></li>
+<li class="fnd"><span class="fid">F14</span><span class="ftitle">A task waiting on the operator still reads `in_progress`</span><span class="nostatus">no status line</span></li></ul>
+      </section>
+    
+      <section class="sev" data-sev="C">
+        <header class="sev-head">
+          <span class="sev-mark">C</span>
+          <h3>Friction and vestige</h3>
+          <span class="sev-n">83</span>
+        </header>
+        <p class="sev-blurb">Real, reproduced, and cheap to leave. Most of the ledger lives here.</p>
+        <ul class="fnds"><li class="fnd"><span class="fid">F371</span><span class="ftitle">a review nobody is doing reads as attended while any agent has input naming the task, including input nothing will deliver</span></li>
+<li class="fnd"><span class="fid">F366</span><span class="ftitle">an agent can set any task&#x27;s assignee over HTTP, a field its MCP tool does not carry</span></li>
+<li class="fnd"><span class="fid">F364</span><span class="ftitle">`submit_checkpoint_notes` enforces caps its description never states, and the refusal names neither the entry nor the overshoot</span></li>
+<li class="fnd"><span class="fid">F350</span><span class="ftitle">below ~560px of height in a narrow window, the composer&#x27;s send button is off the panel even with nothing pending</span></li>
+<li class="fnd"><span class="fid">F346</span><span class="ftitle">the route-reachability instrument lets a sibling route&#x27;s literal satisfy a `{param}` slot, so it undercounts clientless routes by one</span></li>
+<li class="fnd"><span class="fid">F337</span><span class="ftitle">a refusal&#x27;s path or command is recorded and never shown, and its activity line says the agent did the refusing</span></li>
+<li class="fnd"><span class="fid">F336</span><span class="ftitle">no control in the app dispatches a review, so the check that asks the operator to &quot;dispatch a review from the UI&quot; cannot be done</span></li>
+<li class="fnd"><span class="fid">F330</span><span class="ftitle">every refused send from the exploring composer leaves an empty specification document behind</span></li>
+<li class="fnd"><span class="fid">F315</span><span class="ftitle">the button that blocks a ticket says nothing for the two seconds it takes, and a second press writes the move again</span></li>
+<li class="fnd"><span class="fid">F311</span><span class="ftitle">`F307`&#x27;s table of affected dialogs is missing the call site where the hook actually misbehaves</span></li>
+<li class="fnd"><span class="fid">F304</span><span class="ftitle">a run cancelled by shutdown stores an empty string as its reason</span></li>
+<li class="fnd"><span class="fid">F296</span><span class="ftitle">a drive assertion that can never be non-zero was reported as evidence about the product</span></li>
+<li class="fnd"><span class="fid">F291</span><span class="ftitle">a run that fails before its process spawns tells the conversation nothing, and the one path where that is total leaves the turn silent</span></li>
+<li class="fnd"><span class="fid">F289</span><span class="ftitle">the queue status route repeats a refusal&#x27;s own sentence as the current reason long after it stopped being true</span></li>
+<li class="fnd"><span class="fid">F284</span><span class="ftitle">the permission card the operator answers gives them no way to see that the path leaves the run&#x27;s workspace</span></li>
+<li class="fnd"><span class="fid">F282</span><span class="ftitle">a junction inside the workspace is correctly classified as outside and correctly refused; what is wrong is the path both of them then print</span></li>
+<li class="fnd"><span class="fid">F279</span><span class="ftitle">the two &quot;a stopped run&quot; tests fail about half the time, on an unmodified tree</span></li>
+<li class="fnd"><span class="fid">F278</span><span class="ftitle">a deep POSIX file path in a recorded transcript reads `&lt;redacted&gt;.py`, because `/` is inside the high-entropy class</span></li>
+<li class="fnd"><span class="fid">F277</span><span class="ftitle">`restrict_spec_writes` omits `MultiEdit`, the one write tool that edits a file the same way the three it names do</span></li>
+<li class="fnd"><span class="fid">F276</span><span class="ftitle">`agent_wide`&#x27;s documented example was never marked `agent_wide`, and no site sets both flags</span></li>
+<li class="fnd"><span class="fid">F275</span><span class="ftitle">an abandoned operator message renders after the failures it caused</span></li>
+<li class="fnd"><span class="fid">F262</span><span class="ftitle">`GET /messages?conversation=` means an agent pair, and a real conversation id is silently ignored</span></li>
+<li class="fnd"><span class="fid">F261</span><span class="ftitle">the recipient is checked against the roster and the sender is not, so a name nobody registered becomes a listed agent</span></li>
+<li class="fnd"><span class="fid">F260</span><span class="ftitle">row 17&#x27;s whole operator surface is unreachable: three routes, three hooks, three components, none of them in the shipped app</span></li>
+<li class="fnd"><span class="fid">F255</span><span class="ftitle">a malformed `since` is silently ignored, and the route answers as though no filter was asked for</span></li>
+<li class="fnd"><span class="fid">F254</span><span class="ftitle">an SSE ticket outlives the project it names, and opens a stream for a project that no longer exists</span></li>
+<li class="fnd"><span class="fid">F248</span><span class="ftitle">an agent legally named `conflicts` can never have its workspace read</span></li>
+<li class="fnd"><span class="fid">F247</span><span class="ftitle">`GET /worktrees/{agent}` invents a workspace for an agent that does not exist</span></li>
+<li class="fnd"><span class="fid">F246</span><span class="ftitle">finishing a task takes its conflict off the report while the divergence remains</span></li>
+<li class="fnd"><span class="fid">F244</span><span class="ftitle">the roster listing carries no `config`, so the setting that decides where an agent works is invisible on it</span></li>
+<li class="fnd"><span class="fid">F243</span><span class="ftitle">a stored agent config cannot be cleared through the route that set it</span></li>
+<li class="fnd"><span class="fid">F239</span><span class="ftitle">the per-conversation usage rollup answers &quot;0 tokens&quot; for a conversation that does not exist</span></li>
+<li class="fnd"><span class="fid">F238</span><span class="ftitle">half of all budget changes are missing from the project&#x27;s own activity history</span></li>
+<li class="fnd"><span class="fid">F235</span><span class="ftitle">&quot;Still bounded by each checkpoint&#x27;s own visibility&quot; is a bound that cannot exist</span></li>
+<li class="fnd"><span class="fid">F231</span><span class="ftitle">an approval leaves no record any screen can retrieve</span></li>
+<li class="fnd"><span class="fid">F230</span><span class="ftitle">Allow crosses the workspace boundary the product enforces everywhere else, and the card cannot say so</span></li>
+<li class="fnd"><span class="fid">F228</span><span class="ftitle">a declined question never leaves the list the operator reads as &quot;Unanswered&quot;</span></li>
+<li class="fnd"><span class="fid">F225</span><span class="ftitle">a loop&#x27;s two operator-only actions have no operator surface</span></li>
+<li class="fnd"><span class="fid">F224</span><span class="ftitle">a loop archived through its job is told &quot;this loop is still running&quot;, forever</span></li>
+<li class="fnd"><span class="fid">F223</span><span class="ftitle">`GET /jobs/{id}` reports a `source` the job does not have</span></li>
+<li class="fnd"><span class="fid">F217</span><span class="ftitle">an agent&#x27;s accepted evidence is never drift-checked in practice, and an operator&#x27;s for the same requirement is</span></li>
+<li class="fnd"><span class="fid">F216</span><span class="ftitle">the drift candidate names nothing its reader has ever seen</span></li>
+<li class="fnd"><span class="fid">F212</span><span class="ftitle">coverage reports `unserved` as bare identifiers, which are not unique in a project</span></li>
+<li class="fnd"><span class="fid">F211</span><span class="ftitle">F206&#x27;s shape, three more routes with no operator surface</span></li>
+<li class="fnd"><span class="fid">F210</span><span class="ftitle">F204&#x27;s shape, twice more: both proposal decisions refuse a bodyless call</span></li>
+<li class="fnd"><span class="fid">F209</span><span class="ftitle">the accept route takes the operator&#x27;s reason and throws it away</span></li>
+<li class="fnd"><span class="fid">F207</span><span class="ftitle">two doors into `proposed`, and the second one skips the first one&#x27;s checks</span></li>
+<li class="fnd"><span class="fid">F205</span><span class="ftitle">the two phase edges added for F37 are offered by no screen, and the documents they were added for are exactly the ones the UI will not archive</span></li>
+<li class="fnd"><span class="fid">F204</span><span class="ftitle">the phase route is the one door in the machine that refuses a call with no body, and it refuses it as *malformed*</span></li>
+<li class="fnd"><span class="fid">F203</span><span class="ftitle">nothing can read a task&#x27;s transition history</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F201</span><span class="ftitle">an illegal move to `blocked` is refused as **malformed** rather than as illegal, and the sentence tells the caller to send more</span></li>
+<li class="fnd"><span class="fid">F200</span><span class="ftitle">one refusal string for four distinguishable states, and it asserts a delivery that never happened</span></li>
+<li class="fnd"><span class="fid">F199</span><span class="ftitle">`GET /queue/{agent}` and `/queue/{agent}/status` answer 200 for an agent that does not exist</span></li>
+<li class="fnd"><span class="fid">F198</span><span class="ftitle">`PATCH /queue/settings` silently resets the two fields a body omits</span></li>
+<li class="fnd"><span class="fid">F195</span><span class="ftitle">the conversation titler does not run in the project&#x27;s directory, and the parameter that would make it is dead</span></li>
+<li class="fnd"><span class="fid">F194</span><span class="ftitle">the conversation and chat routes answer 200 for an agent that does not exist</span></li>
+<li class="fnd"><span class="fid">F192</span><span class="ftitle">stop reports an agent that does not exist as merely idle</span></li>
+<li class="fnd"><span class="fid">F191</span><span class="ftitle">`Conversation is unavailable` is one sentence for three different causes and names no repair</span></li>
+<li class="fnd"><span class="fid">F184</span><span class="ftitle">a whitespace-only charter name is accepted by the API and renders as a blank row</span></li>
+<li class="fnd"><span class="fid">F183</span><span class="ftitle">charter names have no uniqueness rule anywhere, and the one place a charter is chosen shows nothing else</span></li>
+<li class="fnd"><span class="fid">F182</span><span class="ftitle">F175&#x27;s refusal, restated at a second site, still naming nothing that would work</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F181</span><span class="ftitle">`GET /agents/launchability` does not apply the lifecycle filter, and its docstring says it feeds a selector</span></li>
+<li class="fnd"><span class="fid">F180</span><span class="ftitle">the archive refusal offers only the destructive remedy, and drops the reason the non-destructive one exists</span></li>
+<li class="fnd"><span class="fid">F177</span><span class="ftitle">the runner list&#x27;s &quot;order by creation&quot; silently becomes &quot;order by name&quot; about half the time</span></li>
+<li class="fnd"><span class="fid">F176</span><span class="ftitle">the API creates a nameless runner the dialog refuses to create</span></li>
+<li class="fnd"><span class="fid">F175</span><span class="ftitle">the model refusal is the one gate in the catalog that names nothing that would work</span></li>
+<li class="fnd"><span class="fid">F170</span><span class="ftitle">the Hub&#x27;s own project marker is the one working file it leaves untracked</span></li>
+<li class="fnd"><span class="fid">F169</span><span class="ftitle">the approval advisory is produced for the operator and reaches no surface, then is unrecoverable</span></li>
+<li class="fnd"><span class="fid">F160</span><span class="ftitle">the tool-surface parity tests cannot see an *optional* argument the inventory omits</span></li>
+<li class="fnd"><span class="fid">F157</span><span class="ftitle">a loop field on `POST /jobs` is silently dropped; the same field on `PATCH` is refused</span></li>
+<li class="fnd"><span class="fid">F149</span><span class="ftitle">`job_fired` publishes a JobRun id under the key `run_id`, next to real run ids on the same stream</span></li>
+<li class="fnd"><span class="fid">F141</span><span class="ftitle">the approval gate probes git, refuses, names the conflicting file, and then forgets it ever happened</span></li>
+<li class="fnd"><span class="fid">F125</span><span class="ftitle">a task&#x27;s title cannot be changed by anybody, and F116&#x27;s fix is what made that visible</span></li>
+<li class="fnd"><span class="fid">F123</span><span class="ftitle">a crashed firing reads `failed` forever, including after the Hub itself retried it and the work succeeded</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F121</span><span class="ftitle">one firing of a flow, two `JobRun` rows, and the badge says &quot;2 runs&quot;</span></li>
+<li class="fnd"><span class="fid">F120</span><span class="ftitle">a flow&#x27;s claim of a task is recorded as an operator&#x27;s transition, by nobody</span></li>
+<li class="fnd"><span class="fid">F65</span><span class="ftitle">a review briefing refused for having no evidence stays queued, and blocks archiving its agent</span></li>
+<li class="fnd"><span class="fid">F62</span><span class="ftitle">a mixed-CLI flow reports its tokens in full and its money in part</span></li>
+<li class="fnd"><span class="fid">F47</span><span class="ftitle">the flow&#x27;s own routing is recorded as the operator&#x27;s</span></li>
+<li class="fnd"><span class="fid">F42</span><span class="ftitle">F27 bounds the blast radius but a run can still claim work it will not do</span></li>
+<li class="fnd"><span class="fid">F20</span><span class="ftitle">Deep links use query parameters, and nothing says so</span></li>
+<li class="fnd"><span class="fid">F15</span><span class="ftitle">Stopping an agent does not stop the work</span></li>
+<li class="fnd"><span class="fid">F3</span><span class="ftitle">`contact_mode` still defaults to `&quot;watchdog-spawn&quot;`</span></li></ul>
+      </section>
+    
+      <section class="sev" data-sev="D">
+        <header class="sev-head">
+          <span class="sev-mark">D</span>
+          <h3>Minor</h3>
+          <span class="sev-n">22</span>
+        </header>
+        <p class="sev-blurb">Filed for completeness.</p>
+        <ul class="fnds"><li class="fnd"><span class="fid">F338</span><span class="ftitle">delivery reads an entry as queued and then marks it delivered by key, so a withdrawal that lands in between is answered 200 and delivered anyway</span></li>
+<li class="fnd"><span class="fid">F335</span><span class="ftitle">a review refused on dispatch still broadcasts that it resolved the task&#x27;s open divergence</span></li>
+<li class="fnd"><span class="fid">F326</span><span class="ftitle">a review turn refused after its checkout is provisioned leaves the checkout registered</span></li>
+<li class="fnd"><span class="fid">F263</span><span class="ftitle">`sort` accepts any string and quietly means ascending, and the default page is the oldest 100 messages</span></li>
+<li class="fnd"><span class="fid">F257</span><span class="ftitle">filtering by a severity that cannot exist answers 200 with an empty list</span></li>
+<li class="fnd"><span class="fid">F256</span><span class="ftitle">the Logs screen&#x27;s agent filter offers names that are on no roster</span></li>
+<li class="fnd"><span class="fid">F250</span><span class="ftitle">nothing invalidates the worktrees query, so the panel does not notice a checkout being created</span></li>
+<li class="fnd"><span class="fid">F249</span><span class="ftitle">the worktrees list cannot say &quot;this project is not a repository&quot;</span></li>
+<li class="fnd"><span class="fid">F236</span><span class="ftitle">a stranded note is handed to a later checkpoint as though it were fresh</span></li>
+<li class="fnd"><span class="fid">F234</span><span class="ftitle">taking the checkpoint answers a `due` warning and a `final` one, but not a dismissal</span></li>
+<li class="fnd"><span class="fid">F233</span><span class="ftitle">a checkpoint warning can be dismissed before it is shown, and that silences it for good</span></li>
+<li class="fnd"><span class="fid">F232</span><span class="ftitle">`dismiss` accepts a card the operator answered, though its contract says only an expired one</span></li>
+<li class="fnd"><span class="fid">F229</span><span class="ftitle">the page named after questions is the one page that cannot decline one</span></li>
+<li class="fnd"><span class="fid">F226</span><span class="ftitle">the job detail view&#x27;s embedded history drops the two fields a failure is read by</span></li>
+<li class="fnd"><span class="fid">F221</span><span class="ftitle">the Hub refuses a model alias its own catalog declares</span></li>
+<li class="fnd"><span class="fid">F218</span><span class="ftitle">the create response omits the review it wrote one line earlier</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F214</span><span class="ftitle">a retired requirement is reported `unserved`, which is the one thing it is not</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F213</span><span class="ftitle">a resubmitted edit stacks a duplicate proposal, and the twin can never be resolved</span></li>
+<li class="fnd"><span class="fid">F208</span><span class="ftitle">the arrange refusal names neither the cause nor the remedy</span></li>
+<li class="fnd"><span class="fid">F163</span><span class="ftitle">landing a loop&#x27;s work costs the operator three hand transitions, and two of them are refusals</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F162</span><span class="ftitle">a task reads `completed` before its work is committed, and the tip in that window is the base commit</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F161</span><span class="ftitle">a loop that declares its work needs no evidence still stalls asking for evidence</span><span class="nostatus">no status line</span></li></ul>
+      </section>
+    
+      <section class="sev" data-sev="?">
+        <header class="sev-head">
+          <span class="sev-mark">?</span>
+          <h3>No severity declared anywhere</h3>
+          <span class="sev-n">8</span>
+        </header>
+        <p class="sev-blurb">Neither the heading nor the body states one. Shown rather than hidden: an unrated finding is not a closed one, and dropping it is how a ledger comes to under-report itself.</p>
+        <ul class="fnds"><li class="fnd"><span class="fid">F167</span><span class="ftitle">s bound is now measured — the recovery DOES fire when one edge names an agent</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F165</span><span class="ftitle">ddendum, measured 2026-08-31 (iteration 16) — the unknown branch has **two** spellings, and the merge path knows neither</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F153</span><span class="ftitle">**the flow lands its work.** Driven end to end, and it does</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F151</span><span class="ftitle">running migrations at startup silences the Hub&#x27;s logging, and uvicorn&#x27;s, for the life of the process — FIXED</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F150</span><span class="ftitle">the crash-ordering seam drives clean: a dead-window follow-up is delayed by exactly one turn, not stranded</span><span class="nostatus">no status line</span></li>
+<li class="fnd"><span class="fid">F132</span><span class="ftitle">drift has no agent-side half either, and the gate&#x27;s remedy names an action no surface offers</span></li>
+<li class="fnd"><span class="fid">F130</span><span class="ftitle">a checkpoint over an empty span makes the NEXT checkpoint re-summarise the whole conversation</span></li>
+<li class="fnd"><span class="fid">F77</span><span class="ftitle">an agent has no way to address the operator</span></li></ul>
+      </section>
+  </section>
+
+  <section class="block">
+    <h2 class="sec">Where authority lives</h2>
+    <p class="lede">
+      For an agent orienting itself: these files disagree with each other sometimes, and when they
+      do, this column is the tie-break. Nothing here is a summary of another file — each is the
+      only writer of something.
+    </p>
+    <div class="scroll">
+      <table class="map">
+        <thead><tr><th>File</th><th>Is the authority for</th><th>Written by</th></tr></thead>
+        <tbody>
+          <tr><td><code>spec-queue/APPROVALS.md</code></td><td>what the FIX window may build tonight. The status token is the authority; there is deliberately no checkbox.</td><td>the DECIDE session, on the operator's instruction</td></tr>
+          <tr><td><code>spec-queue/DIRECTION.md</code></td><td>what the FILL window does tomorrow. Overrides the drain-count shape in either direction. May not approve a change.</td><td>the operator, or DECIDE on their behalf</td></tr>
+          <tr><td><code>spec-queue/DECISIONS.md</code></td><td>questions a window may not answer alone. Only the operator marks one DECIDED.</td><td>both windows append; operator decides</td></tr>
+          <tr><td><code>scripts/drive/FINDINGS.md</code></td><td>every defect ever filed, and its <code>**Status:**</code> line. Findings live nowhere else.</td><td>any window that drives</td></tr>
+          <tr><td><code>openspec/changes/&lt;name&gt;/</code></td><td>specs, design and tasks for work in flight. Never in two systems at once.</td><td>the FILL window's spec loop</td></tr>
+          <tr><td><code>openspec/specs/</code></td><td>current shipped behaviour. The 30 accumulated capability documents stay here until the operator migrates them.</td><td>archive-change and sync-specs</td></tr>
+          <tr><td><code>.claude/autonomous/STATE-*.json</code></td><td>a window's own position and queue. Rewritten every firing — never a backlog.</td><td>the window itself</td></tr>
+          <tr><td><code>.claude/handoffs/DEAD-ENDS.md</code></td><td>what does not work on this machine. Read before debugging an environment problem; append rather than re-deriving.</td><td>any session</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="sec">Loop position</h2>
+    <div class="two">
+      <div class="panel">
+        <h3>STATE-night.json</h3>
+        <p class="when">iteration 0</p>
+        <p style="font-size:13px;margin:0">branch <code>autonomous/2026-09-17-daily</code><br>stop_at <code>2026-09-18T07:00:00+01:00</code></p>
+      </div>
+      <div class="panel">
+        <h3>STATE-day.json</h3>
+        <p class="when">iteration 0</p>
+        <p style="font-size:13px;margin:0">branch <code>autonomous/2026-09-14-daily</code><br>stop_at <code>2026-09-16T17:00:00+01:00</code></p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Generated by scripts/backlog_page.py — do not edit this file by hand; edit the generator.<br>
+    Sources: scripts/drive/FINDINGS.md · openspec/changes/ · spec-queue/{APPROVALS,DIRECTION}.md · .claude/autonomous/STATE-{day,night}.json<br>
+    The cycle marker above is computed in your browser, so it stays true even when the counts are a day old.
+  </footer>
+</div>
+
+<script>
+(function () {
+  var track = document.getElementById('track');
+  var line = document.getElementById('nowline');
+  var label = document.getElementById('nowlabel');
+  if (!track || !line || !label) return;
+
+  function place() {
+    var segs = Array.prototype.slice.call(track.querySelectorAll('.seg'));
+    var now = new Date();
+    var h = now.getHours() + now.getMinutes() / 60;
+    var total = track.clientWidth;
+    var x = 0, current = null, acc = 0;
+
+    for (var i = 0; i < segs.length; i++) {
+      var s = segs[i];
+      var from = parseFloat(s.dataset.from), to = parseFloat(s.dataset.to);
+      var span = to > from ? to - from : (24 - from) + to;
+      var inside = to > from ? (h >= from && h < to) : (h >= from || h < to);
+      var w = s.offsetWidth;
+      if (inside) {
+        var into = h >= from ? h - from : (24 - from) + h;
+        x = acc + (into / span) * w;
+        current = s;
+      }
+      acc += w;
+    }
+    if (!current) { current = segs[segs.length - 1]; x = acc; }
+    line.style.left = Math.max(0, Math.min(x, total)) + 'px';
+
+    var name = current.querySelector('b').textContent;
+    var pretty = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    label.innerHTML = 'Now <b>' + pretty + '</b> — in the <b>' + name + '</b> window.';
+  }
+
+  place();
+  window.addEventListener('resize', place);
+  setInterval(place, 60000);
+})();
+</script>

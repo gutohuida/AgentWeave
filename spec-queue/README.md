@@ -23,6 +23,15 @@ Design: `openspec/explorations/2026-09-01-a-daily-research-spec-and-build-loop.m
 | `DECISIONS.md` | both windows *add* rows; only the operator marks one DECIDED | the DECIDE session, and any window deciding what it may take alone |
 | `research/YYYY-MM-DD.md` | the FILL window | the DECIDE session, and tomorrow's FILL |
 | `review/review-YYYY-MM-DD.html` | the FILL window | the operator, via an Artifact published in the DECIDE session |
+| `BACKLOG.html` | **nobody — `scripts/backlog_page.py` generates it** | the operator, and any agent orienting itself |
+
+`BACKLOG.html` is the standing orientation page: open findings by severity, the drain, what each
+window is holding, and which file is the authority for what. **Never edit it by hand** — it is
+derived from `FINDINGS.md`, `openspec/changes/`, this directory and the two `STATE-*.json`, and a
+hand-edit is lost on the next `py -3.11 scripts/backlog_page.py`. Regenerate it whenever a window
+closes, and read it before proposing anything: it is the cheapest way to find out that what you are
+about to file is already F-something. Unlike a dated `review/` page it has no date — it is always
+*now*, and it states its own generation time so a stale copy admits to being stale.
 
 `DIRECTION.md` exists because `APPROVALS.md` steers only the night. Until 2026-09-01 the day
 window had no operator channel at all, so steering a day meant editing the loop's own standing
