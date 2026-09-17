@@ -1,64 +1,40 @@
 {
-  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-  "playbook": ".claude/loops/night-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-09-14-daily",
-  "parent_branch": "master",
-  "parent_sha": "31dcb3f",
-  "stop_at": "2026-09-17T07:00:00+01:00",
-  "iteration": 6,
-  "log_file": ".claude/autonomous/2026-09-16-night-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "amtci-impl",
-      "status": "done",
-      "title": "\u00a72 -- implement materialise() + spec_reading.py guards",
-      "detail": "Done iteration 2: _render_criterion + _criteria_for_entry added to hub/hub/spec_tasks.py, materialise() wired (position map, criteria_index, per-entry names/acceptance_criteria); isinstance(list) guards added inside statements_by_key and criteria_by_requirement_key in hub/hub/spec_reading.py. Verified by execution (rendering, ordering, guard degradation) plus existing suites test_spec_declared_tasks.py + test_spec_reading.py (20 passed) and ruff/black on both files. tasks.md \u00a72 (2.1,2.2,2.7,2.3,2.6,2.5,2.4) ticked."
-    },
-    {
-      "id": "amtci-tests",
-      "status": "done",
-      "title": "\u00a73 -- ~22 tests",
-      "detail": "Done iteration 3: hub/tests/test_spec_criteria_reach_the_task.py, all 25 of the listed 3.1-3.26 (there is no 3.20). 3.1 runs the full HTTP approval route; 3.22/3.25 call spec_reading.requirement_view directly; 3.10 composes a real loop briefing for both is_review values. Every MUST-clause fixture honoured literally (3.6 non-alphabetical keys, 3.15 reversed entry order, 3.23 absent-requirement criterion written first, 3.11/3.26 non-dict list elements, 3.24 criteria the entry names). 25 passed; 45 passed with test_spec_declared_tasks.py + test_spec_reading.py; ruff + black clean. Smoke test of discrimination: two mutations flipped exactly 3.11/3.15/3.18/3.22/3.24/3.25, then reverted. tasks.md section 3 ticked, 25 per-row Done notes."
-    },
-    {
-      "id": "amtci-mutations",
-      "status": "done",
-      "title": "\u00a74 -- 17 mutations",
-      "detail": "Done iteration 4: all 17 applied individually via testbed/scratch/mutate_amtci.py (exact-anchor replacement with a uniqueness assert, run, parse FAILED lines, git checkout revert). EVERY mutation flipped its named target; none flipped nothing, so no finding was recorded. Baseline 25 passed / 14.10s. 4.8 aborted once on an ambiguous anchor (`for entry in raw:` occurs twice in spec_reading.py) and was re-anchored. Three unpredicted results recorded in the rows: 4.16's retarget reason is wrong (materialise_quietly does not protect 3.24, it empties the board and 3.24 fails too) though the retarget stands; 4.8 mutates toward an algorithm D7 forecloses and needed cross-module scaffolding, so 4.8b is what actually pins the ordering; 4.7/4.3 flip 17/15 rows because rendering is a whole-string choke point. 4.11 and 4.5, flagged as likely already-satisfied, both flipped. Implementation byte-identical to HEAD afterwards (git status/diff --stat clean); 45 passed across the three neighbouring suites; openspec validate --strict passes. tasks.md section 4 ticked, 17 per-row Done notes plus a section note."
-    },
-    {
-      "id": "amtci-gate",
-      "status": "done",
-      "title": "\u00a75 -- gates",
-      "detail": "Done iteration 5: full suite from hub/ -- 4440 passed, 86 skipped, 0 failed, 42:02, vs the 4415/86/0/27:46 baseline (+25 = exactly \u00a73's new test file, zero new failures). ruff/black --target-version py311/mypy all clean. openspec validate --strict passes. 5.4 measured against the real (and only) approved document in port 8000's database, spdoc-97d90a3506f5, via a mode=ro SQLite read of its already-materialised tasks.acceptance_criteria (real materialise() output, not a reconstruction): largest rendered block 1,307 characters, 33% of the 4,000-char checkpoint bound; no bound proposed, residual recorded. Found and discarded an uncommitted, unverified prior edit to tasks.md's \u00a75 (its own 5.1 note cited a section note that didn't exist) before redoing the section for real -- see iteration 5's log entry. No implementation file touched. Committed."
-    },
-    {
-      "id": "amtci-drive",
-      "status": "done",
-      "title": "\u00a76-\u00a77 -- drive and close-out, only if it fits",
-      "detail": "Done iteration 6: it fit (checked at ~00:40 against 07:00 stop_at). 6.1 approved spdoc-b903644b6bb6 on the trial Hub, materialised task-f08fecf7d087, confirmed its acceptance_criteria via GET. 6.2 pre-declared a Loop as the document's owner before approval (Task.loop_id is write-once), auto-staffed the materialised task, fired a real run on claude-haiku-4-5-20251001, read the stored briefing from inbound_queue_entries (1,639 chars) and it carried the criterion verbatim. 6.3 screenshotted the task drawer via the already-built UI bundle (no npm run build) showing the rendered criterion. 6.4 fired a real run on a 9-criterion task (3,467-char block, 87% of the 4,000-char reference bound; full briefing 4,871 chars) and both run and task reached completed -- the scheduler.py:3088/runner_commands.py:268 single-arg path held, pty_runner.py:68-88's prior incident did not recur. 6.5 added one sentence to submit_spec_document's docstring in hub/hub/mcp_server.py after reading .claude/rules/mcp-server.md. 7.1 updated the exploration doc's section 12 item 1 with the D5 caveat. 7.2 deliberately left undone -- operator's call. All cleanup verified (throwaway spec/changes/* docs deleted, three test jobs disabled, trial-Hub uvicorn process stopped by this iteration). Committed c255148, pushed. Queue finished; next_action set to null."
-    }
-  ],
-  "decisions_for_user": [
-    "a-materialised-task-carries-its-criteria is fully built, tested (25 tests + 17/17 mutations confirmed), gated green (full suite + lint + mypy + openspec validate), and driven end to end on the trial Hub (approval, a real haiku run reading the rendered criteria in its briefing, a UI screenshot, and a large-criteria-block run). Task 7.2 (`openspec archive`) is ready whenever you want to take it -- deliberately left to you per CLAUDE.md and the change's own tasks.md."
-  ],
-  "limits": [
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-17-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "f9db321",
+    "stop_at":  "2026-09-18T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-17-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
