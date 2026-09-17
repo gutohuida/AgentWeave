@@ -192,7 +192,115 @@ def esc(s: object) -> str:
     return html.escape(str(s if s is not None else ""))
 
 
-def build() -> str:
+def previous_snapshot() -> dict:
+    """The counts the last generation embedded, so a regeneration can report what moved.
+
+    Read from the page's own `<script type="application/json">` block rather than by scraping the
+    rendered numbers: the markup is free to change, the snapshot's shape is not. Missing or
+    unparseable means "no previous run", which is not an error — the first generation has nothing
+    to compare against.
+    """
+    if not OUT.exists():
+        return {}
+    try:
+        text = OUT.read_text(encoding="utf-8", errors="replace")
+        m = re.search(
+            r'<script type="application/json" id="backlog-data">(.*?)</script>', text, re.S
+        )
+        return json.loads(m.group(1)) if m else {}
+    except Exception:
+        return {}
+
+
+#: Snapshot keys that say something about the ledger rather than about when the page was built.
+#: `generated`, `sha` and `branch` move on every run and every commit, so comparing them makes
+#: `--check` answer "has anything happened at all", which is not the question.
+VOLATILE_KEYS = {"generated", "sha", "branch"}
+
+
+def substantive(snap: dict) -> dict:
+    return {k: v for k, v in snap.items() if k not in VOLATILE_KEYS}
+
+
+def report_delta(prev: dict, now: dict) -> list[str]:
+    """Plain lines naming what changed. Empty list means nothing moved."""
+    if not prev:
+        return ["no previous snapshot — first generation, nothing to compare"]
+    lines: list[str] = []
+
+    def moved(key: str, label: str, good_down: bool = True) -> None:
+        a, b = prev.get(key), now.get(key)
+        if a is None or b is None or a == b:
+            return
+        d = b - a
+        arrow = "+" if d > 0 else ""
+        flag = ""
+        if good_down:
+            flag = "  <-- grew" if d > 0 else "  <-- drained"
+        lines.append(f"{label}: {a} -> {b} ({arrow}{d}){flag}")
+
+    moved("open", "open findings")
+    moved("fixed", "fixed", good_down=False)
+    moved("filed", "total filed", good_down=False)
+    moved("drain", "unbuilt changes")
+    for sev in ("A", "B", "C", "D", "?"):
+        moved(f"sev_{sev}", f"  severity {sev}")
+
+    new_ids = sorted(set(now.get("ids", [])) - set(prev.get("ids", [])))
+    if new_ids:
+        lines.append(f"newly filed: {', '.join(new_ids)}")
+    gone = sorted(set(prev.get("open_ids", [])) - set(now.get("open_ids", [])))
+    if gone:
+        lines.append(f"no longer open: {', '.join(gone)}")
+    return lines or ["nothing moved since the last generation"]
+
+
+def consistency_warnings(findings: list[dict], changes: list[dict]) -> list[str]:
+    """Things the ledger says about itself that do not hold up.
+
+    The night playbook calls the status sweep *"the step whose absence makes source 2 wrong"* — the
+    ledger has twice under-reported its own open list. These are the cheap checks; none of them is
+    conclusive on its own, which is why they are warnings and not failures.
+    """
+    warn: list[str] = []
+    nostatus = [f["id"] for f in findings if f["state"] == "no-status"]
+    if nostatus:
+        warn.append(
+            f"{len(nostatus)} of {len(findings)} findings have no **Status:** line, so nothing says "
+            f"whether they are done (they are counted as open): {', '.join(nostatus[:12])}"
+            f"{' ...' if len(nostatus) > 12 else ''}"
+        )
+    unrated = [f["id"] for f in findings if f["sev"] == "?"]
+    if unrated:
+        open_unrated = sum(1 for f in findings if f["sev"] == "?" and f["state"] in ("open", "no-status"))
+        warn.append(
+            f"{len(unrated)} of {len(findings)} findings declare no severity anywhere, so the night "
+            f"window cannot order them ({open_unrated} of those are open — the page's '?' group): "
+            f"{', '.join(unrated[:12])}{' ...' if len(unrated) > 12 else ''}"
+        )
+    # A finding whose status still reads `open` while naming a commit sha is the classic stale row.
+    suspicious = [
+        f["id"]
+        for f in findings
+        if f["state"] == "open" and re.search(r"\b[0-9a-f]{7,40}\b", f["status"] or "")
+    ]
+    if suspicious:
+        warn.append(
+            f"{len(suspicious)} findings read 'open' but name a commit sha — verify before "
+            f"trusting the open count: {', '.join(suspicious[:12])}"
+            f"{' ...' if len(suspicious) > 12 else ''}"
+        )
+    stopped = [c["name"] for c in changes if c["todo"] > 0 and c["note"]]
+    if stopped:
+        warn.append(
+            f"{len(stopped)} unbuilt change(s) carry a STOPPED note and still count toward the "
+            f"drain: {', '.join(stopped)}"
+        )
+    return warn
+
+
+def build() -> tuple[str, dict, list[dict], list[dict]]:
+    """Returns (html, snapshot, findings, changes) — the snapshot is what the next run compares to."""
     findings = parse_findings()
     openf = [f for f in findings if f["state"] in ("open", "no-status")]
     openf.sort(key=lambda f: (SEV_ORDER.get(f["sev"], 9), -f["num"]))
@@ -289,7 +397,22 @@ def build() -> str:
         for f in newest
     )
 
-    return TEMPLATE.format(
+    snapshot = {
+        "generated": now.isoformat(timespec="seconds"),
+        "branch": branch,
+        "sha": sha,
+        "open": total_open,
+        "fixed": total_fixed,
+        "retired": total_retired,
+        "filed": len(findings),
+        "drain": len(drain),
+        **{f"sev_{k}": counts.get(k, 0) for k in ("A", "B", "C", "D", "?")},
+        "ids": sorted(f["id"] for f in findings),
+        "open_ids": sorted(f["id"] for f in openf),
+    }
+
+    page = TEMPLATE.format(
+        snapshot=json.dumps(snapshot, indent=1),
         generated=esc(now.strftime("%Y-%m-%d %H:%M %Z")),
         branch=esc(branch or "?"),
         sha=esc(sha or "?"),
@@ -331,6 +454,7 @@ def build() -> str:
         sev_q=sev_block("?", "No severity declared anywhere", "Neither the heading nor the body states one. Shown rather than hidden: an unrated finding is not a closed one, and dropping it is how a ledger comes to under-report itself."),
         newest_html=newest_html,
     )
+    return page, snapshot, findings, changes
 
 
 TEMPLATE = """<title>AgentWeave Backlog</title>
@@ -634,6 +758,10 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
     </div>
   </section>
 
+  <script type="application/json" id="backlog-data">
+{snapshot}
+  </script>
+
   <footer>
     Generated by scripts/backlog_page.py — do not edit this file by hand; edit the generator.<br>
     Sources: scripts/drive/FINDINGS.md · openspec/changes/ · spec-queue/{{APPROVALS,DIRECTION}}.md · .claude/autonomous/STATE-{{day,night}}.json<br>
@@ -684,12 +812,53 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
 """
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="report the delta and warnings without writing the page (exit 1 if it would change)",
+    )
+    ap.add_argument("--quiet", action="store_true", help="write the page, print only the path")
+    args = ap.parse_args(argv)
+
+    prev = previous_snapshot()
+    page, snapshot, findings, changes = build()
+
+    if args.check:
+        # Compare the *data*, not the rendered bytes. Every generation stamps a fresh time and the
+        # current HEAD, so a byte comparison reports STALE on every call and the flag means nothing.
+        # The question --check answers is "has the ledger moved since this page was built".
+        stale = not OUT.exists() or substantive(prev) != substantive(snapshot)
+        print(f"{OUT.relative_to(ROOT)}: {'STALE' if stale else 'current'}")
+        for line in report_delta(prev, snapshot):
+            print(f"  {line}")
+        return 1 if stale else 0
+
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with io.open(OUT, "w", encoding="utf-8", newline="\n") as f:
-        f.write(build())
+        f.write(page)
+
+    if args.quiet:
+        print(OUT.relative_to(ROOT))
+        return 0
+
     print(f"wrote {OUT.relative_to(ROOT)} ({OUT.stat().st_size:,} bytes)")
+    print()
+    print("SINCE LAST GENERATION")
+    for line in report_delta(prev, snapshot):
+        print(f"  {line}")
+
+    warn = consistency_warnings(findings, changes)
+    if warn:
+        print()
+        print("LEDGER WARNINGS  (none of these is conclusive on its own)")
+        for w in warn:
+            print(f"  - {w}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

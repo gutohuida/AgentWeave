@@ -33,6 +33,11 @@ closes, and read it before proposing anything: it is the cheapest way to find ou
 about to file is already F-something. Unlike a dated `review/` page it has no date — it is always
 *now*, and it states its own generation time so a stale copy admits to being stale.
 
+Use the **`backlog` skill** (`.claude/skills/backlog/`) rather than the bare command: it reports
+what moved since the last generation and triages the ledger's own inconsistencies, which the raw
+page does not. `py -3.11 scripts/backlog_page.py --check` exits non-zero when the ledger has moved
+since the page was built — that is the form a window should call at close.
+
 `DIRECTION.md` exists because `APPROVALS.md` steers only the night. Until 2026-09-01 the day
 window had no operator channel at all, so steering a day meant editing the loop's own standing
 instructions and remembering to un-edit them. Same contract as `APPROVALS.md`: newest day first,
