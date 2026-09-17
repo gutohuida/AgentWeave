@@ -168,6 +168,12 @@ hub/agentweave.db
 # durable output - the findings/log files next to it are.
 .claude/autonomous/scratch/
 
+# Same thing under the other name a window is liable to pick for it. `arm-cycle.ps1` refuses to
+# arm on `git status --short`, which counts UNTRACKED files, so a window that parks a long pytest
+# log here silently leaves the next day unarmed - which is exactly what happened on 2026-09-17,
+# and why no FILL window ran. Ignoring both names costs nothing; the alternative is remembering.
+.claude/autonomous/tmp/
+
 # Staging output from scripts/migrate_openspec_corpus.py — derived, regenerate with --out
 .migration/
 
