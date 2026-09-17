@@ -29101,3 +29101,80 @@ and the per-agent grants on the project's own page **as live values rather than 
 is legible at a glance, an empty input is not — and leave them editable where they already are.
 
 **Related:** F376, F377, F378, F237, F39, F88.
+
+
+---
+
+## F380 (A) — two independent ways the day window silently fails to arm, and neither leaves anything to read
+
+**Status:** open. Filed 2026-09-18 00:15 by an interactive session, from the live scheduled tasks
+and `arm-cycle.ps1` / `install-driver.ps1` on this machine.
+
+**Three consecutive days produced no FILL window, for three different reasons, and all three look
+identical from outside: `STATE-day.json` reads `iteration: 0` and nothing else says anything.**
+Task Scheduler records a bare `LastTaskResult` with no message; the day log is not written because
+the window that would write it never started.
+
+| date | `AgentWeaveArmDay` result | cause |
+|---|---|---|
+| 2026-09-16 | 1 | `install-driver.ps1` rolled the start to tomorrow and threw *"no window"*. Fixed by `22822bc`'s 15-minute grace — but see (b), the fix is narrower than the hole. |
+| 2026-09-17 | **3** | **(a)** the tree was dirty, so the arm refused. |
+| 2026-09-18 | — | would have been **(b)** again, had the `DAY WINDOW` line not been added by hand at 00:15. |
+
+### (a) Any untracked file anywhere in the repo disarms the next window
+
+`arm-cycle.ps1:167` refuses on `git status --short`, which counts **untracked** files, not only
+tracked modifications:
+
+```
+$dirty = @(& git -C $Repo status --short)
+if ($dirty.Count -gt 0) { Say "REFUSING: working tree is dirty. ..."; exit 3 }
+```
+
+Its own comment reads *"A dirty tree is the operator's, or a window that died mid-iteration"* — both
+of those are **tracked** modifications. An untracked scratch file is neither, and is exactly what a
+healthy window produces.
+
+**Measured.** On 2026-09-17 the night window's compose iteration parked a pytest log in
+`.claude/autonomous/tmp/`. Nothing in either playbook or any script names that directory — a window
+picked the name; `.claude/autonomous/scratch/` is the ignored one that exists for this. One
+untracked directory, and the whole next day is gone. Worked around in `.gitignore` for that one
+name (`d52f699`), which does not address the class: **any** file a window leaves, or the operator
+drops in the tree overnight, has the same effect.
+
+Whether the refusal should read `git status --short -uno`, or list untracked files without
+refusing, is the decision. An arm that refuses because a `.log` exists is protecting nothing — it
+does `git checkout`, and untracked files survive that.
+
+### (b) The arm fires 75 minutes after the window it arms is due to start
+
+`AgentWeaveArmDay`'s trigger is **10:15**. `arm-cycle.ps1`'s standard day window is **09:00-17:00**.
+`AgentWeaveArmNight` fires **22:55** for a **23:00** window — five minutes ahead, which is the
+shape that works.
+
+`install-driver.ps1:200-209` gives a start already past a **15-minute** grace; at 10:15 a 09:00
+start is 75 minutes past, so the `elseif` rolls it to **tomorrow 09:00**, which is after **today's**
+17:00 stop, and it throws *"the run would have no window"*.
+
+The day window therefore only arms when `DIRECTION.md`'s **newest section is dated today and
+carries a `DAY WINDOW:` line** that happens to match the trigger. That is how 2026-09-17 was meant
+to work, and it is a daily manual step nobody is reminded of: a section written for tomorrow that
+omits the line disarms tomorrow, silently, and the omission looks like nothing at all.
+
+**The decision is the operator's and it is one line either way** — move the trigger to 08:55 to
+mirror the night, or change the standard window to start at 10:15 and move the trigger to 10:10.
+What must not stay is the current arrangement, where the two disagree and a prose file bridges them.
+
+### What is common to all three, and is the actual severity-A part
+
+**None of the three failures wrote anything a person or a later window would find.** No log entry,
+no `DECISIONS.md` row, no non-zero exit anybody reads. `STATE-day.json` keeps the previous cycle's
+`iteration` and branch, so it reads as a window that has not started yet rather than one that
+cannot. The only reason any of them were caught is that a person went looking days later.
+
+A refusal to arm is a legitimate outcome; a **silent** refusal to arm is not. The arm knows exactly
+why it stopped in every one of these paths — it prints the reason to a console nobody is attached
+to.
+
+**Related:** F361 (the same shape one level down — a suspension with the reason known and recorded
+nowhere the sender can read), F376.
