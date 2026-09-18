@@ -29197,3 +29197,39 @@ to.
 
 **Related:** F361 (the same shape one level down — a suspension with the reason known and recorded
 nowhere the sender can read), F376.
+
+---
+
+## D-1, 2026-09-18 — F376/F378 reproduced on the trial Hub (:8010), independent of `:8000`
+
+**Not a new finding.** Per `DIRECTION.md`'s `## 2026-09-18` section, this feeds R1's argument for
+`a-refused-capability-reaches-the-operator` — confirming F376's diagnosis still reproduces on a
+fresh project, on the trial Hub rather than the operator's real one, before the spec loop reasons
+about the repair.
+
+**Harness:** `scripts/drive/d1_0918_refused_capability.py`, a fresh project (`proj-ece4c8c96a80`,
+deleted afterward), one runner and one agent bound to `claude-haiku-4-5-20251001`. The agent was
+told to call `create_flow` once with a made-up `spec_document_id` and `stop_when_queue_empties=true`
+and to echo the tool's error text back verbatim.
+
+**Measured, this run:**
+- The transcript (`GET /projects/{id}/agent/{agent}/chat/{conv}`) contains F376's exact sentence:
+  `Scheduled work from agents requires operator approval or an enabled allowance`, against the
+  `create_flow` tool call, confirming the client-side checks in `create_flow`
+  (`hub/hub/mcp_server.py:772-795`) run and pass before the server-side allowance gate in
+  `hub/hub/api/v1/jobs.py:568` refuses it — the same order F376 described.
+- `select count(*) from permission_requests where agent = 'architect090815'` on
+  `~/.agentweave/hub/profiles/trial/agentweave.db` (read-only) is **0**. The refusal wrote no row
+  a permission surface could ever show the operator, on a second Hub and a second project — F376's
+  "the refusal names an approval path that does not exist" is not specific to `LoopEngine_2` or to
+  `:8000`.
+- `_require_agent_job_allowance` (`hub/hub/api/v1/jobs.py:32-51`) only gates a call carrying real
+  agent+run attribution; an operator-issued call (no `X-AgentWeave-Agent` header) skips the check
+  entirely (`if agent is None and run_id is None: return`), so this cannot be reproduced from the
+  API alone — a real bound run is required, which is why this drive costs one Haiku turn rather
+  than zero.
+
+**Status:** confirms F376 and F378 (both still open); no new severity assigned. 5/5 harness checks
+passed. Fixture project deleted, no job left enabled.
+
+**Related:** F376, F378.
