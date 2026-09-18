@@ -29337,6 +29337,13 @@ as an unexplained one-time environmental stall, not as a suspected-still-broken 
 
 ## F383 (C) — the CI branch's own commits fail on a genuine flaky test, not only on the docs-only commits noted earlier
 
+**Status:** open. Filed 2026-09-18 by the day window, from CI history. Half repaired 2026-09-18:
+symptom A (the module-level `asyncio.Lock` surviving its event loop) is fixed and has a regression
+test; symptom B (the leaked write transaction that fails the next test's `BEGIN IMMEDIATE`) is
+diagnosed but open. See ROOT CAUSE at the end of this section.
+**Source:** audit
+**Theme:** Harness & CI
+
 **Where noticed:** iteration 20's D-0 gate check (2026-09-18 ~10:25 UTC), reading `gh run list` and
 `gh run view --log-failed` over the branch's own recent CI history while measuring condition 3, not
 from a drive.
@@ -29467,3 +29474,79 @@ Five instances now, at a rate of roughly 1 in 2 of this branch's recent CI runs 
 read that `merge-gate-cadence` option (b) (wait out a conclusion) is not a reliable fix, since the
 failure rate is too high for "wait longer" to help. Filed from reading CI history during the routine
 D-0 check, not from a drive; no code changed.
+
+**ROOT CAUSE, 2026-09-18 ~12:40 (interactive session, at the operator's instruction "how can we
+correct the flakiness of the tests").** All five instances were re-read from the CI logs together
+rather than one at a time, and they are **one mechanism with two symptoms**, not the "cross-test
+interference under CI's parallelism" the entries above concluded.
+
+**Two corrections to what is written above first**, both measured, because the wrong reading was
+steering the `merge-gate-cadence` decision:
+
+1. **There is no parallelism.** `.github/workflows/ci.yml:136` runs `pytest tests/ -v` with no
+   `-n`. `xdist` is installed and never invoked; the run is sequential. Anything above that reasons
+   from "CI's parallelism/ordering" is reasoning from a property the job does not have.
+2. **Every one of the four `database is locked` failures dies on `BEGIN IMMEDIATE`, never on a
+   `DROP`.** That is precisely, and in writing, what `hub/tests/conftest.py:737-740` predicted when
+   it added that statement: *"If F292 survives this, the holder arrives before the reset rather than
+   during it, which is a different finding and a much narrower one."* F383 **is** that finding. It
+   is a successor to F292, not a recurrence of it.
+
+**The mechanism.** `conftest.py`'s autouse `_no_connection_outlives_its_event_loop` cancels every
+still-registered background run at the end of every test (`:591-597`) — the normal path, not a
+fallback. When a cancel lands inside `turn_scheduler.py:283`:
+
+```python
+async with _lock_for(project_id, agent), async_session_factory() as db:
+```
+
+two things leak, and each is one of the observed symptoms:
+
+- **Symptom A, the lock.** `_lock_for` (`turn_scheduler.py:66`) caches an `asyncio.Lock` per
+  `(project_id, agent)` in a module-level dict `_agent_locks` (`:32`) that nothing cleared. The
+  cancelled task never releases it and the loop closes, so the next test asking for the same key —
+  and `proj-test`/`dev` repeat constantly — gets a lock still marked `[locked]` and bound to a dead
+  loop. `6fbcf10`'s failure is exactly this, with `[locked]` in the repr.
+- **Symptom B, the transaction.** The same cancel catches the connection on its way back to the
+  pool. Three of the four runs carry one `sqlalchemy.pool` ERROR for the entire session:
+  `_finalize_fairy` -> `do_rollback` -> aiosqlite `rollback` -> `asyncio.exceptions.CancelledError`.
+  The rollback never completes, so a write transaction stays open and the next test's
+  `BEGIN IMMEDIATE` — the first statement in the suite to demand the write lock up front — waits
+  out its busy timeout and fails at *setup*, blast radius exactly one test.
+
+**Symptom A is fixed** (this commit): `conftest.py` gained autouse
+`_module_level_async_primitives_are_per_test`, which rebuilds `_agent_locks` and the four other
+module-level `asyncio` primitives on both sides of every test.
+`hub/tests/test_module_level_async_state_is_per_test.py` is the regression test, and it was
+**verified to fail with the fixture removed** — reproducing `<asyncio.locks.Lock object at 0x...
+[locked]>` surviving into the next test locally, the same signature as the CI traceback — rather
+than only verified to pass with it present.
+
+**Symptom B is NOT fixed, and three things now constrain whoever takes it:**
+
+1. **A retry/backoff around the schema reset is not the fix, and would have looked like one.**
+   `conftest.py:115` already sets `PRAGMA busy_timeout=30000`. The holder therefore survives a full
+   **30 seconds**, so a short retry cannot clear it — while still being long enough to make a green
+   local run and read as a success. This was the first fix considered here and it was discarded on
+   this measurement.
+2. **The holder is invisible to the existing census, and the census has a structural blind spot.**
+   `_EVER_SEEN` is keyed by `id(connection_record)` (`conftest.py:333,347`), and CPython reuses an
+   `id` once an object is collected. Across the 187-359 connections a run churns through, a later
+   record can silently overwrite a leaked one's entry. "0 with an OPEN sqlite3 handle" is therefore
+   weaker evidence than it reads as, and it should not be taken as proof the holder is outside
+   SQLAlchemy's bookkeeping.
+3. **The path is reproducible locally without CI.** Running the three affected files on this machine
+   emits `PytestUnhandledThreadExceptionWarning` from `aiosqlite/core.py:75`
+   `_connection_worker_thread` -> `future.get_loop().call_soon_threadsafe(...)` ->
+   `RuntimeError: Event loop is closed`: an aiosqlite operation still in flight on the worker thread
+   when the test's loop closed, which is the same "result can never be delivered" shape as the
+   cancelled rollback. CI is not special here; it just loses the race more often.
+
+**Where.** `hub/tests/conftest.py:591-597` (the cancel), `:713-752` (the reset that pays for it),
+`:115` (the 30s timeout), `:333,347` (the id-reuse blind spot); `hub/hub/turn_scheduler.py:32,66,283`.
+Runs: `35333792012` (`6fbcf10`, symptom A + B), `35335492002` (`4dc2d72`), `35333364732` (`c0070c0`),
+`35332995674` (`5b29c2f`), `35337170276` (`cc12402`).
+
+**Severity is left at (C) deliberately** — by this file's own taxonomy it is test-harness friction,
+not product behaviour — but it has cost a full day's merge gate and ~$9 of retries, so raising it is
+worth the operator's call rather than mine.

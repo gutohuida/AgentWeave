@@ -611,6 +611,69 @@ async def _no_connection_outlives_its_event_loop():
         await _REAL_ENGINE.dispose()
 
 
+@pytest.fixture(autouse=True)
+def _module_level_async_primitives_are_per_test():
+    """Rebuild every module-level `asyncio` primitive around each test.
+
+    `pytest-asyncio` builds a fresh event loop per test, but a module-level
+    `asyncio.Lock` outlives it. Since 3.10 such a lock binds to a loop on its first
+    *contended* acquire and refuses every other loop afterwards, so a lock left **held**
+    by one test poisons every later test that contends for it. The uncontended fast path
+    in `Lock.acquire` never consults the loop, which is exactly why this is intermittent
+    rather than constant: it needs two coroutines to want the same lock.
+
+    Measured, CI run 35333792012 (`6fbcf10`):
+
+        tests/test_flow_holds_the_loop_requirements.py::
+          test_one_turn_finishing_answers_for_itself_and_not_for_its_siblings
+        hub/turn_scheduler.py:283  async with _lock_for(project_id, agent), ...
+        RuntimeError: <asyncio.locks.Lock object at 0x7f8bc79ce0d0 [locked]>
+                      is bound to a different event loop
+
+    `[locked]` is the whole point, and it names the previous test rather than this one.
+    The holder was a background run that `_no_connection_outlives_its_event_loop` above
+    cancelled while it was inside that `async with`; the loop closed before the unwinding
+    released the lock, and `turn_scheduler._agent_locks` — a module-level dict keyed by
+    `(project_id, agent)`, which nothing ever cleared — handed the same held object to the
+    next test that asked for that project and agent. Both halves of the key repeat across
+    tests constantly (`proj-test`, `dev`), so "the next test" is usually soon.
+
+    Only `_agent_locks` has been observed failing. The other four are reset on the
+    strength of being the same shape — module-level, awaited from request paths any test
+    can reach — and not on any observation, which is why they are listed rather than
+    described.
+
+    Reassignment rather than `monkeypatch.setattr`, deliberately: monkeypatch restores the
+    *stale* object at teardown, which is precisely what is being removed. Every one of
+    these is read as a module global at its use site rather than captured at import, so
+    rebinding the attribute is what later calls see — checked per module, not assumed.
+
+    Both sides of the `yield`, so a test starts clean whatever ran before it and leaves
+    nothing behind whatever it did itself. This is a test-harness change: in production
+    there is one event loop for the life of the process, and none of these is ever
+    rebound.
+    """
+
+    def _rebuild() -> None:
+        import hub.api.v1.checkpoints as _checkpoints
+        import hub.conversation_titles as _conversation_titles
+        import hub.native_dialog as _native_dialog
+        import hub.turn_scheduler as _turn_scheduler
+        import hub.worker as _worker
+
+        _turn_scheduler._agent_locks.clear()
+        _checkpoints._checkpoint_claims_lock = asyncio.Lock()
+        _native_dialog._lock = asyncio.Lock()
+        _conversation_titles._gate = asyncio.Semaphore(
+            _conversation_titles.MAX_CONCURRENT_TITLE_RUNS
+        )
+        _worker._gate = asyncio.Semaphore(_worker.MAX_CONCURRENT_WORKER_RUNS)
+
+    _rebuild()
+    yield
+    _rebuild()
+
+
 def assert_engine_is_disposable() -> None:
     """Refuse to drop tables on any database this process did not create for itself.
 
