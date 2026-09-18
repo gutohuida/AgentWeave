@@ -29424,3 +29424,24 @@ conclusion (option (b)) does not bound how often a green run happens. Not invest
 whether this is xdist-style worker reuse, a module-scoped fixture holding a connection/lock across
 tests, or something in `conftest.py`'s event-loop handling. Filed from reading CI history during the
 routine D-0 check, not from a drive; no code changed.
+
+**UPDATE, iteration 27 (2026-09-18 ~10:56 UTC):** a fourth instance, caught only because this run
+took unusually long to conclude — `4dc2d72` (iteration 23's retry commit, also state-only), run
+`35335492002`, sat `in_progress` through iterations 24, 25 and 26's checks before finally concluding
+`failure` at (per `gh run view`) roughly `10:52:38Z`, over 16 minutes after its `10:35:58Z` creation:
+
+```
+ERROR tests/test_flow_fires_a_review_turn.py::test_a_flow_fired_reviewer_reads_a_file_that_is_not_on_main
+  - sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+[pool log:     asyncio.exceptions.CancelledError]
+```
+
+Same `BEGIN IMMEDIATE`-shaped lock, same file as one of iteration 24's two failures
+(`test_flow_fires_a_review_turn.py`), but a third distinct test name within it. Four instances now,
+three different files, at least three different test names, one shared `database is locked`
+mechanism plus the one wrong-event-loop outlier from iteration 24 — reinforcing iteration 24's read
+that this is cross-test interference under the CI job's own concurrency, not a single file's fixture
+bug, and that it recurs often enough (4 of the last ~10 runs on this branch) that option (b) of the
+operator's still-open `merge-gate-cadence` decision (wait out a conclusion) would not reliably land
+green either. Filed from reading CI history during the routine D-0 check, not from a drive; no code
+changed.
