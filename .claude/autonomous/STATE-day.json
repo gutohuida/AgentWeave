@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "f9db321",
   "stop_at": "2026-09-18T17:00:00+01:00",
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-09-18-day-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "D-5",
-  "next_action": "TWO STEPS, in this order. STEP 1 - retry D-0's merge gate FIRST, before any commit of your own, re-measuring all four conditions at HEAD's exact sha (never accept a green from an earlier commit; CI failed on a392e9b and 798b2a5). Three of four have now held at two firings in a row; only condition 3 fails, and iteration 5 measured why precisely: this firing started 1m31s after its own predecessor's push, and a CI run needs 13+ minutes. If all four hold, `git checkout master && git merge --ff-only <branch>`, push, return to the branch. If CI has not concluded at HEAD, leave D-0 open, put the timing problem on the review page as an operator decision (make no commit / let the gate wait / drop the gate), and go to step 2. STEP 2 - D-5, the review page: write spec-queue/review/review-2026-09-18.html to the six sections day-window.md's D-5 requires, self-contained (no external stylesheet, script or font; full DOCTYPE/html/head/body; light colours on a bare :root redefined under @media (prefers-color-scheme: dark); explicit body background). Sections: (1) branch autonomous/2026-09-17-daily, 2 days (2026-09-17..18), what D-0's gate did and the cadence problem above; (2) what last night built - nothing, the backlog was decision-gated, see 2026-09-17-night-log.md; (3) D-1's drive result and F381, severity, one sentence, file:line each; (4) a-refused-capability-reaches-the-operator: the problem, the argument, and what R2 and R3 each changed - R2 the record's conversation (D10), R3 the dedupe that could not fire on a typed answer (D13) and a tool list naming a tool that does not exist (D7) - plus the costs recorded rather than repaired (D13, D14); say plainly that no round changed nothing, because the operator funds the rounds; (5) the default night queue if the operator approves nothing; (6) spec-queue/research/2026-09-18.md highlights, briefly. Then append a row to spec-queue/APPROVALS.md with no status token. RESERVE: if a firing starts within 45 minutes of stop_at, do D-5 whatever else is open. Do not start D-6 in the same firing as D-5.",
+  "current": "D-0",
+  "next_action": "TWO STEPS, in this order. STEP 1 - retry D-0's merge gate FIRST, before any commit of your own, re-measuring all four conditions at HEAD's exact sha (never accept a green from an earlier commit; CI failed on a392e9b and 798b2a5). At iteration 5 the gate hit its now-usual shape again: 3 of 4 held, condition 3 did not, because CI (run 35327002703 for 76b398b) was still in_progress under 3 minutes after this firing started, against a measured 13+ minute floor. If this firing starts more than ~15 minutes after 76b398b's push (09:00:09Z), CI is likely concluded by now - check `gh run list --branch autonomous/2026-09-17-daily --limit 1` for 76b398b's own conclusion before anything else. If all four hold, `git checkout master && git merge --ff-only <branch>`, push, return to the branch. If CI has not concluded, leave D-0 open and move on - the timing problem is already on today's review page (spec-queue/review/review-2026-09-18.html §1) as an operator decision, do not re-litigate it. STEP 2 - D-6: only if D-5's review page has already gone to the operator (it has, this cycle) and the day-window.md D-6 carve-out holds in full (no openspec/specs/ requirement touched, no migration/API/schema change, an existing finding with a reproduction, fix smaller than its argument). Candidates: read .claude/autonomous/tmp/2026-09-17-hubtests-compose.log (background hub-suite run from the 2026-09-17 night, still running at 105+ minutes when that window closed) before trusting tree-green - if it's still not done or shows unexpected failures, that itself is the finding to record, not a thing to fix blind. DRIVE any fix before closing it; set the finding's Status line to `fixed <sha>`. RESERVE: if a firing starts within 45 minutes of stop_at (2026-09-18T17:00:00+01:00 / 16:00 UTC), do the D-0 retry only and stop; do not start new D-6 work that close to the boundary.",
   "queue": [
     {
       "id": "D-0",
@@ -47,9 +47,9 @@
     },
     {
       "id": "D-5",
-      "status": "open",
+      "status": "done",
       "title": "The review page",
-      "detail": "See next_action for the full six-section brief and the self-contained-HTML constraints. New since the last state file: section 3 must carry F381 as well as D-1, section 4 must report R3's two changed tasks (D13, D7) beside R2's D10, and section 1 must put the merge gate's cadence problem to the operator as a decision with the three options named. Append a row to spec-queue/APPROVALS.md, no status token."
+      "detail": "Done at iteration 5. spec-queue/review/review-2026-09-18.html written, all six sections: (1) branch/2-days/gate cadence with the three operator options; (2) nothing built last night, decision-gated; (3) D-1's drive result plus F381, file:line; (4) the change's problem/argument, R2's D10, R3's D13/D7, costs recorded not repaired (D13, D14), 'no round changed nothing'; (5) default night queue if nothing approved; (6) research highlights, non-colliding with today's steered work. spec-queue/APPROVALS.md got a new ## 2026-09-18 row, no status token, no ORDER line."
     },
     {
       "id": "D-6",

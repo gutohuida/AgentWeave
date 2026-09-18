@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-18</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f2;
+    --ink: #1c1c1a;
+    --ink-dim: #5c5c56;
+    --ink-faint: #85857d;
+    --rule: #e0e0da;
+    --rule-strong: #c9c9c1;
+    --accent: #6b4fbb;
+    --sev-a: #b3261e;
+    --sev-a-bg: #fbe9e7;
+    --sev-b: #a8590a;
+    --sev-b-bg: #fdf0e0;
+    --sev-c: #4d6a1f;
+    --sev-c-bg: #eef4e2;
+    --sev-d: #4a5568;
+    --sev-d-bg: #eceef2;
+    --ok: #2f6b3a;
+    --ok-bg: #e8f3ea;
+    --warn-bg: #fdf6e0;
+    --warn-rule: #d9b84a;
+    --alarm: #9c1f17;
+    --alarm-bg: #fceeec;
+    --alarm-rule: #c8372d;
+    --code-bg: #f2f2ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --panel: #1e1e23;
+      --panel-2: #26262c;
+      --ink: #e9e9e6;
+      --ink-dim: #b0b0a8;
+      --ink-faint: #86867e;
+      --rule: #33333a;
+      --rule-strong: #4a4a52;
+      --accent: #b09aec;
+      --sev-a: #ff9c92;
+      --sev-a-bg: #3a1f1d;
+      --sev-b: #f0b878;
+      --sev-b-bg: #392a17;
+      --sev-c: #b3d67a;
+      --sev-c-bg: #26301a;
+      --sev-d: #b4c0d4;
+      --sev-d-bg: #24282f;
+      --ok: #8fd39c;
+      --ok-bg: #1c2c20;
+      --warn-bg: #322a14;
+      --warn-rule: #8a7527;
+      --alarm: #ffb0a8;
+      --alarm-bg: #3b1a17;
+      --alarm-rule: #e0655a;
+      --code-bg: #24242a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    margin: 0;
+    padding: 2.2rem 1.25rem 5rem;
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.62;
+  }
+  .wrap { max-width: 62rem; margin: 0 auto; }
+  header.page { border-bottom: 2px solid var(--rule-strong); padding-bottom: 1.1rem; margin-bottom: 1.6rem; }
+  header.page h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 .35rem; letter-spacing: -0.015em; }
+  header.page .sub { color: var(--ink-dim); font-size: .95rem; }
+  h2 {
+    font-size: 1.22rem; letter-spacing: -0.01em;
+    margin: 2.6rem 0 .5rem; padding-top: 1.1rem;
+    border-top: 1px solid var(--rule);
+  }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: .5rem; }
+  h3 { font-size: 1.02rem; margin: 1.5rem 0 .4rem; }
+  h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .06em; }
+  p { margin: .6rem 0; }
+  ul, ol { margin: .5rem 0 .8rem; padding-left: 1.35rem; }
+  li { margin: .3rem 0; }
+  code, pre {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .875em;
+  }
+  code { background: var(--code-bg); padding: .1em .34em; border-radius: 3px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule);
+    border-radius: 6px; padding: .75rem .9rem; overflow-x: auto; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1rem; font-size: .93rem; }
+  th, td { text-align: left; padding: .48rem .6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); border-bottom: 1px solid var(--rule-strong); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { overflow-wrap: anywhere; }
+  table.gate { table-layout: fixed; }
+  table.gate th:first-child { width: 22%; }
+  .card { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0; }
+  .note { border-left: 3px solid var(--warn-rule); background: var(--warn-bg); border-radius: 0 6px 6px 0; padding: .75rem 1rem; margin: 1rem 0; }
+  .note strong:first-child { display: block; margin-bottom: .2rem; }
+  .alarm { border: 2px solid var(--alarm-rule); background: var(--alarm-bg); border-radius: 8px; padding: 1rem 1.15rem; margin: 1rem 0 1.3rem; }
+  .alarm .big { display: block; color: var(--alarm); font-size: 1.12rem; font-weight: 700; margin-bottom: .35rem; letter-spacing: -0.005em; }
+  .sev { display: inline-block; min-width: 1.35rem; text-align: center; font-weight: 700; font-size: .78rem; padding: .1rem .38rem; border-radius: 4px; font-family: ui-monospace, monospace; }
+  .sev.a { color: var(--sev-a); background: var(--sev-a-bg); }
+  .sev.b { color: var(--sev-b); background: var(--sev-b-bg); }
+  .sev.c { color: var(--sev-c); background: var(--sev-c-bg); }
+  .sev.d { color: var(--sev-d); background: var(--sev-d-bg); }
+  .pill { display: inline-block; font-size: .76rem; font-weight: 600; letter-spacing: .03em; padding: .12rem .5rem; border-radius: 999px; border: 1px solid var(--rule-strong); color: var(--ink-dim); white-space: nowrap; }
+  .pill.ok, .pill.driven { color: var(--ok); background: var(--ok-bg); border-color: transparent; }
+  .pill.tested { color: var(--sev-b); background: var(--sev-b-bg); border-color: transparent; }
+  .pill.fail { color: var(--alarm); background: var(--alarm-bg); border-color: transparent; }
+  .fid { font-family: ui-monospace, monospace; font-weight: 700; white-space: nowrap; }
+  .loc { font-family: ui-monospace, monospace; font-size: .82em; color: var(--ink-faint); white-space: nowrap; }
+  .lede { font-size: 1.02rem; color: var(--ink-dim); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: .28rem 1rem; font-size: .93rem; margin: .6rem 0; }
+  .kv dt { color: var(--ink-faint); }
+  .kv dd { margin: 0; }
+  .ask { border: 1px solid var(--accent); border-radius: 8px; padding: .9rem 1.1rem; margin: 1rem 0; background: var(--panel); }
+  .ask h4 { color: var(--accent); margin-top: 0; }
+  .ask h5 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); margin: 1rem 0 .2rem; }
+  blockquote { margin: .8rem 0; padding: .7rem 1rem; border-left: 3px solid var(--accent); background: var(--panel-2); border-radius: 0 6px 6px 0; }
+  blockquote p:first-child { margin-top: 0; }
+  blockquote p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  footer.page { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--ink-faint); font-size: .85rem; }
+  .small { font-size: .88rem; color: var(--ink-dim); }
+  .measured { color: var(--ink-faint); font-size: .82rem; font-style: italic; }
+  @media (max-width: 34rem) {
+    body { padding: 1.4rem .8rem 3rem; font-size: 15px; }
+    table { font-size: .86rem; display: block; overflow-x: auto; }
+    table.gate { display: table; }
+    .kv { grid-template-columns: 1fr; gap: .1rem .5rem; }
+    .kv dd { margin-bottom: .45rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="page">
+  <h1>Daily review — 2026-09-18</h1>
+  <div class="sub">
+    Branch <code>autonomous/2026-09-17-daily</code> · <strong>2 days</strong>
+    (2026-09-17 → 2026-09-18) · merge gate <strong>held open</strong> — CI has not concluded at
+    <code>HEAD</code> · <strong>one spec loop run to completion</strong>,
+    <code>a-refused-capability-reaches-the-operator</code> (F376/F378), R1/R2/R3 all done,
+    <strong>nothing implemented</strong> · one new finding, <code>F381</code> (C) ·
+    <strong>nothing built last night</strong>, backlog was decision-gated
+  </div>
+</header>
+
+<p class="lede">
+  What this page needs from you: a call on the <strong>merge-gate cadence</strong> (§1), and a
+  decision on <code>a-refused-capability-reaches-the-operator</code> — approve it for tonight's
+  build, or hold it for another reason (§4). If you approve nothing, the FIX window falls to the
+  default queue in §5.
+</p>
+
+<!-- ============================== decisions ============================== -->
+<div class="ask">
+  <h4>What only you can decide</h4>
+  <ol>
+    <li id="d1">
+      <strong>The merge gate's cadence.</strong> Held three of its four conditions at two
+      consecutive firings, failing only on "CI concluded green at <code>HEAD</code>." Each
+      firing's own commit starts a 13+ minute CI run, and firings have been landing under two
+      minutes apart — the gate can essentially never see a fourth green. Pick one: <strong>(a)</strong>
+      a firing whose only job is the gate, making no commit of its own; <strong>(b)</strong> the
+      gate allowed to wait for a conclusion at <code>HEAD</code>, up to some budget;
+      <strong>(c)</strong> the CI condition dropped, <code>master</code> fast-forwarded on the
+      other three. Also unexplained: CI <strong>failed</strong> on two docs/state-only commits
+      this cycle (<code>a392e9b</code>, <code>798b2a5</code>) — nobody has looked at why, and that
+      is worth an answer regardless of which cadence option you pick.
+    </li>
+    <li id="d2">
+      <strong><code>a-refused-capability-reaches-the-operator</code>: approve, revise or
+      reject.</strong> F376 <span class="sev a">A</span>, specced through R1, R2 and R3, 0/24 tasks,
+      no migration, no <code>mcp_server.py</code> edit, no UI. Two costs are recorded rather than
+      repaired inside it (D13, D14 — §4); the second was filed as its own finding, <code>F381</code>
+      <span class="sev c">C</span>, rather than fixed in place.
+    </li>
+  </ol>
+</div>
+
+<!-- ============================== 1 ============================== -->
+<h2 id="s1"><span class="num">1</span>The branch, and the merge gate</h2>
+
+<table class="gate">
+  <tbody>
+    <tr><th>Branch</th><td><code>autonomous/2026-09-17-daily</code>, now 2 days old
+      (2026-09-17 → 2026-09-18), 9 commits ahead of <code>master</code> at the time of this page.
+      All commits this cycle are day-window <code>spec(day)</code>/<code>drive(day)</code>/
+      <code>compose(day)</code> entries; no product code has changed.</td></tr>
+    <tr><th>Merge gate</th><td><strong>Left open.</strong> Conditions 1, 2 and 4 held
+      (<code>HEAD..master</code> is 0, the tree is clean, <code>HEAD == @{u}</code>, no
+      <code>HOLD MERGE</code>). Condition 3 — CI concluded green at <code>HEAD</code> — did not:
+      at re-check this iteration, CI run <code>35327002703</code> for <code>HEAD</code>
+      (<code>76b398b</code>) was still <code>in_progress</code>, created 2026-09-18T08:57:15Z,
+      checked 2026-09-18T09:00Z — under 3 minutes in, against a measured 13+ minute floor for this
+      suite. Per instruction, a green from an earlier commit is never accepted as a substitute; no
+      merge was attempted.</td></tr>
+    <tr><th>The cadence problem</th><td>Iterations 4 and 5 both hit exactly this shape: three
+      conditions green, the fourth still running, because each iteration's own commit restarts the
+      clock and firings have been arriving faster than a CI run completes. Iteration 5 measured the
+      gap directly — this firing began 1m31s after its predecessor's push, and the predecessor's own
+      run was still <code>in_progress</code> 11 minutes in. The three options are above in
+      "What only you can decide."</td></tr>
+    <tr><th>Two unexplained CI failures</th><td><code>a392e9b</code> and <code>798b2a5</code>, both
+      docs/state-only commits (queue composition and a night-close entry, no <code>src/</code>,
+      <code>hub/</code> or <code>tests/</code> touched), both failed CI this cycle while every
+      code-bearing commit since has passed. Nobody has looked at why. Either a flake, or a gate that
+      fires on something docs-only commits shouldn't trip — worth a look independent of the cadence
+      decision.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================== 2 ============================== -->
+<h2 id="s2"><span class="num">2</span>What the night built</h2>
+
+<p>
+  <strong>Nothing, so there was nothing to drive.</strong> The 2026-09-17 night window read the
+  backlog and found it fully decision-gated: the one unarchived change,
+  <code>an-unstaffed-review-names-its-holders</code>, is stopped at its review pending a
+  re-derivation round <code>DIRECTION.md</code> did not assign to that window; every open
+  severity-A finding was either decision-gated, undrivable, or lacked a proposal
+  (<code>2026-09-17-night-log.md</code>). The window set its queue to empty and
+  <code>next_action</code> to <code>null</code> rather than spend a firing rediscovering the same
+  block. A background <code>py -3.11 -m pytest hub/tests/</code> run was started to check
+  tree-green but had not finished after 105 minutes when the window closed (heavy contention from
+  two unrelated processes, not the F292/F295 lock-hang shape — CPU time kept climbing throughout).
+  Its result is at <code>.claude/autonomous/tmp/2026-09-17-hubtests-compose.log</code>, unread by
+  any window so far; whoever runs D-6 tonight should check it before trusting tree-green.
+</p>
+
+<!-- ============================== 3 ============================== -->
+<h2 id="s3"><span class="num">3</span>D-1's drive, and F381</h2>
+
+<p>
+  <strong>D-1 reproduced F376/F378 independently of <code>:8000</code>.</strong> On the trial Hub
+  (<code>:8010</code>), a fresh project with one <code>claude-haiku-4-5-20251001</code> agent made
+  one real turn calling <code>create_flow</code>. All 5 checks the drive script asserted passed:
+  F376's exact refusal sentence reproduced verbatim, and <code>permission_requests</code> held 0
+  rows for the triggering agent (read-only <code>sqlite</code> check against the trial profile
+  database) — confirming the refusal's promised approval path never materializes, on a Hub neither
+  finding was originally filed against. Script: <code>scripts/drive/d1_0918_refused_capability.py</code>.
+  Fixture project deleted and the Hub process stopped afterward; no job left enabled.
+</p>
+
+<p>
+  <strong>F381 <span class="sev c">C</span></strong> — a question nobody is waiting on can outrank
+  one an agent is actually blocked on, in that same agent's tray. One sentence,
+  <code>hub/ui/src/lib/pendingQuestions.ts:38</code>: the tray's sort treats
+  <code>asker_waiting !== false</code> as "someone is actually waiting," but
+  <code>hub/hub/api/v1/questions.py:333-344</code> makes <code>asker_waiting</code> a constant
+  <code>True</code> for any question with no run — which is every operator-posted question,
+  including the one this change opens. Filed from reading the code during R3, not from a drive; not
+  yet observed live (needs an operator-posted question and a blocking one outstanding for the same
+  agent at once). Repair shape is in the finding: either <code>asker_waiting</code> stops presuming
+  for a non-blocking question, or the tray's sort reads <code>blocking</code> itself.
+</p>
+
+<!-- ============================== 4 ============================== -->
+<h2 id="s4"><span class="num">4</span><code>a-refused-capability-reaches-the-operator</code></h2>
+
+<p>
+  <strong>The problem (F376/F378).</strong> An agent calls <code>create_flow</code> and is refused
+  with a 403 that names an approval path — <code>permission_requests</code> — that nothing ever
+  writes to. The refusal exists only inside the agent's own transcript; the operator, who may have
+  just said they were leaving, has nothing waiting for them on return. F378 is the same shape one
+  tool over: <code>request_agent</code> reads templates from a table (<code>project_sessions</code>)
+  that no surface writes and that holds 0 rows on the entire Hub, so its 400 can never succeed.
+</p>
+
+<p>
+  <strong>The argument (R1).</strong> Rejected <code>DIRECTION.md</code>'s framing of what the
+  operator would be approving and of the record's lifetime; adopted the honest half of the
+  alternative — the refusal's sentence should be true rather than aspirational — and added a durable
+  question of record: a refused capability call opens a question the operator can see and answer,
+  rather than a card that promises a review nothing produces.
+</p>
+
+<p>
+  <strong>What R2 changed.</strong> Re-derived all five of R1's nominated claims against the code
+  independently and confirmed them, but found one thing R1 and <code>DIRECTION.md</code> had not
+  considered: the record R1 designed carries no run, and therefore no <code>conversation_id</code>
+  (design <strong>D10</strong>). Three readers join a question to its context through
+  <code>conversation_id</code>; two of them would have reported a working run as waiting on the
+  operator forever if the record had gone out un-derived. R2 also measured <code>blocking=False</code>'s
+  cost on the operator panel (D11) and verified, by running it, <code>QuestionCreate</code>'s
+  mandatory fields (D12).
+</p>
+
+<p>
+  <strong>What R3 changed.</strong> The decision survived a third independent re-derivation, but two
+  tasks beneath it did not:
+</p>
+<ul>
+  <li><strong>D13</strong> — the dedupe's "a no is a no" branch keyed on <code>answer_labels</code>,
+    which both answering surfaces (<code>AnswerForm.tsx:33-38</code>,
+    <code>AgentOutputPanel.tsx:934-942</code>) leave empty for every <em>typed</em> answer — verified
+    by running <code>QuestionAnswer</code> directly. So an operator who typed "no, leave it off, too
+    expensive" would have been read as affirmative, and the rule written to stop the Hub nagging
+    would have nagged. Replaced with a rule that never reads the answer's polarity.</li>
+  <li><strong>D7</strong> — the tool list named a tool, <code>update_job</code>, that does not
+    exist (it's a PATCH route reached by <code>toggle_job</code>), and never named
+    <code>create_job</code> — the plainest of the six and the likeliest for an agent to reach for.
+    Cross-checked against <code>agents.py</code>'s <code>_Operation</code> table, which lists the
+    same six tools neither earlier round had gotten right.</li>
+</ul>
+
+<p>
+  <strong>Costs recorded rather than repaired.</strong> Two: <strong>D13</strong>'s own dedupe
+  scan runs with no index on the columns it filters (bounded — 32 questions on the busiest trial
+  project — and a migration was deliberately not proposed for it), and <strong>D14</strong> — a
+  fourth reader, the conversation tray, survives D10's fix because it keys on
+  <code>from_agent</code> rather than <code>conversation_id</code>, and is unfiltered by
+  <code>blocking</code>, so the record this change opens can outrank a real blocker in the same
+  agent's tray. D14 was not repaired inside this change — the behaviour belongs to every run-less
+  question, not to this one record — and was filed separately as <strong>F381</strong> (§3) so it
+  outlives this change's eventual archive.
+</p>
+
+<p class="small">
+  Said plainly, because the operator funds the rounds: <strong>no round changed nothing.</strong> R2
+  found D10, without which the record could have gone out silently wrong for a working run. R3 found
+  two defects that would have shipped and passed their own tests — a dedupe branch that could not
+  fire on the exact input it exists to handle, and a tool list that named a tool nobody can call
+  while omitting the one agents will actually reach for. <code>openspec validate --strict</code>
+  passes; <code>0/24</code> tasks; nothing implemented.
+</p>
+
+<!-- ============================== 5 ============================== -->
+<h2 id="s5"><span class="num">5</span>The default night queue, if you approve nothing</h2>
+
+<p>
+  <code>a-refused-capability-reaches-the-operator</code> is the only change that reached IMPL
+  readiness today, and it stopped there deliberately — a change this window's round discipline
+  produces is not self-approving. If you approve nothing tonight, the FIX window has no ready
+  change to build and falls to the open-findings default: severity A first, and the open A list is
+  <code>an-unstaffed-review-names-its-holders</code>' own gate (stopped at REV, needs its own
+  re-derivation round, not assigned to tonight) plus the same decision-gated/undrivable/no-proposal
+  set the 2026-09-17 night already surveyed. The most likely outcome, absent an approval, is another
+  night that lands no feature.
+</p>
+
+<!-- ============================== 6 ============================== -->
+<h2 id="s6"><span class="num">6</span>Research highlights</h2>
+
+<p>
+  <code>spec-queue/research/2026-09-18.md</code> ranked three candidates, none colliding with
+  today's steered work (<code>hub/hub/scheduler.py</code> + <code>checkpoint_generation.py</code>,
+  <code>src/agentweave/cli.py</code>, a <code>tool_use</code> reading — none of it touches
+  <code>agents.py</code> or the flow/refusal surface this change lives in):
+</p>
+<ol>
+  <li><strong>Label the checkpoint body as the model-authored account it is.</strong>
+    <code>_compose_loop_briefing</code> labels operator-authored sections as data but splices the
+    prior checkpoint's rendered body in bare, at the same heading level as the briefing's own
+    instructions — the same prompt-injection class OpenAI reported in a model's own compaction
+    summary and OpenSpec patched in a config value, both on 2026-09-16.</li>
+  <li><strong>F297 — make <code>agentweave stop</code> graceful on Windows.</strong> Already
+    measured: <code>taskkill /PID &lt;pid&gt; /F</code> runs no <code>atexit</code> and no SIGTERM
+    handler, so run teardown never fires; <code>CTRL_BREAK_EVENT</code> was already proven to run
+    the same teardown in 0.42s, and its precondition (<code>CREATE_NEW_PROCESS_GROUP</code>) is
+    already shipped. Closest thing in the ledger to buildable without a decision.</li>
+  <li><strong>Put a coverage reading on review verdicts.</strong> <code>update_task</code>'s verdict
+    is a bare enum plus free text with nothing checkable against it, while the Hub already knows
+    exactly which files a reviewer's detached checkout exposed and logs every <code>tool_use</code>
+    row — the same instrument already built for checkpoints. Motivated by <em>OverclaimBench</em>
+    (arXiv 2609.20812, 2026-09-17): reviewers that don't read everything they were asked to are
+    misleading 80.4% of the time, and miss planted defects at ~1.8× the rate.</li>
+</ol>
+
+<footer class="page">
+  Generated by the day window, iteration 5, 2026-09-18. Every claim above is measured against the
+  branch at <code>HEAD</code> or labelled unverified; nothing here was guessed.
+</footer>
+
+</div>
+</body>
+</html>

@@ -1481,3 +1481,31 @@ it tonight. Before anyone does, fix its task 4.2: it names migration `0100`, and
 If the window finishes both, the next most valuable thing is **F188** — the last severity-A finding
 with no change and no design (see `DECISIONS.md`, *Not decisions*). Spec it; do not repair it
 directly.
+
+---
+
+## 2026-09-18
+
+Written by the day window, iteration 5, from `review/review-2026-09-18.html`. **No status token is
+supplied below. That is the operator's to write.**
+
+`a-refused-capability-reaches-the-operator` — F376 (A) / F378 (B). Three independent spec rounds
+(R1, R2, R3) all done today; `openspec validate --strict` passes; `0/24` tasks; nothing implemented.
+R2 changed the record's shape (D10: it carries no run and therefore no `conversation_id`, or a
+working run reports as stuck forever to two of three readers). R3 found two defects in the tasks
+beneath the surviving decision: a dedupe branch that could not fire on a typed answer (D13, keyed on
+a field both answering surfaces leave empty when the operator types instead of clicking), and a tool
+list naming `update_job`, which does not exist, while omitting `create_job`, the one agents are
+likeliest to reach for (D7). Two costs recorded rather than repaired inside the change: D13's
+unindexed dedupe scan (bounded, no migration proposed) and D14, a fourth reader (the conversation
+tray) that can still rank this change's own non-blocking record ahead of a real blocker in the same
+agent's tray — filed separately as `F381` (C) so it outlives this change's archive. No migration, no
+`mcp_server.py` edit, no UI.
+
+Also open: the merge gate's cadence (§1 of the review page) — three of four conditions have now held
+at two consecutive firings, failing only because each firing's own commit restarts a 13+ minute CI
+clock faster than firings arrive. Three options are on the page; none has been picked.
+
+If you approve nothing, the FIX window falls to the same decision-gated default the 2026-09-17 night
+already surveyed and closed with an empty queue (§5 of the page). There is deliberately no `ORDER:`
+line here.
