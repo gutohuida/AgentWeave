@@ -29277,3 +29277,47 @@ to every run-less question and not to that record.
 
 **Related:** F376 (the change that surfaced it), F14 (attention state reported about a run that is
 not waiting).
+
+---
+
+## F382 (C) — `pytest hub/tests/ -q` stalled indefinitely overnight with no error, and a same-morning rerun could not reproduce the stall
+
+**Status:** open, undiagnosed. Filed 2026-09-18 by the day window's D-6 unit, from reading a
+background run's own log rather than from a drive.
+
+**Source:** drive (a background command, not a product surface) — found by checking a run this
+same queue had flagged as unresolved rather than trusting tree-green.
+**Theme:** Testing & CI
+
+**The night window (2026-09-17) started `py -3.11 -m pytest hub/tests/ -q`** at compose time,
+logging to `.claude/autonomous/tmp/2026-09-17-hubtests-compose.log`, to check tree-green before
+closing. That window ended without a verdict — still running past 105 minutes — and queued
+checking it as a `D-6` candidate for today rather than blocking on it.
+
+**Measured this morning, before touching anything.** The log file's last line is frozen at
+`[ 14%]` with 21 trailing dots and no percentage marker after them — mid-batch, not between
+batches. Its mtime is `2026-09-17 23:10`, unchanged for **over ten hours** at the time of this
+check (`2026-09-18 09:10 UTC`). No process on the machine has that command line any more
+(`Get-CimInstance Win32_Process` over every `python.exe`, cross-checked against PIDs individually)
+— it did not finish, did not error into the log, and did not survive to be killed by anything that
+left a trace. Nothing else in `hub/tests/` or the environment changed between compose time and this
+check (`git diff` over the same window is empty).
+
+**A same-morning rerun passed the exact point that killed the first one.** Started a fresh
+`py -3.11 -m pytest hub/tests/ -q` at `09:06 UTC`, logging to
+`.claude/autonomous/tmp/2026-09-18-hubtests-d6.log`, and watched it rather than trusting its exit
+code alone: it crossed `14%` cleanly at `09:12:19`, no gap longer than the ordinary per-batch delay,
+and reached `19%` by `09:15:02` — a rate (~2%/minute) that would finish the suite in well under the
+"105 minutes and still at 14%" the night run measured. No `FAILED` or `ERROR` line in either log.
+
+**Why this is the finding, not a thing to fix.** A stall that reproduces would name a test; this one
+did not reproduce on the same machine, same suite, same day, at the same completion point, which
+rules out a simple ordering or fixture bug as the *only* explanation and points instead at something
+environmental — a leaked lock, a port two runs raced for (the trial Hub on `:8010` and the operator's
+`:8000` were both live overnight per this window's own logs), or a resource that one run's leftover
+state starved the other of. Guessing at which without a second stall to compare against would be
+exactly the blind fix this window's own instructions warn against. The fresh run was left running in
+the background at the time of filing (`.claude/autonomous/tmp/2026-09-18-hubtests-d6.log`) rather
+than killed, so its eventual conclusion is on record for whoever next picks this up.
+
+**Related:** none yet — first time this shape has been filed.
