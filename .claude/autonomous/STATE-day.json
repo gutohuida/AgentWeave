@@ -1,81 +1,81 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds').",
-    "playbook":  ".claude/loops/day-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-17-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "f9db321",
-    "stop_at":  "2026-09-18T17:00:00+01:00",
-    "iteration":  2,
-    "log_file":  ".claude/autonomous/2026-09-18-day-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "refused-capability-r1",
-    "next_action":  "refused-capability-r1 -- Spec R1 for a-refused-capability-reaches-the-operator (F376/F378). D-1's reproduction is done and confirmed (scripts/drive/FINDINGS.md, the addendum after F380): the refusal's exact sentence fires on create_flow, and permission_requests holds 0 rows for the run that triggered it, on a fresh trial-Hub project independent of :8000/LoopEngine_2. Do NOT re-derive that diagnosis. Explore hub/hub/api/v1/jobs.py's _require_agent_job_allowance (:32-51) and the create_flow refusal path in hub/hub/mcp_server.py (:768-795), and hub/hub/db/models.py:Project.allow_agent_jobs. Decide, with an argument, between (a) the 403 raises a permission_requests row so the promised approval path becomes real, or (b) the refusal's wording stops promising an approval and instead names the setting (allow_agent_jobs) and where an operator changes it (ProjectSettingsPanel.tsx:146) -- do not assume (a) is right; record the rejected option and why. If (a): also answer what happens to the agent's turn while it waits (does the tool call block, timeout, or return immediately with a pending-request id?). `openspec new change` refuses a name starting with a digit, so name it a-refused-capability-reaches-the-operator or similar. Write proposal.md, design.md, tasks.md, and specs/<capability>/spec.md deltas under openspec/changes/<name>/. Blast radius: hub/hub/api/v1/jobs.py and whatever raises the request -- shares no file with F378's repair (not queued today). After writing, log what the proposal says and move to refused-capability-r2 in the same firing if time and budget allow; otherwise queue it as next_action for the following firing.",
-    "queue":  [
-                  {
-                      "id":  "D-0",
-                      "status":  "open",
-                      "title":  "Retry the merge gate on 45f2813/a392e9b",
-                      "detail":  "Re-measured at iteration 2: conditions 1, 2, 4 true; condition 3 (CI success at HEAD's exact sha) still unmet -- HEAD a392e9b showed CI in_progress. Re-measure all four again next time the queue returns here; never accept a green from an earlier commit."
-                  },
-                  {
-                      "id":  "D-1",
-                      "status":  "done",
-                      "title":  "Scoped drive: reproduce F376/F378 on the trial Hub (:8010)",
-                      "detail":  "Done at iteration 2. scripts/drive/d1_0918_refused_capability.py: fresh project, one claude-haiku-4-5-20251001 agent, one real turn calling create_flow. 5/5 checks passed -- F376's exact refusal sentence reproduced, permission_requests holds 0 rows for the triggering agent (read-only sqlite check against the trial profile db). Addendum appended to scripts/drive/FINDINGS.md after F380. Fixture project deleted, :8010 Hub process stopped, no job left enabled."
-                  },
-                  {
-                      "id":  "refused-capability-r1",
-                      "status":  "open",
-                      "title":  "Spec R1 -- a-refused-capability-reaches-the-operator (F376, F378)",
-                      "detail":  "Drain was 1 at 2026-09-17 ~23:00: one spec loop. Explore hub/hub/api/v1/agents.py's POST /jobs allowance check and the refusal path. Decide, with an argument, (a) raise a permission_requests row on refusal vs (b) tell the truth in the refusal message instead (name the setting, its value, where it lives) -- do not assume (a); record the rejected option. If (a), also answer what happens to the agent's turn while it waits. Write openspec/changes/<name>/proposal.md, design.md, tasks.md, specs/<capability>/spec.md deltas. `openspec new change` refuses a name starting with a digit. Blast radius: hub/hub/api/v1/agents.py and whatever raises the request -- shares no file with item 2 (not queued today, drain permitting)."
-                  },
-                  {
-                      "id":  "refused-capability-r2",
-                      "status":  "open",
-                      "title":  "Spec R2 -- re-derive against the code, independently",
-                      "detail":  "Fresh comparison of R1's proposal against hub/hub/api/v1/agents.py and the write/response path it proposes -- not a re-read of R1's reasoning. Fix the proposal where the code disagrees. `openspec validate --strict <name>` must pass; it reads only a requirement's first physical line for the modal, so SHALL goes on line 1."
-                  },
-                  {
-                      "id":  "refused-capability-r3",
-                      "status":  "open",
-                      "title":  "Spec R3 -- re-derive again, independently",
-                      "detail":  "Same instruction as R2, fresh -- a second independent comparison against the actual code, not against R2's reasoning. If the round changes nothing, say so explicitly in the log. Re-run `openspec validate --strict`."
-                  },
-                  {
-                      "id":  "D-5",
-                      "status":  "open",
-                      "title":  "The review page",
-                      "detail":  "Write spec-queue/review/review-2026-09-18.html -- self-contained HTML, no external stylesheets/scripts/fonts, full DOCTYPE/html/head/body wrapper, light colours on bare :root redefined under @media (prefers-color-scheme: dark), explicit body background. Six sections per day-window.md D-5: (1) branch autonomous/2026-09-17-daily, 2 days (2026-09-17..18), and what D-0's gate did; (2) what last night built (nothing -- backlog was decision-gated, see 2026-09-17-night-log.md); (3) D-1's drive findings, severity, one sentence, file:line; (4) the refused-capability-reaches-the-operator spec: the problem, the argument, what R2/R3 each changed, the cost, explicitly if a round changed nothing; (5) the default night queue if the operator approves nothing; (6) research/2026-09-18.md highlights, briefly. Append a row to spec-queue/APPROVALS.md, no status token. Reserve this: if the firing starts within 45 minutes of stop_at, do this whatever else is left."
-                  },
-                  {
-                      "id":  "D-6",
-                      "status":  "open",
-                      "title":  "Repairs that need no spec, if the day has room",
-                      "detail":  "Only after D-0..D-5 are done, and only if day-window.md's D-6 carve-out holds in full (no openspec/specs/ requirement touched, no migration/API/schema change, an existing finding with a reproduction, fix smaller than its argument). Candidates: check .claude/autonomous/tmp/2026-09-17-hubtests-compose.log (background hub-suite run from last night, still running at 105+ minutes when the night window closed -- read its outcome before trusting tree-green). DRIVE any fix before closing it; set the finding's Status line to fixed <sha>."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "notes":  [
-                  "Research delivered on time: spec-queue/research/2026-09-18.md copied from ~/.claude/routines/agentweave-research/out/research-2026-09-18.md.",
-                  "DIRECTION.md's ## 2026-09-18 section (written 2026-09-17 evening) is fully prescriptive: item 1 of the spec loop is a-refused-capability-reaches-the-operator (F376/F378); item 2 (F379) only fires if tonight's FIX window clears an-unstaffed-review-names-its-holders first, dropping drain to 0 -- not queued today. F377/F378's flow-starts-from-document change is explicitly deferred to tomorrow.",
-                  "Drain measured at compose: 1 unbuilt specced change (an-unstaffed-review-names-its-holders, stopped at REV per its own tasks.md, needs a re-derivation round DIRECTION.md does not assign to today). One spec loop only."
-              ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+  "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds').",
+  "playbook": ".claude/loops/day-window.md",
+  "runner": "claude",
+  "model": "opus",
+  "permission_mode": "unattended-full-access",
+  "branch": "autonomous/2026-09-17-daily",
+  "parent_branch": "master",
+  "parent_sha": "f9db321",
+  "stop_at": "2026-09-18T17:00:00+01:00",
+  "iteration": 3,
+  "log_file": ".claude/autonomous/2026-09-18-day-log.md",
+  "findings_file": "scripts/drive/FINDINGS.md",
+  "approvals_file": "spec-queue/APPROVALS.md",
+  "current": "refused-capability-r2",
+  "next_action": "TWO STEPS, in this order, and step 1 is cheap. STEP 1 - retry D-0's merge gate FIRST, before any commit of your own, because the tree is clean at a firing's start and that is the only moment condition 2 can hold. Measured at iteration 3: CI concluded **success** at d3adcbc, master had not moved (HEAD..origin/master = 0), no HOLD MERGE. Only the dirty tree stopped it. Re-measure all four at HEAD's exact sha - note CI failed on a392e9b and 798b2a5, so a green is not assumed - and if all four hold, `git checkout master && git merge --ff-only <branch>` then push, then return to the branch. If CI has not concluded at HEAD, leave D-0 open and go straight to step 2. STEP 2 - refused-capability-r2: an INDEPENDENT re-derivation of openspec/changes/a-refused-capability-reaches-the-operator against the actual code, not a re-read of R1's reasoning. R1 chose a durable question of record (questions table, ask_question_for_actor) over a permission_requests row, and a 403 with no wait over 409 operator_direction_required; the argument and every file:line it rests on are in design.md D1-D9. Attack, by reading the code: (i) does anything sweep or expire `questions`; (ii) is `blocking=False` right - it is what routes the answer down the queued-and-woken path, but check what the operator's panel reads `blocking` for; (iii) is opening a question safe inside the gate's session at all four call sites of _require_agent_job_allowance (jobs.py:568, :847, :1163, :1294) given ask_question_for_actor commits; (iv) does a 403 dict detail reach an MCP agent as a readable sentence (_readable_detail, mcp_server.py:124); (v) task 2.3's interaction between the allowance gate and require_operator_direction in archive_job. Fix the proposal where the code disagrees, record what you changed in design.md's Rounds section, and re-run `openspec validate --strict a-refused-capability-reaches-the-operator` (it reads only a requirement's first physical line for the modal, so SHALL stays on line 1). Do NOT start R3 in the same firing - the round's whole value is independence.",
+  "queue": [
+    {
+      "id": "D-0",
+      "status": "open",
+      "title": "Retry the merge gate at the START of a firing",
+      "detail": "Re-measured at iteration 3: CI **success** at d3adcbc, master not moved, no HOLD MERGE - three of four held and only the firing's own dirty tree stopped it. Lesson: this step must run at a firing's START, before any commit. Never accept a green from an earlier commit; CI failed on a392e9b and 798b2a5."
+    },
+    {
+      "id": "D-1",
+      "status": "done",
+      "title": "Scoped drive: reproduce F376/F378 on the trial Hub (:8010)",
+      "detail": "Done at iteration 2. scripts/drive/d1_0918_refused_capability.py: fresh project, one claude-haiku-4-5-20251001 agent, one real turn calling create_flow. 5/5 checks passed -- F376's exact refusal sentence reproduced, permission_requests holds 0 rows for the triggering agent (read-only sqlite check against the trial profile db). Addendum appended to scripts/drive/FINDINGS.md after F380. Fixture project deleted, :8010 Hub process stopped, no job left enabled."
+    },
+    {
+      "id": "refused-capability-r1",
+      "status": "done",
+      "title": "Spec R1 -- a-refused-capability-reaches-the-operator (F376)",
+      "detail": "Done at iteration 3. openspec/changes/a-refused-capability-reaches-the-operator/ written (proposal, design, tasks 0/21, test-guide, specs/agent-capability-plane delta); `openspec validate --strict` passes. Rejected DIRECTION's (a) on lifetime (permission_requests is turn-scoped: 120s expire + run-end sweep) and on what the operator would be approving; adopted (b)'s honest sentence as half; chose a durable question of record. Full argument in the iteration-3 log entry."
+    },
+    {
+      "id": "refused-capability-r2",
+      "status": "open",
+      "title": "Spec R2 -- re-derive against the code, independently",
+      "detail": "Independent re-derivation against the code, not a re-read of R1. The five claims worth attacking are listed in next_action and in design.md's Rounds section. `openspec validate --strict` must pass; SHALL on line 1."
+    },
+    {
+      "id": "refused-capability-r3",
+      "status": "open",
+      "title": "Spec R3 -- re-derive again, independently",
+      "detail": "Same instruction as R2, fresh -- a second independent comparison against the actual code, not against R2's reasoning. If the round changes nothing, say so explicitly in the log. Re-run `openspec validate --strict`."
+    },
+    {
+      "id": "D-5",
+      "status": "open",
+      "title": "The review page",
+      "detail": "Write spec-queue/review/review-2026-09-18.html -- self-contained HTML, no external stylesheets/scripts/fonts, full DOCTYPE/html/head/body wrapper, light colours on bare :root redefined under @media (prefers-color-scheme: dark), explicit body background. Six sections per day-window.md D-5: (1) branch autonomous/2026-09-17-daily, 2 days (2026-09-17..18), and what D-0's gate did; (2) what last night built (nothing -- backlog was decision-gated, see 2026-09-17-night-log.md); (3) D-1's drive findings, severity, one sentence, file:line; (4) the refused-capability-reaches-the-operator spec: the problem, the argument, what R2/R3 each changed, the cost, explicitly if a round changed nothing; (5) the default night queue if the operator approves nothing; (6) research/2026-09-18.md highlights, briefly. Append a row to spec-queue/APPROVALS.md, no status token. Reserve this: if the firing starts within 45 minutes of stop_at, do this whatever else is left."
+    },
+    {
+      "id": "D-6",
+      "status": "open",
+      "title": "Repairs that need no spec, if the day has room",
+      "detail": "Only after D-0..D-5 are done, and only if day-window.md's D-6 carve-out holds in full (no openspec/specs/ requirement touched, no migration/API/schema change, an existing finding with a reproduction, fix smaller than its argument). Candidates: check .claude/autonomous/tmp/2026-09-17-hubtests-compose.log (background hub-suite run from last night, still running at 105+ minutes when the night window closed -- read its outcome before trusting tree-green). DRIVE any fix before closing it; set the finding's Status line to fixed <sha>."
+    }
+  ],
+  "decisions_for_user": [],
+  "notes": [
+    "Research delivered on time: spec-queue/research/2026-09-18.md copied from ~/.claude/routines/agentweave-research/out/research-2026-09-18.md.",
+    "DIRECTION.md's ## 2026-09-18 section (written 2026-09-17 evening) is fully prescriptive: item 1 of the spec loop is a-refused-capability-reaches-the-operator (F376/F378); item 2 (F379) only fires if tonight's FIX window clears an-unstaffed-review-names-its-holders first, dropping drain to 0 -- not queued today. F377/F378's flow-starts-from-document change is explicitly deferred to tomorrow.",
+    "Drain measured at compose: 1 unbuilt specced change (an-unstaffed-review-names-its-holders, stopped at REV per its own tasks.md, needs a re-derivation round DIRECTION.md does not assign to today). One spec loop only.",
+    "Iteration 3 measured, for D-5: CI concluded success at d3adcbc but FAILED at a392e9b and 798b2a5 (both compose commits, docs/state only). Nobody has looked at why; it is not this cycle's work but the review page should say the branch's CI is intermittent.",
+    "The gate's structural problem, worth one line to the operator: every iteration commits and pushes, so HEAD's CI is in progress for ~13 minutes afterwards. The gate can therefore only pass at the START of a firing. Iterations 1 and 2 both checked it and then moved on; iteration 3 found it green but already dirty."
+  ],
+  "limits": [
+    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+    "Every claim is measured or labelled unverified.",
+    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+    "Tests under py -3.11, never bare python. black needs --target-version py311.",
+    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+  ]
 }
