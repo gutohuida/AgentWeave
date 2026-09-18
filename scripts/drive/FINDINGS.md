@@ -29376,6 +29376,25 @@ already labelled them "docs/state only" without a log excerpt); whether the flak
 locally; whether it is specific to `test_reviewer_is_not_the_author.py`'s fixtures or a broader
 sqlite-under-CI contention issue. Filed from reading CI history, not from a drive; no code changed.
 
+**UPDATE, iteration 22 (2026-09-18 ~10:30 UTC):** a second, independent instance landed while
+retrying D-0's gate. `c0070c0` (iteration 18's retry commit, also state-only), run `35333364732`,
+concluded `failure` at `10:27:15Z` after `952.38s` (15m52s) — same file, a *different* test:
+
+```
+ERROR tests/test_reviewer_is_not_the_author.py::test_assigning_a_reviewer_and_sending_to_review_in_one_patch_is_accepted
+  - sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+[SQL: BEGIN IMMEDIATE]
+===== 4432 passed, 20 skipped, 248 warnings, 1 error in 952.38s (0:15:52) ======
+```
+
+Two different tests in `test_reviewer_is_not_the_author.py`, both erroring on the same `BEGIN
+IMMEDIATE` lock, across two different state-only commits (`5b29c2f`, `c0070c0`) — this is no longer
+a single anomalous run. The shape now points at the file's own fixtures (shared sqlite handle, or a
+review-staffing helper that opens a write transaction without retry/backoff) rather than a one-off
+CI scheduling fluke. Still not investigated further: reading that test file's setup/teardown to find
+the shared resource. Filed from reading CI history during the routine D-0 check, not from a drive;
+no code changed.
+
 **Related:** F382 (a different, unreproduced pytest stall, on this machine rather than in CI — not
 obviously the same mechanism, but both are unexplained sqlite/test-run timing issues surfacing
 around this branch's own test runs).
