@@ -29282,8 +29282,9 @@ not waiting).
 
 ## F382 (C) — `pytest hub/tests/ -q` stalled indefinitely overnight with no error, and a same-morning rerun could not reproduce the stall
 
-**Status:** open, undiagnosed. Filed 2026-09-18 by the day window's D-6 unit, from reading a
-background run's own log rather than from a drive.
+**Status:** open, undiagnosed; the rerun that motivated it concluded clean (addendum below).
+Filed 2026-09-18 by the day window's D-6 unit, from reading a background run's own log rather than
+from a drive.
 
 **Source:** drive (a background command, not a product surface) — found by checking a run this
 same queue had flagged as unresolved rather than trusting tree-green.
@@ -29319,5 +29320,17 @@ state starved the other of. Guessing at which without a second stall to compare 
 exactly the blind fix this window's own instructions warn against. The fresh run was left running in
 the background at the time of filing (`.claude/autonomous/tmp/2026-09-18-hubtests-d6.log`) rather
 than killed, so its eventual conclusion is on record for whoever next picks this up.
+
+**Addendum, iteration 12 (2026-09-18 ~09:45 UTC): the rerun concluded, and it is clean.**
+`.claude/autonomous/tmp/2026-09-18-hubtests-d6.log`'s final line: `4440 passed, 86 skipped, 262
+warnings in 2301.58s (0:38:21)` — zero `FAILED`, zero `ERROR`. The only warning in the tail is a
+`PytestUnhandledThreadExceptionWarning` from `aiosqlite`'s connection worker thread hitting a closed
+event loop during teardown (`RuntimeError: Event loop is closed`), which is textbook async-fixture
+teardown-ordering noise, not a test failure, and not the shape of a 10-hour freeze. The suite finished
+in 38 minutes once it ran to completion — well inside the pace iteration 7 projected and nowhere near
+the "105 minutes and still at 14%" the frozen overnight run measured. This does not diagnose the
+original stall (still no reproduction, still no test name, still no traceback), but it does close the
+open question of whether the fresh rerun itself would stall too: it did not. The finding stays open
+as an unexplained one-time environmental stall, not as a suspected-still-broken suite.
 
 **Related:** none yet — first time this shape has been filed.
