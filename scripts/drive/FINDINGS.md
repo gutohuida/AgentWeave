@@ -29334,3 +29334,48 @@ open question of whether the fresh rerun itself would stall too: it did not. The
 as an unexplained one-time environmental stall, not as a suspected-still-broken suite.
 
 **Related:** none yet — first time this shape has been filed.
+
+## F383 (C) — the CI branch's own commits fail on a genuine flaky test, not only on the docs-only commits noted earlier
+
+**Where noticed:** iteration 20's D-0 gate check (2026-09-18 ~10:25 UTC), reading `gh run list` and
+`gh run view --log-failed` over the branch's own recent CI history while measuring condition 3, not
+from a drive.
+
+**What the run shows.** The gate's `decisions_for_user['merge-gate-cadence']` entry and this file's
+own notes had, until now, only two failures on record — `a392e9b` and `798b2a5`, both flagged as
+"docs/state only" commits, with nobody having looked at why. A third failure now sits alongside
+them: `5b29c2f` (iteration 15's retry commit, also state-only — it only touches `STATE-day.json` and
+the log), run `35332995674`, concluded `failure` at `10:23:10Z` after `16m48s`. Its `hub-test` job's
+own tail is a real, specific error, not a docs-lint or generic exit:
+
+```
+ERROR tests/test_reviewer_is_not_the_author.py::test_a_wedged_review_is_restaffed_to_a_real_reviewer
+  - sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+[SQL: BEGIN IMMEDIATE]
+===== 4432 passed, 20 skipped, 248 warnings, 1 error in 968.07s (0:16:08) ======
+```
+
+One error out of 4432+20 collected, on a `BEGIN IMMEDIATE` against a locked sqlite file — the shape
+of two connections racing for a write lock, not a logic bug in the test's assertions. The suite
+otherwise ran clean.
+
+**Why this matters to the open decision.** `decisions_for_user['merge-gate-cadence']` frames the
+gate's problem as purely a *timing* one (CI takes 13+ minutes, firings are closer together than
+that) plus an unexplained pair of docs-only failures assumed unrelated. This finding shows a third,
+non-docs-content commit failing CI for an entirely different, concrete reason: a flaky sqlite lock in
+one specific test. That test's own name (`test_a_wedged_review_is_restaffed_to_a_real_reviewer`)
+implies concurrent DB access is exactly what it exercises, which is a plausible self-contention
+source independent of anything this branch's commits touch. This does not resolve the docs-only
+pair's cause (still unlooked-at), but it does mean the operator's merge-gate-cadence decision is
+being asked against an incomplete picture: even a firing that waits out the full CI run (option (b))
+could still see this branch's gate fail on an intermittent test-suite flake unrelated to timing.
+
+**Not investigated further this iteration:** whether `a392e9b`/`798b2a5` show the same
+`database is locked` failure (their own job logs were not re-pulled here — this file's earlier notes
+already labelled them "docs/state only" without a log excerpt); whether the flake is reproducible
+locally; whether it is specific to `test_reviewer_is_not_the_author.py`'s fixtures or a broader
+sqlite-under-CI contention issue. Filed from reading CI history, not from a drive; no code changed.
+
+**Related:** F382 (a different, unreproduced pytest stall, on this machine rather than in CI — not
+obviously the same mechanism, but both are unexplained sqlite/test-run timing issues surfacing
+around this branch's own test runs).
