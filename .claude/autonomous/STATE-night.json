@@ -7,30 +7,34 @@
     "branch":  "autonomous/2026-09-17-daily",
     "parent_branch":  "master",
     "parent_sha":  "f9db321",
-    "stop_at":  "2026-09-18T07:00:00+01:00",
-    "iteration":  1,
-    "log_file":  ".claude/autonomous/2026-09-17-night-log.md",
+    "stop_at":  "2026-09-19T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-18-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
     "current":  "compose",
-    "next_action":  null,
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
     "queue":  [
-
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
               ],
     "decisions_for_user":  [
-        "Backlog is empty of FIX-buildable work tonight (2026-09-18 compose, iteration 1). APPROVALS.md's newest section (## 2026-09-16) is stale -- its ORDER named two changes already archived on earlier nights. The one unarchived change, an-unstaffed-review-names-its-holders, carries its own dated stop-notice: F352-free was decided 2026-09-15 as option (f), every remaining task (including 2.14) was written against the stale (e), and DECISIONS.md:709-710 already says it needs a re-derivation round before building -- that is spec work, not FIX work. All five open severity-A findings (F299, F301, F325, F352, F375) are either waiting on an operator/F299-group decision, undrivable (F325, Codex), the same blocked change (F352), or have no proposal at all (F375). Nothing here is guessed -- see the log entry for the evidence trail. The day window's actionable follow-ups: (1) give an-unstaffed-review-names-its-holders its re-derivation round against (f); (2) propose a fix for F375 (bare '..' escapes the sandbox's rule-4 separator gate -- a real traversal hole, mechanism already described in the finding). ",
-        "The compose iteration's tree-green check (py -3.11 -m pytest hub/tests/ -q) ran past 105 minutes without finishing or producing output -- well beyond the historical 14:39-46:41 range. The process was confirmed alive (CPU climbing throughout, not the F292 lock-hang shape) and left running rather than blocking the whole window on it, since no queue item depended on its result. Its output, when it finishes, is at .claude/autonomous/tmp/2026-09-17-hubtests-compose.log -- read that before trusting the tree is green."
-    ],
+
+                           ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
