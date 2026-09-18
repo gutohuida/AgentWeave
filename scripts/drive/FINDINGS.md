@@ -29398,3 +29398,29 @@ no code changed.
 **Related:** F382 (a different, unreproduced pytest stall, on this machine rather than in CI — not
 obviously the same mechanism, but both are unexplained sqlite/test-run timing issues surfacing
 around this branch's own test runs).
+
+**UPDATE, iteration 24 (2026-09-18 ~10:37 UTC):** a third instance landed, and it changes the shape
+of the finding. `6fbcf10` (iteration 17's retry commit, also state-only), run `35333792012`,
+concluded `failure` at `10:33:25Z` after `1027.32s` (17m07s):
+
+```
+FAILED tests/test_flow_holds_the_loop_requirements.py::test_one_turn_finishing_answers_for_itself_and_not_for_its_siblings
+  - RuntimeError: <asyncio.locks.Lock object at 0x7f8bc79ce0d0 [locked]> is bound to a different event loop
+ERROR tests/test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn
+  - sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+[SQL: BEGIN IMMEDIATE]
+= 1 failed, 4431 passed, 20 skipped, 248 warnings, 1 error in 1027.32s (0:17:07) =
+```
+
+This is no longer confined to `test_reviewer_is_not_the_author.py`: the same `BEGIN IMMEDIATE`
+lock error now also hit `test_flow_fires_a_review_turn.py`, a different file entirely, and this run
+additionally carries a second, distinct failure mode never seen before — a locked `asyncio.Lock`
+bound to the wrong event loop, in `test_flow_holds_the_loop_requirements.py`. Both symptoms read as
+cross-test interference under whatever parallelism/ordering the CI job uses (a lock or connection
+created in one test's event loop reused in another's), not as a defect isolated to one file's
+fixtures as the iteration-22 update suggested. This broadens, not narrows, what the operator's
+merge-gate-cadence decision is weighing: the CI flake is not one file's problem, and waiting out a
+conclusion (option (b)) does not bound how often a green run happens. Not investigated further:
+whether this is xdist-style worker reuse, a module-scoped fixture holding a connection/lock across
+tests, or something in `conftest.py`'s event-loop handling. Filed from reading CI history during the
+routine D-0 check, not from a drive; no code changed.
