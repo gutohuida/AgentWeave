@@ -3,9 +3,11 @@
 Findings: **F376 (A)** — closes it; **F378 (B)** — *not* closed here (its repair is deferred by
 DIRECTION.md 2026-09-18; this change only makes the helper it will reuse).
 
-**R1, 2026-09-18. Nothing below is built. Two independent re-derivation rounds (R2, R3) are owed
-before any task is started** — `CLAUDE.md`'s round discipline, and this repository's dominant failure
-mode is a fix that passes its tests and cannot fire in production.
+**R1, 2026-09-18; amended by R2, 2026-09-18. Nothing below is built. One more independent
+re-derivation round (R3) is owed before any task is started** — `CLAUDE.md`'s round discipline, and
+this repository's dominant failure mode is a fix that passes its tests and cannot fire in
+production. Tasks carrying **(R2)** were changed or answered by that round; see design.md's Rounds
+section for what moved and why.
 
 Tests run under `py -3.11`, never bare `python`. `black` needs `--target-version py311` on this
 machine. No migration, no schema change, no UI change (design D4).
@@ -25,12 +27,20 @@ machine. No migration, no schema change, no UI change (design D4).
   - answered, and `answer_labels` contains the *"Leave it off"* label, or declined → open nothing,
     raise **without** claiming the operator has been asked;
   - answered affirmatively, or none → open a new one.
-- [ ] 1.4 Open through `ask_question_for_actor` (`hub/hub/api/v1/questions.py:234`) — not a hand-built
-  `Question` — so the id scheme, the `question_asked` broadcast, `conversation_id` and the batch
-  fields are the shipped ones. `from_agent` is the refused agent, `created_by_run_id` is its run,
-  `header` names the capability, `blocking=False`, `options` are *"Enabled it — go ahead"* /
-  *"Leave it off"*.
-- [ ] 1.5 Raise `HTTPException(403, detail={...})` carrying `code:
+- [ ] 1.4 **(R2)** Open through `ask_question_for_actor` (`hub/hub/api/v1/questions.py:234`) — not a
+  hand-built `Question` — so the id scheme, the `question_asked` broadcast and the batch fields are
+  the shipped ones. `from_agent` is the refused agent; **`created_by_run_id=None`**, so the row
+  carries no run and therefore no `conversation_id` (design **D10** — passing the run would pin the
+  refused run's conversation to `"waiting"` for the rest of its life, `conversations.py:433-441`,
+  and make a drained loop report this record as what it is waiting on,
+  `scheduler._pending_loop_request:400-452`). `blocking=False` (design D11).
+- [ ] 1.5 **(R2)** Satisfy `QuestionCreate` (`hub/hub/schemas/questions.py:22-34`), which is
+  stricter than it looks (design **D12**): `options` is **required with at least two entries** —
+  *"Enabled it — go ahead"* / *"Leave it off"*, each with a `description`; `header` is **required**
+  and at most 64 characters, naming the capability; `multi_select` is **required** and is `False`.
+  A call omitting any of the three fails validation, so there is no optionless form of this
+  question.
+- [ ] 1.6 Raise `HTTPException(403, detail={...})` carrying `code:
   "project_setting_blocks_capability"`, `message` (the sentence), `setting`, `current_value`,
   `question_id`, and one clause saying the answer arrives as input and the call should not be
   polled or repeated (design D2, D6).
@@ -40,15 +50,19 @@ machine. No migration, no schema change, no UI change (design D4).
 - [ ] 2.1 `hub/hub/api/v1/jobs.py:44-51` — replace **only** the `allow_agent_jobs` branch with a call
   to 1.1. Leave the early return for operator calls (`:39`) and both attribution refusals exactly as
   they are; their order is load-bearing (design D9.2).
-- [ ] 2.2 Confirm by reading, not by assuming, that every caller of `_require_agent_job_allowance`
-  (`:568`, `:847`, `:1163`, `:1294`) reaches it inside a session that is committed or rolled back
-  cleanly after the helper commits the question. A refusal that leaves a half-open transaction is
-  worse than the refusal it replaces. The precedent is `operator_direction._open_request`, which also
-  commits and *then* raises — so committing before a 403 is established practice here, not a new risk;
-  what needs checking is the four specific call sites, not the pattern.
-- [ ] 2.3 `archive_job` (`:1163`) calls the allowance gate **and then**
-  `require_operator_direction` (`:1182`). Check the interaction: an agent with the allowance off must
-  get the new refusal, not a `409 operator_direction_required`, and must not get both records.
+- [ ] 2.2 **(R2 — read and answered; re-confirm only if the routes have moved.)** At all four call
+  sites (`:568`, `:847`, `:1163`, `:1294`) the gate is the **first statement** after
+  `project_id, _ = project`, so nothing of the route's own is pending in the session when
+  `ask_question_for_actor` commits — no half-written job, no partial update is made durable by the
+  refusal's commit. The precedent for committing and *then* raising is
+  `operator_direction._open_request`. **Keep it that way:** any future route that does work before
+  calling the gate breaks this, so the gate stays the first statement.
+- [ ] 2.3 **(R2 — read and answered.)** `archive_job` calls the allowance gate at `:1163` and
+  `require_operator_direction` only at `:1182`, inside the `agent_identity is not None` branch. An
+  agent with the allowance off therefore raises out of the gate and never reaches the 409 path: the
+  new refusal, no permission request, no two records. **That ordering is load-bearing** — reversing
+  it would open a turn-scoped card for a decision that is not turn-scoped. Assert it (task 4.7)
+  rather than re-deriving it.
 
 ## 3. What the agent is told
 
@@ -77,7 +91,13 @@ machine. No migration, no schema change, no UI change (design D4).
 - [ ] 4.7 `hub/tests/test_agent_actions_governed.py` — `archive_job` with the allowance off returns
   the new refusal and opens no permission request (task 2.3's behaviour).
 - [ ] 4.8 A test that asserts the refusal **sentence** an MCP caller sees, through
-  `_readable_detail`, not just the dict.
+  `_readable_detail` (`mcp_server.py:124`), not just the dict — and that `HubAPIError.data` still
+  carries the `question_id`, which is how an adapter learns it without parsing prose.
+- [ ] 4.9 **(R2)** The record does not claim anybody is waiting. Assert the opened question has
+  `created_by_run_id` and `conversation_id` NULL, and that the refused run's conversation's
+  attention state is **not** `"waiting"` (`conversations.py:433-441`) — the defect design D10
+  exists to avoid. A test that only checks the question exists would pass with the run stamped on
+  it.
 
 ## 5. Drive it
 
@@ -87,5 +107,8 @@ machine. No migration, no schema change, no UI change (design D4).
   sentence, `permission_requests` still empty.
 - [ ] 5.2 Then answer it as the operator, with the setting enabled by hand, and assert the agent wakes
   and its retry succeeds. **This is the task that proves the change**; a green suite without it proves
-  only that the code runs.
+  only that the code runs. **(R2)** While the record is open and before answering, look at the
+  Questions destination and at the conversation list: the question must render in the **Unanswered**
+  section rather than under the red *"Blocking"* banner (design D11), and the refused run's
+  conversation must still read as running, not waiting.
 - [ ] 5.3 Set F376's `Status:` line to `fixed <sha>` only after 5.2. Never on the strength of 4.x.

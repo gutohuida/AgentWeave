@@ -1,8 +1,18 @@
 # Proposal — a refused capability reaches the operator
 
-**Round 1, 2026-09-18** (day window, `.claude/autonomous/2026-09-18-day-log.md`). Findings: **F376
-(A)**, with **F378 (B)**'s refusal shape. Two independent re-derivation rounds (R2, R3) are owed
-before a line of this is implemented.
+**Round 1, 2026-09-18; amended by Round 2, 2026-09-18** (day window,
+`.claude/autonomous/2026-09-18-day-log.md`). Findings: **F376 (A)**, with **F378 (B)**'s refusal
+shape. **One more independent re-derivation round (R3) is owed before a line of this is
+implemented.**
+
+R2 re-derived the whole argument against the code and left the decision below standing: the record
+is still a question of record, the refusal is still a 403 that does not wait. It changed one detail
+that the round existed to find — the record must carry **no run and no conversation**, because
+stamping the refused run's conversation on it would make the conversation rail and a drained loop
+both report a run as *waiting on the operator* while it carried on working (design **D10**). It also
+measured what `blocking=False` costs on the operator's panel (**D11**) and found that
+`QuestionCreate` makes `options`, `header` and `multi_select` mandatory, which R1's task list would
+have failed on (**D12**).
 
 ## Why
 

@@ -14,6 +14,11 @@ The record SHALL NOT be one whose lifetime is bounded by the refused run or by a
 deadline. The state that caused the refusal is true or false independently of any turn, so a record
 that is swept when the run ends cannot carry the decision it exists to obtain.
 
+The record SHALL NOT be bound to the refused run's conversation, and SHALL NOT cause any surface to
+report that the refused run, its conversation or its loop is waiting on the operator. The refused
+call does not wait, so nothing about it is waiting; a record that says otherwise is the same false
+statement in a different place.
+
 The operator's answer SHALL be delivered to the agent that was refused, and that agent SHALL be woken
 for it, even when the run that was refused has already ended.
 
@@ -27,8 +32,8 @@ adapter SHALL hold any part of this rule.
 
 - **WHEN** an authenticated run's call is refused because scheduled agent work is not allowed for the
   project
-- **THEN** a question of record is opened for the operator, attributed to the refused agent and its
-  run, naming the setting, its current value, what enabling it would allow, and where it is changed
+- **THEN** a question of record is opened for the operator, attributed to the refused agent, naming
+  the setting, its current value, what enabling it would allow, and where it is changed
 - **AND** an event is broadcast so the operator's view updates without a reload
 - **AND** the refusal returned to the caller carries that record's identifier
 
@@ -67,6 +72,12 @@ adapter SHALL hold any part of this rule.
   then answers it
 - **THEN** the answer is delivered to the agent named on the record, and the second agent is not woken
   by it
+
+#### Scenario: The refused run is not reported as waiting
+
+- **WHEN** a record has been opened for that state and the refused run is still working
+- **THEN** no surface reports that run, its conversation or its loop as waiting on the operator
+- **AND** the record is still open on the operator's surface
 
 #### Scenario: An operator's own call opens nothing
 
