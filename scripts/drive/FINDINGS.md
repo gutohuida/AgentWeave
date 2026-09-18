@@ -29445,3 +29445,25 @@ bug, and that it recurs often enough (4 of the last ~10 runs on this branch) tha
 operator's still-open `merge-gate-cadence` decision (wait out a conclusion) would not reliably land
 green either. Filed from reading CI history during the routine D-0 check, not from a drive; no code
 changed.
+
+**UPDATE, iteration 29 (2026-09-18 ~11:08 UTC):** a fifth instance, and it closes the "unexplained
+docs-only failures" question this file has carried since the first two entries. `cc12402` ("backlog:
+regenerate for F381-F383 and the drain at 2" — a backlog-page/state commit, touching no test or
+application code), run `35337170276`, concluded `failure` at `11:08:55Z` after `714.28s` (11m54s):
+
+```
+ERROR tests/test_flow_fires_a_review_turn.py::test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn
+  - sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) database is locked
+===== 4432 passed, 20 skipped, 248 warnings, 1 error in 714.28s (0:11:54) ======
+```
+
+Same `BEGIN IMMEDIATE`-shaped lock, same file as two earlier instances
+(`test_flow_fires_a_review_turn.py`), a fourth distinct test name within it — and this time on a
+commit that could not plausibly have introduced a code-level race, since it changes only
+`spec-queue/BACKLOG.html` and `.md` sources. This confirms the mechanism is genuinely commit-content-
+independent: the two "unexplained docs-only" failures this file originally flagged (`a392e9b`,
+`798b2a5`) were very likely the same flake, not a separate unlooked-at cause as previously assumed.
+Five instances now, at a rate of roughly 1 in 2 of this branch's recent CI runs — strengthening the
+read that `merge-gate-cadence` option (b) (wait out a conclusion) is not a reliable fix, since the
+failure rate is too high for "wait longer" to help. Filed from reading CI history during the routine
+D-0 check, not from a drive; no code changed.
