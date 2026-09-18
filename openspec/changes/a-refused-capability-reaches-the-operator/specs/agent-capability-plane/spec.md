@@ -22,6 +22,11 @@ statement in a different place.
 The operator's answer SHALL be delivered to the agent that was refused, and that agent SHALL be woken
 for it, even when the run that was refused has already ended.
 
+Where the most recent record for that state has been resolved — answered or declined — the Hub SHALL
+NOT open another record for it, and SHALL NOT infer from the answer's text whether the operator
+agreed. The operator is never confined to a record's offered answers, so an answer's intent is not a
+thing the Hub can read; the refusal SHALL instead report what the operator said.
+
 The refused call SHALL NOT wait for the answer, and the caller SHALL NOT be instructed to poll for
 it. A decision that may arrive after the run has ended cannot be waited for inside the run.
 
@@ -58,13 +63,26 @@ adapter SHALL hold any part of this rule.
 - **WHEN** a further call is refused for the same project state while the record is still unanswered
 - **THEN** no second record is opened, and the refusal carries the existing record's identifier
 
-#### Scenario: A negative answer is an answer
+#### Scenario: An answer is an answer, however it was written
 
-- **WHEN** the operator has answered the most recent record for that state by choosing to leave the
-  state as it is, or has declined it
+- **WHEN** the operator has resolved the most recent record for that state — by choosing an offered
+  answer, by writing their own, or by declining it
 - **AND** a further call is refused for that state
-- **THEN** no new record is opened, and the refusal names the state without claiming the operator has
-  been asked
+- **THEN** no new record is opened, and the refusal reports what the operator said without claiming
+  they have been asked again
+
+#### Scenario: A written answer is not re-asked
+
+- **WHEN** the operator answers the record in their own words rather than by choosing an offered
+  answer
+- **AND** a further call is refused for that state
+- **THEN** no new record is opened
+
+#### Scenario: The refusal reports the answer rather than judging it
+
+- **WHEN** a call is refused for a state whose record the operator has already answered
+- **THEN** the refusal carries the operator's own answer, and does not assert that they agreed or
+  refused
 
 #### Scenario: Only the agent that was refused first is woken
 
@@ -102,6 +120,10 @@ that was never going to arrive.
 The refusal SHALL carry a machine-readable code and the identifier of the record opened for the
 operator, in addition to the sentence, so a caller need not parse prose to know a decision is pending.
 
+The record's identifier SHALL also appear in the sentence itself. A structured refusal body is
+available to an adapter, but only the sentence reaches the agent whose turn was refused, so anything
+that agent must know cannot live in the structure alone.
+
 The refusal SHALL state what the caller may do instead, and SHALL state that the operator's answer
 will arrive as input rather than as a result of this call.
 
@@ -121,3 +143,10 @@ will arrive as input rather than as a result of this call.
 - **WHEN** a refusal is returned for that state
 - **THEN** its body carries a code naming the kind of refusal and the opened record's identifier
 - **AND** an adapter's caller receives the sentence intact
+
+#### Scenario: The sentence alone is enough to act on
+
+- **WHEN** an agent reached the refused call through an adapter that surfaces only the failure's
+  sentence
+- **THEN** that sentence names the state, the record opened for the operator, and that the call must
+  not be polled or repeated

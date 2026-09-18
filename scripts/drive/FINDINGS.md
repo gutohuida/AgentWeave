@@ -29233,3 +29233,47 @@ and to echo the tool's error text back verbatim.
 passed. Fixture project deleted, no job left enabled.
 
 **Related:** F376, F378.
+
+---
+
+## F381 (C) — a question nobody is waiting on outranks one an agent is blocked on, in that agent's own tray
+
+**Status:** open. Filed 2026-09-18 by the day window's R3 round for
+`a-refused-capability-reaches-the-operator`, from reading the code rather than from a drive.
+
+**Source:** code — found by reading, while re-deriving a proposal against the implementation.
+**Theme:** Operator surfaces
+
+**The measurement.** `activeQuestionFor` (`hub/ui/src/lib/pendingQuestions.ts:24-46`) chooses the one
+question shown in an agent's conversation tray. It filters `from_agent === agent && !answered &&
+!declined` — **no `blocking` filter** — and sorts `asker_waiting !== false` first (`:38`), explicitly
+so that *"Questions someone is actually waiting on come first"*, then `batch_index`, then oldest
+`created_at`.
+
+But `asker_waiting` is not a fact about waiting when the asker is unknown. `_with_asker_state`
+computes `wait_ended_at is None and created_by_run_id not in ended`
+(`hub/hub/api/v1/questions.py:333-344`), documented as *"Unknown asker → presumed waiting"*. For any
+question with **no run** — every one posted through the operator route, which passes
+`created_by_run_id=None` (`questions.py:293`) — that expression is **always `True`**.
+
+So a question nobody is waiting on sorts with the genuine waiters, and if it is the older of the two
+it is the one the tray shows while the agent is really blocked on the newer one. That is the exact
+defect the sort was written to prevent, arriving through the field it sorts on rather than through
+the order.
+
+**Not yet observed live**, and deliberately labelled: it needs an operator-posted question and a
+blocking one outstanding for the same agent at once. The ordering above is read, not driven.
+
+**Shape of the repair, for a proposal to argue with.** Either `asker_waiting` stops presuming for a
+question that is **not blocking** (nothing is waiting on a note, by definition — `_asker_still_waiting`
+already reads `blocking` for exactly this reason, `questions.py:48-73`), or the tray's sort reads
+`blocking` itself. The first is one expression and fixes every reader; the second is local but leaves
+the field lying.
+
+**Why it is filed now.** `a-refused-capability-reaches-the-operator` opens a non-blocking question
+with no run, so it inherits this (that change's design **D14**): the change records the cost and
+deliberately does not repair it from inside one refusal's blast radius, because the behaviour belongs
+to every run-less question and not to that record.
+
+**Related:** F376 (the change that surfaced it), F14 (attention state reported about a run that is
+not waiting).

@@ -1,9 +1,8 @@
 # Proposal — a refused capability reaches the operator
 
-**Round 1, 2026-09-18; amended by Round 2, 2026-09-18** (day window,
+**Round 1, 2026-09-18; amended by Rounds 2 and 3, 2026-09-18** (day window,
 `.claude/autonomous/2026-09-18-day-log.md`). Findings: **F376 (A)**, with **F378 (B)**'s refusal
-shape. **One more independent re-derivation round (R3) is owed before a line of this is
-implemented.**
+shape. **The three rounds `CLAUDE.md` requires are done; nothing here is implemented yet.**
 
 R2 re-derived the whole argument against the code and left the decision below standing: the record
 is still a question of record, the refusal is still a 403 that does not wait. It changed one detail
@@ -13,6 +12,22 @@ both report a run as *waiting on the operator* while it carried on working (desi
 measured what `blocking=False` costs on the operator's panel (**D11**) and found that
 `QuestionCreate` makes `options`, `header` and `multi_select` mandatory, which R1's task list would
 have failed on (**D12**).
+
+R3 re-derived it again and the decision still stands — **and two of the tasks under it were wrong in
+a way tests would not have caught.** First, the rule that was supposed to stop the Hub re-asking
+after a *no* keyed on `answer_labels`, and **that column is empty for every typed answer**: both
+surfaces that answer a question send the labels only when the operator typed nothing
+(`AnswerForm.tsx:33-38`, `AgentOutputPanel.tsx:934-942`), so an operator who wrote *"no, leave it
+off"* would have been asked again. The dedupe no longer reads the answer's polarity at all — a
+resolved record stops the asking and the refusal quotes what the operator actually said (design
+**D13**). Second, **there is no `update_job` MCP tool**: the tools that reach this gate are
+`create_job`, `create_loop`, `create_flow`, `toggle_job`, `run_job` and `archive_job`, and
+`create_job` — the plainest of them — was named in neither earlier round (**D7**). R3 also narrowed
+D8's claim that F378 can reuse this helper (F378's blocking state is an empty table with *no place
+the operator changes it*, so three of the signature's parameters have no truthful value there),
+established that the record's id has to be in the refusal's **sentence** because nothing on this
+surface reads the structured body (**D6**), and recorded two measured costs rather than repairing
+them from inside this change (**D13**, **D14**).
 
 ## Why
 
@@ -48,8 +63,12 @@ refusal returned to the agent names the same facts and **stops promising an appr
 agent instead that the operator has been asked and that the answer will arrive as a message.
 
 Scoped to one refusal in this change: `_require_agent_job_allowance`'s `allow_agent_jobs` branch
-(`hub/hub/api/v1/jobs.py:44-51`), which gates `create_loop`, `create_flow`, `update_job`,
-`toggle_job`, `run_job` and `archive_job`. The helper is written so F378's repair can reuse it; that
+(`hub/hub/api/v1/jobs.py:44-51`). It guards four routes — `create_job`, `update_job`, `archive_job`
+and `run_job` (`jobs.py:568`, `:847`, `:1163`, `:1294`) — reached by six MCP tools: `create_job`,
+`create_loop`, `create_flow`, `toggle_job`, `run_job` and `archive_job` (**R3**, design D7; there is
+no `update_job` tool — that is the PATCH route, reached by `toggle_job`). The helper is written in a
+shape F378's repair can reuse, but **R3 narrowed that claim**: F378's blocking state is an empty
+table with no writer, so its refusal needs a control to point at before this signature fits. That
 repair is **not** in this change (DIRECTION.md 2026-09-18 defers it).
 
 ## The decision, and the one that was rejected
@@ -99,7 +118,7 @@ the contract (`openspec/specs/agent-capability-plane/spec.md:107`).
 - `hub/hub/api/v1/jobs.py` — the allowance branch of `_require_agent_job_allowance` only.
 - **new** `hub/hub/refused_capability.py` — opens the record, dedupes, composes the refusal.
 - `hub/hub/mcp_server.py`, `hub/hub/api/v1/agents.py` — tool and contract descriptions of the
-  refusal. No behaviour.
+  refusal, for the six tools R3's table names. No behaviour.
 - Tests: `hub/tests/test_refused_capability.py` (new), `hub/tests/test_agent_actions_governed.py`.
 - **No migration. No schema change. No UI change.** The one-click enable is deliberately left to
   `the-controls-that-gate-collaboration-are-visible` (F379), which owns that surface — see design D4.
