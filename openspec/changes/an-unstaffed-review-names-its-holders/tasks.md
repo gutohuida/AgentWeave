@@ -128,8 +128,12 @@ mutation and the observed failure beside the task when ticking it.
         held clause is `"{name} is waiting for its provider's usage limit to reset"`. It is
         required by a shipped SHALL in `openspec/specs/agent-flows/spec.md`, and without it a held
         agent is reported as running a turn, which is false.
-      - after the helper's sentence, rung 3 itself appends "; rejecting held tasks that are no
-        longer wanted can free their agents." The dispatch refusal (4.2) does not.
+      - after the helper's sentence, rung 3 itself appends " Rejecting held tasks that are no
+        longer wanted can free their agents." — **a new sentence, space and capital, not a `;`**
+        (R6-8). `own_review_remedy` already ends in a period, so the `;` every round wrote
+        produces `…yourself.; rejecting…`. Assert the joined string in the test, not the two
+        halves separately: that is why five rounds missed it.
+        The dispatch refusal (4.2) does not append this clause at all.
       - **R6: the remedy names rejecting, and nothing else.** It must never suggest pausing (a
         paused loop still holds, `scheduler.py:1084-1085`) and must never claim that ending or
         archiving a loop frees an agent (reachability is an OR; the queued arm survives an

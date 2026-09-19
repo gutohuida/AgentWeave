@@ -245,7 +245,13 @@ the rule `enter_selected_task`'s docstring states for the same situation.
   a rung-3 reason.
 
   Wording, with the status half from `own_review_remedy` unchanged before it:
-  *"; rejecting held tasks that are no longer wanted can free their agents."*
+  *" Rejecting held tasks that are no longer wanted can free their agents."* — **a new sentence,
+  not a `;` continuation. R6-8, measured:** `own_review_remedy` returns a complete sentence ending
+  in a period (`scheduler.py:1921-1923`: `"Land it, on the task, to review it yourself."`), so
+  R1-R5's *"rung 3 appends `; rejecting …`"* produces `…to review it yourself.; rejecting held
+  tasks…`. Every round wrote the clause with a leading `;` and none of them concatenated the two
+  strings to look at the result. The helper is not changed — `review_dispatch_refusal` shares it —
+  so the join is rung 3's, and it is a space and a capital.
 - **Any other status (REV).** The divergence screens out only `blocked` (`run_divergence.py:746`),
   and `run_advanced_its_task` counts only the run's own transitions. So if the operator moves a
   task to `revision_needed` or `rejected` while its review run is live, that run's end still
@@ -1061,3 +1067,66 @@ numbers have now been wrong at three consecutive rounds.
 - **Left open** R5's own unexamined question: whether `task_agent_pairs_with_a_turn_queued`'s
   hop-budget arm makes a holding flicker between firings. R6-3 shows that same OR already causes
   trouble, which raises rather than lowers the priority of looking.
+
+## Round 6, measured — the budget table R5 and R6 both deferred, 2026-09-19
+
+Task 2.4 said "do this first" twice and neither round did it. Done now, from the **real** strings
+(`own_review_remedy`, `scheduler.py:1921-1923`) rather than reconstructed ones, under R6's
+five-clause set with the loop id and the archive remedy removed.
+
+**Components**
+
+| piece | chars |
+|---|---|
+| prefix `could not staff this step: no reviewer is free. ` | 48 |
+| remedy, `completed` | 44 |
+| remedy, `under_review` | 74 |
+| reject clause (R6-8 form, leading space + capital) | 70 |
+| held clause, 5-character name (**R6's new clause 4**) | 55 |
+| one holding, 17-character task id, `(pending)` | 27 |
+
+**Totals**
+
+| shape | `completed` | `under_review` |
+|---|---|---|
+| LoopEngine: 4 agents, 5 named holdings, 17-char ids | **410** | **440** |
+| the same plus one usage-held agent | 467 | 497 |
+| 3 agents (1 held, 1 excluded), one holding each | 307 | 337 |
+| 5 agents | 399 | 429 |
+| 6 agents | 445 | 475 |
+| **7 agents** | 491 | **521 — over** |
+| **8 agents** | **537 — over** | 567 — over |
+| LoopEngine shape, 29-char task ids | — | **500 — exactly at the bound** |
+| LoopEngine shape, 45-char task ids | — | 580 — over |
+
+**What this settles.**
+
+- **R6's removals bought about 150 characters.** The review measured R5's version of the flagship
+  shape at 559/589; it is now 410/440. The fit no longer fires on the main case, which was R6-4's
+  whole complaint.
+- **The fit still has to exist and still has to be right.** It fires at **seven agents** on an
+  `under_review` task, and the `under_review` remedy is 30 characters more than the `completed`
+  one, so the two statuses cross the bound at different roster sizes. A project with eight agents
+  is not exotic.
+- **Caller-chosen ids are the sharper edge**, exactly as R3 said: at the LoopEngine shape, 29-char
+  ids land *precisely* on 500. R3's "name at least one agent" floor is therefore load-bearing and
+  must keep its test.
+- **Clause 4 costs 55 characters for a 5-character name** and is unavoidable — it is a shipped
+  SHALL. It is the single most expensive per-agent clause, so a project with several held agents
+  reaches the fit sooner than the table's one-held rows suggest. Not measured: every agent held at
+  once, which is the shape a provider outage produces.
+
+**Still not measured:** the tail string (`"; and N more agents are excluded, busy or unbound"`)
+against a real fit, because the fit algorithm is not written yet. Task 2.4 keeps its instruction —
+these numbers are the input to it, not a substitute for it.
+
+### R6-8 — `.;`, found by concatenating the two halves for the first time
+
+`own_review_remedy` returns a complete sentence ending in a period. Every round from R1 to R6 wrote
+rung 3's addition as *"; rejecting held tasks…"*, so the joined string reads
+`…to review it yourself.; rejecting held tasks…`. Five rounds specified the two halves separately
+and none of them printed the result. Fixed: the clause is a new sentence — space, capital. The
+helper is untouched, because `review_dispatch_refusal` shares it.
+
+The test instruction now says to assert **the joined string**, which is the only reason this was
+findable.

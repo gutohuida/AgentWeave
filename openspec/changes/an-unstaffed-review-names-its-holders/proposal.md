@@ -136,8 +136,26 @@ The rest, in order of what it changes:
 
 **This is the "materially smaller change" the review argued for.** What is left: clause 1 + 2 +
 3-filtered-by-reachability + the hold clause + running, the existing status remedy, and the reject
-clause. Still **not** done: the character budget is not re-measured (task 2.4 owns it), and
-`test-guide.md` is not re-derived (task 6.5).
+clause.
+
+**Measured after the fact, same day** (`design.md`, *Round 6, measured*): the budget R5 and R6 both
+deferred is now done from the real strings. R6's removals bought ~150 characters — the flagship
+shape is **410/440** against a 500 bound, where the review measured R5's at 559/589 — so the fit no
+longer fires on the main case. It still fires at **seven agents** on an `under_review` task, and
+29-character task ids land exactly on 500, so the fit and R3's "name at least one agent" floor both
+stay.
+
+Measuring it also found **R6-8**: `own_review_remedy` ends in a period and every round from R1
+appended the reject clause with a leading `;`, so the sentence read `…yourself.; rejecting…`. Five
+rounds specified the two halves separately and none concatenated them.
+
+**Verified by running, not derived:** `hub/tests/test_a_held_agent_is_busy.py` and
+`hub/tests/test_a_task_nothing_will_move_holds_nobody.py` — **55 passed**, 36s, on `7d805df`. Those
+are the two files R6-1 and R5-0 say this change must not break; they are green today, so the
+regression guard in task 1.3 and 6.0 has a real baseline.
+
+Still **not** done: `test-guide.md` is not re-derived (task 6.5), and no test of the new behaviour
+exists yet because none of it is built.
 
 ## Why
 

@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-19 15:04 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>a435f48</b> · uncommitted changes present<br>
+      generated <b>2026-09-19 15:08 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>7d805df</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -1244,7 +1244,34 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <ul>
 <li><strong>Left open</strong> R5&#x27;s own unexamined question: whether <code>task_agent_pairs_with_a_turn_queued</code>&#x27;s</li>
 </ul>
-<p>hop-budget arm makes a holding flicker between firings. R6-3 shows that same OR already causes trouble, which raises rather than lowers the priority of looking.</p></div></details>
+<p>hop-budget arm makes a holding flicker between firings. R6-3 shows that same OR already causes trouble, which raises rather than lowers the priority of looking.</p>
+<h5>Round 6, measured — the budget table R5 and R6 both deferred, 2026-09-19</h5>
+<p>Task 2.4 said &quot;do this first&quot; twice and neither round did it. Done now, from the <strong>real</strong> strings (<code>own_review_remedy</code>, <code>scheduler.py:1921-1923</code>) rather than reconstructed ones, under R6&#x27;s five-clause set with the loop id and the archive remedy removed.</p>
+<p><strong>Components</strong></p>
+<div class="scroll"><table class="md"><thead><tr><th>piece</th><th>chars</th></tr></thead><tbody><tr><td>prefix <code>could not staff this step: no reviewer is free. </code></td><td>48</td></tr><tr><td>remedy, <code>completed</code></td><td>44</td></tr><tr><td>remedy, <code>under_review</code></td><td>74</td></tr><tr><td>reject clause (R6-8 form, leading space + capital)</td><td>70</td></tr><tr><td>held clause, 5-character name (<strong>R6&#x27;s new clause 4</strong>)</td><td>55</td></tr><tr><td>one holding, 17-character task id, <code>(pending)</code></td><td>27</td></tr></tbody></table></div>
+<p><strong>Totals</strong></p>
+<div class="scroll"><table class="md"><thead><tr><th>shape</th><th><code>completed</code></th><th><code>under_review</code></th></tr></thead><tbody><tr><td>LoopEngine: 4 agents, 5 named holdings, 17-char ids</td><td><strong>410</strong></td><td><strong>440</strong></td></tr><tr><td>the same plus one usage-held agent</td><td>467</td><td>497</td></tr><tr><td>3 agents (1 held, 1 excluded), one holding each</td><td>307</td><td>337</td></tr><tr><td>5 agents</td><td>399</td><td>429</td></tr><tr><td>6 agents</td><td>445</td><td>475</td></tr><tr><td><strong>7 agents</strong></td><td>491</td><td><strong>521 — over</strong></td></tr><tr><td><strong>8 agents</strong></td><td><strong>537 — over</strong></td><td>567 — over</td></tr><tr><td>LoopEngine shape, 29-char task ids</td><td>—</td><td><strong>500 — exactly at the bound</strong></td></tr><tr><td>LoopEngine shape, 45-char task ids</td><td>—</td><td>580 — over</td></tr></tbody></table></div>
+<p><strong>What this settles.</strong></p>
+<ul>
+<li><strong>R6&#x27;s removals bought about 150 characters.</strong> The review measured R5&#x27;s version of the flagship</li>
+</ul>
+<p>shape at 559/589; it is now 410/440. The fit no longer fires on the main case, which was R6-4&#x27;s whole complaint.</p>
+<ul>
+<li><strong>The fit still has to exist and still has to be right.</strong> It fires at <strong>seven agents</strong> on an</li>
+</ul>
+<p><code>under_review</code> task, and the <code>under_review</code> remedy is 30 characters more than the <code>completed</code> one, so the two statuses cross the bound at different roster sizes. A project with eight agents is not exotic.</p>
+<ul>
+<li><strong>Caller-chosen ids are the sharper edge</strong>, exactly as R3 said: at the LoopEngine shape, 29-char</li>
+</ul>
+<p>ids land <em>precisely</em> on 500. R3&#x27;s &quot;name at least one agent&quot; floor is therefore load-bearing and must keep its test.</p>
+<ul>
+<li><strong>Clause 4 costs 55 characters for a 5-character name</strong> and is unavoidable — it is a shipped</li>
+</ul>
+<p>SHALL. It is the single most expensive per-agent clause, so a project with several held agents reaches the fit sooner than the table&#x27;s one-held rows suggest. Not measured: every agent held at once, which is the shape a provider outage produces.</p>
+<p><strong>Still not measured:</strong> the tail string (<code>&quot;; and N more agents are excluded, busy or unbound&quot;</code>) against a real fit, because the fit algorithm is not written yet. Task 2.4 keeps its instruction — these numbers are the input to it, not a substitute for it.</p>
+<h6>R6-8 — <code>.;</code>, found by concatenating the two halves for the first time</h6>
+<p><code>own_review_remedy</code> returns a complete sentence ending in a period. Every round from R1 to R6 wrote rung 3&#x27;s addition as <em>&quot;; rejecting held tasks…&quot;</em>, so the joined string reads <code>…to review it yourself.; rejecting held tasks…</code>. Five rounds specified the two halves separately and none of them printed the result. Fixed: the clause is a new sentence — space, capital. The helper is untouched, because <code>review_dispatch_refusal</code> shares it.</p>
+<p>The test instruction now says to assert <strong>the joined string</strong>, which is the only reason this was findable.</p></div></details>
           <details class="chg-read" open><summary>Read the proposal</summary><div class="md-body"><h4>Proposal — an unstaffed review names its holders</h4>
 <h5>RESOLVED 2026-09-19 — the re-derivation this banner demanded is done; see <code>## R5</code> below</h5>
 <p><strong>This change is no longer stopped.</strong> The banner below is kept as provenance because it is the record of <em>why</em> a round was owed. The round ran on 2026-09-19 (<code>design.md</code>, <code>## Round 5</code>) and the change is ready for implementation — with <code>D1</code>&#x27;s corrected record shape, and with D2&#x27;s character budget re-measured first (task 2.4).</p>
@@ -1337,7 +1364,11 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <ol>
 <li><strong>Twenty-two drifted citations</strong>, including six of twelve call-site line numbers.</li>
 </ol>
-<p><strong>This is the &quot;materially smaller change&quot; the review argued for.</strong> What is left: clause 1 + 2 + 3-filtered-by-reachability + the hold clause + running, the existing status remedy, and the reject clause. Still <strong>not</strong> done: the character budget is not re-measured (task 2.4 owns it), and <code>test-guide.md</code> is not re-derived (task 6.5).</p>
+<p><strong>This is the &quot;materially smaller change&quot; the review argued for.</strong> What is left: clause 1 + 2 + 3-filtered-by-reachability + the hold clause + running, the existing status remedy, and the reject clause.</p>
+<p><strong>Measured after the fact, same day</strong> (<code>design.md</code>, <em>Round 6, measured</em>): the budget R5 and R6 both deferred is now done from the real strings. R6&#x27;s removals bought ~150 characters — the flagship shape is <strong>410/440</strong> against a 500 bound, where the review measured R5&#x27;s at 559/589 — so the fit no longer fires on the main case. It still fires at <strong>seven agents</strong> on an <code>under_review</code> task, and 29-character task ids land exactly on 500, so the fit and R3&#x27;s &quot;name at least one agent&quot; floor both stay.</p>
+<p>Measuring it also found <strong>R6-8</strong>: <code>own_review_remedy</code> ends in a period and every round from R1 appended the reject clause with a leading <code>;</code>, so the sentence read <code>…yourself.; rejecting…</code>. Five rounds specified the two halves separately and none concatenated them.</p>
+<p><strong>Verified by running, not derived:</strong> <code>hub/tests/test_a_held_agent_is_busy.py</code> and <code>hub/tests/test_a_task_nothing_will_move_holds_nobody.py</code> — <strong>55 passed</strong>, 36s, on <code>7d805df</code>. Those are the two files R6-1 and R5-0 say this change must not break; they are green today, so the regression guard in task 1.3 and 6.0 has a real baseline.</p>
+<p>Still <strong>not</strong> done: <code>test-guide.md</code> is not re-derived (task 6.5), and no test of the new behaviour exists yet because none of it is built.</p>
 <h5>Why</h5>
 <p>On the operator&#x27;s own Hub (LoopEngine, <code>:8000</code>, read mode=ro on 2026-09-13 and 2026-09-14), a flow stood still for most of a night with two finished tasks nobody reviewed. Every firing recorded the same <code>review_unstaffed</code> sentence (<code>hub/hub/scheduler.py:1161-1168</code>):</p>
 <blockquote><p><em>could not staff this step: no agent is free to take it. Every agent on the roster is either running a turn, already holding active work, or is the one that completed this task and so may not review it.</em></p></blockquote>
@@ -1548,9 +1579,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-19T15:04:31+01:00",
+ "generated": "2026-09-19T15:08:50+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "a435f48",
+ "sha": "7d805df",
  "open": 208,
  "items": 211,
  "requests": 3,
