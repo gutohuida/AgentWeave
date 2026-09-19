@@ -1,8 +1,21 @@
 # Proposal — a refused capability reaches the operator
 
 **Round 1, 2026-09-18; amended by Rounds 2 and 3, 2026-09-18** (day window,
-`.claude/autonomous/2026-09-18-day-log.md`). Findings: **F376 (A)**, with **F378 (B)**'s refusal
-shape. **The three rounds `CLAUDE.md` requires are done; nothing here is implemented yet.**
+`.claude/autonomous/2026-09-18-day-log.md`); **amended by Round 4, 2026-09-19** (interactive, from
+the adversarial Opus review the operator commissioned before approving). Findings: **F376 (A)**,
+with **F378 (B)**'s refusal shape. **Nothing here is implemented yet.**
+
+**R4 found the decision sound for a third time and the case for it false in one column.** R1 wrote
+that the record lands on *"a top-level destination"*; there is no such destination — `QuestionsPanel`
+opens only from a `useState(false)` on Overview, the sidebar renders no nav item for it, and a
+shipped test asserts its absence. The *lifetime* column, which is what F376's harm turns on, was
+re-derived again and is exact, so the decision stands on one leg rather than two. R4 also changed
+four things beneath it: the helper does not "always raise" and a failed record loses the agent its
+refusal (**D16**); the dedupe keyed on the question's own prose, making a sentence a database key
+(**D15**); a resolved record was permanently terminal on a justification borrowed from a change
+that does not exist (**D17**); and the helper's signature carried the one parameter D10 forbids
+(**D8**). Two shipped UI defects were filed rather than folded in (`F386`, `F387`), and `F386` is
+now a prerequisite (**D18**).
 
 R2 re-derived the whole argument against the code and left the decision below standing: the record
 is still a question of record, the refusal is still a 403 that does not wait. It changed one detail
@@ -115,11 +128,25 @@ the contract (`openspec/specs/agent-capability-plane/spec.md:107`).
 
 ## Impact
 
-- `hub/hub/api/v1/jobs.py` — the allowance branch of `_require_agent_job_allowance` only.
+- `hub/hub/api/v1/jobs.py` — the allowance branch of `_require_agent_job_allowance` only
+  (**R4:** `:46-51`, not the `:44-51` R1-R3 wrote — `:44-45` is the stale-attribution check the
+  task says to leave alone).
 - **new** `hub/hub/refused_capability.py` — opens the record, dedupes, composes the refusal.
 - `hub/hub/mcp_server.py`, `hub/hub/api/v1/agents.py` — tool and contract descriptions of the
   refusal, for the six tools R3's table names. No behaviour.
+- **(R4)** `hub/hub/db/models.py`, `hub/hub/api/v1/questions.py` — `questions.subject_key` and one
+  defaulted keyword on `ask_question_for_actor`, plus **migration `0104`** (design **D15**).
 - Tests: `hub/tests/test_refused_capability.py` (new), `hub/tests/test_agent_actions_governed.py`.
-- **No migration. No schema change. No UI change.** The one-click enable is deliberately left to
+- **(R4) One migration and one schema change** — a nullable column and a partial unique index,
+  backfilling nothing. R1-R3 declared "no migration, no schema change"; that was true of a dedupe
+  keyed on the question's prose, which D15 rejects. `0104` runs against the operator's live
+  database on their next restart, so this change is **no longer purely additive with no restart
+  hazard**.
+- **Still no UI change here — but `F386` is a prerequisite** (design **D18**). The card that is the
+  record's only route to a human says an agent *"is waiting"* for every question it renders, which
+  this change's own ADDED requirement forbids. It is repaired by its own change, not this one:
+  `hub/ui/src/components/` belongs to F379's change, and two changes contending for the committed
+  UI bundle conflict every time.
+- The one-click enable is deliberately left to
   `the-controls-that-gate-collaboration-are-visible` (F379), which owns that surface — see design D4.
 - Blast radius shares no file with F379's change (`hub/ui/src/components/`) or F377/F378's.
