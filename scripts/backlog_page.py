@@ -689,17 +689,35 @@ def consistency_warnings(findings: list[dict], changes: list[dict]) -> list[str]
             f"window cannot order them ({open_unrated} of those are open — the page's '?' group): "
             f"{', '.join(unrated[:12])}{' ...' if len(unrated) > 12 else ''}"
         )
-    # A finding whose status still reads `open` while naming a commit sha is the classic stale row.
+    # A finding whose status reads `open` while claiming a commit FIXED it is the classic stale row.
+    #
+    # The bare "open + any sha" test this used to run flagged 29 rows and was wrong about nearly all
+    # of them (measured 2026-09-19). The dominant shape in this ledger is *provenance*, not a fix
+    # claim: "Filed by the row-1 sweep (`3280f52`)", "Found 2026-09-06 ... (`3142a91`)", "measured
+    # at unit level on `87dfbf4`", "verified against the code at `34014e0`". Every one of those
+    # names the commit the finding was *written* at, which is exactly what a correctly-open finding
+    # looks like. The warning told a reader to go verify 29 rows of which ~2 could possibly be
+    # stale, so the honest ones buried the interesting ones — the same failure the finding it was
+    # meant to catch is about.
+    #
+    # So require a fix verb attached to the sha. This still over-reports: a *partially* fixed
+    # finding legitimately says "the definition half is fixed `4b59ee0`" while staying open (F352),
+    # and a finding can name a sibling's fix ("this is not F321 or F323, which are fixed
+    # (`612b9c9`)" — F362). Both are correct rows. The warning header says so rather than implying
+    # each hit is a defect.
+    fix_claim = re.compile(
+        r"\b(?:fixed|closed|repaired|resolved|landed|shipped)\b"
+        r"(?:\s+(?:by|in|with|at|as))?\s*\(?`?([0-9a-f]{7,40})`?",
+        re.I,
+    )
     suspicious = [
-        f["id"]
-        for f in findings
-        if f["state"] == "open" and re.search(r"\b[0-9a-f]{7,40}\b", f["status"] or "")
+        f["id"] for f in findings if f["state"] == "open" and fix_claim.search(f["status"] or "")
     ]
     if suspicious:
         warn.append(
-            f"{len(suspicious)} findings read 'open' but name a commit sha — verify before "
-            f"trusting the open count: {', '.join(suspicious[:12])}"
-            f"{' ...' if len(suspicious) > 12 else ''}"
+            f"{len(suspicious)} findings read 'open' while their status claims a commit fixed "
+            f"something — check each is a partial fix or a sibling's, not a stale row: "
+            f"{', '.join(suspicious[:12])}{' ...' if len(suspicious) > 12 else ''}"
         )
     stopped = [c["name"] for c in changes if c["todo"] > 0 and c["note"]]
     if stopped:

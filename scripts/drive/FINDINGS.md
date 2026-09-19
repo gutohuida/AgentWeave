@@ -2845,7 +2845,7 @@ four: the two carried over from Q1/Q2 plus this one — `create_spec_document` w
 
 ## F52 (A) — the "workspace" permission posture never sees a git command; every commit is refused, silently, with no operator visibility
 
-**Status:** RETIRED — closed 2026-08-27 without a full fix, and read as closed by every open-A index since; the word was written 2026-09-15 (night `ledger-conflicts`) because the old line said only *"partially fixed"* and the classifier read CONFLICT. The visible half is fixed `68459ea`: `auto_snapshot_notice()` (`hub/hub/launchability.py:404`) is still appended at `hub/hub/api/v1/agent_trigger.py:1079`, and its three `test_f52_*` tests passed 2026-09-15. The refusal itself does not reproduce: `0cda570` disproved its central inference, and `57eb92b` drove a full live turn that committed. A new git refusal is a new finding. Residual, not filed: an allowed call still leaves no record (`agent_actions.py:940`, *"Only refusals are persisted"*), so a recurrence would be as unfalsifiable as this one was (Correction 3, below).
+**Status:** RETIRED — closed 2026-08-27 without a full fix, and read as closed by every open-A index since; the word was written 2026-09-15 (night `ledger-conflicts`) because the old line said only *"partially fixed"* and the classifier read CONFLICT. The visible half is fixed `68459ea`: `auto_snapshot_notice()` (`hub/hub/launchability.py:404`) is still appended at `hub/hub/api/v1/agent_trigger.py:1079`, and its three `test_f52_*` tests passed 2026-09-15. The refusal itself does not reproduce: `0cda570` disproved its central inference, and `57eb92b` drove a full live turn that committed. A new git refusal is a new finding. Residual, **now filed as F389** (2026-09-19): an allowed call still leaves no record (`hub/hub/api/v1/agent_actions.py:940`, *"Only refusals are persisted"*, verified unchanged 2026-09-19 — note the bare `agent_actions.py:940` this line used to give does not exist at the repository root), so a recurrence would be as unfalsifiable as this one was (Correction 3, below).
 
 Found 2026-08-26 driving Q4 live on `ledger-stress` (`proj-18e5d4e0`): enabling `job-f632ee565238`
 ("Width bench", a loop with no reviewer other than its own agent) and letting it fire twice,
@@ -13657,6 +13657,16 @@ So for this history an operator surface *does* name the problem — the opposite
 where not one surface did.
 
 ### F168 (B, new) — there is no way to list a project's runs, and no way to cancel one
+
+**Status:** open — **re-verified 2026-09-19** against the tree, by an interactive session, because
+this was the one finding in the ledger with no `**Status:**` line at all and was therefore counted
+open on nothing. It is genuinely open. `grep` over `hub/hub/api/` returns **no** `@router` GET or
+POST on any `runs` path, so `GET /projects/{p}/runs` and `POST /projects/{p}/runs/{id}/cancel` still
+do not exist. The only run control the Hub publishes is still the per-**agent**
+`POST /{agent}/stop` (`hub/hub/api/v1/agent_trigger.py:1609`), which is the finding's own point: an
+operator cannot enumerate what is running, and cannot stop one run without stopping whatever else
+that agent is doing.
+**Source:** found by driving
 
 Found by a red check that was written to pass. LANE 1 asserted *"a run is bound to the task"* and
 came back with an empty list; the cause was not the product's binding but the route:
@@ -29847,6 +29857,48 @@ correct deterministic floor, not replace it, since its failure mode is this exac
 **Related:** `F386` (same card, copy and declined filtering), `F381`, `R5`.
 
 ---
+
+## F389 (C) — an allowed permission decision is persisted nowhere, so "the agent was never refused" is unfalsifiable
+
+**Status:** open. Filed 2026-09-19 by an interactive session at the operator's instruction, as the
+residual F52's own RETIRED note records and explicitly says was *"not filed"*. It has been carried
+as an unnumbered sentence inside another finding's status line across nine handoffs.
+**Source:** read from the code
+**Theme:** Operator surfaces
+
+**What is missing.** `record_permission_decision`
+(`hub/hub/api/v1/agent_actions.py:932`) persists an event only on the refusal branch:
+
+> Only refusals are persisted. An allowed call is the unremarkable case and would bury the
+> interesting one under a row per tool call (`:940-942`).
+
+The reasoning is sound for the timeline — a row per allowed tool call would bury the refusals, and
+the refusal is the thing an operator can act on. **The consequence is about evidence, not about the
+timeline**: because an allowed call writes nothing, "this run was never refused" and "this run never
+asked" produce byte-identical state. There is no record that distinguishes them.
+
+**Why this is worth a number.** It is the exact property that made F52 cost three weeks. F52 claimed
+every git commit was silently refused under the `workspace` posture. Disproving it needed
+`0cda570` to attack the inference and `57eb92b` to drive a full live turn that committed — because
+**no stored record could answer the question directly.** F52 is now RETIRED and its central
+inference disproved, but the unfalsifiability that let a wrong inference stand for three weeks is
+untouched: **a recurrence would be as unfalsifiable as the original was.**
+
+**Where.** `hub/hub/api/v1/agent_actions.py:932-975`. The refusal branch calls `persist_event` with
+`event_type="permission_denied"`; there is no allowed branch. Note that F52's own status line cites
+this as `agent_actions.py:940` — the file is at `hub/hub/api/v1/`, and the bare path does not exist
+at the repository root. Verified 2026-09-19: the comment is at `:940-942` and the shape is
+unchanged.
+
+**Severity C, deliberately.** Nothing is broken and no operator is misled today. It is a gap in what
+can later be proven, which is why it sat unfiled for nine sessions — it never reproduces, because
+there is nothing to reproduce. That is also why it needs a number rather than a sentence inside a
+RETIRED finding's status line, where no index can see it.
+
+**Not proposed, and the cheap remedy is not obviously right.** A counter per run, or a single
+`permission_allowed` aggregate written at turn end, would answer "was anything refused" without a
+row per call — but that is a design question with a migration behind it, and nobody has asked for
+it. **Do not read this finding as a decision that it should be built.**
 
 ## F388 (A) — a Hub started from source silently opens the operator's live database, and the code comment says it cannot
 

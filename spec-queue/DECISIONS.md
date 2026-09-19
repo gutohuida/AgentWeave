@@ -20,6 +20,26 @@ DECIDED. Absence is not consent.
 
 ## Open
 
+**Nothing is open here. Both rows below are discharged, and both were verified so on 2026-09-19.**
+They are kept in place, not deleted, because each carries the reasoning and the measurements behind
+a decision the corpus still relies on — and a decision log that is silently rewritten stops being
+evidence. **Read them as history. Neither is work waiting on the operator.**
+
+- **`a-quote-can-spell-a-slash` / F332-rule — fully discharged.** The row reads *"REVISING — take the
+  night's candidate correction through one more verification round, then build"*. That happened:
+  **F332's status is `fixed 0e52ad4`**, and the change is archived at
+  `openspec/changes/archive/2026-09-15-a-quote-can-spell-a-slash`. The blocked night-queue items it
+  names (`f332-s4`…`s7`) survive only inside `.agentweave/tasks/`, which is gitignored scratch, not
+  the corpus.
+- **F352-free — decided, and the decision shipped.** *"Reject (d), go with (f), already shipped"*,
+  2026-09-15; `4b59ee0` (`a-task-nothing-will-move-holds-nobody`) is archived. **What is still live
+  is a finding, not a decision:** F352 reads *"open for the visibility half; the definition half is
+  fixed `4b59ee0`"*. The visibility half belongs in `FINDINGS.md`, where it is, and needs no
+  decision from the operator to be queued.
+
+**If a future row is genuinely open, put it above this banner**, so this section keeps meaning what
+its name says.
+
 ### a-quote-can-spell-a-slash stopped at §2 — 2026-09-13 night, DECIDED 2026-09-15
 
 - DECIDED    F332-rule  **REVISING — take the night's candidate correction (below) through one
