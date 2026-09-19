@@ -3,7 +3,19 @@
 **Round 1, 2026-09-19.** Explored against the tree at `ddf73aa`.
 **Round 2, 2026-09-19 — adversarial, independent, returned DO NOT APPROVE with five blocking
 findings. All five were verified at the source before being accepted. Round 3 applied every one.**
-The round log is at the bottom; read it before re-proposing anything this document rejects.
+**Round 4, 2026-09-19 evening — a second adversarial pass, run because R1 and R3 were the same
+session. It also returned DO NOT APPROVE, with eight blocking findings; six were re-verified at the
+source and all six held. This document is R4-applied.** The round log is at the bottom; read it
+before re-proposing anything this document rejects.
+
+**Read this before starting another round.** Four passes have now found a defect each, and three of
+the four were the *same* shape: an artifact of this change contradicting another artifact of this
+change, while each one reads correctly alone. R2-3 (requirement in the wrong capability), R4-1
+(proposal citing the design that refutes it), R4-2 (two requirements governing one sentence), R4-3
+(D9's fix applied to prose but not to its own scenarios), R4-5 (the spec's exception not reaching
+what a task asserts) are all that shape. `openspec validate --strict` passes through every one of
+them, because it checks each requirement alone. **A round that only re-reads the design will not
+find the fifth. Compare the artifacts against each other, and against the code.**
 
 R2's summary of R1 is the thing to carry: *"The argument is right; three of the four things built on
 it are not."* The conformance framing survived. D5 was false, the ADDED requirement was falsified by
@@ -126,7 +138,7 @@ live instance, where loops that keep moving by substituting will start idling.
 (`hub/hub/api/v1/jobs.py:1353-1360`). R2 confirmed both clauses reachable and one wrong:
 
 - *"no other agent is free to take this loop's work"* — **false for a documentless loop once the
-  pool is scoped.** Design D8's own comment (`jobs.py:1352-1354`) states the standard it breaks:
+  pool is scoped.** Design D8's own comment (`jobs.py:1350-1352` — R3 cited `:1352-1354` and R4's correction said `:1351-1353`; **both were wrong, and the third reading is the measured one**) states the standard it breaks:
   *"Telling the operator nobody else is free when somebody is would send them to free an agent,
   which changes nothing."*
 - *"this loop's queue holds no open task for another agent to take"* — the trailing five words are
@@ -164,7 +176,37 @@ written straight into the status, still can"* — i.e. exactly what `:8000` may 
 R1's second justification for D5 was also false and is withdrawn: it said a review on a loop task
 "can only have been dispatched by the operator's own hand", which the path above disproves — once
 that reviewer's turn ends with no verdict, `run_divergence.py:441` substitutes a *second* project-
-wide reviewer with no operator anywhere near it. The exception in the spec covers both.
+wide reviewer with no operator anywhere near it.
+
+**R4-5: "the exception in the spec covers both" was false as R3 wrote it, and the spec is now
+widened so that it is true.** On the `run_divergence` path `task.assignee` is the **silent
+reviewer**, not the author: `hub/hub/run_divergence.py:432-441` builds `barred` from
+`_reviewers_that_gave_no_verdict` plus the run's agent plus the author, and the function never reads
+`loop.spec_document_id`. R3's exception was scoped to *"a task in a review status whose assignee is
+the agent that produced the work"* — which is exactly what that row is **not**. So a second
+project-wide substitution on a documentless loop was governed by nothing in the delta, while task
+4.2 asserted it must keep working. *Rejected:* stating it as a Non-Goal (task 4.2 would then test
+behaviour the spec does not admit — the same shape as B3/D9, a change whose own artifacts
+disagree); adding a second exception (two exceptions for one concept, against the standing
+cleanest-solution preference). **Taken:** one exception over *reviewer recovery*, defined by the
+assignee being unable to complete the review, which both rows satisfy.
+
+**R4-4: the exception is a non-restriction, not a guarantee, and R3 wrote it as a guarantee.** R3's
+text — *"the Hub SHALL resolve a replacement reviewer from every available agent in the project"* —
+and its scenario's *"THEN a replacement reviewer is resolved"* promise an outcome the code does not
+make. Two branches drop a review row before the ladder at `:1738`:
+
+- `scheduler.py:1669` — `if not attribution.recorded:` appends to `unstaffed` and `continue`s. This
+  is reachable on precisely the rows the exception exists for: `:1523-1527` detects a wedge through
+  `agents_that_worked` when `completion_attribution(...).agent is None`, i.e. when nothing recorded
+  a completion — the legacy shape D5 itself calls *"written straight into the status or predates the
+  transition table"*.
+- `scheduler.py:1698` — `if not review_target.resolved:` does the same when
+  `commit_for_task_review` finds no commit.
+
+This is R2-4's shape surviving into R3 in a second place. The requirement now says only that **this
+requirement** adds no narrowing; whether anyone is found is governed by the requirement named in
+D8b and by the ladder's own rules.
 
 **Task 3.5 is therefore load-bearing rather than a formality**, and the exception is written into
 the requirement rather than left to the code.
@@ -204,6 +246,28 @@ Both halves now live in `agent-loops`, where loops live and where `:791` was alr
 **`agent-flows` gets no delta at all**, because flow behaviour does not change. That also dissolves
 the question of whether `agent-flows:14` needed relaxing: it did not.
 
+**A flow scenario nonetheless appears in this delta (R4-N6), and that is deliberate.** *"A flow
+still staffs every available agent"* duplicates `agent-flows:411-415`. It stays because the ADDED
+requirement's own last paragraph — *"A loop that declares a specification document SHALL be
+unaffected"* — is itself in `agent-loops`, and a paragraph with no scenario is the dormancy D9 was
+written to end. The scenario proves that paragraph, not flow width.
+
+### D8b — `agent-loops:1232` already holds half the exception, and R4 reconciles with it (R4-8)
+
+*A loop does not staff a review of its own agent's work* (`openspec/specs/agent-loops/spec.md:1232`)
+already states at `:1242` that *"a loop's task already recorded in `under_review` under its own
+author's name SHALL still be recovered by reassignment without moving status"*, with the scenario
+*"A loop's wedged review still recovers"* (`:1271`). **No document in this change cited it through
+R3** — `grep` over the change directory returned nothing. D8 decided where the delta belongs without
+reading the requirement that already contained half of it, and R3's exception then restated the same
+rule in a second requirement with **wider** wording (*"every available agent in the project"*),
+which is the drift hazard D1 invokes against inline filters.
+
+*Rejected:* modifying `:1232` as well — it is true as written and this change does not alter what it
+requires. *Taken:* the exception is reworded as a non-restriction (D5/R4-4) and **defers the
+recovery guarantee to `:1232` by name**, so the two requirements state one rule between them rather
+than two versions of it. Task 6.7 records the cross-reference.
+
 ### D9 — `agent-loops:791`'s first sentence is scoped (R2-5)
 
 R1 kept the shipped sentence verbatim — *"The Hub SHALL refuse a firing whose loop agent already has
@@ -212,8 +276,18 @@ requirement cannot say both, and R1's answer to its own Open Question 2 (*"the f
 already unconditional and already describes the post-change behaviour"*) was true for loops and
 false for flows.
 
+**R4-3: D9 fixed the prose and left the scenarios, so the defect it names survived one level down.**
+The delta retained *"WHEN a loop's agent has a running turn and the loop's job fires THEN the firing
+is refused"* and *"Repeated firings during one turn do not accumulate work"* unconditionally, and
+the very scenario D9 added — *"A flow is not refused while another agent is free"* — is a strict
+specialization of the first WHEN with the opposite THEN. Verified: `scheduler.py:343-350` returns
+`None` for a flow with an open task and a non-empty pool, and `:1620-1628` then staffs a sibling.
+Both retained scenarios now carry the roster arm, matching the already-scoped held scenario. **The
+lesson is D9's own: a requirement cannot say both — and neither can its scenario list.**
+
 This is a **pre-existing** falsity, not one this change introduces:
-`scripts/drive/FINDINGS.md:28155-28157` records the REV of `a-spent-allowance-holds-the-queue`
+`scripts/drive/FINDINGS.md:28160-28162` (R3 cited `:28155-28157`, which is a blank line and the REV
+header) records the REV of `a-spent-allowance-holds-the-queue`
 finding *"The MODIFIED `agent-loops` SHALL was false for every flow. The guard lets a firing through
 when anyone is free."* That round left it dormant by adding no flow scenario. This change adds the
 scenario that detonates it, so it fixes the sentence in the same delta rather than shipping a
@@ -222,10 +296,36 @@ requirement its own scenario refutes.
 The deferral sentence is narrowed rather than deleted: `agent-flows` still governs which agent a
 **flow** staffs; the documentless answer now lives in this capability.
 
+### D10 — `agent-loops:1471` is modified too, or two requirements govern one sentence (R4-2)
+
+*Pressing Run on a loop that declines names why it declined* (`:1471`) describes the guard as
+refusing on *"either no other agent in the project is free or the loop's queue holds no task in a
+non-terminal status"*, and requires that the answer *"SHALL say **which of those two** held"*.
+
+D3 makes the first of those two conditions inapplicable to every documentless loop, and **task 5.3
+mandates a third clause** — *"this loop runs only the agent its job names"* — that a two-way SHALL
+does not admit. Through R3 the delta modified `:791` and nothing else, so the change would have
+shipped two requirements in one capability governing the same 409 sentence and disagreeing about
+what it may say. **`openspec validate --strict` cannot see this**: both requirements are
+individually well-formed, and nothing checks two requirements against each other. That is the same
+blind spot that let D9's contradiction live in one requirement's own scenario list.
+
+The condition becomes three-way, the answer is required to name the one that held and **not** to
+name one that did not, and a documentless-loop scenario is added. *Rejected:* dropping task 5.3's
+third clause (it is D4, and the whole operator-facing point of the change — the 409 would keep
+telling the operator to free an agent that changes nothing); leaving `:1471` for a later change (it
+is false the day this ships, which is what "dormant" meant in D9 and cost this change two rounds).
+
 ## Risks / Trade-offs
 
 - **The operator's live loops start idling**, and while their agent is held they stop resuming even
   work other agents hold (D6/R2-6). → Accepted with the decision; recorded as behavioural BREAKING.
+- **The operator's board will move on the first restart after this ships (R4-N1).**
+  `hub/ui/src/components/spec/loopCounts.ts:23` buckets any loop with a `stall_reason` as
+  `'stalled'`, and `jobs.py:355` now sets one where a substitution previously kept the loop reading
+  `running`/`idle`. `runningLoopCount` (`:36`) falls, the stalled count rises, **no UI code
+  changes**, and every sentence shown is true. → The risk is that it reads as a regression. The test
+  guide says so explicitly, and this is the first thing to say to the operator after the deploy.
 - **The F70 exception is a real, if narrow, substitution that survives this change.** → Written into
   the requirement, bounded to recovery, and tested (task 4.1). The alternative is an unrecoverable
   row.
@@ -273,9 +373,62 @@ so R2-1's wedged-review path is derived from code and has never been observed; i
 `hub/ui/`'s `loopCounts.ts`; it did not run `openspec validate --strict`; and it searched
 `openspec/specs/` only, not `openspec/changes/archive/`.
 
+### Round 4 — adversarial, 2026-09-19 evening, DO NOT APPROVE
+
+The second adversarial pass, run because R1 and R3 were written by the same session and the
+repository's own `DEAD-ENDS.md` records that *"a round you wrote yourself is not a check"*. Six of
+its eight blocking findings were re-verified at the source before being accepted; all six held.
+
+- **R4-1** `proposal.md`'s Impact still carried R1's blocked claim — *"a documentless loop does not
+  staff a review at all"* — citing **D5**, the section that refutes it, as its authority.
+  → Impact rewritten; the green test that falsifies it is named.
+- **R4-2** `agent-loops:1471` is falsified by D3 and task 5.3, and was not in the delta. → **D10**;
+  a second MODIFIED requirement.
+- **R4-3** the delta kept two unconditional scenarios that its own new flow scenario refutes —
+  **D9's defect one level down**. → both scoped; D9 amended.
+- **R4-4** the exception promised *"a replacement reviewer is resolved"*, which `scheduler.py:1669`
+  and `:1698` do not do. **R2-4's shape, surviving R3 in a second place.** → restated as a
+  non-restriction; D5 amended.
+- **R4-5** the exception was scoped to authorship, so it did not reach `run_divergence.py:441`'s
+  substitution, where the assignee is the *silent reviewer* — while task 4.2 asserted that path must
+  keep working. → exception widened to reviewer recovery; second scenario added.
+- **R4-6** task 4.1's *"No existing test covers this"* is false and checked the wrong file.
+  → corrected; Open Question 1 restated.
+- **R4-7** four of task 0.3's nine named baseline files are flows, not documentless loops, and task
+  6.1's triage rule is keyed to that label. → both rewritten in terms of the fixture.
+- **R4-8** the exception duplicates `agent-loops:1232`, which no document in the change cited.
+  → **D8b**.
+
+Non-blocking, all applied: **R4-N1** (`loopCounts.ts`, now a stated Risk), **R4-N2** (two citations
+off), **R4-N3** (`test_flow_width.py:622` is documentless and its docstring becomes false),
+**R4-N5** (`test_loop_busy_guard.py` missing from the baseline), **R4-N6** (a flow scenario in
+`agent-loops`, kept deliberately — D8).
+
+**What R4 cleared, so a later round need not redo it:** `--strict` passes; the three call sites are
+`:348`, `:1263`, `:1444` and nothing else; **the no-collision claim with
+`an-unstaffed-review-names-its-holders` group 1 is true** in either landing order; **the fix can
+fire** — `decide_firing`'s only pool read is `:1620`, an empty pool falls to `continue` at `:1625`,
+and no second staffing path bypasses it; **no shipped scenario is dropped** (all 8 of
+`agent-loops:820-863` appear in the delta); and every `models.py`, `scheduler.py` and
+`task_transition_service.py` citation checked is exact.
+
+**What R4 could not check:** it drove no Hub and ran no live firing, so tasks 7.1-7.4 are
+unexecuted and R4-4's two drop-out branches are derived from code, not observed; it queried nothing
+on `:8000`; it ran only two test files (12 passed), not the 16-file baseline, the full suite,
+`ruff`/`black`/`mypy` or `npm run lint`; it did not read `loop-firing-accountability`,
+`task-lifecycle-governance:317`/`:1481` or `agent-conversation-workspace`; it did not read
+`_stall_reason_from_walk`'s body, so **D4's claim about the exact sentence it replaces is still
+unverified**; and it audited only 4 of the 16 baseline files beyond the greps it reported.
+
 ## Open Questions
 
 1. **Does `:8000` actually hold a wedged review row on a documentless loop?** R2-1's path is real in
-   code and unobserved in life. It changes nothing about the design — the exception is right either
-   way — but it decides whether task 4.1's test is a regression guard or a live repair. Answerable
-   only by a read-only query against the operator's database, which task 5.1 can carry.
+   code, and **R4-6 establishes it is also covered by a green regression test** —
+   `test_a_loops_wedged_review_still_recovers` (`test_a_loop_does_not_staff_its_own_review.py:328`,
+   `declares_document=False`). So it is no longer "unobserved": it is observed in the suite and
+   unobserved in life. What remains open is only whether task 4.1 is a guard over a hypothetical or
+   over rows the operator is actually holding, which changes the urgency of shipping and nothing
+   about the design. Answerable by a read-only query, which **task 7.4** carries.
+2. **`_stall_reason_from_walk`'s exact current sentence is still unverified** (R4's own gap). D4
+   asserts which string `jobs.py:355` replaces. **Task 5.4** must read that function's body before the
+   operator-visible sentence is changed, not after.

@@ -24,15 +24,36 @@ else means the tree has moved further than this list knows.
 - [ ] 0.3 Baseline the **real** surface, not a quarter of it. `grep -rl --include=*.py
       "decide_firing\|_loop_flow_busy_reason" hub/tests/` returns **16** files; run all of them and
       record which are already red. **Keep `--include=*.py`** — without it the same grep returns 35,
-      the extra 19 being `__pycache__` binaries, and R2 quoted the bare form. At minimum it must
-      include the ones that build **documentless**
-      loops by default: `test_a_loop_does_not_staff_its_own_review.py`,
-      `test_actor_aware_claimability.py`, `test_a_review_nobody_is_doing.py`,
-      `test_firing_decision_is_shared.py`, `test_task_turn_collision.py`, `test_board_agent_role.py`,
-      `test_loop_selection_carries_its_agent.py`, `test_a_flow_names_what_it_cannot_staff.py`,
-      `test_review_leaves_the_pool.py`.
-      **`test_flow_width.py` defaults to `declares_document=True` (`:54`), so it is not a guard for
-      this change** — a green run of it proves nothing here, and R1 listed it as if it did.
+      the extra 19 being `__pycache__` binaries, and R2 quoted the bare form.
+
+      **R4-7, 2026-09-19 — this task's list of "documentless" files was wrong for four of nine, and
+      task 6.1's triage rule is keyed to the label. Do not classify a file by its name.** Measured:
+
+      - **Three files take a `declares_document` parameter**, and it is the whole distinction:
+        `test_a_loop_does_not_staff_its_own_review.py:56` (default `False`),
+        `test_actor_aware_claimability.py:36` (default `False`), `test_flow_width.py:54`
+        (default `True`).
+      - **`test_loop_busy_guard.py` sets `spec_document_id` nowhere**, so its loops are documentless
+        by omission. **It is the dedicated regression file for `_loop_flow_busy_reason`, which
+        tasks 3.1-3.3 change, and R3's list omitted it entirely.** Run it first.
+      - **Four files R3 called documentless are flows** — each sets `spec_document_id`
+        unconditionally: `test_a_review_nobody_is_doing.py:135`, `test_board_agent_role.py:83`,
+        `test_a_flow_names_what_it_cannot_staff.py:111`, `test_review_leaves_the_pool.py:89`. Task
+        4.1 already calls the first of those a flow, so `tasks.md` contradicted `tasks.md`.
+      - The rest — `test_firing_decision_is_shared.py`, `test_task_turn_collision.py`,
+        `test_loop_selection_carries_its_agent.py` and the remainder of the 16 — **classify by
+        reading the fixture**, not by this list. Record what you find beside this task.
+
+      **Measured at R4, with no product code changed:**
+      `py -3.11 -m pytest hub/tests/test_a_loop_does_not_staff_its_own_review.py
+      hub/tests/test_loop_busy_guard.py hub/tests/test_flow_width.py
+      hub/tests/test_actor_aware_claimability.py -q` → **54 passed, 5 warnings, 20.83s.** That is
+      the four files whose documentless/flow status is now established rather than guessed. Start
+      from this number; a different one means the tree moved before you began.
+
+      **`test_flow_width.py` defaults to `declares_document=True` (`:54`), so a green run of it
+      proves nothing about the documentless path** — R1 listed it as if it did. Its one exception is
+      `:622`, which builds `declares_document=False`; see task 6.6.
 
 ## 1. The scope filter (design D1, D2, D7)
 
@@ -99,10 +120,23 @@ else means the tree has moved further than this list knows.
       *Mutation:* apply the loop filter to `resolve_reviewer`'s rung-2 pool. The test must fail, and
       the failure must be *no reviewer resolved* — which is the permanent wedge the exception
       exists to prevent.
-      **No existing test covers this: every fixture in `test_a_review_nobody_is_doing.py` sets
-      `spec_document_id` (`:135`).**
+      **R4-6, 2026-09-19 — "No existing test covers this" was false, and it checked the wrong
+      file.** `test_a_review_nobody_is_doing.py` is indeed a flow file (`:135`), but the covering
+      test is `hub/tests/test_a_loop_does_not_staff_its_own_review.py:328`,
+      `test_a_loops_wedged_review_still_recovers` — a **documentless** loop (`_queue` defaults
+      `declares_document=False`, `:56`), asserting `decision.selections == [(task.id, REVIEWER,
+      True)]`, i.e. a project-wide sibling staffed as reviewer. Green today: 12 passed in that file.
+      **So 4.1 is not a new test: run the mutation against that one, and add a new test only if it
+      does not already fail under it.** Treat a green run of that file after the change as the
+      primary evidence for the whole exception.
 - [ ] 4.2 **Test:** `run_divergence.py:441`'s recovery on a **loop's** task still resolves a
       project-wide reviewer after a verdict-less turn.
+      **R4-5: this path's assignee is the *silent reviewer*, not the author**
+      (`hub/hub/run_divergence.py:432-441` builds `barred` from `_reviewers_that_gave_no_verdict`
+      plus the run's agent plus the author, and never reads `loop.spec_document_id`). R3's exception
+      was worded around authorship and therefore did not reach it, while this task asserted it must
+      keep working — a change whose spec and tasks disagreed. The requirement now covers **reviewer
+      recovery**, both rows. Assert the loop is documentless, or the test proves nothing.
 - [ ] 4.3 Confirm no code change is needed for 4.1 and 4.2 — `resolve_reviewer` keeps
       `_agents_that_are_free` at both call sites. **If either test passes only after a code change,
       D5 has moved and R3's reasoning needs re-deriving, not patching.**
@@ -116,6 +150,16 @@ else means the tree has moved further than this list knows.
 - [ ] 5.3 Split the `why` clause in `run_job` (`hub/hub/api/v1/jobs.py`, the branch that re-asks the
       busy guard) so a documentless loop is told the loop runs only the agent its job names.
       The empty-queue clause drops its trailing *"for another agent to take"* for a loop.
+      **R4-2: this third clause is what forced `agent-loops:1471` into the delta.** That requirement
+      said the answer *"SHALL say which of those **two** held"*, and a third reason does not fit a
+      two-way SHALL. Build 5.3 and the `:1471` delta together, or the code satisfies one requirement
+      by violating another in the same capability — which `openspec validate --strict` cannot
+      detect, because it checks no requirement against any other.
+- [ ] 5.5 **Test:** the `:1471` answer names the condition that held and **not** one that did not.
+      Three cases, one assertion each on absence: documentless loop with a sibling free (names the
+      single-agent scope, not the roster); flow with the roster exhausted (names the roster); any
+      loop with an empty queue (names the queue). **The absence assertions are the test** — all
+      three sentences are individually plausible, which is how F127's survived.
 - [ ] 5.4 **Test:** the board. A documentless loop in this state reports the busy reason, not "no
       claimable task". **Assert the decision kind as well as the sentence** — R2 traced that the
       sentence is only correct because `jobs.py:355` replaces `_stall_reason_from_walk`'s
@@ -124,12 +168,27 @@ else means the tree has moved further than this list knows.
 
 ## 6. What must not move
 
-- [ ] 6.1 Re-run the full 0.3 baseline and diff. A newly red test in any file that defaults to
-      `declares_document=True` is a flow regression and is this change's fault by default.
+- [ ] 6.1 Re-run the full 0.3 baseline and diff. **R4-7: triage by the fixture the failing test
+      actually built, never by the filename.** A newly red test whose loop sets `spec_document_id`
+      (or passes `declares_document=True`) is a **flow** regression and is this change's fault by
+      default — flows do not change. A newly red test whose loop leaves it `None` is the change
+      firing, and is expected only where a task above says so. The old rule keyed on "files that
+      default to `declares_document=True`", which is 3 of the 16 files and misclassified 4 more.
 - [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` in full, once, at the end.
 - [ ] 6.3 `ruff check src/ hub/ tests/`; `black --check src/ hub/hub/ hub/tests/ tests/
       --target-version py311`; `mypy src/`. Nothing under `hub/ui/` is touched, so `make ui` is not
       required and must not be run.
+- [ ] 6.6 **R4-N3:** correct `hub/tests/test_flow_width.py:614-619`'s docstring. It builds
+      `declares_document=False` at `:622` and states as shipped fact that a documentless loop
+      *"still gets width, and it no longer gets review at all"*. **D2 makes the first half false.**
+      The test asserts briefing text and stays green, so change the docstring, not the assertion —
+      and do not let its greenness be read as evidence that width survived.
+- [ ] 6.7 **R4-8:** add the cross-reference D8b requires. `openspec/specs/agent-loops/spec.md:1242`
+      already carries *"a loop's task already recorded in `under_review` under its own author's name
+      SHALL still be recovered by reassignment without moving status"*, with the scenario at
+      `:1271`. No document in this change cited it through R3. The exception now defers the
+      recovery **guarantee** to it by name; confirm at sync time that the two read as one rule and
+      that neither has drifted.
 
 ## 7. Drive it
 

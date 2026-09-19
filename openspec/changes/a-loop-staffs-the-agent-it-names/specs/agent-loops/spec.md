@@ -9,15 +9,26 @@ substituting another agent. The task SHALL keep its status and SHALL gain no ass
 firing SHALL consider it again.
 
 **This requirement governs staffing, not resumption.** A task that already names an assignee SHALL
-continue to be worked by that assignee, whoever it is. It decides who is given work nobody holds,
-and never takes work away from an agent already holding it.
+NOT have that assignee replaced by this requirement, whoever it is. It decides who is given work
+nobody holds, and never takes work away from an agent already holding it. It does not promise that
+such a task is resumed on any particular firing: the busy guard refuses the whole firing while the
+loop's own agent is running or held, so a task assigned to a sibling waits with the rest of the
+queue until that agent is free.
 
-**One exception, and only one.** Where a task is in a review status whose assignee is the agent that
-produced the work — a row no current edge can create, and which nothing else releases — the Hub
-SHALL resolve a replacement reviewer from every available agent in the project. Such a loop names
-one agent, and that agent is the author, so restricting the recovery to the named agent would leave
-the row wedged permanently. This exception SHALL apply to that recovery alone, and SHALL NOT be read
-as permitting substitution for ordinary work.
+**One exception, and only one: reviewer recovery.** Where a task is in a review status held by an
+assignee that cannot complete the review — the agent that produced the work, or a reviewer whose
+turn ended without recording a verdict — this requirement SHALL NOT narrow the pool from which a
+replacement reviewer is resolved to the agent the loop's job names. Such a loop names one agent, and
+on the first of those rows that agent **is** the author, whom the resolver excludes by construction,
+so narrowing the recovery would leave the row wedged permanently.
+
+**This exception is a non-restriction, not a guarantee.** It states only that this requirement adds
+no narrowing of its own. Whether a replacement reviewer is found at all is governed by *A loop does
+not staff a review of its own agent's work* in this capability — which already requires that such a
+row "SHALL still be recovered by reassignment without moving status" — and by the reviewer ladder's
+own requirements, several of which end a recovery with nobody staffed and the operator told why.
+This exception SHALL apply to reviewer recovery alone, and SHALL NOT be read as permitting
+substitution for ordinary work.
 
 This restriction SHALL be a filter over the agents the Hub has already determined to be available,
 and SHALL NOT introduce any further condition on whether an agent can take a turn. An agent excluded
@@ -51,12 +62,21 @@ the declared document and nothing else.
 - **THEN** that task is resumed for its existing assignee
 - **AND** the assignee is not replaced by the agent the loop's job names
 
-#### Scenario: A wedged review is still recovered from the whole project
+#### Scenario: A wedged review's recovery is not narrowed to the loop's own agent
 
 - **WHEN** a loop declares no specification document and one of its tasks is in a review status
   whose assignee is the agent that produced the work
-- **THEN** a replacement reviewer is resolved from the available agents in the project
-- **AND** it is not required to be the agent the loop's job names
+- **THEN** the pool the replacement reviewer is resolved from is not narrowed to the agent the
+  loop's job names
+- **AND** where that recovery ends with nobody staffed, it is for a reason this requirement did not
+  create
+
+#### Scenario: A verdict-less review's substitution is not narrowed either
+
+- **WHEN** a loop declares no specification document and one of its tasks is in a review status
+  whose assignee is a reviewer whose turn ended without recording a verdict
+- **THEN** the pool the substitute reviewer is resolved from is not narrowed to the agent the loop's
+  job names
 
 #### Scenario: An agent the loop names but cannot be started is not replaced
 
@@ -118,13 +138,13 @@ agent is free.
 
 #### Scenario: A firing during a live turn queues nothing
 
-- **WHEN** a loop's agent has a running turn and the loop's job fires
+- **WHEN** a loop's agent has a running turn, no other agent in the project is free, and the loop's job fires
 - **THEN** the firing is refused
 - **AND** no inbound queue entry is created for that agent
 
 #### Scenario: Repeated firings during one turn do not accumulate work
 
-- **WHEN** a loop's job fires several times while its agent's single turn is running
+- **WHEN** a loop's job fires several times while its agent's single turn is running and no other agent in the project is free
 - **THEN** the number of inbound queue entries created by those firings is zero
 
 #### Scenario: A firing while the agent is held queues nothing
@@ -190,3 +210,72 @@ agent is free.
 
 - **WHEN** no task has ever named a loop, its agent is running no turn and is not held, and the loop's job fires
 - **THEN** the firing proceeds and queues one briefing for the loop's agent
+
+### Requirement: Pressing Run on a loop that declines names why it declined
+
+The Hub SHALL answer an operator's manual firing of a loop that the loop's busy guard refused with a conflict that names the reason the guard gave, and SHALL NOT answer it as a failure to fire.
+
+The busy guard refuses a firing when the job's agent is running a turn or its queue is held, and
+**either the loop declares no specification document, or no other agent in the project is free, or
+the loop's queue holds no task in a non-terminal status.** It records nothing, deliberately, so
+there is no firing record to read a reason from, and the most recent record is some earlier
+firing's.
+
+The answer SHALL say which of those three held, and SHALL NOT name a condition that did not hold.
+Stating that no other agent is free when one is free tells the operator to free an agent, which
+would change nothing. For a loop that declares no document, freeing an agent changes nothing
+whether or not one is free — what that loop lacks is its own agent — so the answer SHALL name the
+loop's single-agent scope and SHALL NOT name the roster. Where the loop declares a document and the
+roster is genuinely exhausted, the roster is the true reason and the answer SHALL name it.
+
+The route SHALL answer from a firing record only when the manual firing wrote that record. Where it
+wrote none, the route SHALL ask the guard again before anything else, because the guard is the
+first question the firing asked, and SHALL answer a refusal with the guard's reason. A record some
+earlier firing wrote is not this firing's answer, and the route SHALL NOT change that record's
+requester to whoever pressed Run.
+
+Where the firing declined because every task on the queue is in flight, and an agent those tasks are
+staffed to is held, the answer SHALL name that agent and the time its hold ends. It SHALL NOT state
+that the work is already being worked, or that nothing is wrong. The work is staffed, but it cannot
+start until the hold ends.
+
+#### Scenario: Run while the loop's agent is mid-turn and nobody else is free
+
+- **WHEN** a loop's agent is running a turn, no other agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent that is running
+- **AND** it is not a server error reading "Failed to fire job"
+
+#### Scenario: Run while the loop's agent is mid-turn and its queue is empty
+
+- **WHEN** a loop's agent is running a turn, the loop's queue holds no task in a non-terminal status, another agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent that is running
+- **AND** it does not state that no other agent is free
+- **AND** no inbound queue entry is created for the loop's agent
+
+#### Scenario: Run on a documentless loop while another agent is free
+
+- **WHEN** a loop declares no specification document, its agent is running a turn, its queue holds a pending task, another agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent that is running
+- **AND** it states that the loop runs only the agent its job names
+- **AND** it does not state that no other agent is free
+
+#### Scenario: Run while the loop's agent is held
+
+- **WHEN** a loop's agent's queue is held, no other agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent and the time its hold ends
+
+#### Scenario: Run on a flow whose in-flight work waits on a hold
+
+- **WHEN** every task on a flow's queue is in flight, one of them is staffed to a held agent, and the operator presses Run
+- **THEN** the answer names that agent and the time its hold ends
+- **AND** it does not state that the work is already being worked, or that nothing is wrong
+
+#### Scenario: A firing that recorded its own refusal is answered from that record
+
+- **WHEN** the operator presses Run on a loop, the firing records a skipped firing with its reason, and the loop's agent has become busy since
+- **THEN** the answer is a conflict carrying the recorded reason, not the busy guard's
+
+#### Scenario: An earlier firing's record is not attributed to the press
+
+- **WHEN** Run is pressed on a loop and the firing writes no record
+- **THEN** no earlier firing's record has its requester changed
