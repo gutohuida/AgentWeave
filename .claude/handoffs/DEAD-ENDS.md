@@ -1095,6 +1095,63 @@ Added 2026-09-16 after one of these reached a committed specification.
   landed, read the `requests` field out of the `<script type="application/json"
   id="backlog-data">` block rather than trusting the console summary. *(2026-09-19)*
 
+## Waiting for CI without restarting its own clock
+
+- **`gh run watch <id> --exit-status` backgrounded is how you wait for the merge gate**
+  *(2026-09-19)*. A full CI run on `autonomous/**` measures **~13-14 minutes**. The gate's problem
+  was never the waiting — it was that the *next firing's own commit* moved `HEAD` to an unbuilt sha
+  before the wait could pay off. Get the id with
+  `gh run list --branch <b> --limit 5 --json databaseId,headSha,status,conclusion,workflowName --jq ...`,
+  then `gh run watch <id> --exit-status --interval 30` as a background command. Measured green on
+  `a435f48` after ~14 minutes.
+- **The four gate conditions are cheap to check and worth checking separately** *(2026-09-19)*:
+  `git rev-list --count HEAD..master` is 0; `git status --short` empty and
+  `git rev-parse HEAD` == `git rev-parse @{u}`; CI `success` at HEAD's sha; no line-initial
+  `HOLD MERGE` in `DIRECTION.md`'s newest section. On 2026-09-19 conditions 1, 2 and 4 had been
+  holding for four days and only 3 failed.
+
+## A machine reader needs the row, not the prose — `APPROVALS.md`
+
+- **An approval written only as a `### APPROVED — <name>` heading is invisible** *(2026-09-19)*.
+  `backlog_page.py`'s `approvals_rows()` matches `^-\s+(APPROVED|REVISING|REJECTED)\s+(\S+)`, so a
+  heading plus an `ORDER:` line parses as **no token at all**, and the page renders an approved
+  change as still waiting on the operator. That is how the 2026-09-19 omission was caught. `ORDER:`
+  *does* still parse from inside a fenced block, because the regex is line-initial. **Write both the
+  prose and the `- APPROVED <name>` row.**
+- **`newest_section()` used to take the first `##` positionally** *(fixed 2026-09-19, `a435f48`)*.
+  The spec-queue files declare "newest day first" and are hand-written, so the convention is a
+  promise nobody enforced — and it had been broken: 09-18 and 09-19 were appended at the *bottom*,
+  so every machine read of "the newest approvals section" returned **09-16** for three days. It now
+  sorts by the date in the heading. **The night playbook matches on the armed date rather than
+  position, so the windows were never at risk — the page was.**
+
+## Exact-string edits on the large `openspec/changes/**` markdown files
+
+- **Do not reconstruct the `old` string from memory for a Python `str.replace`** *(2026-09-19)*.
+  These files run to 700-1000 lines with em-dashes, en-dashes and nested emphasis, and a
+  reconstructed block silently drops a sentence — three `AssertionError`s this session from exactly
+  that. **Grep for a unique first line, read the real block with `sed -n 'A,Bp'`, then replace by
+  line index** (`lines[A-1:B] = new`), or copy the block verbatim from the `sed` output.
+- **`assert old in t` before every replace.** It converts a silent no-op into a loud failure. Every
+  one of this session's three misses was caught by it rather than by re-reading the output.
+- **Measured runtime:** `py -3.11 -m pytest hub/tests/test_a_held_agent_is_busy.py
+  hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q` → **55 passed in 36.2s**
+  (2026-09-19, `7d805df`). Cheap enough to run as a routine guard, unlike the full suite's 15-47
+  minutes.
+
+## A round you wrote yourself is not a check
+
+- **2026-09-19, measured twice in one day.** R5 (written interactively) re-derived `D1` of
+  `an-unstaffed-review-names-its-holders` against option (f) and found that D1 would revert
+  `4b59ee0`. An independent adversarial Opus subagent then found D1 would **also** revert
+  `a-spent-allowance-holds-the-queue`, via `agents_held` ORed into the running set **in the very
+  expression R5 had quoted**. Measuring the character budget afterwards found a third defect
+  (`.;` in the operator's own sentence) that five consecutive rounds had specified past.
+- **The pattern to expect: one defect per pass, and each pass finds what the last missed.** Three
+  consecutive passes over one change, each finding something new, is the observed rate. Treat "my
+  own round says it is clean" as unevidenced, and prefer partial `ORDER:` lines that stop at the
+  part whose correctness its own tests can prove.
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
