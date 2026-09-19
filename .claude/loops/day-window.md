@@ -69,7 +69,21 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    **Never `cat` the HTML.** It is 300 KB and reading it burns the context this iteration needs.
    The printed report is the interface; the page is for the operator's browser.
 
-1. **Land yesterday's cycle before starting today's — the merge gate.** This step exists because
+1. **The merge gate — normally NOT here. It runs at window close** (`## The merge gate`, below).
+   **Decided 2026-09-19** (`DECISIONS.md`, `merge-gate-cadence`): every firing commits, and each
+   commit restarts a ~13-minute CI clock, so a gate at the front of the window failed condition 3
+   on four consecutive days while the other three conditions held. Running it after the day's last
+   commit is the only placement where the clock is allowed to finish.
+
+   **What this step does now: check whether the previous window's closing gate ran, and run it here
+   if it did not.** `git rev-list --count HEAD..master` and the log's last entry tell you. A morning
+   run is safe in a way a mid-window run is not — `HEAD` is hours old and its CI concluded long ago,
+   so there is nothing to wait for. If the previous close did land it, say so in one line and move
+   on. **Never run the gate at any other point in the window.**
+
+   The rest of this step is the gate's conditions, which are the same wherever it runs.
+
+   This step exists because
    nothing else in the routine was responsible for finishing. Between 2026-09-01 and 2026-09-03 the
    cycle branch reached 173 commits over 114 files, was never merged, and — because CI triggered
    only on `master` while the standing rule is "push, do not open PRs" — had never once been built
@@ -102,6 +116,8 @@ Only the first firing of the window does this. It ends by writing a full `queue`
      **Write nothing until that run concludes.** Any commit, even a log line, moves `HEAD` to a sha
      whose CI has not started, and the gate then waits another ~13 minutes on nothing. The
      2026-09-12 window opened the gate by waiting; 2026-09-13's measured the same wait twice.
+     **This is the whole reason the gate moved to window close** — at the close there is no next
+     firing to commit behind it, so waiting actually terminates.
 
      **One re-run of a known intermittent is allowed (operator, 2026-09-13).** If the run concluded
      `failure` and **every** failed or errored test in its `gh run view <id> --log-failed` carries
@@ -171,14 +187,34 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    forever. That is not hypothetical: by 2026-09-08 four changes were fully specced, three rounds
    each, **129 tasks with two ticked, neither of them an implementation.**
 
+   **Count only changes waiting on the OPERATOR — decided 2026-09-19** (`DECISIONS.md`,
+   `day-window-spec-gate`). A change the operator has already approved is waiting on a *night*, not
+   on them, and must not suppress tomorrow's proposal. The original gate counted every unbuilt
+   change, and that is what starved 2026-09-16 through 2026-09-19: all four days were gated by
+   proposals awaiting an operator token, so the window stopped producing the one thing the operator
+   opens it for — *"driving the app on a e2e process finding problems and doing spec round for me to
+   just read and approve for the night run"* (the operator, 2026-09-19). A gate that counts night
+   capacity is a gate on the wrong thing.
+
    ```bash
-   # unbuilt specced changes — a change directory with at least one unticked task
+   # changes waiting on the OPERATOR: at least one unticked task AND no decisive status token
+   # in APPROVALS.md's newest dated section. APPROVED (or REJECTED) => not waiting on them.
    for d in openspec/changes/*/; do case "$d" in *archive*) continue;; esac; \
-     grep -q '^\s*- \[ \]' "$d/tasks.md" 2>/dev/null && basename "$d"; done | wc -l
+     n=$(basename "$d"); \
+     grep -q '^\s*- \[ \]' "$d/tasks.md" 2>/dev/null || continue; \
+     awk '/^## [0-9]{4}-/{s++} s==1' spec-queue/APPROVALS.md \
+       | grep -qE "(APPROVED|REJECTED)[^\n]*$n" || echo "$n"; done | wc -l
    ```
 
+   Read the result of that command as the drain. If the awk/grep shape is ever in doubt, fall back
+   to reading the newest `APPROVALS.md` section by eye — the question it answers is simply *"is
+   there a change here that still needs a word from the operator?"*, and a human-read answer is
+   worth more than a clever pipeline.
+
    - **2 or more → there is no spec loop today.** No D-2/D-3/D-4, no new proposal. The day's slots
-     go to the draining column below.
+     go to the draining column below. Under the 2026-09-19 counting this means **two proposals are
+     sitting on the operator's desk unanswered** — a real backlog on their side, where writing a
+     third helps nobody. It should now be rare; under the old counting it was the normal case.
    - **1 → one spec loop runs**, exactly as it always has.
    - **0 → two spec loops run**, one after the other (decided by the operator 2026-09-12). The
      nights are no longer the slow half: the 2026-09-11 night built a 43-task change in about 2.5
@@ -205,7 +241,13 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    D-4  repairs   another, or a FINDINGS status sweep    spec R3  re-derive again, independently
    D-5  review    write the review page                  review   same
    D-6  repairs   if the day has room                    repairs  same
+   D-7  gate      the merge gate, LAST                   gate     same
    ```
+
+   **`D-7` is always the final item, on every shape of day** (decided 2026-09-19). Give it the
+   `-gate` suffix so the driver routes it to Sonnet/medium. Nothing may be queued after it: its
+   whole purpose is that no firing commits behind it while it waits for CI. If the day runs out of
+   iterations before reaching it, the next morning's step 1 picks it up — see `## The merge gate`.
 
    At a drain count of **0** the clear column gains `D-2b/D-3b/D-4b` (the second loop's R1/R2/R3),
    queued between `D-4` and `D-5`, so the review page covers both changes.
@@ -465,9 +507,12 @@ Theme-aware: define light colours on bare `:root`, redefine under
 
 It must answer, in this order and without the reader opening anything else:
 
-1. **The branch.** Its name, how many days it spans, and **what the morning merge gate did** — it
-   landed, or it did not and which of the four conditions failed. If the previous cycle is still
-   unmerged, that fact goes first, in a form that cannot be skimmed past.
+1. **The branch.** Its name, how many days it spans, and **what the last merge gate did** — the
+   previous window's closing `D-7`, or this morning's step 1 fallback if that is what ran. It
+   landed, or it did not and which of the four conditions failed. Since 2026-09-19 the gate runs
+   *after* this page is written, so **this page reports the previous gate, never today's** — say
+   which one you are reporting. If the previous cycle is still unmerged, that fact goes first, in a
+   form that cannot be skimmed past.
 2. **What the night window built**, and which of it was *driven* rather than only tested.
 3. **What today's drive found.** Severity, one sentence each, `file:line`.
 4. **What was specced**, one section per change: the problem, the argument in about a paragraph,
@@ -484,14 +529,44 @@ token — the operator supplies those. Commit and push.
 
 ---
 
+## The merge gate — `D-7`, the window's last firing
+
+**Decided 2026-09-19** (`DECISIONS.md`, `merge-gate-cadence`), replacing a gate at iteration 1.
+
+The gate's four conditions are unchanged and are stated once, in **iteration 1's step 1**. Read
+them there. What changed is only *when* it runs, and that it is now allowed to wait.
+
+1. **Commit and push everything else first.** `git status --short` must be empty before you begin.
+   The gate is the last thing the window does; if you still owe a log entry, write it now, because
+   you may not write one after the wait starts.
+2. **Find CI's run for this exact sha** and **wait for it to conclude**, polling every ~90 seconds,
+   for up to **25 minutes** (a full run measured ~13). Nothing commits behind you, so this wait
+   terminates — that is the entire reason the gate moved here.
+   - Concluded `success` → check the other three conditions and fast-forward.
+   - Concluded `failure` → the one re-run of a known intermittent (step 1's two signatures) still
+     applies, and its conclusion is the verdict.
+   - **Still running at the budget** → stop waiting, do not open the gate, and say so in the log
+     naming the run id. Tomorrow's step 1 will land it: by then the sha is hours old and its CI has
+     concluded, so the morning path needs no wait at all.
+3. **Then `next_action: null`**, as step 7 says. The gate is the last item; nothing follows it.
+
+**Why a morning fallback is safe when a mid-window run is not.** The failure this replaced was
+never the waiting — it was that the *next firing's own commit* moved `HEAD` to an unbuilt sha
+before the wait could pay off. At 09:00 the branch has not moved since the night, so the verdict is
+already there for the asking. The close-of-window run is the fast path; the morning run is the
+backstop; **the middle of the window is the one place the gate must never run.**
+
+---
+
 ## Limits
 
 Inherited from `autonomous-session` and the project's standing directives. State them in the log
 before any work, so a later firing inherits them even if this one dies mid-thought.
 
 - **Stay on the cycle branch.** No commits or rebases onto `master`, and no rebase onto it ever.
-  The one thing iteration 1's step 1 is allowed to do is described there, under four conditions it
-  must check itself; nothing outside that step may touch `master` at all. Push the branch every
+  The one thing the merge gate is allowed to do is described in iteration 1's step 1, under four
+  conditions it must check itself; **only the gate may touch `master`**, and since 2026-09-19 the
+  gate runs as `D-7` at window close (or as step 1's morning fallback), never in between. Push the branch every
   iteration; that is what makes the work durable and reviewable.
 - **Nothing outward-facing.** No publish, no release, no PR or issue creation, no force-push, no
   history rewriting. **Push, do not open PRs.**

@@ -659,6 +659,77 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-19 — six decisions in one sitting: the gate, the day's shape, and four findings
+
+**DECIDED 2026-09-19 afternoon, by the operator, in an interactive DECIDE session**, after being
+driven through each one with its consequences. Several had been carried unanswered for four to five
+days. The operator's framing that governs two of them:
+
+> *"The daily windows is for driving the app on a e2e process finding problems and doing spec round
+> for me to just read and approve for the night run."*
+
+- DECIDED   merge-gate-cadence  **The gate runs at window close, not iteration 1.** Move it to the
+  window's final firing, after the last commit, and let it wait for CI to conclude at `HEAD`.
+  Nothing commits behind it, so the ~13-minute clock finishes instead of being restarted by the
+  next iteration's own commit. Costs the tail of the window; keeps the CI condition intact; needs
+  no extra firing. *Rejected:* waiting at iteration 1 up to a budget (the next firing commits
+  anyway, so it only works if the budget exceeds a full CI run); a firing whose only job is the
+  gate (it still arrives after a committing firing); dropping condition 3 (`master` stops being
+  CI-verified at merge time, and `master` is what `:8000` eventually runs). Closes a question
+  carried on the 09-16, 09-17, 09-18 and 09-19 review pages.
+- DECIDED   day-window-spec-gate  **Gate on undecided, not unbuilt.** The drain count that decides
+  whether a spec loop runs counts only changes waiting on the **operator** — an `APPROVED` change
+  waiting on a night no longer suppresses tomorrow's proposal. This is the real defect: all four
+  starved days were gated by proposals awaiting an operator token, not by night capacity, so the
+  window stopped producing the one thing the operator opens it for. *Rejected:* dropping the gate
+  entirely (restores the 2026-09-08 pile-up it was added to stop: 129 tasks, 2 ticked); raising the
+  threshold to 3 (arbitrary, and still counts the wrong thing); leaving it (the starvation was not
+  self-releasing — it ran four days).
+- DECIDED   F388-fix  **Refuse the implicit default, log the resolved path, fix the docstring**
+  (options a + b + d). Direct `uvicorn hub.main:app` with no `DATABASE_URL` fails to boot with a
+  message naming the two ways to set it; every startup logs the resolved absolute database path and
+  whether the file pre-existed, at INFO, as its first line; `config.py:12-15`'s docstring stops
+  claiming the default "never fires" for the exact invocation `CLAUDE.md` prescribes. (a) alone
+  would have prevented the 2026-09-19 incident. *Rejected:* logging only (prevents nothing); the
+  primary-profile sentinel (c) (strongest, but needs a migration installed **against the operator's
+  live database**, which is the thing being protected).
+- DECIDED   F387-fix  **The sort goes in `list_questions`' `order_by`**
+  (`hub/hub/api/v1/questions.py:318`), not in the card. Blocking first, then newest, so every reader
+  gets a correct floor at once — the Overview card, the conversation tray (`F381`), and any surface
+  added later. *Rejected:* the card alone (narrower blast radius, but leaves every other reader on
+  oldest-first); both (duplication without a named failure it prevents).
+- DECIDED   F374-fix  **A gate-refused approval is not "no verdict", and no operator-only refusal
+  re-staffs.** Any 409 naming a remedy only the operator can apply ends the review and surfaces the
+  gate's own sentence to the operator, rather than re-staffing to a second reviewer who meets the
+  identical refusal. Deliberately broader than F374 measured, so it covers `F352`'s and `F316`'s
+  seams in the same repair. *Rejected:* keeping the re-staff and only correcting the false staffing
+  message (still pays a second review turn on a refusal no reviewer can clear, in the week the
+  rate-limit window counts); scoping it to the evidence gate alone.
+- DECIDED   F128-fix  **The free list becomes loop-scoped.** A loop staffs only the agents it names;
+  a flow staffs its roster, so design D12's width survives where D12 meant it. This restores the
+  invariant `_agents_that_are_free`'s own docstring already claims. **F127's 500 must be fixed in
+  the same change** — the busy-guard becomes reachable again, and that is exactly the corner where
+  it answers 500. Accepted cost: a loop pinned to a busy agent now waits, including on `:8000`,
+  where loops that currently keep moving by substituting will start idling. What decided it: an
+  agent is not only a name — `charter_id` (`models.py:219`), `runner_id` (`:216`) and the three
+  authority flags `can_read_checkpoints`/`can_recall`/`can_accept_evidence` (`:254-268`) all live on
+  the `Agent` row, so a substitution silently swaps the behaviour text, the runner **and the
+  permissions the operator selected that agent for**. *Rejected:* UI/API honesty alone (leaves the
+  authority hole — a UI that correctly reports you have no control); a per-job opt-in width flag
+  (a **flow** already is the width case, so the flag re-implements an existing concept at the cost
+  of a migration and a control — struck under the standing "cleanest solution wins" preference).
+
+**Also settled, as queueing rather than deciding:** `F185` + `F181` share one root cause
+(`agent_lifecycle.archive` leaves `charter_id` bound) and their remedy was already decided at
+`DECISIONS.md:536` and `:586`. They become **one change, taken by the next day-window spec loop** —
+which the `day-window-spec-gate` decision above now permits to run.
+
+**Three carried questions closed as stale in the same sitting**, verified before closing: `F356` is
+**fixed** (`d16a76a`, `a-late-answer-is-delivered`, 2026-09-15, driven live 22/22); `F188` was
+**retired** 2026-09-04, so the night playbook's "last severity-A finding with no change" line points
+at nothing; `F185`/`F181` needed a change directory, not a decision.
+
+
 ### 2026-09-15 — the windows are routed, metered, and trimmed rather than capped
 
 **DECIDED 2026-09-15 ~09:20, by the operator, in an interactive session** (the day window was
