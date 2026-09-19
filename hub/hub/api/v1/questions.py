@@ -242,12 +242,18 @@ async def ask_question_for_actor(
     batch_id: Optional[str] = None,
     batch_index: int = 0,
     batch_size: int = 1,
+    subject_key: Optional[str] = None,
 ) -> Question:
     """Create one question row. A question asked on its own is a batch of one.
 
     Batched questions come through here too, one call each, so a question that arrives as part of a
     set is created by exactly the same path — same id scheme, same event, same broadcast — as one
     asked alone.
+
+    `subject_key` is a structural dedupe identifier, distinct from `body.question`'s prose
+    (`a-refused-capability-reaches-the-operator`, design D15). Defaulted to `None` so every existing
+    caller is unaffected; only a caller that wants "at most one open question for this key per
+    project" (enforced by the partial unique index on `questions`) passes one.
     """
     q_id = f"q-{short_id()}"
     question = Question(
@@ -264,6 +270,7 @@ async def ask_question_for_actor(
         batch_id=batch_id,
         batch_index=batch_index,
         batch_size=batch_size,
+        subject_key=subject_key,
     )
     session.add(question)
     await session.commit()

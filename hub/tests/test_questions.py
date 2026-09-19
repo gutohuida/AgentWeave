@@ -273,3 +273,46 @@ async def test_an_option_must_have_a_label(app, auth_headers):
         headers=auth_headers,
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_operator_posted_questions_write_no_subject_key_and_coexist(app, auth_headers):
+    """Task 4.12: `ask_question_for_actor`'s new `subject_key` keyword defaults to `None` for
+    every caller that does not pass one — `POST /questions` is one — and the partial unique index
+    on `(project_id, subject_key)` only constrains rows where `subject_key IS NOT NULL`, so two
+    NULL-keyed open questions on the same project must coexist rather than collide.
+    """
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Question
+
+    payload = {
+        "from_agent": "claude",
+        "blocking": False,
+        "header": "Decide",
+        "options": [{"label": "Yes"}, {"label": "No"}],
+        "multi_select": False,
+    }
+    first = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={**payload, "question": "First?"},
+        headers=auth_headers,
+    )
+    second = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={**payload, "question": "Second?"},
+        headers=auth_headers,
+    )
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+    async with async_session_factory() as session:
+        rows = (
+            await session.execute(
+                select(Question).where(
+                    Question.id.in_([first.json()["id"], second.json()["id"]])
+                )
+            )
+        ).scalars().all()
+    assert len(rows) == 2
+    assert all(row.subject_key is None for row in rows)
+    assert all(row.answered is False and row.declined is False for row in rows)

@@ -1012,8 +1012,26 @@ class Question(Base):
     # Also stamped on a question **answered** after the tool's last poll for it and before its
     # report (`a-late-answer-is-delivered`, D3): the run never received that answer.
     wait_ended_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
+    # A structural dedupe identifier, distinct from `question`'s prose — e.g.
+    # "capability-refusal:allow_agent_jobs" (`a-refused-capability-reaches-the-operator`, design
+    # D15). Deliberately not derived from the question's text: editing that wording must not stop
+    # matching records already resolved. NULL on every question that dedupes on nothing.
+    subject_key: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="questions")
+
+    __table_args__ = (
+        # Unresolved rows only: a key whose most recent record is answered or declined must be
+        # free to gain a further record (D17), so the constraint excludes resolved rows and NULL
+        # keys rather than covering the whole table.
+        Index(
+            "ix_questions_open_subject_key",
+            "project_id",
+            "subject_key",
+            unique=True,
+            sqlite_where=text("answered = 0 AND declined = 0 AND subject_key IS NOT NULL"),
+        ),
+    )
 
 
 class EventLog(Base):

@@ -37,18 +37,18 @@ first.
   round that does not know about it will rediscover it. The operator has asked (2026-09-19) that
   `R5`'s manager agent be considered for the ordering; `R5` is annotated and explicitly not
   specced, and records why a nondeterministic orderer sits **on top of** a deterministic floor.
-- [ ] 0.3 **Migration `0104`** (head is `0103`, `0103_allowance_refusals.py`). Add
+- [x] 0.3 **Migration `0104`** (head is `0103`, `0103_allowance_refusals.py`). Add
   `questions.subject_key`, `String(200)`, **nullable**, and a **partial unique index** on
   `(project_id, subject_key)` where `answered = 0 AND declined = 0 AND subject_key IS NOT NULL`
   (design **D15**). Backfill nothing — every existing row keeps `NULL` and the partial predicate
   excludes them, so the index cannot fail on existing data. `downgrade` drops both. Follow
   `.claude/rules/` migration checklist; `0104` runs against the operator's live database on their
   next restart.
-- [ ] 0.4 `hub/hub/db/models.py` — the column on `Question` (the class has no `__table_args__`
+- [x] 0.4 `hub/hub/db/models.py` — the column on `Question` (the class has no `__table_args__`
   today, `:927-1010`; this adds the first one) and one comment saying what the key is for: it is a
   **structural identifier, not prose**, and it exists so the question's wording can be edited
   without re-opening every resolved record (design **D15**).
-- [ ] 0.5 `hub/hub/api/v1/questions.py` — `ask_question_for_actor` (`:235`) takes
+- [x] 0.5 `hub/hub/api/v1/questions.py` — `ask_question_for_actor` (`:235`) takes
   `subject_key: Optional[str] = None` and writes it onto the row. Defaulted, so all existing
   callers are untouched; assert that in a test rather than by reading.
 
@@ -284,7 +284,7 @@ first.
   `current_value` but **no** `question_id`; and that the sentence tells the agent to raise it with
   the operator rather than claiming they were asked. This is the path `CLAUDE.md`'s *"ask what each
   route returns when the function it calls raises"* names, and no test in R1-R3 covered it.
-- [ ] 4.12 **(R4 — new; design D15.)** `ask_question_for_actor`'s new `subject_key` keyword
+- [x] 4.12 **(R4 — new; design D15.)** `ask_question_for_actor`'s new `subject_key` keyword
   defaults to `None` and **every existing caller is unaffected** — assert an operator-posted
   question (`POST /questions`) still writes `subject_key IS NULL`, and that the partial unique
   index does not constrain NULL-keyed rows (two open operator questions on one project coexist).
