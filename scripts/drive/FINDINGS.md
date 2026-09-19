@@ -29553,7 +29553,16 @@ worth the operator's call rather than mine.
 
 ## F384 (B) — `submit_spec_document`'s validator reports one missing field at a time, not all of them
 
-**Status:** open. Filed 2026-09-19 by the day window's D-1 full-surface sweep drive.
+**Status:** fixed 3f8887f. `validate_payload` (`hub/hub/spec_payload.py:241-246`) now joins every
+error from `exc.errors()`, not just the first, into `PayloadError`'s message — the field path
+still names the first, for callers that key off `PayloadError.field`. Unit test
+`test_multiple_missing_fields_are_all_named_in_one_refusal` (`hub/tests/test_spec_payload.py`)
+added and mutation-checked (fails against the pre-fix code, passes against the fix). Confirmed
+live: a fresh throwaway drive Hub (`:8021`, deleted after) + throwaway project, `PUT
+.../content` with an `acceptance_criteria` item missing `given`/`when`/`then` returned all three
+in one `422` (`"acceptance_criteria[0].given: Field required; ...when: Field required;
+...then: Field required"`), not one at a time. Filed 2026-09-19 by the day window's D-1
+full-surface sweep drive.
 **Source:** driving
 **Theme:** Spec flow
 
