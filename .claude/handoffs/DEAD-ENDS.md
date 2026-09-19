@@ -1068,6 +1068,23 @@ Added 2026-09-16 after one of these reached a committed specification.
   projects, 348 runs, 87 tasks, 12,500 event_logs.** Whatever produced the 18-table reading was not
   this file. A scary reading about the operator's data is exactly the kind of claim to re-derive
   before acting on it — or before telling them. *(2026-09-19)*
+- **The trap fired a second, harmless time the same night, through a different syntax.** The night
+  window's `unrh-drive` step used the Bash tool's inline-prefix form,
+  `DATABASE_URL="..." AW_BOOTSTRAP_API_KEY="..." py -3.11 -m uvicorn hub.main:app --port 8092`, run
+  from `hub/`. The server started and logged a full `0001→0104` migration chain — which looked like
+  proof of a fresh file — but the intended profile directory (`~/.agentweave/hub/profiles/
+  drive0919c/`) never existed afterward, and the operator's live file's `alembic_version` read
+  `0103` both before and after, unchanged, while its `event_logs` count kept growing on its own.
+  The env var did not reach the `py` launcher's child either way; the full migration log was real
+  but for a database this session never located (most likely reclaimed or pointed at a location
+  this session's tools could not see — not resolved). **The fix that worked:** set the env vars in
+  PowerShell (`$env:DATABASE_URL = "..."`) before `Start-Process`, and pre-create the target
+  directory with `New-Item -ItemType Directory -Force` first — `sqlite3`/`aiosqlite` will not create
+  a missing parent directory, so a silent fallback to the default is also what a *correct* URL
+  against a missing directory would look like from a crashed start, making directory-existence the
+  cheap thing to check first. **Kill only the exact PID `netstat -ano` names as `LISTENING` on the
+  target port** — never a blanket `taskkill /IM python.exe`, which is what turned the first
+  occurrence into a real outage. *(2026-09-19, night window, `unrh-drive`)*
 
 ## Telling whether the operator's `:8000` app is running, without touching it
 

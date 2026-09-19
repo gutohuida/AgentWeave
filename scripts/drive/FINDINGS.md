@@ -30010,3 +30010,57 @@ job or server left enabled.
 **Verdict:** migration 0104 and tasks 0.3/0.4/0.5/4.12 drive clean. No finding to file — recorded
 here as the drive evidence `arc-drive` exists to produce, per `a-refused-capability-reaches-the-
 operator`'s own task list.
+
+## D-3, 2026-09-19 — `unrh-drive`: the roster-availability refactor (tasks 1.1-1.4) drives clean; one documentless-loop path confirms F161 is intact; F388's trap fired a second, harmless time
+
+Night window's `unrh-drive` task, driving commit `f663898` (tasks 1.1-1.4 of
+`an-unstaffed-review-names-its-holders`: `_roster_availability`/`Holding`/`AgentAvailability` in
+`hub/hub/scheduler.py`, and `resolve_reviewer` reading it once instead of two separate queries).
+
+**F388's trap fired again, harmlessly this time.** Starting the drive Hub the first time — inline
+`DATABASE_URL="..." py -3.11 -m uvicorn ...` from `hub/`, the exact shape `CLAUDE.md`'s own
+`.claude/reference/hubs.md` example uses — logged a full `0001→0104` migration chain (looking like
+proof of a fresh database) but left no file at the intended profile path afterward. Read-only
+inspection of the operator's live-instance default path (`~/.agentweave/hub/data/agentweave.db`,
+the exact file `F388` names) found its `alembic_version` unchanged at `0103` before and after, with
+`event_logs` still growing on its own between two reads taken minutes apart while this session's own
+server process was already dead — proof the growth was the operator's own live `:8000` process
+(confirmed separately listening, PID 9940) and not this session. No migration reached that file; the
+column `0104` would have added is absent. Full account and the working fix (PowerShell `$env:` +
+pre-created directory + PID-exact `taskkill`, never `/IM python.exe`) appended to `DEAD-ENDS.md`'s
+existing F388 section rather than filed as a new finding — this is corroborating evidence for an
+already-open finding, not a new one.
+
+**The actual drive**, once a verified-correct fresh Hub was up (port 8092, profile `drive0919c`,
+confirmed via the bootstrap key round-tripping and the intended directory existing): the named
+regression files (`test_a_held_agent_is_busy.py`, `test_a_task_nothing_will_move_holds_nobody.py`)
+gave **57 passed**, matching `unrh-impl`'s own measurement — nothing moved between the commit and
+this drive.
+
+Live pass: a fixture project, a runner, and two agents (`author-agent`, `reviewer-free`). Standing
+up a scenario that reaches `resolve_reviewer`'s rung-2 pool walk turned out to need more than this
+slice's scope — `decide_firing`'s own comment (`scheduler.py:1697`, design D5/F161) says a
+documentless loop **never** calls `resolve_reviewer` at all: *"a loop has one agent and no second
+party, so every reviewer this arm could resolve is the author"*. Reaching the pool walk live would
+need a spec-document-linked loop (task-requirement links, evidence), which is a materially larger
+fixture than a confirmation pass warrants and is `alsn-impl`'s territory, not this one's. Instead,
+this drive exercised the *other* live-reachable half of the same refactor: a real one-agent,
+documentless loop (`unrh-drive-loop`), fired once for real against Haiku, claimed its pending task
+through the refactored `_agents_that_are_free`/roster-availability projection, completed it, and
+then — correctly, per F161 — stayed at `completed` rather than moving to `under_review`:
+`{"status": "completed", "assignee": "author-agent"}`, with the loop's own `stall_reason` reading
+*"A loop does not review its own agent's work, so approving is what puts it in the product."* That
+sentence is unchanged output from before this refactor, produced by code this refactor touches
+(`decide_firing` at `:1443`, calling into the same roster read as `resolve_reviewer` now does) — live
+confirmation that ordinary task-claiming through the re-expressed `_agents_that_are_free` still
+works end to end, even though the review-specific branch needed a bigger fixture than this drive
+built.
+
+Cleanup: job disabled, drive Hub killed by the exact `netstat`-confirmed listening PID (twice, once
+for each start), profile directory and fixture project directory both removed. No project or job
+left enabled; operator's `:8000` instance re-verified unchanged (`alembic_version` still `0103`)
+after teardown.
+
+**Verdict:** tasks 1.1-1.4 drive clean on the reachable path; the pool-walk branch needs a
+spec-linked loop to reach live and was not attempted here — flagged, not silently skipped. No new
+finding filed; F388 gained corroborating evidence in `DEAD-ENDS.md`.

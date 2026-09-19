@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "a435f48",
     "stop_at":  "2026-09-20T07:00:00+01:00",
-    "iteration":  4,
+    "iteration":  5,
     "log_file":  ".claude/autonomous/2026-09-19-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "unrh-drive",
-    "next_action":  "unrh-drive: drive unrh-impl's change. No UI-visible text changes in group 1 -- confirm via the regression suite (already 57 passed: pytest hub/tests/test_a_held_agent_is_busy.py hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q) plus one live staffing pass on a fresh drive Hub (never 8000/8010) that pool membership -- who a flow's rung-2 walk picks, and rung 3's unstaffed sentence text -- is unchanged from before this iteration's scheduler.py refactor. Record the drive as the next D-n entry in scripts/drive/FINDINGS.md. Advance current to alsn-impl-1 when done.",
+    "current":  "alsn-impl-1",
+    "next_action":  "alsn-impl-1: a-loop-staffs-the-agent-it-names, groups 0-4 (preconditions, scope filter, staffing!=resumption, busy guard, F70 exception). See the queue item's own detail field for the specifics (_agents_a_loop_may_staff, documentless loop pool is EMPTY not {job.agent}, no default_agent param, staffing is not resumption, group 4's mutation-test-first note). Baseline before starting: pytest hub/tests/test_a_loop_does_not_staff_its_own_review.py hub/tests/test_loop_busy_guard.py hub/tests/test_flow_width.py hub/tests/test_actor_aware_claimability.py -q, expect 54 passed per the approval's own measurement. This is a large, high-effort slice (model sonnet, effort high per the queue item) -- size the actual build to what fits in one turn and leave alsn-impl-2 for the rest if groups 0-4 alone fill it.",
     "queue":  [
                   {
                       "id":  "compose",
@@ -41,9 +41,9 @@
                   },
                   {
                       "id":  "unrh-drive",
-                      "status":  "open",
+                      "status":  "done",
                       "title":  "Drive unrh-impl's change",
-                      "detail":  "No UI-visible text changes in group 1 -- confirm via the regression suite plus one live staffing pass on the drive Hub that pool membership is unchanged. Record in FINDINGS.md."
+                      "detail":  "57 passed (matches unrh-impl). F388's operator-live-db trap fired a second time, harmlessly -- inline DATABASE_URL prefix before `py -3.11 -m uvicorn` again failed to reach the child; caught via DEAD-ENDS.md's own mode=ro verify-before-believing practice, no harm done, confirmed not assumed. Restarted correctly via PowerShell $env: + pre-created directory. resolve_reviewer's rung-2 pool walk needs a spec-linked loop to reach live (F161: a documentless loop never calls it) -- out of this slice's scope, said so rather than built past it or silently skipped. Instead drove the reachable half: a real one-agent documentless loop claimed and completed its task through the refactored roster-availability projection, then correctly stayed at completed (F161's own stall_reason sentence, unchanged). Recorded as D-3 in FINDINGS.md; appended the second F388 occurrence to DEAD-ENDS.md (no new finding filed). Cleanup verified: drive Hub killed by exact PID both times, fixture dirs removed, operator's :8000 db re-confirmed unchanged after teardown."
                   },
                   {
                       "id":  "alsn-impl-1",
@@ -77,7 +77,7 @@
                   }
               ],
     "decisions_for_user":  [
-
+                               "F388 (a Hub started from source can silently land on the operator's live :8000 database) fired a second time tonight during unrh-drive, harmlessly -- caught by read-only verification before any action, no restart or write occurred. F388's fix shape is still undecided by the operator; this is only a note that it has now fired twice in one day, which may bear on priority."
                            ],
     "limits":  [
                    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
