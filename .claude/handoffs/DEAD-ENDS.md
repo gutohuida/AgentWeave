@@ -1051,6 +1051,50 @@ Added 2026-09-16 after one of these reached a committed specification.
   like a short answer. Start any such script with
   `import sys; sys.stdout.reconfigure(encoding="utf-8", errors="replace")`. *(verified 2026-09-16)*
 
+## Starting a Hub from source can land on the operator's real database
+
+- **`hub/config.py:16` defaults `DATABASE_URL` to `Path.home() / ".agentweave" / "hub" / "data" /
+  "agentweave.db"` — the operator's live `:8000` database.** There is no guard. Any Hub started
+  from `hub/` whose `DATABASE_URL` fails to reach the process lands on it silently. The 2026-09-19
+  day window hit this: it set the variable, backgrounded `py -3.11 -m uvicorn` with `&`, and the
+  variable did not survive a `kill` + `rm` + restart sequence inside one Bash tool call. Export the
+  variable in the same command as the server, and **verify from the server's own startup log** —
+  a fresh throwaway file logs the whole `0065→0103` migration chain, an existing database logs only
+  `Application startup complete`. That missing migration chain is the first sign you are on the
+  wrong file. *(2026-09-19)*
+- **Verify a claimed corruption before believing it.** That same window reported the file had "only
+  18 tables, an empty `alembic_version`, and a schema predating migration 0065". **It does not.**
+  Read `mode=ro` the same day: **46 tables, `alembic_version` = `0103`, `integrity_check` = ok, 3
+  projects, 348 runs, 87 tasks, 12,500 event_logs.** Whatever produced the 18-table reading was not
+  this file. A scary reading about the operator's data is exactly the kind of claim to re-derive
+  before acting on it — or before telling them. *(2026-09-19)*
+
+## Telling whether the operator's `:8000` app is running, without touching it
+
+- **Read its scheduler's own heartbeat out of `event_logs`.** The operator's Hub fires a job every
+  5 minutes and writes `job_fired` + `queue_entry_queued` rows (and `queue_entry_abandoned` when an
+  entry ages out). The **last timestamp is when the process stopped.** This is the only way to
+  establish a before/after without starting, probing or calling `:8000`, all of which the standing
+  rule forbids. Used 2026-09-19 to establish that a `taskkill /IM python.exe /T` had almost
+  certainly killed the operator's live app: events ran at exact 5-minute boundaries from
+  `00:00:00` to `09:40:00.704` and then stopped dead. *(2026-09-19)*
+- **Those timestamps are UTC; Windows file mtimes are local.** In September that is BST, `+1`. The
+  database's mtime read `10:40` for a last event of `09:40` — the same instant, not an hour of
+  unexplained activity. Getting this backwards invents a discrepancy that is not there.
+  *(2026-09-19)*
+- **`taskkill /IM python.exe` does not match `pythonw.exe`.** The operator's app is documented as a
+  `pythonw`-hosted pywebview window, so "`Get-Process` finds no python running" is not evidence
+  that it was not killed — check the event heartbeat above instead. *(2026-09-19)*
+
+## `scripts/backlog_page.py`'s delta report covers findings only
+
+- **`SINCE LAST GENERATION` reports finding counts and `newly filed: F<n>`, and says nothing about
+  requests.** Adding `R4` and `R5` to `spec-queue/REQUESTS.md` on 2026-09-19 moved `requests` 1→3
+  and `items` 205→207 in the page's embedded snapshot while the printed report mentioned neither.
+  The page itself renders them correctly — only the delta block is blind. To confirm a request
+  landed, read the `requests` field out of the `<script type="application/json"
+  id="backlog-data">` block rather than trusting the console summary. *(2026-09-19)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
