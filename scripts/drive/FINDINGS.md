@@ -16910,7 +16910,7 @@ evidence.
 Reproduction: `scripts/drive/t_sweep_row9c_agent_plane.py`, leg 3. Twice, same result.
 
 ## F218 (D) — the create response omits the review it wrote one line earlier
-**Status:** open
+**Status:** fixed 3e3f05e (unit-tested + mutation-checked; live drive not run this session, see 2026-09-19-day-log.md D-5)
 
 `POST /spec/evidence` returns `_evidence_view(evidence, prints.get(evidence.id))` (`spec.py:833`) —
 two arguments, so `latest_review` defaults to `None`. But `requirement_evidence.record` has just
