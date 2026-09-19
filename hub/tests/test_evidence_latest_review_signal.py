@@ -84,6 +84,28 @@ async def test_a_freshly_recorded_row_carries_no_review_yet(app, auth_headers, b
 
 
 @pytest.mark.asyncio
+async def test_operator_recorded_evidence_carries_its_own_auto_review_immediately(
+    app, auth_headers, builder
+):
+    """F218. `record()` auto-accepts operator-recorded evidence and writes its `EvidenceReview`
+    row in the same transaction the POST commits - but the 201 response used to read
+    `latest_review: null` because the handler never fetched it, even though the very next GET
+    on the same row already showed it accepted. This checks the 201 itself, not a follow-up GET.
+    """
+    await _document(app, auth_headers, builder)
+    recorded = await app.post(
+        f"{BASE}/spec/evidence",
+        json={"identifier": "FR-1", "kind": "test_result", "summary": "operator observed it"},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+    review = recorded.json()["latest_review"]
+    assert review is not None
+    assert review["decision"] == "accepted"
+    assert review["actor_kind"] == "operator"
+
+
+@pytest.mark.asyncio
 async def test_decide_evidence_response_names_its_own_reason(app, auth_headers, builder):
     await _document(app, auth_headers, builder)
     recorded = await app.post(

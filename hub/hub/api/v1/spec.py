@@ -830,7 +830,12 @@ async def record_evidence(
     # tell whether the evidence describes the work they think it does, as this view's own comment on
     # it says; withholding it here hid a wrong commit at the only point where noticing was cheap.
     prints = await _footprints_for(session, [evidence.id])
-    return _evidence_view(evidence, prints.get(evidence.id))
+    # **With its review** (F218). `record()` auto-accepts operator-recorded evidence and writes the
+    # `EvidenceReview` row in the same transaction just committed above, but this handler stopped at
+    # the footprint fix and never fetched it — so this 201 read `latest_review: null` for a row the
+    # very next GET already shows accepted. Same fetch-and-pass shape as `list_evidence` uses.
+    reviews = await _latest_reviews_for(session, [evidence.id])
+    return _evidence_view(evidence, prints.get(evidence.id), reviews.get(evidence.id))
 
 
 @router.get("/spec/evidence")
