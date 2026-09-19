@@ -98,6 +98,20 @@ def test_duplicate_requirement_keys_are_refused():
     assert "search-latency" in str(exc.value)
 
 
+def test_multiple_missing_fields_are_all_named_in_one_refusal():
+    """A pydantic ValidationError carries every simultaneous field failure. A
+    refusal that names only the first turns one mistake into a retry loop, one
+    field at a time — the exact failure mode this module exists to avoid."""
+    with pytest.raises(PayloadError) as exc:
+        validate_payload(
+            minimal(acceptance_criteria=[{"key": "c1", "requirement": "search-latency"}])
+        )
+    message = str(exc.value)
+    assert "given" in message
+    assert "when" in message
+    assert "then" in message
+
+
 def test_an_unknown_party_is_refused():
     with pytest.raises(PayloadError) as exc:
         validate_payload(minimal(requirements=[_requirement(party="bystander")]))

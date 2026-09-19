@@ -241,8 +241,11 @@ def validate_payload(raw: Any) -> SpecPayload:
     try:
         payload = SpecPayload.model_validate(raw)
     except ValidationError as exc:
-        first = exc.errors()[0]
-        raise PayloadError(first["msg"], field=_field_path(first["loc"])) from exc
+        errors = exc.errors()
+        message = "; ".join(f"{_field_path(e['loc'])}: {e['msg']}" for e in errors)
+        err = PayloadError(message, field="")
+        err.field = _field_path(errors[0]["loc"])
+        raise err from exc
 
     if payload.kind not in KINDS:
         raise PayloadError(f"kind must be one of {', '.join(KINDS)}", field="kind")
