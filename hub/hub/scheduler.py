@@ -1061,6 +1061,115 @@ class ReviewerChoice:
     reason: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class Holding:
+    """One live task an agent is the assignee of, and whether anything will move it.
+
+    `reachable` is the fact D1 exists to compute: `loop_id in live or (task_id, assignee) in
+    queued`, the same test `_agents_that_are_free` has always applied. An unreachable holding
+    (finding this task's `loop_id` names no loop, or names one that has ended, and nothing is
+    queued for it) stays on the record rather than being filtered out here -- rung 3's naming
+    (design D2, not built by this group) needs to tell the two apart, and filtering here would
+    throw away the fact it needs.
+    """
+
+    task_id: str
+    status: str
+    loop_id: Optional[str]
+    reachable: bool
+
+
+@dataclass(frozen=True)
+class AgentAvailability:
+    """One non-archived agent's staffing-relevant state, read once so rung 2's pool and rung 3's
+    naming (design D2) can both be derived from it instead of reading the database twice.
+
+    `held` is kept separate from `running` (`a-spent-allowance-holds-the-queue`, D6, R6-1): both
+    make `schedule_agent` refuse a start, but clause 4 of the unstaffed sentence must be able to
+    tell a hold from a running turn, so folding one into the other here would erase the fact it
+    needs.
+    """
+
+    name: str
+    has_runner: bool
+    running: bool
+    held: bool
+    holdings: "tuple[Holding, ...]" = ()
+
+
+async def _roster_availability(session: AsyncSession, project_id: str) -> "list[AgentAvailability]":
+    """One record per non-archived agent, in name order -- the single read `_agents_that_are_free`
+    and `resolve_reviewer` both derive their answers from (design D1, re-derived against (f) at
+    R5-R7).
+
+    Reads exactly the queries `_agents_that_are_free` always has: running turns, live (not ended,
+    not archived) loops, queued turns within the hop budget, and every live-status task with an
+    assignee. See that function's docstring for why each one is the fact it is.
+    """
+    from .task_transitions import LIVE_STATUSES
+
+    running_agents = set(
+        (
+            await session.execute(
+                select(Run.agent).where(Run.project_id == project_id, Run.status == "running")
+            )
+        )
+        .scalars()
+        .all()
+    )
+    held_agents = await agents_held(session, project_id)
+    live = set(
+        (
+            await session.execute(
+                select(Loop.id).where(
+                    Loop.project_id == project_id,
+                    Loop.ending_state.is_(None),
+                    Loop.archived_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    queued = await task_agent_pairs_with_a_turn_queued(session, project_id)
+    holdings = (
+        await session.execute(
+            select(Task.id, Task.assignee, Task.loop_id, Task.status).where(
+                Task.project_id == project_id,
+                Task.assignee.isnot(None),
+                Task.status.in_(tuple(sorted(LIVE_STATUSES))),
+            )
+        )
+    ).all()
+    holdings_by_agent: "Dict[str, list[Holding]]" = {}
+    for task_id, assignee, loop_id, status in holdings:
+        holdings_by_agent.setdefault(assignee, []).append(
+            Holding(
+                task_id=task_id,
+                status=status,
+                loop_id=loop_id,
+                reachable=loop_id in live or (task_id, assignee) in queued,
+            )
+        )
+    roster = (
+        await session.execute(
+            select(Agent.name, Agent.runner_id)
+            .where(Agent.project_id == project_id, Agent.lifecycle != "archived")
+            .order_by(Agent.name)
+        )
+    ).all()
+    return [
+        AgentAvailability(
+            name=name,
+            has_runner=runner_id is not None,
+            running=name in running_agents,
+            held=name in held_agents,
+            holdings=tuple(holdings_by_agent.get(name, ())),
+        )
+        for name, runner_id in roster
+    ]
+
+
 async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list[str]":
     """Design D4 rung 2's "free": **not running** *and* **holding no work anything will move**, in
     queue-stable order.
@@ -1108,62 +1217,19 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
     refusal on usage grounds `schedule_agent` refuses its start just as it refuses a running
     agent's, so leaving the hold out of this half would be that third opinion. That change moved
     only this half; which tasks make an agent unavailable is the reachability paragraph above.
-    """
-    from .task_transitions import LIVE_STATUSES
 
-    running = set(
-        (
-            await session.execute(
-                select(Run.agent).where(Run.project_id == project_id, Run.status == "running")
-            )
-        )
-        .scalars()
-        .all()
-    ) | await agents_held(session, project_id)
-    live = set(
-        (
-            await session.execute(
-                select(Loop.id).where(
-                    Loop.project_id == project_id,
-                    Loop.ending_state.is_(None),
-                    Loop.archived_at.is_(None),
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    queued = await task_agent_pairs_with_a_turn_queued(session, project_id)
-    holdings = (
-        await session.execute(
-            select(Task.id, Task.assignee, Task.loop_id).where(
-                Task.project_id == project_id,
-                Task.assignee.isnot(None),
-                Task.status.in_(tuple(sorted(LIVE_STATUSES))),
-            )
-        )
-    ).all()
-    holding = {
-        assignee
-        for task_id, assignee, loop_id in holdings
-        if loop_id in live or (task_id, assignee) in queued
-    }
-    roster = (
-        (
-            await session.execute(
-                select(Agent.name)
-                .where(
-                    Agent.project_id == project_id,
-                    Agent.lifecycle != "archived",
-                    Agent.runner_id.isnot(None),
-                )
-                .order_by(Agent.name)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    return [name for name in roster if name not in running and name not in holding]
+    Re-expressed at group 1 of `an-unstaffed-review-names-its-holders` as the projection over
+    `_roster_availability`'s one read, rather than a second, independently maintained set of
+    queries -- the two must never be able to disagree about who is free.
+    """
+    return [
+        record.name
+        for record in await _roster_availability(session, project_id)
+        if record.has_runner
+        and not record.running
+        and not record.held
+        and not any(h.reachable for h in record.holdings)
+    ]
 
 
 async def resolve_reviewer(
@@ -1259,16 +1325,28 @@ async def resolve_reviewer(
             )
         return ReviewerChoice(rung="unresolved", reason=resolution.unresolved)
 
+    # One read for both rung 2's pool and rung 3's naming below (design D1, group 1's whole
+    # point) -- never `_agents_that_are_free` here, which would take its own, independent read of
+    # the same tables and let the two drift.
+    availability = await _roster_availability(session, project_id)
+
     only_taken = False
-    for candidate in await _agents_that_are_free(session, project_id):
-        if candidate in exclude:
+    for record in availability:
+        if not (
+            record.has_runner
+            and not record.running
+            and not record.held
+            and not any(h.reachable for h in record.holdings)
+        ):
             continue
-        if candidate in unavailable:
+        if record.name in exclude:
+            continue
+        if record.name in unavailable:
             # Eligible in every way that lasts, and merely spoken for by this same firing. Held so
             # rung 3 below can tell the difference.
             only_taken = True
             continue
-        return ReviewerChoice(agent=candidate, rung="available")
+        return ReviewerChoice(agent=record.name, rung="available")
 
     if only_taken:
         # **Not rung 3.** Rung 3 tells the operator to add an agent, free one, or fix a name --
@@ -1288,20 +1366,8 @@ async def resolve_reviewer(
     # D6): `_agents_that_are_free` now counts a held agent as busy, so without the clause this
     # sentence would be false whenever a hold is why nobody was free. Conditional, so a project
     # that never meets a usage limit reads exactly as before.
-    held = await agents_held(session, project_id)
-    roster_held = bool(held - exclude) and bool(
-        (
-            await session.execute(
-                select(Agent.name)
-                .where(
-                    Agent.project_id == project_id,
-                    Agent.lifecycle != "archived",
-                    Agent.runner_id.isnot(None),
-                    Agent.name.in_(sorted(held - exclude)),
-                )
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+    roster_held = any(
+        record.held and record.has_runner and record.name not in exclude for record in availability
     )
     waiting = "waiting for its provider's usage limit to reset, " if roster_held else ""
     return ReviewerChoice(

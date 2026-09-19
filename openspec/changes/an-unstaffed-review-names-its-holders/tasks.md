@@ -34,7 +34,7 @@ mutation and the observed failure beside the task when ticking it.
 *"holds no live task"*, which has been wrong since `4b59ee0` and would have reverted it. Read
 `design.md` `## Round 5`, finding `R5-0`, before starting.**
 
-- [ ] 1.1 Add `AgentAvailability`, `Holding` and `_roster_availability(session, project_id)` to
+- [x] 1.1 Add `AgentAvailability`, `Holding` and `_roster_availability(session, project_id)` to
       `hub/hub/scheduler.py`:
       - one record per non-archived agent, in name order;
       - `has_runner`, `running`, **`held`**, and `holdings` as
@@ -49,7 +49,7 @@ mutation and the observed failure beside the task when ticking it.
         `_agents_that_are_free` does today (`scheduler.py:1123-1150`) — **not** a second opinion
         about reachability, which is the thing D1 exists to prevent.
       - Unreachable holdings stay on the record and are printed by nothing (D1's R5 note).
-- [ ] 1.2 Re-express `_agents_that_are_free` as the projection
+- [x] 1.2 Re-express `_agents_that_are_free` as the projection
       `has_runner and not running and not held and not any(h.reachable for h in holdings)`, and
       keep its docstring's argument **including its reachability paragraph and its D6 paragraph**.
       - **R7, 2026-09-19 — this bullet's caller list was wrong in every particular and is
@@ -76,7 +76,15 @@ mutation and the observed failure beside the task when ticking it.
       `test_a_task_nothing_will_move_holds_nobody.py`**. That last file is the regression guard for
       this group: if `test_the_loopengine_shape_staffs_its_review` goes red, the projection has
       reverted (f) and the fix is here, not in the test.
-- [ ] 1.3 Test: an agent with no runner, one running with nothing held, one holding two **reachable**
+
+      **Build note, 2026-09-19 night.** `grep -n "await _agents_that_are_free("` at the tree this
+      was built against returned exactly `:348`, `:1263`, `:1444` — R7's prediction held, not the
+      four-numbers-earlier text. `resolve_reviewer` now calls `_roster_availability` once and
+      derives both the rung 2 walk and the roster-held check from that one read; `_loop_flow_busy_reason`
+      and `decide_firing` are untouched. Full regression named above plus
+      `test_actor_aware_claimability.py` and `test_a_loop_does_not_staff_its_own_review.py`:
+      124 passed.
+- [x] 1.3 Test: an agent with no runner, one running with nothing held, one holding two **reachable**
       tasks, one holding only **unreachable** tasks, and one free each get the right record; the
       pool is exactly the free one **and the unreachable-holder**.
       *Mutation:* drop `Task.status` from the holdings select (or the `LIVE_STATUSES` filter). The
@@ -85,10 +93,34 @@ mutation and the observed failure beside the task when ticking it.
       and so must `test_the_loopengine_shape_staffs_its_review`.
       *Mutation (R6):* drop `held` from the projection. The test must fail, and so must
       `hub/tests/test_a_held_agent_is_busy.py::test_a_held_agent_is_not_free`.
-- [ ] 1.4 Test: `resolve_reviewer` reads the roster once per call. Count the executed `Task.assignee`
+
+      **Observed, 2026-09-19 night.** Named test is
+      `test_the_roster_read_gives_each_agent_the_right_record`
+      (`hub/tests/test_a_task_nothing_will_move_holds_nobody.py`). The described fixture alone did
+      not catch the `Task.status` mutation — every fixture task already used a `LIVE_STATUSES`
+      member, so dropping the filter changed nothing observable. Added a sixth agent (`NONLIVE`)
+      holding a `completed` task inside the same live loop as the reachable-holder, so dropping the
+      filter pulls it into `holdings` and the pool. All three mutations applied and reverted by
+      hand: (1) dropped the `Task.status.in_(...)` clause — this test failed on `records[NONLIVE]
+      .holdings == ()`; (2) set `reachable=True` unconditionally — this test failed on
+      `UNREACHABLE`'s holdings, and `test_the_loopengine_shape_staffs_its_review` failed too; (3)
+      dropped `and not record.held` from `_agents_that_are_free`'s projection — this test failed on
+      the pool set, and `test_a_held_agent_holding_no_task_is_not_free` failed too (the exact name;
+      `test_a_held_agent_is_not_free` above is stale). Reverted each mutation before moving on;
+      final state is green (124 passed, see 1.2's note).
+- [x] 1.4 Test: `resolve_reviewer` reads the roster once per call. Count the executed `Task.assignee`
       selects with a SQLAlchemy `before_cursor_execute` listener on the real test engine.
       *Mutation:* call `_agents_that_are_free` for rung 2 and `_roster_availability` for rung 3. The
       test must fail.
+
+      **Observed, 2026-09-19 night.** Named test is `test_resolve_reviewer_reads_the_roster_once`.
+      A two-agent fixture where the second agent is genuinely free does not reach the roster-held
+      read at all -- rung 2 returns before it. Staged instead as a single-agent project (the
+      author, excluded), which reaches rung 3 by the general rule `resolve_reviewer`'s own
+      docstring names as D4's test of the ladder. Mutation applied by hand (rung 2 walking
+      `_agents_that_are_free` and a second, independent `_roster_availability` call for the
+      roster-held check): this test failed, two selects naming `tasks.assignee` instead of one.
+      Reverted; final state green.
 
 ## 2. What rung 3 says (design D2, D3)
 

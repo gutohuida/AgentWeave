@@ -26,14 +26,16 @@ import pytest
 from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import AIJob, InboundQueueEntry, JobRun, Loop, Project, Task
+from hub.db.models import Agent, AIJob, InboundQueueEntry, JobRun, Loop, Project, Task
 from hub.inbound_queue import new_entry, release_entry
 from hub.run_task_binding import tasks_with_a_turn_pending_or_running
 from hub.scheduler import (
     JobScheduler,
     _agents_that_are_free,
     _loop_flow_busy_reason,
+    _roster_availability,
     decide_firing,
+    resolve_reviewer,
 )
 from hub.task_transitions import LIVE_STATUSES
 
@@ -543,3 +545,123 @@ async def test_run_on_a_busy_agents_empty_loop_names_the_empty_queue(
     assert "Nothing was started" in detail
     assert "no other agent is free" not in detail
     assert await _entries_for(OWNER) == 0
+
+
+# ---------------------------------------------------------------------------
+# an-unstaffed-review-names-its-holders, group 1 (tasks 1.1-1.4) — one roster read, re-expressed
+# ---------------------------------------------------------------------------
+
+NORUNNER = "roster-norunner"
+RUNNING = "roster-running"
+REACHABLE = "roster-reachable"
+UNREACHABLE = "roster-unreachable"
+NONLIVE = "roster-nonlive"
+HELD = "roster-held"
+FREE_AGENT = "roster-free"
+
+
+async def test_the_roster_read_gives_each_agent_the_right_record(app, auth_headers, bind_runner):
+    """1.3. `AgentAvailability`/`Holding`, one record per non-archived agent, and the pool this
+    change re-expresses as their projection.
+
+    *Mutation:* drop `Task.status` from the holdings select (or the `LIVE_STATUSES` filter). Ran
+    and observed failing: `NONLIVE`'s finished task -- in the same live loop as `REACHABLE`'s --
+    was picked up as a holding, so it left the pool and its `holdings` stopped being `()`.
+    *Mutation:* make `reachable` always `True` (the pre-`4b59ee0` rule). Ran and observed failing:
+    `UNREACHABLE` left the pool, and so did `test_the_loopengine_shape_staffs_its_review`.
+    *Mutation (R6):* drop `held` from the projection. Ran and observed failing: `HELD` joined the
+    pool, and so did `test_a_held_agent_is_busy.py::test_a_held_agent_is_not_free`.
+    """
+    await _roster(
+        app,
+        auth_headers,
+        bind_runner,
+        RUNNING,
+        REACHABLE,
+        UNREACHABLE,
+        NONLIVE,
+        HELD,
+        FREE_AGENT,
+    )
+    async with async_session_factory() as db:
+        db.add(Agent(id="agent-roster-norunner", project_id=PROJECT, name=NORUNNER))
+        await db.commit()
+        await _running_turn(db, agent=RUNNING, suffix="roster-running")
+        _job, live_loop = await _loop(db, suffix="roster-reachable")
+        await _holding(db, task_id="task-roster-r1", assignee=REACHABLE, loop_id=live_loop.id)
+        await _holding(db, task_id="task-roster-r2", assignee=REACHABLE, loop_id=live_loop.id)
+        await _holding(db, task_id="task-roster-u1", assignee=UNREACHABLE, loop_id=None)
+        await _holding(
+            db,
+            task_id="task-roster-nonlive",
+            assignee=NONLIVE,
+            status="completed",
+            loop_id=live_loop.id,
+        )
+    await _hold(HELD)
+
+    async with async_session_factory() as db:
+        records = {record.name: record for record in await _roster_availability(db, PROJECT)}
+
+    assert records[NORUNNER].has_runner is False
+    assert records[RUNNING].running is True
+    assert records[RUNNING].holdings == ()
+    assert {h.task_id for h in records[REACHABLE].holdings} == {
+        "task-roster-r1",
+        "task-roster-r2",
+    }
+    assert all(h.reachable for h in records[REACHABLE].holdings)
+    assert [h.reachable for h in records[UNREACHABLE].holdings] == [False]
+    assert records[NONLIVE].holdings == ()
+    assert records[HELD].held is True
+    assert records[HELD].holdings == ()
+    assert (records[FREE_AGENT].running, records[FREE_AGENT].held) == (False, False)
+    assert records[FREE_AGENT].holdings == ()
+
+    assert set(await _free()) == {UNREACHABLE, NONLIVE, FREE_AGENT}
+
+
+async def test_resolve_reviewer_reads_the_roster_once(app, auth_headers, bind_runner):
+    """1.4. `resolve_reviewer` derives rung 2's pool and rung 3's roster-held check from one read.
+
+    A single-agent project (the author, excluded) reaches rung 3 by the general rule -- the same
+    staging `resolve_reviewer`'s own docstring names as D4's test of the ladder -- so the read this
+    test counts is the one the roster-held check makes, not the one the rung 2 walk short-circuits
+    on finding a candidate.
+
+    *Mutation:* call `_agents_that_are_free` for rung 2 and `_roster_availability` again for the
+    roster-held check, instead of one shared read. Ran and observed failing: two selects naming
+    `tasks.assignee` instead of one.
+    """
+    from sqlalchemy import event
+
+    from hub.db.engine import engine
+
+    author = "roster-once-author"
+    await _roster(app, auth_headers, bind_runner, author)
+    async with async_session_factory() as db:
+        task = await _completed_task_for_roster_once(db)
+
+    statements: list = []
+
+    def _capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    async with async_session_factory() as db:
+        fresh = await db.get(Task, task.id)
+        event.listen(engine.sync_engine, "before_cursor_execute", _capture)
+        try:
+            choice = await resolve_reviewer(db, fresh, project_id=PROJECT, exclude={author})
+        finally:
+            event.remove(engine.sync_engine, "before_cursor_execute", _capture)
+
+    assert choice.rung == "unstaffed"
+    roster_reads = [statement for statement in statements if "tasks.assignee" in statement]
+    assert len(roster_reads) == 1, roster_reads
+
+
+async def _completed_task_for_roster_once(db):
+    task = Task(id="task-roster-once", project_id=PROJECT, title="finished", status="completed")
+    db.add(task)
+    await db.commit()
+    return task
