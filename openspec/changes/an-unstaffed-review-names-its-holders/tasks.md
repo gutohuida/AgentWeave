@@ -37,16 +37,21 @@ mutation and the observed failure beside the task when ticking it.
 - [ ] 1.1 Add `AgentAvailability`, `Holding` and `_roster_availability(session, project_id)` to
       `hub/hub/scheduler.py`:
       - one record per non-archived agent, in name order;
-      - `has_runner`, `running`, and `holdings` as `Holding(task_id, status, loop_id, reachable)`,
-        ordered by task id;
+      - `has_runner`, `running`, **`held`**, and `holdings` as
+        `Holding(task_id, status, loop_id, reachable)`, ordered by task id;
+      - **R6: `held` is `agents_held(session, project_id)`** (`hub/hub/provider_allowance.py`),
+        which `_agents_that_are_free` ORs into its `running` set at `scheduler.py:1122`. It is a
+        separate field, never folded into `running`, because clause 4 must tell them apart.
+        Omitting it reverts `a-spent-allowance-holds-the-queue` D6 exactly as the pre-R5 D1
+        reverted `4b59ee0`.
       - `LIVE_STATUSES` is the **band** a holding must be in, not the test. `reachable` is
         `loop_id in live or (task_id, assignee) in queued`, computed from the same two reads
         `_agents_that_are_free` does today (`scheduler.py:1123-1150`) — **not** a second opinion
         about reachability, which is the thing D1 exists to prevent.
       - Unreachable holdings stay on the record and are printed by nothing (D1's R5 note).
 - [ ] 1.2 Re-express `_agents_that_are_free` as the projection
-      `has_runner and not running and not any(h.reachable for h in holdings)`, and keep its
-      docstring's argument **including its reachability paragraph**.
+      `has_runner and not running and not held and not any(h.reachable for h in holdings)`, and
+      keep its docstring's argument **including its reachability paragraph and its D6 paragraph**.
       - Its three callers keep the projection: `scheduler.py:298`, `:1262` and `:1298`
         (R5-7: `:1137` in the original is stale).
       - `resolve_reviewer` instead reads `_roster_availability` **once**, and derives both rung 2's
@@ -64,6 +69,8 @@ mutation and the observed failure beside the task when ticking it.
       test must fail.
       *Mutation:* make `reachable` always `True` — i.e. the pre-`4b59ee0` rule. The test must fail,
       and so must `test_the_loopengine_shape_staffs_its_review`.
+      *Mutation (R6):* drop `held` from the projection. The test must fail, and so must
+      `hub/tests/test_a_held_agent_is_busy.py::test_a_held_agent_is_not_free`.
 - [ ] 1.4 Test: `resolve_reviewer` reads the roster once per call. Count the executed `Task.assignee`
       selects with a SQLAlchemy `before_cursor_execute` listener on the real test engine.
       *Mutation:* call `_agents_that_are_free` for rung 2 and `_roster_availability` for rung 3. The
@@ -71,15 +78,31 @@ mutation and the observed failure beside the task when ticking it.
 
 ## 2. What rung 3 says (design D2, D3)
 
+> **R6 — ORDERING CONSTRAINT, and it is real. Do task 2.14 FIRST, before 2.3.**
+> `own_review_remedy` ships with a bare `assert task.status in ("completed", "under_review")`
+> (`scheduler.py:1916-1919`). The screen that keeps a diverged non-review task away from it is
+> **2.14**, and it has **not** shipped — `run_divergence.py` carries no `under_review` guard and
+> calls `resolve_reviewer` at `:441-447` with no status check. So the moment 2.3 makes rung 3 call
+> the helper, an operator who moves a task to `revision_needed` while its review run is live turns
+> a surfaced reason into an unhandled `AssertionError` inside the scheduler. In an unattended
+> window that is the failure to expect. The list below is otherwise in its original order.
+
 - [ ] 2.1 Change `resolve_reviewer`'s `exclude` to `Mapping[str, str]` (agent → clause) and remove
       `excluded_because`. Rung 1b reads `exclude[resolution.agent]`.
       - `decide_firing` (`scheduler.py:1550-1584`) builds the mapping from exactly the clauses it
         passes today.
       - Update every call site. A missed one fails only where it reaches a named exclusion, and CI
         runs no mypy over `hub/`, so grep `exclude=` before ticking. The sites are:
-        - `test_reviewer_ladder.py:97, 121, 146, 159, 170, 189, 213, 239, 278, 303, 328, 339`;
-        - `test_a_flow_names_what_it_cannot_staff.py:472, 482`;
-        - `scheduler.py:1577` and `run_divergence.py:440`.
+        - `test_reviewer_ladder.py:97, 121, 146, 159, 170, 189, 242, 257, 283, 322, 347, 372, 383`
+          — **thirteen** sites. R6 corrected six of the numbers R1 gave and found a thirteenth the
+          list never had;
+        - `test_a_flow_names_what_it_cannot_staff.py:471, 478`;
+        - **`test_a_held_agent_is_busy.py:377, 388, 401` (R6) — missing from every earlier round.**
+          All three pass `exclude={AUTHOR}`, a set, and all three reach rung 3, so a `Mapping`
+          signature makes them raise `TypeError` at `exclude[name]`;
+        - `scheduler.py:1738-1745` and `run_divergence.py:441-447`.
+      - **R6: re-verify every line above before editing.** This list has been wrong at three
+        consecutive rounds. Grep for `exclude=` and count; do not trust the numbers.
 - [ ] 2.2 `run_divergence` (`:430-446`) builds the mapping in three layers, each overwriting the
       one before:
       1. on the operator-completed branch, `agents_that_may_have_authored` → "has worked on this
@@ -98,23 +121,30 @@ mutation and the observed failure beside the task when ticking it.
           approval;
         - `under_review`: the three exits, and **not** Land it;
       - **R5:** the holds clause prints only **reachable** holdings, and each as
-        `"{name} holds {id} ({status}) in {loop}"`. A holding that is not reachable is not a reason
-        and must not be named.
+        `"{name} holds {id} ({status})"`. A holding that is not reachable is not a reason and must
+        not be named. **R6 removed the loop id** — it existed only to aim the archive remedy, which
+        R6 removes, and it printed `in None` for a holding reachable only through the queued arm.
+      - **R6: clause precedence is excluded, no runner, holds, HELD, running** — five clauses. The
+        held clause is `"{name} is waiting for its provider's usage limit to reset"`. It is
+        required by a shipped SHALL in `openspec/specs/agent-flows/spec.md`, and without it a held
+        agent is reported as running a turn, which is false.
       - after the helper's sentence, rung 3 itself appends "; rejecting held tasks that are no
-        longer wanted can free their agents, as can archiving the loop that holds them." The
-        dispatch refusal (4.2) does not.
-      - **R5:** the remedy must never suggest pausing. A paused loop still holds
-        (`scheduler.py:1084-1085`), so suggesting it would be a fresh F353.
+        longer wanted can free their agents." The dispatch refusal (4.2) does not.
+      - **R6: the remedy names rejecting, and nothing else.** It must never suggest pausing (a
+        paused loop still holds, `scheduler.py:1084-1085`) and must never claim that ending or
+        archiving a loop frees an agent (reachability is an OR; the queued arm survives an
+        archive). Both would be fresh instances of F353.
 - [ ] 2.4 Bound the reason to 500 characters. If the whole sentence fits, use it. Otherwise add
       clauses in name order while the prefix, the clauses, the tail
       "; and N more agents are excluded, busy or unbound" and the remedy still fit.
       - A holds clause that would not fit is retried with two named tasks, then one, counting the
         rest as "and N more". Only then is its agent left to the tail (R3).
-      - **R5: drop the loop id before dropping a task.** A holding without its loop is still true;
-        a name without its holding is not.
-      - **R5, do this FIRST: re-measure D2's character budget table.** R5 lengthened clause 3 (the
-        loop id) and the remedy (the archive clause) and did **not** recompute the table, so every
-        number in it is now a floor rather than a measurement. The 500 bound is enforced at the
+      - **R6: there is no loop id to drop any more.** The fallback is the pre-R5 one: three named
+        tasks, then two, then one, then the agent falls to the tail.
+      - **R6, do this FIRST: re-measure D2's character budget table.** R5 lengthened clause 3 and
+        the remedy without recomputing it, and the review measured the flagship shape at 559/589
+        against a 500 bound. R6 removed both additions, which should restore it — but clause 4 adds
+        a per-agent string that never existed, and "shorter than before" is not a measurement. The 500 bound is enforced at the
         model since `fit_error_summary` shipped (`models.py:1336-1348`), so an over-long reason is
         now silently truncated rather than loudly wrong — which is exactly the failure mode a stale
         budget table produces.
@@ -129,7 +159,26 @@ mutation and the observed failure beside the task when ticking it.
       holding an `under_review` task; one holding five `pending` tasks; one holding an
       `in_progress` task with no turn.
 
-      **Every held task has `loop_id` NULL**, as LoopEngine's backlog did (R3). A held task in the
+      > **R6 — R3's `loop_id` NULL fixture is now self-defeating and must be replaced.** Under (f)
+      > a holding with a NULL `loop_id` and no queued turn is **unreachable**: it holds nobody, so
+      > R5-3 forbids naming it *and* the firing never reaches rung 3 at all —
+      > `test_a_task_nothing_will_move_holds_nobody.py:307-322` stages exactly this shape and
+      > asserts `decision.unstaffed == ()`. As written this test asserts three mutually exclusive
+      > things and its three mutations cannot fail, because the code under test is never entered.
+      >
+      > **Replace the fixture:** every non-author's held task is **reachable** — carry the loop's
+      > own `loop_id`, or have a queued turn naming `(task, assignee)`. The author's extra live
+      > task (REV's addition, below) stays as it is. Then re-check R3's own caveat in the next
+      > paragraph against the new fixture: an idle assignee's in-loop `in_progress` task is
+      > *walked*, so it may be claimed as a selection rather than stalling. If it is, stage that
+      > agent as `running` instead and say so — the point of the test is the sentence, not the
+      > route to it.
+      >
+      > The same question is unanswered for **2.9, 2.9b, 2.10 and 2.11**, which never state whether
+      > their holdings are reachable. Answer it in each before writing them: an unreachable holding
+      > names nobody, which makes the twelve-agent length test vacuous.
+
+      A held task in the
       loop's own queue is walked: an idle assignee's `in_progress` task is resumed as a selection,
       so the firing claims work and never stalls, and a non-author's `under_review` task with no
       turn surfaces F154's sentence, which F64 may promote instead (design, *Round 3* item 6).
@@ -144,6 +193,8 @@ mutation and the observed failure beside the task when ticking it.
 
       *Mutations:* (a) drop the holdings clause; (b) put holds before excluded; (c) use
       `excluded_because` for every agent. Each must fail.
+      *Mutation (R6):* make every held task unreachable. The test must fail — and if it does not,
+      the fixture is still the one R6 replaced.
 - [ ] 2.7 Test, divergence restaff with nobody left, on **both** branches:
       - agent-completed: the silent reviewer's clause says it recorded no verdict, and nowhere says
         it completed the task;
@@ -195,6 +246,30 @@ mutation and the observed failure beside the task when ticking it.
       while its review run is live, and the run then ends without a verdict. No `review_unstaffed`
       is recorded and no reviewer is staffed.
       *Mutation:* drop the new screen. The test must fail.
+      **R6: this task runs BEFORE 2.3** — see the ordering note at the top of this group. Its
+      citation has drifted: the `blocked` screen is at `run_divergence.py:753-754`, not `:746`.
+- [ ] 2.15 (R6) Test: an agent whose queue is held, running no turn and holding nothing, is named
+      by clause 4 and **not** by clause 5. Assert the reason contains "waiting for its provider's
+      usage limit to reset" for that agent's name, and does not say it is running a turn.
+      *Mutation:* fold `held` into `running` on the record. The test must fail.
+      This is the shipped SHALL at `openspec/specs/agent-flows/spec.md` — *"the reason surfaced
+      SHALL name the hold among the grounds"* — and it is the requirement D2's pre-R6 clause list
+      silently dropped.
+- [ ] 2.16 (R6) Update the three shipped tests in `hub/tests/test_a_held_agent_is_busy.py` that
+      D2 and D3 necessarily break, and say in each commit why the old assertion no longer holds:
+      - `:370-381` asserts the old blanket clause as a substring — rewrite against clause 4;
+      - `:384-390` is `assert choice.reason == _TODAY`, **exact equality** with today's whole
+        sentence. D2 replaces that sentence, so this assertion must be re-based on the new one.
+        R3's claim that *"the existing tests assert fragments that D2's wording keep"* is false
+        against today's tree, and `tasks.md`'s "existing pool tests pass unchanged" list never
+        named this file;
+      - the `error_summary` fit test — re-check it against the re-measured budget (2.4).
+      **Do not weaken these to substring checks to make them pass.** An exact-equality test on the
+      operator's only surface is deliberate; re-base it and keep it exact.
+- [ ] 2.17 (R6) Test: the rung-3 reason never contains "pause", and never claims that ending or
+      archiving a loop frees an agent. One test over a fixture with holdings in another live loop —
+      the case R5 wrote the archive remedy for.
+      *Mutation:* restore R5's archive clause. The test must fail.
 
 ## 3. ~~Once per task (design D4)~~ MOVED 2026-09-15
 
@@ -245,6 +320,10 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
         it exists to repair.
 
       Leave no job enabled.
+- [ ] 6.5 (R6) Re-derive `test-guide.md`. It is untouched since R4: its own header says it needs
+      re-deriving, it still calls the OPERATOR QUESTION open, and its A6 claim and human item 3 are
+      written against option (e). Neither R5 nor R6 touched it. It must reflect the five clauses,
+      the reachability filter, the removed archive remedy, and the hold clause.
 - [ ] 6.4 Archive:
       - sync the `agent-flows` delta into `openspec/specs/` (the only one still owned by this
         directory — `agent-loops` and `task-lifecycle-governance` moved with the split and are
@@ -253,3 +332,5 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
       - in FINDINGS, add a dated note to F352 that its visibility half shipped (`F352-free`
         decided (f), and the rung-3 half here re-derived and built against it). F353, F334, F365
         and F367 are marked `fixed <sha>` by the sibling directory instead.
+      - **R6: do not write that this change "leaves F352 open".** The pre-R6 `Impact` said so,
+        justified by the operator question being open; it is closed.

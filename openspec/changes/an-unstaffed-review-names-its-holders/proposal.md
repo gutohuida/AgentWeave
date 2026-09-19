@@ -106,6 +106,39 @@ ticked. Its full findings are in `design.md`, *Round 4 — REV*.
   - The rung-3 prefix, *"nobody is free"*, was false when the author is free.
   - `own_review_remedy` was undefined for the statuses a divergence can still reach.
 
+## R6, 2026-09-19 — the adversarial review of R5, applied. DO NOT build the pre-R6 text
+
+An independent Opus review, aimed at R5 because R5 was written by the same model in the same
+session. Verdict **DO NOT APPROVE**; its four load-bearing findings were re-verified against the
+code and all four held. Full log: `design.md`, **`## Round 6`**.
+
+**R5 re-derived D1 against one of the two changes that had landed on `_agents_that_are_free`, and
+missed the twin.** `agents_held` is ORed into the running set in the same expression R5-0 quotes
+(`scheduler.py:1114-1122`), and appeared nowhere in this change — so D1 would have reverted
+`a-spent-allowance-holds-the-queue` as well as `4b59ee0`. D1 now carries `held`.
+
+The rest, in order of what it changes:
+
+1. **The sentence gains a fifth clause, and it was a shipped `SHALL` all along.** A held agent must
+   be named as held; the four-clause list would have reported it as *running a turn*, which is
+   false. Three shipped tests break as a result — one an **exact string equality** on the whole
+   rung-3 sentence — and none was in any round's list of call sites.
+2. **The archive remedy R5 invented is removed.** It frees nobody held through reachability's
+   queued arm, it is inapplicable in the in-loop case R5-1 leaves as the dominant one, and the loop
+   id it prints is not the identifier the working control takes. Clause 3 loses the loop id with
+   it. **R5 was asked for a subtractive re-derivation and the one thing it originated had to come
+   out.**
+3. **The flagship test could not have been built.** 2.6 stages `loop_id` NULL holdings, which under
+   (f) never reach rung 3 at all.
+4. **A build-order hazard**: task 2.3 before 2.14 turns an operator's mid-run status move into an
+   `AssertionError` in the scheduler. 2.14 now runs first.
+5. **Twenty-two drifted citations**, including six of twelve call-site line numbers.
+
+**This is the "materially smaller change" the review argued for.** What is left: clause 1 + 2 +
+3-filtered-by-reachability + the hold clause + running, the existing status remedy, and the reject
+clause. Still **not** done: the character budget is not re-measured (task 2.4 owns it), and
+`test-guide.md` is not re-derived (task 6.5).
+
 ## Why
 
 On the operator's own Hub (LoopEngine, `:8000`, read mode=ro on 2026-09-13 and 2026-09-14), a flow
@@ -160,6 +193,14 @@ the sentence is written to, F367, which is under *What changes*.
    same lines, they become one change"*).
 
 ## What changes
+
+> **R6: read this section against `## Impact`, which R6 rewrote.** The bullets below still describe
+> the `error_summary` fit, `_review_unstaffed_already_stands`, the guard sentences and the dispatch
+> refusal as work to do. **All of that shipped with the sibling change on 2026-09-16.** R5 recorded
+> that and did not sweep this section; R6 rewrote `Impact` rather than this prose, because the
+> bullets are also the record of what the change argued for. Treat everything here except the first
+> two bullets (rung 3's clauses, and the fit) as history, and take the file list from `Impact`.
+
 
 - **Rung 3 names every roster agent and why it cannot take the review**, in name order:
   - excluded, with the exclusion the caller applied (the author; every agent that worked on an
@@ -229,56 +270,18 @@ snapshot — so the pool was not empty, the review would have been staffed, and 
 table illustrates would not have occurred. `Architect` and `tester` stay held, correctly, because
 their tasks are in-loop.
 
-## OPERATOR QUESTION — what "free" means (F352's other half, NOT in this change) — superseded, kept for provenance
+**R6 deleted the options table and the "Recommended: (d)" paragraph that stood here.** R5
+recorded that they had to go — *"leaving a recommendation for a rejected option in the file is
+how a later round re-litigates a closed decision"* — and then left them in place, under a
+banner, where the next reader would still find a recommendation for the option the operator
+rejected. The decision and its full reasoning are `spec-queue/DECISIONS.md`, the `F352-free`
+row; the re-derivations are `design.md`'s `## Round 5` and `## Round 6`.
 
-`agent-flows` *"A flow resolves a reviewer by declaration, then by availability"* states the rule
-the code enforces, *"any agent that is not running a turn and holds no task in an active status"*,
-project-wide. The rule's design (`loop-becomes-a-flow` D4) rejected *not running* alone because of
-*"the pile-up the operator named"*. Changing what counts as holding changes a shipped requirement
-and a position the operator took, so it is **the operator's to decide**. This change does not decide
-it. On LoopEngine the pool was empty because:
-
-| agent | held (2026-09-13 22:30 UTC) | freed by (a) | (b) | (c) | (d) |
-|---|---|---|---|---|---|
-| Architect | 1 `under_review` in the flow (a review awaiting the operator, no turn) | no | no | yes | no |
-| dev | 2 `in_progress` with no turn, 1 `pending`, all `loop_id` NULL | yes | no | yes | yes |
-| dev_2 | 5 `pending`, `loop_id` NULL | yes | yes | yes | yes |
-| tester | 1 `in_progress` with no turn (superseded) | yes | no | yes | yes |
-
-- **(a) Scope holding to the flow.** Only tasks carrying this loop's `loop_id` hold an agent. It
-  frees every agent whose backlog is outside the flow, but agents file their follow-ups with no
-  `loop_id`. It re-opens the pile-up for any non-flow work, because a flow would give work to an
-  agent holding three ad-hoc tasks.
-- **(b) `pending` with an assignee does not hold.** A reservation, not work. It is narrow, and on
-  LoopEngine it frees only `dev_2`, which would have been enough that night.
-- **(c) A live task holds only while a turn is running or queued on it** (F154's predicate,
-  `tasks_with_a_turn_pending_or_running`). It frees an agent between turns, which is exactly the
-  case D4 rejected *not running* alone for.
-- **(d) A review asks a different question from new work** (the 2026-08-26 exploration's option 2).
-  - For a **review**, an agent is free when it is not running a turn and is not already the
-    reviewer on an `under_review` task.
-  - For **new work**, the full rule stays.
-  - The argument: a review is one bounded turn against somebody else's commit, not accumulated
-    ownership, and D4's pile-up objection is about being given work.
-  - Open under (d): whether a review turn is refused or confused for an agent whose own task is
-    `in_progress` (worktree, session binding). That needs its own R1.
-- **(e) Leave the rule.** The flow surfaces truthfully, and after this change the sentence names
-  exactly which holdings to resolve. A roster of four then sustains review only while holdings stay
-  low.
-
-**Recommended: (d).** It is the only option that separates the two questions D4 conflated. Of the
-options that do not re-open the pile-up for new work, it frees the most on LoopEngine. Whatever is
-chosen is a separate change, taken through its own spec loop. **REV:** the rung-3 sentence's shape
-depends on the answer. Under (d), it would name only running turns and review holdings, and its
-freeing clause would not apply. So the rung-3 half is written against (e) today, and the answer
-re-derives it.
-
-**Why R1 built this change without the answer, and why REV rejected it.** R1 argued that the change
-was scoped to contain no operator choice, because it keeps the rule exactly as the corpus states
-it. So, R1 said, DIRECTION's *"the change stops after REV, unbuilt"* did not apply, and it named REV
-as the round that could reject the reading. REV did (the top of this file). DIRECTION attaches the
-stop to R1 finding the question, which R1 did. The rung-3 half also presupposes (e) (above). **F352
-stays open**, and so does everything else this change would retire.
+Two facts from the deleted table are worth keeping, because they are measurements rather than
+argument: on the 2026-09-13 LoopEngine snapshot, under (f) **`dev` and `dev_2` are free** (their
+holdings carried no `loop_id` and had no queued turn), so the pool was not empty and the review
+would have been staffed; `Architect` and `tester` stay held, correctly, because their tasks were
+in-loop.
 
 ## Capabilities
 
@@ -295,23 +298,34 @@ stays open**, and so does everything else this change would retire.
 
 ## Impact
 
+**R6 rewrote this section.** Everything below is what is left after the 2026-09-15 split and the
+R5/R6 re-derivations. The previous version listed five files that the sibling change already
+shipped; an implementer following it literally would have re-implemented working code.
+
 - **Python:**
   - `hub/hub/scheduler.py`: `_agents_that_are_free` restructured over a per-agent availability
-    read; `resolve_reviewer` rung 3; `own_review_remedy`; `_wedged_review_reason`'s title fit;
-    `_stall_run_to_increment`'s comparison; `_review_unstaffed_already_stands`.
-  - `hub/hub/db/models.py`: `JOB_RUN_ERROR_SUMMARY_CHARS`, `fit_error_summary`, and
-    `@validates("error_summary")` on `JobRun`. `hub/hub/schemas/jobs.py` reads the constant.
-  - `hub/hub/run_divergence.py`: the exclusion carries reasons.
-  - `hub/hub/task_transition_service.py`: the guard's two sentences.
-  - `hub/hub/api/v1/agent_trigger.py`: the dispatch refusal's sentence.
+    read (`AgentAvailability` / `Holding`, carrying **`held`** and **`reachable`**);
+    `resolve_reviewer` rung 3's five clauses and its remedy.
+  - `hub/hub/run_divergence.py`: the exclusion carries reasons (D3), and the status screen task
+    2.14 adds.
 - **UI:** `hub/ui/src/components/spec/LoopsIndexTab.tsx`, one `title` attribute. The bundle is
   committed only under the day's rule: it must be driven in a browser, and nothing it calls may be
   newer than the `:8000` process. It calls nothing new.
-- **Not touched:** `hub/hub/mcp_server.py` (F354; nothing here needs it), the definition of free,
-  the transition map, and every guard's decision.
+- **Tests this change must UPDATE, not just add** (R6): `hub/tests/test_a_held_agent_is_busy.py`
+  — three assertions, one of them an exact string equality on the whole rung-3 sentence, plus
+  three `exclude=` call sites that a `Mapping` signature breaks.
+- **Already shipped by `a-refusal-names-a-remedy-that-works`; this change touches none of it:**
+  `own_review_remedy`, `_review_unstaffed_already_stands`' per-task scope, `_wedged_review_reason`'s
+  fit, `_stall_run_to_increment`'s comparison, `JOB_RUN_ERROR_SUMMARY_CHARS` / `fit_error_summary`
+  / `@validates` in `models.py`, the guard's two sentences in `task_transition_service.py`, and the
+  dispatch refusal in `agent_trigger.py`.
+- **Not touched:** `hub/hub/mcp_server.py` (F354; nothing here needs it), **the definition of
+  free** — this change reads it, and R5-0/R6-1 are both about not accidentally rewriting it — the
+  transition map, and every guard's decision.
 - **No migration.** No API shape change: `reason` is already a string on the event and on
   `stall_reason`.
-- **Findings:** would retire F353, F334, F365 and F367 if built (it is not; see the top). **Leaves
-  F352 open** with a dated note, because
-  its definition half is the operator's question above. **Leaves F366 open**: this change stops
-  relying on the route's hole, and closing it is that finding's own loop.
+- **Findings:** would retire **F352's visibility half** if built, with a dated note saying the
+  definition half was settled separately by `F352-free` (option (f), `4b59ee0`). F353, F334, F365
+  and F367 are **already** marked fixed by the sibling directory — this change retires none of
+  them. **Leaves F366 open**: this change stops relying on the route's hole, and closing it is that
+  finding's own loop.

@@ -13,9 +13,16 @@ work outside the flow.
 For each non-archived agent, the reason SHALL state the first of these that applies:
 1. it is excluded from this review, stated with the reason the resolution applied to that agent;
 2. it has no runner bound;
-3. it holds tasks that still make it unavailable, naming each such task by identifier, status and
-   the loop that holds it, where a bounded number MAY be named and the rest counted;
-4. it is running a turn.
+3. it holds tasks that still make it unavailable, naming each such task by identifier and status,
+   where a bounded number MAY be named and the rest counted;
+4. its queue is held by a refusal of its provider's usage allowance;
+5. it is running a turn.
+
+Clause 4 is not optional and SHALL NOT be folded into clause 5. An agent whose queue is held is not
+running a turn, and saying that it is states a false cause for a condition that clears on its own
+schedule rather than on the operator's. Naming every agent's reason individually is what satisfies
+*"the reason surfaced SHALL name the hold among the grounds"*; a sentence built only from clauses
+1, 2, 3 and 5 would violate that requirement in the ordinary case.
 
 A task in an active status that nothing will move SHALL NOT be named as a reason an agent could not
 take the review. Such a task does not make its assignee unavailable, so naming it would state a
@@ -33,16 +40,19 @@ second one. A reason built separately could name an agent the resolution conside
 The reason SHALL NOT describe an agent as having completed the work when the resolution excluded
 that agent for a different reason, such as having reviewed the task without recording a verdict.
 
-The reason SHALL name a way to free a held agent that exists and that reaches every agent the
-reason named. Ending a loop's claim on its tasks frees every agent whose holdings are only that
-loop's, and rejecting an unwanted task frees whoever held it. The reason SHALL NOT name pausing,
-which does not free an agent: a paused loop still holds, because resuming it briefs the assignee on
-the same task again. Naming a control that does not have the stated effect is the defect this
-requirement exists to end, and it is not cured by the control being easy to reach.
+Where the reason names a way to free a held agent, that way SHALL have the stated effect for every
+agent the reason named. Rejecting a task that is no longer wanted frees whoever held it, and the
+operator can reach `rejected` from every status that makes an agent unavailable.
 
-Where the reason names ending a loop's claim, it SHALL identify which loop, and that loop SHALL be
-one other than the one whose review could not be staffed. Ending the latter would stop the work the
-reason is asking the operator to unblock.
+The reason SHALL NOT name pausing, which does not free an agent: a paused loop still holds, because
+resuming it briefs the assignee on the same task again. Naming a control that does not have the
+stated effect is the defect this requirement exists to end, and it is not cured by the control
+being easy to reach or by the effect being usual rather than certain.
+
+The reason SHALL NOT claim that ending or archiving a loop frees the agents holding its tasks. A
+task can make its assignee unavailable either because a live loop still walks it **or** because a
+queued turn names it, and retiring the loop withdraws only the first. An agent held through the
+second arm stays held, so the claim would be false exactly when the operator acted on it.
 
 The reason SHALL name an action that exists for the task in its present status:
 - for a `completed` task, the landing action as the operator's way to review it themselves. It
@@ -84,14 +94,19 @@ decides that.
 - **THEN** that agent is not described as held by that task
 - **AND** the task's identifier does not appear in the surfaced reason
 
-#### Scenario: The reason names the loop to end, and never the stuck one
+#### Scenario: An agent whose queue is held is named as held, not as running
 
-- **WHEN** a flow cannot staff a review because every other agent holds tasks belonging to a
-  different loop
-- **THEN** the surfaced reason names each holding with the loop that holds it
-- **AND** the way forward it offers names that other loop, not the loop whose review could not be
-  staffed
+- **WHEN** a flow cannot staff a review and an agent was passed over because its queue is held by a
+  refusal of its provider's usage allowance
+- **THEN** the surfaced reason names that agent's hold as its reason
+- **AND** it does not state that the agent is running a turn
+
+#### Scenario: The reason offers no remedy that would not free the agents it named
+
+- **WHEN** a flow cannot staff a review because every other agent holds work
+- **THEN** the way forward it offers names rejecting an unwanted task
 - **AND** it does not offer pausing as a way to free an agent
+- **AND** it does not claim that ending or archiving a loop frees them
 
 #### Scenario: The author is named as excluded, not as busy
 

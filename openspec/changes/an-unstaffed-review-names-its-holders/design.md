@@ -81,14 +81,23 @@ the proof that it does not.
 > two consumers need two different things from it and only one of them is the pool:
 >
 > ```
-> AgentAvailability(name, has_runner, running, holdings: tuple[Holding, ...])
+> AgentAvailability(name, has_runner, running, held, holdings: tuple[Holding, ...])
 > Holding(task_id, status, loop_id, reachable: bool)
 > ```
 >
-> - the **pool** is `[a.name for a in availability if a.has_runner and not a.running and not
->   any(h.reachable for h in a.holdings)]` — the predicate the code has today, restated, so D1's
->   "no agent enters or leaves" claim becomes true again;
-> - **clause 3** prints `[h for h in a.holdings if h.reachable]` (R5-3), with `h.loop_id` (R5-5).
+> - the **pool** is `[a.name for a in availability if a.has_runner and not a.running and not a.held
+>   and not any(h.reachable for h in a.holdings)]` — the predicate the code has today, restated, so
+>   D1's "no agent enters or leaves" claim becomes true again;
+> - **clause 3** prints `[h for h in a.holdings if h.reachable]` (R5-3).
+>
+> **R6 added `held`, and R5 missing it is the same mistake R5-0 is about.** `_agents_that_are_free`
+> does not read one running source, it reads two: `select(Run.agent).where(... status ==
+> "running")` **`| await agents_held(session, project_id)`** — one expression,
+> `scheduler.py:1114-1122`. A usage-held agent holding nothing has `running=False` and no reachable
+> holding, so without `held` on the record it returns to the pool and
+> `a-spent-allowance-holds-the-queue` D6 is reverted along with `4b59ee0`. `held` is a separate
+> field rather than folded into `running` because **clause 4 has to tell them apart** (D2): an
+> agent that is held is not running a turn, and saying it is states a false cause.
 >
 > Keeping the unreachable holdings on the record rather than filtering them out of the query is
 > deliberate: the reachability arms are already computed for the pool, and a second query to find
@@ -120,9 +129,23 @@ For each record, the **first** of these that holds becomes that agent's clause:
 
 1. **excluded** — `"{name} {clause}"`, where the clause is the caller's reason for this agent (D3);
 2. **no runner** — `"{name} has no runner bound"`;
-3. **holds** — `"{name} holds {id} ({status}) in {loop}"`, listing up to three held tasks and then
+3. **holds** — `"{name} holds {id} ({status})"`, listing up to three held tasks and then
    `"and N more"`;
-4. **running** — `"{name} is running a turn"`.
+4. **held** — `"{name} is waiting for its provider's usage limit to reset"`;
+5. **running** — `"{name} is running a turn"`.
+
+**R6 added clause 4, and it is not optional.** `openspec/specs/agent-flows/spec.md` already carries
+a shipped SHALL: where an agent was passed over because its queue is held, the reason *"SHALL name
+the hold among the grounds, and SHALL NOT state that every agent is running a turn, holding work or
+excluded."* R1–R5's four-clause list has no hold in it, so the sentence it builds would both drop a
+required ground and tell the operator a held agent is running a turn. The clause sits **after**
+holds and **before** running: holds is the actionable one, and of the two wait-states a hold names
+a specific external cause that clears on its own schedule, which is more use than "busy".
+
+**R6 removed the loop id from clause 3.** R5 added it for one purpose — to let the operator aim the
+archive remedy — and R6 removes that remedy (below), so the loop id now costs 21 characters per
+holding and buys nothing. It was also unprintable in the case that matters: a holding reachable
+only through the queued arm can have `loop_id` NULL, and the clause would read `in None`.
 
 **R5 — clause 3 changed twice, and both changes come from (f).**
 
@@ -189,34 +212,40 @@ the rule `enter_selected_task`'s docstring states for the same situation.
   wording becomes *"rejecting held tasks that are no longer wanted can free their agents"*, and the
   OPERATOR QUESTION's answer re-derives it.
 
-  **R5 re-derives it against (f), and the answer is a different remedy.** Rejecting still works —
-  `rejected` leaves `LIVE_STATUSES`, so the holding fails the pool predicate whichever arm held it
-  — and REV's plural stands. But under (f) it is no longer the *best* remedy, and the best one is
-  named nowhere in R1–R4:
+  **R5 re-derived it against (f) and proposed archiving the loop as a second remedy. R6 REMOVES
+  that**, and the removal is the main thing R6 does. R5's reasoning was that `live` excludes an
+  archived loop (`scheduler.py:1126-1130`) and `POST /jobs/{job_id}/archive` sets
+  `loop.archived_at` (`api/v1/jobs.py:1198`), so archiving frees the agents that loop was holding.
+  Three things are wrong with it, and any one of them is disqualifying for a change whose entire
+  subject is remedies that work:
 
-  - **Archiving the loop that holds them frees every agent holding only its tasks, at a stroke.**
-    `live` excludes a loop with `archived_at` set (`scheduler.py:1126-1130`), and
-    `POST /jobs/{job_id}/archive` sets `loop.archived_at` on the job's loop
-    (`api/v1/jobs.py:1190-1197`). The control is real and the operator can reach it
-    (`useArchiveJob`, `hub/ui/src/components/jobs/JobsPage.tsx:42,49`) — which is the test this
-    change applies to every remedy it prints. **Under (e) this remedy did not exist**: a live
-    assigned task held its agent no matter what happened to its loop. It exists only because (f)
-    made the loop's liveness the dominant arm.
-  - **It must name the *other* loop, never this one.** Archiving the loop whose review is stuck
-    stops the firing that needs staffing, so the remedy is correct only where the holding belongs
-    to a different loop. That is why clause 3 now carries each holding's loop: without it the
-    sentence cannot tell the operator which loop to archive, and a remedy the reader cannot aim is
-    the defect class (F353) this change exists to repair.
-  - **Pausing frees nobody, and the sentence must never suggest it.** `_agents_that_are_free` is
-    explicit: *"A **paused** loop still holds, because re-enabling it briefs the assignee on the
-    task again"* (`scheduler.py:1084-1085`). Pause is the control an operator reaches for first and
-    the one that looks like it should work. **Recommending it would be a fresh instance of F353
-    committed by the change whose subject is F353's defect class** — so the remedy names archiving,
-    in those words, and the tests assert the string "pause" never appears in a rung-3 reason.
+  - **It is not guaranteed to free anybody.** Reachability is an **OR**: `loop_id in live or
+    (task_id, assignee) in queued` (`scheduler.py:1146-1150`). Archiving the loop withdraws the
+    first arm and nothing else — a queued turn naming that `(task, assignee)` survives it
+    (`run_task_binding.py:342-353` selects on `state == "queued"` and hop depth; archiving
+    withdraws nothing), and the agent stays held. The remedy would be false precisely when the
+    operator acted on it.
+  - **It is inapplicable in the case that is left.** R5-1 narrowed the remaining rung-3
+    circumstance to agents holding **in-loop** work. For those the loop that holds them *is* the
+    loop whose review is stuck, and archiving it stops the work the sentence is asking the operator
+    to unblock. The remedy applies least often in the situation the change now exists for.
+  - **It cannot be aimed.** The clause would print a loop id, but `POST /loops/{id}/archive`
+    **refuses a live loop** (`api/v1/loops.py:171-175`, 400 while `ending_state is None`). The only
+    archive that works on a live loop is keyed on the **job** id, and `Loop.id != Loop.job_id`.
+    Printing an identifier the working control does not accept is F353 exactly.
+
+  **So the remedy is the reject clause and nothing else** — true, operator-reachable from every
+  status that makes an agent unavailable, and unchanged since REV. This is the "materially smaller
+  change" R6's review argued for: R5 tried to add value and added a false sentence.
+
+  **Pausing frees nobody, and the sentence must never suggest it.** `_agents_that_are_free` is
+  explicit: *"A **paused** loop still holds, because re-enabling it briefs the assignee on the
+  task again"* (`scheduler.py:1084-1085`). Pause is the control an operator reaches for first and
+  the one that looks like it should work, so the tests assert the string "pause" never appears in
+  a rung-3 reason.
 
   Wording, with the status half from `own_review_remedy` unchanged before it:
-  *"; rejecting held tasks that are no longer wanted can free their agents, as can archiving the
-  loop that holds them."*
+  *"; rejecting held tasks that are no longer wanted can free their agents."*
 - **Any other status (REV).** The divergence screens out only `blocked` (`run_divergence.py:746`),
   and `run_advanced_its_task` counts only the run's own transitions. So if the operator moves a
   task to `revision_needed` or `rejected` while its review run is live, that run's end still
@@ -923,3 +952,112 @@ round log exists to prevent. Retire it to one paragraph naming (f) and pointing 
   disappear between two firings, which would make the sentence unstable across ticks in the way D2's
   ordering argument tries to avoid. Named here because it is reachable from (f) and nobody has
   looked.
+
+## Round 6 — the adversarial review of R5, and what it cost, 2026-09-19
+
+An independent adversarial review (Opus subagent, read-only), commissioned by the operator under
+their standing rule that one runs before any `APPROVED` row. It was aimed explicitly at **R5**, on
+the grounds that R5 was written by the same model in the same session and was the least
+independently checked part of the change. Verdict: **DO NOT APPROVE**. Its four load-bearing
+findings were re-verified against the code before being applied here; all four held.
+
+**R5 re-derived D1 against one of the two changes that had landed on `_agents_that_are_free`, and
+missed the twin.** That is the honest summary. The rest follows from it.
+
+### R6-1 — the usage hold: a second silent revert, in the same expression R5-0 quotes
+
+`_agents_that_are_free` builds `running` from two sources ORed together —
+`select(Run.agent).where(... "running")` **`| await agents_held(...)`**, `scheduler.py:1114-1122`.
+`agents_held` appears nowhere in this change's five files. D1's record therefore returns a
+usage-held agent with `running=False` and no reachable holding, i.e. **to the pool**, reverting
+`a-spent-allowance-holds-the-queue` D6 exactly as the original D1 reverted `4b59ee0`.
+
+`hub/tests/test_a_held_agent_is_busy.py` did not exist at REV's tree (`82b58df`) and shipped in
+`e1eca5b`, so R1–R4 could not have seen it. **Catching what landed since was R5's entire purpose,
+and R5 had this expression on screen.** D1 amended: `held` is a field on the record.
+
+### R6-2 — the change deleted a shipped SHALL and told the operator something false
+
+`openspec/specs/agent-flows/spec.md` carries: where an agent was passed over because its queue is
+held, the reason *"SHALL name the hold among the grounds, and SHALL NOT state that every agent is
+running a turn, holding work or excluded."* Today's code honours it (`scheduler.py:1291-1312`, the
+`roster_held` query and its `waiting` clause). D2's four clauses had no hold, so a held agent would
+have read *"X is running a turn"* — false — and the hold would have been named nowhere.
+
+D2 gains **clause 4**. The delta spec's clause list gains it too, with a paragraph saying it may
+not be folded into "running".
+
+Three shipped tests break and none was listed: `test_a_held_agent_is_busy.py:370-381`
+(substring on the hold clause), `:384-390` (**`assert choice.reason == _TODAY`**, exact equality),
+and the `error_summary` fit test. The same three pass `exclude={AUTHOR}` as a **set**, so D3's
+`Mapping[str, str]` makes them raise `TypeError`. R3's claim that *"the existing tests assert
+fragments that D2's wording keep"* is false against today's tree. Tasks added.
+
+### R6-3 — the archive remedy is removed, and this is R6's main act
+
+R5 added it as the remedy (f) created. It fails three ways, each disqualifying on its own for a
+change whose subject is remedies that work: reachability is an **OR** so archiving frees nobody
+held through the queued arm; the remaining rung-3 case is in-loop holdings, where the loop to
+archive is the stuck one the delta forbids naming; and `POST /loops/{id}/archive` refuses a live
+loop, so the printed loop id is not the identifier the working control takes.
+
+Removing it also removes the loop id from clause 3 — R5 added that only to aim the archive — which
+recovers 21 characters per holding. See R6-4.
+
+**The lesson worth carrying: R5 went looking for something to add.** The re-derivation it was asked
+for was subtractive, and the one decision it originated is the one that had to come out.
+
+### R6-4 — the budget, which R5 explicitly declined to re-measure
+
+R5 added a loop id per holding and 43 characters of remedy and left D2's table alone, saying so.
+The review measured the flagship LoopEngine shape at **559** (`completed`) and **589**
+(`under_review`) against the 500 bound — so the fit fired on the main case, not a corner, and
+task 2.4's "drop the loop id first" then produced *"archiving the loop that holds them"* naming no
+loop, violating this change's own delta.
+
+R6 removes both additions, which restores the budget to roughly R5's starting point. **It is still
+not re-measured, and task 2.4 still says to measure it first.** Clause 4 adds a per-agent string
+that did not exist before; it is shorter than what came out, but "shorter than" is not a
+measurement.
+
+### R6-5 — group 2's fixtures were never re-derived
+
+Task 2.6, the flagship test, stages four agents whose held tasks all have `loop_id` NULL (R3's own
+fix). Under (f) those holdings are unreachable, so R5-3 forbids naming them **and** the firing
+never reaches rung 3 at all — `test_a_task_nothing_will_move_holds_nobody.py:307-322` stages that
+shape and asserts `decision.unstaffed == ()`. The test asserts three mutually exclusive things and
+its mutations cannot fail. 2.9, 2.9b, 2.10 and 2.11 never say whether their holdings are reachable.
+R5 announced *"every task in this group was rewritten"* for group 1 and gave group 2 two notes.
+Fixed.
+
+### R6-6 — a build-order hazard that would have fired unattended
+
+`own_review_remedy` ships with a bare `assert task.status in ("completed", "under_review")`
+(`scheduler.py:1916-1919`). The screen that keeps a diverged non-review task away from it is task
+**2.14**, which has not shipped — `run_divergence.py` has no `under_review` guard and calls
+`resolve_reviewer` at `:441-447`. So task 2.3, which makes rung 3 call the helper, turns an
+operator's mid-run status move into an unhandled `AssertionError` inside the scheduler. 2.14 is now
+ordered before 2.3 with the constraint stated.
+
+### R6-7 — twenty-two drifted citations
+
+The review re-checked every citation that is a build instruction or a load-bearing argument and
+found 22 stale, including six of the twelve `test_reviewer_ladder.py` call-site lines (and a
+thirteenth site uncounted), all three `test_a_held_agent_is_busy.py` sites missing entirely, and
+R5's own two new citations. Corrected in `tasks.md` where they are instructions. **R5's advice to
+re-verify the rest at implementation time was right and is repeated here**: this file's line
+numbers have now been wrong at three consecutive rounds.
+
+### What R6 did not do
+
+- **Ran no tests.** Every claim is a code read. "These three tests go red" is derived from reading
+  their assertions, not observed.
+- **Did not re-measure the budget** (R6-4). Task 2.4 owns it.
+- **Did not re-derive `test-guide.md`**, which still reads as if the operator question were open.
+  Task added; the file is otherwise untouched since R4.
+- **Did not open** `task_transition_service.py`, `agent_trigger.py`, `requirement_gate.py` or
+  `turn_scheduler.py` — the review grepped them and did not read them either, and D5's content
+  moved to the archived sibling, taken on trust by both rounds.
+- **Left open** R5's own unexamined question: whether `task_agent_pairs_with_a_turn_queued`'s
+  hop-budget arm makes a holding flicker between firings. R6-3 shows that same OR already causes
+  trouble, which raises rather than lowers the priority of looking.
