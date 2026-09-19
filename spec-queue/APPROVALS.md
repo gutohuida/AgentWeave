@@ -1527,3 +1527,60 @@ Today's work was a full-surface sweep (one new finding, F384, filed and fixed sa
 open). Neither needed a spec. If you approve nothing, the FIX window falls to the same
 decision-gated default the last two nights already surveyed and closed with an empty queue (§5 of
 the page). There is deliberately no `ORDER:` line here.
+
+### APPROVED — `a-refused-capability-reaches-the-operator`
+
+**The operator approved this on 2026-09-19**, after the adversarial Opus review their standing
+process requires (`feedback_opus_review_before_approval`) returned **DO NOT APPROVE**, and after
+**R4** applied every finding from it. R4 is commit `6954a17`; `openspec validate --strict` passes.
+Read design.md's **Rounds** section before building — R4 changed four things beneath the decision,
+and two of them are defects R1-R3 would have shipped.
+
+**This supersedes the "no row to give a status token to" line above**, which was written before the
+review ran.
+
+```
+ORDER: a-refused-capability-reaches-the-operator, tasks 0.3, 0.4, 0.5 and 4.12 ONLY
+```
+
+**Why the order is partial, and this is the part a window must not skip.** R4 added task **0.1**:
+`F386` must be fixed and merged before anything in §1 is built. The record this change opens is
+deliberately **non-blocking**, and the card that is its only route to a human
+(`QuestionInterruptCard.tsx:35`, `:24`) says `{from_agent} is waiting` for every question it
+renders — which this change's **own ADDED requirement** forbids
+(*"SHALL NOT cause any surface to report that the refused run, its conversation or its loop is
+waiting on the operator"*). Building §1 before `F386` makes the change violate its own spec in the
+same motion that satisfies the rest of it. **Do not build §1, §2, §3 or §5 tonight.**
+
+**What is in scope tonight**, and it is real, self-contained work that no prerequisite gates:
+
+- **0.3** — migration `0104` (head is `0103`): `questions.subject_key`, `String(200)`, nullable,
+  plus a **partial unique index** on `(project_id, subject_key)` where
+  `answered = 0 AND declined = 0 AND subject_key IS NOT NULL`. Backfills nothing. `downgrade` drops
+  both.
+- **0.4** — the column on `Question` in `hub/hub/db/models.py`, with the comment saying the key is
+  a structural identifier and **not prose** (design **D15** — this is the whole point of it).
+- **0.5** — `ask_question_for_actor` (`questions.py:235`) takes `subject_key: Optional[str] = None`.
+- **4.12** — the test that every existing caller is unaffected: an operator-posted question still
+  writes `subject_key IS NULL`, and two NULL-keyed open questions on one project coexist.
+
+Additive, nullable, with no consumer yet — so it cannot change behaviour, and it de-risks the
+larger build. **`0104` runs against the operator's live database on their next restart.** That is
+the one thing here they should know happened; it adds a column and an index and touches no existing
+row.
+
+**`F386` goes to the day window of 2026-09-20 as a no-spec carve-out repair**, the same shape as
+F384 on 2026-09-19. It is a finding with no proposal, which this playbook's own source-2 rule says
+is the day window's work and not a FIX window's. Both halves read fields the card already receives:
+`blocking` (so a non-blocking question stops claiming someone is waiting) and `declined` (which
+fires **today**, with no new code — `list_questions` filters on `answered` only, `questions.py:318`,
+so a question the operator explicitly closed renders as an agent waiting on them forever).
+`F387` — one question, oldest-first, so this record would hide a genuine blocker behind it — is
+**not** a prerequisite but should be taken in the same sitting; the deterministic floor is
+blocking-first-then-newest and both fields are already on the wire type.
+
+**Then §1 onward, on the first night after `F386` lands.**
+
+**Still open, and not changed by this approval:** `an-unstaffed-review-names-its-holders` needs its
+re-derivation round against `F352-free`'s decided option (f) before it can build — spec work, not
+FIX work. The merge gate's cadence is undecided for a fourth day.
