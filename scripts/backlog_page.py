@@ -326,16 +326,30 @@ def parse_changes() -> list[dict]:
         # The round log lives in design.md under `## Rounds`. It is the single most useful thing
         # to read before approving: it records which arguments have already been refuted, and
         # this repo's round discipline exists because re-proposing a refuted one costs a window.
+        # Two shapes in the corpus, and a change uses one or the other: a single `## Rounds`
+        # section with `R<n>` entries inside it, or a top-level `## Round <n> — …` heading per
+        # round. Counting only the first read 0 rounds for a change that had five.
         rounds_md, rounds_n = "", 0
         design = d / "design.md"
         if design.exists():
             dt = design.read_text(encoding="utf-8", errors="replace")
             m = re.search(r"^##\s*Rounds\s*$(.*?)(?=^##\s|\Z)", dt, re.M | re.S)
             if m:
+                # An explicit `## Rounds` log wins. A `## Round <n>` heading is NOT a reliable
+                # fallback when one exists: `a-refused-capability` opens with `## Round 1 — the
+                # code as it is`, a survey section, which read as "1 round" for a change with four.
                 rounds_md = m.group(1).strip()
-                rounds_n = len(re.findall(r"^###?\s*R\d+\b", rounds_md, re.M)) or len(
-                    re.findall(r"\bR(\d+)\b", rounds_md)
-                ) and max(int(x) for x in re.findall(r"\bR(\d+)\b", rounds_md))
+                numbered = re.findall(r"\bR(\d+)\b", rounds_md)
+                rounds_n = max(int(x) for x in numbered) if numbered else 0
+            else:
+                per_round = re.findall(r"^##\s*Round\s+(\d+)\b", dt, re.M)
+                if per_round:
+                    rounds_n = max(int(x) for x in per_round)
+                    # Stitch the individual sections together so the page can show the log.
+                    rounds_md = "\n\n".join(
+                        s.strip()
+                        for s in re.findall(r"^##\s*Round\s+\d+\b.*?(?=^##\s|\Z)", dt, re.M | re.S)
+                    )
 
         specs = sorted(p.name for p in (d / "specs").glob("*/spec.md")) if (d / "specs").is_dir() else []
         out.append(
@@ -588,6 +602,7 @@ def report_delta(prev: dict, now: dict) -> list[str]:
     moved("fixed", "fixed", good_down=False)
     moved("filed", "total filed", good_down=False)
     moved("drain", "unbuilt changes")
+    moved("awaiting", "changes waiting on the operator")
     for sev in ("A", "B", "C", "D", "?"):
         moved(f"sev_{sev}", f"  severity {sev}")
 
@@ -896,6 +911,7 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
         "retired": total_retired,
         "filed": len(findings),
         "drain": len(drain),
+        "awaiting": len(awaiting),
         **{f"sev_{k}": counts.get(k, 0) for k in ("A", "B", "C", "D", "?")},
         **{f"src_{k}": src_counts.get(k, 0) for k in SOURCES},
         **{f"rdy_{k}": ready_counts.get(k, 0) for k in READY},
