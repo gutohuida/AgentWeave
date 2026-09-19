@@ -82,33 +82,62 @@ THEMES: dict[str, tuple[str, ...]] = {
 # --------------------------------------------------------------------------- findings
 
 def parse_findings() -> list[dict]:
-    """Every `## F<n>` section, with the state its Status line claims.
+    """Every section naming an `F<n>`, with the state its Status line claims.
 
     **Two heading forms, and both must be read.** 349 sections carry `## F<n> (SEV) — title`; 28
     older ones carry `## F<n> — title` with no parenthetical, and matching only the first form drops
     them silently — which is precisely the defect this page exists to stop the ledger having. Where
     no severity is declared anywhere, the finding is bucketed under `?` and *shown*, never hidden.
 
-    A handful of ids carry two `##` sections (a later re-measurement written as its own heading).
-    The first is kept, because it is the one the Status line convention attaches to.
+    **Two heading *levels*, and both must be read too** *(2026-09-19)*. Four findings were filed at
+    `###` — F165, F166, F167, F168 — and a `##`-only scan lost all four. F166 (C) and F168 (B) were
+    absent from this page entirely; F165 and F167 were present only because a *later* `##` addendum
+    reused their id, so the page showed the addendum's title and none of their severity. A section
+    runs until the next heading of the same or higher rank, so `##` extents are unchanged by
+    admitting `###`.
+
+    **A filing heading and a continuation heading are not the same thing.** `## F165 addendum,
+    measured …` and `## F167's bound is now measured …` are continuations: they name an id without
+    introducing it. The id's title and severity come from its **filing** — id, an optional
+    parenthetical, then a dash — wherever that sits; a continuation supplies them only when no
+    filing exists. The Status line comes from the first of the id's sections that carries one,
+    because a filing written before the Status convention (F165, F168) declares its state in the
+    addendum that followed.
     """
     text = FINDINGS.read_text(encoding="utf-8", errors="replace")
-    pat = re.compile(r"^##\s*(F\d+[a-z]?)\s*(?:\(([^)]*)\))?\s*.\s*(.+)$", re.M)
-    hits = list(pat.finditer(text))
-    out: list[dict] = []
-    seen: set[str] = set()
+    hits = list(_HEADING.finditer(text))
+    sections: dict[str, list[dict]] = {}
+    order: list[str] = []
     for i, m in enumerate(hits):
-        fid = m.group(1)
-        if fid in seen:
-            continue
-        seen.add(fid)
-        end = hits[i + 1].start() if i + 1 < len(hits) else len(text)
-        body = text[m.end() : end]
+        fid = m.group(2)
+        rank = len(m.group(1))
+        end = len(text)
+        for nxt in hits[i + 1 :]:
+            if len(nxt.group(1)) <= rank:
+                end = nxt.start()
+                break
+        if fid not in sections:
+            order.append(fid)
+        sections.setdefault(fid, []).append(
+            {
+                "filing": bool(_FILING.match(m.group(0))),
+                "paren": m.group(3),
+                "title": m.group(4).strip(),
+                "body": text[m.end() : end],
+            }
+        )
+
+    out: list[dict] = []
+    for fid in order:
+        parts = sections[fid]
+        head = next((p for p in parts if p["filing"]), parts[0])
+        named = next((p for p in parts if re.search(r"\*\*Status:\*\*", p["body"])), parts[0])
+        body = named["body"]
         status = re.search(r"\*\*Status:\*\*\s*(.+)", body)
         raw = status.group(1).strip() if status else ""
-        title = m.group(3).strip()
+        title = head["title"]
         state = classify(raw, title)
-        sev = recover_sev(m.group(2), title, body)
+        sev = recover_sev(head["paren"], title, body)
         out.append(
             {
                 "kind": "finding",
@@ -125,6 +154,15 @@ def parse_findings() -> list[dict]:
             }
         )
     return out
+
+
+# A heading naming a finding id, at either level. Group 1 is the rank, so a section can be closed
+# by the next heading of the same or higher rank rather than by the next `##`.
+_HEADING = re.compile(r"^(#{2,3})\s*(F\d+[a-z]?)\s*(?:\(([^)]*)\))?\s*.\s*(.+)$", re.M)
+
+# A *filing*: the id, an optional parenthetical, then a dash or colon. `## F167's bound …` and
+# `## F165 addendum, …` do not match, and must not, or an addendum names the finding.
+_FILING = re.compile(r"^#{2,3}\s*F\d+[a-z]?\s*(?:\([^)]*\))?\s*[-–—:]\s")
 
 
 def classify_source(body: str, status: str) -> str:
@@ -257,15 +295,28 @@ def proposed_findings() -> set[str]:
 
 
 def recover_sev(paren: str | None, title: str, body: str) -> str:
-    """Severity from the heading, else the body's own declaration, else `?`."""
+    """Severity from the heading, else the body's own declaration, else `?`.
+
+    Three spellings the corpus actually uses, past the plain `(B)` the heading form assumes:
+    `(new, severity **B**)` (F165, F166) puts the letter at the *end* of the parenthetical, so the
+    leading-letter match misses it; `**Severity: C**` (F77) closes the bold *after* the letter
+    rather than before it. Both searches stay anchored on the word `severity` and on the emphasis
+    markers, because loose prose says "the last severity-A finding" and must not be read as a
+    declaration.
+    """
     if paren:
         letter = normalise_sev(paren)
         if letter != "?":
             return letter
+        m = re.search(r"severity\s*\**\s*([ABCD])\b", paren, re.I)
+        if m:
+            return m.group(1).upper()
     m = re.search(r"severity\s+([ABCD])\b", title, re.I) or re.search(
-        r"\*\*Severity:?\*\*[:\s]*([ABCD])\b", body
+        r"\*\*Severity:?\*\*[:\s]*([ABCD])\b|\*\*Severity:\s*([ABCD])\b", body
     )
-    return m.group(1).upper() if m else "?"
+    if not m:
+        return "?"
+    return next(g for g in m.groups() if g).upper()
 
 
 def normalise_sev(raw: str) -> str:
