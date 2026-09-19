@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-09-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-3",
-    "next_action": "D-3: repairs -- FINDINGS.md status sweep. 29 of 382 findings in scripts/drive/FINDINGS.md carry no **Status:** line (see spec-queue/BACKLOG.html's ledger warnings for the current id list -- regenerate with py -3.11 scripts/backlog_page.py --check first, since D-2 just changed the counts). Triage a batch (aim for most or all 29, but stop honestly rather than rushing) against git log/git blame on the referenced files and already-shipped changes under openspec/changes/archive/ -- for each, decide: fixed <sha> (only if you can point at the actual commit that did it), open (still unaddressed), or open with a note (can't verify either way, say why). Do not invent a fix that was not actually done. Also worth a glance while in the file: the 24 findings that read 'open' but name a commit sha (BACKLOG.html flags these too) -- if a quick git show <sha> shows the fix is real, correct the Status line while you're there, but do not let this expand D-3 into a full re-audit; the 29 status-less ones are the primary target. Regenerate spec-queue/BACKLOG.html afterward and commit both files together. Stay off proj-5e960453/proj-18e5d4e0 if any triage needs live verification.",
+    "current": "D-4",
+    "next_action": "D-4: write the review page. spec-queue/review/review-2026-09-19.html per day-window.md D-5 structure (branch/merge-gate state first, what got driven/found/repaired today across D-1/D-2/D-3, no specced changes today and why per the drain gate, default night queue, research last). Append ## 2026-09-19 to spec-queue/APPROVALS.md, no status tokens. Retry the merge gate (step 1) first if CI has concluded on the latest pushed sha by now (HEAD after D-3's commit).",
     "queue": [
         {
             "id": "D-1",
@@ -29,9 +29,9 @@
         },
         {
             "id": "D-3",
-            "status": "open",
+            "status": "done",
             "title": "Repairs -- FINDINGS.md status sweep",
-            "detail": "29 of 381 findings carry no Status: line (backlog report, 2026-09-19). Triage a batch against git history and already-shipped changes; set accurate Status: lines. Do not invent fixes that were not actually done -- an unverifiable one stays open with a note."
+            "detail": "All 29 status-less findings triaged against git log/git show for each referenced commit (F14, F60, F122, F123, F128, F133, F134, F140, F142, F150, F151, F152, F153, F154, F155, F161, F162, F163, F165, F167, F182, F187, F203, F214, F218, F267, F273, F281, F283). 14 were already fixed but only carried loose prose, not the **Status:** convention -- normalized. 15 confirmed still open (several with a decision-pending or narrowed-not-repaired note); no fix invented that wasn't real (each sha verified with git cat-file -e before use). BACKLOG.html regenerated: open 219->205, fixed 145->154. Committed 74dc8fb. Full account in 2026-09-19-day-log.md iteration 4."
         },
         {
             "id": "D-4",
