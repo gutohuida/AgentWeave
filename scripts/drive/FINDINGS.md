@@ -29968,3 +29968,45 @@ since the variable's absence was the whole cause.
 **Related:** `DEAD-ENDS.md` §*Starting a Hub from source can land on the operator's real database*
 and §*Telling whether the operator's `:8000` app is running, without touching it* (both 2026-09-19);
 `F380` (the other way a window fails silently and leaves nothing to read).
+
+## D-2, 2026-09-19 — migration 0104 (`subject_key`) drives clean on a fresh profile, and the ordinary question flow is unregressed
+
+Night window's `arc-drive` task, driving commit `3b7718d` (tasks 0.3/0.4/0.5/4.12 of
+`a-refused-capability-reaches-the-operator`). Fresh Hub from source, port 8091 (never 8000/8010),
+`DATABASE_URL` naming a brand-new `~/.agentweave/hub/profiles/drive0919/agentweave.db` — a database
+that had never seen any revision before this run.
+
+`alembic upgrade head` (run implicitly at startup) landed on `0104` from a genuinely empty database:
+`SELECT version_num FROM alembic_version` → `0104`. Schema inspection confirmed both artifacts task
+0.3 describes: `questions.subject_key` (`VARCHAR(200)`, nullable) and
+`ix_questions_open_subject_key`, a unique index on `(project_id, subject_key)` with
+`WHERE answered = 0 AND declined = 0 AND subject_key IS NOT NULL` — the partial predicate design
+D17 calls for, verified by reading the index's own SQL out of `sqlite_master`, not by trusting the
+migration source.
+
+Applying `AW_BOOTSTRAP_API_KEY` at first boot did not take effect — the operator-credential seed
+(`hub/hub/db/engine.py:_seed_operator_credential`) only consults it while `OperatorCredential` is
+empty, and a first boot without the variable set had already auto-generated and persisted one
+before the variable was added on a second start. Not a defect: reading the auto-generated key back
+out of `operator_credentials` (a fixture I own, not the operator's data) unblocked the drive in one
+query. Worth remembering for the next window that starts a fresh profile: set
+`AW_BOOTSTRAP_API_KEY` on the *first* boot of a new profile, or read the row back afterward.
+
+Exercised the ordinary flow against a disposable fixture project (`drive-0919-arc2`, created and
+deleted by the script, never touching `proj-5e960453`/`proj-18e5d4e0`): `POST /questions` with the
+full `QuestionCreate` payload (`from_agent`, `question`, `blocking`, `header`, two `options` objects
+with `label`/`description`, `multi_select`) → `201`, row created with `subject_key` defaulting to
+NULL and not surfaced on `QuestionResponse` (by design — the schema was not touched by 0.3-0.5/4.12,
+and task 0.3's own commit note says exposing it is out of this slice's scope). `PATCH
+/questions/{id}` with `{"answer", "labels"}` (not `answer_labels` — that name only exists on the
+response model, an easy payload mistake worth flagging for the next driver) → `200`, `answered:
+true`. Nothing about the existing ask/answer path changed shape or behaviour with the new nullable
+column and partial index present.
+
+Drive Hub shut down after (`taskkill` on the actual listening PID, which uvicorn's reload/spawn
+means is not the PID the launching shell reports — confirmed via `netstat` before and after). No
+job or server left enabled.
+
+**Verdict:** migration 0104 and tasks 0.3/0.4/0.5/4.12 drive clean. No finding to file — recorded
+here as the drive evidence `arc-drive` exists to produce, per `a-refused-capability-reaches-the-
+operator`'s own task list.
