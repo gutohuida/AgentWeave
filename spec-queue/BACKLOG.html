@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-19 16:33 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>249c8c7</b> · uncommitted changes present<br>
+      generated <b>2026-09-19 16:45 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>534b991</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -759,7 +759,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
             <div class="chg-main">
               <code class="chg-name">a-loop-staffs-the-agent-it-names</code>
               <span class="chg-badge want">waiting on you</span>
-              <p class="chg-facts">29 unticked · 2 delta specs</p>
+              <p class="chg-facts">34 unticked · 1 delta spec</p>
               
             </div>
             <div class="chg-links"><a href="../openspec/changes/a-loop-staffs-the-agent-it-names/proposal.md" target="_blank" rel="noopener">proposal.md</a> · <a href="../openspec/changes/a-loop-staffs-the-agent-it-names/design.md" target="_blank" rel="noopener">design.md</a> · <a href="../openspec/changes/a-loop-staffs-the-agent-it-names/tasks.md" target="_blank" rel="noopener">tasks.md</a></div>
@@ -772,9 +772,17 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <p>So this is a conformance fix, not a new design. The operator decided its shape on 2026-09-19 (<code>spec-queue/DECISIONS.md:748</code>): <strong>the free list becomes loop-scoped.</strong></p>
 <h5>What Changes</h5>
 <ul>
-<li><strong>A documentless loop&#x27;s recruitment pool becomes the one agent its job names.</strong> Where that agent</li>
+<li><strong>A documentless loop staffs unassigned work only with the agent its job names.</strong> Where that agent</li>
 </ul>
 <p>is unavailable, the firing staffs nobody rather than substituting a sibling. A flow — a loop that declares a specification document — is unchanged and keeps the project-wide pool, so D12&#x27;s width survives exactly where D12 meant it.</p>
+<ul>
+<li><strong>Staffing, not resumption.</strong> A task that already names an assignee keeps being worked by that</li>
+</ul>
+<p>assignee. The walk resumes through <code>task.assignee</code> (<code>hub/hub/scheduler.py:1573-1577</code>), not through the pool, and this change does not touch that.</p>
+<ul>
+<li><strong>One explicit exception: the F70 wedged-review recovery stays project-wide.</strong> A task in a review</li>
+</ul>
+<p>status whose assignee is the agent that produced the work reaches the reviewer ladder even on a documentless loop (<code>scheduler.py:1522-1527</code> sets <code>wedged_review</code>, so <code>:1653</code>&#x27;s <code>awaiting_landing</code> branch does not fire), and resolves a reviewer from the whole project at <code>:1263</code>. Narrowing that to the loop&#x27;s one agent — who is the author, whom the resolver excludes — would leave the row wedged permanently. The exception is written into the requirement and bounded to recovery.</p>
 <ul>
 <li><strong>The narrowing is a scope filter over availability, never a second opinion about it.</strong> The pool</li>
 </ul>
@@ -786,37 +794,38 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <ul>
 <li><strong>The busy guard stops depending on whether anyone else is free, for a documentless loop.</strong></li>
 </ul>
-<p><code>_loop_flow_busy_reason</code> (<code>scheduler.py:312-350</code>) refuses only when the job&#x27;s agent is busy <strong>and</strong> the pool is empty; once the pool is <code>{job.agent}</code>, the second half is satisfied by construction, so the guard collapses back to <code>_loop_agent_busy_reason</code> — the pre-D12 behaviour D12 said was right for loops.</p>
+<p><code>_loop_flow_busy_reason</code> (<code>scheduler.py:312-350</code>) refuses when the job&#x27;s agent is busy <strong>and</strong> either the loop holds no open task (<code>:346</code>) or the pool is empty (<code>:348</code>). Once the pool is empty both arms return the same reason, so the guard collapses back to <code>_loop_agent_busy_reason</code> — the pre-D12 behaviour D12 said was right for loops.</p>
 <ul>
 <li><strong>F127&#x27;s 409 sentence is re-derived.</strong> <code>run_job</code> answers *&quot;…, and no other agent is free to take</li>
 </ul>
 <p>this loop&#x27;s work. Nothing was started.&quot;* (<code>hub/hub/api/v1/jobs.py:1353-1360</code>). Once the pool is loop-scoped that clause is false whenever a sibling outside the loop is free: it would send the operator to free an agent that changes nothing, which is the exact harm design D8&#x27;s wording was written to prevent. The sentence must name the real reason — this loop runs only the agent it names.</p>
-<ul>
-<li><strong>Tasks already assigned to a substituted agent keep their assignee.</strong> The walk resumes a task</li>
-</ul>
-<p>through <code>task.assignee</code> (<code>scheduler.py:1573-1577</code>), not through the pool, so existing rows continue to be worked by whoever holds them. Re-homing them is a <strong>Non-Goal</strong> (below).</p>
 <h5>Capabilities</h5>
 <h6>New Capabilities</h6>
-<p>None. This change corrects an implementation that already departs from two shipped capabilities.</p>
+<p>None. This change corrects an implementation that already departs from a shipped capability.</p>
 <h6>Modified Capabilities</h6>
+<p><code>agent-loops</code> only, and <strong>deliberately not <code>agent-flows</code></strong> — flow behaviour does not change, and <code>agent-flows</code>&#x27; first requirement says <em>&quot;A loop that declares no document SHALL be unaffected by [the requirements in this capability]&quot;</em> (<code>:14</code>), so a documentless-loop rule written there would contradict the requirement this change cites as its authority. It would also reproduce F128&#x27;s own mechanism: an implementer reads <code>:14</code>, concludes the capability does not govern documentless loops, and never reads the rule.</p>
 <ul>
-<li><code>agent-flows</code>: the requirement that a firing determines both the task and the agent gains the</li>
+<li><code>agent-loops</code> <strong>ADDED</strong>: *&quot;A firing staffs a loop that declares no document only with the agent its</li>
 </ul>
-<p><strong>scope</strong> of the pool it determines that agent from — the project&#x27;s available agents for a flow, and the agent the job names for a documentless loop. Today the capability states <em>which</em> agent resolution happens and is silent on <em>whom it may choose among</em>, which is the silence the implementation filled project-wide.</p>
+<p>job names&quot;* — the rule, its staffing-not-resumption scope, and the one exception for the wedged- review recovery.</p>
 <ul>
-<li><code>agent-loops</code>: <em>&quot;A firing is refused while its loop&#x27;s agent is already running&quot;</em> (<code>:791</code>)</li>
+<li><code>agent-loops</code> <strong>MODIFIED</strong>: <em>&quot;A firing is refused while its loop&#x27;s agent is already running&quot;</em></li>
 </ul>
-<p>currently makes two of its clauses conditional on <em>&quot;no other agent in the project is free&quot;</em> — in the allowance-hold paragraph and in two scenarios. For a documentless loop that condition stops being necessary: the refusal stands whoever else is free. The requirement&#x27;s own deferral, <em>&quot;This requirement does not state which agent a firing staffs when another agent in the project is free. <code>agent-flows</code> governs that&quot;</em>, is what makes this a delta on both capabilities rather than one.</p>
+<p>(<code>:791</code>). Its allowance-hold paragraph and two of its scenarios are conditional on <em>&quot;no other agent in the project is free&quot;</em>, which stops being necessary for a documentless loop. Its unconditional first sentence is also scoped — it is already false for flows today, which the REV of <code>a-spent-allowance-holds-the-queue</code> recorded (<code>scripts/drive/FINDINGS.md:28155-28157</code>) and left dormant by adding no flow scenario. This change adds that scenario, so it fixes the sentence in the same delta rather than shipping a requirement its own scenario refutes.</p>
 <h5>Impact</h5>
 <p><strong>Code.</strong> <code>hub/hub/scheduler.py</code> — the three call sites of <code>_agents_that_are_free</code> (<code>:348</code> in <code>_loop_flow_busy_reason</code>, <code>:1263</code> in <code>resolve_reviewer</code>, <code>:1444</code> in <code>decide_firing</code>; located by <code>grep -n &quot;await _agents_that_are_free(&quot;</code>, never by line number). Only the two loop-aware ones narrow; <code>resolve_reviewer</code> is reached for flows alone, because a documentless loop does not staff a review at all (<code>scheduler.py:1653</code>, design D5, finding F161). <code>hub/hub/api/v1/jobs.py:1353-1360</code> — F127&#x27;s 409 sentence.</p>
-<p><strong>Ordering — this change follows <code>an-unstaffed-review-names-its-holders</code> group 1.</strong> That change is approved and scheduled to build first, and its task 1.2 re-expresses <code>_agents_that_are_free</code> as a projection over a new <code>_roster_availability</code>. Written against today&#x27;s tree this change would collide in the same function. It must be written against the post-group-1 shape, where the narrowing is a filter over the projection.</p>
-<p><strong>No migration, no schema change, no API shape change, no UI bundle.</strong> There is no per-flow roster column to add: <code>Loop</code> carries <code>spec_document_id</code> and its <code>AIJob</code> carries <code>agent</code> (<code>hub/hub/db/models.py:1428-1473</code>), and those two facts are the whole of &quot;the agents this loop names&quot;. The Python lint set is required; <code>make ui</code> is not.</p>
-<p><strong>Tests that encode today&#x27;s behaviour and must be re-read, not assumed:</strong> <code>test_flow_width.py</code>, <code>test_reviewer_ladder.py</code>, <code>test_a_task_nothing_will_move_holds_nobody.py</code>, <code>test_a_held_agent_is_busy.py</code>, and the board-agreement tests that read the same walk (<code>test_the_board_summary_agrees_with_the_firing_for_a_gated_queue</code>).</p>
+<p><strong>Ordering — there is no collision with <code>an-unstaffed-review-names-its-holders</code> group 1.</strong> R1 asserted one; R2 disproved it from that change&#x27;s own task 1.2, as corrected in R7 the same afternoon: <code>_loop_flow_busy_reason</code> (<code>:348</code>) and <code>decide_firing</code> (<code>:1444</code>) <strong>keep</strong> calling <code>_agents_that_are_free</code> unchanged, and only <code>resolve_reviewer</code> (<code>:1263</code>) moves to <code>_roster_availability</code>. A filter placed above the pool touches neither site this change narrows. Group 1 landing first is convenient, not required.</p>
+<p><strong>No migration, no schema change, no API shape change, no UI bundle.</strong> There is no per-flow roster column to add: <code>Loop.spec_document_id</code> (<code>hub/hub/db/models.py:1473</code>) and <code>AIJob.agent</code> (<code>:1303</code>) are the whole of &quot;the agents this loop names&quot;. The Python lint set is required; <code>make ui</code> is not.</p>
+<p><strong>Tests that encode today&#x27;s behaviour and must be re-read, not assumed.</strong> R2 measured the surface: <code>grep -rl --include=*.py &quot;decide_firing\|_loop_flow_busy_reason&quot; hub/tests/</code> returns <strong>16 files</strong> (the bare grep returns 35, the extra 19 being <code>__pycache__</code> binaries), and the ones that matter most build <strong>documentless</strong> loops by default — <code>test_a_loop_does_not_staff_its_own_review.py:56</code> (<code>declares_document=False</code>), <code>test_actor_aware_claimability.py:36</code>, and <code>test_a_review_nobody_is_doing.py</code>, which exercises the wedged-review path above. <strong><code>test_flow_width.py</code> defaults to <code>declares_document=True</code> (<code>:54</code>), so its greenness proves nothing about this change</strong> — the opposite of the assumption R1 made.</p>
 <p><strong>Non-Goals</strong>, stated rather than left to omission:</p>
 <ul>
 <li><strong>Not re-homing existing assignments.</strong> Tasks a past substitution assigned to a sibling keep that</li>
 </ul>
-<p>assignee and keep being worked. Changing that is a data migration over live rows and a separate decision.</p>
+<p>assignee and keep being worked. Changing that is a data migration over live rows and a separate decision. Note the limit of that guarantee: while the loop&#x27;s named agent is itself busy or held, the busy guard refuses the whole firing before the walk runs (<code>scheduler.py:2758-2772</code>), so those tasks are not resumed either. Under a provider-allowance hold that can be hours.</p>
+<ul>
+<li><strong>Not narrowing the F70 wedged-review recovery.</strong> See <em>What Changes</em>; it is an exception in the</li>
+</ul>
+<p>requirement, bounded to recovery.</p>
 <ul>
 <li><strong>Not giving a flow a roster of its own.</strong> A flow&#x27;s pool stays the project&#x27;s available agents.</li>
 </ul>
@@ -830,9 +839,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 </ul>
 <p>grounds that it leaves the authority hole — a UI that correctly reports you have no control. With the pool narrowed, <code>job.agent</code> becomes true as presented, so no UI text has to change for it to stop lying.</p>
 <ul>
-<li><strong>Not fixing F127&#x27;s status code.</strong> F127 is already fixed (<code>c8e3bbd</code>, 2026-09-14): <code>run_job</code></li>
+<li><strong>Not fixing F127&#x27;s status code.</strong> <code>spec-queue/DECISIONS.md:748</code> requires *&quot;F127&#x27;s 500 must be</li>
 </ul>
-<p>re-asks the busy guard and answers 409, not 500. Only its <em>sentence</em> is in scope here.</p></div></details>
+<p>fixed in the same change&quot;<em>. <strong>That row was already stale when it was written on 2026-09-19:</strong> F127 was fixed five days earlier by <code>c8e3bbd</code>, and <code>hub/hub/api/v1/jobs.py:1341-1362</code> re-asks the busy guard and raises 409 before the 500 branch at <code>:1379</code>. Only F127&#x27;s </em>sentence* is in scope here. Task 6.3 appends that correction to the decision log rather than editing the row, because a decision log that is silently rewritten stops being evidence.</p></div></details>
         </div>
 <div class="chg">
           <div class="chg-head">
@@ -1663,9 +1672,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-19T16:33:28+01:00",
+ "generated": "2026-09-19T16:45:47+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "249c8c7",
+ "sha": "534b991",
  "open": 210,
  "items": 213,
  "requests": 3,

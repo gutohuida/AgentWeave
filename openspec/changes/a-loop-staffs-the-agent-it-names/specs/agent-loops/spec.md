@@ -1,24 +1,100 @@
+## ADDED Requirements
+
+### Requirement: A firing staffs a loop that declares no document only with the agent its job names
+
+The Hub SHALL staff a task that has no assignee, in a loop that declares no specification document, only with the agent that loop's job names, and SHALL NOT select any other agent for it.
+
+Where that agent cannot take a turn, the firing SHALL staff nobody for that task rather than
+substituting another agent. The task SHALL keep its status and SHALL gain no assignee, and a later
+firing SHALL consider it again.
+
+**This requirement governs staffing, not resumption.** A task that already names an assignee SHALL
+continue to be worked by that assignee, whoever it is. It decides who is given work nobody holds,
+and never takes work away from an agent already holding it.
+
+**One exception, and only one.** Where a task is in a review status whose assignee is the agent that
+produced the work — a row no current edge can create, and which nothing else releases — the Hub
+SHALL resolve a replacement reviewer from every available agent in the project. Such a loop names
+one agent, and that agent is the author, so restricting the recovery to the named agent would leave
+the row wedged permanently. This exception SHALL apply to that recovery alone, and SHALL NOT be read
+as permitting substitution for ordinary work.
+
+This restriction SHALL be a filter over the agents the Hub has already determined to be available,
+and SHALL NOT introduce any further condition on whether an agent can take a turn. An agent excluded
+by it SHALL be excluded because this loop does not name it, never because it was judged unable to
+work.
+
+A loop that declares a specification document SHALL be unaffected, and the agents its firings may
+staff SHALL remain every available agent in the project. The distinction SHALL be the presence of
+the declared document and nothing else.
+
+#### Scenario: A busy agent's loop does not hand its work to a free sibling
+
+- **WHEN** a loop declares no specification document, its job names one agent, that agent is running
+  a turn, another agent in the project is free, and the loop's job is fired
+- **THEN** no task is started
+- **AND** the free agent is not selected
+- **AND** the loop's pending task keeps its status and gains no assignee
+
+#### Scenario: A loop does not start a second unassigned task alongside the first
+
+- **WHEN** a loop declares no specification document, two of its tasks have all their dependencies
+  met and neither has an assignee, its own agent is free, and another agent in the project is free
+- **THEN** exactly one task is started
+- **AND** it is started for the agent the loop's job names
+- **AND** the second task keeps its status and gains no assignee
+
+#### Scenario: A task that already has an assignee is still worked by that assignee
+
+- **WHEN** a loop declares no specification document, one of its tasks names an assignee other than
+  the agent its job names, and the loop's job is fired while its own agent is free
+- **THEN** that task is resumed for its existing assignee
+- **AND** the assignee is not replaced by the agent the loop's job names
+
+#### Scenario: A wedged review is still recovered from the whole project
+
+- **WHEN** a loop declares no specification document and one of its tasks is in a review status
+  whose assignee is the agent that produced the work
+- **THEN** a replacement reviewer is resolved from the available agents in the project
+- **AND** it is not required to be the agent the loop's job names
+
+#### Scenario: An agent the loop names but cannot be started is not replaced
+
+- **WHEN** a loop declares no specification document and the agent its job names has no runner bound
+- **THEN** no other agent is selected in its place
+
+#### Scenario: A loop fires its own agent once that agent is free
+
+- **WHEN** a loop declares no specification document, the agent its job names has finished its turn,
+  and the loop's job is fired with claimable work
+- **THEN** a task is started for the agent the loop's job names
+
+#### Scenario: A flow still staffs every available agent
+
+- **WHEN** a loop declares a specification document, two of its tasks have all their dependencies
+  met, and two eligible agents are available
+- **THEN** both tasks are started
+
 ## MODIFIED Requirements
 
 ### Requirement: A firing is refused while its loop's agent is already running
 
-The Hub SHALL refuse a firing whose loop agent already has a running turn, before that firing claims
-a task or queues any input. A loop's agent runs one turn at a time.
+The Hub SHALL refuse a firing whose loop agent already has a running turn, before that firing claims a task or queues any input, where the loop declares no specification document or where no other agent in the project is free. A loop's agent runs one turn at a time.
+
+**The two arms are not alternatives to one condition.** A loop that declares no document staffs only
+the agent its job names, so another agent being free changes nothing about what the firing could do
+and cannot lift the refusal. A flow may staff any available agent, so for a flow the refusal stands
+only where nobody else is free. This paragraph is what keeps the sentence above true of both.
 
 Where the loop's agent's queue is held by a refusal of the provider's usage allowance, the Hub SHALL
-refuse the firing in the same way. An agent whose queue is held cannot take a turn until the hold
-ends, so a briefing queued for it is as stale by the time it is read as one queued during a running
-turn. The hold is the one `agent-conversation-workspace` defines, so this refusal and the scheduler
-cannot disagree about whether the agent can take a turn.
+refuse the firing on the same two arms. An agent whose queue is held cannot take a turn until the
+hold ends, so a briefing queued for it is as stale by the time it is read as one queued during a
+running turn. The hold is the one `agent-conversation-workspace` defines, so this refusal and the
+scheduler cannot disagree about whether the agent can take a turn.
 
-**For a loop that declares no specification document, neither refusal SHALL depend on whether any
-other agent in the project is free.** Such a loop staffs only the agent its job names
-(`agent-flows`), so another agent being free changes nothing about what the firing could do. For a
-flow, both refusals apply where no other agent in the project is free, since a flow may staff any
-available agent.
-
-This requirement does not state which agent a firing staffs when another agent in the project is
-free. `agent-flows` governs that.
+Which agent a firing of a **flow** staffs when another agent in the project is free is governed by
+`agent-flows`. For a loop that declares no document it is governed by the staffing requirement in
+this capability.
 
 **Another agent being free SHALL NOT let a firing queue input for the loop's own agent while that
 agent is running a turn or held.** Where the loop's queue holds no task in a non-terminal status,
