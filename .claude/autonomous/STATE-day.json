@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-09-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-4",
-    "next_action": "D-4: write the review page. spec-queue/review/review-2026-09-19.html per day-window.md D-5 structure (branch/merge-gate state first, what got driven/found/repaired today across D-1/D-2/D-3, no specced changes today and why per the drain gate, default night queue, research last). Append ## 2026-09-19 to spec-queue/APPROVALS.md, no status tokens. Retry the merge gate (step 1) first if CI has concluded on the latest pushed sha by now (HEAD after D-3's commit).",
+    "current": "D-5",
+    "next_action": "D-5: repair F218 (D), hub/hub/api/v1/spec.py:833 -- POST /spec/evidence omits the latest_review argument the sibling decision route (spec.py:895) passes, so a 201 right after an operator's own auto-reviewed observation reports latest_review: null even though the next GET on the same row shows it populated. No spec requirement names latest_review, no migration, no schema shape change. Fix, add/mutation-check a test, run the changed-file lint set, live-drive it on a fresh throwaway Hub, set F218's **Status:** line, regenerate BACKLOG.html. If stop_at is close, retry the merge gate first (step 1) if CI has concluded on HEAD.",
     "queue": [
         {
             "id": "D-1",
@@ -35,15 +35,15 @@
         },
         {
             "id": "D-4",
-            "status": "open",
+            "status": "done",
             "title": "Write the review page",
-            "detail": "spec-queue/review/review-2026-09-19.html per day-window.md D-5 structure (branch/merge-gate state first, what got driven/found/repaired, no specced changes today and why per the drain gate, default night queue, research last). Append ## 2026-09-19 to spec-queue/APPROVALS.md, no status tokens. Retry the merge gate (step 1) first if CI has concluded on the latest pushed sha by now."
+            "detail": "spec-queue/review/review-2026-09-19.html written (branch/merge-gate table, night built nothing x2, today's drive+F384 arc+29-entry status sweep, no specced changes today and why, default night queue, 4 ranked research candidates). ## 2026-09-19 appended to spec-queue/APPROVALS.md, no status token, 3 carried decisions restated. Merge gate retried and still not open: CI in_progress on HEAD f5b883f. Full account in 2026-09-19-day-log.md iteration 5."
         },
         {
             "id": "D-5",
             "status": "open",
-            "title": "Repairs if the day has room",
-            "detail": "Only if D-1..D-4 finish well before stop_at. Otherwise close the window: set next_action to null."
+            "title": "Repairs if the day has room -- F218",
+            "detail": "09:27 local, stop_at 17:00 -- room to take one more. Candidate: F218 (D), hub/hub/api/v1/spec.py:833, POST /spec/evidence omits latest_review. No spec surface, no migration. Fix, mutation-check, live-drive, set Status line. If this finishes with room left, close the window: set next_action to null."
         }
     ],
     "decisions_for_user": [

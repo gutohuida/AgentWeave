@@ -1509,3 +1509,21 @@ clock faster than firings arrive. Three options are on the page; none has been p
 If you approve nothing, the FIX window falls to the same decision-gated default the 2026-09-17 night
 already surveyed and closed with an empty queue (§5 of the page). There is deliberately no `ORDER:`
 line here.
+
+## 2026-09-19
+
+Written by the day window, iteration 5, from `review/review-2026-09-19.html`. No change was
+specced today — the drain count at compose time was 2 (both `a-refused-capability-reaches-the-operator`
+and `an-unstaffed-review-names-its-holders` still unbuilt), so per the playbook's own rule every
+slot went to the draining column instead of a spec round. There is no row to give a status token to.
+
+The two carried decisions from `## 2026-09-18` are unchanged and still open: an explicit
+`APPROVED`/`REVISING`/`REJECTED` token for `a-refused-capability-reaches-the-operator`, and the
+re-derivation round `an-unstaffed-review-names-its-holders` needs before it can build. Also open:
+the merge gate's cadence, now a three-day-old pattern (§1 of the page).
+
+Today's work was a full-surface sweep (one new finding, F384, filed and fixed same day) and a
+`FINDINGS.md` status sweep (29 entries normalized, 14 of them already fixed but miscounted as
+open). Neither needed a spec. If you approve nothing, the FIX window falls to the same
+decision-gated default the last two nights already surveyed and closed with an empty queue (§5 of
+the page). There is deliberately no `ORDER:` line here.
