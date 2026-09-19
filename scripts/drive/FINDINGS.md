@@ -9949,12 +9949,21 @@ project has been used, the likelier it is.
 
 ---
 
-## F130 — a checkpoint over an empty span makes the NEXT checkpoint re-summarise the whole conversation
+## F130 (B) — a checkpoint over an empty span makes the NEXT checkpoint re-summarise the whole conversation
 
 **Status:** open. Verified 2026-09-09: `hub/hub/checkpoints.py:386` still stores
 `covers_through_run_id=runs[-1].id if runs else None`, and `runs_to_cover` still reads that NULL as
 *cover everything*. None of the three fix shapes below was taken. The 2026-08-30 release roadmap
 lists it as decided and queued for a full spec loop; no change carries it. [classified 2026-09-09, D-3]
+
+**Severity: B**, rated by the operator 2026-09-19. It had been filed with no severity anywhere, so
+the night window's A-before-B-before-C queue could never reach it. **B and not A** because it needs
+an operator action to trigger — pressing Checkpoint twice with no turn between — and nothing is lost
+or blocked when it fires. **B and not C** because once tripped it is permanent and unbounded:
+nothing ever re-establishes a non-NULL `covers_through`, so every later checkpoint in that
+conversation re-summarises back to turn one at full worker price, and the observed damage was a
+checkpoint whose prose contradicted its own file list. The rejected A argument is recorded in
+`spec-queue/DECISIONS.md` under `### 2026-09-19`.
 
 **Found by driving the second link of a checkpoint chain** (`scripts/drive/t_row15_chain.py`), which
 row 15's cutover leg never reached: every checkpoint that harness made was a conversation's *first*,
@@ -10169,12 +10178,25 @@ A third caller was corrected alongside: `checkpoint_cutover.py`'s `auto_continue
 
 ---
 
-## F132 — drift has no agent-side half either, and the gate's remedy names an action no surface offers
+## F132 (C) — drift has no agent-side half either, and the gate's remedy names an action no surface offers
 
 **Status:** open. Verified 2026-09-09: `hub/ui/src` still contains no reference to
 `spec/drift`, `drift/detect` or `requirement_drift`, so neither plane can raise or clear a candidate,
 and the gate's `DRIFTING` remedy still names an action no surface offers. Carried by the release
 roadmap as a proposal that was never written. [classified 2026-09-09, D-3]
+
+**Severity: C**, rated by the operator 2026-09-19. It had been filed with no severity anywhere, so
+the night window's queue could never reach it. **C because the trap cannot spring**: the same
+missing UI that cannot clear a drift candidate also cannot raise one, and no MCP tool or agent route
+reaches `/spec/drift` either, so nothing in the product can put a requirement into `DRIFTING` in the
+first place. This is a half-built feature, not a misbehaving one.
+
+**It becomes B the day any caller of `POST /spec/drift/detect` ships** — at that moment one call
+makes a `gate`-rigor requirement permanently un-approvable through the app, because
+`resolve_drift`'s only route appears nowhere in `hub/ui/src` and `detect_drift` skips evidence that
+already has an open candidate, so re-scanning is not an escape. **Whoever builds a drift caller owns
+raising this finding's severity in the same change.** The B argument was heard and rejected on
+probability, not on consequence; both are in `spec-queue/DECISIONS.md` under `### 2026-09-19`.
 
 **Read 2026-08-29, iteration 12. Static, not driven: this closes `next_action` item (e), "the drift
 feature's agent-side half (F129), if it has one." It has none, and looking for it turned up a

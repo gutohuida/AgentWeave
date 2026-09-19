@@ -25,6 +25,100 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-20
+
+**Written 2026-09-19 afternoon by an interactive DECIDE session, at the operator's instruction.**
+No `DAY WINDOW` line — the window is the standard 09:00–17:00, armed at 08:55.
+
+**You get two spec loops today, and both subjects are named here.** The drain gate now counts
+changes waiting on the *operator*, not unbuilt ones, and that count is **0** — the two unbuilt
+changes are both approved and waiting on a night, not on a decision. Do not spend a slot deciding
+which change to take: it is decided, twice, below.
+
+### Item 1 — `F185` + `F181` as one change
+
+Decided 2026-09-19 (`DECISIONS.md`, `### 2026-09-19`): *"their remedy was already decided; they
+lacked a directory, not a decision."* **So R1's job is the directory and the rounds, not the
+argument.** The remedy is recorded at `DECISIONS.md:536` and `:586` — clear an archived agent's
+bindings at source.
+
+- **F185 (B)** — a charter held only by an ARCHIVED agent cannot be deleted, and the 409 names an
+  agent `GET /agents` does not show. `hub/hub/api/v1/charters.py:95-98`;
+  `agent_lifecycle.archive` (`:64-67`) leaves `charter_id` bound.
+- **F181 (C)** — `GET /agents/launchability` applies no lifecycle predicate while its docstring says
+  it feeds a selector. `agents.py:249-263` is explicit about why the filter lives where it does.
+
+**Blast radius:** `hub/hub/api/v1/charters.py`, `hub/hub/agent_lifecycle.py`,
+`hub/hub/api/v1/agents.py`. **Item 2 must not touch these, and does not.**
+
+### Item 2 — `F388` (A), the source Hub that opens the live database
+
+**Its fix is already decided: (a) + (b) + (d)** — refuse the implicit default, log the resolved
+path, fix the docstring that calls the dangerous path the safe one. Decided 2026-09-19;
+*rejected* were logging alone (prevents nothing) and the sentinel (c), which needs a migration
+installed against the very database being protected. **R1 explores how to build (a), not whether.**
+
+`hub/hub/config.py:9-18` returns `~/.agentweave/hub/data/agentweave.db` with no guard, and `:24`
+makes a missing environment variable indistinguishable from a deliberate choice of that path. The
+docstring at `:12-15` asserts the default "never fires" for `direct uvicorn hub.main:app` — which is
+exactly what this repository's own `CLAUDE.md` tells an agent to run.
+
+**Why this one, out of eight open A's.** It is the only one already decided with no change
+directory, and it is a hazard on *this* machine: on 2026-09-19 it attached a throwaway Hub to the
+operator's live `:8000` database (348 runs, 12,500 event logs), and the recovery
+(`taskkill /IM python.exe /T`) took the operator's own app down for about three hours. Everything
+that protects `:8000` today is prose in `CLAUDE.md` with no mechanism behind it.
+
+**Do not weaken the third loss while specking the first two.** F388's severity rests on *"the
+recovery is worse than the fault"* — an agent that discovers it is on the live database has no safe
+way to detach. A proposal that adds a refusal and a log line but leaves that standing has addressed
+(a) and (b) and not the reason this is an A.
+
+**Blast radius:** `hub/hub/config.py` and its tests, plus the `CLAUDE.md`/`.claude/reference/hubs.md`
+prose that currently carries the guarantee. **Shares no file with item 1, and none with either
+approved-and-unbuilt change** (`a-refused-capability-reaches-the-operator`,
+`an-unstaffed-review-names-its-holders`, whose code is `scheduler.py` and the capability-refusal
+path).
+
+### Two things not to spend the day on
+
+1. **Do not re-rate F130 or F132.** Both were rated by the operator on 2026-09-19 — **F130 is B,
+   F132 is C** — with the rejected alternatives recorded in `DECISIONS.md`. F132's finding already
+   says it becomes B when a drift caller ships; that is a note for whoever builds one, not an open
+   question.
+2. **Do not re-derive F388's cause.** It is measured against the real database, with the heartbeat's
+   last timestamp and the three losses written out. R1 explores the **repair**.
+
+### The carve-out lane is gone today, and `F386` + `F387` were counted on it
+
+Two spec loops take `D-2b/D-3b/D-4b`, so the `clear` column has no `repairs` row — but handoff 0130
+and the 2026-09-19 DECIDE session both routed **F386 and F387** to today as no-spec carve-outs, and
+a window that simply follows the column will silently drop them. **Take them if and only if both
+spec loops have delivered their R3; they are the first thing to cut, not the first thing to do.**
+
+Both are decided, both are small, and both share no file with item 1 or item 2:
+
+- **F386 (B)** — `hub/ui/src/components/questions/QuestionInterruptCard.tsx:24,35` must read
+  `blocking` and stop rendering `declined`.
+- **F387 (B)** — the sort belongs in `hub/hub/api/v1/questions.py:318`'s `order_by`, **not** in the
+  card, so every reader gets a correct floor. Decided 2026-09-19; *rejected* were the card alone,
+  and doing both (duplication preventing no named failure).
+
+**This one ships to the operator's real app.** F386 touches `hub/ui/src`, so it needs
+`make ui` / `scripts/refresh_ui_bundle.py`, and `hub/ui/src` and `hub/hub/static/ui` must be
+committed together — and a committed UI bundle reaches the operator's live `:8000` on their next
+reload. If the window cannot run the bundle refresh, **do F387 alone and leave F386**, rather than
+committing a source change the bundle does not carry.
+
+### If a slot is still left over
+
+`F166` (C) and `F168` (B) became visible on the backlog page for the first time on 2026-09-19 —
+they were filed at `###` and the page's parser read `##` only. **`F168` has no `**Status:**` line
+at all**, so it is counted open on the strength of a 2026-08-31 filing nobody has re-verified.
+Verifying it is cheap and honest work; it is not a spec loop.
+
+---
+
 ## 2026-09-18
 
 **Written 2026-09-17 evening by an interactive session, at the operator's instruction, after an

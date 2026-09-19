@@ -659,6 +659,46 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-19, second sitting — two severities rated, and tomorrow's second spec loop named
+
+**DECIDED 2026-09-19 afternoon, by the operator, in the interactive session that resumed handoff
+0131.** Two of these close a question carried in the handoff chain eight times.
+
+**The question itself was wrong as carried.** It read *"five open findings with no severity (F77,
+F130, F132, F165, F167) can never be reached by the night window's A-before-B-before-C queue"*.
+Three of the five do declare a severity — F77 is C, F165 and F167 are both B — and
+`backlog_page.py` simply could not read the spelling they used. Fixing the parser (`3918fa9`) also
+found **F166 (C) and F168 (B), which had never appeared on the backlog page at all.** So the real
+decision was over two findings, not five.
+
+- DECIDED   F130-severity  **B.** Not A: it needs an operator action to trigger — pressing
+  Checkpoint twice with no turn between — and nothing is lost or blocked when it fires. Not C: once
+  tripped it is permanent and unbounded, because nothing ever re-establishes a non-NULL
+  `covers_through`, and the observed damage was a checkpoint whose prose said the work was not done
+  while its own file list named the file it had created. *Rejected:* **A**, argued on the grounds
+  that it hands a worker a false record rather than merely a bill, and that worker tokens are now a
+  real constraint under the weekly window — refused because severity measures what the product does,
+  and here it keeps working, over-widely. *Rejected:* **C**, which would have left it unreachable in
+  practice, since 89 C's are open and the queue has never reached that far.
+- DECIDED   F132-severity  **C.** The trap cannot spring: the same missing UI that cannot clear a
+  drift candidate cannot raise one, and no MCP tool or agent route reaches `/spec/drift` either, so
+  nothing in the product can put a requirement into `DRIFTING`. A half-built feature, not a
+  misbehaving one. *Rejected:* **B**, argued on consequence rather than probability — one call to
+  `POST /spec/drift/detect` makes a `gate`-rigor requirement permanently un-approvable through the
+  app, with no escape. **That argument was accepted as correct and deferred, not dismissed:** the
+  finding now records that it becomes B the day any drift caller ships, and that whoever builds one
+  owns raising it in the same change. *Rejected:* folding F132 into F129 and retiring it, which
+  would have stopped tracking the gate's unactionable remedy anywhere.
+- DECIDED   day-2026-09-20-loop-2  **`F388` (A) — a Hub started from source silently opens the
+  operator's live database.** Named in `spec-queue/DIRECTION.md` so the window does not choose for
+  itself. It is the only open severity-A that is already decided (a+b+d) and has no change
+  directory, and it is a hazard on this machine specifically. Its blast radius shares no file with
+  loop 1 (`charters.py`, `agent_lifecycle.py`, `agents.py`) or with either approved-and-unbuilt
+  change. *Rejected:* **F299+F301** as one change, whose runner/transport blast radius would have
+  cost R1 a round just to establish the boundary between them; **F347**, a first-run barrier but a B
+  while eight A's are open; **F168**, which is a missing feature rather than a defect, so a round on
+  it would be product design rather than repair.
+
 ### 2026-09-19 — six decisions in one sitting: the gate, the day's shape, and four findings
 
 **DECIDED 2026-09-19 afternoon, by the operator, in an interactive DECIDE session**, after being
