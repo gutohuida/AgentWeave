@@ -7,6 +7,13 @@ the rest of D2, D3 and D6 are what remains to build, and they need re-deriving a
 `F352-free`'s decision (option (f), reachability, `4b59ee0`) before any of it is trustworthy: this
 text still argues from option (e), which did not ship.
 
+**2026-09-19: that re-derivation is done — `## Round 5` at the end, read it before D1.** The
+decision to name the holdings survives; the case R1 built for it does not, and neither does its
+remedy. **D1 as originally written would silently revert `4b59ee0`** (see the R5 block inside it);
+D2's clause 3 now filters by reachability and names each holding's loop; the freeing clause gains
+the remedy (f) created, archiving the loop that holds them, and is forbidden from suggesting pause.
+The `OPERATOR QUESTION` in `proposal.md` is closed and should no longer be read as open.
+
 R1, 2026-09-14. Line numbers are at `2d5674c`. R2, 2026-09-14, re-derived at `e8ea490`: every
 decision it changed is marked **R2**, and *Round 2* at the end lists what changed and why. R3,
 2026-09-14, re-derived at `fb469e2`: marked **R3**, listed in *Round 3* at the end. REV,
@@ -52,6 +59,44 @@ That is the predicate the function has today, and `agent-flows` states it. **No 
 leaves the pool because of this change**, and the existing ladder, width and busy-guard tests are
 the proof that it does not.
 
+> **R5 — STOP. The three paragraphs above are false as of `4b59ee0`, and implementing them as
+> written would revert (f).**
+>
+> They were true when R1 wrote them. They are not true now, and this is the most serious thing R5
+> found, because it is a *silent* regression: it reverts a shipped behaviour while every sentence
+> around it still reads correctly.
+>
+> - The function does **not** read `Task.assignee` over `LIVE_STATUSES` and stop. It reads that as
+>   the *band*, then filters by reachability — `loop_id in live or (task_id, assignee) in queued`
+>   (`scheduler.py:1146-1150`) — and its own docstring says so: *"the roster's `LIVE_STATUSES` is
+>   read here only as the band a holding must be in, not as the whole test"* (`:1089-1092`).
+> - So the pool is **not** `not a.holdings`. An agent holding three live tasks that nothing will
+>   move is in the pool today. Under the predicate written above it would not be.
+> - **The claim "No agent enters or leaves the pool because of this change" is therefore the
+>   opposite of the truth**, and the tests named as proof would catch it — including
+>   `test_the_loopengine_shape_staffs_its_review`, which asserts the pool is *not* empty in exactly
+>   the shape D1's predicate would empty. That is the one mercy here: this cannot ship green.
+>
+> **Corrected shape.** The record carries the reachability verdict, not a raw holding list, because
+> two consumers need two different things from it and only one of them is the pool:
+>
+> ```
+> AgentAvailability(name, has_runner, running, holdings: tuple[Holding, ...])
+> Holding(task_id, status, loop_id, reachable: bool)
+> ```
+>
+> - the **pool** is `[a.name for a in availability if a.has_runner and not a.running and not
+>   any(h.reachable for h in a.holdings)]` — the predicate the code has today, restated, so D1's
+>   "no agent enters or leaves" claim becomes true again;
+> - **clause 3** prints `[h for h in a.holdings if h.reachable]` (R5-3), with `h.loop_id` (R5-5).
+>
+> Keeping the unreachable holdings on the record rather than filtering them out of the query is
+> deliberate: the reachability arms are already computed for the pool, and a second query to find
+> out which of an agent's tasks are unreachable would be the third opinion this decision exists to
+> prevent. Nothing prints them today. **Do not add a surface that does** without deciding what an
+> operator is supposed to do with a task nothing will move — that is `R4`/`F218`'s territory, not
+> this change's.
+
 *Why one read:* the function's own docstring argues that *"a third opinion about whether an agent
 is busy cannot appear here"*. A sentence built from a second query would be exactly that third
 opinion, able to name an agent the pool thought free. *Rejected:* building the sentence at the call
@@ -75,9 +120,33 @@ For each record, the **first** of these that holds becomes that agent's clause:
 
 1. **excluded** — `"{name} {clause}"`, where the clause is the caller's reason for this agent (D3);
 2. **no runner** — `"{name} has no runner bound"`;
-3. **holds** — `"{name} holds {id} ({status})"`, listing up to three held tasks and then
+3. **holds** — `"{name} holds {id} ({status}) in {loop}"`, listing up to three held tasks and then
    `"and N more"`;
 4. **running** — `"{name} is running a turn"`.
+
+**R5 — clause 3 changed twice, and both changes come from (f).**
+
+- **It lists only *reachable* holdings.** Under the rule this change was written against, every live
+  assigned task made its assignee unavailable, so "what this agent holds" and "why this agent cannot
+  review" were the same list. Under (f) they are not: a task makes its assignee unavailable only if
+  `loop_id in live or (task_id, assignee) in queued` (`scheduler.py:1146-1150`). A task outside
+  that set holds nobody — that is the whole of what (f) decided — so naming one here would state a
+  reason that is not one. **The list is the pool's own predicate, not `LIVE_STATUSES`.**
+- **Each holding names its loop**, which R1–R4 did not carry. That is not decoration: under (f) the
+  dominant arm is `loop_id in live`, so *which* loop holds an agent is what decides whether the
+  operator can free it, and for which review — see the remedy below. Budget cost is measured in the
+  R5 table; where it does not fit, the loop is the first thing dropped, because a holding without
+  its loop is still true while a name without its holding is not.
+
+**The sentence and the roster will now disagree, and the sentence must not pretend otherwise.**
+`_agents_that_are_free`'s own docstring is explicit that the roster's "active task" count
+(`api/v1/agents.py`) answers *what does this agent hold* and still counts every live task, while the
+pool answers *may a flow give this agent work* (D5, `scheduler.py:1089-1092`). Under the old rule
+those two produced the same number. Under (f) they routinely differ, so an operator reading
+*"dev holds 1 task"* here and *"dev — 4 active"* on the roster sees a contradiction between two
+surfaces that are both correct. The clause therefore reads **holds**, and the remedy sentence says
+the list is what something will still move; the roster is not changed to match, because D5 decided
+on purpose that it answers the other question.
 
 Clauses are in name order. Every record matches one of the four. **R3** corrected R1's reason for
 that, *"the pool is empty by construction at rung 3"*, which is false: the author can be free, and
@@ -119,6 +188,35 @@ the rule `enter_selected_task`'s docstring states for the same situation.
   the clause is option (e)'s remedy, true only while the definition of free stays as it is. The
   wording becomes *"rejecting held tasks that are no longer wanted can free their agents"*, and the
   OPERATOR QUESTION's answer re-derives it.
+
+  **R5 re-derives it against (f), and the answer is a different remedy.** Rejecting still works —
+  `rejected` leaves `LIVE_STATUSES`, so the holding fails the pool predicate whichever arm held it
+  — and REV's plural stands. But under (f) it is no longer the *best* remedy, and the best one is
+  named nowhere in R1–R4:
+
+  - **Archiving the loop that holds them frees every agent holding only its tasks, at a stroke.**
+    `live` excludes a loop with `archived_at` set (`scheduler.py:1126-1130`), and
+    `POST /jobs/{job_id}/archive` sets `loop.archived_at` on the job's loop
+    (`api/v1/jobs.py:1190-1197`). The control is real and the operator can reach it
+    (`useArchiveJob`, `hub/ui/src/components/jobs/JobsPage.tsx:42,49`) — which is the test this
+    change applies to every remedy it prints. **Under (e) this remedy did not exist**: a live
+    assigned task held its agent no matter what happened to its loop. It exists only because (f)
+    made the loop's liveness the dominant arm.
+  - **It must name the *other* loop, never this one.** Archiving the loop whose review is stuck
+    stops the firing that needs staffing, so the remedy is correct only where the holding belongs
+    to a different loop. That is why clause 3 now carries each holding's loop: without it the
+    sentence cannot tell the operator which loop to archive, and a remedy the reader cannot aim is
+    the defect class (F353) this change exists to repair.
+  - **Pausing frees nobody, and the sentence must never suggest it.** `_agents_that_are_free` is
+    explicit: *"A **paused** loop still holds, because re-enabling it briefs the assignee on the
+    task again"* (`scheduler.py:1084-1085`). Pause is the control an operator reaches for first and
+    the one that looks like it should work. **Recommending it would be a fresh instance of F353
+    committed by the change whose subject is F353's defect class** — so the remedy names archiving,
+    in those words, and the tests assert the string "pause" never appears in a rung-3 reason.
+
+  Wording, with the status half from `own_review_remedy` unchanged before it:
+  *"; rejecting held tasks that are no longer wanted can free their agents, as can archiving the
+  loop that holds them."*
 - **Any other status (REV).** The divergence screens out only `blocked` (`run_divergence.py:746`),
   and `run_advanced_its_task` counts only the run's own transitions. So if the operator moves a
   task to `revision_needed` or `rejected` while its review run is live, that run's end still
@@ -699,3 +797,129 @@ edge that hands a review over.
 1519-1545; `task_transition_service.py:443-464`; `agent_trigger.py:480-504`; `schemas/jobs.py:88`;
 `models.py:1349`; the eight write sites; `run_divergence.py:430-446`; `mcp_server.py:307`;
 `schemas/tasks.py:17, 72`.
+
+## Round 5 — the re-derivation against (f), 2026-09-19
+
+The round `F352-free`'s decision asked for, and the one the STOPPED note at the top of
+`proposal.md` says has to happen before a line is implemented: *"rung-3's naming needs re-deriving
+against (f), from scratch"*. Run interactively at the operator's instruction (*"Go do the round"*),
+as a fresh comparison of the proposal against the code — not a re-reading of R1–R4.
+
+**The decision to name the holdings survives. The case R1 built for it does not, and neither does
+its remedy.**
+
+### R5-0 — D1 as written reverts `4b59ee0`. This is the finding that matters most
+
+D1 specifies the pool as `not a.holdings` over `Task.assignee` in `LIVE_STATUSES`, and asserts
+*"No agent enters or leaves the pool because of this change"*. Both were true at R1. **Neither is
+true now.** `_agents_that_are_free` reads `LIVE_STATUSES` only as the band and then filters by
+reachability (`scheduler.py:1146-1150`), exactly as its docstring says (`:1089-1092`). An agent
+holding three live tasks nothing will move is in the pool **today** and would be out of it under
+D1's predicate.
+
+So the change that exists to *describe* the staffing rule would, implemented literally, **undo the
+rule** — and it would do so while every sentence around it still read correctly, which is the shape
+of regression that survives review. It is caught here by comparing the decision against the code
+rather than against R1's account of the code, which is what this round is for.
+
+It cannot ship green: `test_the_loopengine_shape_staffs_its_review` asserts the pool is non-empty
+in precisely the shape D1's predicate empties. But a round that only ran the suite would have
+learned this as a mysterious red at implementation time, with the design still reading as correct.
+
+D1 is amended in place with the corrected record shape.
+
+### R5-1 — the incident in *Why* cannot happen any more, and a shipped test proves it
+
+`hub/tests/test_a_task_nothing_will_move_holds_nobody.py::test_the_loopengine_shape_staffs_its_review`
+stages exactly the shape `proposal.md`'s *Why* describes — a flow's completed task, its author
+excluded, every other agent holding only a task assigned outside the loop — and asserts
+`decision.selections == [(task.id, B, True)]` and **`decision.unstaffed == ()`**. The review is
+staffed. Under (f) the `loop_id`-NULL holdings on `dev` and `dev_2` are reachable-free, so the pool
+is not empty and rung 3 is never reached.
+
+So the change's own motivating narrative — *"a flow stood still for most of a night … every firing
+recorded the same `review_unstaffed` sentence"* — is a wedge **(f) has already fixed**. This does
+not retire the change: rung 3 is still reachable whenever every non-excluded agent is running, held,
+or holding *in-loop* work, and when it is reached the sentence still names nobody, which is F352
+entire. But the *Why* must be re-grounded on that narrower circumstance instead of inheriting a
+snapshot that no longer reproduces. **A change whose stated reason cannot recur is one a future
+round will reopen.**
+
+### R5-2 — three of the five findings *Why* names are already closed
+
+Verified in the tree, not in the archive's prose:
+
+- **F365 shipped.** `_review_unstaffed_already_stands` is scoped to this task's own newest record
+  (`scheduler.py:2120-2153`), and its docstring credits `a-refusal-names-a-remedy-that-works` D3.
+  `proposal.md` still argues for this under *What changes* as work to do.
+- **F367 / the `error_summary` fit shipped.** `JOB_RUN_ERROR_SUMMARY_CHARS` and
+  `fit_error_summary` are in `hub/hub/db/models.py:1336-1348`.
+- **F353 and F334's remedy half** moved to the same sibling and archived 2026-09-16.
+
+`tasks.md` §3 is already struck as MOVED. `proposal.md` was not swept with it, and still presents
+all five as this change's work. **Only F352's visibility half remains**, and the file should say so
+in one line rather than leave a reader to discover it.
+
+### R5-3 — clause 3 must filter by reachability, and R1–R4 never said so
+
+Under the rule this change was written against, "what this agent holds" and "why this agent cannot
+review" were the same list, so D2 could say `"{name} holds {id} ({status})"` over live assigned
+tasks and be right. Under (f) they are different lists: unavailability is
+`loop_id in live or (task_id, assignee) in queued` (`scheduler.py:1146-1150`). Printing a holding
+outside that set states a reason that (f) explicitly decided is not one. D2 amended.
+
+### R5-4 — the sentence will contradict the roster, by design, and has to be unambiguous
+
+`_agents_that_are_free`'s docstring (D5, `scheduler.py:1089-1092`) says the roster's active-task
+count answers a different question **on purpose** and still counts every live task. Under (e) the
+two agreed; under (f) they routinely differ, so *"dev holds 1 task"* here beside *"dev — 4 active"*
+on the roster is two correct surfaces disagreeing. New under (f), unaddressed by R1–R4. D2 amended;
+the roster is deliberately not changed to match.
+
+### R5-5 — the freeing clause is (e)'s remedy, and the right one is named nowhere
+
+REV already caught that *"frees its agent"* is false for an agent holding several tasks. The deeper
+problem is that the clause is the whole remedy, and under (f) it is no longer the best one:
+
+- **Archiving the loop frees every agent holding only its tasks, at once.** `live` excludes a loop
+  with `archived_at` set (`scheduler.py:1126-1130`); `POST /jobs/{job_id}/archive` sets
+  `loop.archived_at` (`api/v1/jobs.py:1190-1197`); the operator has the control
+  (`JobsPage.tsx:42,49`). **This remedy is created by (f)** — under (e) a live assigned task held
+  its agent whatever became of its loop.
+- **It must name the other loop**, since archiving the stuck review's own loop stops the firing
+  that needs staffing. Hence the loop attribution added to clause 3.
+- **Pausing frees nobody** (`scheduler.py:1084-1085`, *"A paused loop still holds"*), and it is the
+  control an operator reaches for first. Suggesting it would be a fresh F353 — committed by the
+  change whose subject is F353's defect class. D2 now forbids it and requires a test.
+
+### R5-6 — the OPERATOR QUESTION section is dead text and must go
+
+`proposal.md:174-223` presents options (a)–(e) and *"Recommended: (d)"*. The decision was **reject
+(d), take (f)** — an option the list does not contain. Leaving a recommendation for a rejected
+option in the file is how a later round re-litigates a closed decision, which is the failure the
+round log exists to prevent. Retire it to one paragraph naming (f) and pointing at the
+`F352-free` row.
+
+### R5-7 — citation drift, four places
+
+- The rung-3 sentence is at `scheduler.py:1307-1314`, not `:1161-1168` as `proposal.md:68` and R4's
+  sampled-references list both say. It has also gained D6's `waiting` clause since R1 quoted it, so
+  the quoted text in *Why* is no longer what the code emits.
+- `F352-free`'s decision cites the reachability predicate at `scheduler.py:1138`; that is now the
+  `session.execute` line, and the predicate is `:1146-1150`.
+- D2's *"`scheduler.py:1137-1159`"* for the pool walk is now `:1262-1285`.
+- R4's sampled references were verified against the tree of 2026-09-14 and five of them have moved.
+  **Re-verify the whole list at implementation time rather than trusting this round's four.**
+
+### What R5 did not check
+
+- No test was run. Nothing here was executed; every claim is a code read plus one shipped test's
+  assertions read from source.
+- The budget table (D2's character counts) was **not** recomputed for the longer clause 3 or the
+  longer remedy. Both grow, the 500-character `error_summary` bound is real and now enforced at the
+  model, so **the table is the first thing the implementation round must redo** — this round changed
+  the strings without re-measuring them.
+- Whether `task_agent_pairs_with_a_turn_queued`'s hop-budget arm can make a holding appear and
+  disappear between two firings, which would make the sentence unstable across ticks in the way D2's
+  ordering argument tries to avoid. Named here because it is reachable from (f) and nobody has
+  looked.

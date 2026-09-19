@@ -30,23 +30,40 @@ mutation and the observed failure beside the task when ticking it.
 
 ## 1. One availability read (design D1)
 
-- [ ] 1.1 Add `AgentAvailability` and `_roster_availability(session, project_id)` to
+**R5, 2026-09-19 — every task in this group was rewritten. The originals specified the pool as
+*"holds no live task"*, which has been wrong since `4b59ee0` and would have reverted it. Read
+`design.md` `## Round 5`, finding `R5-0`, before starting.**
+
+- [ ] 1.1 Add `AgentAvailability`, `Holding` and `_roster_availability(session, project_id)` to
       `hub/hub/scheduler.py`:
       - one record per non-archived agent, in name order;
-      - `has_runner`, `running`, and `holdings` as `(task_id, status)` pairs over `LIVE_STATUSES`,
-        ordered by task id.
+      - `has_runner`, `running`, and `holdings` as `Holding(task_id, status, loop_id, reachable)`,
+        ordered by task id;
+      - `LIVE_STATUSES` is the **band** a holding must be in, not the test. `reachable` is
+        `loop_id in live or (task_id, assignee) in queued`, computed from the same two reads
+        `_agents_that_are_free` does today (`scheduler.py:1123-1150`) — **not** a second opinion
+        about reachability, which is the thing D1 exists to prevent.
+      - Unreachable holdings stay on the record and are printed by nothing (D1's R5 note).
 - [ ] 1.2 Re-express `_agents_that_are_free` as the projection
-      `has_runner and not running and not holdings`, and keep its docstring's argument.
-      - Its three callers keep the projection: `scheduler.py:298`, `:1137` and `:1298`.
+      `has_runner and not running and not any(h.reachable for h in holdings)`, and keep its
+      docstring's argument **including its reachability paragraph**.
+      - Its three callers keep the projection: `scheduler.py:298`, `:1262` and `:1298`
+        (R5-7: `:1137` in the original is stale).
       - `resolve_reviewer` instead reads `_roster_availability` **once**, and derives both rung 2's
         pool and rung 3's records from that one read.
 
       The existing pool tests pass unchanged: `test_reviewer_ladder.py`, `test_flow_width.py`,
-      `test_a_task_waits_while_its_run_waits.py::…3.4`, and the busy guard.
-- [ ] 1.3 Test: an agent with no runner, one running with nothing held, one holding two tasks, and
-      one free each get the right record, and the pool is exactly the free one.
+      `test_a_task_waits_while_its_run_waits.py::…3.4`, the busy guard, **and every test in
+      `test_a_task_nothing_will_move_holds_nobody.py`**. That last file is the regression guard for
+      this group: if `test_the_loopengine_shape_staffs_its_review` goes red, the projection has
+      reverted (f) and the fix is here, not in the test.
+- [ ] 1.3 Test: an agent with no runner, one running with nothing held, one holding two **reachable**
+      tasks, one holding only **unreachable** tasks, and one free each get the right record; the
+      pool is exactly the free one **and the unreachable-holder**.
       *Mutation:* drop `Task.status` from the holdings select (or the `LIVE_STATUSES` filter). The
       test must fail.
+      *Mutation:* make `reachable` always `True` — i.e. the pre-`4b59ee0` rule. The test must fail,
+      and so must `test_the_loopengine_shape_staffs_its_review`.
 - [ ] 1.4 Test: `resolve_reviewer` reads the roster once per call. Count the executed `Task.assignee`
       selects with a SQLAlchemy `before_cursor_execute` listener on the real test engine.
       *Mutation:* call `_agents_that_are_free` for rung 2 and `_roster_availability` for rung 3. The
@@ -80,13 +97,27 @@ mutation and the observed failure beside the task when ticking it.
         - `completed`: "Land it, on the task, to review it yourself", with **no** promise of
           approval;
         - `under_review`: the three exits, and **not** Land it;
-      - after the helper's sentence, rung 3 itself appends "; rejecting a held task that is no
-        longer wanted frees its agent." The dispatch refusal (4.2) does not.
+      - **R5:** the holds clause prints only **reachable** holdings, and each as
+        `"{name} holds {id} ({status}) in {loop}"`. A holding that is not reachable is not a reason
+        and must not be named.
+      - after the helper's sentence, rung 3 itself appends "; rejecting held tasks that are no
+        longer wanted can free their agents, as can archiving the loop that holds them." The
+        dispatch refusal (4.2) does not.
+      - **R5:** the remedy must never suggest pausing. A paused loop still holds
+        (`scheduler.py:1084-1085`), so suggesting it would be a fresh F353.
 - [ ] 2.4 Bound the reason to 500 characters. If the whole sentence fits, use it. Otherwise add
       clauses in name order while the prefix, the clauses, the tail
       "; and N more agents are excluded, busy or unbound" and the remedy still fit.
       - A holds clause that would not fit is retried with two named tasks, then one, counting the
         rest as "and N more". Only then is its agent left to the tail (R3).
+      - **R5: drop the loop id before dropping a task.** A holding without its loop is still true;
+        a name without its holding is not.
+      - **R5, do this FIRST: re-measure D2's character budget table.** R5 lengthened clause 3 (the
+        loop id) and the remedy (the archive clause) and did **not** recompute the table, so every
+        number in it is now a floor rather than a measurement. The 500 bound is enforced at the
+        model since `fit_error_summary` shipped (`models.py:1336-1348`), so an over-long reason is
+        now silently truncated rather than loudly wrong — which is exactly the failure mode a stale
+        budget table produces.
 ~~- [ ] 2.5~~ **MOVED 2026-09-15** to `a-refusal-names-a-remedy-that-works/tasks.md` task 2.1
       (Fit `JobRun.error_summary` at the model). Built there, not here.
 ~~- [ ] 2.5b~~ **MOVED 2026-09-15** to the same directory's task 2.2 (`_wedged_review_reason`'s
@@ -184,6 +215,11 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
 
 ## 6. Verify
 
+- [ ] 6.0 **R5 regression guard, run this before anything else and again at the end:**
+      `py -3.11 -m pytest hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q`.
+      It must be green before you start and green when you finish. If
+      `test_the_loopengine_shape_staffs_its_review` goes red, the availability projection has
+      reverted `4b59ee0` (design R5-0) — fix the projection, never the test.
 - [ ] 6.1 CI's lint set:
       - `ruff check src/ hub/ tests/`;
       - `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`;
@@ -200,7 +236,13 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
       - the drawer's status menu → `under_review` on the author-held task, with the refusal
         rendered beside Land it (Chromium);
       - one real Haiku agent turn asked to move that task to `under_review`, and the refusal text
-        it received, read from its tool result.
+        it received, read from its tool result;
+      - **R5, the two new claims, driven not asserted:** stage a holder whose only tasks are
+        unreachable (no live loop, no queued turn) and confirm it is *not* named in the reason and
+        *is* in the pool; then archive the holding loop through the operator's own control
+        (`POST /jobs/{id}/archive`) and confirm the next firing staffs the review. The second is the
+        remedy the sentence now prints, and a remedy this change has not watched work is the defect
+        it exists to repair.
 
       Leave no job enabled.
 - [ ] 6.4 Archive:

@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-19 14:25 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>7270b92</b> · uncommitted changes present<br>
+      generated <b>2026-09-19 14:32 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>2fbd0c3</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -972,7 +972,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
             <div class="chg-main">
               <code class="chg-name">an-unstaffed-review-names-its-holders</code>
               <span class="chg-badge want">waiting on you</span>
-              <p class="chg-facts">24 unticked · 1 delta spec</p>
+              <p class="chg-facts">25 unticked · 1 delta spec</p>
               <p class="chg-note">STOPPED, 2026-09-15 — the split shipped; this half now needs re-deriving, not un-blocking</p>
             </div>
             <div class="chg-links"><a href="../openspec/changes/an-unstaffed-review-names-its-holders/proposal.md" target="_blank" rel="noopener">proposal.md</a> · <a href="../openspec/changes/an-unstaffed-review-names-its-holders/design.md" target="_blank" rel="noopener">design.md</a> · <a href="../openspec/changes/an-unstaffed-review-names-its-holders/tasks.md" target="_blank" rel="noopener">tasks.md</a> · <a href="../openspec/changes/an-unstaffed-review-names-its-holders/test-guide.md" target="_blank" rel="noopener">test-guide.md</a></div>
@@ -991,6 +991,27 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <p>remaining half (D1, D2&#x27;s naming/clause/prefix/budget logic, D3, D6) was written against.** Option (f) already shipped, independently of this change: <code>4b59ee0</code> (<code>openspec/changes/archive/2026-09-15-a-task-nothing-will-move-holds-nobody</code>), <code>hub/hub/scheduler.py:1138</code>. An independent adversarial (Opus) review, asked to validate (d) once (f) was found to have shipped, rejected (d) in (f)&#x27;s favour — its full reasoning is in <code>spec-queue/DECISIONS.md</code>&#x27;s <code>F352-free</code> row.</p>
 <p><strong>What is left here is real, undone work, not a resolved blocker: rung-3&#x27;s naming needs re-deriving against (f), from scratch, through its own R1.</strong> (f) redefines <em>holding</em> itself (a task holds its agent only if a live loop still walks it or a queued turn names it), which is upstream of everything D1–D3 below say about clauses, exclusions and the prefix sentence. That re-derivation has not been done in this pass — it is the next round to run on this directory, not a mechanical find-and-replace of &quot;(e)&quot; with &quot;(f)&quot;.</p>
 <p>The rest of this file (below) is the REV-era text, kept for provenance. Read it as history: the OPERATOR QUESTION section&#x27;s options (a)-(e) no longer include the option that shipped, and the &quot;Why it stopped&quot; reasoning below is superseded by the decisions above.</p>
+<h5>R5, 2026-09-19 — the re-derivation is DONE. This change is unblocked, and smaller than it reads</h5>
+<p>Run interactively at the operator&#x27;s instruction. Full findings: <code>design.md</code>, <strong><code>## Round 5</code></strong> — read <code>R5-0</code> before touching <code>D1</code>.</p>
+<p><strong>The decision to name the holdings survives a fourth pass. Four things under it do not.</strong></p>
+<ol>
+<li><strong><code>D1</code>, implemented as written, would silently revert <code>4b59ee0</code></strong> — it specifies the pool as</li>
+</ol>
+<p><em>&quot;holds no live task&quot;</em> and claims no agent&#x27;s membership changes, and both were true at R1 and are false now. <code>D1</code> is amended in place. This is the one to read first.</p>
+<ol>
+<li><strong>The <code>Why</code> below is a wedge (f) already fixed.</strong> <code>test_the_loopengine_shape_staffs_its_review</code></li>
+</ol>
+<p>asserts <code>decision.unstaffed == ()</code> in exactly the shape the <code>Why</code> narrates. Rung 3 is still reachable — whenever every non-excluded agent is running, held, or holding <em>in-loop</em> work — and when it is reached the sentence still names nobody, which is F352 entire. But the justification is now that narrower circumstance, <strong>not</strong> the LoopEngine night.</p>
+<ol>
+<li><strong>Three of the five findings the <code>Why</code> names are already closed.</strong> F365 shipped</li>
+</ol>
+<p>(<code>scheduler.py:2120-2153</code>), F367 and the <code>error_summary</code> fit shipped (<code>models.py:1336-1348</code>), and F353/F334&#x27;s remedy half archived 2026-09-16 with the sibling. <strong>Only F352&#x27;s visibility half is left here.</strong> <code>tasks.md</code> §3 is already struck; this file was never swept with it, so treat <em>Why</em> items 2–4 and the <code>error_summary</code> bullet under <em>What changes</em> as history.</p>
+<ol>
+<li><strong>The remedy changes.</strong> Rejecting a held task still frees, but under (f) the strong remedy is</li>
+</ol>
+<p><strong>archiving the loop that holds them</strong> — which frees every agent holding only its tasks at once, which (e) could not do, and which the operator has a real control for. It must name the <em>other</em> loop, so clause 3 now carries each holding&#x27;s loop id. <strong>Pausing frees nobody</strong> (<code>scheduler.py:1084-1085</code>) and the sentence is forbidden from suggesting it — that would be a fresh F353 committed by the change whose subject is F353.</p>
+<p><strong>Status: ready for implementation</strong>, with <code>D1</code>&#x27;s corrected record shape, and with D2&#x27;s character budget <strong>re-measured first</strong> — R5 changed the strings and did not recompute the table, and the 500-character bound is now enforced at the model.</p>
+<p><strong>The <code>OPERATOR QUESTION</code> section below is CLOSED.</strong> It recommends option (d); the operator rejected (d) and took (f). It is kept only as provenance. Do not read it as an open choice, and do not re-open (a)–(e) — the decision is <code>spec-queue/DECISIONS.md</code>, the <code>F352-free</code> row.</p>
 <h5>STOPPED AT REV, 2026-09-14 — specced, unbuilt, waiting on the operator (superseded, kept for provenance)</h5>
 <p>The adversarial review (REV, an Opus subagent, 2026-09-14 ~12:15) read this change and the decisions it rests on, and <strong>stopped it</strong>. Nothing here is built, and no task in <code>tasks.md</code> is ticked. Its full findings are in <code>design.md</code>, <em>Round 4 — REV</em>.</p>
 <ul>
@@ -1117,7 +1138,10 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <li><strong>The board&#x27;s stall line shows the whole reason on hover</strong> (<code>title</code> on the truncated <code>&lt;p&gt;</code>). This</li>
 </ul>
 <p>is UI, so the day&#x27;s bundle rule applies. If it cannot be driven in a browser today, the group is left unbuilt and its row says so.</p>
-<h5>OPERATOR QUESTION — what &quot;free&quot; means (F352&#x27;s other half, NOT in this change)</h5>
+<h5>OPERATOR QUESTION — CLOSED 2026-09-15: the answer is (f), which is not in the list below</h5>
+<p><strong>Decided:</strong> <code>spec-queue/DECISIONS.md</code>, the <code>F352-free</code> row — <strong>reject (d), take (f)</strong>, reachability, which had already shipped as <code>4b59ee0</code> and was never one of the five options put to the operator. The table and the recommendation below are <strong>provenance only</strong>. The change is re-derived against (f) in <code>design.md</code>&#x27;s <code>## Round 5</code>.</p>
+<p>Two things in the table below are now wrong on their own terms, recorded so nobody rebuilds an argument from them: it has no <code>(f)</code> column, and under (f) <code>dev</code> and <code>dev_2</code> are <strong>free</strong> on that snapshot — so the pool was not empty, the review would have been staffed, and the incident the table illustrates would not have occurred. <code>Architect</code> and <code>tester</code> stay held, correctly, because their tasks are in-loop.</p>
+<h5>OPERATOR QUESTION — what &quot;free&quot; means (F352&#x27;s other half, NOT in this change) — superseded, kept for provenance</h5>
 <p><code>agent-flows</code> <em>&quot;A flow resolves a reviewer by declaration, then by availability&quot;</em> states the rule the code enforces, <em>&quot;any agent that is not running a turn and holds no task in an active status&quot;</em>, project-wide. The rule&#x27;s design (<code>loop-becomes-a-flow</code> D4) rejected <em>not running</em> alone because of <em>&quot;the pile-up the operator named&quot;</em>. Changing what counts as holding changes a shipped requirement and a position the operator took, so it is <strong>the operator&#x27;s to decide</strong>. This change does not decide it. On LoopEngine the pool was empty because:</p>
 <div class="scroll"><table class="md"><thead><tr><th>agent</th><th>held (2026-09-13 22:30 UTC)</th><th>freed by (a)</th><th>(b)</th><th>(c)</th><th>(d)</th></tr></thead><tbody><tr><td>Architect</td><td>1 <code>under_review</code> in the flow (a review awaiting the operator, no turn)</td><td>no</td><td>no</td><td>yes</td><td>no</td></tr><tr><td>dev</td><td>2 <code>in_progress</code> with no turn, 1 <code>pending</code>, all <code>loop_id</code> NULL</td><td>yes</td><td>no</td><td>yes</td><td>yes</td></tr><tr><td>dev_2</td><td>5 <code>pending</code>, <code>loop_id</code> NULL</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td></tr><tr><td>tester</td><td>1 <code>in_progress</code> with no turn (superseded)</td><td>yes</td><td>no</td><td>yes</td><td>yes</td></tr></tbody></table></div>
 <ul>
@@ -1264,9 +1288,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-19T14:25:07+01:00",
+ "generated": "2026-09-19T14:32:19+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "7270b92",
+ "sha": "2fbd0c3",
  "open": 208,
  "items": 211,
  "requests": 3,

@@ -28,6 +28,42 @@ The rest of this file (below) is the REV-era text, kept for provenance. Read it 
 OPERATOR QUESTION section's options (a)-(e) no longer include the option that shipped, and the
 "Why it stopped" reasoning below is superseded by the decisions above.
 
+## R5, 2026-09-19 — the re-derivation is DONE. This change is unblocked, and smaller than it reads
+
+Run interactively at the operator's instruction. Full findings: `design.md`, **`## Round 5`** —
+read `R5-0` before touching `D1`.
+
+**The decision to name the holdings survives a fourth pass. Four things under it do not.**
+
+1. **`D1`, implemented as written, would silently revert `4b59ee0`** — it specifies the pool as
+   *"holds no live task"* and claims no agent's membership changes, and both were true at R1 and
+   are false now. `D1` is amended in place. This is the one to read first.
+2. **The `Why` below is a wedge (f) already fixed.** `test_the_loopengine_shape_staffs_its_review`
+   asserts `decision.unstaffed == ()` in exactly the shape the `Why` narrates. Rung 3 is still
+   reachable — whenever every non-excluded agent is running, held, or holding *in-loop* work — and
+   when it is reached the sentence still names nobody, which is F352 entire. But the justification
+   is now that narrower circumstance, **not** the LoopEngine night.
+3. **Three of the five findings the `Why` names are already closed.** F365 shipped
+   (`scheduler.py:2120-2153`), F367 and the `error_summary` fit shipped
+   (`models.py:1336-1348`), and F353/F334's remedy half archived 2026-09-16 with the sibling.
+   **Only F352's visibility half is left here.** `tasks.md` §3 is already struck; this file was
+   never swept with it, so treat *Why* items 2–4 and the `error_summary` bullet under *What
+   changes* as history.
+4. **The remedy changes.** Rejecting a held task still frees, but under (f) the strong remedy is
+   **archiving the loop that holds them** — which frees every agent holding only its tasks at once,
+   which (e) could not do, and which the operator has a real control for. It must name the *other*
+   loop, so clause 3 now carries each holding's loop id. **Pausing frees nobody**
+   (`scheduler.py:1084-1085`) and the sentence is forbidden from suggesting it — that would be a
+   fresh F353 committed by the change whose subject is F353.
+
+**Status: ready for implementation**, with `D1`'s corrected record shape, and with D2's character
+budget **re-measured first** — R5 changed the strings and did not recompute the table, and the
+500-character bound is now enforced at the model.
+
+**The `OPERATOR QUESTION` section below is CLOSED.** It recommends option (d); the operator
+rejected (d) and took (f). It is kept only as provenance. Do not read it as an open choice, and do
+not re-open (a)–(e) — the decision is `spec-queue/DECISIONS.md`, the `F352-free` row.
+
 ## STOPPED AT REV, 2026-09-14 — specced, unbuilt, waiting on the operator (superseded, kept for provenance)
 
 The adversarial review (REV, an Opus subagent, 2026-09-14 ~12:15) read this change and the
@@ -171,7 +207,20 @@ the sentence is written to, F367, which is under *What changes*.
   is UI, so the day's bundle rule applies. If it cannot be driven in a browser today, the group is
   left unbuilt and its row says so.
 
-## OPERATOR QUESTION — what "free" means (F352's other half, NOT in this change)
+## OPERATOR QUESTION — CLOSED 2026-09-15: the answer is (f), which is not in the list below
+
+**Decided:** `spec-queue/DECISIONS.md`, the `F352-free` row — **reject (d), take (f)**, reachability,
+which had already shipped as `4b59ee0` and was never one of the five options put to the operator.
+The table and the recommendation below are **provenance only**. The change is re-derived against (f)
+in `design.md`'s `## Round 5`.
+
+Two things in the table below are now wrong on their own terms, recorded so nobody rebuilds an
+argument from them: it has no `(f)` column, and under (f) `dev` and `dev_2` are **free** on that
+snapshot — so the pool was not empty, the review would have been staffed, and the incident the
+table illustrates would not have occurred. `Architect` and `tester` stay held, correctly, because
+their tasks are in-loop.
+
+## OPERATOR QUESTION — what "free" means (F352's other half, NOT in this change) — superseded, kept for provenance
 
 `agent-flows` *"A flow resolves a reviewer by declaration, then by availability"* states the rule
 the code enforces, *"any agent that is not running a turn and holds no task in an active status"*,
