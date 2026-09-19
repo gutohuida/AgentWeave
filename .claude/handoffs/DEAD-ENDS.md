@@ -1152,6 +1152,75 @@ Added 2026-09-16 after one of these reached a committed specification.
   own round says it is clean" as unevidenced, and prefer partial `ORDER:` lines that stop at the
   part whose correctness its own tests can prove.
 
+## `openspec validate --strict` cannot see a contradiction between two requirements
+
+*Measured 2026-09-19 evening.* It validates each requirement in isolation — shape, `SHALL` on the
+first physical line, at least one scenario. **Nothing checks one requirement against another, and
+nothing checks a requirement against its own scenario list.** A change can therefore pass `--strict`
+six times running while:
+
+- two requirements in the **same capability** govern the same operator-visible sentence and
+  disagree about what it may say (`a-loop-staffs-the-agent-it-names`, R4-2: the delta's new rule
+  needed a third clause in a 409 that `agent-loops:1471` says "SHALL say which of those **two**
+  held");
+- a requirement's own scenario list holds an unconditional scenario and a strict specialization of
+  it with the **opposite** THEN (same change, R4-3);
+- the proposal cites as its authority the design section that refutes it (R4-1).
+
+**So a green `--strict` is evidence about form, never about consistency.** The only thing that finds
+this class is a pass that reads the artifacts *against each other*. Budget for that explicitly; four
+rounds on one change each found exactly one defect, and three of the four were this shape.
+
+## Before working a `backlog_page.py` LEDGER WARNING, read the heuristic that produced it
+
+*Measured 2026-09-19 evening.* The warning *"N findings read 'open' but name a commit sha — verify
+before trusting the open count"* tested `state == open AND /[0-9a-f]{7,40}/ in status`. It flagged
+**29 rows, of which 2 could possibly be stale.** The dominant shape in `FINDINGS.md` is
+**provenance**, not a fix claim — *"Filed by the row-1 sweep (`3280f52`)"*, *"Found 2026-09-06
+(`3142a91`)"*, *"measured at unit level on `87dfbf4`"* — all of which name the commit the finding
+was **written** at, which is exactly what a correctly-open finding looks like.
+
+**Fixed at `91a8ddf`**: the test now requires a fix verb (`fixed|closed|repaired|resolved|landed|
+shipped`) attached to the sha, and reports 2. Both survivors (F53, F352) are correct partial-fix
+rows, not stale ones. **The durable lesson outlives the fix:** these warnings are heuristics over
+prose written by many sessions, the file says *"none of these is conclusive on its own"*, and an
+afternoon can be spent verifying a list that was wrong about 27 of its 29 entries. Read the
+generator before believing the count.
+
+## A finding's file citation may not resolve from the repository root
+
+*Measured 2026-09-19 evening.* F52's status line cited `agent_actions.py:940`. There is no such path
+at the root — the file is `hub/hub/api/v1/agent_actions.py`, and the line number was right. A bare
+filename in `FINDINGS.md` is often a shortened citation written by someone who had the file open,
+not a path. **`find . -name "<basename>"` before concluding a finding is stale**, and note that
+`.agentweave/tasks/*/` holds full copies of the tree, so a naive `find` returns three hits for one
+real file.
+
+## Reconstructing an exact-match `old` string fails on `spec-queue/` files too
+
+*Measured 2026-09-19 evening; extends the `openspec/changes/**` entry above.* The same failure hit
+`spec-queue/DIRECTION.md`: an `old` string typed from memory, including a line break placed where it
+looked right, did not match and the edit asserted out. **The rule is not about `openspec/changes/`
+specifically — it is about any prose file in this repo long enough that you are not looking at the
+bytes.** `grep -n` the anchor, read the real line, and `assert old in t` before writing. This is the
+fourth session to hit it.
+
+## A second adversarial pass on an already-reviewed change still pays
+
+*2026-09-19 evening, extending "A round you wrote yourself is not a check".* The change
+`a-loop-staffs-the-agent-it-names` had R1, an adversarial R2 that returned DO NOT APPROVE with 5
+blocking findings, and an R3 that applied all of them — **but R1 and R3 were the same session.** A
+fresh adversarial pass (R4) returned DO NOT APPROVE with **eight** blocking findings, six of which
+were re-verified at the source and all six held. Two of them were prior findings' own shapes
+surviving into R3 in a *new place* (R2-4's "a spec promising an outcome the code does not make"
+reappeared in a second paragraph; D9's "a requirement cannot say both" was fixed in prose and left
+in the scenario list).
+
+**Running tally across the two sibling changes: seven passes, seven defects, no pass yet finding
+nothing.** Treat "the review already ran" as satisfied only if the applying round was a *different*
+session from the one that wrote what was reviewed.
+
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
