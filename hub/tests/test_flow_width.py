@@ -614,9 +614,10 @@ async def test_a_loops_briefing_never_claims_someone_will_review_the_work(app):
     **A loop, deliberately** (task 5.5 of `approval-waits-for-the-turn-to-end`): the subject here is
     what a document-less loop is told, so its fixture declares nothing where every other flow in
     this file now does. The claim this used to rest on — that a document-less loop *"still gets
-    width and review when other agents exist"* — is half retired by design D5: it still gets width,
-    and it no longer gets review at all. The wording is unchanged and is now true of the scheduler
-    rather than merely safe for it.
+    width and review when other agents exist"* — is now retired in full: `a-loop-staffs-the-agent-
+    it-names` design D2 bounds a document-less loop to its own named agent, permanently, so it no
+    longer gets width either, on top of design D5's earlier retirement of review. The wording is
+    unchanged and is now true of the scheduler rather than merely safe for it.
     """
     async with async_session_factory() as db:
         _job, loop = await _flow(db, suffix="tier-loop", declares_document=False)

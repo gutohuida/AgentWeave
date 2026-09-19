@@ -282,27 +282,64 @@ else means the tree has moved further than this list knows.
 
 ## 6. What must not move
 
-- [ ] 6.1 Re-run the full 0.3 baseline and diff. **R4-7: triage by the fixture the failing test
+- [x] 6.1 Re-run the full 0.3 baseline and diff. **R4-7: triage by the fixture the failing test
       actually built, never by the filename.** A newly red test whose loop sets `spec_document_id`
       (or passes `declares_document=True`) is a **flow** regression and is this change's fault by
       default — flows do not change. A newly red test whose loop leaves it `None` is the change
       firing, and is expected only where a task above says so. The old rule keyed on "files that
       default to `declares_document=True`", which is 3 of the 16 files and misclassified 4 more.
-- [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` in full, once, at the end.
-- [ ] 6.3 `ruff check src/ hub/ tests/`; `black --check src/ hub/hub/ hub/tests/ tests/
+
+      **Measured 2026-09-20:** `py -3.11 -m pytest hub/tests/test_a_loop_does_not_staff_its_own_review.py
+      hub/tests/test_loop_busy_guard.py hub/tests/test_flow_width.py
+      hub/tests/test_actor_aware_claimability.py hub/tests/test_a_loop_staffs_the_agent_it_names.py
+      -q` → **64 passed, 49.44s**, matching `alsn-impl-1`'s own measurement of the same command
+      exactly (54 baseline + 10 new). Nothing newly red; no triage needed.
+- [x] 6.2 `py -3.11 -m pytest hub/tests/ -q` in full, once, at the end.
+
+      **Measured 2026-09-20:** full suite green — see log entry for the exact count and duration
+      (command ran past the 600s foreground timeout and was moved to background; result recorded
+      there rather than here to avoid a stale placeholder).
+- [x] 6.3 `ruff check src/ hub/ tests/`; `black --check src/ hub/hub/ hub/tests/ tests/
       --target-version py311`; `mypy src/`. Nothing under `hub/ui/` is touched, so `make ui` is not
       required and must not be run.
-- [ ] 6.6 **R4-N3:** correct `hub/tests/test_flow_width.py:614-619`'s docstring. It builds
+
+      **Measured 2026-09-20:** `ruff check` → all checks passed. `black --check` → found one
+      pre-existing drift, unrelated to this change's own groups: `hub/tests/test_questions.py`,
+      last touched by `arc-impl` (`3b7718d`, an earlier iteration in this same window, task 4.12),
+      not reformatted there before commit. Reformatted it (mechanical, no logic change); re-ran
+      `black --check` clean (581 files unchanged); re-ran `hub/tests/test_questions.py` alone — 10
+      passed, unaffected by the formatting-only change. `mypy src/` → Success: no issues found in
+      22 source files.
+- [x] 6.6 **R4-N3:** correct `hub/tests/test_flow_width.py:614-619`'s docstring. It builds
       `declares_document=False` at `:622` and states as shipped fact that a documentless loop
       *"still gets width, and it no longer gets review at all"*. **D2 makes the first half false.**
       The test asserts briefing text and stays green, so change the docstring, not the assertion —
       and do not let its greenness be read as evidence that width survived.
-- [ ] 6.7 **R4-8:** add the cross-reference D8b requires. `openspec/specs/agent-loops/spec.md:1242`
+
+      **Corrected 2026-09-20.** Docstring now states that D2 retires the width half in full (bounds
+      a documentless loop to its own named agent, permanently) on top of D5's earlier retirement of
+      review, rather than claiming width survives. Assertions untouched;
+      `test_a_loops_briefing_never_claims_someone_will_review_the_work` still passes (1 passed).
+- [x] 6.7 **R4-8:** add the cross-reference D8b requires. `openspec/specs/agent-loops/spec.md:1242`
       already carries *"a loop's task already recorded in `under_review` under its own author's name
       SHALL still be recovered by reassignment without moving status"*, with the scenario at
       `:1271`. No document in this change cited it through R3. The exception now defers the
       recovery **guarantee** to it by name; confirm at sync time that the two read as one rule and
       that neither has drifted.
+
+      **Confirmed 2026-09-20, no edit made — matches design.md's D8b decision.** D8b's own text
+      explicitly rejects modifying `:1232`/`:1242` ("it is true as written and this change does not
+      alter what it requires") and instead takes the cross-reference by having the delta spec cite
+      it by name. Verified both sides: `openspec/specs/agent-loops/spec.md:1242`'s wording is
+      unchanged and still reads *"a loop's task already recorded in `under_review` under its own
+      author's name SHALL still be recovered by reassignment without moving status"*; this change's
+      own delta (`specs/agent-loops/spec.md:26-29`) names that exact requirement — *"A loop does not
+      staff a review of its own agent's work"* — and quotes the same clause verbatim, deferring the
+      **guarantee** to it while scoping its own **wider** reviewer-recovery exception (which also
+      covers the silent-reviewer/verdict-less row `:1242` does not mention) to "the reviewer ladder's
+      own requirements" instead of over-citing `:1242` for a case it doesn't cover. The two read as
+      one rule for the row they share, and the delta does not claim `:1242`'s authority for the row
+      it doesn't. `openspec validate a-loop-staffs-the-agent-it-names --strict` → valid.
 
 ## 7. Drive it
 

@@ -307,12 +307,16 @@ async def test_operator_posted_questions_write_no_subject_key_and_coexist(app, a
 
     async with async_session_factory() as session:
         rows = (
-            await session.execute(
-                select(Question).where(
-                    Question.id.in_([first.json()["id"], second.json()["id"]])
+            (
+                await session.execute(
+                    select(Question).where(
+                        Question.id.in_([first.json()["id"], second.json()["id"]])
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     assert len(rows) == 2
     assert all(row.subject_key is None for row in rows)
     assert all(row.answered is False and row.declined is False for row in rows)
