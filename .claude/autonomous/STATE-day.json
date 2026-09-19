@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "f9db321",
     "stop_at": "2026-09-19T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-1",
-    "next_action": "D-1: full-surface sweep drive. Drain count is 2 (a-refused-capability-reaches-the-operator, an-unstaffed-review-names-its-holders), both gated on decisions outside this window, so no spec loop runs today -- all slots are draining-column repairs/drive per day-window.md. The night built nothing to scope a drive to, and the last full-surface sweep was 2026-09-01 (stale), so this folds D-1+D-2 into one full sweep. Use the e2e-loop skill. Start a drive Hub on a free port (netstat -ano | grep LISTENING first) from hub/ via uvicorn from source against a fresh profiles/drive0919/agentweave.db -- never agentweave --port. Create a fresh project (never proj-5e960453 or proj-18e5d4e0). Bind claude-haiku-4-5 for every real agent turn. Sweep every feature area per e2e-loop's full-surface method. Append new findings to scripts/drive/FINDINGS.md with severity, file:line, repro, and a first-line **Status:** open. Never leave the drive job enabled when done.",
+    "current": "D-2",
+    "next_action": "D-2: repairs -- no-spec carve-out. Fix F384 (scripts/drive/FINDINGS.md): hub/hub/spec_payload.py:241-245's validate_payload takes only exc.errors()[0] from pydantic's ValidationError, discarding every other simultaneous field error -- verified independently (bare SpecPayload.model_validate() surfaces all missing fields in one pass; validate_payload's PayloadError names only the first). No spec/API surface change, just the error message's content, so it fits D-2's no-spec carve-out. Fix: report every error from exc.errors(), not just the first (e.g. join field+msg pairs, or return a list similar to the existing 'blocking' shape). Update or add a unit test in hub/tests/ that submits a payload missing multiple fields on one object (e.g. acceptance_criteria with 2+ missing keys) and asserts the response names more than one of them. Run py -3.11 -m pytest hub/tests/ -q (never bare python). Run ruff/black/mypy per CLAUDE.md's CI-matching quality commands. Then drive it live (spin up a throwaway Hub+project the same way iteration 2 did, or reuse scripts/drive/aw.py against a fresh drive Hub) to confirm an agent submitting a badly-shaped acceptance_criteria now sees every missing field in one refusal, not one per retry. Set F384's **Status:** line to 'fixed <sha>' only after the live drive confirms it, not on the strength of the unit test alone. If the fix turns out to need more than the error message (e.g. touching submit_spec_document's contract), stop and queue it for tomorrow's spec loop instead of finishing it here.",
     "queue": [
         {
             "id": "D-1",
-            "status": "open",
+            "status": "done",
             "title": "Full-surface sweep drive (folded D-1+D-2; night built nothing, sweep is stale since 2026-09-01)",
-            "detail": "e2e-loop skill, full-surface method. Fresh drive Hub + fresh project + fresh drive0919 DB. Haiku for every agent turn. Findings -> FINDINGS.md with severity/file:line/repro/Status:open."
+            "detail": "Driven for real on rows 1,2,3,4,5,7,8,9,10,13,16 with a fresh drive Hub (:8020, profiles/drive0919, deleted after) and fresh project proj-c189dabfc772 (deleted after). Rows 6,11,12,14,15,17,18,19 not reached -- recorded as not-reached, not as passed. One new finding filed and independently verified: F384 (B), hub/hub/spec_payload.py:241-245. Full account in 2026-09-19-day-log.md iteration 2."
         },
         {
             "id": "D-2",

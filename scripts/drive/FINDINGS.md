@@ -29550,3 +29550,81 @@ Runs: `35333792012` (`6fbcf10`, symptom A + B), `35335492002` (`4dc2d72`), `3533
 **Severity is left at (C) deliberately** — by this file's own taxonomy it is test-harness friction,
 not product behaviour — but it has cost a full day's merge gate and ~$9 of retries, so raising it is
 worth the operator's call rather than mine.
+
+## F384 (B) — `submit_spec_document`'s validator reports one missing field at a time, not all of them
+
+**Status:** open. Filed 2026-09-19 by the day window's D-1 full-surface sweep drive.
+**Source:** driving
+**Theme:** Spec flow
+
+**What happened, live.** A fresh Haiku 4.5 agent (`builder`, on a fresh drive Hub/project outside
+this repo) was asked to add one requirement with one acceptance criterion to a spec document. It
+submitted `acceptance_criteria` with an incomplete item and got back one `422` naming exactly one
+missing field (`acceptance_criteria[0].key`). It supplied `key` and resubmitted — got back a new
+`422` naming the *next* missing field (`.requirement`), then `.given`, then `.when`, then `.then`.
+**Five submissions to discover a five-field object**, on top of two earlier failed submissions
+caused by a separate, correct refusal (a `capability` document cannot be agent-written). Full
+transcript: `agent_outputs` for `run-3af2a3fb7439` in
+`profiles/drive0919/agentweave.db` — see the tool_result payloads with `is_error: true`.
+
+**Root cause, verified independently of the transcript.** `hub/hub/spec_payload.py:241-245`:
+
+```python
+try:
+    payload = SpecPayload.model_validate(raw)
+except ValidationError as exc:
+    first = exc.errors()[0]
+    raise PayloadError(first["msg"], field=_field_path(first["loc"])) from exc
+```
+
+Pydantic's `ValidationError.errors()` already collects every failing field in one pass. Confirmed
+directly, bypassing the agent and the HTTP layer:
+
+```
+>>> sp.SpecPayload.model_validate({'schema_version':1,'kind':'change-spec','title':'verify',
+...   'requirements':[{'key':'r1','statement':'x','modal':'MUST'}], 'acceptance_criteria':[{}]})
+pydantic saw 5 errors:
+ - ('acceptance_criteria', 0, 'key') Field required
+ - ('acceptance_criteria', 0, 'requirement') Field required
+ - ('acceptance_criteria', 0, 'given') Field required
+ - ('acceptance_criteria', 0, 'when') Field required
+ - ('acceptance_criteria', 0, 'then') Field required
+```
+
+`errors()[0]` throws away the other four before `PayloadError` — and therefore the `422` body the
+agent sees — is built. The same narrowing applies to every list-of-objects field this module
+validates (`requirements`, `tasks`, `algorithms`, `open_questions`), not only
+`acceptance_criteria`.
+
+**Why this is a real defect and not just a model-capability gap.** The tool's own docstring
+(`hub/hub/mcp_server.py:1728-1731`) states the full five-field shape of an acceptance criterion up
+front — the agent's mistake was submitting an incomplete object, not a documentation gap. But this
+module's own header comment (`spec_payload.py:1-7,46-51`) states the reason the per-field error
+exists at all: *"a refusal the author cannot act on produces a retry loop, which is the failure
+mode the prose contract had."* Reporting only the first of several simultaneous errors reintroduces
+exactly that retry loop when a caller's mistake spans more than one field at once — which is the
+common case for a freshly-invented multi-field object, not a rare one. This is the same class of
+cost `F35` measured for a related but distinct cause (that one was an `Any`-typed field silently
+accepting a wrong shape; this one is a fully-typed, fully-documented field whose validator still
+serializes what should be a batch of errors into a sequence of round trips).
+
+**Cost, this instance.** 5 wasted agent turns' worth of tool calls (one per missing field) plus 2
+more for the unrelated `capability`-vs-`change-spec` confusion — 7 failed `submit_spec_document`
+calls out of 11 total in one turn. Cheap in isolation on Haiku; multiplies across every agent that
+invents a multi-field object without re-reading the docstring first, which zero-trust review
+charters and time pressure both encourage.
+
+**Fix shape (not yet decided or implemented):** collect and report all of `exc.errors()`, not just
+the first — e.g. join every `_field_path`/`msg` pair into one message, or return a `blocking`-style
+list the way `submit_spec_document`'s own docstring already frames refusals ("what would refuse a
+proposal right now"). No spec or API surface changes shape beyond the error message's content, so
+this may be a same-day repair candidate rather than something needing a spec round — the operator's
+call, since D-1/D-2 folded today and no-spec repairs are explicitly in scope for tomorrow's D-2 slot
+if not today's.
+
+**What held.** The `capability`-vs-`change-spec` authority boundary itself is correctly enforced and
+legibly explained (`"capability documents are written by the operator"`,
+`"this document is 'capability'; a submission cannot change what a document is"`) — the agent
+understood both messages immediately and did not retry blindly against that gate. The referential
+check (`acceptance_criteria[].requirement` must name a real requirement key) is unaffected by this
+bug since it is checked in a separate loop, after `model_validate` already succeeded.
