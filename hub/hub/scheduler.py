@@ -332,20 +332,22 @@ async def _loop_flow_busy_reason(session: AsyncSession, loop: Loop, agent: str) 
       job agent, so *busy and empty* is precisely *this firing would queue input for the busy
       agent*.
 
-    Where neither holds, the pool is **project-scoped**, so a loop naming one agent is not
-    single-agent as far as this guard can tell: a documentless loop whose agent is mid-turn can
-    hand its next pending task to a free sibling (finding F128, the operator's open decision). A
-    single-agent project still reaches the refusal by the general rule, with no branch of its own.
-    A firing that proceeds past this and then resolves nobody falls into the ordinary stall path,
-    which is the right place for it: something was staffable in principle and was not staffed, and
-    that is a fact about the queue.
+    Where neither holds, the pool is `_agents_a_loop_may_staff`'s (design D1, D2) — a
+    **documentless loop's pool is empty**, so this guard collapses to *busy, full stop*: the
+    pre-D12 behaviour, restored (design D3, finding F128, closed by
+    `a-loop-staffs-the-agent-it-names`). A single-agent project reached the same refusal before
+    that change by the general rule, with no branch of its own, and still does. A flow's pool is
+    the project's, unchanged, so this half is exactly as it was for a flow. A firing that proceeds
+    past this and then resolves nobody falls into the ordinary stall path, which is the right place
+    for it: something was staffable in principle and was not staffed, and that is a fact about the
+    queue.
     """
     busy_reason = await _loop_agent_busy_reason(session, loop.project_id, agent)
     if busy_reason is None:
         return None
     if not await _loop_has_open_task(session, loop):
         return busy_reason
-    if await _agents_that_are_free(session, loop.project_id):
+    if await _agents_a_loop_may_staff(session, loop):
         return None
     return busy_reason
 
@@ -1232,6 +1234,29 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
     ]
 
 
+async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[str]":
+    """Which of `_agents_that_are_free`'s pool a loop's firing may draw *fresh* work from
+    (design D1, D2). A narrowing over availability, computed here and nowhere else, so the rule
+    cannot drift between the busy guard and the walk that reads it.
+
+    **For a documentless loop the pool is empty, not `{job.agent}`** (design D2). The job's own
+    agent never comes from this pool: `decide_firing`'s ordinary-work arm reaches it through its
+    own default-agent branch, tested against `running`/`held_agents`/`taken` and deliberately not
+    against a pool -- naming it here as well would offer it through two tests that could disagree.
+    A single-agent project still reaches the general refusal with no branch of its own.
+
+    A loop that declares a specification document is a flow (`agent-flows:13`, design D7) and
+    draws the pool unfiltered: flow width is unaffected by this function existing.
+
+    *Why not a parameter on `_agents_that_are_free` instead:* that function answers a question
+    about a **project** and knows nothing about loops (its own docstring, design D5); filtering
+    inline at each of its callers would let the rule drift between them.
+    """
+    if loop.spec_document_id is None:
+        return []
+    return await _agents_that_are_free(session, loop.project_id)
+
+
 async def resolve_reviewer(
     session: AsyncSession,
     task: Task,
@@ -1506,8 +1531,10 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # turn *or* holding work something will move, which is right for staffing something new and
     # wrong for resuming something already staffed: a task's own assignee is, by construction,
     # holding work this very walk will move — itself. So resumption consults `running` directly
-    # (design D12 step 1) and only fresh work draws from `free`.
-    free = await _agents_that_are_free(session, loop.project_id)
+    # (design D12 step 1) and only fresh work draws from `free`. `_agents_a_loop_may_staff`
+    # narrows that pool to empty for a documentless loop (design D1, D2) — resumption is untouched
+    # because it never reads `free` at all.
+    free = await _agents_a_loop_may_staff(session, loop)
     running = await _agents_running_a_turn(session, loop.project_id)
     # The per-task counterpart of `running`, for design D8's refusal. Asked once before the walk
     # for the same two reasons the line above is: a wide firing asks it about several candidates,
@@ -1686,8 +1713,13 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 candidate = next((name for name in free if name not in taken), None)
                 if candidate is None:
                     # Width is bounded by available agents (design D5) and this is that bound
-                    # being reached, not a fault. Nothing is recorded: the task keeps its status
-                    # and its assignee, and the next firing considers it again.
+                    # being reached, not a fault. **For a documentless loop `free` is always empty**
+                    # (`_agents_a_loop_may_staff`, design D1, D2), so the bound here is now one
+                    # agent, permanently — the job's own, already spent by the branch above — and
+                    # not merely "however many happen to be idle right now". A reader who does not
+                    # know that will read this `continue` as a bug for a loop and a non-event for a
+                    # flow, where the pool is still the project's. Nothing is recorded: the task
+                    # keeps its status and its assignee, and the next firing considers it again.
                     continue
                 agent = candidate
             selections.append(LoopSelection(task=task, agent=agent))
