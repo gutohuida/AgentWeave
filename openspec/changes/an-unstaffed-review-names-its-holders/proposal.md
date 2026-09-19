@@ -1,6 +1,15 @@
 # Proposal — an unstaffed review names its holders
 
-## STOPPED, 2026-09-15 — the split shipped; this half now needs re-deriving, not un-blocking
+## RESOLVED 2026-09-19 — the re-derivation this banner demanded is done; see `## R5` below
+
+**This change is no longer stopped.** The banner below is kept as provenance because it is the
+record of *why* a round was owed. The round ran on 2026-09-19 (`design.md`, `## Round 5`) and the
+change is ready for implementation — with `D1`'s corrected record shape, and with D2's character
+budget re-measured first (task 2.4).
+
+**It still needs an operator token in `spec-queue/APPROVALS.md` before any night may build it.**
+
+## ~~STOPPED, 2026-09-15~~ — the split shipped; this half needed re-deriving (discharged, R5)
 
 **Both questions this file raised are decided** (`spec-queue/DECISIONS.md`, `### 2026-09-15,
 later` and the `F352-free` row).
