@@ -1077,6 +1077,7 @@ Nothing refuses the toggle or says "this loop has finished — give it work or c
 which is what the operator actually needs to hear.
 
 ## F14 (B) — A task waiting on the operator still reads `in_progress`
+**Status:** fixed bb3d3e7, 3cec5a5 (a-task-waits-while-its-run-waits: `block_task_for_question` now fires when `ask_user` blocks, not only at run end; confirmed live)
 
 **Status: FIXED 2026-08-30**, `a-task-waits-while-its-run-waits` (three spec rounds, then eleven
 implementation groups: `bb3d3e7` … `3cec5a5`). The first half was `7fcd172`'s derived
@@ -3860,6 +3861,7 @@ which forces it deterministically rather than hoping for a coincidence. This is 
 distinction F55's own live verification drew for `Checkpoint`.
 
 ## F60 (A) — An unanswered `ask_user` question that resolves itself mid-turn leaves the task reading `completed`, and the operator can still "answer" it afterward into a state that contradicts the code that shipped
+**Status:** fixed 033ec4c, paired with F14's fix under a-task-waits-while-its-run-waits (question timeout now records `proceeded_without_answer_reason` on the task)
 
 **Status: FIXED 2026-08-30**, `a-task-waits-while-its-run-waits`, part (b), shipped with F14 in the
 same change. `033ec4c`'s `_asker_is_gone` guard predates the filing and stands.
@@ -8855,6 +8857,7 @@ for FR-1 has already been recorded" and moves on rather than retrying.
 ---
 
 ## F122 (B) — a flow drives a task to `approved` by itself, and the work never reaches the branch — FIXED, NOT YET DRIVEN
+**Status:** fixed d4c1467, 2a53a27 (approval-refuses-unaccepted-evidence: approval refused while evidence sits unaccepted; accepting evidence now attempts integration)
 
 **Status: fixed 2026-08-31 (`d4c1467`, `2a53a27`), on the operator's decision of 2026-08-30 that
 approval is refused while evidence sits unaccepted.** The change is
@@ -9292,6 +9295,7 @@ It reaches that by the `conversation_id` correlation the two tables share by con
 than by constraint — `JobRun` and `Run` have no foreign key — and the correlation held.
 
 ## F123 (C, open) — a crashed firing reads `failed` forever, including after the Hub itself retried it and the work succeeded
+**Status:** open (decision needed jointly with F121 on what a JobRun row represents; three shapes proposed, none chosen)
 
 Same specimen, sixteen seconds later:
 
@@ -9785,6 +9789,7 @@ newest `JobRun` id before and after the firing. It answers from a row only if th
 and re-asks the guard only if it wrote none.
 
 ## F128 (B) — a loop runs on an agent its job does not name, whenever its own agent is busy
+**Status:** open (operator decision needed: loop-scoped free list vs. UI/API no longer implying `job.agent` is who runs the loop; reaffirmed 2026-09-14 and 2026-09-15, still unresolved)
 
 Driven live in `t_run_while_busy.py` (that file's own BAD lines are this discovery). Job
 `busy-run` was created with `agent: gamma`. gamma was put mid-turn on an unrelated errand. Pressing
@@ -10241,6 +10246,7 @@ Not proposed here — this wants a spec loop, and the clock ended this session b
 `hub/hub/api/v1/spec.py:921,942,974`.
 
 ## F133 (B) — the operator's own message erases the reason their agent is stalled
+**Status:** open (filed per decision D5: two defensible fixes -- mirror the selection logic in the endpoint, or refactor `schedule_agent` so both callers share one predicate; neither chosen)
 
 **Driven 2026-08-30, iteration 11, full-surface sweep. Reproduced live on the 8011 Hub against
 `proj-1964cdedffe2` (`drive-0830-sweep`), two Haiku agents, real turns.
@@ -10348,6 +10354,7 @@ AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 \
 Clears the budget and drains the queue in a `finally`. Costs two Haiku turns.
 
 ## F134 (B) — a charter with no content is injected as a bare heading, and the agent is reported fully configured
+**Status:** open (design gap, no chosen fix -- refuse empty charter content at the API, or render a no-charter-equivalent notice, or a third explicit statement)
 
 **Driven 2026-08-30, iteration 11, full-surface sweep. Row 4 into row 3, on the 8011 Hub,
 `proj-1964cdedffe2`.**
@@ -11002,6 +11009,7 @@ first and withdraws the entry that queues behind the running turn.
 ---
 
 ## F140 (A) — a flow's briefing tells the agent to "finish the task and stop", and never tells it, or the Hub, what finishing means
+**Status:** fixed 1b4c730 (2026-08-30), driven live 2026-08-31, RETIRED 2026-09-08
 
 **Status: FIXED `1b4c730` (2026-08-30), driven live 2026-08-31, RETIRED 2026-09-08.** Repair 1 —
 the briefing names the call — shipped as `_briefing_completion_lines` (`hub/hub/scheduler.py:2025`,
@@ -11306,6 +11314,7 @@ says which of these held rather than printing four thousand lines of JSON.
 ---
 
 ## F142 (A) — a task the operator marks finished can never be reviewed by its flow, and the stall blames the queue instead
+**Status:** fixed f3a778f (2026-08-31), driven and closed 2026-09-09 (night window, iteration 3)
 
 **Status: fixed `f3a778f` (2026-08-31), DRIVEN AND CLOSED 2026-09-09 (night window, iteration 3).**
 Both arms are now covered on a live Hub: the operator-completed leg reached a staffed review and a
@@ -12158,6 +12167,7 @@ whether the activity log should read either. That is the operator's call, not a 
 ---
 
 ## F150 — the crash-ordering seam drives clean: a dead-window follow-up is delayed by exactly one turn, not stranded
+**Status:** not a defect -- covered-and-correct record, driven 13/13 via `t_row19_crash_order.py`, no fix needed
 
 **Severity: none. This is a covered-and-correct record, not a defect.** It is written down because
 the seam has a docstring naming a failure it was built to end, and nothing had ever driven it with
@@ -12235,6 +12245,7 @@ and `drain_deferred_schedules`.
 ---
 
 ## F151 — running migrations at startup silences the Hub's logging, and uvicorn's, for the life of the process — FIXED
+**Status:** fixed 8e57949 (2026-08-30), verified by regression test and a live restart
 
 **Severity B. Found while trying to read a Hub log, which is the only way this shows up.**
 
@@ -12340,6 +12351,7 @@ sqlalchemy, alembic`; `hub/hub/main.py` `lifespan()` ordering (`init_db()` first
 process starts, four lines each.
 
 ## F152 (B) — every gate refusal reaches an agent as a Python dict repr, and the fix is three lines — FIXED
+**Status:** fixed 2a53a27 (2026-08-31), task 6.3 of approval-refuses-unaccepted-evidence; driven live in DRIVE-1 (see "F152 driven" below)
 
 **Fixed 2026-08-31 (`2a53a27`), as task 6.3 of `approval-refuses-unaccepted-evidence`.**
 `_readable_detail` returns `detail["message"]` where a dict carries a non-empty string one, and keeps
@@ -12420,6 +12432,7 @@ of `.claude/autonomous/2026-08-31-the-flow-lands-its-work-log.md`.
 ---
 
 ## F153 — **the flow lands its work.** Driven end to end, and it does
+**Status:** not a defect -- the DRIVE-1 record proving the flow lands its work end to end (F140/F142/F152 confirmed live, commits merged to master)
 
 **Not a defect. The record this whole run exists to produce.**
 
@@ -12493,6 +12506,7 @@ work. That contrast is the most useful thing this drive produced.
 ---
 
 ## F154 (A) — a review that ends without a verdict wedges the task forever, and the flow answers "nothing is wrong"
+**Status:** fixed 001a07d (2026-08-31), driven the same day, RETIRED 2026-09-08
 
 **Status: FIXED `001a07d` (2026-08-31), driven the same day, RETIRED 2026-09-08.** The repair
 shipped in `hub/hub/run_task_binding.py` and `hub/hub/scheduler.py`, and it was **driven, not merely
@@ -12591,6 +12605,7 @@ owns is what happens afterwards, and afterwards is F154.**
 ---
 
 ## F155 (A) — "Resolve the conflict on the branch, then approve" cannot be followed, by anybody
+**Status:** fixed 0373867 (2026-08-31), driven the same day, RETIRED 2026-09-08
 
 **Status: FIXED `0373867` (2026-08-31), driven the same day, RETIRED 2026-09-08.** The repair shipped
 in `hub/hub/requirement_gate.py`, and it was **driven, not merely tested**:
@@ -12912,6 +12927,7 @@ The inventory lines for `create_loop` and `create_flow` were updated by hand in 
 what this repository's guards exist to stop relying on.
 
 ## F161 (D) — a loop that declares its work needs no evidence still stalls asking for evidence
+**Status:** fixed, group 5 of approval-waits-for-the-turn-to-end (f468bf5, "a loop stops entering the review arm"); closed and driven, see line 13222 (`t_drive2_loop_lands.py`, 36/36)
 
 Found by `t_drive2_loop_lands.py` on 2026-08-31, and not by any assertion in it: it is what the two
 loops' `stall_reason` said after the drive had finished with them. Both loops — the one whose
@@ -12955,6 +12971,7 @@ agent's work at all, which is a design question about the loop/flow split rather
 sentence. Filed with the measurement so the decision is made on evidence.
 
 ## F162 (D) — a task reads `completed` before its work is committed, and the tip in that window is the base commit
+**Status:** fixed, groups 1-4 of approval-waits-for-the-turn-to-end (9f9f18d, 89429d5, c3c23a4); closed and driven, see line 13138 (`t_f162_window.py`, 17/17, GUARDED)
 
 Measured twice on 2026-08-31, on two consecutive runs of `t_drive2_loop_lands.py`, before the
 harness was taught to wait for the turn to end:
@@ -13040,6 +13057,7 @@ moved since the row was written (narrowest, and it leaves the operator holding a
 no reason to press).
 
 ## F163 (D) — landing a loop's work costs the operator three hand transitions, and two of them are refusals
+**Status:** fixed, group 6 of approval-waits-for-the-turn-to-end (80e5717, `POST /tasks/{id}/land`); closed and driven, see line 13208 (`t_drive2_loop_lands.py`, 36/36)
 
 Not a defect so much as the price of the feature, measured end to end for the first time now that a
 loop's approval merges anything at all. `t_drive2_loop_lands.py` drove every refusal:
@@ -13576,6 +13594,7 @@ Fresh project every run, never an existing one. The harness leaves the project a
 repository in place for inspection and prints both paths.
 
 ## F167's bound is now measured — the recovery DOES fire when one edge names an agent
+**Status:** open (note: bound measured by 2fc2322 -- narrows scope but ships no fix; still cited as open on 2026-09-16 at line 27973)
 
 Driven 2026-08-31 (iteration 13), against the trial Hub on 8011 running this branch. New harness:
 `scripts/drive/t_f167_agent_walked_edge.py`. **13/13 checks**, reproduced twice, two Haiku spawns
@@ -13686,6 +13705,7 @@ Not queued. No product code was touched to establish this.
 ---
 
 ## F165 addendum, measured 2026-08-31 (iteration 16) — the unknown branch has **two** spellings, and the merge path knows neither
+**Status:** open (note: measured/narrowed twice by a1b2270 and ccae08b; no fix commit exists; last confirmed open at line 13803)
 
 Read at the source, no code touched. This narrows F165's repair a second time; the finding, its
 severity (**B**) and its unqueued status are unchanged.
@@ -14604,6 +14624,7 @@ promised one filter would prevent it.
 ---
 
 ## F182 (C) — F175's refusal, restated at a second site, still naming nothing that would work
+**Status:** open
 
 `agents.py:630-634`:
 
@@ -14839,6 +14860,7 @@ row — which, given F183, is a row that may be one of several with the same nam
 `GET /charters/{id}` answers 404 within the same second. `row4-05-deleted-no-confirm.png`.
 
 ## F187 (B) — the charter form swallows its own refusal: the operator clicks Save and is told nothing
+**Status:** open
 
 **Severity:** B. F173's exact shape, at a third site.
 
@@ -16003,6 +16025,7 @@ what the Overview reads.
 truncation legs on a project with 100 tasks or fewer, and say so.
 
 ## F203 (C) — nothing can read a task's transition history
+**Status:** open
 
 `task_transitions` is append-only, written inside `apply_transition` for every accepted move, and
 carries `from_status`, `to_status`, `actor_kind`, `actor_agent`, `run_id`, `origin` and
@@ -16625,6 +16648,7 @@ permanently unacceptable. There is no withdraw or cancel route; the only exit is
 records a rejection that never happened as a judgement.
 
 ## F214 (D) — a retired requirement is reported `unserved`, which is the one thing it is not
+**Status:** open
 
 `GET /spec/requirements/{identifier}` computes coverage with `include_retired=True`
 (`hub/hub/api/v1/spec.py:770`) and returns whatever `_state` produces — for a retired requirement
@@ -16886,6 +16910,7 @@ evidence.
 Reproduction: `scripts/drive/t_sweep_row9c_agent_plane.py`, leg 3. Twice, same result.
 
 ## F218 (D) — the create response omits the review it wrote one line earlier
+**Status:** open
 
 `POST /spec/evidence` returns `_evidence_view(evidence, prints.get(evidence.id))` (`spec.py:833`) —
 two arguments, so `latest_review` defaults to `None`. But `requirement_evidence.record` has just
@@ -19363,6 +19388,7 @@ run failure) and this window does not write proposals.
 **Consequences.** Severity drops **B → C** — it costs suite time and credibility, not operator behaviour. The "Not proposed / needs the day window / the fix is a design question" note is superseded: the design question is a *harness* question (how to give the Hub suite per-session connections without weakening `assert_engine_is_disposable`), and the candidates measured so far are under F272. The one piece of genuinely product-side content that survives from either entry is filed as **F273**.
 
 ## F267 (B) — the model catalog is a compile-time literal behind a closed door, and it is already 28 days stale
+**Status:** open (note: `scripts/check_model_catalog.py`/tests added 2026-09-10, bb08dc4, as a staleness detector only -- the finding's own text confirms the underlying literal-catalog defect is unfixed)
 
 Found by the 2026-09-02 day window's D-1 drive
 (`scripts/drive/t_d1_catalog_is_the_only_door.py`, **33 passed / 3 failed**), driving the served
@@ -20223,6 +20249,7 @@ URL *without* an explicit pool is not a change at all — SQLAlchemy still picks
 
 
 ## F273 (B) — the one write whose purpose is to outlive the process is the one whose failure nothing surfaces
+**Status:** open
 
 Split out of **F272** on 2026-09-03 (night window, iteration 8), because F272 itself turned out to be a test-harness artefact and this part of it is not. Nothing here has been observed in a drive; it is read from the code, and this entry says so rather than claiming a sighting.
 
@@ -21130,6 +21157,7 @@ already there; nothing pointed out that the sentence covered both. Worth a sweep
 shipped requirements phrased around "the response" are implemented on the operator plane only?
 
 ## F281 (B) - a shell command's writes are never recorded, in any posture, and the boundary that refuses some of them is the only thing that ever sees one
+**Status:** open (filed as explicitly out-of-scope for the archived a-write-outside-the-workspace-is-recorded change, 46b8e3e; not fixed by it)
 
 **Found 2026-09-04 (night N-21)** doing task 8.1 of
 `a-write-outside-the-workspace-is-recorded`. **Filed, not fixed** - it is named out of scope in that
@@ -21214,6 +21242,7 @@ a real hole and it is unrelated to symlinks; it is recorded here so a later swee
 rediscover it and file it as the same thing.
 
 ## F283 (B) - the Permissions pill sits on "Edit files" while the run it describes is spawned under "Workspace only"
+**Status:** open
 
 **Found 2026-09-04 (night N-21)** while documenting the postures (task 7.1). **Filed, not fixed** -
 it is outside `a-write-outside-the-workspace-is-recorded`, whose scope is observing writes, not
