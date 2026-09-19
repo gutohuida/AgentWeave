@@ -39,6 +39,19 @@ condition is one loop. This file outranks the playbook in either direction, and 
 read this** — check `APPROVALS.md` for a token naming it, and if there is none, run item 1 alone and
 spend the rest of the window draining.
 
+**Resolved 2026-09-19 evening: the token exists, so both items run.** `APPROVALS.md`'s
+`## 2026-09-19` section now carries
+`- APPROVED  a-loop-staffs-the-agent-it-names   groups 0, 1, 2, 3, 4, 6, 7 and 8`, written by the
+operator after a second adversarial review returned DO NOT APPROVE and R4 (`96fed13`) applied all
+eight of its blocking findings. **Verify that row is still present rather than trusting this
+paragraph** — the row is the contract, and this paragraph is a note about it.
+
+**That change is also third in tonight's `ORDER:`.** If the 22:55 window builds it, §1-§4 land
+before you compose tomorrow's queue, and item 2's "shares no file with item 1" check still holds —
+F388 is `hub/hub/config.py`, which this change does not touch. **§5 of it is deliberately not
+approved** and is a separate, short follow-up; do not fold §5 into either of today's loops without
+asking.
+
 Do not spend a slot deciding which change to take: both are decided, below.
 
 ### Item 1 — `F185` + `F181` as one change

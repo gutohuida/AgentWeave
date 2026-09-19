@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-19 19:07 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>96fed13</b> · clean<br>
+      generated <b>2026-09-19 19:14 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>a1c4aa0</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -253,7 +253,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="fig"><b>213</b><span>open items — 210 findings + 3 requests</span></div>
     <div class="fig" data-t="op"><b>7</b><span>you asked for</span></div>
     <div class="fig"><b>16</b><span>have a proposal, so the night can build them</span></div>
-    <div class="fig" data-t="op"><b>1</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs one spec loop</span></div>
+    <div class="fig" data-t="op"><b>0</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs two spec loops</span></div>
     <div class="fig"><b>3</b><span>unbuilt changes in total (the drain)</span></div>
   </div>
 
@@ -730,13 +730,14 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
         <p class="when">reads spec-queue/APPROVALS.md § 2026-09-19</p>
         <div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>a-refused-capability-reaches-the-operator</code><span class="apr-note">tasks 0.3, 0.4, 0.5 and 4.12 only; §1 is gated on F386</span></div>
 <div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>an-unstaffed-review-names-its-holders</code><span class="apr-note">group 1 ONLY (tasks 1.1-1.4); groups 2, 5, 6 are not approved</span></div>
-        <div class="directive"><span class="tok">ORDER</span><code>a-refused-capability-reaches-the-operator tasks 0.3, 0.4, 0.5 and 4.12 ONLY, then an-unstaffed-review-names-its-holders tasks 1.1-1.4 ONLY</code></div>
+<div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>a-loop-staffs-the-agent-it-names</code><span class="apr-note">groups 0, 1, 2, 3, 4, 6, 7 and 8; §5 is NOT approved</span></div>
+        <div class="directive"><span class="tok">ORDER</span><code>a-refused-capability-reaches-the-operator tasks 0.3, 0.4, 0.5 and 4.12 ONLY, then an-unstaffed-review-names-its-holders tasks 1.1-1.4 ONLY, then a-loop-staffs-the-agent-it-names groups 0, 1, 2, 3, 4, 6, 7, 8 -- NOT group 5</code></div>
         
       </div>
       <div class="panel">
         <h3>Tomorrow · FILL proposes</h3>
         <p class="when">reads spec-queue/DIRECTION.md § 2026-09-20</p>
-        <p style="font-size:13px;margin:0 0 10px">Drain is <b>3</b>, so the day runs <b>one spec loop</b>. A dated section overrides that shape in either direction.</p>
+        <p style="font-size:13px;margin:0 0 10px">Drain is <b>3</b>, so the day runs <b>two spec loops</b>. A dated section overrides that shape in either direction.</p>
         <p class="empty">Read the section itself before composing — it is the only operator channel the day window has.</p>
       </div>
     </div>
@@ -758,14 +759,14 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">a-loop-staffs-the-agent-it-names</code>
-              <span class="chg-badge want">waiting on you</span>
+              <span class="chg-badge ok">approved — waiting on a night</span>
               <p class="chg-facts">37 unticked · 1 delta spec</p>
               
             </div>
             <div class="chg-links"><a href="../openspec/changes/a-loop-staffs-the-agent-it-names/proposal.md" target="_blank" rel="noopener">proposal.md</a> · <a href="../openspec/changes/a-loop-staffs-the-agent-it-names/design.md" target="_blank" rel="noopener">design.md</a> · <a href="../openspec/changes/a-loop-staffs-the-agent-it-names/tasks.md" target="_blank" rel="noopener">tasks.md</a></div>
           </div>
           
-          <details class="chg-read" open><summary>Read the proposal</summary><div class="md-body"><p><strong>R4-applied, 2026-09-19 evening.</strong> A second adversarial pass returned DO NOT APPROVE with eight blocking findings; six were re-verified at the source before being accepted and all six held. Three of them were this change&#x27;s own artifacts contradicting each other — see <code>design.md</code>&#x27;s banner before opening another round. <strong>Not approved; no <code>APPROVALS.md</code> token names this change.</strong></p>
+          <details class="chg-read" open><summary>Read the proposal</summary><div class="md-body"><p><strong>R4-applied, 2026-09-19 evening.</strong> A second adversarial pass returned DO NOT APPROVE with eight blocking findings; six were re-verified at the source before being accepted and all six held. Three of them were this change&#x27;s own artifacts contradicting each other — see <code>design.md</code>&#x27;s banner before opening another round. <strong>APPROVED 2026-09-19 evening by the operator, all groups except §5</strong> (<code>spec-queue/APPROVALS.md</code>, <code>## 2026-09-19</code>). §5 — the two operator-visible sentences — is explicitly not approved: task 5.3 is tied to a MODIFIED requirement R4 added the same evening and no round has re-derived, and design Open Question 2 records that the sentence task 5.4 asserts has never been read. <strong>Do not build §5.</strong></p>
 <h5>Why</h5>
 <p>A loop bound to one agent is run by a different one whenever its own agent is busy. Driven live (<code>scripts/drive/t_run_while_busy.py</code>, finding <strong>F128</strong>): job <code>busy-run</code> was created with <code>agent: gamma</code>, gamma was put mid-turn on an unrelated errand, pressing Run answered <strong>200</strong>, and the work went to <strong>alpha</strong> — <code>conv-a51b18211d43</code>, agent <code>alpha</code>, origin <code>job</code>, and the queued task&#x27;s <code>assignee</code> read <code>alpha</code>.</p>
 <p><strong>An agent is not only a name.</strong> <code>charter_id</code> (<code>hub/hub/db/models.py:219</code>), <code>runner_id</code> (<code>:216</code>) and the three authority flags <code>can_read_checkpoints</code> / <code>can_recall</code> / <code>can_accept_evidence</code> (<code>:254-268</code>) all live on the <code>Agent</code> row. So a substitution silently swaps the behaviour text, the runner, <strong>and the permissions the operator selected that agent for</strong>. Nothing in the job form, the loop list or the API says <code>job.agent</code> is only a default.</p>
@@ -1685,9 +1686,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-19T19:07:39+01:00",
+ "generated": "2026-09-19T19:14:52+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "96fed13",
+ "sha": "a1c4aa0",
  "open": 210,
  "items": 213,
  "requests": 3,
@@ -1695,7 +1696,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
  "retired": 12,
  "filed": 388,
  "drain": 3,
- "awaiting": 1,
+ "awaiting": 0,
  "sev_A": 8,
  "sev_B": 94,
  "sev_C": 90,

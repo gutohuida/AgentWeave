@@ -1,7 +1,7 @@
 **R4-applied, 2026-09-19 evening.** A second adversarial pass returned DO NOT APPROVE with eight
 blocking findings; six were re-verified at the source before being accepted and all six held. Three
 of them were this change's own artifacts contradicting each other — see `design.md`'s banner before
-opening another round. **Not approved; no `APPROVALS.md` token names this change.**
+opening another round. **APPROVED 2026-09-19 evening by the operator, all groups except §5** (`spec-queue/APPROVALS.md`, `## 2026-09-19`). §5 — the two operator-visible sentences — is explicitly not approved: task 5.3 is tied to a MODIFIED requirement R4 added the same evening and no round has re-derived, and design Open Question 2 records that the sentence task 5.4 asserts has never been read. **Do not build §5.**
 
 ## Why
 

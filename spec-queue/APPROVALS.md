@@ -48,7 +48,7 @@ review ran.
 - APPROVED  a-refused-capability-reaches-the-operator   tasks 0.3, 0.4, 0.5 and 4.12 only; §1 is gated on F386
 
 ```
-ORDER: a-refused-capability-reaches-the-operator tasks 0.3, 0.4, 0.5 and 4.12 ONLY, then an-unstaffed-review-names-its-holders tasks 1.1-1.4 ONLY
+ORDER: a-refused-capability-reaches-the-operator tasks 0.3, 0.4, 0.5 and 4.12 ONLY, then an-unstaffed-review-names-its-holders tasks 1.1-1.4 ONLY, then a-loop-staffs-the-agent-it-names groups 0, 1, 2, 3, 4, 6, 7, 8 -- NOT group 5
 ```
 
 **The `- APPROVED` row above was missing until 2026-09-19 16:0x** — the approval was written only
@@ -148,6 +148,74 @@ re-derivation round against `F352-free`'s decided option (f) before it can build
 FIX work. The merge gate's cadence is undecided for a fourth day.
 
 ---
+
+### APPROVED — `a-loop-staffs-the-agent-it-names`, all groups except §5
+
+**The operator approved this on 2026-09-19 evening**, in an interactive session, after a **second**
+adversarial Opus review — run because R1 and R3 were written by the same session, and
+`DEAD-ENDS.md` records that *"a round you wrote yourself is not a check"*. It returned
+**DO NOT APPROVE** with eight blocking findings; six were re-verified at the source before being
+accepted and all six held. **R4** (`96fed13`) applied every one. `openspec validate --strict`
+passes.
+
+- APPROVED  a-loop-staffs-the-agent-it-names   groups 0, 1, 2, 3, 4, 6, 7 and 8; §5 is NOT approved
+
+**It is third in tonight's `ORDER:`, deliberately.** The two changes ahead of it are small, scoped
+partials. Take this one only after both are done and green; if the night runs short, this is the one
+to leave.
+
+**Why §5 is held, and a window must not take it anyway.** §5 changes the two sentences the operator
+actually reads — `run_job`'s 409 and the loop board's stall reason. Two things about it are hours
+old and unreviewed:
+
+- **Task 5.3 is now tied to a MODIFIED requirement written this evening.** R4-2 found that
+  `agent-loops:1471` (*"Pressing Run on a loop that declines names why it declined"*) requires the
+  answer to say *"which of those **two** held"*, while 5.3 mandates a third clause. The delta gained
+  that requirement in R4 and **no round has yet re-derived it**.
+- **Design Open Question 2 is open by R4's own admission**: `_stall_reason_from_walk`'s exact
+  current sentence has never been read, and D4 asserts which string `jobs.py:355` replaces. Task 5.4
+  asserts a sentence nobody has verified is the one there today.
+
+So §5 is one short follow-up once that function has been read — not night work while its own
+requirement is unrounded.
+
+**What is in scope tonight.**
+
+- **§1** — `_agents_a_loop_may_staff(session, loop)` in `hub/hub/scheduler.py`: call the existing
+  availability read and **filter its result**. For a documentless loop the pool is **empty**, not
+  `{job.agent}` (D2 — the job's own agent reaches work through `decide_firing`'s own branch at
+  `:1601-1618`, which is deliberately not tested against the pool). No `default_agent` parameter
+  (R2-8). **Locate the call sites by `grep -n "await _agents_that_are_free("`, never by line
+  number** — they are `:348`, `:1263`, `:1444`, and the numbers in these documents have been wrong
+  three times.
+- **§2, §3** — staffing is not resumption (D6); `_loop_flow_busy_reason` collapses to
+  `_loop_agent_busy_reason` for a documentless loop (D3).
+- **§4** — the reviewer-recovery guards. **Read task 4.1's R4-6 note first:** its *"No existing test
+  covers this"* was false. `test_a_loops_wedged_review_still_recovers`
+  (`hub/tests/test_a_loop_does_not_staff_its_own_review.py:328`, `declares_document=False`) already
+  covers it and is **green today**. Run the mutation against that test; write a new one only if it
+  does not already fail.
+- **§6, §7, §8** — the regression set, the drive, and closing F128 out.
+
+**The baseline is the point of the night, not a formality.** Measured at `96fed13` with no product
+code changed:
+`py -3.11 -m pytest hub/tests/test_a_loop_does_not_staff_its_own_review.py hub/tests/test_loop_busy_guard.py hub/tests/test_flow_width.py hub/tests/test_actor_aware_claimability.py -q`
+→ **54 passed, 20.83s.** Run it before starting and again at the end.
+
+**Triage a new red by the fixture, never by the filename** (R4-7). A failing test whose loop sets
+`spec_document_id` is a **flow** regression and is this change's fault by default — flows do not
+change. R3's list of "documentless" files was wrong for four of nine, and omitted
+`test_loop_busy_guard.py`, which is the dedicated regression file for the function §3 changes.
+
+**One thing to tell the operator in the morning, because it will look like a regression.**
+`hub/ui/src/components/spec/loopCounts.ts:23` buckets any loop carrying a `stall_reason` as
+`'stalled'`. After this, every documentless loop pinned to a busy agent gains one, so the running
+count falls and the stalled count rises on the board. **No UI code changes and every sentence shown
+is true** — the loop genuinely is not proceeding. That is the fix working.
+
+**Do not build §5.** Do not edit `hub/hub/api/v1/jobs.py`'s 409 `why` clause and do not touch the
+board's stall sentence. If §1-§4 land early, spend the remainder on §6's full suite and §7's drive,
+which are the two things four rounds of reading cannot substitute for.
 
 ## 2026-09-18
 
