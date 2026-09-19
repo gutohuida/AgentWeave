@@ -29721,3 +29721,105 @@ one-line change with a different meaning:
 would have to clear). `hub/ui/src/store/configStore.ts:17-19` already records that an older
 persisted `theme` key from the removed 5-theme picker is deliberately ignored; that is a different
 key and not the cause here.
+
+
+## F386 (B) — the Overview question card tells the operator an agent "is waiting" for questions nobody is waiting on, and keeps showing declined ones
+
+**Status:** open. Filed 2026-09-19 by the adversarial Opus review of
+`a-refused-capability-reaches-the-operator` (the review the operator commissioned before approving
+it); confirmed against the code by the session that commissioned it.
+**Source:** review
+**Theme:** Operator surfaces
+
+**What happened.** `QuestionInterruptCard` is the amber card on a project's Overview tab, and it is
+the only route from the dashboard to an unanswered question (see `F387`). It states, in its heading
+and its accessible label, that the asking agent **is waiting** — for every question it renders,
+unconditionally.
+
+**Where.**
+- `hub/ui/src/components/questions/QuestionInterruptCard.tsx:35` — `{first.from_agent} is waiting`.
+- `:24` — `aria-label={`${first.from_agent} is waiting for an answer`}`, so a screen reader gets the
+  same claim.
+- The card is fed by `hub/ui/src/components/overview/OverviewPage.tsx:80`, `useQuestions(false)` →
+  `GET /questions?answered=false`, and `hub/hub/api/v1/questions.py:315-318` filters on `answered`
+  **only**.
+
+**Two defects, one file, both with the data already in hand.**
+
+1. **`blocking` is ignored.** `Question.blocking` exists on the model
+   (`hub/hub/db/models.py:936`) and on the wire type the card consumes
+   (`hub/ui/src/api/questions.ts:16`). A non-blocking question is by construction one whose asker
+   did **not** wait — `_asker_still_waiting` short-circuits on it (`questions.py:71-75`) — so the
+   card states the opposite of the field it is holding. Today every `ask_user` call is blocking, so
+   the defect is latent rather than firing; it becomes live the moment any non-blocking question is
+   written, which is exactly what `a-refused-capability-reaches-the-operator` proposes to do.
+2. **`declined` is ignored.** `Question.declined` is deliberately a separate column from `answered`
+   (`models.py:987-990`, and the change `2026-08-11-declining-a-question` D1 that made it so:
+   *"Collapsing the two would make every reader of `answered` treat a decline as an answer"*).
+   `list_questions` does not filter it and neither does the card, so a question the operator
+   explicitly closed without answering keeps rendering as an agent waiting on them, indefinitely.
+   The card's own dismiss control is `useState` (`QuestionInterruptCard.tsx:15`) and so does not
+   survive a reload.
+
+**Why this is filed separately from the change that found it.** The review found it while checking
+`a-refused-capability-reaches-the-operator`'s claim that its record would reach the operator without
+any surface reporting a false wait — that change's own ADDED requirement
+(`specs/agent-capability-plane/spec.md:17-20`) forbids exactly this sentence. But the defect is in
+shipped code, predates the change, fires for declined questions **today** with no new code at all,
+and lives in `hub/ui/src/components/`, which that change's blast-radius claim
+(`proposal.md:123,125`) says it does not touch. It outlives whatever the operator decides about
+that change.
+
+**Fix shape (not decided).** Both halves read a field the card already receives. The copy needs a
+non-waiting form for `blocking === false` — the review's suggestion was *"<agent> asked about this
+project"* versus *"<agent> is waiting"* — and declined questions need filtering, at the card, at
+`list_questions`, or both. Whether `GET /questions?answered=false` should exclude declined rows for
+**every** caller is the one real decision here: `hub/hub/api/v1/questions.py:315-318` is shared, and
+other readers may be relying on a decline still appearing.
+
+**Related:** `F387` (same card, ordering), `F381` (the same class of defect in the conversation
+tray), `a-refused-capability-reaches-the-operator` (the change whose review found it).
+
+
+## F387 (B) — the Overview question card shows one question, oldest first, so a non-urgent question hides a blocking one
+
+**Status:** open. Filed 2026-09-19 by the adversarial Opus review of
+`a-refused-capability-reaches-the-operator`; confirmed against the code by the session that
+commissioned it.
+**Source:** review
+**Theme:** Operator surfaces
+
+**What happened.** The amber card on Overview renders exactly one question — the first of the list
+it is given — and the list arrives oldest-first, with no regard for whether anything is blocked.
+So the question most likely to be costing the operator time is the one most likely to be hidden.
+
+**Where.**
+- `hub/ui/src/components/questions/QuestionInterruptCard.tsx:16-18` — `visible[0]`; everything after
+  it is rendered only as a count, not as a row.
+- `hub/hub/api/v1/questions.py:318` — `list_questions` orders by `created_at` ascending.
+- No sort is applied between the two: `hub/ui/src/components/overview/OverviewPage.tsx:80` passes
+  the response through.
+
+**The failure.** An agent genuinely parked on a blocking question — one that has a task parked
+behind it (`Question.blocked_task_id`, `models.py:978`) — sits behind any older unanswered
+question, including one nobody is waiting on. The operator's landing page shows the wrong one, and
+the count beside it does not say that a blocking question is among the rest.
+
+**Why it is worth filing now.** It is latent today, in the same way `F386`'s first half is: every
+current question is blocking, so oldest-first is merely arbitrary rather than harmful. Introducing
+any non-blocking question makes it harmful, and
+`a-refused-capability-reaches-the-operator` proposes to introduce a durable, deliberately
+non-blocking, deliberately long-lived one — whose whole purpose is to be waiting when the operator
+returns. That record would outlive and therefore outrank every blocking question asked after it.
+
+**Fix shape (not decided).** The deterministic floor is blocking first, then newest — both fields
+are already on the wire type (`hub/ui/src/api/questions.ts:16,30`), so it is a sort, not a schema
+change. Whether it belongs in the card or in `list_questions`' `order_by` is the open question;
+the card is the narrower blast radius, the route fixes every reader at once.
+
+**The operator's own framing, 2026-09-19:** they like the card and want the ordering solved either
+by newest-first or by `R5`'s manager agent deciding the order. Recorded here so the fix is not
+chosen without it — but see `R5`'s note that a nondeterministic orderer must sit **on top of** a
+correct deterministic floor, not replace it, since its failure mode is this exact defect.
+
+**Related:** `F386` (same card, copy and declined filtering), `F381`, `R5`.

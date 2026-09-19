@@ -107,3 +107,49 @@ Not yet argued, and each of these changes what the button is:
 Related: `.claude/reference/hubs.md` documents the manual profile-swap procedure this would
 replace for trial use; `F385` is the other half of the same session's observation that the app's
 own state does not survive a close and reopen.
+
+
+## R5 — A manager agent the Hub runs behind the scenes
+**Asked:** 2026-09-19
+**Theme:** Agents & runners
+**Ready:** thinking
+
+"Just as we have the adhoc run of an agent to change the name of a thread we could have an agent
+that is executed adhoc making all sorts of decisions for the project behind the scene. It has
+special permission being able to see everything in the project but it's only invoked by the hub,
+never by the user. It does all sorts of things in the project for example: Deciding which message
+should hit the user first and changing the order."
+
+**Annotated deliberately, not specced.** The operator's framing is that they want it *touching
+everything*, which is the opposite of the self-contained slice the trial takes one at a time. This
+row exists so the idea is revisitable, not so a window picks it up. Do not open a change directory
+for this without the operator saying so.
+
+**The precedent already exists and is the right one to read first.**
+`hub/hub/conversation_titles.py` is a Hub-invoked, one-shot, never-user-invoked agent spawn, and
+its module docstring has already settled two constraints a manager would inherit:
+
+- **It records no `Run` row, deliberately.** `turn_scheduler.schedule_agent` and
+  `trigger_agent_directly` both gate on `Run.project_id == p, Run.agent == a, Run.status ==
+  "running"`, so a background spawn under an agent's own name makes that agent look busy and
+  stalls its queue. The titler is recorded as an event instead.
+- **"Truncation is the floor."** A conversation is named the moment its first message lands, so
+  the model-generated title is an upgrade on a deterministic result that is already correct.
+  Everything in that module failing changes nothing structural — which is precisely what lets it
+  be best-effort.
+
+**That second rule is the one that matters most for the ordering example.** A model deciding what
+the operator sees first is nondeterministic, and its failure mode is burying something urgent —
+which is the defect it would be built to fix (`F387`). So the deterministic rule stays the floor
+(blocking first, then newest) and the manager is an upgrade on top of it. A manager that *is* the
+ordering, rather than an improvement to it, can fail into exactly the state it exists to prevent.
+
+**Open, and each changes what this is:** what else "all sorts of decisions" covers, and whether
+those are advisory (it reorders, annotates, suggests) or authoritative (it closes, assigns,
+answers); what it costs per firing and what triggers one, given the flow already spends 58% of its
+turns on coordination (`openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md`);
+what "sees everything in the project" means against the workspace and permission boundaries; and
+how the operator inspects or overrides a decision it made, since a background agent whose
+reasoning is invisible is the hardest kind to trust.
+
+**Related:** `F387` (the ordering defect that prompted the example), `R4`.
