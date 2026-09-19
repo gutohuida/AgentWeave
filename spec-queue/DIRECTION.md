@@ -30,10 +30,16 @@ operator, or by a DECIDE session on the operator's behalf.
 **Written 2026-09-19 afternoon by an interactive DECIDE session, at the operator's instruction.**
 No `DAY WINDOW` line — the window is the standard 09:00–17:00, armed at 08:55.
 
-**You get two spec loops today, and both subjects are named here.** The drain gate now counts
-changes waiting on the *operator*, not unbuilt ones, and that count is **0** — the two unbuilt
-changes are both approved and waiting on a night, not on a decision. Do not spend a slot deciding
-which change to take: it is decided, twice, below.
+**This section names two spec loops, and that is a deliberate override of the gate — read this
+paragraph before acting on it.** When it was written the count of changes waiting on the operator
+was **0**, which is the gate's two-loop condition. Later the same afternoon
+`a-loop-staffs-the-agent-it-names` (F128) was proposed and the count became **1**, whose gate
+condition is one loop. This file outranks the playbook in either direction, and the override stands:
+**item 1 is the loop, item 2 runs only if the F128 change has cleared the operator by the time you
+read this** — check `APPROVALS.md` for a token naming it, and if there is none, run item 1 alone and
+spend the rest of the window draining.
+
+Do not spend a slot deciding which change to take: both are decided, below.
 
 ### Item 1 — `F185` + `F181` as one change
 
