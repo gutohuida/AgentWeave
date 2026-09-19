@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-19 15:08 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>7d805df</b> · uncommitted changes present<br>
+      generated <b>2026-09-19 15:24 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>48215cb</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -253,7 +253,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="fig"><b>211</b><span>open items — 208 findings + 3 requests</span></div>
     <div class="fig" data-t="op"><b>7</b><span>you asked for</span></div>
     <div class="fig"><b>15</b><span>have a proposal, so the night can build them</span></div>
-    <div class="fig" data-t="op"><b>1</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs one spec loop</span></div>
+    <div class="fig" data-t="op"><b>0</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs two spec loops</span></div>
     <div class="fig"><b>2</b><span>unbuilt changes in total (the drain)</span></div>
   </div>
 
@@ -725,13 +725,14 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
         <h3>Tonight · FIX builds</h3>
         <p class="when">reads spec-queue/APPROVALS.md § 2026-09-19</p>
         <div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>a-refused-capability-reaches-the-operator</code><span class="apr-note">tasks 0.3, 0.4, 0.5 and 4.12 only; §1 is gated on F386</span></div>
-        <div class="directive"><span class="tok">ORDER</span><code>a-refused-capability-reaches-the-operator, tasks 0.3, 0.4, 0.5 and 4.12 ONLY</code></div>
+<div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>an-unstaffed-review-names-its-holders</code><span class="apr-note">group 1 ONLY (tasks 1.1-1.4); groups 2, 5, 6 are not approved</span></div>
+        <div class="directive"><span class="tok">ORDER</span><code>a-refused-capability-reaches-the-operator tasks 0.3, 0.4, 0.5 and 4.12 ONLY, then an-unstaffed-review-names-its-holders tasks 1.1-1.4 ONLY</code></div>
         
       </div>
       <div class="panel">
         <h3>Tomorrow · FILL proposes</h3>
         <p class="when">reads spec-queue/DIRECTION.md § 2026-09-18</p>
-        <p style="font-size:13px;margin:0 0 10px">Drain is <b>2</b>, so the day runs <b>one spec loop</b>. A dated section overrides that shape in either direction.</p>
+        <p style="font-size:13px;margin:0 0 10px">Drain is <b>2</b>, so the day runs <b>two spec loops</b>. A dated section overrides that shape in either direction.</p>
         <p class="empty">Read the section itself before composing — it is the only operator channel the day window has.</p>
       </div>
     </div>
@@ -971,7 +972,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">an-unstaffed-review-names-its-holders</code>
-              <span class="chg-badge want">waiting on you</span>
+              <span class="chg-badge ok">approved — waiting on a night</span>
               <p class="chg-facts">29 unticked · 6 rounds · 1 delta spec</p>
               
             </div>
@@ -1579,9 +1580,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-19T15:08:50+01:00",
+ "generated": "2026-09-19T15:24:39+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "7d805df",
+ "sha": "48215cb",
  "open": 208,
  "items": 211,
  "requests": 3,
@@ -1589,7 +1590,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
  "retired": 12,
  "filed": 386,
  "drain": 2,
- "awaiting": 1,
+ "awaiting": 0,
  "sev_A": 8,
  "sev_B": 90,
  "sev_C": 87,

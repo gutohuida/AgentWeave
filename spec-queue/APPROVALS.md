@@ -48,7 +48,7 @@ review ran.
 - APPROVED  a-refused-capability-reaches-the-operator   tasks 0.3, 0.4, 0.5 and 4.12 only; §1 is gated on F386
 
 ```
-ORDER: a-refused-capability-reaches-the-operator, tasks 0.3, 0.4, 0.5 and 4.12 ONLY
+ORDER: a-refused-capability-reaches-the-operator tasks 0.3, 0.4, 0.5 and 4.12 ONLY, then an-unstaffed-review-names-its-holders tasks 1.1-1.4 ONLY
 ```
 
 **The `- APPROVED` row above was missing until 2026-09-19 16:0x** — the approval was written only
@@ -83,6 +83,53 @@ Additive, nullable, with no consumer yet — so it cannot change behaviour, and 
 larger build. **`0104` runs against the operator's live database on their next restart.** That is
 the one thing here they should know happened; it adds a column and an index and touches no existing
 row.
+
+### APPROVED — `an-unstaffed-review-names-its-holders`, group 1 only
+
+**The operator approved this on 2026-09-19 afternoon**, in an interactive session, after the
+adversarial Opus review their standing process requires returned **DO NOT APPROVE** and **R6**
+applied every finding from it. R6 is commit `7d805df`; the measurements are `48215cb`;
+`openspec validate --strict` passes.
+
+- APPROVED  an-unstaffed-review-names-its-holders   group 1 ONLY (tasks 1.1-1.4); groups 2, 5, 6 are not approved
+
+**Why group 1 only, and this is the part a window must not exceed.** Three consecutive passes over
+this change each found something the previous one missed, and all three were the same shape — a
+decision that read correctly while reverting shipped behaviour. R5 found that D1 would revert
+`4b59ee0`. R6 found it would *also* revert `a-spent-allowance-holds-the-queue`, via `agents_held`
+ORed into the running set in the very expression R5 quoted. Measuring the budget then found a third
+defect (`R6-8`, a `.;` in the operator's own sentence) that five rounds had specified past. That
+pattern has not broken yet, so the night builds the part whose correctness its own tests can prove
+and stops.
+
+**What is in scope tonight:**
+
+- **1.1** — `AgentAvailability` and `Holding` in `hub/hub/scheduler.py`, one record per
+  non-archived agent in name order, carrying `has_runner`, `running`, **`held`**, and holdings as
+  `Holding(task_id, status, loop_id, reachable)`. `LIVE_STATUSES` is the **band**, not the test;
+  `reachable` is `loop_id in live or (task_id, assignee) in queued`; `held` is `agents_held(...)`.
+- **1.2** — re-express `_agents_that_are_free` as the projection
+  `has_runner and not running and not held and not any(h.reachable for h in holdings)`, keeping its
+  docstring's reachability **and** D6 paragraphs. Correct the three caller citations
+  (`:348`, `:1262`, `:1444` — `:298`/`:1137`/`:1298` are stale).
+- **1.3 / 1.4** — the record test with its **three** mutations (drop `Task.status`; force
+  `reachable` true; drop `held`), and the one-read test.
+
+**This group changes no text the operator ever sees.** It is a refactor whose whole content is
+*"compute the same answer, in a shape rung 3 can also read"* — so its correctness is entirely a
+question of whether the pool's membership is unchanged, which is what its mutations test.
+
+**The regression guard is the point of the night, not a formality.** Run
+`py -3.11 -m pytest hub/tests/test_a_held_agent_is_busy.py hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q`
+before starting and again at the end. **Measured green today at `7d805df`: 55 passed, 36.21s.** If
+`test_the_loopengine_shape_staffs_its_review` or `test_a_held_agent_is_not_free` goes red, the
+projection has reverted a shipped change — **fix the projection, never the test.**
+
+**Do not build group 2 tonight.** It carries the five-clause sentence, the fit algorithm (still
+unwritten, and the only remaining unmeasured piece), and updates to three shipped tests including
+an exact string equality. It also carries an ordering constraint — 2.14 before 2.3 — whose
+violation produces an `AssertionError` inside the scheduler. None of that is night work while the
+find-rate on this change is still one defect per pass.
 
 **`F386` goes to the day window of 2026-09-20 as a no-spec carve-out repair**, the same shape as
 F384 on 2026-09-19. It is a finding with no proposal, which this playbook's own source-2 rule says
