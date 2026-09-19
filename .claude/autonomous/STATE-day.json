@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "f9db321",
     "stop_at": "2026-09-19T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-19-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-2",
-    "next_action": "D-2: repairs -- no-spec carve-out. Fix F384 (scripts/drive/FINDINGS.md): hub/hub/spec_payload.py:241-245's validate_payload takes only exc.errors()[0] from pydantic's ValidationError, discarding every other simultaneous field error -- verified independently (bare SpecPayload.model_validate() surfaces all missing fields in one pass; validate_payload's PayloadError names only the first). No spec/API surface change, just the error message's content, so it fits D-2's no-spec carve-out. Fix: report every error from exc.errors(), not just the first (e.g. join field+msg pairs, or return a list similar to the existing 'blocking' shape). Update or add a unit test in hub/tests/ that submits a payload missing multiple fields on one object (e.g. acceptance_criteria with 2+ missing keys) and asserts the response names more than one of them. Run py -3.11 -m pytest hub/tests/ -q (never bare python). Run ruff/black/mypy per CLAUDE.md's CI-matching quality commands. Then drive it live (spin up a throwaway Hub+project the same way iteration 2 did, or reuse scripts/drive/aw.py against a fresh drive Hub) to confirm an agent submitting a badly-shaped acceptance_criteria now sees every missing field in one refusal, not one per retry. Set F384's **Status:** line to 'fixed <sha>' only after the live drive confirms it, not on the strength of the unit test alone. If the fix turns out to need more than the error message (e.g. touching submit_spec_document's contract), stop and queue it for tomorrow's spec loop instead of finishing it here.",
+    "current": "D-3",
+    "next_action": "D-3: repairs -- FINDINGS.md status sweep. 29 of 382 findings in scripts/drive/FINDINGS.md carry no **Status:** line (see spec-queue/BACKLOG.html's ledger warnings for the current id list -- regenerate with py -3.11 scripts/backlog_page.py --check first, since D-2 just changed the counts). Triage a batch (aim for most or all 29, but stop honestly rather than rushing) against git log/git blame on the referenced files and already-shipped changes under openspec/changes/archive/ -- for each, decide: fixed <sha> (only if you can point at the actual commit that did it), open (still unaddressed), or open with a note (can't verify either way, say why). Do not invent a fix that was not actually done. Also worth a glance while in the file: the 24 findings that read 'open' but name a commit sha (BACKLOG.html flags these too) -- if a quick git show <sha> shows the fix is real, correct the Status line while you're there, but do not let this expand D-3 into a full re-audit; the 29 status-less ones are the primary target. Regenerate spec-queue/BACKLOG.html afterward and commit both files together. Stay off proj-5e960453/proj-18e5d4e0 if any triage needs live verification.",
     "queue": [
         {
             "id": "D-1",
@@ -23,9 +23,9 @@
         },
         {
             "id": "D-2",
-            "status": "open",
+            "status": "done",
             "title": "Repairs -- no-spec carve-out",
-            "detail": "Pick one existing finding with a clean repro, no openspec/specs requirement touched, no migration/API/schema change. Fix it, drive it before closing (not just tests), run CI's lint set, mutation-check any added test, set Status: fixed <sha>. If it turns out to need a spec, stop and queue it for tomorrow's spec loop instead of finishing."
+            "detail": "Fixed F384 (hub/hub/spec_payload.py:241-246, commit 3f8887f): validate_payload now joins every pydantic ValidationError entry instead of exc.errors()[0]. Unit test added and mutation-checked (fails pre-fix, passes post-fix). Full hub/tests/ suite: 4444 passed, 86 skipped (~39.6min). ruff/black/mypy clean. Live-confirmed on a throwaway drive Hub (:8021, deleted after): a PUT with acceptance_criteria missing given/when/then returned all three in one 422, not one per retry. FINDINGS.md Status set to 'fixed 3f8887f' (commit e9909a9), BACKLOG.html regenerated (220->219 open). Full account in 2026-09-19-day-log.md iteration 3."
         },
         {
             "id": "D-3",
