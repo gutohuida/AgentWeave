@@ -52,10 +52,24 @@ mutation and the observed failure beside the task when ticking it.
 - [ ] 1.2 Re-express `_agents_that_are_free` as the projection
       `has_runner and not running and not held and not any(h.reachable for h in holdings)`, and
       keep its docstring's argument **including its reachability paragraph and its D6 paragraph**.
-      - Its three callers keep the projection: `scheduler.py:298`, `:1262` and `:1298`
-        (R5-7: `:1137` in the original is stale).
-      - `resolve_reviewer` instead reads `_roster_availability` **once**, and derives both rung 2's
-        pool and rung 3's records from that one read.
+      - **R7, 2026-09-19 — this bullet's caller list was wrong in every particular and is
+        replaced.** It read *"Its three callers keep the projection: `scheduler.py:298`, `:1262`
+        and `:1298` (R5-7: `:1137` in the original is stale)"*. Measured at `2f0ef0d`,
+        `grep -n "await _agents_that_are_free("` returns **`:348`, `:1263`, `:1444`** and nothing
+        else. Of the three numbers given, `:298` is a docstring line inside `_loop_has_open_task`,
+        `:1298` is a `where` clause inside `resolve_reviewer`'s `roster_held` query, and only
+        `:1262` is within a line of a real call. R5-7 corrected four citations elsewhere and closed
+        with *"re-verify the whole list at implementation time rather than trusting this round's
+        four"* — this is that re-verification, and the list did not survive it.
+      - **It was also self-contradictory.** `:1262` is `resolve_reviewer`'s pool walk, which the
+        next bullet says does **not** keep the projection. The count is two, not three:
+      - **`_loop_flow_busy_reason` (`scheduler.py:348`) and `decide_firing` (`scheduler.py:1444`)
+        keep the projection**, unchanged, calling `_agents_that_are_free` exactly as they do today.
+      - `resolve_reviewer` (`scheduler.py:1263`) instead reads `_roster_availability` **once**, and
+        derives both rung 2's pool and rung 3's records from that one read.
+      - Line numbers move. **Locate all three by `grep -n "await _agents_that_are_free("` rather
+        than by the numbers above**, and treat a count other than 3 as a signal that the tree has
+        moved further than this task knows.
 
       The existing pool tests pass unchanged: `test_reviewer_ladder.py`, `test_flow_width.py`,
       `test_a_task_waits_while_its_run_waits.py::…3.4`, the busy guard, **and every test in
