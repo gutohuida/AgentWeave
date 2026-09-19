@@ -30064,3 +30064,63 @@ after teardown.
 **Verdict:** tasks 1.1-1.4 drive clean on the reachable path; the pool-walk branch needs a
 spec-linked loop to reach live and was not attempted here — flagged, not silently skipped. No new
 finding filed; F388 gained corroborating evidence in `DEAD-ENDS.md`.
+
+## D-4, 2026-09-20 — `alsn-drive`: `a-loop-staffs-the-agent-it-names` (F128's fix) drives clean; a documentless loop pinned to a busy agent now refuses and stalls, a flow in the identical shape is unaffected
+
+Fresh Hub from source, port 8093, brand-new `~/.agentweave/hub/profiles/drive0920/agentweave.db`
+(never seen a revision before this run — the startup log showed the full `0001→0104` migration
+chain, and the file's existence and mtime were confirmed directly before trusting it, per
+`DEAD-ENDS.md`'s F388 practice). Started correctly on the first try: PowerShell `$env:DATABASE_URL`/
+`$env:AW_BOOTSTRAP_API_KEY` set before `Start-Process`, target profile directory pre-created.
+Fixture project `proj-3c1791d525a7` (never `proj-5e960453`/`proj-18e5d4e0`), three Haiku agents
+(`gamma`/`alpha`/`beta`, one runner bound to `claude-haiku-4-5-20251001`). Script:
+`scripts/drive/d7_0920_alsn_drive.py`.
+
+**F128's own shape, live, post-fix.** `gamma` put mid-turn on a real Haiku turn (a genuine `running`
+status, not a stub), `alpha`/`beta` left idle on purpose so the project-wide free list is genuinely
+non-empty — this is exactly the shape that used to substitute a free sibling
+(`t_f128_substitution.py`'s 2026-08-29 measurement). A **documentless** loop naming `gamma`, one
+unassigned task, Run pressed:
+
+* **409**, not the 200 F128 reproduced: `"gamma005410 is already running a turn, and no other agent
+  is free to take this loop's work. Nothing was started."` — F127's re-derived sentence, now correct
+  for this shape because `_agents_a_loop_may_staff` (design D1/D2) empties the pool for a
+  documentless loop instead of falling through to the project-wide free list.
+* the loop's one task kept `status: pending` and gained no `assignee`;
+* no conversation was created for the refused firing (`GET /conversations` for the loop: `[]`);
+* `GET /projects/{p}/loops/{id}` carries `"stall_reason": "gamma005410 is already running a turn"`,
+  `"ending_state": null`, `"firing_active": false`, `"stopped_at": null` — the exact field
+  combination `hub/ui/src/components/spec/loopCounts.ts:23`'s `endingBucket()` reads. Evaluated that
+  function's own rule by hand against this JSON: `stalled`. **This is the change working as
+  designed, not a regression** — the board's `running` count would have dropped by one and its
+  `stalled` count risen by one for this loop, which is D2/D3's whole point (a documentless loop
+  pinned to a busy agent no longer silently draws another agent's capacity). The frontend function
+  itself was not exercised through a browser in this drive (no Vite/UI leg run) — this is a
+  code-level confirmation against the pure function's own literal rule, not a screenshot.
+
+**The flow control, same busy shape.** A **spec-linked** loop (`spec_document_id` set to an
+arbitrary non-existent string — the route does not validate it against a real `Document` row, only
+checks for a conflicting live loop) naming the same busy `gamma`, two unassigned tasks, Run pressed
+while `gamma` is still mid-turn: **200**, both tasks moved to `in_progress`, one on `alpha` and one
+on `beta` — the ordinary project-wide free list, untouched by this change. The loop's own
+`stall_reason` reads `null` and its bucket is `running`. Confirms D1/D7's promise directly: the
+scope filter is documentless-only, and a flow's width and staffing are identical to before this
+change in the identical adversarial shape that flips a documentless loop to refused.
+
+**13 of 13 verdicts held**, including both directions (documentless refused, flow unaffected) in one
+run against one Hub, so neither result is an artifact of a different fixture.
+
+Cleanup: both jobs stopped via `PATCH .../jobs/{id}` with `stop_reason` (the operator's own ending
+path), their loops archived, their tasks rejected, agents confirmed `idle` before the fixture
+project was deleted (`DELETE /projects/{id}` → 204; an earlier attempt while a real Haiku turn was
+still finishing answered 409, which is the delete route doing its job, not a defect — waited for
+`idle` and retried). Drive Hub killed by the exact `netstat`-confirmed listening PID (`24504` — the
+launching shell's own reported PID, `23164`, was not the real listener, same gap noted in prior
+drives). Profile directory and fixture project directory both removed. Operator's `:8000` database
+re-verified read-only (`mode=ro`) before and after: `alembic_version` `0103`, `event_logs` count
+unchanged at `12888` both times — no activity and no write, confirmed rather than assumed.
+
+**Verdict:** `a-loop-staffs-the-agent-it-names` groups 0-4 and 6 drive clean in the shape F128 was
+found in. Group 5 (operator-facing wording) remains unbuilt and out of this window's scope, per
+`APPROVALS.md`'s `ORDER` line — the 409 sentence above is F127's pre-existing wording, not this
+change's own §5 rewrite. No new finding filed; F128 is ready to close (group 8).
