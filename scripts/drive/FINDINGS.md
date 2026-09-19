@@ -29823,3 +29823,74 @@ chosen without it — but see `R5`'s note that a nondeterministic orderer must s
 correct deterministic floor, not replace it, since its failure mode is this exact defect.
 
 **Related:** `F386` (same card, copy and declined filtering), `F381`, `R5`.
+
+---
+
+## F388 (A) — a Hub started from source silently opens the operator's live database, and the code comment says it cannot
+
+**Status:** open. Filed 2026-09-19 by the interactive DECIDE session, at the operator's explicit
+instruction ("Yeah becomes a finding"), after the 2026-09-19 day window hit it against the real
+`:8000` database.
+**Source:** operator
+**Theme:** Operator surfaces
+
+**What happened.** The 2026-09-19 day window started a throwaway Hub from `hub/` to drive the
+product. It set `DATABASE_URL` to a trial profile, but the variable did not survive a
+`kill` + `rm` + restart sequence inside one Bash tool call. The process fell back to the default
+and attached to `~/.agentweave/hub/data/agentweave.db` — **the operator's live `:8000` database,
+348 runs and 12,500 event logs of real work.** The window noticed, stopped itself mid-window, and
+ran `taskkill /IM python.exe /T`, which also killed the operator's running app. Its scheduler
+heartbeat stops at `2026-09-19 09:40:00.704` UTC and does not resume.
+
+**Where.**
+- `hub/hub/config.py:9-18` — `_default_database_url()` returns
+  `Path.home() / ".agentweave" / "hub" / "data" / "agentweave.db"`. No guard, no marker file, no
+  refusal.
+- `hub/hub/config.py:24` — `database_url: str = Field(default_factory=_default_database_url)`.
+  A missing environment variable is indistinguishable from a deliberate choice of that path.
+- `hub/hub/config.py:12-15` — the docstring asserts the default is *"Only consulted by callers that
+  skip the CLI (direct `uvicorn hub.main:app`, or any future embedder)"* and that *"this default
+  never fires there"*. **Direct `uvicorn hub.main:app` is exactly what this repository's own
+  `CLAUDE.md` instructs an agent to run for the trial Hub.** The comment describes the dangerous
+  path as the safe one.
+
+**The failure.** There are three distinct losses, and the third is the one that makes this an A:
+
+1. **Silent attachment.** Nothing in the startup output names the file. The only tell is indirect —
+   a fresh database logs the whole `0065→0103` migration chain, an existing one logs only
+   `Application startup complete` — and reading an absence is not a safeguard.
+2. **Uncontrolled migration.** A source checkout ahead of the live instance runs its migrations
+   against the operator's real data on attach. This is the exact hazard `CLAUDE.md` forbids in
+   prose (*"Never restart it, migrate it, call it, or write to its database"*) with no mechanism
+   behind the prose.
+3. **The recovery is worse than the fault.** An agent that discovers it is on the live database has
+   no safe way to detach: `taskkill /IM python.exe /T` matched the operator's app as well. The
+   operator's Hub was down for roughly three hours until they restarted it by hand.
+
+**Why it is worth filing now.** It has already fired once, against real data, and nothing has
+changed since — the next window that backgrounds a server the same way lands on the same file.
+The blast radius is the operator's only production instance, and the failure is silent on the way
+in. `CLAUDE.md` and `DEAD-ENDS.md` both now describe the trap; neither can stop it, because both
+are read by an agent that has already decided it set the variable correctly.
+
+**Fix shape (not decided).** Options, cheapest first, and they compose:
+
+- **(a) Refuse the implicit default.** Make `database_url` required when the process was not started
+  by the CLI — no `default_factory`, so a direct `uvicorn` with no `DATABASE_URL` fails to boot
+  with a message naming the two ways to set it. Cost: breaks any embedder relying on the default,
+  of which there are none in this repository.
+- **(b) Name the file at startup, unconditionally.** Log the resolved absolute database path and
+  whether it existed before this process opened it, at INFO, as the first line. Does not prevent
+  anything; makes every occurrence visible in one line instead of inferred from a missing
+  migration chain. Cheapest, and worth doing whatever else is chosen.
+- **(c) Mark the live profile.** A sentinel row or file (`instance_role = "primary"`) that a Hub
+  started from a source checkout refuses to open unless `AW_ALLOW_PRIMARY=1`. Strongest, and the
+  only option that survives an agent that believes it set the variable.
+- **(d) Fix the docstring regardless.** It currently tells the reader the opposite of the truth.
+
+The operator has not chosen. Note that (a) alone would have prevented the 2026-09-19 incident,
+since the variable's absence was the whole cause.
+
+**Related:** `DEAD-ENDS.md` §*Starting a Hub from source can land on the operator's real database*
+and §*Telling whether the operator's `:8000` app is running, without touching it* (both 2026-09-19);
+`F380` (the other way a window fails silently and leaves nothing to read).
