@@ -29666,3 +29666,58 @@ legibly explained (`"capability documents are written by the operator"`,
 understood both messages immediately and did not retry blindly against that gate. The referential
 check (`acceptance_criteria[].requirement` must name a real requirement key) is unaffected by this
 bug since it is checked in a separate loop, after `model_validate` already succeeded.
+
+
+## F385 (C) — closing and reopening the Hub window loses every browser-stored preference, and the theme falls back to light
+
+**Status:** open. Filed 2026-09-19 by the operator, from their own use of the `:8000` app.
+**Source:** operator
+**Theme:** Operator surfaces
+
+**What happened.** In the operator's words: *"whenever I close the hub and open again the theme
+changes from dark to light (minor bug)."* Reproducible on every close/reopen cycle of the windowed
+app, with no other action in between.
+
+**Where.** Two halves, and the second is why the drift only ever runs dark to light.
+
+1. **The store is never persisted across window sessions.** `src/agentweave/cli.py:950-952` opens
+   the window with `webview.create_window("AgentWeave", url, text_select=True)` and
+   `webview.start(icon=_app_icon_path())`. Neither call passes `private_mode=False` or a
+   `storage_path`, and pywebview's `start()` defaults `private_mode` to `True` — an in-memory
+   profile whose cookies, `localStorage` and `sessionStorage` are discarded when the window closes.
+   So every `window.localStorage` write the dashboard makes is gone on the next launch.
+2. **The fallback is hardcoded light, not the OS preference.** `hub/ui/src/store/configStore.ts:49`
+   reads `mode: prefs.mode ?? 'light'`, where `prefs` comes from
+   `readJSON<StoredPrefs>(window.localStorage, PREFS_STORAGE_KEY)` (`:41-44`). The round trip
+   itself is correct — `setMode` writes through `writePrefs` to the same key (`:116-126, :144-147`)
+   — so this is not a read/write mismatch. But when the read returns `{}`, the `??` resolves to
+   `'light'` unconditionally. Nothing consults `prefers-color-scheme` anywhere in `hub/ui/src`
+   (the only `matchMedia` calls are `lib/motion.ts:7-8` for reduced motion). An operator who has
+   never touched the toggle and one who set dark and lost it are therefore indistinguishable, and
+   both get light.
+
+**The theme is the visible half; it is probably not the expensive half.** The same discarded
+`localStorage` holds `SELECTED_PROJECT_STORAGE_KEY` (`configStore.ts:53-60, :105-110`), so the open
+project does not survive a close either. That is masked rather than absent: `bootstrap()`
+auto-selects a project when none is persisted (`:176`), so with three projects registered the app
+reopens on whichever one that picks rather than on an empty state — the operator lands somewhere
+plausible instead of somewhere chosen. **Unverified** — asserted from reading the two code paths,
+not reproduced against a running window, because confirming it means driving the operator's own
+`:8000` app.
+
+**Fix shape (not decided).** The two halves are independently repairable and the second is a
+one-line change with a different meaning:
+
+- Pass `private_mode=False` (with an explicit `storage_path` under `~/.agentweave/`, so the profile
+  is somewhere the product owns and a reset can find) to `webview.start()`. This restores every
+  preference at once, and is the fix that matches what the operator expects from a desktop app.
+  It also makes the WebView2 profile a thing that exists on disk, which `R4`'s reset button would
+  then have to know about.
+- Separately, decide whether an *unset* preference should follow `prefers-color-scheme` instead of
+  defaulting to light. That is a real product decision, not a repair, and it stays wrong for a
+  first-launch operator even after the persistence fix lands.
+
+**Related:** `R4` (a reset button, from the same conversation — the persistence profile is state it
+would have to clear). `hub/ui/src/store/configStore.ts:17-19` already records that an older
+persisted `theme` key from the removed 5-theme picker is deliberately ignored; that is a different
+key and not the cause here.

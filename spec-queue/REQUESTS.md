@@ -77,3 +77,33 @@ try and group them by theme."
 Shipped in the same sitting: filters, search, theme grouping, source and readiness on every row.
 Kept here because it is the reason this file exists, and because the next person to wonder why
 `REQUESTS.md` is separate from `FINDINGS.md` should find the answer attached to a request.
+
+
+## R4 — A button that resets the Hub to a clean slate
+**Asked:** 2026-09-19
+**Theme:** Operator surfaces
+**Ready:** thinking
+
+"A button to restart the hub from scratch clears the database and restart everything from the hub."
+
+Filed as an idea to develop later, not as work ready to take. The operator's own framing is one
+button doing two things — wipe the database and restart the process — from inside the Hub itself,
+so the current alternative (stop the app, delete or move
+`~/.agentweave/hub/data/agentweave.db`, start it again from a terminal) stops being the only path.
+
+Not yet argued, and each of these changes what the button is:
+
+- **What "from scratch" includes.** The database only, or also `.agentweave/project.json` in every
+  registered working directory, the API keys, the instance identity, the worktrees? A reset that
+  leaves project registrations pointing at a database that no longer has those rows is a worse
+  state than either end.
+- **Restarting the process from inside itself.** The Hub is a windowed desktop app
+  (`src/agentweave/cli.py`, pywebview); the server it would be restarting is the one serving the
+  page the button is on. Whether that is a true restart, a re-exec, or the app closing itself and
+  relying on the operator to reopen it, is the substance of the change.
+- **What stops an accident.** This destroys the operator's whole corpus with one click, and the
+  same motion is one row away from things that must never be reachable that way.
+
+Related: `.claude/reference/hubs.md` documents the manual profile-swap procedure this would
+replace for trial use; `F385` is the other half of the same session's observation that the app's
+own state does not survive a close and reopen.
