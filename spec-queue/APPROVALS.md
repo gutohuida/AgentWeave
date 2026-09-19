@@ -45,9 +45,18 @@ and two of them are defects R1-R3 would have shipped.
 **This supersedes the "no row to give a status token to" line above**, which was written before the
 review ran.
 
+- APPROVED  a-refused-capability-reaches-the-operator   tasks 0.3, 0.4, 0.5 and 4.12 only; §1 is gated on F386
+
 ```
 ORDER: a-refused-capability-reaches-the-operator, tasks 0.3, 0.4, 0.5 and 4.12 ONLY
 ```
+
+**The `- APPROVED` row above was missing until 2026-09-19 16:0x** — the approval was written only
+as this heading and the `ORDER:` line. `README.md`'s contract is *"One line per change. The status
+token is the authority"*, and every machine reader looks for that row: `backlog_page.py`'s
+`approvals_rows()` found none and rendered this change as still **waiting on the operator**, which
+is how the omission was caught. A prose heading is for the human; the row is the contract. **Write
+both.**
 
 **Why the order is partial, and this is the part a window must not skip.** R4 added task **0.1**:
 `F386` must be fixed and merged before anything in §1 is built. The record this change opens is

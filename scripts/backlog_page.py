@@ -294,7 +294,14 @@ def classify(status: str, title: str) -> str:
 # --------------------------------------------------------------------------- changes
 
 def parse_changes() -> list[dict]:
-    """Change directories with at least one unticked task — the drain, as the playbook counts it."""
+    """Change directories with at least one unticked task — the drain, as the playbook counts it.
+
+    Each entry also carries the **full proposal text** and the round log, so `BACKLOG.html` can
+    render a proposal for the operator to read in place rather than only naming it. Asked for by
+    the operator 2026-09-19: *"those should be linked in the backlog file and rendered there as
+    well so I can easily read them"* — the point of the day window is to produce something they
+    can read and approve, and a filename is not that.
+    """
     out: list[dict] = []
     if not CHANGES.is_dir():
         return out
@@ -308,29 +315,67 @@ def parse_changes() -> list[dict]:
             done = len(re.findall(r"^\s*- \[x\]", t, re.M | re.I))
             todo = len(re.findall(r"^\s*- \[ \]", t, re.M))
         note = ""
+        proposal = ""
         prop = d / "proposal.md"
         if prop.exists():
-            head = prop.read_text(encoding="utf-8", errors="replace")[:1500]
-            stop = re.search(r"^##\s*(STOPPED[^\n]*)", head, re.M)
+            proposal = prop.read_text(encoding="utf-8", errors="replace")
+            stop = re.search(r"^##\s*(STOPPED[^\n]*)", proposal[:1500], re.M)
             if stop:
                 note = stop.group(1).strip()
-        out.append({"name": d.name, "done": done, "todo": todo, "note": note})
+
+        # The round log lives in design.md under `## Rounds`. It is the single most useful thing
+        # to read before approving: it records which arguments have already been refuted, and
+        # this repo's round discipline exists because re-proposing a refuted one costs a window.
+        rounds_md, rounds_n = "", 0
+        design = d / "design.md"
+        if design.exists():
+            dt = design.read_text(encoding="utf-8", errors="replace")
+            m = re.search(r"^##\s*Rounds\s*$(.*?)(?=^##\s|\Z)", dt, re.M | re.S)
+            if m:
+                rounds_md = m.group(1).strip()
+                rounds_n = len(re.findall(r"^###?\s*R\d+\b", rounds_md, re.M)) or len(
+                    re.findall(r"\bR(\d+)\b", rounds_md)
+                ) and max(int(x) for x in re.findall(r"\bR(\d+)\b", rounds_md))
+
+        specs = sorted(p.name for p in (d / "specs").glob("*/spec.md")) if (d / "specs").is_dir() else []
+        out.append(
+            {
+                "name": d.name,
+                "done": done,
+                "todo": todo,
+                "note": note,
+                "proposal": proposal,
+                "rounds_md": rounds_md,
+                "rounds": rounds_n,
+                "has_design": design.exists(),
+                "has_tasks": tasks.exists(),
+                "has_guide": (d / "test-guide.md").exists(),
+                "spec_count": len(specs),
+            }
+        )
     return out
 
 
 # --------------------------------------------------------------------------- spec-queue
 
 def newest_section(path: Path) -> tuple[str, str]:
-    """The newest `## YYYY-MM-DD` section of a spec-queue file: (date, body)."""
+    """The newest `## YYYY-MM-DD` section of a spec-queue file: (date, body).
+
+    **Newest by date, not by position.** These files declare "newest day first" and are written
+    by hand, so the convention is a promise nobody enforces — and on 2026-09-19 it was found
+    broken: the 09-18 and 09-19 sections had been appended at the *bottom*, so a positional read
+    returned 09-16 and this page showed the operator a three-day-stale approvals section as
+    "newest". Sorting by the date the heading actually carries cannot drift that way.
+    """
     if not path.exists():
         return ("", "")
     text = path.read_text(encoding="utf-8", errors="replace")
     hits = list(re.finditer(r"^##\s*(\d{4}-\d{2}-\d{2})\s*$", text, re.M))
     if not hits:
         return ("", "")
-    first = hits[0]
-    end = hits[1].start() if len(hits) > 1 else len(text)
-    return (first.group(1), text[first.end() : end].strip())
+    bounds = [(h, (hits[i + 1].start() if i + 1 < len(hits) else len(text))) for i, h in enumerate(hits)]
+    newest, end = max(bounds, key=lambda b: b[0].group(1))
+    return (newest.group(1), text[newest.end() : end].strip())
 
 
 def approvals_rows(body: str) -> list[tuple[str, str, str]]:
@@ -368,6 +413,128 @@ def git(*args: str) -> str:
 
 def esc(s: object) -> str:
     return html.escape(str(s if s is not None else ""))
+
+
+def md(text: str, *, demote: int = 1) -> str:
+    """Enough Markdown to read a proposal in a browser. Deliberately small.
+
+    Handles headings, fenced code, blockquotes, bullet and numbered lists, tables, horizontal
+    rules, paragraphs, and inline `code`/**bold**/*italic*/[links]. Everything is escaped first,
+    so a proposal containing HTML renders as the text it is — these files are written by agents
+    and the page must not become an injection surface for them.
+
+    `demote` shifts heading levels so a proposal's own `#` does not compete with the page's `<h2>`.
+    """
+    src = text.replace("\r\n", "\n").replace("\r", "\n")
+    out: list[str] = []
+    lines = src.split("\n")
+    i = 0
+    list_stack: list[str] = []
+
+    def close_lists(to: int = 0) -> None:
+        while len(list_stack) > to:
+            out.append(f"</{list_stack.pop()}>")
+
+    def inline(s: str) -> str:
+        s = esc(s)
+        s = re.sub(r"`([^`]+)`", r"<code>\1</code>", s)
+        s = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", s)
+        s = re.sub(r"(?<![*\w])\*([^*\n]+)\*(?!\*)", r"<em>\1</em>", s)
+        s = re.sub(
+            r"\[([^\]]+)\]\(([^)\s]+)\)",
+            lambda m: f'<a href="{m.group(2)}" target="_blank" rel="noopener">{m.group(1)}</a>',
+            s,
+        )
+        return s
+
+    while i < len(lines):
+        ln = lines[i]
+
+        if ln.startswith("```"):
+            close_lists()
+            i += 1
+            buf = []
+            while i < len(lines) and not lines[i].startswith("```"):
+                buf.append(lines[i])
+                i += 1
+            i += 1
+            out.append(f"<pre><code>{esc(chr(10).join(buf))}</code></pre>")
+            continue
+
+        if re.match(r"^\s*(---+|\*\*\*+|___+)\s*$", ln):
+            close_lists()
+            out.append("<hr>")
+            i += 1
+            continue
+
+        h = re.match(r"^(#{1,6})\s+(.*)$", ln)
+        if h:
+            close_lists()
+            lvl = min(6, len(h.group(1)) + demote)
+            out.append(f"<h{lvl}>{inline(h.group(2).strip())}</h{lvl}>")
+            i += 1
+            continue
+
+        # A table: a header row, a separator of dashes, then body rows.
+        if "|" in ln and i + 1 < len(lines) and re.match(r"^\s*\|?[\s:|-]+\|[\s:|-]*$", lines[i + 1]):
+            close_lists()
+
+            def cells(r: str) -> list[str]:
+                return [c.strip() for c in r.strip().strip("|").split("|")]
+
+            head = cells(ln)
+            i += 2
+            body = []
+            while i < len(lines) and "|" in lines[i] and lines[i].strip():
+                body.append(cells(lines[i]))
+                i += 1
+            th = "".join(f"<th>{inline(c)}</th>" for c in head)
+            tb = "".join(
+                "<tr>" + "".join(f"<td>{inline(c)}</td>" for c in r) + "</tr>" for r in body
+            )
+            out.append(f'<div class="scroll"><table class="md"><thead><tr>{th}</tr></thead><tbody>{tb}</tbody></table></div>')
+            continue
+
+        q = re.match(r"^>\s?(.*)$", ln)
+        if q:
+            close_lists()
+            buf = []
+            while i < len(lines) and re.match(r"^>\s?", lines[i]):
+                buf.append(re.sub(r"^>\s?", "", lines[i]))
+                i += 1
+            out.append(f"<blockquote>{md(chr(10).join(buf), demote=demote)}</blockquote>")
+            continue
+
+        b = re.match(r"^(\s*)([-*+]|\d+[.)])\s+(.*)$", ln)
+        if b:
+            depth = len(b.group(1)) // 2 + 1
+            tag = "ul" if b.group(2) in "-*+" else "ol"
+            while len(list_stack) > depth:
+                out.append(f"</{list_stack.pop()}>")
+            while len(list_stack) < depth:
+                out.append(f"<{tag}>")
+                list_stack.append(tag)
+            item = b.group(3)
+            # A task checkbox reads better as a mark than as literal brackets.
+            item = re.sub(r"^\[([ xX])\]\s*", lambda m: "☑ " if m.group(1).lower() == "x" else "☐ ", item)
+            out.append(f"<li>{inline(item)}</li>")
+            i += 1
+            continue
+
+        if not ln.strip():
+            close_lists()
+            i += 1
+            continue
+
+        close_lists()
+        buf = []
+        while i < len(lines) and lines[i].strip() and not re.match(r"^(#{1,6}\s|```|>|\s*([-*+]|\d+[.)])\s)", lines[i]):
+            buf.append(lines[i].strip())
+            i += 1
+        out.append(f"<p>{inline(' '.join(buf))}</p>")
+
+    close_lists()
+    return "\n".join(out)
 
 
 def previous_snapshot() -> dict:
@@ -541,7 +708,17 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
     dirty = git("status", "--porcelain")
     now = datetime.now(timezone.utc).astimezone()
 
-    loops = 2 if len(drain) == 0 else (1 if len(drain) == 1 else 0)
+    # Which unbuilt changes are waiting on the OPERATOR, as opposed to waiting on a night.
+    # Decided 2026-09-19 (`DECISIONS.md`, day-window-spec-gate): an APPROVED change waits on a
+    # night, and must not suppress tomorrow's proposal. Counting every unbuilt change is what
+    # starved 2026-09-16..09-19 — four days on which the window produced nothing to read.
+    decided_names = {name for token, name, _ in rows if token in ("APPROVED", "REJECTED")}
+    for c in changes:
+        c["awaiting_operator"] = c["todo"] > 0 and c["name"] not in decided_names
+        c["token"] = next((t for t, n, _ in rows if n == c["name"]), "")
+    awaiting = [c for c in drain if c["awaiting_operator"]]
+
+    loops = 2 if len(awaiting) == 0 else (1 if len(awaiting) == 1 else 0)
     loop_word = {0: "no spec loop", 1: "one spec loop", 2: "two spec loops"}[loops]
 
     # ---- rows ------------------------------------------------------------
@@ -630,17 +807,63 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
     sev_chips = filter_chips("sev", {k: len([f for f in items if f["sev"] == k]) for k in sev_labels},
                              ["A", "B", "C", "D", "?", "—"], sev_labels)
 
-    change_rows = (
-        "\n".join(
-            f"""<div class="chg">
-              <div class="chg-main">
-                <code class="chg-name">{esc(c["name"])}</code>
-                {f'<p class="chg-note">{esc(c["note"])}</p>' if c["note"] else ""}
-              </div>
-              <div class="chg-count"><b>{c["todo"]}</b><span>unticked</span></div>
-            </div>"""
-            for c in drain
+    def change_block(c: dict) -> str:
+        base = f"../openspec/changes/{c['name']}"
+        links = [f'<a href="{base}/proposal.md" target="_blank" rel="noopener">proposal.md</a>']
+        if c["has_design"]:
+            links.append(f'<a href="{base}/design.md" target="_blank" rel="noopener">design.md</a>')
+        if c["has_tasks"]:
+            links.append(f'<a href="{base}/tasks.md" target="_blank" rel="noopener">tasks.md</a>')
+        if c["has_guide"]:
+            links.append(f'<a href="{base}/test-guide.md" target="_blank" rel="noopener">test-guide.md</a>')
+
+        if c["token"] == "APPROVED":
+            badge = '<span class="chg-badge ok">approved — waiting on a night</span>'
+        elif c["token"]:
+            badge = f'<span class="chg-badge">{esc(c["token"].lower())}</span>'
+        else:
+            badge = '<span class="chg-badge want">waiting on you</span>'
+
+        facts = " · ".join(
+            x
+            for x in (
+                f'{c["todo"]} unticked' + (f' of {c["todo"] + c["done"]}' if c["done"] else ""),
+                f'{c["rounds"]} rounds' if c["rounds"] else "",
+                f'{c["spec_count"]} delta spec{"s" if c["spec_count"] != 1 else ""}'
+                if c["spec_count"]
+                else "",
+            )
+            if x
         )
+
+        rounds = (
+            f"""<details class="chg-rounds"><summary>The round log — what has already been argued and refuted</summary>
+                 <div class="md-body">{md(c["rounds_md"], demote=3)}</div></details>"""
+            if c["rounds_md"]
+            else ""
+        )
+        body = (
+            f'<div class="md-body">{md(c["proposal"], demote=3)}</div>'
+            if c["proposal"]
+            else '<p class="empty">No <code>proposal.md</code> in this directory.</p>'
+        )
+
+        return f"""<div class="chg">
+          <div class="chg-head">
+            <div class="chg-main">
+              <code class="chg-name">{esc(c["name"])}</code>
+              {badge}
+              <p class="chg-facts">{esc(facts)}</p>
+              {f'<p class="chg-note">{esc(c["note"])}</p>' if c["note"] else ""}
+            </div>
+            <div class="chg-links">{" · ".join(links)}</div>
+          </div>
+          {rounds}
+          <details class="chg-read" open><summary>Read the proposal</summary>{body}</details>
+        </div>"""
+
+    change_rows = (
+        "\n".join(change_block(c) for c in drain)
         or '<p class="empty">No unbuilt change directories. The drain is clear.</p>'
     )
 
@@ -693,6 +916,7 @@ def build() -> tuple[str, dict, list[dict], list[dict]]:
         total_retired=total_retired,
         total_all=len(findings),
         drain_n=len(drain),
+        awaiting_n=len(awaiting),
         loop_word=esc(loop_word),
         a_count=counts.get("A", 0),
         n_proposed=ready_counts.get("proposed", 0),
@@ -836,14 +1060,39 @@ section.block{{margin-top:44px}}
 .directive{{display:flex;align-items:baseline;gap:9px;margin-top:11px;padding-top:11px;border-top:1px dashed var(--rule-2);font-size:12.5px;flex-wrap:wrap}}
 .directive[data-stop="1"] .tok{{background:var(--sevA-soft);color:var(--sevA)}}
 
-.chg{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:11px 0;border-bottom:1px solid var(--rule)}}
+.chg{{padding:16px 0;border-bottom:1px solid var(--rule)}}
 .chg:last-child{{border-bottom:0}}
+.chg-head{{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}}
 .chg-main{{min-width:0}}
 .chg-name{{font-size:13px;font-weight:600;overflow-wrap:anywhere}}
 .chg-note{{margin:5px 0 0;font-size:11.5px;line-height:1.45;color:var(--sevB)}}
-.chg-count{{text-align:right;flex-shrink:0}}
-.chg-count b{{display:block;font-family:var(--mono);font-size:19px;font-variant-numeric:tabular-nums;line-height:1}}
-.chg-count span{{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3)}}
+.chg-facts{{margin:5px 0 0;font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}}
+.chg-links{{flex-shrink:0;font-size:11.5px;color:var(--ink-3)}}
+.chg-links a{{color:var(--ink-2)}}
+.chg-badge{{display:inline-block;margin-left:8px;padding:1px 7px;border-radius:9px;font-size:10px;
+  text-transform:uppercase;letter-spacing:.06em;background:var(--rule);color:var(--ink-2);vertical-align:1px}}
+.chg-badge.want{{background:var(--sevA-soft);color:var(--sevA);font-weight:600}}
+.chg-badge.ok{{background:var(--sevC-soft,var(--rule));color:var(--ink-3)}}
+.chg-rounds,.chg-read{{margin-top:12px}}
+.chg-rounds>summary,.chg-read>summary{{cursor:pointer;font-size:11.5px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--ink-3);padding:5px 0}}
+.chg-rounds>summary:hover,.chg-read>summary:hover{{color:var(--ink)}}
+.md-body{{margin-top:10px;padding:14px 18px;border-left:2px solid var(--rule);font-size:13.5px;line-height:1.62}}
+.md-body h3{{font-size:15px;margin:20px 0 7px}}
+.md-body h4,.md-body h5,.md-body h6{{font-size:13px;margin:16px 0 5px;color:var(--ink-2)}}
+.md-body h3:first-child,.md-body h4:first-child{{margin-top:0}}
+.md-body p{{margin:0 0 11px}}
+.md-body li{{margin:0 0 5px}}
+.md-body ul,.md-body ol{{margin:0 0 11px;padding-left:20px}}
+.md-body pre{{background:var(--rule);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12px;margin:0 0 11px}}
+.md-body code{{font-family:var(--mono);font-size:.92em}}
+.md-body pre code{{font-size:inherit}}
+.md-body blockquote{{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}}
+.md-body blockquote p:last-child{{margin-bottom:0}}
+.md-body table.md{{border-collapse:collapse;font-size:12.5px;width:100%}}
+.md-body table.md th,.md-body table.md td{{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}}
+.md-body table.md th{{background:var(--rule);font-weight:600}}
+.md-body hr{{border:0;border-top:1px solid var(--rule);margin:16px 0}}
 
 .bars{{display:flex;flex-direction:column;gap:7px;margin:18px 0 8px}}
 .bar-row{{display:flex;align-items:center;gap:11px}}
@@ -958,7 +1207,8 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
     <div class="fig"><b>{total_items}</b><span>open items — {total_open} findings + {n_requests} requests</span></div>
     <div class="fig" data-t="op"><b>{n_operator}</b><span>you asked for</span></div>
     <div class="fig"><b>{n_proposed}</b><span>have a proposal, so the night can build them</span></div>
-    <div class="fig"><b>{drain_n}</b><span>unbuilt changes — tomorrow runs {loop_word}</span></div>
+    <div class="fig" data-t="op"><b>{awaiting_n}</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs {loop_word}</span></div>
+    <div class="fig"><b>{drain_n}</b><span>unbuilt changes in total (the drain)</span></div>
   </div>
 
   <section class="block">
@@ -1022,11 +1272,16 @@ footer{{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-f
   </section>
 
   <section class="block">
-    <h2 class="sec">Unbuilt changes</h2>
+    <h2 class="sec">Unbuilt changes — read and approve here</h2>
     <p class="lede">
-      A change directory with at least one unticked task. This count is the throttle: <b>2 or more</b>
-      and no spec loop runs at all, <b>1</b> gives one loop, <b>0</b> gives two. It is what stops the
-      proposing rate outrunning the building rate.
+      A change directory with at least one unticked task, with its proposal rendered in place.
+      <b>Marked <span class="chg-badge want">waiting on you</span></b> means it needs an
+      <code>APPROVED</code>, <code>REVISING</code> or <code>REJECTED</code> token in
+      <code>spec-queue/APPROVALS.md</code> before any night can build it.
+      Only those count toward the throttle: <b>2 or more</b> waiting on you and no spec loop runs
+      tomorrow, <b>1</b> gives one loop, <b>0</b> gives two. A change you have already approved is
+      waiting on a night, not on you, and no longer suppresses tomorrow's proposal
+      (decided 2026-09-19 — counting every unbuilt change starved four consecutive days).
     </p>
     <div class="panel">{change_rows}</div>
   </section>
