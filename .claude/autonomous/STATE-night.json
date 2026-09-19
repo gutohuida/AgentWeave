@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "a435f48",
     "stop_at":  "2026-09-20T07:00:00+01:00",
-    "iteration":  1,
+    "iteration":  2,
     "log_file":  ".claude/autonomous/2026-09-19-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "arc-impl",
-    "next_action":  "arc-impl: in openspec/changes/a-refused-capability-reaches-the-operator, build ONLY tasks 0.3 (migration 0104, head is 0103: questions.subject_key String(200) nullable + partial unique index on (project_id, subject_key) where answered=0 AND declined=0 AND subject_key IS NOT NULL, downgrade drops both), 0.4 (Question.subject_key column in hub/hub/db/models.py, comment says structural identifier not prose per design D15), 0.5 (ask_question_for_actor in questions.py:235 takes subject_key: Optional[str]=None), 4.12 (test: operator-posted question still writes subject_key IS NULL, two NULL-keyed open questions on one project coexist). Do NOT touch §1/§2/§3/§5 (gated on F386). Bump migration head assertions in hub/tests/test_migrations.py and hub/tests/test_project_persistence.py. Run py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q plus the new 4.12 test. Commit when green.",
+    "current":  "arc-drive",
+    "next_action":  "arc-drive: drive a-refused-capability-reaches-the-operator's tasks 0.3-0.5/4.12 slice for real. Start a fresh Hub from source (from hub/, py -3.11 -m uvicorn hub.main:app --port <free-port>) against a brand-new profile, e.g. DATABASE_URL naming ~/.agentweave/hub/profiles/drive0919/agentweave.db -- NEVER 8000 or 8010. Confirm alembic upgrade head lands on 0104 cleanly (fresh DB, no prior revision), and that sqlite3 shows the questions.subject_key column plus the ix_questions_open_subject_key partial index (sqlite_master query, look for the WHERE clause). Then exercise the ordinary question flow once live (POST /questions with the full QuestionCreate payload -- from_agent, question, blocking, header, options>=2, multi_select -- then answer it) to confirm nothing about the existing path regressed now that subject_key exists and defaults to NULL. Record what was actually run and observed in scripts/drive/FINDINGS.md (new dated entry, cite migration 0104 and commit 3b7718d). Shut the drive Hub down when done -- do not leave a job/server enabled per the usage limits below.",
     "queue":  [
                   {
                       "id":  "compose",
@@ -23,9 +23,9 @@
                   },
                   {
                       "id":  "arc-impl",
-                      "status":  "open",
+                      "status":  "done",
                       "title":  "a-refused-capability-reaches-the-operator: tasks 0.3, 0.4, 0.5, 4.12 ONLY",
-                      "detail":  "Additive/nullable migration 0104 + column + optional param + coexistence test. Do not build §1-§3/§5 -- gated on F386 (day window 2026-09-20's job)."
+                      "detail":  "Additive/nullable migration 0104 + column + optional param + coexistence test. Do not build §1-§3/§5 -- gated on F386 (day window 2026-09-20's job). Committed 3b7718d: found and fixed a broken 4.12 test (missing required QuestionCreate fields caused 422s), 111 passed/1 skipped after. Tasks 0.3/0.4/0.5/4.12 marked [x] in tasks.md."
                   },
                   {
                       "id":  "arc-drive",
