@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a435f48",
     "stop_at": "2026-09-20T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f388-r1",
-    "next_action": "Item 2 R1 -- explore the codebase and write the proposal for F388 (A), the Hub started from source silently opening the operator's live database. DIRECTION.md item 2. The fix is ALREADY DECIDED and R1 does not re-open it: (a) refuse the implicit default, (b) log the resolved path, (d) fix the false-safety docstring. R1 explores HOW to build (a), not whether. Do not re-derive F388's cause -- it is already measured; read its FINDINGS.md section and DEAD-ENDS.md's F388 practice rather than reproducing it, and do NOT start a Hub against :8000 or its database to check. Blast radius: hub/hub/config.py + its tests + prose in CLAUDE.md and .claude/reference/hubs.md. Constraint to hold while specking: (a) must not weaken the recovery path -- F388's severity A rests on the recovery being worse than the fault, so a refusal that leaves an operator unable to start any Hub at all is not the fix. Say what config.py's resolver RETURNS when the env var is absent versus malformed versus pointing at a missing file, and what each caller does with that -- a round checks the argument, a drive checks the product, and this one needs the return values. Create openspec/changes/<name>/ with proposal.md, design.md, tasks.md, a test-guide, and spec deltas; requirements use '### Requirement:' with SHALL on the FIRST physical line and '#### Scenario:' blocks. openspec validate --strict must pass before done.",
+    "current": "f388-r2",
+    "next_action": "Item 2 R2 -- independently re-derive openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one against the code. READ THE CODE FIRST, then the document: hub/hub/config.py, hub/hub/db/engine.py, hub/hub/main.py (lifespan at :412), hub/hub/migrations/env.py, hub/hub/alembic.ini, hub/hub/bound_address.py, hub/tests/test_config.py, hub/tests/conftest.py, src/agentweave/cli.py (the DATABASE_URL write at :1028), scripts/refresh_ui_bundle.py, hub/docker-compose.yml, and openspec/specs/app-lifecycle/spec.md. A fresh comparison, NOT a re-read of R1. The change is (a) refuse the implicit default + (b) log the resolved path + (d) fix the docstring -- already decided, do not re-open whether; R2 checks HOW. design.md ends with R1's own list of where it is weakest, and those four are where to start: (1) D9 -- the severity argument rests on (a)+(b) REMOVING the route rather than narrowing it; name a launch that still reaches the live database with no DATABASE_URL, or confirm there is none. (2) D5 -- the claim that hub.* INFO is invisible was measured with a hand-called fileConfig, NOT from a running Hub; DRIVE IT (a throwaway Hub from source, port in the 8090s, a fresh profile directory, never 8000/8010 and never ~/.agentweave/hub/data/) and say whether an INFO line from hub.* actually appears. If it does, (b)'s WARNING level is over-specified and D5 is wrong. (3) D3 -- whether a .env value counts as 'told' is the one judgement call. (4) D4 -- rejected on a version-skew argument that was REASONED, not measured. Also re-check the D11 return-value table row by row and the tasks' line citations. Do not re-derive F388's cause. openspec validate --strict must pass before done; leave the tree clean.",
     "queue": [
         {
             "id": "compose",
@@ -25,37 +25,43 @@
             "id": "d1-drive",
             "status": "done",
             "title": "D-1 -- scoped drive of what the night built",
-            "detail": "Done iteration 2. Fresh Hub :8020, profiles/drive0920. No new findings -- everything held (migration 0104 schema, subject_key kwarg, alsn F128 shape 13/13, unrh group 1 re-checked at code level). Narrative entry appended to FINDINGS.md, no new F-number. arc's own refusal-reaches-operator behavior (SS1/2/3/5) still unbuilt, nothing more to drive there yet. Cleanup verified: jobs archived, projects deleted, :8020 process killed."
+            "detail": "Done iteration 2. Fresh Hub :8020, profiles/drive0920. No new findings. Cleanup verified: jobs archived, projects deleted, :8020 process killed."
         },
         {
             "id": "f185-r1",
             "status": "done",
             "title": "Item 1 R1 -- explore + propose F185+F181 as one change",
-            "detail": "Done iteration 3. Directory openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere, validate --strict passes; proposal/design(D1-D8)/tasks(30 in 6 groups)/test-guide + 3 delta specs (agent-configuration MODIFIED, runner-registry MODIFIED+ADDED, agent-charter ADDED). Both findings RE-DRIVEN on 1fdfc4d before writing (throwaway ASGI test, deleted): F185 409 + name absent from roster; F181 runnable:true one call before trigger's 409. Three R1 discoveries: PATCH /agents/{name} re-binds a charter to an ARCHIVED agent (200, no lifecycle check anywhere) so clearing at archive alone is undoable -- now tasks 1.6-1.8; migration 0105 needed or the fix cannot fire on already-archived rows (rewrites the operator's live DB on their next :8000 restart, downgrade cannot undo); third site runners.py:175-183 filed as F390 (C), tasks group 5, declared cut line. runner_id deliberately NOT cleared (design D3) -- stated so R2 can reject it. No UI: useAgentLaunchability has zero call sites, measured. F185/F181 status lines updated to 'specced, R2/R3 not run, no token, nothing built'."
+            "detail": "Done iteration 3. Directory an-archived-agent-holds-nothing-and-is-offered-nowhere; validate --strict passes. F390 (C) filed. Both findings re-driven before writing."
         },
         {
             "id": "f185-r2",
             "status": "done",
             "title": "Item 1 R2 -- independently re-derive against the code",
-            "detail": "Done iteration 4. Code read before the proposal, fresh comparison. R1's findings all reproduce; FOUR claims corrected. C1: D3's 'a runner records what it ran with' is false -- TurnUsage (models.py:1235-1248, written by record_turn_usage from 6 sites in agent_trigger.py + run_reconciliation.py:80) is that record and survives archival; Run has no runner/model column. The asymmetry is a DISPLAY dependency (list_agents:517-524 reads only the live binding), not a principle -- conclusion kept, reason rewritten, and the same false sentence removed from the NORMATIVE agent-configuration spec text. C2: R1's unarchive sentence implied a charter is required (contradicting its own D8) and never said the release is permanent (the operator's literal rider); replaced in D2, task 2.2/2.3, the spec + 2 scenarios, and the test guide. C3 (new D9): useArchiveAgent's onSuccess takes NO argument, so nothing renders either response -- group 2's tests pass while the operator sees nothing; group 2 kept but retitled, proposal's 'the product says so' struck, task 2.5 added. C4: D6's 'the settings page is entitled to probe' is false (zero callers anywhere but a test); param kept for roster symmetry, F181's fix relabelled PREVENTIVE. C5: group 5 exists BECAUSE D3 keeps runner_id -- cutting it is not free. C6: D1 grep count off by one. Confirmed unchanged: D1's single caller, the PRAGMA claim, D7's hole, D8's trigger refusals, D5's necessity. validate --strict passes; tree staged clean."
+            "detail": "Done iteration 4. Four claims corrected (C1-C6), D9 added. validate --strict passes."
         },
         {
             "id": "f185-r3",
             "status": "done",
             "title": "Item 1 R3 -- independently re-derive again",
-            "detail": "Done iteration 5. Code read before the document; R2's own C1-C6/D9 were the target. ALL of R1's and R2's conclusions survive -- no task's intent changed, no task added. R3-C1: R2's C1 premise HOLDS (enumerated all six terminal Run.status writes in hub/hub/ -- agent_trigger.py:1915/2061/2313/2887/2960 + run_reconciliation.py:66 -- each with a record_turn_usage beside it, so a run cannot end without a TurnUsage row), but 'records runner AND model for every run' is too strong: model comes only from sample.model and sample=None on all four failure paths and reconciliation, so every unmeasured outcome has model=NULL (usage_accounting.py:44); narrowed in D3, the proposal AND the normative agent-configuration text. R3-C2: D3 confirmed a THIRD time and now demonstrated -- create_agent writes config={} (agents.py:673), the step neither earlier round took, so the fall-through really does fire; and the cost is FALSE, not blank (runner:'native' is a positive claim, not absence). R3-C3 (new, F391 C): archiving persists NO event and broadcasts nothing -- no agent_archived kind anywhere in the tree, both routes just commit/refresh/return while agent_created/agent_requested/agent_heartbeat all persist. DRIVEN via a throwaway ASGI test (deleted) with a positive control: events/history is [] before/after archive and unarchive, ['agent_heartbeat'] right after a heartbeat. So released_charter_id is UNRECORDED, not merely unrendered -> new D10; no task added (archival's defect, not this change's). R3-C4: D9 confirmed (onSuccess agents.ts:230 takes no argument, mutationFn types the body without released_charter_id, ArchiveControl reads .error/.isPending never .data) -- group 2 stays invisible, change still acquires NO bundle refresh; and AgentCard is rendered nowhere outside its own test, extending C4. R3-C5: patch_agent re-binds runner_id to an archived agent too (:2462-2470) and stays permitted under D3 -- one sentence added to task 1.6 so it reads as a decision. R3-C6: D3's :2461 off by one. Objection raised and self-closed (recorded so R4 skips it): TurnUsage.runner on the reconciliation path is recovered from the LIVE binding, but archivable refuses while a run is 'running' and reconcile runs inside lifespan() before the Hub serves a request, so it is unreachable -- this REMOVES an objection to clearing runner_id rather than adding one. Five citations R3 added were wrong and were corrected in place. validate --strict passes; no code changed; tree clean."
+            "detail": "Done iteration 5. All of R1's and R2's conclusions survive; three narrowed, F391 (C) filed and driven, D10 added. validate --strict passes."
+        },
+        {
+            "id": "f185-operator-decision",
+            "status": "done",
+            "title": "Item 1's one operator decision -- RESOLVED by the operator, not by this window",
+            "detail": "Resolved 2026-09-20 in an interactive DECIDE session, found UNCOMMITTED at iteration 6 and committed as 51b17bd. The operator chose the MIDDLE of the three shapes R3 offered: API plus a persisted archival event (persist_event + sse_manager.broadcast on both archive and unarchive routes), and NO hub/ui/src bundle refresh. That is design.md D10 and the new tasks.md group 2b. APPROVALS.md's ## 2026-09-20 section carries 'APPROVED an-archived-agent-holds-nothing-and-is-offered-nowhere -- all groups, including the new 2b and group 5; no UI, no bundle refresh' and an ORDER: line for tonight. The standing adversarial-Opus pass was SKIPPED at the operator's explicit instruction, recorded there so its absence is not read as an oversight. Carry while building: D10 and group 2b are R3-and-later work that nothing has re-derived -- if a task in 2b disagrees with the code, the task is the thing more likely to be wrong. Item 1 needs nothing further from this window."
         },
         {
             "id": "f388-r1",
-            "status": "in_progress",
+            "status": "done",
             "title": "Item 2 R1 -- explore + propose F388 (A) fix",
-            "detail": "DIRECTION.md item 2. Fix already decided: (a) refuse implicit default + (b) log resolved path + (d) fix false-safety docstring. R1 explores HOW to build (a), not whether. Do not weaken recovery-path safety while specking (a)/(b) -- F388's A rests on the recovery being worse than the fault. Blast radius: hub/hub/config.py + tests + CLAUDE.md/.claude/reference/hubs.md prose. Do not re-derive F388's cause -- already measured."
+            "detail": "Done iteration 6. Directory openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one; validate --strict passes; proposal/design(D1-D11)/tasks(43 in 6 groups)/test-guide + one MODIFIED delta on app-lifecycle. No code changed; the probe patch to config.py was reverted and test_config.py is back to 4 passed. Six R1 discoveries, all measured: (1) F388 is SPEC'D -- app-lifecycle's scenario 'The Hub's own database is launch-directory-independent' normatively requires a no-DATABASE_URL uvicorn to resolve to the home path, so (a) reverses a current requirement; (2) engine.py:228's logger.info naming the database has NEVER been visible (root has no handler before init_db, and alembic.ini:20-22's level=WARN after), so (b) at INFO would be invisible -- D5 makes it WARNING; (3) .env is a third source and is cwd-relative, and hub/.env.example:5 still ships the pre-D1 RELATIVE path; (4) blast radius includes make ui (refresh_ui_bundle.py:110 imports hub.main with no DATABASE_URL) -- group 3, do it with group 1 or neither; agentweave --help/doctor, Docker and native agentweave all measured unaffected; (5) a bare required field's pydantic message names neither the database nor the fix, so D2 uses a raising default_factory (measured to propagate unwrapped); (6) DEAD-ENDS.md's F388 practice has one false sentence about aiosqlite not creating a parent directory -- the Hub does (engine.py:346-350) -- corrected, not dropped, in task 4.2. Third loss HELD in D9 (states what (a)+(b) reach and that an already-attached Hub still has no in-product detach). D4 records and REJECTS the stronger path-keyed guard: cli.py:1028 sets DATABASE_URL to exactly that path, and a CLI-sent marker breaks under agentweave-ai/agentweave-hub version skew."
         },
         {
             "id": "f388-r2",
-            "status": "open",
+            "status": "in_progress",
             "title": "Item 2 R2 -- independently re-derive against the code",
-            "detail": "Fresh comparison of R1's proposal against config.py's actual code, not a re-read. openspec validate --strict must pass."
+            "detail": "See next_action. Fresh comparison, code before document. The four places R1 named as weakest: D9 (does (a)+(b) really remove the route?), D5 (measured by hand-calling fileConfig, NOT from a running Hub -- drive it), D3 (.env as 'told'), D4 (reasoned, not measured). openspec validate --strict must pass."
         },
         {
             "id": "f388-r3",
@@ -73,7 +79,7 @@
             "id": "d5",
             "status": "open",
             "title": "D-5 -- write the review page",
-            "detail": "spec-queue/review/review-2026-09-20.html per day-window.md D-5 structure. Sections: branch/gate table (report the PREVIOUS gate, i.e. 2026-09-19's, which did not open -- CI never concluded in time), what night built + driven, today's drive findings, both specced changes (R2/R3 deltas, cost), default night queue if nothing approved, research highlights. Append dated section to spec-queue/APPROVALS.md, one row per specced change, no status token."
+            "detail": "REDUCED IN SCOPE by the operator's own 2026-09-20 APPROVALS section, which says it is 'the authority for tonight regardless of whether' the day window reaches this step -- item 1 is already approved and ORDERed, so the page no longer has to carry it for a decision. Still worth writing if time allows: spec-queue/review/review-2026-09-20.html per day-window.md D-5. Sections: branch/gate table (report the PREVIOUS gate, 2026-09-19's, which did not open -- CI never concluded in time), what night built + driven, today's drive findings, item 2's change (R2/R3 deltas, cost) as the one thing still undecided, research highlights. If written, append a dated row for item 2 only to spec-queue/APPROVALS.md's existing ## 2026-09-20 section -- do NOT open a second section for the same day and do NOT restate item 1's row. CUT THIS BEFORE CUTTING f388-r3."
         },
         {
             "id": "d7-gate",
@@ -82,20 +88,7 @@
             "detail": "Only after git status --short is empty. Find CI's run for the exact HEAD sha, poll ~90s up to 25min. success + HEAD..master==0 + clean + HEAD==@{u} + no HOLD MERGE in DIRECTION.md newest section => git merge --ff-only, push. Still running at budget => stop, log run id, leave for tomorrow's step 1. Then next_action: null."
         }
     ],
-    "decisions_for_user": [
-        {
-            "id": "f185-ui-half",
-            "question": "Does an-archived-agent-holds-nothing-and-is-offered-nowhere accept a hub/ui/src bundle refresh, or ship API-only?",
-            "context": "WIDENED BY R2 into one decision with two halves, both the same wall (a hub/ui/src change -> make ui -> reaches the operator's live :8000 app). Half (a), found by R1: the change makes PATCH /agents/{name} refuse binding a charter to an archived agent, but the archived agent's Charter section keeps rendering CharterPicker (AgentSettingsPage.tsx:124-135) and on failure shows only its own generic 'Could not update charter binding.' -- the server's sentence is dropped, the F187 shape. Half (b), found by R2: nothing renders the archive or unarchive response AT ALL -- useArchiveAgent (hub/ui/src/api/agents.ts:214-241) is the only client of both routes and its onSuccess takes no argument, so the body is discarded. So every sentence group 2 adds (released_charter_id, the archive sentence, the unarchive standing sentence) is an API fact no operator can read, and the operator's own rider ('unarchive must then say the bindings are gone') is only half discharged. The change is complete and shippable without either half. R3 (iteration 5) did not change either half, but found a THIRD option neither earlier round had: archiving persists no event at all (F391, design.md D10), so a persist_event(..., 'agent_archived', {released_charter_id: ...}) would make the released binding DURABLE and queryable with NO hub/ui/src change and therefore no bundle refresh -- the only route to the rider's second half that does not reach the live :8000 app. It does not render it (useSSE.ts allow-lists event kinds at :31 and switches at :460), so it closes the recording gap, not the display gap.",
-            "options": [
-                "accept the bundle refresh and do both halves (disable the picker + surface the server detail; render what archive/unarchive say)",
-                "accept the bundle refresh for half (a) only",
-                "ship API-only and file both halves as their own findings",
-                "ship API-only now, and take F391's server-side event separately -- makes the released charter durable without a bundle refresh, but still renders nothing"
-            ],
-            "raised": "2026-09-20 iteration 3 (R1), widened iteration 4 (R2), third option added iteration 5 (R3)"
-        }
-    ],
+    "decisions_for_user": [],
     "limits": [
         "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
         "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
@@ -106,6 +99,7 @@
         "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
         "Tests under py -3.11, never bare python. black needs --target-version py311.",
         "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "F388 is live on this machine and this window is now specking it: a Hub started from source with a DATABASE_URL that does not reach the process lands on ~/.agentweave/hub/data/agentweave.db, the operator's live database. Set the variable in PowerShell ($env:DATABASE_URL) before Start-Process, pre-create the profile directory, and kill only the exact PID netstat -ano names LISTENING on the target port -- never taskkill /IM python.exe.",
         "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
     ]
 }

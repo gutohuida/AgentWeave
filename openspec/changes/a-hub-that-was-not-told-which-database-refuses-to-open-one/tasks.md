@@ -1,0 +1,177 @@
+# Tasks — a Hub that was not told which database refuses to open one
+
+**Round 1, 2026-09-20. Not approved. Nothing here is built.**
+
+**Read before starting:** this change removes a default that every unattended window on this machine
+currently relies on without knowing it. **Group 3 is not optional and is not cleanup** — the moment
+group 1 lands, `make ui` and every `scripts/drive/*.py` that imports `hub` stops working until group
+3 is done. Do groups 1 and 3 in the same commit, or do neither.
+
+**No migration. No `hub/ui/src` change, therefore no `make ui` bundle refresh, therefore nothing in
+this change reaches the operator's live `:8000` app on their next reload.** If a task here acquires a
+file under `hub/ui/src`, stop and leave it for the operator (day-window rule; the same wall
+`an-archived-agent-holds-nothing-and-is-offered-nowhere` hit).
+
+---
+
+## Group 1 — (a): the Hub refuses to guess
+
+- [ ] 1.1 In `hub/hub/config.py`, add a module-level exception type — `HubNotToldWhichDatabase(RuntimeError)`
+      — and export it. A distinct type, not a bare `RuntimeError`: `hub/tests/` asserts on it, and a
+      future caller that wants to catch this and only this needs something to name.
+- [ ] 1.2 Replace `database_url: str = Field(default_factory=_default_database_url)` (`config.py:23`)
+      with `Field(default_factory=_refuse_to_guess_a_database)`, a new module-level function that
+      raises `HubNotToldWhichDatabase`. **Do not make the field required** — measured in D2, a bare
+      required field yields `1 validation error for Settings / database_url / Field required
+      [type=missing, input_value={}, input_type=dict]`, which names neither the database nor the fix.
+- [ ] 1.3 Keep `_default_database_url()` exactly as it is, and call it from the refusal message
+      (D7). It is still the path the CLI computes, still what `agentweave doctor` reports on, and
+      still the subject of the CLI-drift test in 1.7.
+- [ ] 1.4 Write the message. It MUST contain, verbatim enough to assert on: the **absolute** path it
+      declined to open; `DATABASE_URL`; and bare `agentweave` as the deliberate way to get that
+      default. It MUST also say which sources were consulted — the process environment **and** a
+      `.env` in the working directory — because an operator with a `.env` one directory up will
+      otherwise read the message as false (D3).
+- [ ] 1.5 `hub/tests/test_config.py`: rewrite
+      `TestDatabaseUrlDefault::test_default_is_absolute_home_relative_path_not_the_old_relative_default`
+      into a refusal test. It must `monkeypatch.delenv("DATABASE_URL")`, construct
+      `Settings(_env_file=None)`, assert `HubNotToldWhichDatabase` is raised, and assert **all three**
+      elements of 1.4's message are present. Do not assert the whole string; assert the three facts.
+- [ ] 1.6 Add the complement in the same class: with `DATABASE_URL` set, `Settings(_env_file=None)`
+      returns it and **the factory does not run** (D2's measured property — assert by pointing the
+      factory at something that would fail loudly, or by asserting the returned value alone if that
+      reads cleaner). Also add: a value supplied only by an env *file* satisfies the refusal (D3).
+- [ ] 1.7 Repoint `TestDatabaseUrlDriftAgainstCli::test_hub_default_matches_cli_hub_dir` at
+      `_default_database_url()` directly instead of at `Settings(...).database_url`. **Do not delete
+      it.** It is the only thing in the tree guarding the `agentweave-ai` / `agentweave-hub` seam,
+      and D4's rejection of the stronger guard rests on that seam being real.
+- [ ] 1.8 Run `py -3.11 -m pytest hub/tests/test_config.py -v` and record the count here. Before this
+      change it is `4 passed`; under a naive required-field version it is `2 failed, 2 passed`
+      (measured 2026-09-20). **Write the number you actually saw**, not the number expected.
+
+## Group 2 — (b): the Hub names its database before it opens it
+
+- [ ] 2.1 In `hub/hub/main.py`'s `lifespan()` (`:412`), as the **first statement, before
+      `await init_db()`** (`:413`), resolve the sqlite file path out of `settings.database_url` and
+      capture `Path(...).exists()` **into a local, before anything runs** — `init_db` creates the
+      directory (`engine.py:346-350`) and SQLite creates the file, so the answer changes one line
+      later.
+- [ ] 2.2 Emit one line carrying: the **absolute** resolved path; whether the file existed before
+      this process opened it; and `os.getpid()`.
+- [ ] 2.3 **Do not print a port** (D6). `settings.aw_port` is configured intent — only
+      `hub/hub/main.py:540` honours it, and a `--port` on the uvicorn command line never reaches
+      `settings`. `hub/hub/bound_address.py` is the module that knows the real port and it is
+      **empty during `lifespan()`** (populated by request middleware, `main.py:466-469`). A port on
+      this line would be wrong in exactly the drive scenario F388 came from.
+- [ ] 2.4 Emit it with `logger.warning`, and put the reason in a comment beside it: measured
+      2026-09-20, `logging.getLogger("hub.*").isEnabledFor(logging.INFO)` is `False` both before
+      `init_db` (root has no handler; `logging.lastResort` is WARNING-only) and after it (root is
+      configured by `hub/hub/alembic.ini:20-22`'s `level = WARN` via `migrations/env.py:28`). Without
+      the comment, a later tidy-up will "correct" the level and silently delete the feature.
+- [ ] 2.5 Handle the non-sqlite case without crashing: if `settings.database_url` does not start with
+      `sqlite`, log the URL **with any credentials stripped** and skip the existence check. Do not
+      let the safety line become a way to print a password into a log.
+- [ ] 2.6 Test it in `hub/tests/` by asserting on the emitted record (`caplog`), **not** by asserting
+      the string reaches stdout — and assert the record's `levelno` is `>= logging.WARNING`. The level
+      is the feature; a test that only checks the text passes on an invisible line.
+- [ ] 2.7 Add the test that D5 exists for: assert `logging.getLogger("hub.main").isEnabledFor(
+      logging.INFO)` is `False` under the alembic-configured root, so that if someone later gives the
+      Hub its own logging configuration, this test fails and tells them 2.4's comment is now stale
+      rather than leaving a false comment in place.
+
+## Group 3 — the one caller that breaks, and it breaks `make ui`
+
+- [ ] 3.1 `scripts/refresh_ui_bundle.py:110` does `from hub.main import UI_BUILD_STAMP,
+      ui_source_fingerprint` with no `DATABASE_URL` set. Measured under the probe: `make ui` and
+      `make ui-check` die with a raw `pydantic_core.ValidationError`. Fix it — the script needs a
+      build stamp, not a database, so set `os.environ.setdefault("DATABASE_URL",
+      "sqlite+aiosqlite:///:memory:")` immediately before the import, with a one-line comment saying
+      why.
+- [ ] 3.2 Grep `scripts/` for every other module-scope import of `hub.*` and decide each one the same
+      way: `scripts/drive/setup_d2_cutover.py`, `scripts/drive/churn_sessions_plugin.py`,
+      `scripts/drive/t_*.py`, `scripts/drive/n10_route_reachability.py`. Drive scripts that genuinely
+      want a database are **correct to fail** — that is this change working — so fix only the ones
+      that do not, and say in the commit which were left to fail on purpose.
+- [ ] 3.3 Confirm the three launch paths that must keep working, by running them: `make ui-check`;
+      `agentweave --help`; `cd testbed/scratch && agentweave doctor`. Measured 2026-09-20 that the
+      last two do not import `hub` and are unaffected — **re-measure rather than trusting that line.**
+- [ ] 3.4 Do **not** change `hub/tests/conftest.py`. It assigns `os.environ["DATABASE_URL"]` before
+      importing anything from `hub` (`:57-67`), so the whole Hub suite is already a told path.
+
+## Group 4 — (d) and the prose that carried the guarantee
+
+- [ ] 4.1 `hub/hub/config.py:10-15`: rewrite `_default_database_url()`'s docstring. The current text
+      says the default is *"Only consulted by callers that skip the CLI"* and *"this default never
+      fires there"* — the second clause is false and the first describes the dangerous path as safe.
+      Say instead what the function now is: the path bare `agentweave` resolves to, quoted by the
+      refusal, never used as a fallback.
+- [ ] 4.2 `.claude/handoffs/DEAD-ENDS.md`, § *Starting a Hub from source can land on the operator's
+      real database*: correct the sentence *"`sqlite3`/`aiosqlite` will not create a missing parent
+      directory … making directory-existence the cheap thing to check first."* True of raw
+      `aiosqlite` (measured: `OperationalError: unable to open database file`), **false of the Hub**,
+      which calls `os.makedirs(..., exist_ok=True)` at `engine.py:346-350`. **Keep the check and
+      strengthen it:** because the Hub would have created the directory, a profile directory that does
+      not exist afterwards proves the URL never reached the process at all. Add the date and the
+      change name.
+- [ ] 4.3 Same entry: replace *"verify from the server's own startup log — a fresh throwaway file
+      logs the whole `0065→0103` migration chain, an existing database logs only `Application startup
+      complete`"* with group 2's line, which states the fact instead of requiring it to be inferred
+      from an absence. **Keep the migration-chain tell as a fallback for Hubs older than this change**,
+      labelled as such.
+- [ ] 4.4 Same entry: state the recovery as *kill the PID group 2's line printed; failing that,
+      `netstat -ano` for the `LISTENING` PID on the port* — and keep the standing warning that
+      `taskkill /IM python.exe` does not match `pythonw.exe`, so the operator's app can be killed by it
+      while `Get-Process` shows no `python`.
+- [ ] 4.5 `.claude/reference/hubs.md`: the runbook currently hands an agent a `DATABASE_URL=… py -3.11
+      -m uvicorn …` line (`:28`) and nothing that catches the case where the variable does not arrive.
+      Add one sentence saying the Hub now refuses rather than falling back, and that the startup line
+      names the file — so the procedure is "read the line", not "infer from what is missing".
+- [ ] 4.6 `CLAUDE.md`, § *The Hubs on this machine*: the prose *"never `agentweave --port 8010`"* and
+      *"confirm which database a running instance serves before trusting it"* now has a mechanism
+      behind it. Add at most **one sentence** — this file is re-read on every request of every session
+      and its size is a standing constraint.
+- [ ] 4.7 `hub/.env.example:5` ships `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db`, a
+      **relative** path — the pre-`D1` bug, still in the file `hub/.env` on this machine was copied
+      from. Make it absolute or comment it out with the absolute form shown. Do **not** touch
+      `hub/.env` itself; it is gitignored local state.
+- [ ] 4.8 Do **not** change `hub/docker-compose.yml:34`. Its relative `data/agentweave.db` is
+      container-internal and paired with a named volume; it is a told path and it is correct.
+
+## Group 5 — the spec, and what it costs
+
+- [ ] 5.1 Apply `specs/app-lifecycle/spec.md`'s `MODIFIED` requirement. **Note what it removes**: the
+      scenario *"The Hub's own database is launch-directory-independent"*, which normatively required
+      a no-`DATABASE_URL` `uvicorn hub.main:app` to resolve to the home path. That scenario **is**
+      F388. Removing it is the point; saying so out loud is the task.
+- [ ] 5.2 Check that the guarantee the removed scenario existed to protect is still carried. It is, by
+      the new scenario *"The database a launch path names does not depend on its working directory"* —
+      which is the real requirement (no cwd-relative paths) separated from the fallback that was doing
+      the work.
+- [ ] 5.3 `openspec validate a-hub-that-was-not-told-which-database-refuses-to-open-one --strict`
+      passes. **Not evidence of anything but the file's shape** — record it, do not lean on it.
+- [ ] 5.4 Run `py -3.11 -m pytest hub/tests/ -q` in full and **write the count into this file.** Not
+      `test_config.py` alone: this change edits `main.py`'s `lifespan()`, which every API test starts.
+      F392 was filed on 2026-09-20 for a task ticked on the strength of a run nobody recorded — do not
+      add to it.
+- [ ] 5.5 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/
+      hub/tests/ tests/` over exactly CI's paths.
+
+## Group 6 — drive it, because a passing suite is not proof
+
+- [ ] 6.1 The refusal, for real: from a directory with no `.env`, `DATABASE_URL` unset, run
+      `py -3.11 -m uvicorn hub.main:app --port 8093`. It must fail to start and print 1.4's message.
+      **Then confirm nothing was created** — no new file, no new directory at the default path. This
+      is the one check that matters and no unit test can make it.
+- [ ] 6.2 The startup line, for real: start the same command with `DATABASE_URL` naming a **new**
+      throwaway profile and read the output. The line must appear (D5's whole claim is that an `INFO`
+      one would not), must name the absolute path, and must say the file did **not** exist. Then stop
+      it and start it again against the same file: the line must now say it **did**.
+- [ ] 6.3 Kill it by the PID the line printed. If that does not stop the server, group 2's line is
+      printing the wrong PID — which uvicorn's reload/spawn behaviour makes a live possibility, and
+      `DEAD-ENDS.md` already records that the launching shell's PID is not the listening one.
+- [ ] 6.4 **Never against port 8000, 8010, `~/.agentweave/hub/data/`, `proj-5e960453` or
+      `proj-18e5d4e0`.** Use a port in the 8090s and a profile directory created for this drive and
+      deleted after.
+- [ ] 6.5 Write the drive up in `scripts/drive/FINDINGS.md` as a `D-n` narrative entry, and set
+      `**Status:** fixed <sha>` on **F388** only once 6.1, 6.2 and 6.3 have all been observed — not
+      when the suite goes green.

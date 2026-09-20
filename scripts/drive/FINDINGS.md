@@ -29929,9 +29929,13 @@ it. **Do not read this finding as a decision that it should be built.**
 
 ## F388 (A) — a Hub started from source silently opens the operator's live database, and the code comment says it cannot
 
-**Status:** open. Filed 2026-09-19 by the interactive DECIDE session, at the operator's explicit
-instruction ("Yeah becomes a finding"), after the 2026-09-19 day window hit it against the real
-`:8000` database.
+**Status:** open — **specced 2026-09-20 (R1 only), no token, nothing built.** Change directory
+`openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one` carries the decided
+fix (a) + (b) + (d); `openspec validate --strict` passes. **R2 and R3 have not run**, so the
+proposal is one round's argument and nothing more, and no line of `hub/hub/config.py` has changed.
+Filed 2026-09-19 by the interactive DECIDE session, at the operator's explicit instruction
+("Yeah becomes a finding"), after the 2026-09-19 day window hit it against the real `:8000`
+database.
 **Source:** operator
 **Theme:** Operator surfaces
 
