@@ -8,33 +8,81 @@
     "parent_branch":  "master",
     "parent_sha":  "802a8c7",
     "stop_at":  "2026-09-21T07:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-20-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "current":  "group1-impl",
+    "next_action":  "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 1.1-1.8 (archival releases the charter binding, agent_lifecycle.py + charters.py + agents.py patch_agent guard). Tick each task with its mutation check recorded. Commit.",
     "queue":  [
                   {
-                      "id":  "compose",
+                      "id":  "group1-impl",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "Group 1 - archival releases the charter binding",
+                      "detail":  "Tasks 1.1-1.8. archive() nulls charter_id, keeps runner_id; patch_agent refuses re-binding a charter to an archived agent (409); tests + mutation checks."
+                  },
+                  {
+                      "id":  "group2-impl",
+                      "status":  "open",
+                      "title":  "Group 2 - archive/unarchive responses state the binding's fate",
+                      "detail":  "Tasks 2.1-2.5. released_charter_id + sentence on archive; revised D8 sentence on unarchive (use R2 wording exactly, not R1's 'before this agent's next turn'). No UI change; confirm useArchiveAgent still discards body."
+                  },
+                  {
+                      "id":  "group2b-impl",
+                      "status":  "open",
+                      "title":  "Group 2b - the transition leaves a trace (F391)",
+                      "detail":  "Tasks 2b.1-2b.7. persist_event + sse_manager.broadcast for agent_archived/agent_unarchived, server-side only, no hub/ui/src change, no make ui. Payload carries released_charter_id (pre-release capture, not re-read after)."
+                  },
+                  {
+                      "id":  "group3-impl",
+                      "status":  "open",
+                      "title":  "Group 3 - migration 0105 clears archived agents' charter bindings",
+                      "detail":  "Tasks 3.1-3.5. down-revision 0104, guard missing agents table, no-op downgrade documented, bump head assertions in test_migrations.py + test_project_persistence.py, data test with mutation."
+                  },
+                  {
+                      "id":  "group4-impl",
+                      "status":  "open",
+                      "title":  "Group 4 - launchability applies the roster's lifecycle filter (F181)",
+                      "detail":  "Tasks 4.1-4.5. lifecycle query param on get_agents_launchability matching list_agents; filter after session_agents_meta, before per-name loop; probe/spawn agreement test."
+                  },
+                  {
+                      "id":  "group5-impl",
+                      "status":  "open",
+                      "title":  "Group 5 - the third site, runners.py delete_runner (F390)",
+                      "detail":  "Tasks 5.1-5.3. Qualify archived holders in the refusal message; three-case test with mutation; set F390 fixed <sha> in same commit."
+                  },
+                  {
+                      "id":  "group-verify-drive",
+                      "status":  "open",
+                      "title":  "Group 6 - full suite, lint, and a real drive",
+                      "detail":  "Tasks 6.1-6.4. pytest hub/tests/ -v green, ruff/black/mypy clean, drive on a fresh throwaway Hub (not 8000/8010) covering F185 end to end, F181 probe/trigger, and the 0105 migration against a seeded db. Haiku for any real agent turn. Set F185/F181/(F390) fixed in FINDINGS.md with evidence."
+                  },
+                  {
+                      "id":  "change-archive",
+                      "status":  "open",
+                      "title":  "openspec validate --strict, then sync-specs/archive-change",
+                      "detail":  "Task 6.5. Use the repo's own skills, not by hand. Retire F185/F181/F390/F391 statuses per night-window.md's archiving rule; correct FINDINGS.md's open severity list."
+                  },
+                  {
+                      "id":  "i-6.2-redo",
+                      "status":  "open",
+                      "title":  "If time remains: a-loop-staffs-the-agent-it-names group 6.2-REDO",
+                      "detail":  "Run py -3.11 -m pytest hub/tests/ -q in full and write the actual count into the task (APPROVALS.md 2026-09-20: 6.2's tick cites a log entry that was never written -- do not trust it). Section 5 of that change is still NOT approved, do not build it."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
