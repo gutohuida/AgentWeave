@@ -9788,8 +9788,26 @@ correction to the fix shape above: re-asking the guard *first* could answer a fi
 newest `JobRun` id before and after the firing. It answers from a row only if the firing wrote it,
 and re-asks the guard only if it wrote none.
 
+**Note 2026-09-20 (`a-loop-staffs-the-agent-it-names`).** This entry's **409 sentence itself** was
+re-derived, not re-decided, while driving that change's fix for F128: `D-4, 2026-09-20` presses Run
+on a documentless loop pinned to a busy agent, with siblings free, and gets exactly `"gamma… is
+already running a turn, and no other agent is free to take this loop's work. Nothing was started."`
+— this entry's own wording, now reachable in the shape F128 used to substitute silently instead.
+`Status:` is unchanged; this note only confirms the sentence still holds post-F128-fix.
+
 ## F128 (B) — a loop runs on an agent its job does not name, whenever its own agent is busy
-**Status:** open (operator decision needed: loop-scoped free list vs. UI/API no longer implying `job.agent` is who runs the loop; reaffirmed 2026-09-14 and 2026-09-15, still unresolved)
+**Status:** fixed `831ac16`/`adca56b` — `a-loop-staffs-the-agent-it-names` design D1/D2/D3, groups
+0-4 and 6, driven clean in `D-4, 2026-09-20`. The free list became loop-scoped: `decide_firing`'s
+fresh-work draw and `_loop_flow_busy_reason`'s pool check both now read
+`_agents_a_loop_may_staff(session, loop)`, which returns `[]` for a documentless loop (no
+substitution) and the unfiltered free list for a flow (D12's width survives where it was meant to).
+This closes the authority hole the finding names above: a documentless loop's `job.agent` is no
+longer only a default silently overridden by a busy sibling with a **different `charter_id`
+(`models.py:219`), `runner_id` (`:216`) and authority flags
+(`can_read_checkpoints`/`can_recall`/`can_accept_evidence`, `:254-268`)** — the exact reason this was
+never a cosmetic finding. Group 5 (rewording the operator-facing UI/API text) is unbuilt and stays
+open in `openspec/changes/a-loop-staffs-the-agent-it-names/`; this finding closes on the substitution
+being fixed, not on that wording landing.
 
 Driven live in `t_run_while_busy.py` (that file's own BAD lines are this discovery). Job
 `busy-run` was created with `agent: gamma`. gamma was put mid-turn on an unrelated errand. Pressing

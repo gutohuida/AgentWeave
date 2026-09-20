@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "a435f48",
     "stop_at":  "2026-09-20T07:00:00+01:00",
-    "iteration":  7,
+    "iteration":  9,
     "log_file":  ".claude/autonomous/2026-09-19-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "alsn-closeout",
-    "next_action":  "alsn-closeout: a-loop-staffs-the-agent-it-names, group 8 (close it out, F128). Close F128 in scripts/drive/FINDINGS.md with the commit sha(s) (831ac16 groups 0-4, adca56b group 6) once #0-4,6,7 are all green and driven -- they are, per D-4's drive. Do NOT archive the change itself -- group 5 (operator-facing wording) is unbuilt, so the change stays open in openspec/changes/. Also: append F127 note (task 8.3, its 409 sentence was re-derived here, do not change its Status) and the DECISIONS.md:748 correction (task 8.4, append, do not edit the row). Task 8.1 (test-guide.md) needs a human-verifiable/agent-verifiable split -- write it or explicitly decide it waits for group 5 (the operator-facing wording task 8.1 would otherwise have to describe) and say which. Model sonnet, effort medium, per this item's own queue entry.",
+    "current":  null,
+    "next_action":  null,
     "queue":  [
                   {
                       "id":  "compose",
@@ -69,11 +69,11 @@
                   },
                   {
                       "id":  "alsn-closeout",
-                      "status":  "open",
+                      "status":  "done",
                       "title":  "a-loop-staffs-the-agent-it-names: group 8 (close it out, F128)",
                       "model": "sonnet",
                       "effort": "medium",
-                      "detail":  "Close F128 in scripts/drive/FINDINGS.md with the commit sha once §0-4,6,7 are all green and driven. Do NOT archive the change itself -- §5 is unbuilt so the change stays open in openspec/changes/."
+                      "detail":  "F128 set to fixed (831ac16/adca56b, D-4 2026-09-20) in scripts/drive/FINDINGS.md, authority-hole account kept verbatim. F127 note appended (409 sentence re-derived, Status untouched -- fixed c8e3bbd 2026-09-14). DECISIONS.md correction appended after the F128-fix row (line had drifted from :748 to ~768): the row's 'F127's 500 must be fixed in the same change' sentence was already stale when written 2026-09-19, since F127 was fixed five days earlier. Row itself untouched, correction appended per task 8.4. Wrote test-guide.md covering groups 0-4/6/7 as agent-verifiable; group 5's wording checks explicitly named as not-yet-written (decision: does not wait for group 5). tasks.md 8.1-8.4 all [x]. openspec validate --strict passes. Change NOT archived -- group 5 stays open in openspec/changes/. backlog_page.py regenerated: F128 now reads 'no longer open' (211->210, fixed 155->156). Queue finished -- next_action set to null."
                   }
               ],
     "decisions_for_user":  [

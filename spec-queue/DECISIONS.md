@@ -779,6 +779,14 @@ days. The operator's framing that governs two of them:
   (a **flow** already is the width case, so the flag re-implements an existing concept at the cost
   of a migration and a control — struck under the standing "cleanest solution wins" preference).
 
+**Correction, 2026-09-20 (night window, `alsn-closeout`).** The row above's sentence *"F127's 500
+must be fixed in the same change"* was stale when written on 2026-09-19 afternoon: F127 was already
+fixed five days earlier, by `c8e3bbd` on 2026-09-14 (`a-spent-allowance-holds-the-queue` design D11,
+archived), not by this change. `a-loop-staffs-the-agent-it-names` made that existing fix's busy-guard
+reachable again in the multi-agent shape F128 used to hide it in — driven live and confirmed in
+`scripts/drive/FINDINGS.md`'s `D-4, 2026-09-20` — but it did not fix F127 itself. Appended per this
+change's own task 8.4 instruction not to edit the row.
+
 **Also settled, as queueing rather than deciding:** `F185` + `F181` share one root cause
 (`agent_lifecycle.archive` leaves `charter_id` bound) and their remedy was already decided at
 `DECISIONS.md:536` and `:586`. They become **one change, taken by the next day-window spec loop** —

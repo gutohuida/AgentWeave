@@ -356,13 +356,16 @@ else means the tree has moved further than this list knows.
 
 ## 8. Close it out
 
-- [ ] 8.1 Write `test-guide.md` (R2-12 — there is none to re-derive), splitting agent-verifiable
-      checks from the ones only the operator can make on `:8000`.
-- [ ] 8.2 Set F128's `**Status:**` to fixed, naming the commit, and **keep the entry's account of
-      the authority hole** — `charter_id`, `runner_id` and the three flags are why this was not a
-      cosmetic finding.
-- [ ] 8.3 Append a note to F127 recording that its 409 *sentence* was re-derived here. Do not change
-      its `Status:` — it was fixed by `c8e3bbd` on 2026-09-14.
-- [ ] 8.4 Append a correction to `spec-queue/DECISIONS.md:748`, which requires *"F127's 500 must be
-      fixed in the same change"*. It was stale when written. **Append; do not edit the row** — a
-      decision log that is silently rewritten stops being evidence.
+- [x] 8.1 Wrote `test-guide.md`, covering groups 0-4/6/7 (built and driven) as agent-verifiable and
+      naming group 5's wording checks as not-yet-written rather than pre-writing them against text
+      that doesn't exist. Decision: does not wait for group 5 — it describes what shipped.
+- [x] 8.2 F128's `**Status:**` set to fixed, naming `831ac16`/`adca56b` and `D-4, 2026-09-20`, with
+      the authority-hole account (`charter_id`, `runner_id`, the three flags) kept verbatim in the
+      entry body.
+- [x] 8.3 Appended a note to F127 (`scripts/drive/FINDINGS.md`) recording that its 409 sentence was
+      re-derived, not re-decided, in `D-4`. `Status:` unchanged (fixed `c8e3bbd`, 2026-09-14).
+- [x] 8.4 Appended a correction after the `F128-fix` row in `spec-queue/DECISIONS.md` (line 748 had
+      drifted to ~768 by the time this ran — the file's own recurring citation-drift failure,
+      confirmed by reading the actual row rather than trusting the line number): the row's sentence
+      *"F127's 500 must be fixed in the same change"* was already stale on 2026-09-19 afternoon, since
+      F127 was fixed five days earlier by `c8e3bbd`. Appended; the row itself is untouched.
