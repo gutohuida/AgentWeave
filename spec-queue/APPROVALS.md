@@ -63,14 +63,122 @@ disagrees with the code, the task is the thing more likely to be wrong.
 
 - APPROVED  an-archived-agent-holds-nothing-and-is-offered-nowhere   all groups, including the new 2b and group 5; no UI, no bundle refresh
 
+### APPROVED — `a-first-turn-is-not-told-it-has-nothing`, **group 7 only**
+
+**Added 2026-09-20 22:3x, in session with the operator present**, after the operator asked for more
+than one change and an e2e run on the same night. Groups 1-6 were implemented, quality-gated and
+**merged to `master` at `802a8c7`** earlier this evening; CI run `35536597112` is green on all nine
+jobs. Group 7 is the only thing left, and it is a drive, not a build.
+
+**What it is.** The measurement the operator's **D2** decision turns on: *"ship this shape, then
+measure"*. Three fresh agents, a throwaway Hub, **Haiku bound** (standing directive), **first turn
+only**. It answers whether removing the two false sentences actually moves behaviour, or whether the
+Architect's ten post-fix `curl` runs mean the steer was never the cause.
+
+- **Read task 7.1b before 7.1.** It names three preconditions 7.1 does not, each of which *silently
+  voids the experiment while looking identical in the transcript*: `hub_client` must resolve to
+  `None` (not `"cli"`, not `"mcp"`), the bound runner must be in `MCP_INJECTABLE_RUNNERS`, and the
+  agent must have **no prior run** carrying `mcp_adapter_online_at`. All three are trivially true of
+  a brand-new agent on a fresh Hub — which is why 7.1's wording is safe *only* if the agent really
+  is new. **Verify them before the turn, not after.**
+- **The baseline in 7.5 is n=1, not "4 of 4".** R3 corrected this and it was the most load-bearing
+  error in the group. Four agents were *told* the sentence; one agent's behaviour was read. Do not
+  restore the larger number.
+- **7.4 must carry counts inline.** Per **F392** and the operator's own bar, a tick citing a log
+  entry that was never written is not done. **The change stays barred from archive until it does.**
+- **Whatever it finds, append it to F302 in `scripts/drive/FINDINGS.md`** (task 7.6) — including a
+  result that says the change did not help. F302 is already `fixed 802a8c7` for the *text*; the
+  behavioural claim is deliberately left open, and 7.7 corrects the exploration's own overreach.
+
+- APPROVED  a-first-turn-is-not-told-it-has-nothing   group 7 ONLY (7.1-7.7); groups 1-6 are built, merged and green
+
+### APPROVED — one full-surface e2e sweep, **last**, and only if the queue above is finished
+
+The operator asked for this explicitly. Per-change drives are scoped to the change; a full-surface
+sweep is the only thing that finds defects living *between* two features. Use the `e2e-loop` skill.
+**It is last on purpose: it must not consume the window before the builds land.**
+
+**Four constraints, because the skill's own "Reference — this machine" section conflicts with
+`night-window.md` and following it literally would be a CLAUDE.md violation:**
+
+1. **NOT port 8010.** `.claude/skills/e2e-loop/SKILL.md:144` hands you a launch on **8010**. That is
+   the *trial Hub*, and **this repository is registered in it as `proj-d85a82bf4216`**. Driving it
+   points the Hub you are editing at the tree you are editing — the exact thing CLAUDE.md prohibits,
+   because a restart kills the runs orchestrating the work. `night-window.md` already says never
+   8010 and never 8000. **Pick a free port** (`netstat -ano | grep LISTENING` first) and record it.
+2. **Set `DATABASE_URL` explicitly** to a per-night drive profile, `profiles/drive0920/agentweave.db`.
+   That same skill line carries **no `DATABASE_URL`**, so it resolves through the gitignored
+   `hub/.env` — measured today as the *relative* `data/agentweave.db`, i.e. whatever is under the
+   launch directory. It does **not** reach the operator's live database (checked), but it is not a
+   fresh profile either, and a sweep that inherits another run's rows is not a sweep. **This is
+   F388's mechanism and it is still unfixed** — see the REVISING row below.
+3. **Fresh project every drive; never `proj-5e960453` or `proj-18e5d4e0`**, and never this
+   repository's own working directory as the project path.
+4. **Haiku on every real agent turn**, and **never leave a job enabled**. File what it finds in
+   `scripts/drive/FINDINGS.md` with the usual `Source: found by driving`.
+
+### REVISING — `a-hub-that-was-not-told-which-database-refuses-to-open-one` (**F388, severity A**)
+
+**The operator's standing adversarial-Opus pass ran on 2026-09-20 22:2x and returned DO NOT APPROVE.**
+This change was a candidate for tonight and is **held out of the queue**. R1, R2 and R3 all ran today
+and all concluded "every decision survives"; the core mechanism *is* sound — the reviewer probed the
+raising `default_factory` directly and could not break D2 or D3. The blockers are in the task list
+and the delta, which is exactly what a fourth independent pass is for.
+
+**Four blocking findings, for tomorrow's R4 — do not build any of this tonight:**
+
+1. **A second spec-vs-tasks contradiction, the same class R3 caught once.**
+   `specs/app-lifecycle/spec.md:9-13` still requires launch-directory independence for *"a direct
+   `uvicorn hub.main:app` invocation"*, while **task 4.7 mandates the opposite** and says so in its
+   own words. No task touches those lines.
+2. **Task 2.7 is a test that cannot fail — measured, not argued.** The reviewer ran it: pytest's
+   logging plugin pins the root logger at WARNING, so
+   `logging.getLogger("hub.main").isEnabledFor(logging.INFO) is False` holds with `alembic.ini`
+   deleted. It ticks green proving nothing. **F190's shape.**
+3. **Group 3's sweep is labelled *"settled by R3"* and is incomplete.** Three more
+   `uvicorn hub.main:app` launches with no `DATABASE_URL` exist and were never opened:
+   `.claude/skills/e2e-loop/SKILL.md:144`, `.claude/skills/autonomous-session/SKILL.md:265` (and
+   both `.agents/` mirrors), and **`hub/Makefile:25`** (`make dev`). All survive today only on the
+   gitignored `hub/.env`. `tasks.md:9-11` tells a fresh process to treat group 3 as complete.
+4. **Remedy (d) leaves a live copy of the false sentence it exists to delete.**
+   `hub/tests/test_config.py:3-7` restates the same guarantee; task 1.9 fixes a *different*
+   docstring and task 4.1 fixes `config.py`. And 4.1's own replacement text is unqualified in the
+   same way, because `src/agentweave/cli.py:617-621` returns a pre-existing `DATABASE_URL`.
+
+**The one thing every round got right for the wrong reason, worth carrying into R4:** all three
+asserted the operator's `:8000` is a native `agentweave` start and therefore unaffected — while the
+only document they had, **`.claude/reference/hubs.md:37`, says it is a bare
+`pythonw -m uvicorn hub.main:app --port 8000` with no `DATABASE_URL`**, i.e. says the change would
+brick it. None of them reconciled that. The reviewer measured it from the PID file
+(`~/.agentweave/hub/hub.pid` = 9940/8000, mtime exactly matching the process, written only at
+`cli.py:1108` inside the detach branch that sets `DATABASE_URL` at `:1038`) and **refutes** the
+brick — but on inference from a PID file, not from the process's environment block. **`hubs.md:37`
+is false and is still in the file task 4.5 edits.**
+
+- REVISING  a-hub-that-was-not-told-which-database-refuses-to-open-one   adversarial Opus returned DO NOT APPROVE 2026-09-20; four blocking items above; needs R4, not a build
+
 ```
-ORDER: an-archived-agent-holds-nothing-and-is-offered-nowhere all groups
+ORDER: an-archived-agent-holds-nothing-and-is-offered-nowhere all groups, then a-first-turn-is-not-told-it-has-nothing group 7 ONLY, then one full-surface e2e sweep under the four constraints above
 ```
 
-**If that change is finished and the window still has time**, the backlog-first default applies —
-and the honest next item is `a-loop-staffs-the-agent-it-names` **group 6.2-REDO**: run
+**Why group 7 is second and not last.** It is a drive on a throwaway Hub and it is the only thing
+standing between `a-first-turn-is-not-told-it-has-nothing` and the archive, which serves the week's
+**O5**. It is cheap — one drive iteration — and putting it behind a 38-task build risks losing it to
+the clock for no gain.
+
+**If all three finish and the window still has time**, the backlog-first default applies — and the
+honest next item is `a-loop-staffs-the-agent-it-names` **group 6.2-REDO**: run
 `py -3.11 -m pytest hub/tests/ -q` in full and write the count into the task. **§5 of that change is
 still NOT approved** and was held deliberately on 2026-09-19.
+
+**Inherited state, measured at 22:3x so the compose iteration does not have to.** `master` is
+`802a8c7` and **CI is green on it** (run `35536597112`, all nine jobs). The branch HEAD `28ed8f1` is
+**red on F292 alone** — `4452 passed, 20 skipped, 0 failed, 1 error`, `database is locked`, on a
+commit whose entire diff is one `.md` file. Per step 3 that is the gate's business, not the night's:
+name it and carry on. Tonight's green rate is **6 of 9**. The full local Hub suite is green twice
+over at `802a8c7` (`4460 passed, 86 skipped`, in 33m27s and 26m46s). **Also new tonight: F394 (A)** —
+`hub-test` sometimes does not error on `master`, it *hangs*, and three runs were killed or stranded
+at the 6-hour mark. A run with no conclusion is neither green nor red; do not read one as either.
 
 ## 2026-09-19
 

@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-20 23:00 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>6c934d7</b> · clean<br>
+      generated <b>2026-09-20 23:04 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>daaa52a</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -253,7 +253,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="fig"><b>218</b><span>open items — 214 findings + 4 requests</span></div>
     <div class="fig" data-t="op"><b>8</b><span>you asked for</span></div>
     <div class="fig"><b>27</b><span>have a proposal, so the night can build them</span></div>
-    <div class="fig" data-t="op"><b>5</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs no spec loop</span></div>
+    <div class="fig" data-t="op"><b>4</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs no spec loop</span></div>
     <div class="fig"><b>6</b><span>unbuilt changes in total (the drain)</span></div>
   </div>
 
@@ -739,7 +739,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
         <h3>Tonight · FIX builds</h3>
         <p class="when">reads spec-queue/APPROVALS.md § 2026-09-20</p>
         <div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>an-archived-agent-holds-nothing-and-is-offered-nowhere</code><span class="apr-note">all groups, including the new 2b and group 5; no UI, no bundle refresh</span></div>
-        <div class="directive"><span class="tok">ORDER</span><code>an-archived-agent-holds-nothing-and-is-offered-nowhere all groups</code></div>
+<div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>a-first-turn-is-not-told-it-has-nothing</code><span class="apr-note">group 7 ONLY (7.1-7.7); groups 1-6 are built, merged and green</span></div>
+<div class="apr" data-tok="REVISING"><span class="tok">REVISING</span><code>a-hub-that-was-not-told-which-database-refuses-to-open-one</code><span class="apr-note">adversarial Opus returned DO NOT APPROVE 2026-09-20; four blocking items above; needs R4, not a build</span></div>
+        <div class="directive"><span class="tok">ORDER</span><code>an-archived-agent-holds-nothing-and-is-offered-nowhere all groups, then a-first-turn-is-not-told-it-has-nothing group 7 ONLY, then one full-surface e2e sweep under the four constraints above</code></div>
         
       </div>
       <div class="panel">
@@ -767,7 +769,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">a-first-turn-is-not-told-it-has-nothing</code>
-              <span class="chg-badge want">waiting on you</span>
+              <span class="chg-badge ok">approved — waiting on a night</span>
               <p class="chg-facts">10 unticked of 38 · 1 delta spec</p>
               
             </div>
@@ -902,7 +904,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">a-hub-that-was-not-told-which-database-refuses-to-open-one</code>
-              <span class="chg-badge want">waiting on you</span>
+              <span class="chg-badge">revising</span>
               <p class="chg-facts">41 unticked · 3 rounds · 1 delta spec</p>
               
             </div>
@@ -2081,7 +2083,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="two">
       <div class="panel">
         <h3>STATE-night.json</h3>
-        <p class="when">iteration 0</p>
+        <p class="when">iteration 1</p>
         <p style="font-size:13px;margin:0">branch <code>autonomous/2026-09-17-daily</code><br>stop_at <code>2026-09-21T07:00:00+01:00</code></p>
       </div>
       <div class="panel">
@@ -2094,9 +2096,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-20T23:00:17+01:00",
+ "generated": "2026-09-20T23:04:25+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "6c934d7",
+ "sha": "daaa52a",
  "open": 214,
  "items": 218,
  "requests": 4,
@@ -2104,7 +2106,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
  "retired": 12,
  "filed": 394,
  "drain": 6,
- "awaiting": 5,
+ "awaiting": 4,
  "sev_A": 9,
  "sev_B": 94,
  "sev_C": 93,
