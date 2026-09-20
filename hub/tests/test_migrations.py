@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0104"
+HEAD_REVISION = "0105"
 
 
 # ---------------------------------------------------------------------------
@@ -3566,6 +3566,69 @@ def test_migration_0103_is_guarded_when_the_queue_does_not_exist(tmp_path) -> No
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0103"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0105 — an archived agent holds no charter binding (F185, group 3)
+# ---------------------------------------------------------------------------------------------
+
+
+def test_migration_0105_clears_an_archived_agents_charter_but_leaves_an_open_ones(
+    tmp_path,
+) -> None:
+    """The data test, not a schema test: `charter_id` was already nullable before this
+    migration (`Agent.charter_id`, `hub/hub/db/models.py:230-232`) — nothing about the column
+    changes. What changes is the *rows*: an agent archived before this migration ran still holds
+    the binding `archive()` now releases going forward. Only `lifecycle = 'archived'` rows may be
+    touched — an open agent's binding is exactly the case the `WHERE` clause exists to leave
+    alone.
+    """
+    db_file = tmp_path / "clear_archived_charter_bindings.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url, "0104")
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', " f"'{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO agents (id, project_id, name, self_registered, lifecycle, "
+            "charter_id, created_at, updated) VALUES ('agent-archived', 'proj-1', "
+            f"'a1', 0, 'archived', 'charter-1', '{stamp}', '{stamp}')"
+        )
+        conn.execute(
+            "INSERT INTO agents (id, project_id, name, self_registered, lifecycle, "
+            "charter_id, created_at, updated) VALUES ('agent-open', 'proj-1', "
+            f"'a2', 0, 'open', 'charter-2', '{stamp}', '{stamp}')"
+        )
+        conn.commit()
+
+    _run_alembic_with(db_url, "0105")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute(
+            "SELECT charter_id FROM agents WHERE id = 'agent-archived'"
+        ).fetchone() == (None,)
+        assert conn.execute("SELECT charter_id FROM agents WHERE id = 'agent-open'").fetchone() == (
+            "charter-2",
+        )
+
+
+def test_migration_0105_is_guarded_when_agents_does_not_exist(tmp_path) -> None:
+    """An upgrade starting from an early revision reaches 0105 with only that revision's tables."""
+    db_file = tmp_path / "no_agents_0105.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0104')")
+
+    _upgrade_to(db_url, "0105")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0105"
 
 
 # ---------------------------------------------------------------------------

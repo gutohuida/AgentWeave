@@ -209,20 +209,33 @@ change happened to notice.
 > earlier, and the downgrade cannot put it back. That is the decided remedy, not a side effect —
 > say it in the review page, not only here.
 
-- [ ] 3.1 `hub/hub/migrations/versions/0105_clear_archived_agent_charter_bindings.py`, down-revision
+- [x] 3.1 `hub/hub/migrations/versions/0105_clear_archived_agent_charter_bindings.py`, down-revision
       `0104` — `UPDATE agents SET charter_id = NULL WHERE lifecycle = 'archived'`. Guard for a
       missing `agents` table the way `0033`/`0034` do, because an upgrade from an early revision
       reaches this migration with only that revision's tables.
-- [ ] 3.2 Same file — `downgrade()` is a documented no-op: the cleared bindings are not recoverable
+      **Done 2026-09-20:** migration written, guarded via `_has_table` exactly as `0033`/`0104` do.
+- [x] 3.2 Same file — `downgrade()` is a documented no-op: the cleared bindings are not recoverable
       and the migration must not pretend otherwise.
-- [ ] 3.3 No `models.py` change — `Agent.charter_id` is already nullable
+      **Done 2026-09-20:** `downgrade()` is a single-line no-op with a docstring stating why.
+- [x] 3.3 No `models.py` change — `Agent.charter_id` is already nullable
       (`hub/hub/db/models.py:219-221`). Confirm this rather than assume it.
-- [ ] 3.4 Bump the head assertions in `hub/tests/test_migrations.py` **and**
+      **Confirmed 2026-09-20:** re-read `hub/hub/db/models.py:230-232` — `charter_id: Mapped[Optional[str]]
+      = mapped_column(String(64), ForeignKey("charters.id"), nullable=True)`. No model change made.
+- [x] 3.4 Bump the head assertions in `hub/tests/test_migrations.py` **and**
       `hub/tests/test_project_persistence.py` to `0105`.
-- [ ] 3.5 `hub/tests/test_migrations.py` — a data test, not a schema test: seed an archived agent
+      **Done 2026-09-20:** `HEAD_REVISION = "0105"` in `test_migrations.py`; `assert version ==
+      "0105"` in `test_project_persistence.py`. Grepped both files for any other `"0104"` literal
+      first — none found.
+- [x] 3.5 `hub/tests/test_migrations.py` — a data test, not a schema test: seed an archived agent
       with a non-NULL `charter_id` at `0104`, upgrade, assert NULL; seed an **open** agent with a
       binding and assert it survives. *Mutation: drop the `WHERE lifecycle = 'archived'` clause;
       the second assertion must fail.*
+      **Done 2026-09-20:** `test_migration_0105_clears_an_archived_agents_charter_but_leaves_an_open_ones`
+      (plus `test_migration_0105_is_guarded_when_agents_does_not_exist` for 3.1's guard, matching
+      the house pattern every other guarded migration in this file carries). Mutation applied by
+      hand (dropped `WHERE lifecycle = 'archived'` from the `UPDATE`): the open agent's
+      `charter_id` assertion failed (`None == 'charter-2'`); the archived agent's assertion still
+      passed. Reverted (diffed byte-identical against a pre-mutation copy); file green again.
 
 ## 4. Launchability applies the roster's lifecycle filter (design D6, closes F181)
 

@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 4,
+  "iteration": 5,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "group3-impl",
-  "next_action": "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 3.1-3.5 (migration 0105_clear_archived_agent_charter_bindings, down-revision 0104: UPDATE agents SET charter_id = NULL WHERE lifecycle = 'archived'; guard missing agents table like 0033/0034; downgrade is a documented no-op; confirm Agent.charter_id already nullable rather than assume it; bump head assertions in test_migrations.py AND test_project_persistence.py to 0105; data test seeding an archived agent with a bound charter at 0104, upgrade, assert NULL, plus an open agent's binding survives, with the WHERE-clause mutation check). Tick tasks, commit.",
+  "current": "group4-impl",
+  "next_action": "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 4.1-4.5 (F181): add lifecycle: Literal[\"open\",\"archived\",\"all\"] = Query(\"open\") to get_agents_launchability in hub/hub/api/v1/agents.py, matching list_agents' signature; apply the filter after session_agents_meta has taken names from both sources and before the per-name loop, using the same \"an agent with no row cannot have been archived, so it counts as open\" rule as agents.py:359-369; extend the docstring pointing at list_agents' reasoning rather than restating it; test in hub/tests/test_agents.py (or the launchability module) covering default-omits-archived, ?lifecycle=archived, ?lifecycle=all, and an archived name present only in session config also omitted, with the mutation moving the filter onto the Agent query so the session-config case fails; a probe/spawn agreement test driven as one sequence: for every agent the default probe reports runnable:true, POST /agent/trigger must not refuse it as archived; confirm again at build time that nothing under hub/ui/src calls useAgentLaunchability (measured zero call sites 2026-09-20) before treating this as UI-inert. Tick tasks, commit.",
   "queue": [
     {
       "id": "group1-impl",
@@ -35,9 +35,9 @@
     },
     {
       "id": "group3-impl",
-      "status": "open",
+      "status": "done",
       "title": "Group 3 - migration 0105 clears archived agents' charter bindings",
-      "detail": "Tasks 3.1-3.5. down-revision 0104, guard missing agents table, no-op downgrade documented, bump head assertions in test_migrations.py + test_project_persistence.py, data test with mutation."
+      "detail": "Tasks 3.1-3.5. down-revision 0104, guard missing agents table, no-op downgrade documented, bump head assertions in test_migrations.py + test_project_persistence.py, data test with mutation. Done iteration 5: 103 passed/1 skipped across both test files, mutation confirmed (dropping the WHERE clause cleared the open agent's binding too), ruff/black clean, no hub/ui/src touched."
     },
     {
       "id": "group4-impl",
