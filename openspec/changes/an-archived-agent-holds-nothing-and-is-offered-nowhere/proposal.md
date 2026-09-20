@@ -90,14 +90,24 @@ missed. R1 found a third (below).
    parameter, the same default, applied in the same place, after every source has contributed a
    name, for the reason `list_agents` already gives.
 5. `runners.py`'s bound-delete refusal names an archived holder *as archived*, with where to reach
-   it — **F390**. (Cuttable — see above.)
+   it — **F390**. (Cuttable — see above. **The operator was offered the cut on 2026-09-20 and did
+   not take it.**)
+6. **Archiving and unarchiving each persist an event and broadcast it** — `agent_archived` carrying
+   `released_charter_id`, `agent_unarchived` carrying neither that nor anything implying a restore.
+   Added 2026-09-20 by the operator's decision on the one question this change carries (`design.md`
+   D10). Both calls are server-side, so the change still commits nothing under `hub/ui/src` and
+   still reaches nothing in the live `:8000` app on reload. **It closes the recording gap, not the
+   display gap:** `useSSE.ts` allow-lists event kinds, so a client that does not know these ignores
+   them, and rendering the transition remains a later change.
 
 ## Impact
 
 - **Affected code:** `hub/hub/agent_lifecycle.py`, `hub/hub/api/v1/agents.py`,
   `hub/hub/api/v1/charters.py` (comment + invariant test only), `hub/hub/api/v1/runners.py`,
   one new migration.
-- **No UI change, no bundle refresh — and R2 priced that.** Nothing under `hub/ui/src` reads
+- **No UI change, no bundle refresh — and R2 priced that.** *(Still true after the 2026-09-20
+  decision: what was folded in is `persist_event` + `sse_manager.broadcast`, both server-side.)*
+  Nothing under `hub/ui/src` reads
   `/agents/launchability` (zero call sites; a drive measured 41 requests with the agent rail open
   and none to that route), so F181's fix here is **preventive** rather than user-visible. The
   archive/unarchive responses only gain fields, and nothing reads those either. The cost of holding

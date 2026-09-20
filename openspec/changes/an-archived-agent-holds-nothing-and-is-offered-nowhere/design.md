@@ -458,6 +458,35 @@ Whether to fold it in is the operator's call, and it belongs beside the one deci
 already carries, since it is the option that makes the rider's second half reachable *without* the
 bundle refresh that decision is about.
 
+### Decided by the operator, 2026-09-20, in session
+
+**Folded in — the API line holds and the event is added.** Of the three shapes put to them (API
+only as R3 left it; API plus this event; API plus a `hub/ui/src` bundle refresh), they chose the
+middle one. The reasoning they were given and accepted: `persist_event` and `sse_manager.broadcast`
+are both server-side, so the rider's *recording* half is discharged with nothing committed under
+`hub/ui/src` and nothing reaching the live `:8000` app on its next reload — which is the constraint
+that made the bundle-refresh option expensive in the first place. **Group 2b** carries it; the
+`agent-configuration` delta gains one normative paragraph and three scenarios.
+
+**What this decision does not do, stated so a later round does not over-read it:**
+
+- **It does not close the display gap.** `useSSE.ts:31`/`:460` still do not know these kinds, so the
+  operator sees nothing new. Group 2b says so in its own header and task 2b.6 forbids claiming
+  otherwise when setting F391's status.
+- **It does not reverse D2.** Remembering the binding in a column is still rejected; an event
+  records that something happened, which is a different claim from something being bound.
+- **It does not widen the change's blast radius beyond the API.** Task 2b.7 is the check.
+
+**Group 5 (F390, `runners.py`) was not cut** — the operator was offered that trim and did not take
+it, so `DIRECTION.md`'s three-file framing is knowingly exceeded by one file.
+
+**The standing adversarial-Opus pass before approval was deliberately skipped**, at the operator's
+explicit instruction on 2026-09-20, on the grounds that R1, R2 and R3 ran as three independent
+processes and each corrected the last — unlike `a-loop-staffs-the-agent-it-names`, where two of
+three rounds shared a session and a second adversarial pass then returned eight blocking findings.
+Recorded here because the absence of that pass is otherwise indistinguishable from an oversight,
+and because **this change's D10 itself is R3 work that nothing has re-derived.**
+
 ## D8 — what holds, and must keep holding
 
 Named because a change that lists only defects describes a product that does not exist. Each was

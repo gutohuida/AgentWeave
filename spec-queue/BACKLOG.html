@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-20 15:13 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>14f8dae</b> · uncommitted changes present<br>
+      generated <b>2026-09-20 15:20 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>aa9983f</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -253,7 +253,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="fig"><b>216</b><span>open items — 213 findings + 3 requests</span></div>
     <div class="fig" data-t="op"><b>7</b><span>you asked for</span></div>
     <div class="fig"><b>21</b><span>have a proposal, so the night can build them</span></div>
-    <div class="fig" data-t="op"><b>1</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs one spec loop</span></div>
+    <div class="fig" data-t="op"><b>3</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs no spec loop</span></div>
     <div class="fig"><b>4</b><span>unbuilt changes in total (the drain)</span></div>
   </div>
 
@@ -733,17 +733,15 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="two">
       <div class="panel">
         <h3>Tonight · FIX builds</h3>
-        <p class="when">reads spec-queue/APPROVALS.md § 2026-09-19</p>
-        <div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>a-refused-capability-reaches-the-operator</code><span class="apr-note">tasks 0.3, 0.4, 0.5 and 4.12 only; §1 is gated on F386</span></div>
-<div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>an-unstaffed-review-names-its-holders</code><span class="apr-note">group 1 ONLY (tasks 1.1-1.4); groups 2, 5, 6 are not approved</span></div>
-<div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>a-loop-staffs-the-agent-it-names</code><span class="apr-note">groups 0, 1, 2, 3, 4, 6, 7 and 8; §5 is NOT approved</span></div>
-        <div class="directive"><span class="tok">ORDER</span><code>a-refused-capability-reaches-the-operator tasks 0.3, 0.4, 0.5 and 4.12 ONLY, then an-unstaffed-review-names-its-holders tasks 1.1-1.4 ONLY, then a-loop-staffs-the-agent-it-names groups 0, 1, 2, 3, 4, 6, 7, 8 -- NOT group 5</code></div>
+        <p class="when">reads spec-queue/APPROVALS.md § 2026-09-20</p>
+        <div class="apr" data-tok="APPROVED"><span class="tok">APPROVED</span><code>an-archived-agent-holds-nothing-and-is-offered-nowhere</code><span class="apr-note">all groups, including the new 2b and group 5; no UI, no bundle refresh</span></div>
+        <div class="directive"><span class="tok">ORDER</span><code>an-archived-agent-holds-nothing-and-is-offered-nowhere all groups</code></div>
         
       </div>
       <div class="panel">
         <h3>Tomorrow · FILL proposes</h3>
         <p class="when">reads spec-queue/DIRECTION.md § 2026-09-20</p>
-        <p style="font-size:13px;margin:0 0 10px">Drain is <b>4</b>, so the day runs <b>one spec loop</b>. A dated section overrides that shape in either direction.</p>
+        <p style="font-size:13px;margin:0 0 10px">Drain is <b>4</b>, so the day runs <b>no spec loop</b>. A dated section overrides that shape in either direction.</p>
         <p class="empty">Read the section itself before composing — it is the only operator channel the day window has.</p>
       </div>
     </div>
@@ -765,7 +763,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">a-loop-staffs-the-agent-it-names</code>
-              <span class="chg-badge ok">approved — waiting on a night</span>
+              <span class="chg-badge want">waiting on you</span>
               <p class="chg-facts">10 unticked of 39 · 1 delta spec</p>
               
             </div>
@@ -867,7 +865,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">a-refused-capability-reaches-the-operator</code>
-              <span class="chg-badge ok">approved — waiting on a night</span>
+              <span class="chg-badge want">waiting on you</span>
               <p class="chg-facts">29 unticked of 33 · 4 rounds · 1 delta spec</p>
               
             </div>
@@ -1085,8 +1083,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">an-archived-agent-holds-nothing-and-is-offered-nowhere</code>
-              <span class="chg-badge want">waiting on you</span>
-              <p class="chg-facts">31 unticked · 3 rounds · 3 delta specs</p>
+              <span class="chg-badge ok">approved — waiting on a night</span>
+              <p class="chg-facts">38 unticked · 3 rounds · 3 delta specs</p>
               
             </div>
             <div class="chg-links"><a href="../openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere/proposal.md" target="_blank" rel="noopener">proposal.md</a> · <a href="../openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere/design.md" target="_blank" rel="noopener">design.md</a> · <a href="../openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere/tasks.md" target="_blank" rel="noopener">tasks.md</a> · <a href="../openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere/test-guide.md" target="_blank" rel="noopener">test-guide.md</a></div>
@@ -1204,16 +1202,20 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <ol>
 <li><code>runners.py</code>&#x27;s bound-delete refusal names an archived holder <em>as archived</em>, with where to reach</li>
 </ol>
-<p>it — <strong>F390</strong>. (Cuttable — see above.)</p>
+<p>it — <strong>F390</strong>. (Cuttable — see above. <strong>The operator was offered the cut on 2026-09-20 and did not take it.</strong>)</p>
+<ol>
+<li><strong>Archiving and unarchiving each persist an event and broadcast it</strong> — <code>agent_archived</code> carrying</li>
+</ol>
+<p><code>released_charter_id</code>, <code>agent_unarchived</code> carrying neither that nor anything implying a restore. Added 2026-09-20 by the operator&#x27;s decision on the one question this change carries (<code>design.md</code> D10). Both calls are server-side, so the change still commits nothing under <code>hub/ui/src</code> and still reaches nothing in the live <code>:8000</code> app on reload. <strong>It closes the recording gap, not the display gap:</strong> <code>useSSE.ts</code> allow-lists event kinds, so a client that does not know these ignores them, and rendering the transition remains a later change.</p>
 <h5>Impact</h5>
 <ul>
 <li><strong>Affected code:</strong> <code>hub/hub/agent_lifecycle.py</code>, <code>hub/hub/api/v1/agents.py</code>,</li>
 </ul>
 <p><code>hub/hub/api/v1/charters.py</code> (comment + invariant test only), <code>hub/hub/api/v1/runners.py</code>, one new migration.</p>
 <ul>
-<li><strong>No UI change, no bundle refresh — and R2 priced that.</strong> Nothing under <code>hub/ui/src</code> reads</li>
+<li><strong>No UI change, no bundle refresh — and R2 priced that.</strong> *(Still true after the 2026-09-20</li>
 </ul>
-<p><code>/agents/launchability</code> (zero call sites; a drive measured 41 requests with the agent rail open and none to that route), so F181&#x27;s fix here is <strong>preventive</strong> rather than user-visible. The archive/unarchive responses only gain fields, and nothing reads those either. The cost of holding the line at the API is that two operator-facing halves stay undone — the archived agent&#x27;s <code>CharterPicker</code>, and rendering what archive/unarchive now say — and both are folded into the one decision this change carries.</p>
+<p>decision: what was folded in is <code>persist_event</code> + <code>sse_manager.broadcast</code>, both server-side.)* Nothing under <code>hub/ui/src</code> reads <code>/agents/launchability</code> (zero call sites; a drive measured 41 requests with the agent rail open and none to that route), so F181&#x27;s fix here is <strong>preventive</strong> rather than user-visible. The archive/unarchive responses only gain fields, and nothing reads those either. The cost of holding the line at the API is that two operator-facing halves stay undone — the archived agent&#x27;s <code>CharterPicker</code>, and rendering what archive/unarchive now say — and both are folded into the one decision this change carries.</p>
 <ul>
 <li><strong>Affected specs:</strong> <code>agent-configuration</code> (MODIFIED), <code>runner-registry</code> (MODIFIED + ADDED),</li>
 </ul>
@@ -1231,7 +1233,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
           <div class="chg-head">
             <div class="chg-main">
               <code class="chg-name">an-unstaffed-review-names-its-holders</code>
-              <span class="chg-badge ok">approved — waiting on a night</span>
+              <span class="chg-badge want">waiting on you</span>
               <p class="chg-facts">25 unticked of 29 · 6 rounds · 1 delta spec</p>
               
             </div>
@@ -1838,9 +1840,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-20T15:13:27+01:00",
+ "generated": "2026-09-20T15:20:13+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "14f8dae",
+ "sha": "aa9983f",
  "open": 213,
  "items": 216,
  "requests": 3,
@@ -1848,7 +1850,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
  "retired": 12,
  "filed": 392,
  "drain": 4,
- "awaiting": 1,
+ "awaiting": 3,
  "sev_A": 8,
  "sev_B": 94,
  "sev_C": 93,

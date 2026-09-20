@@ -16,6 +16,62 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-20
+
+Written in session with the operator present, not by the day window — the day window hit the weekly
+usage limit at 14:15 with `f388-r1` still `in_progress`, so it may not reach `d5` (the review page)
+before 17:00. This section is the authority for tonight regardless of whether it does.
+
+**Read this before building: the tree was red when this section was written, and is not any more.**
+`a-loop-staffs-the-agent-it-names` task 3.3 (`831ac16`) repointed `_loop_flow_busy_reason` at
+`_agents_a_loop_may_staff`, whose pool is empty for a documentless loop, and that broke three group-3
+cases in `hub/tests/test_a_task_nothing_will_move_holds_nobody.py` — a file no artifact of that
+change names anywhere. Repaired in `aa9983f` by restaging `_guard_case` on a spec-linked loop, with
+the mutation re-checked. Filed as **F392 (B)**, because the *process* hole is open: group 6.2
+(`pytest hub/tests/ -q` in full) is ticked `[x]` citing a log entry that was never written. **Step 3
+of `night-window.md` still applies — run the suite yourself before adding to it, and do not trust
+6.2's tick.**
+
+### APPROVED — `an-archived-agent-holds-nothing-and-is-offered-nowhere`
+
+**F185 (B) + F181 (C) + F390 (C).** R1, R2 and R3 all ran on 2026-09-20 as three independent day-window
+processes; R2 corrected four of R1's claims and R3 corrected four more and filed F391.
+`openspec validate --strict` passes after the amendment below.
+
+**The one decision this change carried is now made** (`design.md` D10, *Decided by the operator*):
+of the three shapes offered — API only, API plus a persisted archival event, API plus a `hub/ui/src`
+bundle refresh — the operator chose **the middle one**. So:
+
+- **Group 2b is new and is approved with the rest.** `archive_agent` and `unarchive_agent` each
+  `persist_event` **and** `sse_manager.broadcast`, matching `agent_created` (`agents.py:689-690`).
+  `agent_archived` carries `released_charter_id` from task 2.1's pre-release capture.
+- **Both calls are server-side.** The change still commits nothing under `hub/ui/src`, still needs no
+  `make ui`, and still reaches nothing in the operator's live `:8000` app on its next reload. **Task
+  2b.7 is the check; if this group acquires a bundle refresh, stop and leave it for the operator.**
+- **It closes the recording gap, not the display gap.** Do not set `**Status:** fixed` on **F391**
+  unless both the persist and the broadcast landed, and say in the same edit that display is
+  untouched (task 2b.6).
+- **Group 5 was offered as a cut and the operator declined it.** Build it.
+- **Migration `0105` rewrites rows in the operator's live database** on their next `:8000` restart
+  (`.claude/rules/db-migrations.md`). It is required — D5 — but read group 3's banner first.
+
+**The standing adversarial-Opus pass was deliberately skipped**, at the operator's explicit
+instruction, on the grounds that the three rounds were independent processes that each corrected the
+last. Recorded so its absence does not read as an oversight. **The consequence to carry while
+building: D10 and group 2b are R3-and-later work that nothing has re-derived** — if a task in 2b
+disagrees with the code, the task is the thing more likely to be wrong.
+
+- APPROVED  an-archived-agent-holds-nothing-and-is-offered-nowhere   all groups, including the new 2b and group 5; no UI, no bundle refresh
+
+```
+ORDER: an-archived-agent-holds-nothing-and-is-offered-nowhere all groups
+```
+
+**If that change is finished and the window still has time**, the backlog-first default applies —
+and the honest next item is `a-loop-staffs-the-agent-it-names` **group 6.2-REDO**: run
+`py -3.11 -m pytest hub/tests/ -q` in full and write the count into the task. **§5 of that change is
+still NOT approved** and was held deliberately on 2026-09-19.
+
 ## 2026-09-19
 
 Written by the day window, iteration 5, from `review/review-2026-09-19.html`. No change was

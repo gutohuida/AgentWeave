@@ -45,6 +45,17 @@ imply that a charter is required before the agent can run, because an agent with
 fully usable, and it MUST state that unarchiving does not restore the released binding rather than
 leaving that to be inferred from the rule.
 
+**Archiving and unarchiving SHALL each be recorded as an event, and SHALL each be announced to open
+clients.** A response body is read by the client that made the request and by nobody else, so a fate
+stated only there is stated to one reader and then lost — and the released charter's identity exists
+nowhere else once the binding is cleared. Recording SHALL NOT depend on any client reading the
+response, and SHALL happen whether or not a charter was bound, so that "no charter was released" is
+a recorded fact rather than an absence. The announcement is what tells a second open client its
+roster changed; every other agent lifecycle transition already makes one, and archival is the one
+that does not. Recording a transition is not the same as displaying it: a client that does not
+recognise the announcement SHALL be unaffected by it, and rendering the transition where an operator
+reads it is not required here.
+
 **Binding a charter to an archived agent SHALL be refused, naming unarchiving as the repair.**
 Releasing the binding at archival is undone by any route that can re-bind one afterwards, and the
 agent's own configuration offers exactly that. Clearing a binding SHALL remain permitted on an
@@ -137,6 +148,25 @@ would sit queued forever.
 
 - **WHEN** an archived agent's charter binding is set to none
 - **THEN** the request succeeds
+
+#### Scenario: Archiving records what it released
+
+- **WHEN** an agent is archived
+- **THEN** the Hub records an event for the transition, naming the agent and the charter released
+- **AND** the event is recorded whether or not a charter was bound
+- **AND** the recorded fact does not depend on any client reading the response
+
+#### Scenario: Unarchiving records the transition too
+
+- **WHEN** an archived agent is unarchived
+- **THEN** the Hub records an event for the transition, naming the agent
+- **AND** the event does not assert that a charter was restored
+
+#### Scenario: Another open client is told the roster changed
+
+- **WHEN** an agent is archived or unarchived while a second client has the project open
+- **THEN** the Hub announces the transition to that client
+- **AND** a client that does not recognise the announcement is unaffected by it
 
 #### Scenario: Archival does not release the runner binding
 
