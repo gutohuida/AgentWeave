@@ -89,7 +89,12 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       let the safety line become a way to print a password into a log.
 - [ ] 2.6 Test it in `hub/tests/` by asserting on the emitted record (`caplog`), **not** by asserting
       the string reaches stdout — and assert the record's `levelno` is `>= logging.WARNING`. The level
-      is the feature; a test that only checks the text passes on an invisible line.
+      is the feature; a test that only checks the text passes on an invisible line. **(R3)** Assert
+      the self-identification too, against `record.getMessage()` **alone** — not `caplog.text`, which
+      interpolates a level and logger name that this site does not have (2.2). The delta requires the
+      line to name what it is *"without depending on a logger-name or level prefix being present"*,
+      and as R2 left it that clause was the one normative sentence in the change with no task
+      verifying it.
 - [ ] 2.7 Add the test that D5 exists for: assert `logging.getLogger("hub.main").isEnabledFor(
       logging.INFO)` is `False` under the alembic-configured root, so that if someone later gives the
       Hub its own logging configuration, this test fails and tells them 2.4's comment is now stale
@@ -103,14 +108,43 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       build stamp, not a database, so set `os.environ.setdefault("DATABASE_URL",
       "sqlite+aiosqlite:///:memory:")` immediately before the import, with a one-line comment saying
       why.
-- [ ] 3.2 Grep `scripts/` for every other module-scope import of `hub.*` and decide each one the same
-      way: `scripts/drive/setup_d2_cutover.py`, `scripts/drive/churn_sessions_plugin.py`,
-      `scripts/drive/t_*.py`, `scripts/drive/n10_route_reachability.py`. Drive scripts that genuinely
-      want a database are **correct to fail** — that is this change working — so fix only the ones
-      that do not, and say in the commit which were left to fail on purpose.
-- [ ] 3.3 Confirm the three launch paths that must keep working, by running them: `make ui-check`;
+- [ ] 3.2 **(settled by R3 — this is now a check, not a judgement call.)** R3 ran the sweep R1 and
+      R2 only read. Every `hub.*` import under `scripts/` is listed below with the measured answer to
+      *does it reach `hub.config`* (`importlib.import_module(m)` then `'hub.config' in sys.modules`,
+      2026-09-20):
+      - `scripts/refresh_ui_bundle.py:110` (`hub.main`) — **reaches it; breaks.** Task 3.1.
+      - `scripts/drive/n10_route_reachability.py:108` (`hub.main`, in a subprocess) — **reaches it;
+        breaks.** Task 3.5.
+      - `scripts/drive/setup_d2_cutover.py:29-34` — `hub.checkpoint_generation` **True** and
+        `hub.db.engine` **True**; breaks, and is **correct to fail**: it seeds a real database.
+      - `scripts/drive/churn_sessions_plugin.py:38` — `hub.db.engine` **True**, but function-scope,
+        and it wants a database; **correct to fail**.
+      - `scripts/drive/t_d2_0913_f299_harness.py`, `t_d3_0913_f299_init_line.py`,
+        `t_d7_0913_accept_edits_confined.py` — import only `hub.pty_runner`, `hub.runner_commands`,
+        `hub.runner_parsing`, all measured **False**. **Unaffected. Change nothing.**
+      - `scripts/check_model_catalog.py` — loads the catalog **by path**; 0 probe hits. Unaffected.
+      Fix the first two; leave the rest; say so in the commit. If a new script appears before IMPL,
+      re-run the one-liner rather than re-reasoning.
+- [ ] 3.3 Confirm the launch paths that must keep working, by running them: `make ui-check`;
       `agentweave --help`; `cd testbed/scratch && agentweave doctor`. Measured 2026-09-20 that the
       last two do not import `hub` and are unaffected — **re-measure rather than trusting that line.**
+      **(R3)** R3 ran the probe over both CI jobs as well, with `hub/.env` moved aside so a *clean
+      checkout* was what was measured, and all of the following are **unaffected** — do not spend
+      IMPL time on them:
+      - `ci.yml:61` `python -c "import agentweave"` and `ci.yml:131` `python -c "import agentweave,
+        hub"` (cwd `hub/`) both exit 0. `hub/hub/__init__.py` reads only package metadata; it never
+        imports `hub.config`.
+      - `pytest tests/ --collect-only` (538) and `pytest tests --collect-only` from `hub/` (4545)
+        both collect clean. **Collection is not the instrument** — 4.9's break is an `import
+        hub.config` inside a test *body*, which only a run catches.
+      - `.claude/skills/copilot-test-setup/SKILL.md:73-74` sets `$env:DATABASE_URL` before
+        `python -m alembic upgrade head`. Unaffected.
+      Also measured: a bare `alembic -c hub/alembic.ini current` from `hub/` with no `DATABASE_URL`
+      **raises**, because `migrations/env.py:10` imports `settings`. That is this change **working**,
+      not blast radius — Docker sets the variable (`docker-compose.yml:34`) and native sets it
+      (`cli.py:1028`) before either migrates — and no documented workflow runs alembic bare
+      (`.claude/rules/db-migrations.md` does not, and the skill above sets it). Recorded so a later
+      round does not re-open it.
 - [ ] 3.4 Do **not** change `hub/tests/conftest.py`. It assigns `os.environ["DATABASE_URL"]` before
       importing anything from `hub` (`:57-67`), so the whole Hub suite is already a told path.
 - [ ] 3.5 **(R2)** `scripts/drive/n10_route_reachability.py:119-121` runs
@@ -122,6 +156,13 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       one-line comment. (`:memory:` is enough: `engine.py:199` skips the alembic upgrade for it.)
       This is task 3.2's sweep done for the one entry it should not have left to judgement.
 
+- [ ] 3.6 **(R3)** Know that **CI will not catch a regression of 3.1 or 3.5.** `grep -rn
+      "refresh_ui_bundle\|ui-check\|make ui" .github/workflows/` returns **nothing** — no workflow
+      runs `make ui`, `make ui-check` or any drive script. Both fixes are guarded only by a developer
+      running them by hand. Do not add a CI job for it in this change (out of scope), but say so in
+      the commit message, and prefer `os.environ.setdefault` in 3.1/3.5 precisely because it cannot
+      break a caller that *does* set `DATABASE_URL`.
+
 ## Group 4 — (d) and the prose that carried the guarantee
 
 - [ ] 4.1 `hub/hub/config.py:10-15`: rewrite `_default_database_url()`'s docstring. The current text
@@ -129,7 +170,12 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       fires there"* — the second clause is false and the first describes the dangerous path as safe.
       Say instead what the function now is: the path bare `agentweave` resolves to, quoted by the
       refusal, never used as a fallback.
-- [ ] 4.2 `.claude/handoffs/DEAD-ENDS.md`, § *Starting a Hub from source can land on the operator's
+- [ ] 4.2 **(R3 guard on every task in this group.)** Nothing rewritten here may assert the working
+      directory the 2026-09-19 start ran from. The finding does not establish one, and the two
+      candidates give different databases (from `hub/`, `hub/.env` resolves to `hub/data/`; elsewhere
+      the home default). Describe the *failure mode* — a `DATABASE_URL` that did not reach the
+      process — not a reconstructed location. See R3's note in `design.md`.
+      Then: `.claude/handoffs/DEAD-ENDS.md`, § *Starting a Hub from source can land on the operator's
       real database*: correct the sentence *"`sqlite3`/`aiosqlite` will not create a missing parent
       directory … making directory-existence the cheap thing to check first."* True of raw
       `aiosqlite` (measured: `OperationalError: unable to open database file`), **false of the Hub**,
@@ -200,6 +246,22 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       separate step before `lifespan()` ever runs, so it is now scoped to a direct
       `uvicorn hub.main:app` — the launch F388 happened on — with the other paths covered by a
       weaker "states it at startup" clause.
+      **(R3 verdict: the narrowing is right, not convenient.)** R3 re-derived both from
+      `hub/Dockerfile:31`, `hub/docker-compose.yml:23,34` and `src/agentweave/cli.py` *before*
+      reading R2's version, and reached the same two conclusions independently. On (ii) R3 also found
+      the sharper reason R2 did not have: `_hub_resolve_database_source` (`cli.py:599-616`) returns
+      `message=None` for the **default** profile, so a plain `agentweave` start names the database
+      **nowhere** before `_hub_run_migrations` (`:1054`) opens it — it prints a path only for a
+      *named* `--profile`. The broad scenario was therefore not merely unproven on the native path,
+      it was **unsatisfiable there without changing the CLI**, which is outside this change. Narrowing
+      was the only honest option. Apply 5.2 as it stands.
+      **(R3, third scenario.)** R3 also narrowed *"A container's own relative database path is not a
+      host path"*. As R2 left it, its final clause required *the file* to state it is a container
+      path, and it covered *"an environment file **or compose file**"* — but `docker-compose.yml:34`
+      carries no such statement and **task 4.8 forbids changing it**, so the delta contradicted the
+      tasks. The clause is now scoped to a file that is *a template intended to be copied*, which is
+      `hub/.env.example` (task 4.7) and not the compose file. Check this pairing survives IMPL: if
+      4.8 is ever reopened, the scenario moves with it.
 - [ ] 5.3 `openspec validate a-hub-that-was-not-told-which-database-refuses-to-open-one --strict`
       passes. **Not evidence of anything but the file's shape** — record it, do not lean on it.
 - [ ] 5.4 Run `py -3.11 -m pytest hub/tests/ -q` in full and **write the count into this file.** Not

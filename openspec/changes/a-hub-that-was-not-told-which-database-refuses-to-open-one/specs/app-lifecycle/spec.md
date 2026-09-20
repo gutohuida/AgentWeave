@@ -100,7 +100,8 @@ afterwards from output that is missing.
 - **WHEN** the Hub ships an environment file or compose file whose `DATABASE_URL` is relative, for
   resolution against a fixed working directory inside a container image
 - **THEN** that value is left relative, because it names a mount point rather than a host location
-- **AND** the file states that it is a container path, so that copying it into a source checkout is
+- **AND** where that file is a *template intended to be copied* into a working configuration, it
+  states that the value is a container path, so that copying it into a source checkout is
   recognisably a change that must supply an absolute path instead
 
 #### Scenario: Docker Compose produces the same instance regardless of launch directory

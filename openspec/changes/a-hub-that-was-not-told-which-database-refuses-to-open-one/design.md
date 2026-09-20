@@ -416,19 +416,82 @@ call stands; its `.env.example` consequence was wrong and its fix would have bro
 4. **The false "no dependency edge" sentence is in the test file too**, not only in D4
    (`hub/tests/test_config.py:56-58`). New task 1.9.
 
-## What R3 should attack first
+## Round 3 — what R3 attacked, and what it found
 
-1. **The narrowed delta (task 5.2).** R2 rewrote two scenarios against measurements it took itself.
-   Re-derive them from `hub/Dockerfile`, `hub/docker-compose.yml` and `src/agentweave/cli.py:1054`
-   without reading R2's version first, and say whether the narrowing is right or merely convenient.
-2. **Group 3's completeness.** R2 found one caller R1 missed by reading; neither round has *run* the
-   probe over `scripts/` exhaustively. Apply the probe and run every entry point the Makefile and CI
-   invoke - that is a measurement, and it is cheap.
-3. **Task 2.2 against D5's new constraint.** The line must identify itself with no logger-name or
-   level prefix. Check that what 2.2 asks for actually reads as a warning when printed bare.
-4. **The proposal's "Why".** It says the 2026-09-19 start was "from `hub/`". Measured (D3, D9), from
-   `hub/` with `hub/.env` present - and it is dated 2026-09-09, so it was present - an absent
-   `DATABASE_URL` resolves to `hub/data/agentweave.db`, not the home path; and `hub/data/` does not
-   exist. R2 has softened the sentence to what the finding supports rather than re-deriving F388's
-   cause, which DIRECTION item 2 forbids. **R3 should not re-derive it either** - but if the
-   discrepancy still looks load-bearing, that is a note for the operator, not a round's decision.
+R3 read the code before the document, took the four targets R2 named, and **ran** the probe R1 and
+R2 only reasoned from. **Every decision in this change survives a third time** — (a), (b), (d), the
+`config.py` site, the raising `default_factory`, the `WARNING` level, the `lifespan()` site, D4's
+rejection of a path-keyed guard, and the `MODIFIED` delta. No decision was reopened. What follows is
+one confirmation, one defect, and one completed measurement.
+
+**1. The narrowed delta is right, not convenient — and the reason is stronger than R2's.**
+R3 re-derived both narrowings from `hub/Dockerfile:31`, `hub/docker-compose.yml:23,34` and
+`src/agentweave/cli.py` *before* reading R2's text, and reached the same conclusions independently:
+the container's relative path is correct (`WORKDIR /app` + `hub-data:/app/data` + an `environment:`
+key that overrides `env_file:`), and both native `agentweave` and Docker migrate in a separate step
+before `lifespan()` runs. R3 then found what R2 did not: `_hub_resolve_database_source`
+(`cli.py:599-616`) returns `message=None` for the **default** profile. A plain `agentweave` start
+therefore names its database **nowhere** before `_hub_run_migrations` (`:1054`) opens it; only a
+named `--profile` prints a path, and it prints it at `:1026`, before the migration. So R1's broad
+scenario was not merely unproven on the native path — it was **unsatisfiable there without changing
+the CLI**, which this change does not touch. Narrowing was the only honest move.
+
+**2. One real defect: the delta contradicted its own tasks.** R2's scenario *"A container's own
+relative database path is not a host path"* covered *"an environment file **or compose file**"* and
+required *the file* to state that its value is a container path. `hub/docker-compose.yml:34` carries
+no such statement, and **task 4.8 explicitly forbids changing it** — so the change shipped a
+normative clause its own task list refused to satisfy. Fixed: the stating-clause is now scoped to a
+file that is *a template intended to be copied*, which is `hub/.env.example` (task 4.7) and not the
+compose file. This is the defect R2's own note predicted would be there — the narrowing was R2's
+weakest work not because it narrowed too much, but because it widened one clause while narrowing
+another.
+
+**3. Group 3 is now measured rather than read, and it is complete.** R3 applied the raising
+`default_factory` **with `hub/.env` moved aside**, so what was measured is a *clean checkout* rather
+than this machine. Every `hub.*` import under `scripts/` was resolved by running
+`importlib.import_module(m)` and asking whether `hub.config` landed in `sys.modules`; the full
+result is in task 3.2. Three outcomes worth naming here:
+
+- **The two known breaks are confirmed by running them,** not by reading: `refresh_ui_bundle.py`
+  (`make ui`, `make ui-check`) and `n10_route_reachability.py` both die with the probe's exception.
+  The CLI suite's cost is **exactly one test**, and R3 captured its name where R2 had only a line
+  number: `test_first_start_migrations_leave_a_database_that_can_hold_a_conversation`
+  (`pytest tests/test_hub_commands.py -q` under the probe: `1 failed, 40 passed`).
+- **Both CI jobs are unaffected, measured.** `ci.yml:61` and `ci.yml:131` (`import agentweave, hub`
+  from `hub/`) exit 0 — `hub/hub/__init__.py` reads package metadata and never imports `hub.config`
+  — and both suites collect clean. **Collection is the wrong instrument**, which is itself the
+  finding: the CLI break is an `import hub.config` inside a test *body*, invisible to
+  `--collect-only`. A future round must not mistake a green collection for a green run.
+- **Nothing in CI guards either fix.** `grep -rn "refresh_ui_bundle\|ui-check\|make ui"
+  .github/workflows/` returns nothing. Tasks 3.1 and 3.5 are protected only by a human running them,
+  which is why 3.6 now says so and why `os.environ.setdefault` is the right shape.
+
+Also measured and deliberately *not* filed as blast radius: a bare `alembic -c hub/alembic.ini` from
+`hub/` with no `DATABASE_URL` raises, because `migrations/env.py:10` imports `settings`. That is the
+change **working**. Docker and native both set the variable before migrating, and no documented
+workflow runs alembic bare — `.claude/rules/db-migrations.md` does not, and
+`.claude/skills/copilot-test-setup/SKILL.md:73` sets `$env:DATABASE_URL` first. Recorded so a fourth
+reader does not re-open it.
+
+**4. Task 2.2 holds, and R3 closed the gap underneath it.** 2.2's requirement — that the line
+identify itself in its own words, because at this site there is no `WARNING [hub.main]` prefix — is
+consistent with 2.1's placement before `await init_db()` and with 2.4's `logger.warning`. But the
+delta's clause *"names what it is without depending on a logger-name or level prefix being present"*
+was the one normative sentence in the change with **no task verifying it**: 2.6 asserted `levelno`
+and text, and `caplog.text` interpolates exactly the prefix this site does not have. 2.6 now asserts
+against `record.getMessage()` alone.
+
+**5. The proposal's "Why" — a note for the operator, not a decision.** R2 softened the "from `hub/`"
+sentence and flagged it; R3 did not re-derive F388's cause (DIRECTION item 2 forbids it) and reports
+only this: **the discrepancy is not load-bearing for this change.** The case for (a) rests on
+`config.py:23` making a missing variable indistinguishable from a deliberate one, on the docstring
+naming the dangerous path as the safe one, and on nothing downstream ever refusing a path. None of
+those depends on which directory the 2026-09-19 start ran from, and (a) refuses whichever path the
+default would have named. It *is* load-bearing for one thing: the `DEAD-ENDS.md` entry group 4
+rewrites is advice to a future agent, and it must not assert a launch directory the finding does not
+establish. Task 4.2 now carries that as a guard over the whole group. Whether the incident's cwd is
+worth establishing at all is the operator's call.
+
+**Nothing else changed.** R3 reopened no decision, added no task outside group 3, and left every
+number, level, site and rejection exactly where R1 and R2 put them.
+

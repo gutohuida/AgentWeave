@@ -12,7 +12,19 @@ rejection of a path-keyed guard. What changed is the *evidence*: D5 was re-taken
 running Hubs rather than a hand-called `fileConfig`, D9's question was answered by measurement, and
 three claims that were wrong are corrected — D3's `.env.example` consequence (R1's fix would have
 broken Docker), D4's "no dependency edge" premise, and the blast radius, which is larger than R1
-found. Four tasks added. **R3 has not run.**
+found. Four tasks added.
+
+**Round 3, 2026-09-20.** A second independent re-derivation, code before document. **Every decision
+survives a third time** and none was reopened. R3 confirmed R2's narrowing of the delta from the
+Docker and CLI sources without reading R2's version first, and found the stronger reason for it
+(`cli.py:599-616` names no database at all on the default profile, so R1's broad scenario was
+unsatisfiable on the native path). It found **one real defect**: the container-path scenario required
+a statement in *"an environment file or compose file"* that task 4.8 forbids adding to the compose
+file — the delta contradicted its own tasks, and the clause is now scoped to templates that get
+copied. And it **ran** the probe R1 and R2 had only read from, with `hub/.env` moved aside so a clean
+checkout was what was measured: group 3 is now a settled list rather than a judgement call, both CI
+jobs are measured unaffected, and **no CI job guards either script fix** (new task 3.6). One
+verification gap closed (task 2.6). **The change is ready to implement.**
 
 ## Why
 
