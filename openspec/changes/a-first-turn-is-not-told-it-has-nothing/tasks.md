@@ -179,3 +179,50 @@
   `_http_lines`, `_mcp_lines`, `_operations()` or any route handler.**
 - [ ] 6.4 Confirm nothing under `hub/ui/src/` or `hub/hub/static/ui/` is in the diff, so no bundle
   refresh is owed and nothing reaches the operator's live app on its next reload.
+
+## 7. The measurement the operator's D2 decision depends on
+
+> **Added 2026-09-20 on the operator's decision** (design D2, *"ship this shape, then measure"*).
+> **This group runs after groups 1-6 have landed**, because the falsehood is a competing cause that
+> has to be removed before the question can be asked at all.
+>
+> **The change is not archived until 7.4 carries a recorded result.** R2's dissent is held open on
+> this measurement; a "decide after measuring" that never measures is the F392 defect wearing a
+> different hat, and this group exists so that cannot happen quietly.
+>
+> **The question, stated so it cannot drift:** with no false sentence in front of it, does a fresh
+> agent's **first turn** use the `agentweave` MCP tools, or does it still shell out to `curl`? R2
+> reads the LoopEngine record as the positive HTTP steer causing the `curl` habit; the competing
+> reading is that the Architect simply kept a working method it had already paid for. **Only a
+> first turn separates them**, because it is the one moment the steer acts with no learned method
+> behind it.
+
+- [ ] 7.1 On a **throwaway Hub** — never `:8000`, never the operator's database; a scratch profile
+  under `testbed/scratch/` per `.claude/reference/hubs.md` — create a **brand-new agent** whose
+  `Run.mcp_adapter_online_at` has never been set, so `described_access_path` takes the no-grounds
+  branch while `resolve_access_path` still injects the server. Confirm that state in the database
+  before the turn rather than assuming it; an agent that has already earned grounds measures
+  nothing.
+- [ ] 7.2 Give it **one** instruction that requires a capability-plane operation it cannot fake —
+  creating a task, or sending a message — and let it take exactly one turn. **Bind Haiku**
+  (standing directive: real agent turns in a drive always bind a cheap model). Record the run id.
+- [ ] 7.3 Repeat 7.1-7.2 with **at least three** distinct fresh agents. One turn is one sample and
+  the behaviour is stochastic; a single run settles nothing in either direction and must not be
+  written up as if it did.
+- [ ] 7.4 For each run, record inline here: the run id, whether the first turn called an
+  `mcp__agentweave__*` tool or shelled out, and the transcript line that shows which. **Write the
+  counts, not a conclusion** — e.g. "3 of 3 first turns called `create_task` over MCP".
+- [ ] 7.5 State the verdict against the **pre-change baseline**, which is the 2026-09-14 LoopEngine
+  observation: **4 of 4 agents took the HTTP path on their first turn**
+  (`openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`).
+  - **Fresh agents now use the MCP tools** → the falsehood was the cause, the conditional text is
+    unnecessary, and D2's declined alternative closes. Say so in `DECISIONS.md` under a dated
+    heading, and only then may F302 be marked `fixed` without qualification.
+  - **Fresh agents still shell out** → the positive HTTP steer is the cause, R2's dissent is
+    vindicated, and the conditional text becomes a live proposal. **File it as a new finding rather
+    than widening this change**, which will already be archived.
+  - **Mixed** → record the split and leave D2 open. Do not round a mixed result to either verdict.
+- [ ] 7.6 Whatever the outcome, append the measurement to **F302**'s entry in
+  `scripts/drive/FINDINGS.md`, and correct the 2026-09-14 exploration's "the notice heals on turn
+  two; the agent does not" line if 7.5 shows that framing was about a learned method rather than
+  the steer. An exploration that keeps a superseded reading is how the next round inherits it.

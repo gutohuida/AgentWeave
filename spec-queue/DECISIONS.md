@@ -679,6 +679,48 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-20 evening — F302 reaches R2, and its one dissent is answered with a measurement
+
+**DECIDED 2026-09-20 evening, by the operator, in the same interactive session.** F302's 2026-09-09
+verdict was found decided-but-unbuilt; the operator directed it into openspec under the **full**
+R1/R2/R3 discipline rather than a single verification round. R1 and R2 have run, R2 as a fresh
+process with no access to R1's reasoning. R3 is still owed.
+
+- DECIDED   f302-d2-dissent  **Ship the decided shape, then measure — the conditional text is
+  neither adopted nor closed.** R2 dissented from design D2: it argued the declined one-text
+  alternative (*"the `agentweave` tools are available if they appear in your tool list; otherwise
+  the same operations are HTTP requests"*) is the better change, because the Architect kept to
+  `curl` for **ten runs after the notice healed**, so what persisted was the positive HTTP steer
+  this change keeps rather than the falsehood it removes. **What decided it: that evidence is
+  confounded and the confound cannot be resolved from the observation it rests on.** By the time
+  the notice healed the Architect had already learned a working method — payload shapes derived
+  from two 422s, a file-plus-`curl` routine that worked. "The steer keeps pointing it at `curl`"
+  and "it kept a method it had already paid for" both fit that record, and one agent that had
+  already invested cannot separate them. **Only a fresh agent's first turn can**, and that turn
+  cannot be observed until the falsehood — a competing cause — is gone. So: land the change, then
+  measure, then decide. Recorded as **tasks group 7**, with the change barred from archive until
+  7.4 carries counts, because a "decide after measuring" that never measures is **F392** in a new
+  coat. *Rejected:* **keeping the decided shape and closing the question**, which would bank an
+  unproven claim that the behaviour is fixed; **switching to the conditional text now**, which
+  would overturn the 2026-09-09 verdict on confounded evidence and rework a delta that has passed
+  two rounds.
+- DECIDED   f302-home  **openspec, not the trial Hub, and the full three rounds.** The change edits
+  a shipped requirement in `agent-capability-plane`, and the corpus is openspec's. *Rejected:*
+  authoring it in the trial Hub, which would have needed hand reconciliation back into
+  `openspec/specs/`; and the single verification round CLAUDE.md allows an already-proposed change,
+  because the verdict predated both the approver fix and F393's correction of the runner registries.
+
+**What R2 found, recorded here because it is the argument for not collapsing the rounds.** R1's
+premise, its independent `_decide` measurement and its spec fidelity all survived. But
+`_tool_surface_lines` (`hub/hub/api/v1/agents.py`) renders the *same* false denial from the *same*
+`described_path`, reaching the model as `--append-system-prompt-file`, and R1's Impact had
+explicitly excluded that file — so the change would have shipped **violating its own new scenario**.
+`hub/tests/test_launchability.py::test_a_run_without_mcp_is_not_told_it_cannot_act` exists to stop
+exactly this class of sentence and checks only three *older* wordings, which the live clause walks
+past. R1 had also silently narrowed a MODIFIED SHALL, dropping the HTTP-form obligation in the one
+world where HTTP is the run's only path, and had described the 2026-09-09 verdict as conditional
+when it is flat.
+
 ### 2026-09-20 — archival's blast radius, and an approval taken without the adversarial pass
 
 **DECIDED 2026-09-20 afternoon, by the operator, in the interactive session that resumed handoff

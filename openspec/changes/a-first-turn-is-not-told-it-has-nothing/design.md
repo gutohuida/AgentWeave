@@ -92,6 +92,31 @@ as declined rather than missed.
 > measured behaviour fixed rather than the falsehood removed, this is the decision to revisit —
 > before implementation, since the two changes touch the same two strings.
 
+> **DECIDED by the operator, 2026-09-20, in session: ship this shape, then measure — and the
+> measurement is group 7, not an intention.** R2's dissent was put to the operator with its
+> argument intact. The decision is **neither** "keep the decided shape and close the question"
+> **nor** "switch to the conditional text": it is to land the falsehood removal, then find out
+> empirically whether a fresh agent still reaches for `curl` when nothing false is in front of it.
+>
+> **What decided it: R2's evidence is confounded, and the confound is not resolvable from the
+> observation it rests on.** The Architect kept to `curl` for ten runs after the notice healed —
+> but by then it had *already learned a working method*, deriving its payload shapes from two 422s
+> and building a file-plus-`curl` routine that worked. Two explanations fit that record equally:
+> (a) the positive HTTP steer kept pointing it at `curl` on every later turn, which is R2's reading
+> and would mean this change is insufficient; or (b) it kept a method it had already paid for,
+> which is ordinary and would mean this change is sufficient for an agent that never pays that cost
+> in the first place. **One agent that had already invested cannot distinguish them.**
+>
+> **Only a fresh agent's first turn separates the two**, because that is the single moment where
+> the steer acts with no learned method behind it. That measurement does not exist yet and cannot
+> be taken before this change lands — the falsehood is a competing cause that has to be removed
+> first. So the order is: ship, then measure, then decide whether the conditional text is still
+> wanted.
+>
+> **This does not reopen the 2026-09-09 verdict**, and the conditional text is not approved. It is
+> held open pending group 7's result, and D2's reasoning above stands unless that result contradicts
+> it.
+
 ### D3 — "Unless it has grounds" is written into the requirement even though grounds never exist today
 
 The new clause forbids asserting absence *unless the system has grounds*. Today it never does: the
