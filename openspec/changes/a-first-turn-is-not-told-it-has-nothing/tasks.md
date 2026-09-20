@@ -220,19 +220,25 @@
   diffs clean against `openspec/specs/`, and the live conclusion clause survives, relocated into
   the corrected paragraph as "The conclusion is unchanged: unreachable by the agent's own tools on
   the `cli` path."**
-- [ ] 4.2b **R2 added.** `DECISIONS.md` 1d carries a *second* live verdict about this same notice —
+- [x] 4.2b **R2 added.** `DECISIONS.md` 1d carries a *second* live verdict about this same notice —
   *"change the notice to instruct the `python -c` shape now"* — which this change does not carry.
   Confirm in the ledger edit that it is **superseded, not skipped**: 1d chose `python -c` because
   it was then the only shape `_decide` allowed, and the durable half of that verdict has since
   shipped, so the `curl` shape the notice already instructs is now allowed in both dialects (the
   measurement is in the proposal's **Why**, and R2 re-ran it at `d7f2694`). Do not silently drop it.
-- [ ] 4.3 Update **F302**'s entry in `scripts/drive/FINDINGS.md` to `fixed <sha>` only once 2.1,
+- [x] 4.3 Update **F302**'s entry in `scripts/drive/FINDINGS.md` to `fixed <sha>` only once 2.1,
   **2.4**, 3.1 and 3.3 have all landed, and say in the same edit that `harness_has_honoured_mcp`'s
   permanent-positive latch (**F340**) is untouched. **R2: state what was fixed precisely — both
   false sentences were removed from the first turn. Do not write that the measured behaviour is
   closed.** The Architect kept to `curl` for ten runs *after* the notice healed, so removing the
   falsehood is necessary and is not shown to be sufficient; design D2's R2 dissent is the record of
   that, and claiming more here is the kind of tick this repo's discipline exists to prevent.
+  **Done. F302's status is now `fixed 802a8c7`.** The entry carries: the two-site table (both
+  strings, was → is); the mutation counts pinning each half separately; an explicit *"the measured
+  behaviour is NOT closed"* paragraph naming the ten post-fix `curl` runs and correcting the
+  baseline to **n=1**; the bar on archiving until 7.4 has counts; *"`harness_has_honoured_mcp`'s
+  permanent-positive latch (F340) is untouched"*; and 4.2b's superseded-not-skipped paragraph, in
+  the same edit.
 
 ## 5. Quality gates, over CI's exact paths
 

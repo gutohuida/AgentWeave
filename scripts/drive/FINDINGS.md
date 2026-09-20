@@ -24735,10 +24735,47 @@ AW_KEY=$(cat ~/.agentweave/hub/profiles/trial/bootstrap-key.txt) AW_PROJECT=<pid
 
 ## F302 (B) — an agent's *first* turn is told "no MCP tools this turn" while it is holding them, and one measured turn believed it
 
-**Status:** open. Found 2026-09-09 by the day window's D-1 drive, on a Hub carrying all three of
-the night's changes at once. This is **not** the F299/F300/F301 deployment: the harness here
-honours MCP perfectly. It is the ordinary local one, and the misdescription lands on the first
+**Status:** fixed `802a8c7`. Found 2026-09-09 by the day window's D-1 drive, on a Hub carrying all
+three of the night's changes at once. This is **not** the F299/F300/F301 deployment: the harness
+here honours MCP perfectly. It is the ordinary local one, and the misdescription lands on the first
 turn of every agent created in it.
+
+> **2026-09-20, implemented: both false sentences are gone, and that is all that is claimed.**
+> `802a8c7`, under change `a-first-turn-is-not-told-it-has-nothing` (R1+R2+R3). The defect lived at
+> **two** sites fed by the same `described_path`, not one — R1's proposal named only the first:
+>
+> | where | was | is |
+> |---|---|---|
+> | `access_path_notice` (`hub/hub/launchability.py`) | `Tool access: no MCP tools this turn — but the AgentWeave capability plane is reachable over HTTP…` | `Tool access: the AgentWeave capability plane is reachable over HTTP…` |
+> | `_tool_surface_lines` (`hub/hub/api/v1/agents.py`) | `No AgentWeave tools are injected this turn, so each capability below is one HTTP request instead. Send it…` | `Each capability below is one HTTP request. Send it…` |
+>
+> Both reach a brand-new agent's first turn, the second by `--append-system-prompt-file`. Each half
+> is pinned by a test that fails when only that half regresses (mutation-checked: restoring the
+> denial in `launchability.py` → 4 failed / 92 passed; in `agents.py` only → 1 failed / 53 passed).
+>
+> **What is NOT claimed.** The *measured behaviour* is not closed. Removing the falsehood is
+> necessary; it is not shown to be sufficient. The Architect kept to `curl` and payload files for
+> ten runs **after** the notice healed
+> (`openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`), and the honest baseline
+> there is **n=1**, not the "4 of 4" an earlier draft of this ledger implied — four agents were
+> *told* the sentence; only the Architect's behaviour was read. Design **D2** of the change records
+> R2's dissent (that the declined one-text alternative is the better change) and the operator's
+> answer — *"ship this shape, then measure"*. **Group 7 of that change is the measurement, and the
+> change is barred from archive until task 7.4 carries counts.** Whatever it finds is appended here.
+>
+> **`harness_has_honoured_mcp`'s permanent-positive latch (F340) is untouched.** This change removes
+> two assertions; it grants nothing on trust, and `described_access_path`, `resolve_access_path` and
+> the MCP branch of the notice are all byte-identical.
+>
+> **`DECISIONS.md` 1d's second verdict — *"change the notice to instruct the `python -c` shape
+> now"* — is superseded, not skipped.** 1d chose `python -c` because it was then the only shape
+> `_decide` allowed: a `$HUB_URL` word was refused because `_judge_word`'s rule 2 trusts it only
+> when the approver's own process carries `HUB_URL`, and `python -c` names no such word. The durable
+> half of the F299/F300 verdict has since shipped, and the `curl` shape the notice already instructs
+> is now **allowed in both the Bash and PowerShell renderings** — re-measured by R2 at `d7f2694`
+> with `HUB_URL` and `AW_WORKSPACE_DIR` set as the Hub sets them, while a foreign address is still
+> refused `_NETWORK` and `../outside.txt` still `_OUTSIDE`. So 1d's remedy addressed a constraint
+> that no longer exists; the notice needs no rewrite to the `python -c` shape.
 
 > **2026-09-20, interactive session: decided, unbuilt, and its stated precondition is now
 > measured satisfied.** The verdict is `DECISIONS.md` `#### DAY-2 / F302 — the notice stops
