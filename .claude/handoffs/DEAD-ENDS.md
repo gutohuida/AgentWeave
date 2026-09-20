@@ -1238,6 +1238,50 @@ nothing.** Treat "the review already ran" as satisfied only if the applying roun
 session from the one that wrote what was reviewed.
 
 
+## 2026-09-20 — an interactive session sharing the tree with a live scheduled window
+
+- **The unattended driver will commit your uncommitted working-tree edits, under its own message.**
+  Commit `51b17bd` (*"chore: commit the operator DECIDE session's approval of item 1"*) is the day
+  window's iteration sweeping in this session's in-flight edits to
+  `openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere/` and
+  `spec-queue/APPROVALS.md` while they were still being written. **`git log --format=%an` does not
+  help** — the driver runs as the same git user, so its commits and yours are indistinguishable by
+  author; only the message's `day(YYYY-MM-DD)` prefix tells them apart. Working with a window live
+  in the same tree: commit in small units as you go, and expect a `Read`/`Edit` to report *"the file
+  had been modified on disk"* mid-session. Confirmed 2026-09-20 16:0x.
+
+- **To land a merge while a driver is live in the tree, push the ref — never check out `master`.**
+  `git push origin <sha>:master` followed by `git fetch origin master:master` performs the
+  fast-forward without the working tree ever leaving the branch, so a firing that runs `git status`
+  or the test suite mid-merge sees nothing unusual. A `git checkout master` would have swapped the
+  tree under a running iteration. Used 2026-09-20 to land 40 commits; `--is-ancestor` first, so the
+  push is provably a fast-forward and not a force.
+
+- **A green local `hub/tests/` run is not evidence that CI will pass, and this has cost real days.**
+  F292's `sqlite3.OperationalError: database is locked` **does not reproduce on this machine at
+  all**. Measured 2026-09-19/20: 16 consecutive red CI runs across 20 hours and 14 pushes, every one
+  of them that signature alone, while the full local suite was green throughout (4459 passed at
+  `09237f6`). `night-window.md` step 3 now reads CI's conclusion for the inherited sha for exactly
+  this reason. **Never report "the tree is green" from a local run without saying which signal you
+  checked.**
+
+- **`tests/test_skill_sync.py` fails locally on a clean tree and passes in CI** — two cases
+  (`Kimi + OpenCode (project)`, `Codex (user-level)`), over `autonomous-session/scripts/*.ps1`
+  present in the source and absent from the mirrors, plus `backlog` absent from Codex. The
+  2026-09-20 day log records this as *"a third reason `pytest tests/` is red and therefore bears on
+  the merge gate"*. **That inference is wrong and should not be inherited:** CI concluded `success`
+  on both `c6fccc5` and `3d8c02e` with those same local failures present, and on every red run the
+  only failing job was `hub-test`. It is a local skill-mirror state artifact, not a gate blocker.
+
+- **`backlog_page.py`'s "changes waiting on the operator" counts only the NEWEST `APPROVALS.md`
+  dated section.** Writing a new `## <date>` section makes every approval in yesterday's section
+  stop counting, so the figure jumps upward the moment you record today's decisions — 1 → 3 on
+  2026-09-20. It is not a bug to go fix blindly: for partly-built changes whose remaining groups
+  really are unapproved, the higher number is the honest one. But **the figure also drives
+  `loops = 2 if awaiting == 0 else (1 if awaiting == 1 else 0)`**, so recording an approval can
+  silently tell the next day window to run zero spec loops. Check that line before reading the
+  count as good or bad news.
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
