@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 6,
+  "iteration": 7,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "group5-impl",
-  "next_action": "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 5.1-5.3 (F390, the third site): in hub/hub/api/v1/runners.py delete_runner, select both Agent.name and Agent.lifecycle for the bound-holders check and qualify each archived holder inline in the refusal message, e.g. 'Runner is bound to agent(s): a1, b2 (archived). Unbind before deleting; an archived agent is listed under Agents with the archived filter.' -- open-only holders keep today's sentence unchanged. Add three cases to hub/tests/test_runners_api.py: only-archived holder, mixed holders, only-open holder (asserts today's sentence unchanged); mutation: drop the lifecycle column from the select, the first two cases must fail and the third must pass -- apply it, confirm the failure, revert. Set **Status:** fixed <sha> on F390 in scripts/drive/FINDINGS.md in the same commit (it was filed by reading, never reproduced through HTTP until 5.2). Tick tasks, commit.",
+  "current": "group-verify-drive",
+  "next_action": "Run tasks 6.1-6.4 of openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere: (6.1) py -3.11 -m pytest hub/tests/ -v, full suite, must be green; (6.2) ruff check src/ hub/ tests/, black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/, mypy src/, all clean; (6.3) drive the whole change end-to-end on a fresh throwaway Hub (NOT 8000, NOT 8010) covering: F185 (archive an agent holding a charter, confirm the charter releases and the 409-on-rebind and the archive/unarchive response sentences), F181 (probe/trigger agreement under ?lifecycle=archived on launchability), and the 0105 migration against a seeded pre-0105 db (upgrade, confirm archived agent's charter_id cleared, open agent's untouched). Any real agent turn binds claude-haiku-4-5; leave no job enabled. (6.4) Set F185 and F181 **Status:** fixed <sha> in scripts/drive/FINDINGS.md with the drive's evidence (F390 and F391 are already fixed from groups 5 and 2b). Tick 6.1-6.4 in tasks.md, commit, push. Advance current/next_action to change-archive.",
   "queue": [
     {
       "id": "group1-impl",
@@ -47,9 +47,9 @@
     },
     {
       "id": "group5-impl",
-      "status": "open",
+      "status": "done",
       "title": "Group 5 - the third site, runners.py delete_runner (F390)",
-      "detail": "Tasks 5.1-5.3. Qualify archived holders in the refusal message; three-case test with mutation; set F390 fixed <sha> in same commit."
+      "detail": "Tasks 5.1-5.3. Qualify archived holders in the refusal message; three-case test with mutation; set F390 fixed <sha> in same commit. Done iteration 7: 23 passed in test_runners_api.py, mutation confirmed (dropping the lifecycle column fails only-archived and mixed, leaves only-open green), ruff/black clean. F390 set fixed 861429d in FINDINGS.md, first HTTP reproduction of this finding recorded."
     },
     {
       "id": "group-verify-drive",
