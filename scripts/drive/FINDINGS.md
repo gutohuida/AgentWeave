@@ -14639,7 +14639,11 @@ discard.
 
 ## F181 (C) — `GET /agents/launchability` does not apply the lifecycle filter, and its docstring says it feeds a selector
 
-**Status:** open, with the remedy already chosen and unimplemented.
+**Status:** open, **specced 2026-09-20** in
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 only -- R2/R3 not
+run, no operator token, nothing built). Re-reproduced that day on `1fdfc4d`: the archived agent
+came back `runnable: true, collaboration_ready: true` one call before `POST /agent/trigger`
+refused it as archived. Remedy already chosen and unimplemented.
 `spec-queue/DECISIONS.md:536` files this under *"already answered by something already written
 down"* -- clear an archived agent's bindings at source. Verified 2026-09-09: the launchability query
 is still `select(Agent).where(Agent.project_id == project_id)` with no lifecycle predicate. [classified 2026-09-09, D-3]
@@ -14844,7 +14848,12 @@ the response echoes `"name": "   "`.
 
 ## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
 
-**Status:** open, reproduced 2026-09-15 on `48eede3` in-process (register `aq2`, bind the charter, archive 200, `GET /agents` omits `aq2`, `DELETE` answers 409 *"Charter is bound to agent(s): aq2. Unbind before deleting."*); `charters.py:95-98` is unchanged since `dbdf486` and `agent_lifecycle.archive` (`:64-67`) still leaves `charter_id` bound; the remedy, clearing bindings on archive, is decided at `spec-queue/DECISIONS.md:586` and has no change directory.
+**Status:** open, **specced 2026-09-20** in
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 only -- R2/R3 not
+run, no operator token, nothing built); re-reproduced that day on `1fdfc4d` through the API, and
+that round measured a hole the finding did not name: `PATCH /agents/{name}` re-binds a charter to
+an **archived** agent with no lifecycle check (200), so clearing on archive alone would not hold.
+Originally reproduced 2026-09-15 on `48eede3` in-process (register `aq2`, bind the charter, archive 200, `GET /agents` omits `aq2`, `DELETE` answers 409 *"Charter is bound to agent(s): aq2. Unbind before deleting."*); `charters.py:95-98` is unchanged since `dbdf486` and `agent_lifecycle.archive` (`:64-67`) still leaves `charter_id` bound; the remedy, clearing bindings on archive, is decided at `spec-queue/DECISIONS.md:586` and has no change directory.
 
 **Severity:** B. The operator is stopped by a name they cannot find.
 
@@ -30208,3 +30217,36 @@ No job left enabled, no process left running.
 **Verdict:** everything driven held, on independent infrastructure from last night's own. No new
 finding. `a-refused-capability-reaches-the-operator`'s actual refusal-reaches-operator behavior
 (§1/§2/§3/§5) remains unbuilt — there is nothing more of that change to drive until those land.
+
+---
+
+## F390 (C) -- `DELETE /runners/{id}` refuses with the same unfindable name F185 refuses with
+
+**Status:** open, **specced 2026-09-20** in
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere`, group 5 -- which is
+that change's declared cut line, so this may come back unspecced. Found **by reading** during that
+change's R1, not by a drive. Not independently reproduced through HTTP; the claim below is a
+code read of `1fdfc4d`.
+
+`hub/hub/api/v1/runners.py:175-183` is `hub/hub/api/v1/charters.py:95-98` with one word changed:
+
+```python
+bound = await session.execute(
+    select(Agent.name).where(Agent.project_id == project_id, Agent.runner_id == runner_id)
+)
+...
+detail=f"Runner is bound to agent(s): {', '.join(bound_names)}. Unbind before deleting.",
+```
+
+No `Agent.lifecycle` predicate. A runner bound only to an archived agent therefore cannot be
+deleted, and the refusal names an agent `GET /agents` does not show -- F185's wall, one route
+over. **Severity C rather than B** because, unlike a charter, a runner is not a record the
+operator authored: an unused runner left undeleted costs a row, where the blocked charter deletion
+blocks a document someone wrote.
+
+It is answered differently from F185 on purpose. F185's remedy releases the charter binding at
+archive; the runner binding is deliberately **kept** (an archived agent's configuration still
+displays what it ran with -- `agents.py:518`, `:568-569`), so this site is closed by naming the
+holder as archived and saying where an archived agent is found, not by releasing anything. The
+reasoning is `design.md` D3/D4 of that change, and D3 is the part to attack if this looks wrong.
+
