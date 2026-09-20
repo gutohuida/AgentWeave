@@ -24740,6 +24740,24 @@ the night's changes at once. This is **not** the F299/F300/F301 deployment: the 
 honours MCP perfectly. It is the ordinary local one, and the misdescription lands on the first
 turn of every agent created in it.
 
+> **2026-09-20, interactive session: decided, unbuilt, and its stated precondition is now
+> measured satisfied.** The verdict is `DECISIONS.md` `#### DAY-2 / F302 — the notice stops
+> asserting, and does not start trusting` (2026-09-09): **drop the `no MCP tools this turn`
+> sentence, and do not grant the MCP rendering on trust either.** That verdict made itself
+> conditional — *"what makes this cheaper than it was this morning"* is the F299/F300 verdict
+> teaching the approver to recognise the run's own Hub URL, *"so the HTTP form the notice steers a
+> fresh agent toward is one the agent can actually use."* **That half has shipped and was measured
+> today.** `_decide` was called directly at `d7f2694` with `AW_WORKSPACE_DIR` and `HUB_URL` set as
+> the Hub sets them for a run; the notice's own instructed shape
+> (`curl -H "Authorization: Bearer $AW_RUN_TOKEN" $HUB_URL/api/v1/agent-actions/tasks`) is
+> **allowed**, in both the Bash and PowerShell renderings, while a foreign address is still refused
+> as `_NETWORK` and `../outside.txt` still as `_OUTSIDE` (`mcp_server.py:1147-1152`,
+> `_HUB_REFERENCE_RE` at `:987`). So the reason to wait is gone. **Still no change directory.**
+> Measured evidence of the cost is in `openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`:
+> all four LoopEngine agents opened on the false sentence, and the Architect kept to `curl` and
+> payload files for ten runs after the notice healed, accounting for 9 of its 21
+> `agent_wrote_outside_workspace` warnings.
+
 **The mechanism is documented and deliberate; the sentence it produces is not.**
 `described_access_path` (`hub/hub/launchability.py:263-295`) grants the MCP rendering only on
 grounds, and the only observable ground is `Run.mcp_adapter_online_at` on a **previous** run of the
@@ -30426,3 +30444,59 @@ tests their teeth: forcing `reachable` true in `_agents_that_are_free`'s project
 **Not proposed.** The cheap half is a rule that a group-6-style full-suite tick must carry its own
 count inline or stay unticked. The harder half is deriving the regression set from every open
 change's named guard files rather than only this one's.
+
+---
+
+## F393 (B) -- three runner registries disagree, the two that lie are the ones a reader finds first, and nothing marks them legacy
+
+**Status:** open. **Found 2026-09-20** in an interactive session, by being taken in by it: the
+session read `RUNNER_CLI` in `hub/hub/launchability.py`, concluded that five of nine registered
+runners fall to the approver-less `cli` path by construction, and built an architectural argument
+on it — that `resolve_access_path`'s three-questions-one-boolean coupling was actively breaking
+most runners and had to be fixed before GitHub Copilot support landed. **The operator caught it**
+(*"beware that I think you might be reading legacy code"*), and the argument collapsed on one grep.
+No proposal was written, so the measured cost is one session's reasoning; the cost if it had not
+been caught was a spec loop re-architecting a live seam to fix runners that cannot be created.
+
+**The three registries.**
+
+| where | entries | what it actually governs |
+|---|---|---|
+| `src/agentweave/constants.py:133` `RUNNER_CONFIGS` | 9 — `claude`, `native`, `claude_proxy`, `kimi`, `opencode`, `codex`, `codex_mcp`, `manual`, `copilot` | the CLI's own table |
+| `hub/hub/launchability.py:20-30` `RUNNER_CLI` | the same 9 | CLI-binary resolution and probing |
+| `hub/hub/db/models.py:300` `RUNNER_CLIS` | **2 — `("claude", "codex")`** | **everything that can create a runner** |
+
+**The two-entry one is the gate, and it is enforced.** `hub/hub/schemas/runners.py:22-23` raises
+`cli must be one of ('claude', 'codex')` on any other value, so no `Runner` row with `copilot`,
+`kimi` or `opencode` can be created through the API at all. `hub/ui/src/api/runners.ts:5` declares
+`type RunnerCli = 'claude' | 'codex'` and `hub/ui/src/components/runners/RunnersPage.tsx:19` offers
+exactly those two. `db/engine.py:253` and `project_lifecycle.py:283` seed from the same two.
+
+**Why the misreading was reasonable, which is the finding.** `RUNNER_CLI` lives in the module
+named for launchability, sits eight lines from `MCP_INJECTABLE_RUNNERS` (`:210`), and carries a
+comment (*"Mirrors the `cli` field of RUNNER_CONFIGS in agentweave.constants"*) that points at the
+**other** nine-entry registry rather than at the two-entry one that decides anything. Read together,
+`RUNNER_CLI` minus `MCP_INJECTABLE_RUNNERS` computes a five-runner set that looks like a live
+population and is empty. Nothing in either file says the extra seven are legacy.
+
+**What is actually true today:** both creatable runners (`claude`, `codex`) are in
+`MCP_INJECTABLE_RUNNERS`, so every runner an operator can make gets the Hub's MCP server injected
+and keeps the `workspace` posture with its approver. The approver-less path is reached only by a
+harness that refuses the injected server (F299's case, real on machines whose policy blocks MCP —
+the operator reports their work PC is one) or by `hub_client: "cli"`, which no UI sets.
+
+**Why B rather than C.** It is a wrong surface, like F339, and wrong surfaces here cost decisions,
+not words: F339's four false texts were the stated reason an option was rejected, and this one
+nearly produced a proposal. It will also recur — the registries are three files apart, the
+misleading two are the discoverable ones, and GitHub Copilot support is planned, which is exactly
+when someone will read `RUNNER_CONFIGS`'s `copilot` entry (`constants.py:210-221`, including a live
+`mcp_add_cmd`) and believe it is wired up.
+
+**Not proposed, and deliberately not "delete the legacy entries".** Whether the seven extra keys
+should go, be annotated, or become the basis of a real per-runner capability descriptor is a design
+question that belongs with GitHub Copilot support rather than ahead of it. The cheap half is that
+nothing in the code says which registry is authoritative. An annotation pass over dead paths was
+started the same afternoon.
+
+**Reproduce:** `grep -n "RUNNER_CLI\b" hub/hub/launchability.py`, then
+`grep -rn "RUNNER_CLIS" hub/hub/`, and note that only the second set reaches a validator.
