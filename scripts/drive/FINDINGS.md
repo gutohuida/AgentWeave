@@ -30318,20 +30318,32 @@ finding. `a-refused-capability-reaches-the-operator`'s actual refusal-reaches-op
 
 ## F390 (C) -- `DELETE /runners/{id}` refuses with the same unfindable name F185 refuses with
 
-**Status:** open, **specced 2026-09-20** in
-`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere`, group 5 -- which is
-that change's declared cut line, so this may come back unspecced. **R2, 2026-09-20:** that cut
-is not free and is not the deferral of an unrelated site -- group 5 exists *because* the change
-chooses to keep `Agent.runner_id` bound through archival (its `design.md` D3/D4). If archival
-released the runner binding too, this finding would close by construction. Found **by reading** during that
-change's R1, not by a drive. Not independently reproduced through HTTP; the claim below is a
-code read of `1fdfc4d`. **R3, 2026-09-20:** re-derived D3 independently and confirmed keeping
-`runner_id` for a third time -- and strengthened it, by measuring that `create_agent` writes
-`config={}` (`agents.py:673`), so a cleared `runner_id` would make an archived agent's row report
-`runner: "native"` / `"Native"` -- a false value rather than a missing one. This finding therefore
-stays answered by naming rather than by releasing.
+**Status:** fixed 861429d -- `delete_runner` now selects `Agent.lifecycle` alongside `Agent.name`
+and qualifies each archived holder inline (`"name (archived)"`), appending the "listed under Agents
+with the archived filter" clause only when at least one holder is archived; an open-only refusal is
+unchanged. Reproduced through HTTP for the first time (group 5's own R1/R2/R3 note this had never
+been driven, only read): `test_delete_runner_bound_to_only_archived_agent_names_it_archived` and
+`test_delete_runner_bound_to_mixed_holders_qualifies_only_the_archived_one` in
+`hub/tests/test_runners_api.py`, both via real `POST .../archive` + `DELETE /runners/{id}` calls,
+not direct DB mutation. Mutation-tested (dropping the lifecycle column fails both, leaves the
+pre-existing only-open case green). The underlying design choice this finding is downstream of --
+`runner_id` staying bound through archival -- is unchanged (D3/D4); this fix answers by naming the
+archived holder, not by releasing the binding, per R2/R3's reasoning below (kept for the design
+history, not because the code snippet is current).
 
-`hub/hub/api/v1/runners.py:175-183` is `hub/hub/api/v1/charters.py:95-98` with one word changed:
+Specced 2026-09-20 in `openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere`,
+group 5 -- originally that change's declared cut line. **R2, 2026-09-20:** that cut is not free and
+is not the deferral of an unrelated site -- group 5 exists *because* the change chooses to keep
+`Agent.runner_id` bound through archival (its `design.md` D3/D4). If archival released the runner
+binding too, this finding would close by construction. Found **by reading** during that change's
+R1, not by a drive, and not reproduced through HTTP until group 5 (above). **R3, 2026-09-20:**
+re-derived D3 independently and confirmed keeping `runner_id` for a third time -- and strengthened
+it, by measuring that `create_agent` writes `config={}` (`agents.py:673`), so a cleared `runner_id`
+would make an archived agent's row report `runner: "native"` / `"Native"` -- a false value rather
+than a missing one. This finding is answered by naming rather than by releasing.
+
+Pre-fix, `hub/hub/api/v1/runners.py:175-183` was `hub/hub/api/v1/charters.py:95-98` with one word
+changed:
 
 ```python
 bound = await session.execute(
@@ -30341,8 +30353,8 @@ bound = await session.execute(
 detail=f"Runner is bound to agent(s): {', '.join(bound_names)}. Unbind before deleting.",
 ```
 
-No `Agent.lifecycle` predicate. A runner bound only to an archived agent therefore cannot be
-deleted, and the refusal names an agent `GET /agents` does not show -- F185's wall, one route
+No `Agent.lifecycle` predicate. A runner bound only to an archived agent therefore could not be
+deleted, and the refusal named an agent `GET /agents` does not show -- F185's wall, one route
 over. **Severity C rather than B** because, unlike a charter, a runner is not a record the
 operator authored: an unused runner left undeleted costs a row, where the blocked charter deletion
 blocks a document someone wrote.
