@@ -1,67 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds').",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-17-daily",
-    "parent_branch": "master",
-    "parent_sha": "f9db321",
-    "stop_at": "2026-09-19T17:00:00+01:00",
-    "iteration": 6,
-    "log_file": ".claude/autonomous/2026-09-19-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-5",
-    "next_action": null,
-    "queue": [
-        {
-            "id": "D-1",
-            "status": "done",
-            "title": "Full-surface sweep drive (folded D-1+D-2; night built nothing, sweep is stale since 2026-09-01)",
-            "detail": "Driven for real on rows 1,2,3,4,5,7,8,9,10,13,16 with a fresh drive Hub (:8020, profiles/drive0919, deleted after) and fresh project proj-c189dabfc772 (deleted after). Rows 6,11,12,14,15,17,18,19 not reached -- recorded as not-reached, not as passed. One new finding filed and independently verified: F384 (B), hub/hub/spec_payload.py:241-245. Full account in 2026-09-19-day-log.md iteration 2."
-        },
-        {
-            "id": "D-2",
-            "status": "done",
-            "title": "Repairs -- no-spec carve-out",
-            "detail": "Fixed F384 (hub/hub/spec_payload.py:241-246, commit 3f8887f): validate_payload now joins every pydantic ValidationError entry instead of exc.errors()[0]. Unit test added and mutation-checked (fails pre-fix, passes post-fix). Full hub/tests/ suite: 4444 passed, 86 skipped (~39.6min). ruff/black/mypy clean. Live-confirmed on a throwaway drive Hub (:8021, deleted after): a PUT with acceptance_criteria missing given/when/then returned all three in one 422, not one per retry. FINDINGS.md Status set to 'fixed 3f8887f' (commit e9909a9), BACKLOG.html regenerated (220->219 open). Full account in 2026-09-19-day-log.md iteration 3."
-        },
-        {
-            "id": "D-3",
-            "status": "done",
-            "title": "Repairs -- FINDINGS.md status sweep",
-            "detail": "All 29 status-less findings triaged against git log/git show for each referenced commit (F14, F60, F122, F123, F128, F133, F134, F140, F142, F150, F151, F152, F153, F154, F155, F161, F162, F163, F165, F167, F182, F187, F203, F214, F218, F267, F273, F281, F283). 14 were already fixed but only carried loose prose, not the **Status:** convention -- normalized. 15 confirmed still open (several with a decision-pending or narrowed-not-repaired note); no fix invented that wasn't real (each sha verified with git cat-file -e before use). BACKLOG.html regenerated: open 219->205, fixed 145->154. Committed 74dc8fb. Full account in 2026-09-19-day-log.md iteration 4."
-        },
-        {
-            "id": "D-4",
-            "status": "done",
-            "title": "Write the review page",
-            "detail": "spec-queue/review/review-2026-09-19.html written (branch/merge-gate table, night built nothing x2, today's drive+F384 arc+29-entry status sweep, no specced changes today and why, default night queue, 4 ranked research candidates). ## 2026-09-19 appended to spec-queue/APPROVALS.md, no status token, 3 carried decisions restated. Merge gate retried and still not open: CI in_progress on HEAD f5b883f. Full account in 2026-09-19-day-log.md iteration 5."
-        },
-        {
-            "id": "D-5",
-            "status": "done",
-            "title": "Repairs if the day has room -- F218",
-            "detail": "Fixed hub/hub/api/v1/spec.py:833 (commit 3e3f05e): record_evidence now fetches _latest_reviews_for and passes it into _evidence_view, matching the sibling decision route. Unit test added and mutation-checked (fails pre-fix, passes post-fix). hub/tests/ -k spec: 601 passed, 18 skipped. ruff/black clean; mypy's one flag near the change confirmed pre-existing. F218 Status set to fixed 3e3f05e, BACKLOG.html regenerated (open 205->204, fixed 154->155), commit 7e8282f. Live drive NOT executed -- see the incident below. Full account in 2026-09-19-day-log.md iteration 6."
-        }
-    ],
-    "decisions_for_user": [
-        "NEW, needs eyes before more autonomous Hub-starting: this iteration's throwaway drive Hub (port 8022, second launch attempt) appears to have fallen through to hub/config.py's default DATABASE_URL and touched ~/.agentweave/hub/data/agentweave.db -- the path .claude/reference/hubs.md names as the operator's real :8000 database. Read-only inspection afterward found integrity_check ok, but only 18 tables, an empty alembic_version, and a schema that predates migration 0065+ -- inconsistent with hubs.md's own claim that the real db is at ~0102, so it's unclear whether this is genuinely the live db under a stale doc, or an unrelated stale file at that path. A taskkill /IM python.exe /T was also run to clear the confusion; Get-Process finds no python/pythonw running now, and none was found running before either, so there's no direct evidence the operator's real (pythonw-hosted) app was killed, but this session has no clean before/after to be certain. Please confirm :8000 still starts cleanly and its data looks right before any further loop window starts a throwaway Hub. F218's live-drive step was skipped this session as a result -- fix shipped on unit-test + mutation-check only.",
-        "Carried from 2026-09-18 night, still unresolved: spec-queue/APPROVALS.md's ## 2026-09-18 section needs an explicit APPROVED/REVISING/REJECTED token for a-refused-capability-reaches-the-operator before any FIX window can build it.",
-        "Carried: an-unstaffed-review-names-its-holders needs a re-derivation round against F352-free's decided option (f) before it can build -- spec work, not FIX work.",
-        "Carried: the merge gate's cadence is still undecided (three options on a prior review page, none picked) -- each firing's own commit keeps restarting the ~13 minute CI clock."
-    ],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today\u0027s DIRECTION.md section names one under an operator\u0027s DECISIONS.md row (day-window.md, \u0027A day that builds\u0027).",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-17-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "a435f48",
+    "stop_at":  "2026-09-20T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-20-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
