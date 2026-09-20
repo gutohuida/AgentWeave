@@ -1,5 +1,5 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today\u0027s DIRECTION.md section names one under an operator\u0027s DECISIONS.md row (day-window.md, \u0027A day that builds\u0027).",
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds').",
     "playbook":  ".claude/loops/day-window.md",
     "runner":  "claude",
     "model":  "opus",
@@ -8,33 +8,93 @@
     "parent_branch":  "master",
     "parent_sha":  "a435f48",
     "stop_at":  "2026-09-20T17:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-20-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "current":  "d1-drive",
+    "next_action":  "D-1: scoped drive of what last night built (arc's subject_key column/migration 0104, unrh group 1, alsn groups 0-4/6/7/8) end to end as a real operator would, e2e-loop skill, fresh drive Hub on a free port from source, Haiku for every real agent turn. Not a full sweep -- the last one was 2026-09-19. Append findings to scripts/drive/FINDINGS.md with Status/file:line/repro. Never touch proj-5e960453 or proj-18e5d4e0, never leave a job enabled.",
     "queue":  [
                   {
                       "id":  "compose",
+                      "status":  "done",
+                      "title":  "Compose this window's queue from the playbook",
+                      "detail":  "Done iteration 1. Drain count 0 (verified independently); DIRECTION.md#2026-09-20 confirms both spec loops run (approval token verified in APPROVALS.md). Gate not run this morning -- CI for HEAD 1f0d5c5 still in_progress."
+                  },
+                  {
+                      "id":  "d1-drive",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "D-1 -- scoped drive of what the night built",
+                      "detail":  "See next_action. Scope: arc tasks 0.3-0.5/4.12, unrh group 1, alsn groups 0-4/6-8. Log findings with Status: open, file:line, repro."
+                  },
+                  {
+                      "id":  "f185-r1",
+                      "status":  "open",
+                      "title":  "Item 1 R1 -- explore + propose F185+F181 as one change",
+                      "detail":  "DIRECTION.md item 1. Remedy already decided (DECISIONS.md 2026-09-19): clear an archived agent's bindings at source. R1's job is the directory + rounds, not the argument. Blast radius: hub/hub/api/v1/charters.py, hub/hub/agent_lifecycle.py, hub/hub/api/v1/agents.py. openspec new change (name not starting with a digit), proposal.md/design.md/tasks.md/specs deltas, SHALL on line 1."
+                  },
+                  {
+                      "id":  "f185-r2",
+                      "status":  "open",
+                      "title":  "Item 1 R2 -- independently re-derive against the code",
+                      "detail":  "Fresh comparison of R1's proposal against the actual charters.py/agent_lifecycle.py/agents.py code, not a re-read of R1's reasoning. Fix where they disagree. openspec validate --strict must pass."
+                  },
+                  {
+                      "id":  "f185-r3",
+                      "status":  "open",
+                      "title":  "Item 1 R3 -- independently re-derive again",
+                      "detail":  "A second fresh comparison, independent of R2. Say explicitly if nothing changed. openspec validate --strict must pass before done."
+                  },
+                  {
+                      "id":  "f388-r1",
+                      "status":  "open",
+                      "title":  "Item 2 R1 -- explore + propose F388 (A) fix",
+                      "detail":  "DIRECTION.md item 2. Fix already decided: (a) refuse implicit default + (b) log resolved path + (d) fix false-safety docstring. R1 explores HOW to build (a), not whether. Do not weaken recovery-path safety while specking (a)/(b) -- F388's A rests on the recovery being worse than the fault. Blast radius: hub/hub/config.py + tests + CLAUDE.md/.claude/reference/hubs.md prose. Do not re-derive F388's cause -- already measured."
+                  },
+                  {
+                      "id":  "f388-r2",
+                      "status":  "open",
+                      "title":  "Item 2 R2 -- independently re-derive against the code",
+                      "detail":  "Fresh comparison of R1's proposal against config.py's actual code, not a re-read. openspec validate --strict must pass."
+                  },
+                  {
+                      "id":  "f388-r3",
+                      "status":  "open",
+                      "title":  "Item 2 R3 -- independently re-derive again",
+                      "detail":  "A second fresh comparison, independent of R2. Say explicitly if nothing changed. openspec validate --strict must pass before done."
+                  },
+                  {
+                      "id":  "f386-387-impl",
+                      "status":  "open",
+                      "title":  "D-6 carve-out -- F386 + F387 (conditional, cut first if short on time)",
+                      "detail":  "ONLY if both spec loops above reached R3. F387: move the sort into hub/hub/api/v1/questions.py:318 order_by (blocking first, then newest) -- not the card alone. F386: QuestionInterruptCard.tsx:24,35 read blocking, stop rendering declined. Reaches :8000 -- needs make ui / refresh_ui_bundle.py, hub/ui/src + hub/hub/static/ui committed together, driven in a browser first. If bundle refresh can't be driven, do F387 alone (API-only, no bundle) and leave F386. Set Status: fixed <sha> on both."
+                  },
+                  {
+                      "id":  "d5",
+                      "status":  "open",
+                      "title":  "D-5 -- write the review page",
+                      "detail":  "spec-queue/review/review-2026-09-20.html per day-window.md D-5 structure. Sections: branch/gate table (report the PREVIOUS gate, i.e. 2026-09-19's, which did not open -- CI never concluded in time), what night built + driven, today's drive findings, both specced changes (R2/R3 deltas, cost), default night queue if nothing approved, research highlights. Append dated section to spec-queue/APPROVALS.md, one row per specced change, no status token."
+                  },
+                  {
+                      "id":  "d7-gate",
+                      "status":  "open",
+                      "title":  "D-7 -- the merge gate, LAST",
+                      "detail":  "Only after git status --short is empty. Find CI's run for the exact HEAD sha, poll ~90s up to 25min. success + HEAD..master==0 + clean + HEAD==@{u} + no HOLD MERGE in DIRECTION.md newest section => git merge --ff-only, push. Still running at budget => stop, log run id, leave for tomorrow's step 1. Then next_action: null."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
