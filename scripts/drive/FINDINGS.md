@@ -30355,7 +30355,14 @@ reasoning is `design.md` D3/D4 of that change, and D3 is the part to attack if t
 
 ## F391 (C) -- archiving an agent persists no event and broadcasts nothing, so the transition leaves no trace
 
-**Status:** open, found **by reading** on 2026-09-20 during R3 of
+**Status:** fixed 06161a7 -- `archive_agent`/`unarchive_agent` now call `persist_event` then
+`sse_manager.broadcast` for `agent_archived`/`agent_unarchived`, matching `agent_created`'s order,
+with `released_charter_id` carried unconditionally on archive (never on unarchive). Verified
+through `GET /events/history` with a heartbeat positive control, mutation-checked both ways. **The
+display half is untouched** -- `hub/ui/src/hooks/useSSE.ts` still allow-lists kinds at `:31` and
+switches per kind at `:460` with no entry for either new kind, so the new events are durable and
+queryable but not shown on any screen; that is a later change, not this one. Found **by reading**
+on 2026-09-20 during R3 of
 `openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere`, recorded in that
 change's `design.md` D10. **Not specced, and deliberately not folded into that change** -- it is
 true today with no charter release at all, so it is a standing defect of archival rather than
