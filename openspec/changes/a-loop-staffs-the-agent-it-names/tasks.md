@@ -340,6 +340,35 @@ else means the tree has moved further than this list knows.
       own requirements" instead of over-citing `:1242` for a case it doesn't cover. The two read as
       one rule for the row they share, and the delta does not claim `:1242`'s authority for the row
       it doesn't. `openspec validate a-loop-staffs-the-agent-it-names --strict` → valid.
+- [x] 6.8 **Found 2026-09-20 afternoon, by an operator-requested check, not by this group:
+      D2 broke three tests in `hub/tests/test_a_task_nothing_will_move_holds_nobody.py`** —
+      `test_the_guard_agrees_with_the_walk` (3.3), `test_run_staffs_the_bookmark_holder_and_answers_success`
+      (3.4) and `test_the_board_does_not_read_the_busy_sentence` (3.5). That file's `_guard_case`
+      built a **documentless** loop, so task 3.3's repointing of `_loop_flow_busy_reason` at
+      `_agents_a_loop_may_staff` (`scheduler.py:350`) collapses the guard to *busy, full stop*, and
+      all three assert it does not. **The two changes' rules genuinely contradicted each other on
+      that fixture** — this is not a flaky test.
+
+      **Why 6.1 and 6.2 did not catch it, which is the part worth keeping.** 6.1's five-file set
+      never included that file, and **no artifact of this change names it anywhere** — it is the
+      sibling change's regression guard, not this one's. 6.2 (*"`pytest hub/tests/ -q` in full"*)
+      was ticked citing *"see log entry for the exact count"*; **the log entry does not exist.**
+      `alsn-impl-2`'s process died before writing one, and the reconciling iteration re-ran only the
+      same five files. So the full-suite tick rested on evidence nobody ever recorded, and the
+      regression is exactly what R4-7's triage rule was written to classify: a newly red test whose
+      loop leaves `spec_document_id` `None` is *"the change firing, expected only where a task above
+      says so"*, and no task said so.
+
+      **Fixed by restaging, not by weakening either rule** (operator's call, 2026-09-20): the three
+      cases ask a flow's question — *does a bookmark cost the project an agent* — so `_guard_case`
+      now declares a `SpecDocument` and sets `loop.spec_document_id`, exactly as 3.1 and 3.2 in the
+      same file already do. `_make_loop_job` in `test_loop_busy_guard.py` is shared and was **not**
+      touched. **Measured:** file alone **30 passed**, 13.4s. Mutation re-checked, so the restaging
+      did not cost the tests their teeth: forcing `reachable` true in `_agents_that_are_free`'s
+      projection (`scheduler.py:1232`) fails all three, along with 14 others in the file; reverted.
+- [ ] 6.2-REDO **Run `py -3.11 -m pytest hub/tests/ -q` in full and record the number here**, since
+      6.2's own evidence was never written down. Until this carries a count, treat the suite as
+      unmeasured at this change's HEAD.
 
 ## 7. Drive it
 

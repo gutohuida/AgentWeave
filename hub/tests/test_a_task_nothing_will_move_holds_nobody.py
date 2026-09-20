@@ -26,7 +26,16 @@ import pytest
 from sqlalchemy import func, select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, AIJob, InboundQueueEntry, JobRun, Loop, Project, Task
+from hub.db.models import (
+    Agent,
+    AIJob,
+    InboundQueueEntry,
+    JobRun,
+    Loop,
+    Project,
+    SpecDocument,
+    Task,
+)
 from hub.inbound_queue import new_entry, release_entry
 from hub.run_task_binding import tasks_with_a_turn_pending_or_running
 from hub.scheduler import (
@@ -342,8 +351,29 @@ async def test_new_work_is_given_to_a_bookmark_holder(app, auth_headers, bind_ru
 
 async def _guard_case(db, *, suffix, bookmark_in_live_loop):
     """3.3's staging: the job's agent mid-turn, one other agent holding one task, and the guard's
-    loop holding a startable unassigned task (Round 3: without it the case tests D8 instead)."""
+    loop holding a startable unassigned task (Round 3: without it the case tests D8 instead).
+
+    **The loop declares a document, and must.** `a-loop-staffs-the-agent-it-names` (design D2,
+    finding F128) bounds a *documentless* loop to its own named agent: its pool is empty by
+    construction, so `_loop_flow_busy_reason` collapses to *busy, full stop* whatever any other
+    agent holds, and every case below would be measuring that rule rather than this one. The
+    question here -- does a bookmark cost the project an agent -- is a flow's question, so the
+    staging is a flow's, exactly as 3.1 and 3.2 above already build theirs.
+    """
     job, loop, task = await _make_loop_job(db, suffix=suffix, agent="guard-owner")
+    db.add(
+        SpecDocument(
+            id=f"doc-guard-{suffix}",
+            project_id=PROJECT,
+            path=f"spec/guard-{suffix}.html",
+            title=f"Guard {suffix}",
+            phase="current",
+            kind="capability",
+        )
+    )
+    await db.commit()
+    loop.spec_document_id = f"doc-guard-{suffix}"
+    await db.commit()
     await _running_turn(db, agent="guard-owner", suffix=suffix)
     elsewhere = None
     if bookmark_in_live_loop:

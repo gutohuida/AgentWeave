@@ -30318,3 +30318,70 @@ happened rather than that something is bound. Neither R1 nor R2 drew that distin
 `hub/ui/src/hooks/useSSE.ts` allow-lists event kinds at `:31` and switches per kind at `:460`, so a
 new kind would be durable and queryable but not displayed until that file learns it. Durable is not
 displayed.
+
+## F392 (B) -- a change's "what must not move" group ticked a full-suite run whose evidence was never written down, and the regression it would have caught was real
+
+**Status:** open. The red tests this was found through are repaired (2026-09-20, see below), but
+the finding is the **process defect**, and that stands: nothing stops the next change repeating it.
+
+**Found** 2026-09-20 afternoon, by an operator-requested live check of the 2026-09-19 night
+window's claims, not by any window's own verification. **Reproducible at `14f8dae`:**
+
+```
+$ py -3.11 -m pytest hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q
+FAILED ::test_the_guard_agrees_with_the_walk                          (3.3)
+FAILED ::test_run_staffs_the_bookmark_holder_and_answers_success      (3.4)
+FAILED ::test_the_board_does_not_read_the_busy_sentence               (3.5)
+3 failed, 27 passed
+```
+
+**The regression.** `a-loop-staffs-the-agent-it-names` task 3.3 (`831ac16`) repointed
+`_loop_flow_busy_reason`'s pool read at `_agents_a_loop_may_staff` (`hub/hub/scheduler.py:350`),
+which returns `[]` for a loop with no `spec_document_id` (design D2). That file's `_guard_case`
+built a documentless loop, so the guard collapses to *busy, full stop* whatever any other agent
+holds, and all three cases assert it does not. The two changes' rules contradicted each other on
+that fixture. Those tests arrived with `4b59ee0` (2026-09-15), which **is an ancestor of `master`**
+-- so this was a merge blocker, not a branch-local annoyance, and `d7-gate`'s `--ff-only` merge
+would have been sitting on a red suite.
+
+**Why every guard that existed missed it.**
+
+1. Group 6.1's measured set is five files and never included this one. **No artifact of
+   `a-loop-staffs-the-agent-it-names` names that file anywhere** -- `grep` over the whole change
+   directory returns nothing. It is the *sibling* change's regression guard, and the sibling's own
+   `tasks.md:76` calls it exactly that.
+2. Group 6.2 is `pytest hub/tests/ -q` in full. It is ticked `[x]` reading *"full suite green --
+   see log entry for the exact count and duration (command ran past the 600s foreground timeout and
+   was moved to background; result recorded there rather than here to avoid a stale placeholder)."*
+   **`.claude/autonomous/2026-09-19-night-log.md` contains no full-suite run at all.** That
+   process died before writing its log entry; the reconciling iteration 7 re-ran only the same five
+   files and marked the item done from the commit. The tick therefore rests on a number nobody
+   recorded, and the deferral that produced it -- *record it in the log, not here* -- is precisely
+   what made it unfalsifiable when the log never got written.
+3. The change's own R4-7 triage rule classifies it correctly on sight: *"a newly red test whose
+   loop leaves `spec_document_id` `None` is the change firing, and is expected only where a task
+   above says so."* No task said so. The rule was right; nothing ever ran the command that would
+   have handed it the input.
+
+**Fixed, by restaging rather than by weakening either rule** (operator's call, 2026-09-20).
+`_guard_case` now declares a `SpecDocument` and sets `loop.spec_document_id`, as 3.1 and 3.2 in the
+same file already do -- the question those cases ask, *does a bookmark cost the project an agent*,
+is a flow's question. `_make_loop_job` in `test_loop_busy_guard.py` is shared with the alsn
+baseline and was not touched. File alone: **30 passed**, 13.4s. The restaging did not cost the
+tests their teeth: forcing `reachable` true in `_agents_that_are_free`'s projection
+(`scheduler.py:1232`) fails all three plus 14 others; reverted. Recorded as task 6.8 in
+`a-loop-staffs-the-agent-it-names/tasks.md`, with 6.2 re-opened as `6.2-REDO`.
+
+**What is still open, and why this is B and not C.** Two things, neither addressed:
+
+1. **A tick whose evidence lives "in the log" can outlive the log.** Three artifacts
+   (`tasks.md`, the window log, `STATE-*.json`) each deferred the measurement to another, and the
+   one that was supposed to hold it was never written. A measurement recorded nowhere reads
+   identically to a measurement that passed.
+2. **A change's regression set is chosen from its own artifacts**, so it is structurally blind to
+   a sibling change's guard file -- exactly where two in-flight changes collide. Nothing computes
+   the union of the files the *other* open changes name as guards.
+
+**Not proposed.** The cheap half is a rule that a group-6-style full-suite tick must carry its own
+count inline or stay unticked. The harder half is deriving the regression set from every open
+change's named guard files rather than only this one's.
