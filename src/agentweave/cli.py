@@ -33,6 +33,16 @@ def _emit_diagnostic_log(result: object) -> None:
     log_fn(event, extra={"event": event, "data": data})
 
 
+# DEAD (2026-09-20): both helpers below — _emit_nonfatal_diagnostic and
+# _print_readiness_summary — are never called.
+# Why: each has exactly one reference in the repository, its own definition. No command emits a
+#   `<step>_failed` setup diagnostic, and no command prints a "[READINESS]" block — `cmd_doctor`
+#   prints its own "[DOCTOR]" header (cli.py:149) from `collect_diagnostics`. They are leftovers
+#   of the init/setup commands `2026-08-03-single-runtime` removed; five cmd_* survive.
+# Live equivalent: `cmd_doctor` (line 130) for readiness output; `_emit_diagnostic_log` (line 24)
+#   for the logging path, which IS live.
+# Removal: `_print_readiness_summary` is a second importer of diagnostics.format_results /
+#   summarize — cmd_doctor:134 keeps both alive, so neither import breaks.
 def _emit_nonfatal_diagnostic(
     step: str, message: str, *, hint: Optional[str] = None, severity: str = "warn"
 ) -> None:

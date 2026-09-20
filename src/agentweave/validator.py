@@ -1,5 +1,15 @@
 """JSON schema validation for AgentWeave."""
 
+# DEAD (2026-09-20): the whole module. Nothing in the product imports it.
+# Why: the only importer in the repository is tests/test_validator.py:3 — src/agentweave/ has
+#   no `from .validator import` anywhere, and `agentweave/__init__.py` does not export it. What
+#   it validates is the deleted vocabulary: `validate_message` (messaging was deleted, CLAUDE.md
+#   Architecture rules), `validate_session` (the CLI session vocabulary), and
+#   `validate_runner_config` against RUNNER_TYPES, nine runner kinds no Runner row can hold
+#   (hub/hub/db/models.py:311).
+# Live equivalent: the Hub's pydantic schemas (hub/hub/schemas/) validate every write today.
+# Removal: `.claude/rules/cli.md` still states "ALL saves pass through validator.py sanitize
+#   functions" — that sentence is already false and must be corrected in the same change.
 import re
 from typing import Any, Dict, List, Tuple
 

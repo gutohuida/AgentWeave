@@ -387,6 +387,17 @@ class HttpTransport(BaseTransport):
             )
             return None
 
+    # DEAD (2026-09-20): update_task_status, ask_question, get_answer and push_heartbeat
+    # (lines 390-469) are never called.
+    # Why: each has exactly two references in the repository — its own `def` line and the
+    #   `_transport_error_data("<name>", exc)` string inside its own `except` block. The only
+    #   live entries into this class are `push_log` (logging_handlers.py:69) and
+    #   `sync_local_jobs` (transport/config.py:110); the CLI commands that used to call these
+    #   were removed by `2026-08-03-single-runtime`. The `get_answer`/`create_job` hits in
+    #   src/agentweave/mcp/server.py are the Hub's MCP tool names, not calls to this class.
+    # Live equivalent: the Hub's own routes — /api/v1/agent-actions/... and the MCP tools that
+    #   adapt them (hub/hub/mcp_server.py).
+    # Removal: `_transport_error_data`, `_request` and the retry constants stay — live via push_log.
     def update_task_status(self, task_id: str, status: str) -> bool:
         """PATCH /api/v1/tasks/{id} — update task status on Hub."""
         try:
@@ -527,6 +538,14 @@ class HttpTransport(BaseTransport):
             )
             return False
 
+    # DEAD (2026-09-20): never called — both callers named in the docstring below are gone.
+    # Why: the only caller chain is session.py's `_push_session_to_hub` (session.py:436) <-
+    #   `Session.save()` (session.py:180), and nothing in src/agentweave calls `Session.save()`;
+    #   the watchdog was deleted outright (CLAUDE.md, Architecture rules). The receiving endpoint
+    #   records the same: hub/hub/api/v1/session_sync.py:9-14.
+    # Live equivalent: none. The Hub owns the roster (hub/hub/api/v1/agents.py).
+    # Removal: goes with `BaseTransport.push_session` (transport/base.py:80) and session.py's
+    #   `_push_session_to_hub`; leave POST /session/sync itself, which hub/tests still uses.
     def push_session(self, session_data: Dict[str, Any]) -> bool:
         """POST /api/v1/session/sync — push session.json config to the Hub.
 
@@ -620,6 +639,16 @@ class HttpTransport(BaseTransport):
     # AI Jobs
     # ------------------------------------------------------------------
 
+    # DEAD (2026-09-20): the six job CRUD methods below are never called — the CLI cannot
+    # create, list, read, update, delete or fire a job.
+    # Why: each of create_job, list_jobs, get_job, update_job, delete_job and fire_job has
+    #   references only in this file and its abstract twin in transport/base.py — no caller
+    #   anywhere in src/agentweave, tests/, hub/ or scripts/. The CLI's job commands
+    #   (`agentweave jobs create|list|pause|run`, still quoted at config.py:781-784) were
+    #   removed with the rest of the surface; five cmd_* survive (cli.py:80 onward).
+    # Live equivalent: the Hub's /api/v1/jobs routes (hub/hub/api/v1/jobs.py) and its UI.
+    # Removal: `sync_local_jobs` just below IS live (transport/config.py:110) and posts to
+    #   /jobs directly with `self._request` — it does not use create_job, so it is unaffected.
     def create_job(self, job_data: Dict[str, Any]) -> Optional[str]:
         """POST /api/v1/jobs — create a new job on the Hub."""
         try:

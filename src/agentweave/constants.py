@@ -30,6 +30,14 @@ COPILOT_OTEL_DIR = SHARED_DIR / "copilot_otel"  # per-invocation OTel JSONL scra
 
 # File paths
 SESSION_FILE = AGENTWEAVE_DIR / "session.json"
+# DEAD (2026-09-20): nothing writes or reads this path, and the comment below is false.
+# Why: the only references to WATCHDOG_HEARTBEAT_FILE in src/agentweave are eventlog.py:31/42/50,
+#   and eventlog's `write_heartbeat`/`get_heartbeat_age` have no caller outside
+#   tests/test_eventlog.py — grep "heartbeat" across src/agentweave returns nothing else but
+#   HttpTransport.push_heartbeat, which posts to the Hub and never touches this file. No
+#   readiness check reads it; diagnostics.py does not mention heartbeats at all.
+# Live equivalent: the Hub's own liveness tracking (hub/hub/run_liveness.py, agent_status.py).
+# Removal: goes with eventlog.py (see the DEAD block at the top of that module).
 # The watchdog itself is gone; only the heartbeat file outlives it, still read by the
 # readiness checks that report an agent as stale.
 WATCHDOG_HEARTBEAT_FILE = AGENTWEAVE_DIR / "watchdog.heartbeat"  # gitignored
@@ -47,6 +55,13 @@ EVENTS_LOG_FILE = LOGS_DIR / "events.jsonl"  # gitignored, machine-local
 # now, in `hub/hub/project_lifecycle.py`, where the directory being written to is known.
 
 
+# DEAD (2026-09-20): a one-member enum of "pluggable" backends that nothing references.
+# Why: `TransportType` has exactly one reference in the repository — this definition. The code
+#   that would use it compares the raw string instead (transport/config.py:92), and the local
+#   and git backends it existed to switch between were deleted (CLAUDE.md, Architecture rules;
+#   transport/base.py:9-12 states HttpTransport is the only implementation).
+# Live equivalent: none needed — there is one transport.
+# Removal: `TRANSPORT_CONFIG_FILE` just below is NOT dead (transport/config.py:28) — keep it.
 # Transport types
 class TransportType(str, Enum):
     """Pluggable transport backends."""
@@ -89,6 +104,11 @@ KNOWN_AGENTS = [
 # Default agents when none specified at init (backward-compatible)
 DEFAULT_AGENTS = ["claude", "kimi"]
 
+# DEAD (2026-09-20): the "old code paths" this alias was kept for no longer exist.
+# Why: `VALID_AGENTS` has exactly one reference in the repository — this line. Nothing in
+#   src/agentweave, tests/, hub/ or scripts/ reads it; `KNOWN_AGENTS` itself is still referenced.
+# Live equivalent: `KNOWN_AGENTS` above, and AGENT_NAME_RE for validation.
+# Removal: it is not in any `__all__`; deleting the alias leaves KNOWN_AGENTS untouched.
 # Backward-compatible alias used in old code paths
 VALID_AGENTS = KNOWN_AGENTS
 
@@ -284,9 +304,23 @@ MESSAGE_TYPES = ["message", "delegation", "review", "discussion", "direct_trigge
 # Priorities
 PRIORITIES = ["low", "medium", "high", "critical"]
 
+# DEAD (2026-09-20): nothing reads this, and one of its three values names a deleted subsystem.
+# Why: `CONTACT_MODES` has exactly one reference in the repository — this definition.
+#   "watchdog-spawn" names the watchdog, which was deleted (CLAUDE.md, Architecture rules).
+# Live equivalent: hub/hub/api/v1/agents.py's own `_CONTACT_MODES`, which is what the Hub
+#   validates a self-registering agent against (agents.py:2165).
+# Removal: nothing imports it; check no template or doc quotes "watchdog-spawn" as valid.
 # Contact modes for self-registered agents
 CONTACT_MODES = ["poll", "mcp-push", "watchdog-spawn"]
 
+# DEAD (2026-09-20): lines 325-355 — CLAUDE_CONTEXT_LIMITS, KIMI_WIRE_MODE,
+# CODEX_MODEL_CONTEXT_LIMITS and _get_context_limit. Nothing computes a context limit here.
+# Why: `_get_context_limit` has exactly one reference in the repository, its own definition;
+#   `CODEX_MODEL_CONTEXT_LIMITS` and `KIMI_WIRE_MODE` likewise; `CLAUDE_CONTEXT_LIMITS` is read
+#   only by `_get_context_limit` itself (line 352). The tables are also stale — see
+#   hub/hub/runner_parsing.py:14 and :21, which say so and name what replaced them.
+# Live equivalent: hub/hub/runner_parsing.py's own limits, fed by the Hub's model catalog.
+# Removal: none of the four is exported or tested; they can go as one block.
 # Claude context window limits by model name substring (all Claude 3.x/4.x are 200K)
 CLAUDE_CONTEXT_LIMITS: dict = {
     "claude-opus-4": 200000,

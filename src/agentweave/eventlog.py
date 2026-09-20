@@ -12,6 +12,17 @@ This module retains the read-path utilities (get_events, format_event) and the
 watchdog heartbeat helpers — none of those are affected by the logging migration.
 """
 
+# DEAD (2026-09-20): the whole module. No product code imports it.
+# Why: the only importer in the repository is tests/test_eventlog.py:26 — no
+#   `from .eventlog import` exists anywhere in src/agentweave, and hub/ has its own event
+#   persistence. Per-symbol: `write_heartbeat`/`get_heartbeat_age` serve the watchdog, which
+#   was deleted (CLAUDE.md, Architecture rules), and nothing else in src/agentweave even
+#   mentions a heartbeat file; `get_events`/`format_event` appear outside this file only in a
+#   docstring at logging_handlers.py:27, never in a call.
+# Live equivalent: writes go through logging_handlers.py (JSONRotatingFileHandler/HubHandler);
+#   reads belong to the Hub (hub/hub/api/v1/events.py and the UI).
+# Removal: constants.WATCHDOG_HEARTBEAT_FILE (constants.py:43) becomes unreferenced with it;
+#   tests/test_eventlog.py tests only this module and goes too.
 import contextlib
 import json
 from datetime import datetime, timezone

@@ -205,6 +205,17 @@ class Agent(Base):
     description: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     contact_mode: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     self_registered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # DEAD (2026-09-20): write-only columns — the Hub stores and echoes them, nothing acts on them.
+    # Why: every reference outside tests is in one file — written at api/v1/agents.py:2194-2195
+    #   and :2207-2208 (register), :2466 and :2468 (PATCH), and read back only into the response
+    #   dict at :2537-2538. No spawn path reads either: runner_commands.build_command takes its
+    #   binary from the resolved CLI, never spawn_cmd, and agent_trigger.py builds the MCP server
+    #   command itself rather than reading mcp_endpoint. They are the deleted watchdog's contact
+    #   fields (CLAUDE.md, Architecture rules).
+    # Live equivalent: Runner.cli + Runner.model (api/v1/agent_trigger.py:677-678) for spawning;
+    #   the Hub-built --mcp-config for the endpoint.
+    # Removal: hub/tests/test_agents_self_registered.py asserts on both in API responses, and
+    #   dropping columns needs a migration — see .claude/rules/db-migrations.md.
     mcp_endpoint: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     spawn_cmd: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     config: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
@@ -1640,6 +1651,17 @@ CHECKPOINT_STATUSES = (
 )
 
 # Effective access is agent capability ∩ checkpoint visibility (design.md, Decision 7).
+# DEAD (2026-09-20): "granted" has no writer, and could not be observed if it had one.
+# Why, two independent legs: (1) no writer — the only `visibility=` sites in hub/hub are
+#   checkpoints.py:430 and checkpoint_generation.py:557, both passing their own parameter whose
+#   default is "project" (checkpoints.py:401, checkpoint_generation.py:473), and no caller passes
+#   the kwarg; the column default is "project" too (models.py:1723) and no route mutates it.
+#   (2) not observable — the single read is checkpoint_access.py:48,
+#   `visibility in ("project", "granted")`, where the two values give the same answer.
+# Live equivalent: "project". ("private" is NOT dead in the same way — it has no writer either,
+#   but it does change checkpoint_access.py:48's result, so it is unexposed, not leftover.)
+# Removal: hub/ui/src/api/checkpoints.ts:14 declares the same union and must change too, as must
+#   the CHECK at models.py:1794 and migrations/versions/0044_add_checkpoints.py:38.
 CHECKPOINT_VISIBILITIES = ("private", "project", "granted")
 
 
@@ -2427,6 +2449,16 @@ EVIDENCE_DECISIONS = ("accepted", "rejected")
 # How long an artifact is kept. `never` means never delete it.
 EVIDENCE_RETENTION_POLICIES = ("on_acceptance", "daily", "monthly", "manual", "never")
 
+# DEAD (2026-09-20): "superseded" has no writer — a drift row can only be candidate or resolved.
+# Why: the only RequirementDrift(...) construction is requirement_evidence.py:1154 with
+#   state="candidate"; the only assignment anywhere is requirement_evidence.py:1205
+#   (`candidate.state = "resolved"`); the column default is "candidate" (models.py:2638); and no
+#   bulk UPDATE touches this table. The literal "superseded" appears nowhere else in the product
+#   but the mirrored CHECK tuple in migrations/versions/0068_add_requirement_evidence.py:30.
+# Live equivalent: none — the superseding behaviour the comment at models.py:2643 describes was
+#   never implemented, so a reworded requirement leaves its drift candidate open.
+# Removal: the CHECK constraint ck_requirement_drift_state (models.py:2657) and 0068 must change
+#   together, which is a table rebuild on SQLite — a new migration, not an edit to 0068.
 DRIFT_STATES = ("candidate", "resolved", "superseded")
 DRIFT_RESOLUTIONS = ("specification_updated", "implementation_corrected", "no_change_required")
 

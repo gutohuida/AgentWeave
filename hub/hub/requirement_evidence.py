@@ -862,6 +862,17 @@ def retention_is_valid(policy: str) -> bool:
     return policy in EVIDENCE_RETENTION_POLICIES
 
 
+# DEAD (2026-09-20): mark_artifact_removed and artifact_exists (below) have no production caller,
+# and as a consequence the API's "artifact_removed" flag is always false.
+# Why: `evidence.artifact_removed_at` is written in exactly one place — line 875 inside this
+#   function — and the only caller of this function anywhere is
+#   hub/tests/test_requirement_evidence.py:423. `artifact_exists` has exactly one reference in
+#   the repository, its own definition. The column is read at api/v1/spec.py:1064
+#   (`"artifact_removed": evidence.artifact_removed_at is not None`), so that field can never be
+#   true for any project. This function also takes `session` only to `del` it (line 874).
+# Live equivalent: none — nothing detects that an evidence artifact has vanished.
+# Removal: RequirementEvidence.artifact_removed_at (db/models.py:2507) becomes a permanently NULL
+#   column — drop both together, or wire this up instead of deleting it.
 async def mark_artifact_removed(
     session: AsyncSession, evidence: RequirementEvidence
 ) -> RequirementEvidence:

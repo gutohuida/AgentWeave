@@ -12,6 +12,14 @@ Two mechanisms specified by ``agent-tool-surface`` (openspec change
   the operator's explicit override; when unset ("auto"), the path is probed.
 """
 
+# DEAD (2026-09-20): the whole module. It has zero references anywhere in the repository.
+# Why: grep for "tool_surface" across src/, tests/, hub/ and scripts/ returns only this file —
+#   every other hit is the Hub's unrelated `_tool_surface_lines` (hub/hub/api/v1/agents.py:1394).
+#   There is not even a test. Both mechanisms it implements now live in the Hub: identity binding
+#   in hub/hub/agent_auth.py, and access-path resolution in hub/hub/launchability.py:231.
+# Live equivalent: hub/hub/launchability.py's resolve_access_path / described_access_path.
+# Removal: the per-runner *probe* this module performs is the one launchability.py:197-218
+#   documents as deleted and says "Do not restore it" — delete, never revive or re-import.
 from __future__ import annotations
 
 import os

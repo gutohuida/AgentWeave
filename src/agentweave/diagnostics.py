@@ -515,6 +515,13 @@ def _context_missing_sections(context_path: Path) -> list[str]:
     return [section for section in REQUIRED_CONTEXT_SECTIONS if section not in content]
 
 
+# DEAD (2026-09-20): `agentweave doctor` never runs this check.
+# Why: the only path into this module is cmd_doctor (cli.py:130) -> collect_diagnostics
+#   (line 1164), whose body (lines 1181-1192) names exactly eight checks and not this one.
+#   `check_session` has exactly one reference in the repository: this definition. What it
+#   inspects is session.json, which nothing writes any more (src/agentweave/session.py:180).
+# Live equivalent: none — the Hub holds the roster (hub/hub/api/v1/agents.py).
+# Removal: it is the last reader of SESSION_FILE here; keep `_load_json_raw`, which is shared.
 def check_session() -> list[DiagnosticResult]:
     data, error = _load_json_raw(SESSION_FILE)
     if error == "missing":
@@ -548,6 +555,14 @@ def check_session() -> list[DiagnosticResult]:
     ]
 
 
+# DEAD (2026-09-20): `agentweave doctor` never runs this check, so agentweave.yml is never read.
+# Why: exactly one reference in the repository — this definition. `collect_diagnostics`
+#   (line 1119) does not call it, and it is the only caller of `config.load_agentweave_yml`
+#   apart from `check_jobs`, which is dead for the same reason. CLAUDE.md already calls a root
+#   agentweave.yml "a leftover".
+# Live equivalent: none — project settings live in the Hub's database, not a YAML file.
+# Removal: with `check_jobs`, this is the last importer of src/agentweave/config.py, so that
+#   whole module (and tests/test_config.py) goes with the pair.
 def check_project_config() -> list[DiagnosticResult]:
     try:
         from .config import AGENTWEAVE_YML_PATH, ConfigValidationError, load_agentweave_yml
@@ -593,6 +608,12 @@ def check_project_config() -> list[DiagnosticResult]:
         ]
 
 
+# DEAD (2026-09-20): `agentweave doctor` never runs this check.
+# Why: its only references outside this definition are tests/test_diagnostics.py:175,185 — no
+#   product caller. `collect_diagnostics` (line 1164) runs eight checks and this is not one.
+# Live equivalent: the Hub materializes agent context per turn
+#   (hub/hub/api/v1/agents.py's `_render_hub_agent_context`), not from .agentweave/ai_context.md.
+# Removal: test-only, so it goes with its two tests.
 def check_project_context() -> list[DiagnosticResult]:
     ai_context_path = AGENTWEAVE_DIR / "ai_context.md"
     if not ai_context_path.exists():
@@ -721,6 +742,13 @@ def _http_status_check(config: dict[str, Any]) -> DiagnosticResult:
         )
 
 
+# DEAD (2026-09-20): `agentweave doctor` never runs this check.
+# Why: exactly one reference in the repository — this definition. `collect_diagnostics`
+#   (line 1119) runs eight checks and this is not one of them.
+# Live equivalent: none in the CLI. The transport itself is still live (transport/config.py),
+#   but nothing reports on it.
+# Removal: it is the last reader of TRANSPORT_CONFIG_FILE outside transport/config.py, which
+#   keeps that constant alive — do not delete the constant with it.
 def check_transport() -> list[DiagnosticResult]:
     """Report on the project-key HTTP transport, if configured.
 
@@ -799,6 +827,15 @@ def _runner_cli_override(agent: str, session: Any) -> Optional[str]:
     return str(value) if value else None
 
 
+# DEAD (2026-09-20): nothing in the product calls this — including `agentweave doctor`.
+# Why: its only callers are `check_agents` (below) and `launch_blockers` (below), both of which
+#   have exactly one reference each — their own definitions — plus tests/test_diagnostics.py:89,195.
+#   `collect_diagnostics` (line 1164) runs eight checks and none of them is this one. It also
+#   starts from `Session.load()`, and nothing writes session.json any more (session.py:180).
+# Live equivalent: hub/hub/launchability.py — whose module docstring (launchability.py:4) names
+#   THIS function as the logic it mirrors. Read that as "mirrors what this used to do": the Hub
+#   copy is the live one, and a reader comparing the two is comparing live code to dead code.
+# Removal: it is the last consumer of AGENT_CONTEXT_DIR / AGENT_CONTEXT_FILES here.
 def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[DiagnosticResult]:
     if session is None:
         from .session import Session
@@ -1067,6 +1104,14 @@ def check_agent_readiness(agent: str, session: Optional[Any] = None) -> list[Dia
     return results
 
 
+# DEAD (2026-09-20): `check_agents` and `check_jobs` below are never called.
+# Why: each has exactly one reference in the repository — its own definition.
+#   `collect_diagnostics` (line 1164) runs eight checks and neither is among them.
+#   `check_agents` starts from `Session.load()` (nothing writes session.json — session.py:180)
+#   and `check_jobs` from agentweave.yml (nothing writes that either).
+# Live equivalent: the Hub reports agent launchability itself (hub/hub/api/v1/agents.py:217)
+#   and owns jobs (hub/hub/api/v1/jobs.py).
+# Removal: delete with `check_agent_readiness` and `launch_blockers`, their only relatives.
 def check_agents(session: Optional[Any] = None) -> list[DiagnosticResult]:
     if session is None:
         from .session import Session
@@ -1178,6 +1223,13 @@ def format_results(results: Iterable[DiagnosticResult]) -> str:
     return "\n".join(lines).rstrip()
 
 
+# DEAD (2026-09-20): nothing consults this before launching anything.
+# Why: exactly one reference in the repository — this definition. The CLI no longer launches
+#   agents at all (five cmd_* functions survive: cli.py:80/130/162/1161/1303), and it delegates
+#   to `check_agent_readiness`, which is itself dead (see its DEAD block above).
+# Live equivalent: hub/hub/api/v1/agent_trigger.py's pre-spawn gates — the probe at
+#   agent_trigger.py:679 and the refusals that follow it.
+# Removal: goes with check_agent_readiness / check_agents.
 def launch_blockers(agent: str, session: Optional[Any] = None) -> list[DiagnosticResult]:
     """Return deterministic failures that should block an automatic launch."""
     return [

@@ -69,6 +69,14 @@ class BaseTransport(ABC):
         """Fire a job immediately."""
         raise NotImplementedError("Jobs not supported by this transport")
 
+    # DEAD (2026-09-20): nothing calls push_session on any transport.
+    # Why: the sole call site is session.py:446, inside `_push_session_to_hub`, whose only caller
+    #   is `Session.save()` — and nothing in src/agentweave calls `Session.save()` (see the DEAD
+    #   block at session.py:180). Also: "no-op on non-HTTP transports" describes a choice that no
+    #   longer exists — HttpTransport is the only implementation (this class's own docstring).
+    # Live equivalent: none. The Hub owns the roster (hub/hub/api/v1/agents.py).
+    # Removal: delete together with HttpTransport.push_session (transport/http.py:549) and
+    #   session.py's `_push_session_to_hub`.
     def push_session(self, session_data: Dict[str, Any]) -> bool:
         """Push session data to the backend (no-op on non-HTTP transports)."""
         return False

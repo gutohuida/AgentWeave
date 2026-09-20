@@ -16,6 +16,16 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# DEAD (2026-09-20): 7 of these 9 keys name runner kinds no agent can be bound to any more.
+# Why: a Runner's `cli` is validated against RUNNER_CLIS = ("claude", "codex")
+#   (db/models.py:311, schemas/runners.py:22) and RunnerUpdate has no `cli` field at all
+#   (schemas/runners.py:27), so no runner row can hold another value; every spawn overwrites
+#   config["runner"] from the bound Runner (api/v1/agent_trigger.py:677) before probing.
+# Live equivalent: RUNNER_CLIS in hub/hub/db/models.py:311 — the only registry that binds.
+# Removal: "native" still backs probe_agent's default at line 63 and "manual" still arrives
+#   from legacy session.json, so neither is removable; kimi/opencode/copilot/codex_mcp/
+#   claude_proxy have no writer but a hand-made POST /session/sync (session_sync.py:46) or
+#   /agents/register payload (api/v1/agents.py:2209), plus hub/tests/test_launchability.py.
 # Runner -> CLI binary name. Mirrors the "cli" field of RUNNER_CONFIGS in
 # agentweave.constants (kept independent — see module docstring).
 RUNNER_CLI: Dict[str, Optional[str]] = {
@@ -207,6 +217,14 @@ def resolve_agent_env(runner: str, config: Dict[str, Any]) -> Optional[Dict[str,
 # on a permitted machine nor on a policy-blocked one.
 # ---------------------------------------------------------------------------
 
+# DEAD (2026-09-20): "claude_proxy"/"native" here, and the non-injectable branch at line 245.
+# Why: resolve_access_path's only caller is api/v1/agent_trigger.py:1008, inside
+#   trigger_agent_directly, whose `runner` is the bound Runner.cli (agent_trigger.py:677) —
+#   validated against RUNNER_CLIS = ("claude", "codex") (db/models.py:311). Both live values
+#   are already in this set, so the `not in` arm cannot be taken by any run.
+# Live equivalent: none needed — every spawnable runner is MCP-injectable.
+# Removal: hub/tests/test_launchability.py:421 asserts the branch using runner "kimi", which
+#   no Runner row can hold; that test goes with it.
 MCP_INJECTABLE_RUNNERS = {"claude", "claude_proxy", "native", "codex"}
 
 

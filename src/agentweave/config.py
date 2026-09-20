@@ -4,6 +4,17 @@ Provides loading, validation, and generation of the declarative configuration fi
 that serves as the single source of truth for project settings, agents, and jobs.
 """
 
+# DEAD (2026-09-20): the whole module. agentweave.yml is read and written by nothing live.
+# Why: the only importers in src/agentweave are diagnostics.py's `check_project_config` and
+#   `check_jobs`, and BOTH have exactly one reference in the repository — their own definitions
+#   (see their DEAD blocks in diagnostics.py); `collect_diagnostics`, the single path from
+#   `agentweave doctor`, does not call either. `generate_agentweave_yml`, `save_agentweave_yml`
+#   and `load_agentweave_yml` have no caller outside tests/test_config.py. Its docstring's
+#   "single source of truth" is no longer true of anything: CLAUDE.md calls a root
+#   agentweave.yml "a leftover" and the Hub's database holds project settings.
+# Live equivalent: the Hub (hub/hub/db/models.py's Project/Agent/Runner/Charter rows).
+# Removal: it is the last src/agentweave importer of session.py outside dead diagnostics
+#   (`generate_agentweave_yml` takes a Session), and tests/test_config.py goes with it.
 import re
 from dataclasses import dataclass, field
 from pathlib import Path

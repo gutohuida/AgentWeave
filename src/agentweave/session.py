@@ -50,6 +50,15 @@ class Session:
         """Get list of agent names in this session."""
         return list(self._data.get("agents", {}).keys())
 
+    # DEAD (2026-09-20): get_agent_role, hub_client and get_agent_hub_client (lines 62-80).
+    # Why: the role subsystem was deleted (CLAUDE.md, Architecture rules) and no module in
+    #   src/agentweave calls any of the three — the only repo-wide hits are their own
+    #   definitions, tests/test_session.py:58, and a prose reference in hub/hub/launchability.py:478.
+    # Live equivalent: roles — none, deliberately. hub_client — the Hub reads the key itself
+    #   from ProjectSession.data (hub/hub/launchability.py:476), never through this class.
+    # Removal: the class's remaining read accessors are reached only from diagnostics functions
+    #   that are themselves dead (diagnostics.py:843, :1119) — see their DEAD blocks; these three
+    #   go with tests/test_session.py:54.
     def get_agent_role(self, agent: str) -> str:
         """Get session role for an agent (principal/delegate/reviewer/collaborator)."""
         return self.agents.get(agent, {}).get("role", "delegate")
@@ -74,6 +83,12 @@ class Session:
         """Return True if yolo mode is enabled for the agent."""
         return bool(self.agents.get(agent, {}).get("yolo", False))
 
+    # DEAD (2026-09-20): nothing ever sets yolo through this class.
+    # Why: `set_agent_yolo` has zero references in the whole repository — not src/agentweave,
+    #   not tests/, not hub/. Only its definition here.
+    # Live equivalent: the Hub owns the posture (hub/hub/runner_commands.py's yolo argument,
+    #   set from Agent/conversation state), not session.json.
+    # Removal: the read side `get_agent_yolo` above IS live (diagnostics.py:877) — keep it.
     def set_agent_yolo(self, agent: str, enabled: bool) -> None:
         """Enable or disable yolo mode for an agent."""
         if agent not in self._data.get("agents", {}):
@@ -112,6 +127,13 @@ class Session:
         """Return runner-specific options for an agent, defaulting to {}."""
         return self.agents.get(agent, {}).get("runner_options", {}) or {}
 
+    # DEAD (2026-09-20): no CLI command configures a runner any more.
+    # Why: the only reference in the repository outside this file is a fixture call in
+    #   tests/test_diagnostics.py:95; none of the five surviving cmd_* functions
+    #   (cli.py:80/130/162/1161/1303) reaches it, and RUNNER_TYPES it validates against is a
+    #   list of nine kinds a Runner row cannot hold (hub/hub/db/models.py:311).
+    # Live equivalent: Runner rows created through the Hub (hub/hub/api/v1/runners.py).
+    # Removal: check tests/test_diagnostics.py:95 still has a way to build its fixture.
     def set_runner_config(
         self, agent: str, runner: str, env_vars: dict, model: Optional[str] = None
     ) -> None:
@@ -146,6 +168,17 @@ class Session:
             return cls(data)
         return None
 
+    # DEAD (2026-09-20): nothing in the product writes session.json, or pushes it to a Hub.
+    # Why: `Session(...)` and `Session.create(...)` are constructed only under tests/ (test_session.py,
+    #   test_diagnostics.py, test_config.py), and no `.save()` call exists in src/agentweave — the
+    #   only `.save()` hits there are jobs.py:351/362 on Job. `2026-08-03-single-runtime` removed the
+    #   CLI push path and the watchdog that re-pushed it; hub/hub/api/v1/session_sync.py:9-14 records
+    #   the same fact from the receiving end.
+    # Live equivalent: none. `Session.load()` above is not a live read path either — its only
+    #   callers are diagnostics.py:843 and :1119, both inside functions `collect_diagnostics`
+    #   never calls (see their DEAD blocks), plus config.py, which is dead as a whole.
+    # Removal: `create` (below) builds the deleted vocabulary — principal, role, mode,
+    #   active_tasks, discussions — and goes with it; tests/test_session.py exercises both.
     def save(self) -> bool:
         """Save session to file and sync to Hub if HTTP transport is active."""
         result = save_json(SESSION_FILE, self._data)
@@ -219,6 +252,16 @@ class Session:
         self._data.update(kwargs)
         self._data["updated"] = now_iso()
 
+    # DEAD (2026-09-20): the whole run below — set_principal, add_task, complete_task,
+    # get_summary, sync_agents, remove_agent — has no caller in the product.
+    # Why: repo-wide greps over src/agentweave, tests/, hub/ and scripts/ return zero hits for
+    #   set_principal, complete_task, get_summary and remove_agent (definitions aside), and
+    #   `Session.add_task` zero (the `add_task` hits are hub/hub/api/v1/tasks.py:1634's unrelated
+    #   add_task_dependency); sync_agents appears only in tests/test_session.py:101-126. They are
+    #   the deleted principal/role/session-task vocabulary (CLAUDE.md, "When compacting").
+    # Live equivalent: tasks and rosters live in the Hub (hub/hub/api/v1/tasks.py, agents.py).
+    # Removal: they mutate `self._data` only, and nothing persists it (see `save` above), so
+    #   deleting them changes no stored state; tests/test_session.py:91-126 goes with sync_agents.
     def set_principal(self, name: str) -> None:
         """Set the principal agent, updating both the top-level field and agent role
         entries."""
@@ -384,6 +427,14 @@ class Session:
         return now_iso()
 
 
+# DEAD (2026-09-20): no session is ever pushed to a Hub from here.
+# Why: its only caller is `Session.save()` (line 184), which itself has no caller in
+#   src/agentweave — see the DEAD block above `save`. The receiving endpoint says the same from
+#   the other side: hub/hub/api/v1/session_sync.py:9-14 records that the CLI push path and the
+#   watchdog that used it both ceased to exist in `2026-08-03-single-runtime`.
+# Live equivalent: none. The Hub is authoritative for the roster (hub/hub/api/v1/agents.py).
+# Removal: `HttpTransport.push_session` (transport/http.py:549) and its abstract declaration
+#   (transport/base.py:80) become unreachable with it; POST /session/sync keeps test callers.
 def _push_session_to_hub(session_data: Dict[str, Any]) -> None:
     """Push session config to the Hub if HTTP transport is configured.
 

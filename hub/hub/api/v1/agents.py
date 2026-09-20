@@ -71,6 +71,14 @@ _24H = timedelta(hours=24)
 # answer is the drift shape all three of this product's loop stall bugs came out of.
 _ACTIVE_TASK_STATUSES = tuple(sorted(LIVE_STATUSES))
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+# DEAD (2026-09-20): "mcp-push" is accepted and stored, but nothing anywhere branches on it.
+# Why: Agent.contact_mode is read in exactly two places in hub/hub — scheduler.py:227
+#   (`== "poll"`) and the response echo below — and no .py/.ts/.tsx file in hub/ or src/ compares
+#   anything to "mcp-push". Its only other occurrence in the product is the CLI's mirror list at
+#   src/agentweave/constants.py:314, which is itself dead (see the DEAD block there).
+# Live equivalent: "poll", the one value with a branch, and "watchdog-spawn", which this file
+#   writes for every operator-created agent (lines 679 and 2094).
+# Removal: hub/tests/test_agents_self_registered.py:468,534,538,689 use it to exercise PATCH.
 _CONTACT_MODES = ("poll", "mcp-push", "watchdog-spawn")
 
 
