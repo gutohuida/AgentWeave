@@ -95,6 +95,34 @@ Only the first firing of the window does this.
    file. If it is red and you did not break it, **that is tonight's first queue item** — fix the
    inherited breakage before adding to it, and say so in the log.
 
+   **And read CI's verdict for the sha you inherited, in the same step.** The local suite is not the
+   signal that decides whether anything you build tonight can ever land: the day window's merge gate
+   opens only on a CI `success` for an exact sha, so a branch CI cannot pass is a branch that does
+   not merge, however green this machine is. One call, no waiting — you are reading a conclusion
+   that already exists, never blocking on one that does not:
+
+   ```
+   gh run list --branch <branch> --limit 20 --json headSha,conclusion,workflowName,createdAt
+   ```
+
+   **Record the verdict for your inherited sha in the log's first entry, every night**, in one line,
+   including when it is `success` or absent. Then:
+
+   - **Red with a failure signature other than F292 or F314** — triage it the way you would triage a
+     red local suite: it is tonight's first queue item.
+   - **Red on F292 (`database is locked`) or F314 (`bound to a different event loop`) alone** — these
+     are the two known intermittents the gate already has a one-re-run allowance for
+     (`day-window.md`, the gate's conditions; operator, 2026-09-13). **Do not spend the night on
+     them and do not re-run them here** — the gate owns that. Name the signature and the run id in
+     the log and carry on building.
+   - **Red for more than three consecutive shas** — say so explicitly and in those words. This is
+     the case the loop has no other way to see. Measured 2026-09-19/20: CI was red for **16
+     consecutive runs across 20 hours and 14 pushes**, every one of them F292 alone, while the local
+     suite stayed green throughout and the night window built nine commits onto it. Nothing noticed,
+     because nothing was looking. A streak is a fact about whether the week's work can land, and it
+     belongs in front of the operator the next morning, not in a gate that may never run.
+   - **No run for that sha at all** — say so. It is not a pass and it is not a failure.
+
 4. **Write the queue**, in this order unless `ORDER:` says otherwise. Backlog first, decided
    2026-09-01; the rejected alternative was approved-first, which would let 8 unarchived changes and
    173 findings rot while the loop shipped new ideas.

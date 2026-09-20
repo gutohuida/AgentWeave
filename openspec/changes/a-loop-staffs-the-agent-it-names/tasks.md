@@ -366,9 +366,22 @@ else means the tree has moved further than this list knows.
       touched. **Measured:** file alone **30 passed**, 13.4s. Mutation re-checked, so the restaging
       did not cost the tests their teeth: forcing `reachable` true in `_agents_that_are_free`'s
       projection (`scheduler.py:1232`) fails all three, along with 14 others in the file; reverted.
-- [ ] 6.2-REDO **Run `py -3.11 -m pytest hub/tests/ -q` in full and record the number here**, since
+- [x] 6.2-REDO **Run `py -3.11 -m pytest hub/tests/ -q` in full and record the number here**, since
       6.2's own evidence was never written down. Until this carries a count, treat the suite as
       unmeasured at this change's HEAD.
+
+      **Measured 2026-09-20 at `09237f6`, in full, nothing excluded: 4459 passed, 86 skipped,
+      1712.95s (28:32).** Exit code 0. The count is written here rather than in a log, which is the
+      whole point of 6.8. For comparison, the same command at `aa9983f` with only
+      `test_a_task_nothing_will_move_holds_nobody.py` excluded gave **4429 passed, 86 skipped,
+      1474.31s** — the 30-test difference is that file, which is what confirms the restaging put it
+      back in the suite rather than merely silencing it.
+
+      **CI is a separate question and this number does not settle it.** The same tree fails
+      `ci.yml` intermittently on **F292** (`sqlite3.OperationalError: database is locked` at setup),
+      which does not reproduce locally at all — 16 consecutive red runs from `3b7718d` to `aa9983f`,
+      then green at `09237f6` and `c6fccc5`. **A green local suite is not evidence that this change
+      can merge**; that was the gap F392 exists to name.
 
 ## 7. Drive it
 

@@ -81,6 +81,22 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    so there is nothing to wait for. If the previous close did land it, say so in one line and move
    on. **Never run the gate at any other point in the window.**
 
+   **Whether or not the gate opens, record CI's verdict for the inherited sha and how long master
+   has been behind.** One line in the compose entry: the conclusion, the run id, and
+   `git rev-list --count master..HEAD`. This costs one call and is the only thing that makes a
+   multi-day failure visible while it is still cheap, because **a window that ends early runs no
+   gate at all** — the gate has exactly two permitted placements, here and at close, and a window
+   that dies between them consults CI zero times that day.
+
+   That is not hypothetical. On 2026-09-20 this step correctly skipped the gate (`1f0d5c5`'s CI was
+   still `in_progress`, which is not a pass), the window then hit the weekly usage limit at 14:15
+   with five items still open, and the closing gate never ran. Meanwhile CI had been red since 22:18
+   the previous night — **16 consecutive runs, every one of them F292 alone**, which is precisely
+   the signature the gate's own one-re-run allowance exists for. The machinery was adequate; it
+   simply never ran, and `master` sat 40 commits behind for a day and a half. **If the count is
+   above one day's commits, say so in the compose entry in plain words** rather than leaving it to
+   be inferred from a number.
+
    The rest of this step is the gate's conditions, which are the same wherever it runs.
 
    This step exists because
