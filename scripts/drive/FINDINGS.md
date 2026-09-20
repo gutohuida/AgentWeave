@@ -22279,6 +22279,27 @@ obvious fix.
 
 **Status:** open, and still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
 
+**Re-measured 2026-09-20 (interactive session, at the operator's request for a verification scan) —
+the rate escalated far past 22.6%, and the consequence is now structural.** Over the `ci.yml` runs
+on `autonomous/2026-09-17-daily`: green through `7811bf4` (2026-09-19T22:03Z), then **16 of 16
+completed runs failed, from `3b7718d` (22:18Z) to `aa9983f` (2026-09-20T14:13Z)** — 20 hours, 14
+pushes. Four spanning that range were opened and read (`3b7718d`, `a93f95d`, `14f8dae`, `aa9983f`);
+**all four carry `sqlite3.OperationalError: database is locked` at *setup*, and nothing else
+explains `3b7718d`** — it predates the F392 regression, and the summary lines read
+`4439 passed, 20 skipped, 1 error` and `4450 passed, 20 skipped, 2 errors` with **no `FAILED`
+line at all**. Still the same two files this entry already names. The run on `09237f6`
+(2026-09-20T14:21Z) then went **green**, so the failure is not deterministic — but a flake that
+takes 16 consecutive runs is not a flake the loop can ride out.
+
+**Why this is worse than a red badge, and why it belongs at the top of a plan rather than in a
+queue.** The day window's `d7-gate` merges to `master` only on CI success for the exact HEAD sha.
+For 20 hours no sha had one, so the gate could not open under any circumstances, and **`master` sat
+38 commits behind** while nine night commits and five day commits were pushed onto a tree that CI
+could not pass. Nothing in either window reads CI — `night-window.md` step 3 checks the suite
+**locally**, where it is green — so the loop is *structurally blind* to this: it cannot notice, and
+it did not. The 2026-09-19 gate's recorded reason (*"CI never concluded in time"*, `STATE-day.json`
+`d5`) is a different and now-superseded explanation for the same stuck gate.
+
 **Status as written 2026-09-11:** **mitigated 2026-09-10, and as of 2026-09-11 the mitigation is measured and
 REFUTED AS A FIX: F292 reproduced on the mitigated tree at `f51ec21`, and again at `8d227de`
 (run 34583319728, 2026-09-11 09:16Z). The classified rate was 1 in 17 runs with the mitigation

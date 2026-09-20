@@ -153,3 +153,64 @@ how the operator inspects or overrides a decision it made, since a background ag
 reasoning is invisible is the hardest kind to trust.
 
 **Related:** `F387` (the ordering defect that prompted the example), `R4`.
+
+## R6 — A knowledge vault: everything known about a project, indexed, and fetched rather than read
+**Asked:** 2026-09-20
+**Theme:** Spec & requirements
+**Ready:** thinking
+
+"Create a new session for the project where agentweave acts called knowledge vault. That is going to
+be all the documents with knowledge about the project. Transcripts from meetings, pdfs, excel files,
+anything that gives context and knowledge from the project. The manager AI will also create md files
+to distil that information and also a guide to navigate the files with briefing of each information
+and where it exists. The files won't be accessed directly so the agent doesn't burn tokens just
+reading the entire repo — it will have free access to the index from the files and will request the
+knowledge from a mcp server (or some mechanism) that then will give it either access to the files or
+give it directly the files."
+
+**Four separable pieces, and they have very different costs.** Written out because the request reads
+as one feature and is at least four, and three of them have a verified blocker or precedent in this
+repository today (checked 2026-09-20, not recalled):
+
+1. **Ingestion — genuinely new surface.** `grep -rn "UploadFile\|multipart" hub/hub/api/` returns
+   **nothing**: the Hub has no file upload anywhere, and no attachment, asset or blob model
+   (`db/models.py`'s document-ish classes are `ProjectInstructions`, `CheckpointNote`,
+   `SpecDocument`, `SpecDocumentMerge`, `SpecDocumentEvent` — all text or metadata). PDFs, Excel and
+   transcripts have no way into the product at all today. This is the largest piece and the one with
+   no precedent to copy.
+2. **Distillation — this is R5 wearing a different hat.** "The manager AI will create md files to
+   distil that information" is a Hub-invoked, never-user-invoked agent, which is exactly R5, and
+   R5's row already carries the two constraints such a thing inherits from
+   `hub/hub/conversation_titles.py` (record no `Run` row; truncation is the floor). **Whatever is
+   decided for R5 decides this.** Do not design them apart.
+3. **The index in every turn — the slot already exists.** `_render_hub_agent_context`
+   (`hub/hub/api/v1/agents.py:1495`) renders `## Project Instructions` into every turn's canonical
+   context; `openspec/explorations/2026-09-14-project-notes-inside-the-product.md` already argues for
+   a second, agent-writable section beside it, from the LoopEngine observation that four agents kept
+   their shared knowledge in the harness's own memory directory where the operator could never see
+   it — **including one note that was simply wrong about the guard, which nobody who could correct it
+   could read.** The vault's "guide to navigate the files" is that brief, generalised. Read that
+   exploration before designing this.
+4. **Retrieval by request rather than by reading — and F354 is the live constraint.** The mechanism
+   the request describes is an MCP tool. Every agent turn spawns its tool server **fresh from this
+   working tree** (`agent_trigger.py` ~L1086), which is F354 (B): an uncommitted edit to
+   `hub/hub/mcp_server.py` reaches the operator's live `:8000` agents mid-edit, with no restart in
+   between. Adding a vault tool means touching the one file with that property. F354 is worth fixing
+   *before* this, not after.
+
+**The token argument is the strongest part of the request and is already measured.**
+`openspec/explorations/2026-09-16-the-flow-costs-more-than-the-work.md` found the flow spends 58% of
+its turns on coordination; "don't burn tokens reading the whole repo" is the same economics one
+layer down. An index-plus-fetch shape is the right instinct.
+
+**Not argued, and each changes what this is:** whether the vault is project-scoped storage the Hub
+owns or a pointer into the operator's own filesystem (the second is far cheaper and loses the
+"anything that gives context" ambition); whether distillation is one-shot at ingestion or continuous;
+what happens when the distilled md and the source document disagree; whether the index is rendered
+into every turn (a fixed context cost on every run, forever) or fetched like everything else; and who
+may write to the vault — the manager only, or any agent, which is the question
+`project-notes-inside-the-product` answers with "any agent, and the operator can correct it".
+
+**Related:** `R5` (the manager agent — same agent, decide together), `R4`,
+`openspec/explorations/2026-09-14-project-notes-inside-the-product.md`,
+`openspec/explorations/2026-08-16-a-corpus-at-scale.md`, `F354` (the MCP tool-surface blocker).
