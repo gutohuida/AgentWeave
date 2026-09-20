@@ -62,6 +62,60 @@ async def test_agent_trigger_rejects_work_dir_with_non_printable_chars(app, auth
 
 
 @pytest.mark.asyncio
+async def test_patch_agent_refuses_binding_a_charter_to_an_archived_agent(app, auth_headers):
+    """F185's guard: 1.1 releases charter_id on archive, but this route is the only other way
+    to write it — without a lifecycle check here, one ordinary PATCH puts an archived agent
+    straight back into F185's state.
+    """
+    charter = (
+        await app.post(
+            "/api/v1/projects/proj-test/charters",
+            json={"name": "Guard Test Charter", "content": "Guard behavior"},
+            headers=auth_headers,
+        )
+    ).json()
+    registered = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "guard-archived-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert registered.status_code in (200, 201)
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/guard-archived-agent/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+    refused = await app.patch(
+        "/api/v1/projects/proj-test/agents/guard-archived-agent",
+        json={"charter_id": charter["id"]},
+        headers=auth_headers,
+    )
+    assert refused.status_code == 409
+
+    cleared = await app.patch(
+        "/api/v1/projects/proj-test/agents/guard-archived-agent",
+        json={"charter_id": None},
+        headers=auth_headers,
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["charter_id"] is None
+
+    registered_open = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "guard-open-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert registered_open.status_code in (200, 201)
+    allowed = await app.patch(
+        "/api/v1/projects/proj-test/agents/guard-open-agent",
+        json={"charter_id": charter["id"]},
+        headers=auth_headers,
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["charter_id"] == charter["id"]
+
+
+@pytest.mark.asyncio
 async def test_recent_chat_limit_is_bounded(app, auth_headers):
     # M14: limit must be between 1 and 500
     resp_low = await app.get(

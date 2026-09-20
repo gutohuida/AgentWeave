@@ -92,6 +92,9 @@ async def delete_charter(
     if charter is None or charter.project_id != project_id:
         raise HTTPException(status_code=404, detail="Charter not found")
 
+    # An archived agent can never appear here: agent_lifecycle.archive() releases charter_id
+    # on archival, so this select only ever finds open agents. Do not restore the binding here
+    # without revisiting that invariant first.
     bound = await session.execute(
         select(Agent.name).where(Agent.project_id == project_id, Agent.charter_id == charter_id)
     )

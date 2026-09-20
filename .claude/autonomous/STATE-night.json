@@ -8,18 +8,18 @@
     "parent_branch":  "master",
     "parent_sha":  "802a8c7",
     "stop_at":  "2026-09-21T07:00:00+01:00",
-    "iteration":  1,
+    "iteration":  2,
     "log_file":  ".claude/autonomous/2026-09-20-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "group1-impl",
-    "next_action":  "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 1.1-1.8 (archival releases the charter binding, agent_lifecycle.py + charters.py + agents.py patch_agent guard). Tick each task with its mutation check recorded. Commit.",
+    "current":  "group2-impl",
+    "next_action":  "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 2.1-2.5 (archive/unarchive responses state the binding's fate: released_charter_id + sentence on archive, revised D8 sentence on unarchive using R2 wording exactly). No UI change; confirm useArchiveAgent still discards body. Tick tasks, commit.",
     "queue":  [
                   {
                       "id":  "group1-impl",
-                      "status":  "open",
+                      "status":  "done",
                       "title":  "Group 1 - archival releases the charter binding",
-                      "detail":  "Tasks 1.1-1.8. archive() nulls charter_id, keeps runner_id; patch_agent refuses re-binding a charter to an archived agent (409); tests + mutation checks."
+                      "detail":  "Tasks 1.1-1.8. archive() nulls charter_id, keeps runner_id; patch_agent refuses re-binding a charter to an archived agent (409); tests + mutation checks. Done iteration 2, commit pending in this same push."
                   },
                   {
                       "id":  "group2-impl",

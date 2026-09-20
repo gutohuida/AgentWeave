@@ -62,12 +62,25 @@ async def archivable(db: AsyncSession, agent: Agent) -> Optional[str]:
 
 
 def archive(agent: Agent) -> None:
-    """Mark an agent archived. Callers check `archivable` first."""
+    """Mark an agent archived. Callers check `archivable` first.
+
+    Also releases the agent's charter binding (`charter_id = None`): nothing runs an archived
+    agent, so a bound charter governs nothing while it only walls off the charter's deletion
+    behind a name the default roster does not show (F185). `runner_id` is deliberately left
+    bound — an archived agent can still be named as a runner's holder (`design.md` D3), and a
+    third site (`runners.py delete_runner`) relies on being able to say so.
+    """
     agent.lifecycle = "archived"
     agent.archived_at = datetime.now(timezone.utc)
+    agent.charter_id = None
 
 
 def unarchive(agent: Agent) -> None:
-    """Reopen an archived agent. Always permitted — nothing is blocked by reopening."""
+    """Reopen an archived agent. Always permitted — nothing is blocked by reopening.
+
+    Does **not** restore the charter binding `archive` released — that release is permanent,
+    not a pause. The archive/unarchive API responses say so explicitly (`agents.py`
+    `archive_agent`/`unarchive_agent`).
+    """
     agent.lifecycle = "open"
     agent.archived_at = None

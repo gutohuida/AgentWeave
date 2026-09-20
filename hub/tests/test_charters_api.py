@@ -238,3 +238,98 @@ async def test_delete_bound_charter_is_refused(app, auth_headers):
         f"/api/v1/projects/proj-test/charters/{charter['id']}", headers=auth_headers
     )
     assert deleted.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_charter_bound_to_an_archived_agent_succeeds(app, auth_headers):
+    """F185, end to end through HTTP: archiving releases the binding, so the charter is
+    deletable again without the operator ever having to find and unbind the archived agent.
+    """
+    charter = (
+        await app.post(
+            "/api/v1/projects/proj-test/charters",
+            json={"name": "Bound Then Archived", "content": "Bound behavior"},
+            headers=auth_headers,
+        )
+    ).json()
+    registered = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "archived-chartered-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert registered.status_code in (200, 201)
+    bound = await app.patch(
+        "/api/v1/projects/proj-test/agents/archived-chartered-agent",
+        json={"charter_id": charter["id"]},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200
+
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/archived-chartered-agent/archive",
+        headers=auth_headers,
+    )
+    assert archived.status_code == 200
+
+    deleted = await app.delete(
+        f"/api/v1/projects/proj-test/charters/{charter['id']}", headers=auth_headers
+    )
+    assert deleted.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_no_archived_agent_row_ever_holds_a_charter(app, auth_headers):
+    """The invariant itself, driven rather than asserted on a snapshot: archive, then attempt
+    a re-bind, then check every row in `agents` rather than trusting the refusal alone.
+    """
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent
+
+    charter = (
+        await app.post(
+            "/api/v1/projects/proj-test/charters",
+            json={"name": "Invariant Charter", "content": "Invariant behavior"},
+            headers=auth_headers,
+        )
+    ).json()
+    registered = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "invariant-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert registered.status_code in (200, 201)
+    bound = await app.patch(
+        "/api/v1/projects/proj-test/agents/invariant-agent",
+        json={"charter_id": charter["id"]},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200
+
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/invariant-agent/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+    refused = await app.patch(
+        "/api/v1/projects/proj-test/agents/invariant-agent",
+        json={"charter_id": charter["id"]},
+        headers=auth_headers,
+    )
+    assert refused.status_code == 409
+
+    async with async_session_factory() as session:
+        from sqlalchemy import select
+
+        rows = (
+            (
+                await session.execute(
+                    select(Agent).where(
+                        Agent.project_id == "proj-test", Agent.lifecycle == "archived"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert rows, "expected at least the archived agent under test"
+        assert all(row.charter_id is None for row in rows)

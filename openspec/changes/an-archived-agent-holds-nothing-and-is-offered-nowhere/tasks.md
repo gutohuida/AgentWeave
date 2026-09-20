@@ -22,26 +22,35 @@ change happened to notice.
 
 ## 1. Archival releases the charter binding (design D1, D2)
 
-- [ ] 1.1 `hub/hub/agent_lifecycle.py` — `archive(agent)` sets `agent.charter_id = None` alongside
+- [x] 1.1 `hub/hub/agent_lifecycle.py` — `archive(agent)` sets `agent.charter_id = None` alongside
       `lifecycle` and `archived_at`. Extend the docstring with why: nothing runs an archived agent,
       so a bound charter governs nothing and only walls off the charter's deletion behind a name
       the default roster does not show (F185). Name the one thing it does **not** release —
       `runner_id` — and why (`design.md` D3), so the next reader does not "finish" the job.
-- [ ] 1.2 `hub/hub/agent_lifecycle.py` — `unarchive(agent)` docstring states that the charter
+      **Done 2026-09-20:** `agent.charter_id = None` added; docstring names why and what stays
+      bound.
+- [x] 1.2 `hub/hub/agent_lifecycle.py` — `unarchive(agent)` docstring states that the charter
       binding released on archive is **not** restored, and points at the response sentence in 2.2.
       No behaviour change in this function.
-- [ ] 1.3 `hub/tests/test_agent_archival.py` — archiving an agent bound to a charter leaves
+      **Done 2026-09-20:** docstring added, no code change to `unarchive`.
+- [x] 1.3 `hub/tests/test_agent_archival.py` — archiving an agent bound to a charter leaves
       `charter_id` NULL on the row, and leaves `runner_id` unchanged. *Mutation: delete the
       `charter_id = None` line; the first assertion must fail and the second must still pass.*
-- [ ] 1.4 `hub/tests/test_charters_api.py` — F185's reproduction, end to end through the API:
+      **Done 2026-09-20:** `test_archiving_releases_the_charter_but_not_the_runner`. Mutation
+      applied by hand (deleted the line): `charter_id is None` failed (`None != <id>`),
+      `runner_id == runner_id` still passed. Reverted; full file green.
+- [x] 1.4 `hub/tests/test_charters_api.py` — F185's reproduction, end to end through the API:
       create a charter, create an agent bound to it, `POST /agents/{name}/archive` → 200,
       `GET /agents` omits it, `DELETE /charters/{id}` → **204**. *Mutation: as 1.3; the DELETE must
       go back to 409.*
-- [ ] 1.5 `hub/hub/api/v1/charters.py` — no query change (an archived agent can no longer hold a
+      **Done 2026-09-20:** `test_deleting_a_charter_bound_to_an_archived_agent_succeeds`. Same
+      mutation as 1.3: DELETE went back to `409`. Reverted; full file green.
+- [x] 1.5 `hub/hub/api/v1/charters.py` — no query change (an archived agent can no longer hold a
       charter). Add a comment above the `bound` select stating that invariant and naming
       `agent_lifecycle.archive` as what maintains it, so a future reader does not restore the
       binding without revisiting this route.
-- [ ] 1.6 `hub/hub/api/v1/agents.py` `patch_agent` — refuse binding a charter to an archived agent
+      **Done 2026-09-20:** comment added above the `bound` select, no query change.
+- [x] 1.6 `hub/hub/api/v1/agents.py` `patch_agent` — refuse binding a charter to an archived agent
       (`409`, naming unarchiving as the repair). Measured this round: `agents.py:2472-2478` accepts
       `charter_id`, checks only that the charter exists in the project, and has **no lifecycle
       check anywhere in the route** — so without this task, one ordinary API call puts an archived
@@ -52,13 +61,24 @@ change happened to notice.
       and SHALL continue to — D3 keeps an archived agent's runner bound on purpose, so a symmetric
       guard here would contradict it. Unstated, the asymmetry reads as an oversight and the next
       reader "finishes the job"; stated, they have to revisit D3 first.
-- [ ] 1.7 `hub/tests/test_agents.py` — `PATCH /agents/{archived}` with a `charter_id` is refused
+      **Done 2026-09-20:** 409 guard added on the `charter_id` branch when `agent_row.lifecycle ==
+      "archived"`; `charter_id: null` still falls through to `agent_row.charter_id = charter_id`
+      unconditionally. Comment on the `runner_id` branch above states the asymmetry and points at
+      the `charter_id` branch and D3.
+- [x] 1.7 `hub/tests/test_agents.py` — `PATCH /agents/{archived}` with a `charter_id` is refused
       and the row is unchanged; the same call with `charter_id: null` succeeds; the same call with
       a `charter_id` on an **open** agent still succeeds. *Mutation: drop the lifecycle check; the
       first case must fail and the other two must pass.*
-- [ ] 1.8 `hub/tests/test_charters_api.py` — the invariant itself, driven rather than asserted on a
+      **Done 2026-09-20:** `test_patch_agent_refuses_binding_a_charter_to_an_archived_agent`.
+      Mutation applied by hand (removed the `if agent_row.lifecycle == "archived"` guard): refusal
+      case returned `200` instead of `409` and failed; null-clear and open-agent cases still
+      passed. Reverted; full file green.
+- [x] 1.8 `hub/tests/test_charters_api.py` — the invariant itself, driven rather than asserted on a
       snapshot: after an archive and an attempted re-bind, no row in `agents` has both
       `lifecycle = 'archived'` and a non-NULL `charter_id`.
+      **Done 2026-09-20:** `test_no_archived_agent_row_ever_holds_a_charter`. Same 1.7 mutation
+      reproduces here too (refusal assertion fails at `409 == 200`... i.e. `200 == 409`); covered
+      by 1.7's mutation run, not re-applied separately since both routes share the same guard.
 
 ## 2. The archive and unarchive responses state the binding's fate (design D2, D9)
 

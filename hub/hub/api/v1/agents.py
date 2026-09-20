@@ -2467,6 +2467,10 @@ async def patch_agent(
     if "spawn_cmd" in body:
         agent_row.spawn_cmd = body["spawn_cmd"]
 
+    # No lifecycle guard on runner_id: D3 keeps an archived agent's runner bound through
+    # archival on purpose, so re-binding one here is consistent with that, not an oversight.
+    # A symmetric guard on this branch would contradict D3 — see the charter_id branch below,
+    # which does guard, because charter binding is exactly what archive() releases.
     runner_newly_bound = False
     if "runner_id" in body:
         runner_id = body["runner_id"]
@@ -2480,6 +2484,15 @@ async def patch_agent(
     if "charter_id" in body:
         charter_id = body["charter_id"]
         if charter_id is not None:
+            # Archival releases charter_id (agent_lifecycle.archive) and stays released until
+            # unarchive — refuse re-binding one here rather than silently undoing that.
+            # Clearing to null stays permitted below: clearing is not re-binding.
+            if agent_row.lifecycle == "archived":
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Agent '{name}' is archived and cannot hold a charter. "
+                    "Unarchive it first.",
+                )
             charter_row = await session.get(Charter, charter_id)
             if charter_row is None or charter_row.project_id != project_id:
                 raise HTTPException(status_code=404, detail=f"Charter '{charter_id}' not found")

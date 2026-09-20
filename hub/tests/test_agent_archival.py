@@ -8,6 +8,7 @@ a route, which is the only way a commitment not to add one survives the next per
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import select
 
 
 async def _register(app, auth_headers, name: str):
@@ -66,6 +67,50 @@ async def test_unarchive_restores_the_agent(app, auth_headers):
     assert resp.json()["lifecycle"] == "open"
     assert "backagain" in await _names(app, auth_headers)
     assert "backagain" not in await _names(app, auth_headers, "archived")
+
+
+@pytest.mark.asyncio
+async def test_archiving_releases_the_charter_but_not_the_runner(app, auth_headers, bind_runner):
+    """F185: a bound charter walls off its own deletion behind a name the roster does not show.
+
+    Archival releases `charter_id` so the charter becomes deletable again. `runner_id` is left
+    bound on purpose (`design.md` D3) — `runners.py delete_runner` names an archived holder.
+    """
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent
+
+    charter = await app.post(
+        "/api/v1/projects/proj-test/charters",
+        json={"name": "Bound For Archival", "content": "Do the thing."},
+        headers=auth_headers,
+    )
+    charter_id = charter.json()["id"]
+
+    await _register(app, auth_headers, "chartered-and-runnered")
+    runner_id = await bind_runner("chartered-and-runnered")
+    bound = await app.patch(
+        "/api/v1/projects/proj-test/agents/chartered-and-runnered",
+        json={"charter_id": charter_id},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200
+    assert bound.json()["charter_id"] == charter_id
+
+    resp = await app.post(
+        "/api/v1/projects/proj-test/agents/chartered-and-runnered/archive", headers=auth_headers
+    )
+    assert resp.status_code == 200
+
+    async with async_session_factory() as session:
+        row = (
+            await session.execute(
+                select(Agent).where(
+                    Agent.project_id == "proj-test", Agent.name == "chartered-and-runnered"
+                )
+            )
+        ).scalar_one()
+        assert row.charter_id is None
+        assert row.runner_id == runner_id
 
 
 @pytest.mark.asyncio
