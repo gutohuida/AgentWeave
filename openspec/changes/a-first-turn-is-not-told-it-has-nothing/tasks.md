@@ -288,10 +288,23 @@
   hub/tests/test_agent_facing_text.py hub/tests/test_tool_surface_matches_server.py -q` →
   **157 passed, 0 failed, 6 warnings, 43.75s.** The six warnings are pre-existing aiosqlite
   teardown noise (`RuntimeError: Event loop is closed`), present on the baseline and unrelated.
-- [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` in full — **write the actual counts and the duration
+- [x] 6.2 `py -3.11 -m pytest hub/tests/ -q` in full — **write the actual counts and the duration
   inline in this task.** Per **F392**, a tick on this line citing a log entry that does not exist is
   the exact process defect that let a three-test regression reach `master`; if the number is not
   written here, this task is not done.
+  **→ 4460 passed, 86 skipped, 0 failed, 267 warnings, 2007.94s (33m27s).** Run on the tree at
+  `802a8c7` (started by the previous session at ~20:15Z, read at 20:49Z by the session that resumed
+  it). **Two caveats, recorded rather than smoothed over:**
+  (a) it overlapped a second full-suite run for its last ~13 minutes, so it is not a clean-machine
+  measurement — it passed anyway, and contention is the direction that would have *caused* a
+  failure, not hidden one;
+  (b) the local totals do not match CI's and are not supposed to — **CI at `802a8c7` reports
+  `4451 passed, 20 skipped`** (run `35535926320`, `hub-test` green in 12m13s). The 66-skip gap is
+  machine-dependent collection (`claude` is on PATH here and is not on a runner — see
+  `DEAD-ENDS.md`), which is why neither number alone is the gate.
+  **Both signals are green at the implementation sha**, which is the claim this task exists to
+  support. Note the local run is *not* evidence about **F292**: that lock has never reproduced on
+  this machine.
 - [x] 6.3 Confirm no permission posture changed. **R3 rewrote this task's first clause: as R2 left
   it, it was already false against the tree and would have fired a false alarm at implementation
   time.** It read *"`grep -n "acceptEdits\|permission-prompt-tool"` in `hub/hub/runner_commands.py`
