@@ -679,6 +679,35 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-20 — archival's blast radius, and an approval taken without the adversarial pass
+
+**DECIDED 2026-09-20 afternoon, by the operator, in the interactive session that resumed handoff
+0132.** The day window had already hit the weekly usage limit, so this did not come from a window.
+
+- DECIDED   archived-agent-blast-radius  **API plus a persisted, broadcast archival event — the
+  middle of the three shapes offered.** The change `an-archived-agent-holds-nothing-and-is-offered-nowhere`
+  carried exactly one question through three rounds: how far past the API does it go. Chosen because
+  `persist_event` and `sse_manager.broadcast` are both server-side, so the rider's *recording* half
+  is discharged with nothing under `hub/ui/src` and nothing reaching the live `:8000` app on reload —
+  the cost that made the third option expensive. *Rejected:* **API only as R3 left it**, which leaves
+  the released charter's identity existing solely in a response body that `useArchiveAgent`'s
+  argument-less `onSuccess` discards, so the fact dies with the request. *Rejected:* **accepting the
+  bundle refresh**, which would close the display gap properly but commits `hub/ui/src` and
+  `hub/hub/static/ui` together and reaches the operator's live app. Carried as **group 2b**;
+  `design.md` D10 holds the full reasoning. **Not decided, and still open: the display half.**
+  `useSSE.ts:31`/`:460` do not know the new kinds, so an operator still sees nothing.
+- DECIDED   archived-agent-group-5  **Build it.** The trim to `DIRECTION.md`'s three files was
+  offered — R1 had marked group 5 (`runners.py`, F390) as the one part safe to cut — and declined.
+- DECIDED   archived-agent-opus-pass  **Skip the standing adversarial Opus review for this one
+  change.** The operator's own standing rule (`feedback_opus_review_before_approval`) asks for an
+  adversarial pass before any `- APPROVED` row; they instructed otherwise here, on the grounds that
+  R1, R2 and R3 ran as three independent processes and each corrected the last — unlike
+  `a-loop-staffs-the-agent-it-names`, where two of three rounds shared a session and a later
+  adversarial pass returned eight blocking findings. **Recorded because its absence is otherwise
+  indistinguishable from an oversight**, and because the consequence is specific: D10 and group 2b
+  are R3-and-later work that nothing has re-derived. *This decision is about one change, not about
+  the rule.*
+
 ### 2026-09-19, second sitting — two severities rated, and tomorrow's second spec loop named
 
 **DECIDED 2026-09-19 afternoon, by the operator, in the interactive session that resumed handoff
