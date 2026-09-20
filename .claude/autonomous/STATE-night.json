@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 7,
+  "iteration": 8,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "group-verify-drive",
-  "next_action": "Run tasks 6.1-6.4 of openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere: (6.1) py -3.11 -m pytest hub/tests/ -v, full suite, must be green; (6.2) ruff check src/ hub/ tests/, black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/, mypy src/, all clean; (6.3) drive the whole change end-to-end on a fresh throwaway Hub (NOT 8000, NOT 8010) covering: F185 (archive an agent holding a charter, confirm the charter releases and the 409-on-rebind and the archive/unarchive response sentences), F181 (probe/trigger agreement under ?lifecycle=archived on launchability), and the 0105 migration against a seeded pre-0105 db (upgrade, confirm archived agent's charter_id cleared, open agent's untouched). Any real agent turn binds claude-haiku-4-5; leave no job enabled. (6.4) Set F185 and F181 **Status:** fixed <sha> in scripts/drive/FINDINGS.md with the drive's evidence (F390 and F391 are already fixed from groups 5 and 2b). Tick 6.1-6.4 in tasks.md, commit, push. Advance current/next_action to change-archive.",
+  "current": "change-archive",
+  "next_action": "Task 6.5 of openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere: run `openspec validate --strict an-archived-agent-holds-nothing-and-is-offered-nowhere`, fix anything it flags, then use the repo's own openspec-sync-specs and openspec-archive-change skills (not by hand) to archive the change. Per night-window.md's archiving rule, retire F185/F181/F390/F391's presence in FINDINGS.md's open-severity listing/summary (their per-finding Status lines are already 'fixed <sha>' from group-verify-drive -- this step is about the ledger's open-count/summary bookkeeping, not re-touching those four entries' Status lines). Tick 6.5 in tasks.md, commit, push. Advance current/next_action to group7-drive.",
   "queue": [
     {
       "id": "group1-impl",
@@ -53,9 +53,9 @@
     },
     {
       "id": "group-verify-drive",
-      "status": "open",
+      "status": "done",
       "title": "Group 6 - full suite, lint, and a real drive",
-      "detail": "Tasks 6.1-6.4. pytest hub/tests/ -v green, ruff/black/mypy clean, drive on a fresh throwaway Hub (not 8000/8010) covering F185 end to end, F181 probe/trigger, and the 0105 migration against a seeded db. Haiku for any real agent turn. Set F185/F181/(F390) fixed in FINDINGS.md with evidence."
+      "detail": "Tasks 6.1-6.4. pytest hub/tests/ -v green, ruff/black/mypy clean, drive on a fresh throwaway Hub (not 8000/8010) covering F185 end to end, F181 probe/trigger, and the 0105 migration against a seeded db. Haiku for any real agent turn. Set F185/F181/(F390) fixed in FINDINGS.md with evidence. Done iteration 8: 4474 passed/86 skipped, lint/type-check clean, drive on port 8025 (proj-b99d375d4baf) confirmed F185's release/409/unarchive sentences, F181's default-probe/trigger agreement, and migration 0105's charter_id clear against a hand-seeded 0104 db. F185 fixed 10cf98e, F181 fixed 2bf4816 in FINDINGS.md."
     },
     {
       "id": "change-archive",

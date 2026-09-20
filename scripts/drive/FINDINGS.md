@@ -14639,7 +14639,20 @@ discard.
 
 ## F181 (C) — `GET /agents/launchability` does not apply the lifecycle filter, and its docstring says it feeds a selector
 
-**Status:** open, **specced 2026-09-20** in
+**Status:** fixed 2bf4816 -- `get_agents_launchability` now takes the same `lifecycle` query param
+as `list_agents` (`open` default, `archived`, `all`), applied to `session_agents_meta` before the
+per-name probe loop. Verified end to end over real HTTP on a fresh throwaway Hub (port 8025) 2026-09-21:
+archived `archive-test-agent`, then `GET /agents/launchability` (default) -> `200 {"agents":{}}`
+(correctly absent), and `POST /agent/trigger {"agent":"archive-test-agent","message":"hello"}` ->
+`409 {"detail":"archive-test-agent is archived and cannot be triggered. Unarchive it first."}` --
+the default probe and the trigger now agree, which is the exact assertion this finding's
+reproduction violated. Note for anyone re-reading this: `GET .../launchability?lifecycle=archived`
+still reports the archived agent `runnable: true` -- that is by design, not a regression of this
+finding. This finding and task 4.4's test are both scoped to the **default** (`lifecycle=open`)
+probe agreeing with trigger; the non-default views intentionally show the raw probe result so an
+operator looking at the archived roster can still see whether the CLI/auth underneath is healthy.
+
+Originally: **specced 2026-09-20** in
 `openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (**R1 + R2 + R3 all done
 2026-09-20** -- no operator token, nothing built). Re-reproduced that day on `1fdfc4d`: the archived agent
 came back `runnable: true, collaboration_ready: true` one call before `POST /agent/trigger`
@@ -14848,7 +14861,21 @@ the response echoes `"name": "   "`.
 
 ## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
 
-**Status:** open, **specced 2026-09-20** in
+**Status:** fixed 10cf98e -- `agent_lifecycle.archive` now nulls `charter_id` on archival and
+`PATCH /agents/{name}` refuses (409) re-binding a charter to an already-archived agent, so the
+charter-then-archive ordering this finding depended on can no longer occur. Verified end to end
+over real HTTP on a fresh throwaway Hub (port 8025, not 8000/8010) 2026-09-21: created a charter,
+bound it to `archive-test-agent`, archived the agent -- response
+`{"name":"archive-test-agent","lifecycle":"archived","charter_id":null,"released_charter_id":"charter-76a2942959d2","message":"Archiving released this agent's charter, \"test-charter\"."}` --
+then re-attempted the same bind, got `409 {"detail":"Agent 'archive-test-agent' is archived and
+cannot hold a charter. Unarchive it first."}`. A charter is therefore never left bound only to an
+archived agent, so `DELETE /charters/{id}` cannot hit the wall this finding named. Unarchive
+returns `{"name":"...","lifecycle":"open","charter_id":null,"message":"No charter is bound.
+Archiving releases an agent's charter and unarchiving does not restore it. An agent with no
+charter still runs -- bind one only if this agent should have one."}` -- confirming D8's design:
+unarchiving does not restore the binding.
+
+Originally: **specced 2026-09-20** in
 `openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (**R1 + R2 + R3 all done
 2026-09-20** -- no operator token, nothing built); re-reproduced that day on `1fdfc4d` through the API, and
 that round measured a hole the finding did not name: `PATCH /agents/{name}` re-binds a charter to

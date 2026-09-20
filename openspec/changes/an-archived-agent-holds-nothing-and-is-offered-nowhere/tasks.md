@@ -305,15 +305,33 @@ change happened to notice.
 
 ## 6. Verification
 
-- [ ] 6.1 `pytest hub/tests/ -v` green under `py -3.11`.
-- [ ] 6.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
+- [x] 6.1 `pytest hub/tests/ -v` green under `py -3.11`.
+      **Done 2026-09-21:** `py -3.11 -m pytest hub/tests/ -q` -> 4474 passed, 86 skipped, 265
+      warnings in 2841.21s. The two `RuntimeError: Event loop is closed` traces in the warning
+      summary are background-thread teardown noise from `aiosqlite`, pre-existing, not failures.
+- [x] 6.2 `ruff check src/ hub/ tests/`, `black --check src/ hub/hub/ hub/tests/ tests/
       --target-version py311`, `mypy src/`.
-- [ ] 6.3 Drive it on a throwaway Hub from source on a port that is not `8000` or `8010`, against a
+      **Done 2026-09-21:** all three clean (`ruff`: "All checks passed!"; `black`: 582 files
+      unchanged; `mypy`: "Success: no issues found in 22 source files").
+- [x] 6.3 Drive it on a throwaway Hub from source on a port that is not `8000` or `8010`, against a
       fresh profile: F185's reproduction end to end through HTTP, F181's probe/trigger pair, and
       the migration against a database seeded at `0104` with an archived agent holding a charter.
       Every real agent turn binds `claude-haiku-4-5-20251001`. Archive nothing on a real project.
-- [ ] 6.4 Update `scripts/drive/FINDINGS.md`: `**Status:** fixed <sha>` on F185, F181 (and F390 if
+      **Done 2026-09-21:** throwaway Hub on port 8025, `DATABASE_URL` pointed at
+      `testbed/drive0921/agentweave.db`, fresh project `proj-b99d375d4baf`. F185: bind charter ->
+      archive (`released_charter_id` + message match spec) -> re-bind refused 409 -> unarchive
+      (D8's static "does not restore" message confirmed). F181: default probe omits the archived
+      agent (`{"agents":{}}`), `POST /agent/trigger` refuses it 409 as archived -- probe/trigger
+      agree. Migration: seeded `testbed/drive0921/migration_test.db` at `0104` with one archived
+      agent (`charter_id` set) and one open agent (`charter_id` set), ran `alembic upgrade head`
+      (applied exactly `0104 -> 0105`), archived row's `charter_id` cleared to `NULL`, open row's
+      unchanged. No real agent turn was triggered (the 409 fires before any spawn). Hub process
+      stopped, port 8025 confirmed free; `testbed/drive0921/` artifacts left on disk as evidence.
+- [x] 6.4 Update `scripts/drive/FINDINGS.md`: `**Status:** fixed <sha>` on F185, F181 (and F390 if
       group 5 survived), each with
       the one-line evidence of what was driven.
+      **Done 2026-09-21:** F185 -> fixed `10cf98e`, F181 -> fixed `2bf4816` (F390 already fixed
+      `861429d` from group 5), each rewritten in place with the drive's evidence per the F390
+      pattern.
 - [ ] 6.5 `openspec validate --strict an-archived-agent-holds-nothing-and-is-offered-nowhere`, then
       `openspec-sync-specs`/`openspec-archive-change` per the repo's own skills — not by hand.
