@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a435f48",
     "stop_at": "2026-09-20T17:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "d7-gate",
-    "next_action": "D-7, the merge gate, and it is the LAST unit of this window. Preconditions, in order: (1) `git status --short` empty; (2) `git rev-list HEAD..master --count` == 0; (3) `git rev-parse HEAD` == `git rev-parse @{u}` (push first if not); (4) no `HOLD MERGE` in the newest section of spec-queue/DIRECTION.md. Then find CI's run for the EXACT HEAD sha (`gh run list --branch autonomous/2026-09-17-daily` and match `headSha`), poll ~90s up to 25 min. success on all four => `git checkout master && git merge --ff-only autonomous/2026-09-17-daily && git push` then `git checkout autonomous/2026-09-17-daily`. Anything else -- still running at budget, a failed job, a HOLD MERGE, or the window's stop_at reached -- => DO NOT MERGE: log the run id and the reason in the day log and leave it for tomorrow's step 1. Either way, append a short log entry, then set next_action to null so the driver unregisters. NOTE: a concurrent operator session has committed to this branch before (c6fccc5), so re-check the sha at the moment you poll rather than trusting one read earlier in the turn. Known-red context for reading CI: `pytest tests/` has 2 pre-existing test_skill_sync.py failures on a clean tree (iteration 7) -- they are NOT caused by this branch, but if CI is red only for them, that is still a red gate: report it, do not merge, and do not 'fix' them inside the gate.",
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -83,9 +83,9 @@
         },
         {
             "id": "d7-gate",
-            "status": "open",
+            "status": "done",
             "title": "D-7 -- the merge gate, LAST",
-            "detail": "Only after git status --short is empty. Find CI's run for the exact HEAD sha, poll ~90s up to 25min. success + HEAD..master==0 + clean + HEAD==@{u} + no HOLD MERGE in DIRECTION.md newest section => git merge --ff-only, push. Still running at budget => stop, log run id, leave for tomorrow's step 1. Then next_action: null."
+            "detail": "Done iteration 9. Two rounds needed: CI for a09e4a2 (35518457958) passed after ~13min polling, but a re-check before merging found the concurrent operator session had moved HEAD to 45d4576 while polling -- re-ran all four conditions and polled CI for 45d4576 (35518709191) instead, success after ~7.5min. Merged: git merge --ff-only, c6fccc5..45d4576 fast-forward, 14 files, pushed to origin/master. Item 2 (a-hub-that-was-not-told-which-database-refuses-to-open-one) is unaffected by this merge's decision -- stays specced (R1-R3 done, no operator token) for tomorrow."
         }
     ],
     "decisions_for_user": [],
