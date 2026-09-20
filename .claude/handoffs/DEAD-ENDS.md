@@ -1238,6 +1238,42 @@ nothing.** Treat "the review already ran" as satisfied only if the applying roun
 session from the one that wrote what was reviewed.
 
 
+## 2026-09-20 (evening) — implementing a change, and probing the approver
+
+- **`ruff`, `black` and `mypy` are NOT on PATH in the Bash tool.** `ruff check ...` returns
+  `/usr/bin/bash: line 1: ruff: command not found`, and so do the other two. The CI commands in
+  `CLAUDE.md` and in every change's quality-gate tasks are written in CI's spelling, which does not
+  work in this shell. **Invoke them as `py -3.11 -m ruff` / `py -3.11 -m black` / `py -3.11 -m
+  mypy`.** Measured 2026-09-20. This matters beyond convenience: a task that reads
+  *"`ruff check src/ hub/ tests/` — clean"* will look like a **failed gate** to an agent that runs
+  it literally, and the honest-looking response to a failed gate is to start changing code.
+
+- **Probing `_decide` (`hub/hub/mcp_server.py`) without `HUB_URL` set gives a false `deny`, with a
+  misleading reason.** `_judge_word`'s rule 2 trusts a `$HUB_URL` reference only when
+  `trusted and base`, where `base` is `os.environ["HUB_URL"]` **in the approver's own process** —
+  the Hub sets it for every run, so a bare probe does not reproduce a real run. Unset, a shape the
+  Hub actually allows is refused as *"contains a variable, '~' or a command substitution that the
+  shell expands when it runs"*, which reads like a real verdict about the command rather than a
+  missing variable in the harness. Measured 2026-09-20 by getting it wrong first, then twice more
+  by R2 and R3 independently. **Export `HUB_URL` and `AW_WORKSPACE_DIR` before any `_decide`
+  probe.** Note `python -c` is unaffected — it names no `$HUB_URL` word, so rule 2 never fires on
+  it, which is exactly why `DECISIONS.md` 1d once picked that shape.
+
+- **A `grep -n` guard in a task compares line NUMBERS, not code, and any annotation pass breaks
+  it.** A task guarding "the permission posture is unchanged" was written as
+  `grep -n "acceptEdits\|permission-prompt-tool" ... byte-identical to master`. Commit `4bd966e`
+  added comment blocks and moved all six matches (57→65, 63→71, 71→79, 73→81, 75→83, 254→269) while
+  changing **no code at all**. Drop the `-n` and diff the matched lines' *text*, against **the sha
+  the change is being implemented on top of** — not against `master`, which on a working branch
+  also contains every unrelated commit since the branch point. Caught by R3 before implementation;
+  it would otherwise have fired a false alarm and invited a "fix" to code that was correct.
+
+- **Importing anything from the `hub` package in a scratch script opens the operator's live
+  database unless `DATABASE_URL` is set FIRST** (open finding **F388**, fix decided a+b+d and not
+  yet built). Set it to a throwaway path **before** the import, not after — `hub.config` reads it at
+  import time. Every probe script this session did this deliberately; it is cheap and the failure
+  mode is writing to `:8000`'s real data.
+
 ## 2026-09-20 — an interactive session sharing the tree with a live scheduled window
 
 - **The unattended driver will commit your uncommitted working-tree edits, under its own message.**

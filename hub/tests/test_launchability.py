@@ -493,6 +493,11 @@ class TestAccessPathNotice:
             "no agentweave tool surface",
             "cannot send messages",
             "report what you would have sent",
+            # Added by `a-first-turn-is-not-told-it-has-nothing`. This test was written to stop
+            # exactly this class of sentence and the shipped clause walked straight past it,
+            # because the list only held the *older* wordings. A denial in new words is still a
+            # denial; the list is what makes that check real rather than nominal.
+            "no mcp tools this turn",
         ):
             assert denial not in notice
 

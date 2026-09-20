@@ -1445,8 +1445,8 @@ def _tool_surface_lines(*, has_peers: bool = True, access_path: str = "mcp") -> 
         # name discloses nothing it does not already hold; the value would be a credential in
         # stored turn text.
         preamble = (
-            "No AgentWeave tools are injected this turn, so each capability below is one HTTP "
-            "request instead. Send it to the address in the `HUB_URL` environment variable, with "
+            "Each capability below is one HTTP request. Send it to the address in the `HUB_URL` "
+            "environment variable, with "
             "the header `Authorization: Bearer $AW_RUN_TOKEN` — read both values out of your own "
             "process environment. A field marked `*` is required, and `{...}` in a path is a "
             "value you substitute. Requests and responses are JSON, and a refusal comes back as "

@@ -741,8 +741,15 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
     # harness has never had the adapter report in, so the Hub has no grounds to assert the tools
     # are there; it still injects them, because injection is what the operator's statement moves
     # and an inference must not move containment with it.
-    assert "no MCP tools this turn" in prompt
+    # Neither direction is asserted: no claim the tools are there, and — since
+    # `a-first-turn-is-not-told-it-has-nothing` — no claim that they are not. This turn holds
+    # them, so the denial that used to stand here was false on exactly this path. The negative
+    # is paired with the plane content the requirement demands, because a bare `not in` passes
+    # against a prompt that lost the notice altogether (design D5).
+    assert "no MCP tools this turn" not in prompt
     assert "the `agentweave` MCP tools are available" not in prompt
+    assert "$HUB_URL/api/v1/agent-actions/..." in prompt
+    assert "Authorization: Bearer $AW_RUN_TOKEN" in prompt
     assert captured_kwargs["mcp_command"][-1].endswith("mcp_server.py")
 
     from hub.agent_auth import hash_run_token
@@ -926,6 +933,55 @@ async def test_an_observed_harness_earns_the_mcp_description_for_the_next_run(
         app, auth_headers, "observed-claude", session_suffix="observed-2"
     )
     assert "the `agentweave` MCP tools are available" in second["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_a_run_holding_the_tools_is_not_told_it_is_empty(app, auth_headers, bind_runner):
+    """The delta's scenario `A run holding the tools is not told it is empty`.
+
+    A brand-new agent has no run carrying `mcp_adapter_online_at`, so `described_access_path`
+    has no grounds and the turn is described the HTTP form. `resolve_access_path` injects the
+    server anyway, because injection follows the operator's declaration and never an inference.
+    Both are true of this single turn, and that is exactly why the denial which used to open its
+    notice was false: the tools it was told it did not have are on its own command line.
+
+    Each negative is paired with a positive, because a bare `not in` is satisfied by a prompt
+    that lost the notice entirely (`design.md` D5).
+    """
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"fresh-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("fresh-claude", cli="claude")
+
+    captured = await _trigger_and_capture_build_command(
+        app, auth_headers, "fresh-claude", session_suffix="fresh-1"
+    )
+
+    # The experimental condition, asserted rather than assumed: no run of this agent carries the
+    # column `harness_has_honoured_mcp` reads, so there were no grounds when the turn was
+    # described.
+    async with async_session_factory() as db:
+        grounded = await db.execute(
+            select(Run).where(Run.agent == "fresh-claude", Run.mcp_adapter_online_at.is_not(None))
+        )
+        assert grounded.scalars().first() is None
+
+    # ...and the server was injected all the same, so the run genuinely holds the tools.
+    assert captured["mcp_command"][-1].endswith("mcp_server.py")
+
+    prompt = captured["prompt"]
+    assert "no MCP tools this turn" not in prompt
+    assert "the `agentweave` MCP tools are available" not in prompt
+    assert "$HUB_URL/api/v1/agent-actions/..." in prompt
+    assert "Authorization: Bearer $AW_RUN_TOKEN" in prompt
 
 
 @pytest.mark.asyncio
@@ -2877,10 +2933,17 @@ async def test_a_run_without_mcp_is_described_the_operations_it_can_actually_per
     # And not as injected calls, which is what it would have said before the hoist.
     assert "`send_message(to_agent" not in context
     assert "prefixed `mcp__agentweave__`" not in context
+    # Nor does the tool section claim the absence. Its preamble used to open "No AgentWeave
+    # tools are injected this turn", which is the stronger of the two falsehoods this turn
+    # carried — injection is exactly what happened. Paired with the positives above, which are
+    # what stops this passing against an empty context.
+    assert "No AgentWeave tools are injected this turn" not in context
 
-    # The notice in the turn prompt agrees with the description in the same turn's context.
-    assert "no MCP tools this turn" in captured_kwargs["prompt"]
+    # The notice in the turn prompt agrees with the description in the same turn's context —
+    # and neither asserts a tool surface, in either direction.
+    assert "no MCP tools this turn" not in captured_kwargs["prompt"]
     assert "the `agentweave` MCP tools are available" not in captured_kwargs["prompt"]
+    assert "$HUB_URL/api/v1/agent-actions/..." in captured_kwargs["prompt"]
 
 
 @pytest.mark.asyncio

@@ -407,7 +407,7 @@ def access_path_notice(access_path: str) -> str:
     # discloses nothing it does not already hold; the value would be a leak. The difference is one
     # f-string, which is why the spec states it as a prohibition rather than a preference.
     return (
-        "[AgentWeave] Tool access: no MCP tools this turn — but the AgentWeave capability "
+        "[AgentWeave] Tool access: the AgentWeave capability "
         "plane is reachable over HTTP, and this run is already authenticated for it. Its base "
         "address is the value of the `HUB_URL` environment variable, and its operations live "
         "under the route prefix `/api/v1/agent-actions`, so a request goes to "

@@ -111,9 +111,15 @@ def notice_shape(text):
     http = "HUB_URL" in text or "AW_RUN_TOKEN" in text
     mcp = "mcp__agentweave__" in text or "MCP tool" in text
     nothing = "no AgentWeave tool surface is available" in text
-    injected = "No AgentWeave tools are injected this turn" in text
+    # Which rendering the tool section used. This used to key on the HTTP preamble's opening
+    # sentence, "No AgentWeave tools are injected this turn" -- removed by
+    # `a-first-turn-is-not-told-it-has-nothing` as an unfounded claim of absence. Keying on a
+    # sentence that change deletes would report `False` for every run and read as "the MCP
+    # rendering was used", which is the opposite of the truth. The route prefix comes from
+    # `_http_lines`, not from the preamble, so it survives any rewording of the prose.
+    http_rendering = "/api/v1/agent-actions" in text
     return (f"http-form={http} mcp-form={mcp} says-you-have-nothing={nothing} "
-            f"says-not-injected={injected}")
+            f"http-rendering={http_rendering}")
 
 
 def last_reply(agent):

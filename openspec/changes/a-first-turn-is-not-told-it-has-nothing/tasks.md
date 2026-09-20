@@ -14,7 +14,7 @@
 > **R2 ran 1.1 and 1.2 and recorded the answers.** Re-run them to confirm nothing moved — the tree
 > has another agent editing `hub/hub/` — but do not treat finding what is written here as new work.
 
-- [ ] 1.1 `grep -rn "no MCP tools this turn" .` across the **whole repository** (excluding
+- [x] 1.1 `grep -rn "no MCP tools this turn" .` across the **whole repository** (excluding
   `node_modules/`, `.git/`, `hub/hub/static/ui/`) and confirm the list below. Docs, skill templates
   and charter text count — the clause may be quoted where no test runs.
 
@@ -26,14 +26,14 @@
   `scripts/drive/FINDINGS.md`, `.claude/autonomous/2026-09-09-day-log.md`, and this change's own
   four documents.
 
-- [ ] 1.1b **R2 added.** Repeat the sweep for the *second* string,
+- [x] 1.1b **R2 added.** Repeat the sweep for the *second* string,
   `grep -rn "No AgentWeave tools are injected this turn" .`. Product: `hub/hub/api/v1/agents.py`
   (`_tool_surface_lines`). Non-test consumer that will **silently go stale**, since nothing fails
   when it is missed: `scripts/drive/t_d1_0909_together.py`, whose detector is
   `injected = "No AgentWeave tools are injected this turn" in text`. Everything else is a stale
   fixture under `testbed/scratch/`, `.agentweave/tasks/` or a captured context file — leave them.
 
-- [ ] 1.2 Read all four test files that reference `access_path_notice` —
+- [x] 1.2 Read all four test files that reference `access_path_notice` —
   `hub/tests/test_agent_trigger.py`, `hub/tests/test_agent_facing_text.py`,
   `hub/tests/test_launchability.py`, `hub/tests/test_tool_surface_matches_server.py` — and confirm
   R2's reading below. The question is what each test would still prove after the edit.
@@ -48,24 +48,56 @@
   no edit expected. `test_tool_surface_matches_server.py` — asserts on the rendered context text and
   is where the `agents.py` assertion belongs; does not pin the preamble today.
 
-- [ ] 1.3 Record the current no-MCP notice string **and the current `_tool_surface_lines` non-MCP
+- [x] 1.3 Record the current no-MCP notice string **and the current `_tool_surface_lines` non-MCP
   preamble** verbatim in this file, so every later round can diff against what was actually there
   rather than against a remembered version.
 
+  **Confirmed at `82106af`. Both sweeps returned exactly R2's inventory**, with every other hit a
+  record, a gitignored scratch copy under `.agentweave/tasks/` or `testbed/scratch/`, or this
+  change's own documents. Nothing had moved.
+
+  **`access_path_notice`, non-MCP branch, as it stood:**
+
+  > `[AgentWeave] Tool access: no MCP tools this turn — but the AgentWeave capability plane is
+  > reachable over HTTP, and this run is already authenticated for it. Its base address is the
+  > value of the \`HUB_URL\` environment variable, and its operations live under the route prefix
+  > \`/api/v1/agent-actions\`, so a request goes to \`$HUB_URL/api/v1/agent-actions/...\`.
+  > Authenticate every request with the run credential in the \`AW_RUN_TOKEN\` environment
+  > variable, presented as the header \`Authorization: Bearer $AW_RUN_TOKEN\`. Read both values
+  > from your own process environment; they are deliberately not written here. Inbound content is
+  > already included in this turn; no retrieval is needed.`
+
+  **`_tool_surface_lines`, non-MCP `preamble`, as it stood:**
+
+  > `No AgentWeave tools are injected this turn, so each capability below is one HTTP request
+  > instead. Send it to the address in the \`HUB_URL\` environment variable, with the header
+  > \`Authorization: Bearer $AW_RUN_TOKEN\` — read both values out of your own process
+  > environment. A field marked \`*\` is required, and \`{...}\` in a path is a value you
+  > substitute. Requests and responses are JSON, and a refusal comes back as an HTTP status with a
+  > \`detail\` saying why.`
+
 ## 2. The notice stops asserting
 
-- [ ] 2.1 In `access_path_notice` (`hub/hub/launchability.py`), no-MCP branch: remove the clause
+> **Implemented 2026-09-20. The two product strings now read:**
+> - notice — *"[AgentWeave] Tool access: the AgentWeave capability plane is reachable over HTTP,
+>   and this run is already authenticated for it. …"* (the clause and its `— but` hinge removed;
+>   every required field kept).
+> - context preamble — *"Each capability below is one HTTP request. Send it to the address in the
+>   `HUB_URL` environment variable, …"* (restated positively per D6, not truncated: `so each
+>   capability below is one HTTP request instead` had no subject once the claim was gone).
+
+- [x] 2.1 In `access_path_notice` (`hub/hub/launchability.py`), no-MCP branch: remove the clause
   claiming the run has no MCP tools this turn. Keep the base address, the route prefix, the
   credential variable name, its `Authorization: Bearer` presentation, the read-from-your-own-
   environment instruction, and the inbound-content sentence — each is required by the spec.
-- [ ] 2.2 Leave the comment above that branch in place, including the paragraph prohibiting
+- [x] 2.2 Leave the comment above that branch in place, including the paragraph prohibiting
   interpolation of the credential value. It explains a constraint the spec still carries.
-- [ ] 2.3 Do not touch the MCP branch, `described_access_path`, `harness_has_honoured_mcp`,
+- [x] 2.3 Do not touch the MCP branch, `described_access_path`, `harness_has_honoured_mcp`,
   `resolve_access_path`, or anything in `agent_trigger.py`. **R2: `git diff --stat` must show
   exactly two product files — `hub/hub/launchability.py` and `hub/hub/api/v1/agents.py` — not the
   one R1 wrote here.**
 
-- [ ] 2.4 **R2 added — the canonical context stops asserting too.** In `_tool_surface_lines`
+- [x] 2.4 **R2 added — the canonical context stops asserting too.** In `_tool_surface_lines`
   (`hub/hub/api/v1/agents.py`), the `else` (non-MCP) `preamble`: remove the claim that no
   AgentWeave tools are injected this turn, and restate the sentence positively rather than
   truncating it — *"so each capability below is one HTTP request instead"* has no subject once the
@@ -73,23 +105,28 @@
   header, the read-both-values-out-of-your-own-process-environment instruction, the `*`-required and
   `{...}`-substitute conventions, and the JSON-and-`detail`-refusal sentence.
 
-- [ ] 2.5 **R2 added.** Leave the comment above that `else` branch in place, including the paragraph
+- [x] 2.5 **R2 added.** Leave the comment above that `else` branch in place, including the paragraph
   on never interpolating credential values — it is the same prohibition 2.2 preserves in
   `launchability.py` and the spec still carries it. Do not touch `over_mcp`, the `if` branch,
   `_http_lines`, `_mcp_lines`, `_operations()`, or the `access_path: str = "mcp"` default.
 
-- [ ] 2.6 **R2 added.** Update `scripts/drive/t_d1_0909_together.py`'s detector
+- [x] 2.6 **R2 added.** Update `scripts/drive/t_d1_0909_together.py`'s detector
   (`injected = "No AgentWeave tools are injected this turn" in text`) to match the new preamble, or
   rewrite it to key on something the change does not move. Nothing fails if this is skipped, which
   is exactly why it is a task: the script would report the opposite of the truth on the next drive.
 
+  **Done by the second route.** Keyed on `"/api/v1/agent-actions" in text`, which `_http_lines`
+  renders per operation rather than the preamble carrying once, so it survives any later rewording
+  of the prose. The field is renamed `http-rendering=` from `says-not-injected=`, because the old
+  label would have been a lie about what is now measured.
+
 ## 3. The tests assert the absence of a claim
 
-- [ ] 3.1 Restage `hub/tests/test_agent_trigger.py`'s two assertions (each currently
+- [x] 3.1 Restage `hub/tests/test_agent_trigger.py`'s two assertions (each currently
   `assert "no MCP tools this turn" in ...`) so each pairs a **negative** — no availability claim in
   the built prompt — with a **positive** on the plane content the requirement demands. Per design
   D5, a bare `not in` assertion passes against an empty prompt and is not acceptable.
-- [ ] 3.2 **Rewritten by R2, because as written this task would have ticked green having proved
+- [x] 3.2 **Rewritten by R2, because as written this task would have ticked green having proved
   nothing.** 1.2 establishes that **none** of the other three test files pins the removed clause, so
   "restage anything that pins it" finds nothing and closes. The real gap is the inverse: extend
   `hub/tests/test_launchability.py::test_a_run_without_mcp_is_not_told_it_cannot_act` — a test
@@ -97,7 +134,7 @@
   only checks the *older* denial wordings (`"no AgentWeave tool surface is available"`, `"cannot
   send messages"`). Add the current clause to what it refuses. Finding nothing to restage elsewhere
   is the correct outcome and should be written here as such, not left ambiguous.
-- [ ] 3.3 Add one test that fails on the defect itself: a turn built for an agent with **no prior
+- [x] 3.3 Add one test that fails on the defect itself: a turn built for an agent with **no prior
   run carrying `mcp_adapter_online_at`**, asserting the prompt makes no claim that the tool surface
   is unavailable **and still carries the plane content the requirement demands** — `HUB_URL`,
   `AW_RUN_TOKEN`, `Authorization: Bearer`, `/api/v1/agent-actions`. *(R3 added the second half. D5's
@@ -111,7 +148,7 @@
   `test_mcp_adapter_online.py` (the route) and `test_migrations.py` (the column).** The existing
   `test_an_observed_harness_earns_the_mcp_description_for_the_next_run` sets the column and is the
   fixture to model the new test on.
-- [ ] 3.3b **R2 added — the context side of 3.3, which the spec now names explicitly.** Assert that
+- [x] 3.3b **R2 added — the context side of 3.3, which the spec now names explicitly.** Assert that
   the same fresh-agent turn's **rendered canonical context** makes no claim that the tool surface is
   unavailable, paired with a positive on the HTTP content it must still carry. This is the
   scenario's `AND` clause about the canonical context. Without this, the `agents.py` edit from 2.4
@@ -130,7 +167,22 @@
   change are already captured from one trigger, so put the paired assertion there. Adding a
   string-level assertion in `test_tool_surface_matches_server.py` as well is fine and cheap, but it
   is not what satisfies the scenario.
-- [ ] 3.4 **Mutation check — R2 extended it to both files.** Restore the removed clause in
+
+  **Done in R3's home.** The paired assertion went into
+  `test_a_run_without_mcp_is_described_the_operations_it_can_actually_perform`, beside the context
+  positives it already carried: `"No AgentWeave tools are injected this turn" not in context`. The
+  separate string-level assertion in `test_tool_surface_matches_server.py` was **not** added —
+  3.4's second mutation proves the `agents.py` edit is pinned without it.
+
+  **3.1's result, for the record:** both assertions flipped from `in` to `not in` and each gained
+  positives (`$HUB_URL/api/v1/agent-actions/...`, `Authorization: Bearer $AW_RUN_TOKEN`), so
+  neither survives a prompt that lost the notice. **3.2's result:** exactly as R2 predicted —
+  nothing elsewhere pinned the clause, so the work was the inverse, adding `"no mcp tools this
+  turn"` to `test_a_run_without_mcp_is_not_told_it_cannot_act`'s refusal list. **3.3's result:**
+  new test `test_a_run_holding_the_tools_is_not_told_it_is_empty`, which asserts the no-grounds
+  condition against the database, asserts `mcp_command` was still injected, and then asserts
+  neither claim is made.
+- [x] 3.4 **Mutation check — R2 extended it to both files.** Restore the removed clause in
   `access_path_notice`, run the tests from 3.1, 3.2 and 3.3, and record here that they fail, with
   the count. **Then, separately, restore the removed clause in `_tool_surface_lines`' non-MCP
   preamble and confirm 3.3b fails, with the count** — a mutation on one file proves nothing about
@@ -138,13 +190,30 @@
   confirm `git diff` over `hub/hub/launchability.py` and `hub/hub/api/v1/agents.py` shows only the
   intended edits. A test that passes both ways proves nothing.
 
+  **Both mutations ran, separately, and both bit.**
+
+  | mutation | command | result |
+  |---|---|---|
+  | clause restored in `access_path_notice` | `pytest hub/tests/test_launchability.py hub/tests/test_agent_trigger.py -q` | **4 failed, 92 passed** |
+  | clause restored in `_tool_surface_lines` (notice already reverted) | `pytest hub/tests/test_agent_trigger.py -q` | **1 failed, 53 passed** |
+
+  The four are `test_a_run_without_mcp_is_not_told_it_cannot_act` (3.2),
+  `test_trigger_injects_identity_env_and_tells_agent_the_access_path` (3.1),
+  `test_a_run_holding_the_tools_is_not_told_it_is_empty` (3.3) and
+  `test_a_run_without_mcp_is_described_the_operations_it_can_actually_perform` (3.1/3.3b). The one
+  is that last test alone — **which is the point of running the second mutation separately**: the
+  `agents.py` edit is pinned by a test that fails when only `agents.py` regresses, so neither half
+  of this change can be reverted silently. Both mutations reverted; `git diff 82106af` over the two
+  product files shows only the two intended strings.
+
 ## 4. The corpus
 
-- [ ] 4.1 Apply the delta's two MODIFIED requirements to
+- [x] 4.1 Apply the delta's two MODIFIED requirements to
   `openspec/specs/agent-capability-plane/spec.md` (via the normal sync at archive time, not by hand
   now). Confirm `openspec validate a-first-turn-is-not-told-it-has-nothing --strict` passes after
-  every edit to the change.
-- [ ] 4.2 Confirm the F301 prose correction carries **only** the mechanism, and that the
+  every edit to the change. **Not hand-applied — the sync is archive-time work and stays there.
+  `--strict` green after every edit in this session.**
+- [x] 4.2 Confirm the F301 prose correction carries **only** the mechanism, and that the
   requirement's conclusion (unreachable by the agent's own tools on the `cli` path) is unchanged and
   its SHALL is byte-identical to today's. `DECISIONS.md` 1d mandates the correction; it does not
   authorise reopening the conclusion. **R2 verified both: the second requirement's SHALL line
@@ -167,11 +236,18 @@
 
 ## 5. Quality gates, over CI's exact paths
 
-- [ ] 5.1 `ruff check src/ hub/ tests/` — clean.
-- [ ] 5.2 `black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311` — clean.
-- [ ] 5.3 `mypy src/` — clean. (No `src/` file changes here; run it anyway, because CI does.)
-- [ ] 5.4 `hub/ui` is not built or linted, because nothing under `hub/ui/` is touched. Confirm that
-  claim with `git diff --name-only` rather than asserting it.
+- [x] 5.1 `py -3.11 -m ruff check src/ hub/ tests/` → **All checks passed!**
+- [x] 5.2 `py -3.11 -m black --check src/ hub/hub/ hub/tests/ tests/ --target-version py311` →
+  **581 files unchanged.** First run wanted one reformat (the new test's `select(...).where(...)`
+  fitted on one line); applied, re-run clean.
+- [x] 5.3 `py -3.11 -m mypy src/` → **Success: no issues found in 22 source files.** (No `src/`
+  file changed; run because CI runs it.) **Note:** the three tools are not on PATH in this shell —
+  `ruff`/`black`/`mypy` return `command not found` and must be invoked as `py -3.11 -m <tool>`.
+- [x] 5.4 `hub/ui` is not built or linted, because nothing under `hub/ui/` is touched. Confirmed
+  with `git diff 82106af --name-only`: five files, none under `hub/ui/` or `hub/hub/static/ui/` —
+  `hub/hub/api/v1/agents.py`, `hub/hub/launchability.py`, `hub/tests/test_agent_trigger.py`,
+  `hub/tests/test_launchability.py`, `scripts/drive/t_d1_0909_together.py`. **No bundle refresh is
+  owed and nothing reaches the operator's live app on reload.**
 
 ## 6. What must not move
 
@@ -193,22 +269,24 @@
 > **The correct baseline for every guard in this group is the commit this change is implemented on
 > top of** (`git rev-parse HEAD` before the first edit — record it in 6.0), not `master`.
 
-- [ ] 6.0 **R3 added.** Before editing anything, record the implementation baseline here:
-  `git rev-parse HEAD` → `________`, and confirm `git status --short` is empty. Every "unchanged"
+- [x] 6.0 **R3 added.** Before editing anything, record the implementation baseline here:
+  `git rev-parse HEAD` → **`82106afde36922331ea3d4feb65152ff98eb2007`** (`82106af`, R3's own commit),
+  and `git status --short` was **empty** — both confirmed before the first edit. Every "unchanged"
   guard below diffs against that sha. Diffing against `master` is wrong on this branch and will
   report `4bd966e`'s annotation pass as this change's work. **This governs every bare `git diff` in
   this file** — 2.3's `--stat`, 5.4's `--name-only`, 6.3 and 6.4 — each means `git diff <6.0-sha>`.
   With a clean tree at 6.0 a bare `git diff` happens to agree, which is exactly why it must be
   written down: the next agent to touch this tree makes it disagree again without telling anyone.
 
-- [ ] 6.1 `py -3.11 -m pytest hub/tests/test_launchability.py hub/tests/test_agent_trigger.py
-  hub/tests/test_agent_facing_text.py hub/tests/test_tool_surface_matches_server.py -q` — **write
-  the pass/fail counts inline in this task.**
+- [x] 6.1 `py -3.11 -m pytest hub/tests/test_launchability.py hub/tests/test_agent_trigger.py
+  hub/tests/test_agent_facing_text.py hub/tests/test_tool_surface_matches_server.py -q` →
+  **157 passed, 0 failed, 6 warnings, 43.75s.** The six warnings are pre-existing aiosqlite
+  teardown noise (`RuntimeError: Event loop is closed`), present on the baseline and unrelated.
 - [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q` in full — **write the actual counts and the duration
   inline in this task.** Per **F392**, a tick on this line citing a log entry that does not exist is
   the exact process defect that let a three-test regression reach `master`; if the number is not
   written here, this task is not done.
-- [ ] 6.3 Confirm no permission posture changed. **R3 rewrote this task's first clause: as R2 left
+- [x] 6.3 Confirm no permission posture changed. **R3 rewrote this task's first clause: as R2 left
   it, it was already false against the tree and would have fired a false alarm at implementation
   time.** It read *"`grep -n "acceptEdits\|permission-prompt-tool"` in `hub/hub/runner_commands.py`
   is byte-identical to `master`"*. Two things are wrong with that. **(a) `-n` prints line numbers,
@@ -231,14 +309,23 @@
 
   — and confirm `git diff <6.0-sha> --name-only` names neither
   `runner_commands.py` nor `mcp_server.py`. The spec scenario *"A truer description does not
-  silently widen permission"* is the requirement this guards. **R2: `agent_trigger.py` must also be
+  silently widen permission"* is the requirement this guards.
+
+  **Run as R3 re-expressed it, against `82106af` and without `-n`:** the `diff` of the matched
+  lines' text is **empty** — the permission-posture code is byte-identical. `git diff 82106af
+  --name-only` names five files and **none of them is `runner_commands.py`, `mcp_server.py` or
+  `agent_trigger.py`**. Within `hub/hub/api/v1/agents.py` the diff is two lines, both inside the
+  non-MCP `preamble`: `over_mcp`, `_http_lines`, `_mcp_lines`, `_operations()` and every route
+  handler are untouched. *(R3's correction earned its place — the original `grep -n` guard would
+  have reported a false alarm here, since `4bd966e` moved all six line numbers.)* **R2: `agent_trigger.py` must also be
   absent from the diff — it holds both `access_path` and `described_path`, and the whole change
   rests on those two staying separate. And within `hub/hub/api/v1/agents.py`, confirm the diff is
   the one `preamble` string: `git diff <6.0-sha> -- hub/hub/api/v1/agents.py` must show no change to
   `over_mcp`, `_http_lines`, `_mcp_lines`, `_operations()` or any route handler.** *(R3: baseline
   sha substituted for R2's bare `git diff`, for the reason in 6.0.)*
-- [ ] 6.4 Confirm nothing under `hub/ui/src/` or `hub/hub/static/ui/` is in the diff, so no bundle
-  refresh is owed and nothing reaches the operator's live app on its next reload.
+- [x] 6.4 Confirm nothing under `hub/ui/src/` or `hub/hub/static/ui/` is in the diff, so no bundle
+  refresh is owed and nothing reaches the operator's live app on its next reload. **Confirmed
+  against `82106af` — see 5.4 for the five-file list.**
 
 ## 7. The measurement the operator's D2 decision depends on
 
