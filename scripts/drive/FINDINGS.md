@@ -30537,3 +30537,70 @@ started the same afternoon.
 
 **Reproduce:** `grep -n "RUNNER_CLI\b" hub/hub/launchability.py`, then
 `grep -rn "RUNNER_CLIS" hub/hub/`, and note that only the second set reaches a validator.
+
+---
+
+## F394 (A) -- `hub-test` does not error on `master`, it HANGS: three runs stopped dead at 13% and were killed by GitHub's 6-hour job timeout
+
+**Status:** open. **Found 2026-09-20** in an interactive session, while doing nothing more than
+checking whether CI was green enough to merge. It is filed separately from **F292** on purpose:
+F292 is an `ERROR at setup` that ends the run in ~15 minutes with a summary line, and every
+statement in this repository about CI's cost — the 22.6% rate, the 16-in-a-row escalation, the
+`night-window.md` step-3 rule, the whole **O2** objective on the week scorecard — is written about
+*that* shape. This one produces **no summary line, no `FAILED`, no error, and no conclusion for six
+hours.** Whether the two share a mechanism is an inference and is **not** measured here.
+
+**The measurement.** Of the last five `ci.yml` runs on `master`, **three hung in `hub-test`**:
+
+| run | sha / message | started | hub-test |
+|---|---|---|---|
+| `35218523888` | `fix(openspec): actually stage the synced spec and 7.2 done-note` | 2026-09-17T11:58Z | **cancelled at 6h00m31s** by the job timeout |
+| `35518372695` | `day(2026-09-20): note the concurrent operator session on this branch` | 2026-09-20T15:03Z | still `in_progress` at 20:43Z (**5h40m**) |
+| `35519549858` | `dead-ends: five entries from sharing the tree with a live window` (`45d4576`, master HEAD) | 2026-09-20T15:25Z | still `in_progress` at 20:43Z (**5h18m**) |
+
+The other two master runs (2026-09-16 `13m30s`, 2026-09-19 `12m59s`) were ordinary and green. Every
+other job in all three hung runs — `ui-test`, all six `test` matrix cells, `build` — finished
+normally in one to three minutes.
+
+**Where it stops, exactly.** `35218523888` is the only one whose log can be read (a job still
+running will not serve one). Its `hub-test` output ends at
+`2026-09-17T12:02:09.3044770Z tests/test_agent_trigger.py::test_a_second_release_charges_a_refused_entry_at_most_twice PASSED [ 13%]`
+and then emits **nothing at all** until `17:58:57`, when the runner's teardown reports
+`Terminate orphan process: pid (2463) (pytest)`. The next test in file order is
+`test_spawn_failure_marks_run_failed` (`hub/tests/test_agent_trigger.py:1674`). So pytest was alive
+and produced no output for **5h56m48s**; it did not crash, it blocked.
+
+**Why this is severity A and not a duplicate of F292.**
+
+1. **It defeats the merge gate more completely than F292 does.** `d7-gate` merges on CI *success*
+   for the exact HEAD sha. A red run at least concludes, so the gate can be told why it is shut and
+   a re-run costs 15 minutes. A hung run never concludes at all, and `master` HEAD `45d4576` has
+   now carried **no CI verdict of any kind for over five hours**.
+2. **It burns 6 hours of a runner per occurrence**, against ~15 minutes for a red one.
+3. **Nothing in the loop distinguishes "still running" from "wedged".** `night-window.md` step 3 and
+   `check-build` both read a *conclusion*; an `in_progress` run has none, and the rules written in
+   `a09e4a2` for **O1** do not say what a window should do when the sha it inherits has a run that
+   has been in flight for five hours. A window firing now would read "no conclusion yet" and wait.
+4. **The error shape is concurrently alive on the branch and behaves completely differently.** Runs
+   `35533586928` (`4bd966e`) and `35534558164` (`82106af`) both failed the classic F292 way the same
+   evening — `4451 passed, 20 skipped, 1 error`, `database is locked` on `BEGIN IMMEDIATE`, in
+   `test_flow_fires_a_review_turn.py` and `test_reviewer_is_not_the_author.py` respectively — and
+   both concluded inside 16 minutes. Same workflow, same tree, two different failure modes.
+
+**What is NOT claimed.** That this is F292's lock blocking instead of raising is the obvious guess
+and it is **not evidence**: no stack, no `faulthandler` dump, and no log past the last `PASSED`
+line. It is also **not** established that this is master-specific — the three hangs are all on
+`master`, but nothing in `ci.yml` branches on the ref (no `concurrency:` block, no `if:` on the ref
+for `hub-test`), so a sample of three on the busier-at-that-hour ref is as consistent with chance as
+with a cause. Both questions need the *next* occurrence instrumented, not argued about.
+
+**The cheap instrumentation, for whoever picks this up.** `hub-test`'s pytest invocation
+(`ci.yml:136`) is a bare `pytest tests/ -v`. Adding `--timeout=120 --timeout-method=thread` (or
+`-p faulthandler --faulthandler-timeout=120`) would convert the next hang from six silent hours into
+a dumped stack naming the blocked call, at no cost to a healthy run. That turns the inference above
+into a measurement, and it is a prerequisite for O2 being able to claim anything about the week's
+green rate — a hung run is neither green nor red, and `gh run list` counts it as neither.
+
+**Reproduce:** `gh run list --branch master --limit 10`, then
+`gh run view 35218523888 --json jobs -q '.jobs[] | .name + ": " + .conclusion + " " + .startedAt + " -> " + .completedAt'`
+and `gh run view 35218523888 --log | grep '^hub-test' | tail -30`.
