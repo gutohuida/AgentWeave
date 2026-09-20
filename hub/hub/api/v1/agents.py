@@ -2659,10 +2659,28 @@ async def archive_agent(
             )
         raise HTTPException(status_code=409, detail=obstruction)
 
+    # `charter_id` must be read before `archive_agent_row` releases it — it is `None` afterward,
+    # and this response is the only place the released charter's identity will ever exist
+    # (`design.md` D9/D10: archival persists no event today).
+    released_charter_id = agent_row.charter_id
+    message = None
+    if released_charter_id is not None:
+        released_charter = await session.get(Charter, released_charter_id)
+        charter_label = released_charter.name if released_charter else released_charter_id
+        message = f'Archiving released this agent\'s charter, "{charter_label}".'
+
     archive_agent_row(agent_row)
     await session.commit()
     await session.refresh(agent_row)
-    return {"name": agent_row.name, "lifecycle": agent_row.lifecycle}
+    response = {
+        "name": agent_row.name,
+        "lifecycle": agent_row.lifecycle,
+        "charter_id": agent_row.charter_id,
+        "released_charter_id": released_charter_id,
+    }
+    if message is not None:
+        response["message"] = message
+    return response
 
 
 @router.post("/{name}/unarchive")
@@ -2678,7 +2696,16 @@ async def unarchive_agent(
     unarchive_agent_row(agent_row)
     await session.commit()
     await session.refresh(agent_row)
-    return {"name": agent_row.name, "lifecycle": agent_row.lifecycle}
+    return {
+        "name": agent_row.name,
+        "lifecycle": agent_row.lifecycle,
+        "charter_id": agent_row.charter_id,
+        "message": (
+            "No charter is bound. Archiving releases an agent's charter and unarchiving does "
+            "not restore it. An agent with no charter still runs — bind one only if this agent "
+            "should have one."
+        ),
+    }
 
 
 @router.post("/{name}/heartbeat", status_code=status.HTTP_201_CREATED)

@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 2,
+  "iteration": 3,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "group2-impl",
-  "next_action": "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 2.1-2.5 (archive/unarchive responses state the binding's fate: released_charter_id + sentence on archive, revised D8 sentence on unarchive using R2 wording exactly). No UI change; confirm useArchiveAgent still discards body. Tick tasks, commit.",
+  "current": "group2b-impl",
+  "next_action": "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 2b.1-2b.7 (F391: persist_event + sse_manager.broadcast for agent_archived/agent_unarchived, server-side only, matching agent_created's order exactly. Payload carries released_charter_id from the SAME pre-release capture task 2.1 already takes, not re-read after. No hub/ui/src change, no make ui). Tick tasks, commit.",
   "queue": [
     {
       "id": "group1-impl",
@@ -23,9 +23,9 @@
     },
     {
       "id": "group2-impl",
-      "status": "open",
+      "status": "done",
       "title": "Group 2 - archive/unarchive responses state the binding's fate",
-      "detail": "Tasks 2.1-2.5. released_charter_id + sentence on archive; revised D8 sentence on unarchive (use R2 wording exactly, not R1's 'before this agent's next turn'). No UI change; confirm useArchiveAgent still discards body."
+      "detail": "Tasks 2.1-2.5. released_charter_id + sentence on archive; revised D8 sentence on unarchive (use R2 wording exactly, not R1's 'before this agent's next turn'). No UI change; confirm useArchiveAgent still discards body. Done iteration 3: 38 tests pass, mutation confirmed, 2.5's half-discharge stated, no finding's Status touched."
     },
     {
       "id": "group2b-impl",

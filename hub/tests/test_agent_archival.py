@@ -114,6 +114,68 @@ async def test_archiving_releases_the_charter_but_not_the_runner(app, auth_heade
 
 
 @pytest.mark.asyncio
+async def test_archive_and_unarchive_responses_state_the_bindings_fate(app, auth_headers):
+    """F185 group 2 (design.md D2, D9): the API states what archival released.
+
+    R2: nothing renders this today — `useArchiveAgent`'s `onSuccess` discards the body — but the
+    response is the only place the released charter's identity ever exists (D10), so the fact
+    itself must be true and present even though no screen shows it yet.
+    """
+    charter = await app.post(
+        "/api/v1/projects/proj-test/charters",
+        json={"name": "Named For The Sentence", "content": "Do the thing."},
+        headers=auth_headers,
+    )
+    charter_id = charter.json()["id"]
+
+    await _register(app, auth_headers, "sentenced")
+    bound = await app.patch(
+        "/api/v1/projects/proj-test/agents/sentenced",
+        json={"charter_id": charter_id},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200
+
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/sentenced/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+    body = archived.json()
+    assert body["charter_id"] is None
+    assert body["released_charter_id"] == charter_id
+    assert "Named For The Sentence" in body["message"]
+
+    unarchived = await app.post(
+        "/api/v1/projects/proj-test/agents/sentenced/unarchive", headers=auth_headers
+    )
+    assert unarchived.status_code == 200
+    unarchived_body = unarchived.json()
+    assert unarchived_body["charter_id"] is None
+    standing_sentence = (
+        "No charter is bound. Archiving releases an agent's charter and unarchiving does not "
+        "restore it. An agent with no charter still runs — bind one only if this agent should "
+        "have one."
+    )
+    assert unarchived_body["message"] == standing_sentence
+    assert "before this agent's next turn" not in unarchived_body["message"]
+
+    await _register(app, auth_headers, "never-chartered")
+    archived_bare = await app.post(
+        "/api/v1/projects/proj-test/agents/never-chartered/archive", headers=auth_headers
+    )
+    assert archived_bare.status_code == 200
+    bare_body = archived_bare.json()
+    assert bare_body["released_charter_id"] is None
+    assert "message" not in bare_body
+
+    unarchived_bare = await app.post(
+        "/api/v1/projects/proj-test/agents/never-chartered/unarchive", headers=auth_headers
+    )
+    assert unarchived_bare.status_code == 200
+    assert unarchived_bare.json()["message"] == standing_sentence
+
+
+@pytest.mark.asyncio
 async def test_archiving_is_idempotent(app, auth_headers):
     await _register(app, auth_headers, "twice")
     first = await app.post("/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers)

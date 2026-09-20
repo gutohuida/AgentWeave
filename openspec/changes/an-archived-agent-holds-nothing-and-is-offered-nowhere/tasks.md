@@ -88,7 +88,7 @@ change happened to notice.
 > read**, and this group's tests will pass without that changing. The group is kept deliberately —
 > `design.md` D9 says why — but it MUST NOT be described as telling the operator anything.
 
-- [ ] 2.1 `hub/hub/api/v1/agents.py` `archive_agent` — read `agent_row.charter_id` **before**
+- [x] 2.1 `hub/hub/api/v1/agents.py` `archive_agent` — read `agent_row.charter_id` **before**
       calling `archive_agent_row`, and return it in the response as `released_charter_id` alongside
       `charter_id: None`, plus a sentence naming the charter (by name, resolved from the `Charter`
       row) when one was released. No sentence when nothing was bound.
@@ -96,7 +96,10 @@ change happened to notice.
       persists no event and broadcasts nothing (`design.md` D10) — there is no `agent_archived`
       event kind anywhere in the tree — so once `useArchiveAgent` discards the body the fact is
       irrecoverable from the Hub. Do not delete this field as dead payload on the strength of D9.
-- [ ] 2.2 `hub/hub/api/v1/agents.py` `unarchive_agent` — response carries `charter_id: None`
+      **Done 2026-09-20:** `released_charter_id` captured before `archive_agent_row`; response adds
+      `charter_id: None`, `released_charter_id`, and `message` (only present when a charter was
+      released), naming the charter by its `Charter.name`.
+- [x] 2.2 `hub/hub/api/v1/agents.py` `unarchive_agent` — response carries `charter_id: None`
       explicitly and the standing sentence, **as revised by R2**: *"No charter is bound. Archiving
       releases an agent's charter and unarchiving does not restore it. An agent with no charter
       still runs — bind one only if this agent should have one."* Use this wording, not R1's.
@@ -105,25 +108,36 @@ change happened to notice.
       which is the one thing the operator's rider asked unarchive to say. Every clause of the
       revised sentence is true of an agent that never had a charter: its state, then the rule, then
       the product's behaviour, then a conditional rather than an instruction.
-- [ ] 2.3 `hub/tests/test_agent_archival.py` — archive names the charter it released; archive of an
+      **Done 2026-09-20:** response now returns `charter_id: agent_row.charter_id` (always `None`
+      by this point) plus `message` set to the exact R2 wording, unconditionally.
+- [x] 2.3 `hub/tests/test_agent_archival.py` — archive names the charter it released; archive of an
       unbound agent names none; unarchive carries `charter_id: None` and the standing sentence, and
       the same sentence comes back for an agent that never had a charter. Assert the revised
       wording from 2.2, including that it does **not** contain "before this agent's next turn".
       *Mutation: move the `charter_id` read in 2.1 to after the archive call; the "names the
       charter" assertion must fail.*
-- [ ] 2.4 **No UI change is made, and R2 established what that costs.** Measured 2026-09-20:
+      **Done 2026-09-20:** `test_archive_and_unarchive_responses_state_the_bindings_fate`. Mutation
+      applied by hand (moved the `released_charter_id = agent_row.charter_id` read to after
+      `archive_agent_row(agent_row)`): `released_charter_id == charter_id` failed
+      (`None == 'charter-...'`). Reverted; full file green (15 passed).
+- [x] 2.4 **No UI change is made, and R2 established what that costs.** Measured 2026-09-20:
       `useArchiveAgent` (`hub/ui/src/api/agents.ts:214-241`) serves both routes, types the response
       `{ name: string; lifecycle: string }`, and its `onSuccess` **takes no argument** — it
       invalidates the roster queries and returns, so the body is discarded rather than
       under-typed. Its only non-test caller is `AgentSettingsPage.tsx:224`. Re-confirm this at
       build time; if a component has begun rendering the raw response, this becomes a real UI task
       and the change acquires a bundle refresh (`make ui`) — **it does not have one today.**
-- [ ] 2.5 Record the half-discharge in the change's own record, not only here: the operator's rider
+      **Re-confirmed 2026-09-20:** re-read `hub/ui/src/api/agents.ts:209-238` — `mutationFn` still
+      typed `{ name: string; lifecycle: string }`, `onSuccess` still takes no argument. No
+      `hub/ui/src` file touched this iteration; `make ui` not run.
+- [x] 2.5 Record the half-discharge in the change's own record, not only here: the operator's rider
       asked that unarchiving *say* the bindings are gone, and after this group the API says it while
       the app shows nothing. Whoever builds this SHALL state that in the commit message and SHALL
       NOT set `**Status:** fixed` on any finding on the strength of group 2 alone. Rendering it is
       part of the one operator decision this change carries (`design.md` D7, D9), not a separate
       follow-up to be invented at build time.
+      **Done 2026-09-20:** stated in this tick and repeated in the commit message. No finding's
+      `**Status:**` is touched by this group — F185 stays open pending group 6's drive.
 
 ## 2b. The transition leaves a trace (design D10, F391) — **operator, 2026-09-20: folded in**
 
