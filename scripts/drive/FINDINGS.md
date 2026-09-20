@@ -30142,3 +30142,69 @@ unchanged at `12888` both times — no activity and no write, confirmed rather t
 found in. Group 5 (operator-facing wording) remains unbuilt and out of this window's scope, per
 `APPROVALS.md`'s `ORDER` line — the 409 sentence above is F127's pre-existing wording, not this
 change's own §5 rewrite. No new finding filed; F128 is ready to close (group 8).
+
+---
+
+## D-1 drive, 2026-09-20 — independent re-derivation on a fresh Hub (:8020, `profiles/drive0920`)
+
+Scoped drive of the three changes last night's window built, re-run on a **new Hub instance** built
+from source on this branch's HEAD (`alembic_version` measured `0104` on startup, no manual
+migration step), against a **new** project outside the repo, to vary the axis last night's own
+in-process drives could not (a second process, a second port, a second day). `netstat` confirmed
+only `:8000` listening beforehand; started `:8020` from `hub/` with
+`DATABASE_URL=sqlite+aiosqlite:///…/profiles/drive0920/agentweave.db`. `GET /health` →
+`{"status":"ok","runtime":"native"}` before driving.
+
+**Scope check first.** Read all three changes' `tasks.md`. `a-refused-capability-reaches-the-
+operator` has **only 0.3/0.4/0.5/4.12 ticked** — the actual record (`refuse_for_project_state`,
+§1), its callers (§2/§3) and its "reaches the operator" drive (§5) are **all unbuilt**. There is no
+live "run refuses a capability" flow to drive yet; what exists is the migration, the model column,
+and `ask_question_for_actor`'s new optional `subject_key` kwarg. Drove exactly that, not more.
+
+**1. Migration 0104 / schema, direct read.** `PRAGMA table_info(questions)` on the fresh db shows
+`subject_key` present; `sqlite_master` shows
+`CREATE UNIQUE INDEX ix_questions_open_subject_key ON questions (project_id, subject_key) WHERE
+answered = 0 AND declined = 0 AND subject_key IS NOT NULL`. Matches design D15 exactly (nullable
+column, partial unique index, no backfill). **Held.**
+
+**2. Task 4.12, live (not just unit-tested).** `POST /projects/{p}/questions` (the
+`ask_question_for_actor` route, `subject_key` omitted, defaults `None`) called twice on the same
+fresh project with distinct `from_agent`/`question`/required `options`/`header`/`multi_select` —
+both returned **201**, both rows carry `subject_key: null` implicitly (the partial index's own
+`WHERE … subject_key IS NOT NULL` is what let both through). Confirms live: two open NULL-keyed
+questions coexist, the existing (non-refusal) caller path is genuinely unaffected by the new
+column. **Held.**
+
+**3. `a-loop-staffs-the-agent-it-names`, groups 0-4/6/7 — F128's own shape, re-run.** Reused
+`scripts/drive/d7_0920_alsn_drive.py` verbatim (last night's own group-7 harness) against the new
+Hub/project/day. `gamma` put genuinely mid-turn (`status: running`) on a real
+`claude-haiku-4-5-20251001` turn, `alpha`/`beta` idle. A documentless loop naming `gamma`, one
+unassigned task, `POST /jobs/{id}/run`: **409**, `"gamma090657 is already running a turn, and no
+other agent is free to take this loop's work. Nothing was started."` — task stayed `pending` with
+no assignee, no conversation created, loop's own `stall_reason` set and `endingBucket()` (the exact
+`loopCounts.ts:23` rule, evaluated by hand against the live JSON) flips to `stalled`. A
+spec-linked flow in the identical busy-sibling shape: **200**, both tasks moved to `in_progress` on
+the free siblings (`alpha`/`beta`), `gamma` untouched, loop's bucket stayed `running` with no
+`stall_reason` — confirming D1/D7's promise that the scope filter is documentless-only. **13/13
+verdicts held**, matching last night's own count exactly on independent infrastructure.
+
+**4. `an-unstaffed-review-names-its-holders` group 1 — code-level re-check.** `grep -n "await
+_agents_that_are_free(" hub/hub/scheduler.py` on this branch's tip returns **exactly one** site
+(`:1257`, inside `_agents_a_loop_may_staff`) — matching `a-loop-staffs-the-agent-it-names` task
+0.2's own post-group-1 prediction of "TWO before this group's edits, ONE after," now measured after
+both changes are in. `resolve_reviewer` calls `_roster_availability` directly, never
+`_agents_that_are_free`. Confirms group 1's consolidation is real on disk, not just in last night's
+transcript. Not re-driven live today (already driven live 2026-09-19, `e41b607`, "F388's trap fired
+again harmlessly") — budget spent on the two changes above instead, which had *not* yet been driven
+independently outside last night's own process.
+
+**Cleanup.** Both alsn-drive fixture jobs stopped (`PATCH … {"stop_reason": …}`), loops archived,
+tasks rejected, agents confirmed `idle`, project deleted (`204`, after one `409` while the flow's
+real turns were still finishing — waited, retried, same pattern noted in prior drives). The two
+small `arc-check*` projects (subject_key probes, no agent turns) deleted immediately (`204`).
+Fixture directories removed. `:8020` Hub process killed by its `netstat`-confirmed listening PID.
+No job left enabled, no process left running.
+
+**Verdict:** everything driven held, on independent infrastructure from last night's own. No new
+finding. `a-refused-capability-reaches-the-operator`'s actual refusal-reaches-operator behavior
+(§1/§2/§3/§5) remains unbuilt — there is nothing more of that change to drive until those land.

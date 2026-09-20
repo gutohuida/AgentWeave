@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "a435f48",
     "stop_at":  "2026-09-20T17:00:00+01:00",
-    "iteration":  1,
+    "iteration":  2,
     "log_file":  ".claude/autonomous/2026-09-20-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "d1-drive",
-    "next_action":  "D-1: scoped drive of what last night built (arc's subject_key column/migration 0104, unrh group 1, alsn groups 0-4/6/7/8) end to end as a real operator would, e2e-loop skill, fresh drive Hub on a free port from source, Haiku for every real agent turn. Not a full sweep -- the last one was 2026-09-19. Append findings to scripts/drive/FINDINGS.md with Status/file:line/repro. Never touch proj-5e960453 or proj-18e5d4e0, never leave a job enabled.",
+    "current":  "f185-r1",
+    "next_action":  "Item 1 R1 -- explore + propose F185 (B, archived-agent charter deletion 409) + F181 (C, launchability ignoring lifecycle) as one openspec change. Remedy already decided (DECISIONS.md 2026-09-19): clear an archived agent's bindings at source. Blast radius hub/hub/api/v1/charters.py, hub/hub/agent_lifecycle.py, hub/hub/api/v1/agents.py. openspec new change (name not starting with a digit), proposal.md/design.md/tasks.md/specs deltas, SHALL on line 1, openspec validate --strict must pass.",
     "queue":  [
                   {
                       "id":  "compose",
@@ -23,9 +23,9 @@
                   },
                   {
                       "id":  "d1-drive",
-                      "status":  "open",
+                      "status":  "done",
                       "title":  "D-1 -- scoped drive of what the night built",
-                      "detail":  "See next_action. Scope: arc tasks 0.3-0.5/4.12, unrh group 1, alsn groups 0-4/6-8. Log findings with Status: open, file:line, repro."
+                      "detail":  "Done iteration 2. Fresh Hub :8020, profiles/drive0920. No new findings -- everything held (migration 0104 schema, subject_key kwarg, alsn F128 shape 13/13, unrh group 1 re-checked at code level). Narrative entry appended to FINDINGS.md, no new F-number. arc's own refusal-reaches-operator behavior (SS1/2/3/5) still unbuilt, nothing more to drive there yet. Cleanup verified: jobs archived, projects deleted, :8020 process killed."
                   },
                   {
                       "id":  "f185-r1",
