@@ -41,6 +41,75 @@ Four things the code contradicted, and two corrections of fact:
 R2 changed no task's intent, added one task (2.5) and one design section (D9), and re-ran
 `openspec validate --strict`.
 
+## Round 3, 2026-09-20 — second independent re-derivation
+
+R3 opened `agent_lifecycle.py`, `agents.py` (`patch_agent`, `get_agents_launchability`,
+`list_agents`, both archive routes, `create_agent`), `charters.py`, `runners.py`,
+`usage_accounting.py`, `run_reconciliation.py`, `db/models.py` and the UI's `agents.ts` /
+`AgentSettingsPage.tsx` **before reading this document's Round 2 section**, then compared. R2's
+corrections were the target: C1-C6 and D9 had had no second reader.
+
+**Every one of R1's and R2's conclusions survives. No task's intent changed.** Three claims were
+narrowed or sharpened, and one defect neither round found was filed.
+
+- **R3-C1 — R2's C1 premise holds; two of its sentences are too strong.** R3 enumerated every
+  terminal `Run.status` write in `hub/hub/`: `agent_trigger.py:1915`, `:2061`, `:2313`, `:2887`,
+  `:2960` and `run_reconciliation.py:66` — six, each with a `record_turn_usage` call beside it
+  (`:1925`, `:2067`, `:2334`, `:2892`, `:2981`, `run_reconciliation.py:80`). (`scheduler.py`'s
+  status writes and `run_reconciliation.py:252` are `JobRun`, not `Run`.) **A run cannot end
+  without a `TurnUsage` row**, so R2's C1 stands. But *"records `runner` and `model` for every
+  run"* does not: `model` is read only from `sample.model`, and `sample=None` on all four failure
+  paths and on reconciliation, so **every unmeasured outcome carries `model = NULL`**
+  (`usage_accounting.py:44`), and `runner` is `Optional` by design (`usage_accounting.py:21-24`).
+  Narrowed in D3 and in the `agent-configuration` spec text.
+- **R3-C2 — D3's conclusion is confirmed a third time, now demonstrated instead of asserted, and
+  its cost is worse than D3 says.** See D3: `create_agent` writes `config={}`, which is the step
+  neither earlier round took, and the blanked row is not blank but **false**.
+- **R3-C3 — new, and neither round found it: archiving an agent persists no event and broadcasts
+  nothing.** New **D10**. It bears directly on group 2 and on the operator's rider, and it is filed
+  as **F391 (C)** because it is a standing defect of archival rather than something this change
+  introduces.
+- **R3-C4 — C3/D9 confirmed by independent measurement, and C4 reaches further than R2 said.**
+  `onSuccess` at `hub/ui/src/api/agents.ts:230` takes no argument; the `mutationFn` types the
+  response `{ name, lifecycle }`, so `released_charter_id` is not even in the type; and the one
+  non-test caller, `ArchiveControl` (`AgentSettingsPage.tsx:224-263`), reads `archive.error` and
+  `archive.isPending` and **never `archive.data`**. Nothing else under `hub/ui/src` posts to either
+  route. So group 2 is user-invisible, D9 is right, and **the change still acquires no bundle
+  refresh.** Extending C4: R2 measured zero call sites for `useAgentLaunchability`; R3 measured that
+  **`AgentCard` is rendered nowhere outside its own test** (`grep -rn "<AgentCard" hub/ui/src/`
+  returns only `__tests__/agentCardCollaboration.test.tsx`), so the `launchability` prop has no
+  production consumer either. D6's "preventive" label is strengthened, not changed.
+- **R3-C5 — `patch_agent` can re-bind `runner_id` to an archived agent too, and tasks 1.6-1.8 were
+  silent about it.** The adjacent branch in the same unguarded route (`agents.py:2462-2470`) has
+  the identical missing lifecycle check. Under D3 the right answer is that it **stays permitted** —
+  an archived agent is meant to keep its runner — but left unsaid it reads as an oversight rather
+  than a decision. One sentence added to task 1.6, so that whoever later "finishes the job" by
+  adding the symmetric guard has to revisit D3 first.
+- **R3-C6 — D3's citation `agents.py:2461-2470` is off by one** (the branch opens at `:2462`).
+
+**What R3 re-derived and found unchanged**, listed because a round that confirms is doing its job:
+D1's single caller and the four-reference grep; D5's necessity and `0104` still being head
+(`hub/hub/migrations/versions/` holds `0103` and `0104`); D7's hole (no lifecycle check anywhere in
+`patch_agent`, confirmed by reading the whole route); D8's trigger refusals at `agent_trigger.py:661`
+and `:1370`; F181's shape (`get_agents_launchability` seeds `session_agents_meta` from **all**
+`Agent` rows with no lifecycle filter, `agents.py:186-191`); the two symmetric `DELETE` walls
+(`charters.py:96`, `runners.py:175-183`); C5's point that group 5 exists because of D3.
+
+**One objection R3 raised against D3 and then closed itself, recorded so R4 does not re-raise it.**
+On the reconciliation path `TurnUsage.runner` is recovered from the **live** `Agent.runner_id`
+binding — `_runner_cli_for_agent` joins `Runner` on `Agent.runner_id` (`run_reconciliation.py:33-48`)
+and says so: *"`Run` does not carry the runner, so a crashed run's is recovered from the agent's
+binding."* So if `archive()` released `runner_id`, a crashed run of an archived agent would record
+`runner = NULL`. That hazard is **unreachable**: `archivable` refuses while a run's status is
+`"running"` (`agent_lifecycle.py:34-44`), a crashed run keeps `"running"` until reconciliation, and
+`reconcile_interrupted_runs` runs inside `lifespan()` **before the Hub serves a single request**
+(`main.py:415`, `run_reconciliation.py:144`). Archive and recovery cannot interleave. This *removes*
+an objection to clearing `runner_id` rather than adding one — D3 therefore rests on the display
+argument alone, which is exactly where R2 left it.
+
+R3 changed no task's intent, added no task and no group, edited one task (1.6), added one design
+section (D10), and re-ran `openspec validate --strict`.
+
 ## R1's own measurement — all four claims driven through the API, not read
 
 Both findings were re-reproduced on `1fdfc4d` before a word of this proposal was trusted, in a
@@ -157,14 +226,22 @@ of what this agent ran with."* The first half is true. **The second half is not 
 The record of what an agent ran with already exists, per run, somewhere else:
 `TurnUsage` (`hub/hub/db/models.py:1235-1248`, *"The immutable accounting outcome for one Hub-owned
 run"*) carries `runner` and `model`, is written for every run by
-`usage_accounting.record_turn_usage`, and archival does not touch it. `Run` itself carries no
+`usage_accounting.record_turn_usage`, and archival does not touch it. **R3 narrowed the second
+half of that sentence.** The *row* is written for every run — R3 enumerated all six terminal
+`Run.status` writes in `hub/hub/` and found a `record_turn_usage` call beside each, so a run cannot
+end without one. But its *contents* are not uniform: `model` is read only from `sample.model` and
+`sample=None` on every failure and reconciliation path, so **an unmeasured outcome carries
+`model = NULL`** (`usage_accounting.py:44`), and `runner` is `Optional` by design
+(`usage_accounting.py:21-24`). This matters only for the fallback floated at the end of this
+section: recovering an archived agent's display from its most recent `TurnUsage` would often
+recover a runner and no model. `Run` itself carries no
 runner or model column at all (`models.py:1105-1229`) — R2 checked, because R1's sentence implied
 one.
 
 Structurally the two bindings are the *same* kind of thing, not different kinds:
 
 - adjacent, identically-shaped branches in `patch_agent` — each validates that the referenced row
-  exists in the project, then assigns (`agents.py:2461-2470` and `:2472-2478`);
+  exists in the project, then assigns (`agents.py:2462-2470` and `:2472-2478`, corrected from R2's `:2461` by R3);
 - adjacent fields on the same response model (`AgentSummary`, `agents.py:568`, `:569`);
 - each walls a `DELETE` with the same sentence, one word apart (`charters.py:95-98`,
   `runners.py:175-183`).
@@ -175,6 +252,23 @@ binding **and from nothing else** — `runners_by_id.get(agent_row.runner_id)` a
 — and never reads `TurnUsage`. Clearing `runner_id` would therefore drop an archived agent's row to
 the `"native"` / `"Native"` fall-through that the comment at `:512-515` exists to prevent, on the
 one screen that still shows that agent, with no fallback to recover it from.
+
+**R3 took the step neither earlier round took, and the conclusion is demonstrated rather than
+asserted.** R1 and R2 both argued the fall-through from `list_agents` and from its comment; neither
+checked what an archived agent's `config` actually holds, and the fall-through only fires if
+`agent_meta` has no `runner` key of its own. It does not: `create_agent` writes **`config={}`**
+(`agents.py:673`) for every Hub-created, runner-bound agent. So `agent_meta.get("runner", "native")`
+reaches its default and `_display_model` resolves through its own `.get(_runner, ...)` fall-through.
+The blanking is real, and it is now proved from the creation site.
+
+**And R3 found the cost is worse than "blanked".** The row does not go empty — it goes **wrong**.
+`runner: "native"` and `display_model: "Native"` are a *positive claim* naming a runner kind this
+product supports, so an operator reading an archived agent's configuration would be told it ran
+natively when it ran on Claude. D3 has argued this cost twice as lost information; it is stated
+falsehood, which is the stronger form of the same argument and the one this repository's own idiom
+already reaches for (`run_reconciliation.py:77-79`, on why an absent accounting row was worse than
+an inaccurate one: *"Absence was worse than a wrong number"* — here it is the inverse). **The
+conclusion is unchanged for the third time; only its price is stated correctly.**
 
 **The price of that choice, which R1 did not state.** Keeping `runner_id` bound is precisely what
 leaves `runners.py`'s refusal able to name an agent the default roster does not show. **F390 and
@@ -246,7 +340,12 @@ entitled to probe an agent it can display."* The settings page does not probe th
 nothing else does either: `useAgentLaunchability` (`hub/ui/src/api/agents.ts:376-385`) has zero call
 sites, the only caller anywhere in the tree is `hub/tests/test_launchability.py`, and a drive
 recorded on 2026-09-01 measured 41 requests with the agent rail open, **none** of them to
-`/agents/launchability` (that is F178's subject). The parameter serves no caller that exists today.
+`/agents/launchability` (that is F178's subject). The parameter serves no caller that exists today. **R3 measured one step further:** the component
+that would consume a per-agent verdict, `AgentCard` (whose `launchability` prop exists and is typed,
+`AgentCard.tsx:12-20`), **is itself rendered nowhere outside its own test** —
+`grep -rn "<AgentCard" hub/ui/src/` returns only `__tests__/agentCardCollaboration.test.tsx`. So the
+renderer F178 refers to does not exist even in skeleton form, and neither the hook nor its consumer
+is wired to a screen.
 
 What it is actually for, stated honestly: **F181's fix here is preventive.** The default is what
 closes the defect, and it closes it *before* whoever wires the indicator up (F178) inherits an
@@ -298,6 +397,12 @@ facts that **no operator can read**. Group 2's tests (2.3) assert the response b
 That is this repository's named dominant failure mode — a fix that passes its tests and cannot fire
 where the operator is — so it is written down here rather than found later.
 
+**R3: it is worse than unrendered — it is unrecorded.** See D10. Archival persists no event, so the
+HTTP response is the *only* place `released_charter_id` ever exists, and `useArchiveAgent` discards
+it. The identity of the released charter is irrecoverable from the Hub the moment the request
+returns. That does not change group 2's shape, but it makes the case for keeping it stronger than
+the two reasons R2 gave: deleting the field would not defer a display, it would destroy the fact.
+
 **Group 2 is kept**, for two reasons that do not depend on today's client: an API that states the
 fate of a binding it silently changed is right whether or not anything reads it yet, and the
 sentence is the thing a future renderer renders. But three claims had to be corrected:
@@ -315,6 +420,43 @@ change, therefore a bundle refresh, therefore it reaches the `:8000` app — the
 `CharterPicker`. R2 folds it into that one decision, which is now correctly framed as *"does this
 change accept a bundle refresh at all?"* and covers two UI halves: disabling the picker on an
 archived agent, and rendering what archive/unarchive now say.
+
+## D10 — R3: archiving an agent persists no event and broadcasts nothing
+
+Found by R3 by reading, after asking where `released_charter_id` goes once the response is
+discarded, and then **driven through the API** rather than left as a read: an archive and an
+unarchive leave `GET /events/history` unchanged, while a heartbeat on the same agent lands in it as
+a control (F391 carries the verbatim output). The answer is nowhere. `grep -rn "agent_archived\|agent_unarchived" hub/ src/` returns
+**no match anywhere in the tree**, and both routes (`agents.py:2602-2644`, `:2648-2660`) end the
+same way — mutate the row, `commit`, `refresh`, `return` — with no `persist_event` and no
+`sse_manager.broadcast`. Every neighbouring agent route has one: `agent_created` (`:689`),
+`agent_requested` (`:2133`), `agent_heartbeat` (`:2682`). Archival is the lifecycle transition that
+leaves no trace.
+
+Three consequences, in the order they matter to this change:
+
+1. **It is why D9's problem is unrecoverable rather than merely invisible.** The released charter's
+   identity exists only in a response body nothing reads.
+2. **It is the cheapest route past the rider's half-discharge, and it is server-side.**
+   `persist_event` needs no bundle refresh, so an `agent_archived` event carrying
+   `released_charter_id` would make the fact durable and queryable without touching `hub/ui/src`.
+   D2 rejected option (a), *remembering* the binding, because an `archived_charter_id` column
+   re-creates the live state this change removes — that objection is right about a column and does
+   **not** apply to an event, which records that something happened rather than that something is
+   bound. Neither R1 nor R2 considered the distinction.
+3. **Durable is still not displayed.** `useSSE.ts` allow-lists event kinds at `:31` and switches per
+   kind at `:460`, so *rendering* a new event in the activity feed remains a `hub/ui/src` change.
+   An event closes the recording gap, not the display gap.
+
+Separately, and independently of charters: with no broadcast, a second open client's roster is not
+told an agent was archived. The acting client self-invalidates in `useArchiveAgent`'s `onSuccess`;
+nothing informs the others.
+
+**R3 adds no task for this.** It is true today with no charter release at all, so it is a standing
+defect of archival rather than something this change introduces or worsens — filed as **F391 (C)**.
+Whether to fold it in is the operator's call, and it belongs beside the one decision this change
+already carries, since it is the option that makes the rider's second half reachable *without* the
+bundle refresh that decision is about.
 
 ## D8 — what holds, and must keep holding
 

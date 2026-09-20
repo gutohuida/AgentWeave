@@ -1,9 +1,11 @@
 # Tasks — an archived agent holds nothing and is offered nowhere
 
 Findings: **F185 (B)**, **F181 (C)**, **F390 (C)** — the third site in `runners.py`, filed by this
-round after finding it by reading (`design.md` D4). Written by **R1, 2026-09-20**, re-derived against the code by **R2, 2026-09-20** (see
-`design.md`'s Round 2 section for what R2 changed and why). **R3 has not run**, so **no task here
-may be built until R3 is done and an operator token names this change in
+round after finding it by reading (`design.md` D4). Written by **R1, 2026-09-20**, re-derived against the code by **R2, 2026-09-20** and again,
+independently, by **R3, 2026-09-20** (see `design.md`'s Round 2 and Round 3 sections for what each
+changed and why). **All three rounds are done.** R3 changed no task's intent and added no task; it
+narrowed two claims, sharpened D3's cost, edited task 1.6, added `design.md` D10 and filed **F391
+(C)**. **No task here may be built until an operator token names this change in
 `spec-queue/APPROVALS.md`.**
 
 Tests run under `py -3.11`, never bare `python`. `black` needs `--target-version py311`. Each test
@@ -45,6 +47,11 @@ change happened to notice.
       check anywhere in the route** — so without this task, one ordinary API call puts an archived
       agent straight back into F185's state and 1.1 fixes nothing durable (`design.md` D7).
       Setting `charter_id: null` on an archived agent stays permitted: clearing is not re-binding.
+      **R3: say in the same comment that `runner_id` keeps no such guard, and why.** The adjacent
+      branch of this same route (`agents.py:2462-2470`) can re-bind a runner to an archived agent
+      and SHALL continue to — D3 keeps an archived agent's runner bound on purpose, so a symmetric
+      guard here would contradict it. Unstated, the asymmetry reads as an oversight and the next
+      reader "finishes the job"; stated, they have to revisit D3 first.
 - [ ] 1.7 `hub/tests/test_agents.py` — `PATCH /agents/{archived}` with a `charter_id` is refused
       and the row is unchanged; the same call with `charter_id: null` succeeds; the same call with
       a `charter_id` on an **open** agent still succeeds. *Mutation: drop the lifecycle check; the
@@ -65,6 +72,10 @@ change happened to notice.
       calling `archive_agent_row`, and return it in the response as `released_charter_id` alongside
       `charter_id: None`, plus a sentence naming the charter (by name, resolved from the `Charter`
       row) when one was released. No sentence when nothing was bound.
+      **R3: this response is the only place the released charter's identity will exist.** Archival
+      persists no event and broadcasts nothing (`design.md` D10) — there is no `agent_archived`
+      event kind anywhere in the tree — so once `useArchiveAgent` discards the body the fact is
+      irrecoverable from the Hub. Do not delete this field as dead payload on the strength of D9.
 - [ ] 2.2 `hub/hub/api/v1/agents.py` `unarchive_agent` — response carries `charter_id: None`
       explicitly and the standing sentence, **as revised by R2**: *"No charter is bound. Archiving
       releases an agent's charter and unarchiving does not restore it. An agent with no charter

@@ -54,8 +54,10 @@ already names.
 An agent's runner binding SHALL NOT be released by archival. The reason is the display and not a
 difference in the bindings' meaning: an archived agent's configuration reports the runner and model
 it was bound to, that report is derived from the live binding and from nothing else, and releasing
-it would blank what the agent was configured to run on the one surface that still shows it. What
-each run actually ran with is recorded separately, per run, and archival does not touch that record.
+it would blank what the agent was configured to run on the one surface that still shows it. Each run's own
+accounting outcome separately records what it ran on — completely for a measured turn, and as much
+as could be determined for one that ended without telemetry — and archival does not touch those
+records.
 
 A consequence of holding the runner binding SHALL be carried rather than hidden: an archived agent
 can still be named as a runner's holder, which is why the runner-deletion refusal is required to

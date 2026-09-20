@@ -14640,8 +14640,8 @@ discard.
 ## F181 (C) — `GET /agents/launchability` does not apply the lifecycle filter, and its docstring says it feeds a selector
 
 **Status:** open, **specced 2026-09-20** in
-`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 + **R2** done 2026-09-20 -- R3 not
-run, no operator token, nothing built). Re-reproduced that day on `1fdfc4d`: the archived agent
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (**R1 + R2 + R3 all done
+2026-09-20** -- no operator token, nothing built). Re-reproduced that day on `1fdfc4d`: the archived agent
 came back `runnable: true, collaboration_ready: true` one call before `POST /agent/trigger`
 refused it as archived. Remedy already chosen and unimplemented.
 `spec-queue/DECISIONS.md:536` files this under *"already answered by something already written
@@ -14849,8 +14849,8 @@ the response echoes `"name": "   "`.
 ## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
 
 **Status:** open, **specced 2026-09-20** in
-`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 + **R2** done 2026-09-20 -- R3 not
-run, no operator token, nothing built); re-reproduced that day on `1fdfc4d` through the API, and
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (**R1 + R2 + R3 all done
+2026-09-20** -- no operator token, nothing built); re-reproduced that day on `1fdfc4d` through the API, and
 that round measured a hole the finding did not name: `PATCH /agents/{name}` re-binds a charter to
 an **archived** agent with no lifecycle check (200), so clearing on archive alone would not hold.
 Originally reproduced 2026-09-15 on `48eede3` in-process (register `aq2`, bind the charter, archive 200, `GET /agents` omits `aq2`, `DELETE` answers 409 *"Charter is bound to agent(s): aq2. Unbind before deleting."*); `charters.py:95-98` is unchanged since `dbdf486` and `agent_lifecycle.archive` (`:64-67`) still leaves `charter_id` bound; the remedy, clearing bindings on archive, is decided at `spec-queue/DECISIONS.md:586` and has no change directory.
@@ -30229,7 +30229,11 @@ is not free and is not the deferral of an unrelated site -- group 5 exists *beca
 chooses to keep `Agent.runner_id` bound through archival (its `design.md` D3/D4). If archival
 released the runner binding too, this finding would close by construction. Found **by reading** during that
 change's R1, not by a drive. Not independently reproduced through HTTP; the claim below is a
-code read of `1fdfc4d`.
+code read of `1fdfc4d`. **R3, 2026-09-20:** re-derived D3 independently and confirmed keeping
+`runner_id` for a third time -- and strengthened it, by measuring that `create_agent` writes
+`config={}` (`agents.py:673`), so a cleared `runner_id` would make an archived agent's row report
+`runner: "native"` / `"Native"` -- a false value rather than a missing one. This finding therefore
+stays answered by naming rather than by releasing.
 
 `hub/hub/api/v1/runners.py:175-183` is `hub/hub/api/v1/charters.py:95-98` with one word changed:
 
@@ -30253,3 +30257,64 @@ displays what it ran with -- `agents.py:518`, `:568-569`), so this site is close
 holder as archived and saying where an archived agent is found, not by releasing anything. The
 reasoning is `design.md` D3/D4 of that change, and D3 is the part to attack if this looks wrong.
 
+## F391 (C) -- archiving an agent persists no event and broadcasts nothing, so the transition leaves no trace
+
+**Status:** open, found **by reading** on 2026-09-20 during R3 of
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere`, recorded in that
+change's `design.md` D10. **Not specced, and deliberately not folded into that change** -- it is
+true today with no charter release at all, so it is a standing defect of archival rather than
+something that change introduces. **Reproduced through the API** the same day on `00a3878`, in a
+throwaway test against the suite's ASGI app (written, run, deleted -- no test file was added), with
+a positive control so that the empty result is the absence of an event and not a broken endpoint:
+
+```
+BEFORE          : []
+AFTER ARCHIVE   : []
+AFTER UNARCHIVE : []
+ARCHIVE RESPONSE: {'name': 'f391', 'lifecycle': 'archived'}
+NEW EVENTS      : []
+AFTER HEARTBEAT : ['agent_heartbeat']        <- control: this route does persist one
+```
+
+`GET /events/history` is unchanged by an archive and by an unarchive, and records the very next
+heartbeat on the same agent.
+
+**Where.** `hub/hub/api/v1/agents.py:2602-2644` (`archive_agent`) and `:2648-2660`
+(`unarchive_agent`). Both end identically -- mutate the row, `commit`, `refresh`, `return` -- with
+no `persist_event` and no `sse_manager.broadcast`. There is no `agent_archived` or
+`agent_unarchived` event kind anywhere in the tree:
+
+```
+$ grep -rn "agent_archived|agent_unarchived" hub/ src/     # alternation escaped for grep
+(no matches)
+```
+
+Every neighbouring agent route has one: `agent_created` (`agents.py:689`), `agent_requested`
+(`:2133`), `agent_heartbeat` (`:2682`). Archival is the one agent lifecycle transition that records
+nothing.
+
+**Severity C**, on two counts that are each small and one that is not:
+
+1. A second open client's roster is not told. The acting client self-invalidates in
+   `useArchiveAgent`'s `onSuccess` (`hub/ui/src/api/agents.ts:230-240`); nothing informs the others,
+   so another window shows an archived agent as open until something else refetches.
+2. The project's own event history cannot answer *when was this agent archived* --
+   `Agent.archived_at` carries the timestamp, but nothing records the transition itself.
+3. **The one that matters, and the reason this was found now.** The change specced above adds a
+   `released_charter_id` to the archive response. With no event, that response is the *only* place
+   the released charter's identity ever exists, and its only client discards the body -- its
+   `onSuccess` takes no argument (that change's `design.md` D9). So the fact is irrecoverable from
+   the Hub the moment the request returns.
+
+**Why it is its own finding rather than a task on that change.** The remedy is server-side and
+cheap -- `persist_event(session, project_id, "agent_archived", {...})` needs no `hub/ui/src` change
+and therefore no bundle refresh -- which makes it the only route to that change's operator rider
+(*"unarchive must then say the bindings are gone"*) that does not reach the live `:8000` app. That
+change's D2 rejected *remembering* the binding, correctly, because an `archived_charter_id` column
+re-creates the live state it exists to remove; an event does not, because it records that something
+happened rather than that something is bound. Neither R1 nor R2 drew that distinction.
+
+**What the remedy would not do.** Rendering it is still a UI change:
+`hub/ui/src/hooks/useSSE.ts` allow-lists event kinds at `:31` and switches per kind at `:460`, so a
+new kind would be durable and queryable but not displayed until that file learns it. Durable is not
+displayed.

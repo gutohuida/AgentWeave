@@ -65,8 +65,9 @@ missed. R1 found a third (below).
    resolves an archived agent through `?lifecycle=archived` — so clearing it would blank that row
    with no fallback. **R2 corrected the reason R1 gave for this.** R1 argued the two bindings differ
    in kind ("a runner records what it ran with"); they do not — `TurnUsage`
-   (`db/models.py:1235-1248`) already records the runner and model of every run and survives
-   archival untouched, and `patch_agent` treats the two bindings identically. The asymmetry is a
+   (`db/models.py:1235-1248`) already records what every run ran on and survives archival untouched
+   (**R3 narrowed this**: a row exists for every run, but an unmeasured outcome carries no model),
+   and `patch_agent` treats the two bindings identically. The asymmetry is a
    display dependency, not a principle, and it has a price: **F390 and tasks group 5 exist because
    of it.** `design.md` D3 states the trade on those terms for R3 to weigh.
 
