@@ -14,11 +14,23 @@ must not drift.
 **A note for the verification rounds:** an annotation pass over legacy code was running in this tree
 on 2026-09-20 and is shifting line numbers in `hub/hub/launchability.py`. Cite symbols, not lines.
 
+> **R2 (2026-09-20) — this Context paragraph is right and incomplete.** `access_path_notice` is one
+> of **two** places the no-grounds branch asserts absence. The other is `_tool_surface_lines` in
+> `hub/hub/api/v1/agents.py`, whose non-MCP preamble opens *"No AgentWeave tools are injected this
+> turn"* — fed by the same `described_path`, in the same turn, reaching the model through
+> `--append-system-prompt-file` / `model_instructions_file`. R1 explored `launchability.py` and
+> `agent_trigger.py` and stopped at the notice; the context renderer is one `access_path=` argument
+> further down the same call and carries the stronger falsehood. See **D6**. The 2026-09-14
+> exploration this change cites did not notice it either, so this is new to R2 rather than a
+> re-finding.
+
 ## Goals / Non-Goals
 
 **Goals:**
 
-- The first turn of a new agent contains no false statement about its tool surface.
+- The first turn of a new agent contains no false statement about its tool surface. **R2: this goal
+  is the reason `agents.py` had to come into scope. With only the notice edited, the first turn
+  still contains one — in the tool section rather than the first line.**
 - The requirement forbids the denial as clearly as it already forbids the unfounded claim.
 - The F301 mechanism sentence in the requirement's prose stops being false.
 
@@ -59,6 +71,27 @@ considering the trust direction. Changing that is a new decision for the operato
 this one. **It remains a reasonable future change** and is named here so a later round recognises it
 as declined rather than missed.
 
+> **R2 dissent, recorded and not acted on.** Asked to judge the declined alternative on its merits,
+> R2 thinks it is the better change, and that D2's reasoning is sound about *authority* but weak
+> about *sufficiency*. Removing the denial is necessary; the evidence this change cites does not
+> show it is sufficient. The Architect had the tools, was not blocked from using them, used
+> `ask_user` through MCP in the same session — and still kept to `curl` and payload files for ten
+> runs *after the notice healed*, when nothing false remained in front of it. What persisted was
+> the positive HTTP steer, which this change deliberately keeps. A text of the form "the
+> `agentweave` tools are available if they appear in your tool list; otherwise the same operations
+> are HTTP requests" asserts nothing the system cannot know — it is a conditional, not a claim —
+> and it is the only wording that both stops the falsehood and stops pointing a tool-holding agent
+> at `curl`. It also makes D3's "unless it has grounds" hedge unnecessary and retires the grounds
+> mechanism's only consumer.
+>
+> **R2 is not making that change.** The verdict is the operator's and it chose otherwise; R2's
+> mandate is to correct the proposal against the code, not to overrule a decision. But the honest
+> statement of this change's expected effect is: *it removes two falsehoods from every agent's
+> first turn, and it is not established that it changes what the agent then does.* The tasks must
+> not claim more than that, and 4.3 has been narrowed accordingly. If the operator wants the
+> measured behaviour fixed rather than the falsehood removed, this is the decision to revisit —
+> before implementation, since the two changes touch the same two strings.
+
 ### D3 — "Unless it has grounds" is written into the requirement even though grounds never exist today
 
 The new clause forbids asserting absence *unless the system has grounds*. Today it never does: the
@@ -69,6 +102,23 @@ one place the truth appears is the harness's first `system`/`init` line carrying
 and F340 is the change that would obtain them. A flat "never say absent" would have to be amended
 the day that ships; the conditional form is already correct for both worlds, and it keeps the
 requirement symmetric with the presence clause directly beside it, which is the point.
+
+> **R2 verified D3's premise in the code and it holds.** Nothing reads the harness's reported MCP
+> state. `parse_claude_line` (`hub/hub/runner_parsing.py`) branches on exactly four message types —
+> `assistant`, `user`, `result`, `rate_limit_event` — and has no `system`/`init` branch at all, so
+> the line carrying `mcp_servers` is parsed as nothing. Grepping `mcp_servers` across `hub/hub/`
+> returns only *outbound* config construction (`runner_commands.py`, `codex_appserver.py`); there is
+> no inbound reader anywhere. The only ground that exists today is the positive one,
+> `Run.mcp_adapter_online_at`, set by the adapter announcing itself — a different mechanism, and
+> one with no negative form. D3's conditional wording is correct as written.
+>
+> **R2 also had to fix what the conditional did to the rest of the SHALL** — see the spec delta's
+> R2 note. R1 rewrote the surviving third clause from *"SHALL describe the plane's direct HTTP form
+> instead when it has no such grounds"* to *"when it has grounds for neither"*, which quietly
+> removes the obligation to describe the HTTP form in precisely the world D3 is anticipating: once
+> F340 ships and the system has grounds for **absence**, "grounds for neither" is false and the
+> clause stops applying — in the one case where HTTP is the run's only path. The delta now keeps the
+> live breadth.
 
 ### D4 — The F301 prose correction rides in this delta, and only the prose moves
 
@@ -94,11 +144,64 @@ that is directly testable.
 an empty prompt. Each restaged assertion must pair the negative with the positive content the
 requirement demands.
 
+> **R2 — D5 is right and the tasks that implement it were aimed at the wrong files.** R2 read all
+> four test files. **None of the other three pins the removed clause**, so R1's task 3.2 ("restage
+> anything 1.2 found pinning the removed clause in the other three test files") would have found
+> nothing and ticked green having proved nothing — the shape of failure this repo's discipline
+> exists to catch. The substantive gap is the opposite one:
+> `hub/tests/test_launchability.py::test_a_run_without_mcp_is_not_told_it_cannot_act` is a test
+> written to stop exactly this class of sentence, and the current clause walked past it, because it
+> only checks the *previous* denial wordings (`"no AgentWeave tool surface is available"`,
+> `"cannot send messages"`). Extending that test is the edit; finding nothing to restage is the
+> correct outcome of 3.2 and is now stated as such.
+
+### D6 — The canonical context's preamble is fixed in the same change (R2, added 2026-09-20)
+
+`_tool_surface_lines` (`hub/hub/api/v1/agents.py`) renders the tool inventory in one of two idioms,
+chosen by the same `described_path` the notice uses. Its non-MCP preamble begins *"No AgentWeave
+tools are injected this turn, so each capability below is one HTTP request instead."*
+
+*Why it is in scope rather than a follow-up:* it is the same defect, not a related one — an
+unfounded assertion of absence, in the same turn, to the same agent, from the same value — and it is
+the **stronger** of the two, since "no AgentWeave tools are injected" is unambiguously false when
+injection is what `agent_trigger.py` just did. It reaches the model as text ahead of the operator's
+message (`--append-system-prompt-file` for `claude`, `-c model_instructions_file=` for `codex`), so
+the delta's new scenarios reach it: a shipped product with this sentence still in it fails *"No
+grounds means no denial either"* and *"A run holding the tools is not told it is empty"* on the day
+the notice change lands. A change cannot be allowed to violate the requirement it is writing.
+
+*The edit, in D1's shape:* drop the absence claim and keep every load-bearing part — the `HUB_URL`
+address, the `Authorization: Bearer $AW_RUN_TOKEN` header, the read-from-your-own-environment
+instruction, the `*`-means-required and `{...}`-means-substitute conventions, and the
+JSON/`detail`-refusal sentence. The clause cannot simply be deleted: *"so each capability below is
+one HTTP request instead"* dangles without its subject, so the sentence is restated positively
+(for example, "Each capability below is described as one HTTP request.") rather than truncated.
+
+*What must not move:* the `access_path: str = "mcp"` default, the `over_mcp` branch, `_http_lines`,
+`_mcp_lines`, `_operations()`, and the one-source-two-renderings invariant that
+`test_tool_surface_matches_server.py` enforces. The comment above the `else` branch explaining why
+credential values are never interpolated must survive, for the same reason D1 keeps its counterpart.
+
+*Rejected:* leaving it to its own change, which would ship a requirement its own product violates;
+and rewriting the whole preamble, which risks content four scenarios depend on for no gain.
+
 ## Risks / Trade-offs
 
 - **A test elsewhere pins the exact string and is missed** → three further files reference
   `access_path_notice` (`test_agent_facing_text.py`, `test_launchability.py`,
   `test_tool_surface_matches_server.py`). Each is read and named in tasks, not grepped once.
+  **R2 has already done this read and the answer is recorded in the proposal's Impact list: none of
+  the three pins the clause.** The risk that remains is the inverse — a test that *should* have
+  caught it and did not.
+- **A non-test consumer of the changed strings goes quietly stale** (R2) → `scripts/drive/
+  t_d1_0909_together.py` detects the access path with
+  `injected = "No AgentWeave tools are injected this turn" in text`. Nothing fails if it is missed;
+  it just answers `False` forever, and a future drive reports the opposite of the truth. Named in
+  Impact and in task 1.1.
+- **The change removes the falsehood without changing the behaviour it was filed for** (R2) → see
+  the dissent under D2. This is accepted, and the tasks must not tick as though the measured harm
+  were closed. F302's ledger entry says the notice stopped lying, not that the agent stopped
+  reaching for `curl`.
 - **The removed clause was load-bearing for a reader somewhere** (docs, a skill template, a charter)
   → grep the clause across the whole repo, not just `hub/`, before deleting it.
 - **A fresh agent now reads an HTTP instruction with no stated reason** → acceptable, and better

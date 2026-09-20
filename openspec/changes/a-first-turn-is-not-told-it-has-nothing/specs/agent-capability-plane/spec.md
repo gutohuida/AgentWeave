@@ -1,8 +1,31 @@
+<!--
+R2 (2026-09-20). Two corrections to this delta, recorded here rather than in the requirement prose
+because this file's requirement bodies become the corpus at archive time and process notes must not.
+
+1. The first requirement's third SHALL clause. R1 rewrote the live text "and SHALL describe the
+   plane's direct HTTP form instead when it has no such grounds" as "when it has grounds for
+   neither". That silently narrowed a surviving obligation: once grounds for *absence* exist
+   (design D3 names F340 as the change that would obtain them), "grounds for neither" is false and
+   the HTTP-form obligation lapses -- in exactly the case where HTTP is the run's only path.
+   Restored to the live breadth as "whenever it lacks grounds to believe the surface will be
+   honoured", which is the live semantics plus the new absence clause, and nothing else.
+
+2. The scope sentence added to the symmetry paragraph. The prohibition has to bind every text the
+   system places ahead of the operator's message, not only the turn-start notice, because the run's
+   canonical context carries the same claim from the same value and reaches the model the same way
+   (proposal Impact; design D6).
+
+Diffed clause by clause and scenario by scenario against openspec/specs/agent-capability-plane/
+spec.md: both requirement headers match exactly, the second requirement's SHALL line is
+byte-identical to the live one, all three of the first requirement's live scenarios and all three of
+the second's survive verbatim, and nothing else was dropped or reworded.
+-->
+
 ## MODIFIED Requirements
 
 ### Requirement: A run is told the access path it actually has
 
-The system SHALL NOT tell a run that a tool-protocol surface is available unless it has grounds to believe the run's harness will honour the surface it was given, SHALL NOT tell a run that a tool-protocol surface is absent unless it has grounds to believe that it is, and SHALL describe the plane's direct HTTP form when it has grounds for neither.
+The system SHALL NOT tell a run that a tool-protocol surface is available unless it has grounds to believe the run's harness will honour the surface it was given, SHALL NOT tell a run that a tool-protocol surface is absent unless it has grounds to believe that it is, and SHALL describe the plane's direct HTTP form whenever it lacks grounds to believe the surface will be honoured.
 
 Providing a harness with a tool-protocol server is not the same as that harness offering it. A
 deployment may forbid tool-protocol servers by policy while permitting ordinary local API calls; a
@@ -18,7 +41,15 @@ its adapter online, and the injection that provides the surface is decided separ
 unconditionally. Every agent's first turn therefore held the tools it was told it did not have.
 Absence and presence are the same kind of claim about the same unobserved fact, and neither is
 available without grounds. Describing the HTTP form is not an assertion about the tool surface and
-remains the correct thing to do when there are no grounds either way.
+remains the correct thing to do whenever there are no grounds to assert the surface — including
+when the system has grounds to believe the surface is absent, which is the case where the HTTP form
+is the run's only path.
+
+This binds every text the system places ahead of the operator's message, not only the first line of
+the turn. A run's canonical context is placed there too, and it describes the same operations from
+the same decision about the same access path; a claim of absence removed from one and left in the
+other has not been removed. Where the system has no grounds either way, neither text asserts, and
+both describe.
 
 An explicit statement by the operator about a run's access path remains authoritative. This
 requirement governs what the system asserts on its own, not what it is told.
@@ -58,6 +89,8 @@ is told.
   that agent has reported the server online
 - **THEN** the text delivered ahead of the operator's message makes no claim that the tool-protocol
   surface is unavailable
+- **AND** the run's canonical context, which is delivered ahead of the operator's message in the
+  same turn, makes no such claim either
 
 #### Scenario: The operator's own statement is honoured
 
