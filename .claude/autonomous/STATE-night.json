@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 5,
+  "iteration": 6,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "group4-impl",
-  "next_action": "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 4.1-4.5 (F181): add lifecycle: Literal[\"open\",\"archived\",\"all\"] = Query(\"open\") to get_agents_launchability in hub/hub/api/v1/agents.py, matching list_agents' signature; apply the filter after session_agents_meta has taken names from both sources and before the per-name loop, using the same \"an agent with no row cannot have been archived, so it counts as open\" rule as agents.py:359-369; extend the docstring pointing at list_agents' reasoning rather than restating it; test in hub/tests/test_agents.py (or the launchability module) covering default-omits-archived, ?lifecycle=archived, ?lifecycle=all, and an archived name present only in session config also omitted, with the mutation moving the filter onto the Agent query so the session-config case fails; a probe/spawn agreement test driven as one sequence: for every agent the default probe reports runnable:true, POST /agent/trigger must not refuse it as archived; confirm again at build time that nothing under hub/ui/src calls useAgentLaunchability (measured zero call sites 2026-09-20) before treating this as UI-inert. Tick tasks, commit.",
+  "current": "group5-impl",
+  "next_action": "Build openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere tasks 5.1-5.3 (F390, the third site): in hub/hub/api/v1/runners.py delete_runner, select both Agent.name and Agent.lifecycle for the bound-holders check and qualify each archived holder inline in the refusal message, e.g. 'Runner is bound to agent(s): a1, b2 (archived). Unbind before deleting; an archived agent is listed under Agents with the archived filter.' -- open-only holders keep today's sentence unchanged. Add three cases to hub/tests/test_runners_api.py: only-archived holder, mixed holders, only-open holder (asserts today's sentence unchanged); mutation: drop the lifecycle column from the select, the first two cases must fail and the third must pass -- apply it, confirm the failure, revert. Set **Status:** fixed <sha> on F390 in scripts/drive/FINDINGS.md in the same commit (it was filed by reading, never reproduced through HTTP until 5.2). Tick tasks, commit.",
   "queue": [
     {
       "id": "group1-impl",
@@ -41,9 +41,9 @@
     },
     {
       "id": "group4-impl",
-      "status": "open",
+      "status": "done",
       "title": "Group 4 - launchability applies the roster's lifecycle filter (F181)",
-      "detail": "Tasks 4.1-4.5. lifecycle query param on get_agents_launchability matching list_agents; filter after session_agents_meta, before per-name loop; probe/spawn agreement test."
+      "detail": "Tasks 4.1-4.5. lifecycle query param on get_agents_launchability matching list_agents; filter after session_agents_meta, before per-name loop; probe/spawn agreement test. Done iteration 6: 124 passed across the four touched test files, mutation confirmed (query-only filter leaks a session-config-only name into ?lifecycle=archived, and leaks a session-config archived agent into the default probe -> 409 on trigger), ruff/black clean, 4.5 re-confirmed zero real hub/ui/src call sites (definition + 11 vi.mock stubs only)."
     },
     {
       "id": "group5-impl",

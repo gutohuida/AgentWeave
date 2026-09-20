@@ -168,6 +168,7 @@ async def get_configured_agents(
 
 @router.get("/launchability")
 async def get_agents_launchability(
+    lifecycle: Literal["open", "archived", "all"] = Query("open"),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
@@ -188,6 +189,11 @@ async def get_agents_launchability(
     actually use. An agent with no bound Runner (self-registered or CLI-launched,
     outside the Hub's own spawn path) keeps the legacy config-derived probe unchanged —
     that path is real for those agents, not stale.
+
+    `lifecycle` mirrors `list_agents`' own filter (same default, same values, same
+    "an agent with no row counts as open" rule) — see that function's docstring for why
+    the filter exists at all: this probe feeds the same selector `list_agents` populates,
+    so an archived agent excluded there must not still report `runnable: true` here.
     """
     project_id, _ = project
 
@@ -199,6 +205,15 @@ async def get_agents_launchability(
     db_agents: dict[str, Agent] = {row.name: row for row in agent_res.scalars().all()}
     for name in db_agents:
         session_agents_meta.setdefault(name, {})
+
+    if lifecycle != "all":
+        wanted = lifecycle
+        session_agents_meta = {
+            name: meta
+            for name, meta in session_agents_meta.items()
+            # An agent with no row cannot have been archived, so it counts as open.
+            if (db_agents[name].lifecycle if name in db_agents else "open") == wanted
+        }
 
     # Task 6.1's "callback-address agreement": the same condition
     # `trigger_agent_directly` itself requires before it will start any run at all (see

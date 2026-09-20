@@ -239,25 +239,45 @@ change happened to notice.
 
 ## 4. Launchability applies the roster's lifecycle filter (design D6, closes F181)
 
-- [ ] 4.1 `hub/hub/api/v1/agents.py` `get_agents_launchability` — add
+- [x] 4.1 `hub/hub/api/v1/agents.py` `get_agents_launchability` — add
       `lifecycle: Literal["open", "archived", "all"] = Query("open")`, matching `list_agents`'
       signature exactly.
-- [ ] 4.2 Same function — apply the filter **after** `session_agents_meta` has taken names from both
+      **Done 2026-09-20:** parameter added, first in the signature ahead of `project`/`session`,
+      matching `list_agents`.
+- [x] 4.2 Same function — apply the filter **after** `session_agents_meta` has taken names from both
       sources and **before** the per-name loop (which does a `get_agent_config` and a `Runner`
       lookup per agent), using the same "an agent with no row cannot have been archived, so it
       counts as open" rule as `agents.py:359-369`. Extend the docstring with one paragraph pointing
       at `list_agents`' reasoning rather than restating it.
-- [ ] 4.3 `hub/tests/test_agents.py` (or the launchability test module R2 identifies) — archive an
+      **Done 2026-09-20:** filter applied to `session_agents_meta` right after the `db_agents`
+      `setdefault` loop, identical shape and comment to `list_agents`' own filter. Docstring
+      extended with one paragraph naming `list_agents` as the source of the reasoning.
+- [x] 4.3 `hub/tests/test_agents.py` (or the launchability test module R2 identifies) — archive an
       agent, then: default probe omits it; `?lifecycle=archived` returns it; `?lifecycle=all`
       returns both; an archived name present *only* in session config is omitted too.
       *Mutation: move the filter onto the `Agent` query instead; the session-config case must fail.*
-- [ ] 4.4 The probe/spawn agreement, driven as one sequence in the same test: for every agent the
+      **Done 2026-09-20:** `hub/tests/test_launchability.py::test_launchability_lifecycle_filter_matches_the_roster`.
+      Uses `hub/tests/test_launchability.py` (the probe's own test module) rather than
+      `test_agents.py`, since every other test in this module already exercises this endpoint.
+      Mutation applied by hand (filtered `agent_q` by `Agent.lifecycle == lifecycle` instead of
+      post-filtering `session_agents_meta`): the session-config-only name (`config-only`) leaked
+      into the `?lifecycle=archived` response (`AssertionError: 'config-only' not in {...}`).
+      Reverted; full file green again (44 passed).
+- [x] 4.4 The probe/spawn agreement, driven as one sequence in the same test: for every agent the
       default probe reports `runnable: true`, `POST /agent/trigger` does not refuse it as archived.
       This is the assertion F181 actually violates — write it as the loop over the response, not as
       a single hand-picked agent.
-- [ ] 4.5 Confirm again at build time that nothing under `hub/ui/src` calls
+      **Done 2026-09-20:** `test_every_agent_the_default_probe_calls_runnable_is_not_refused_as_archived`,
+      same file. Same mutation as 4.3 (which also makes `archived-runnable` leak into the default
+      probe, since it is present in session config too): the loop then POSTs `/agent/trigger` for
+      it and gets `409`, failing `resp.status_code != 409`. Reverted; full file green again.
+- [x] 4.5 Confirm again at build time that nothing under `hub/ui/src` calls
       `useAgentLaunchability` (measured zero call sites on 2026-09-20). If that has changed, the
       default's effect on that screen must be looked at before shipping.
+      **Re-confirmed 2026-09-20:** `grep -rn "useAgentLaunchability" hub/ui/src` finds the
+      definition (`api/agents.ts:376`) and eleven `vi.mock` stubs in `__tests__/*.test.tsx` — no
+      import or call in any real component. Still zero real call sites; no `hub/ui/src` file
+      touched, `make ui` not run.
 
 ## 5. The third site — `runners.py` (design D4). **Cut this group first.**
 

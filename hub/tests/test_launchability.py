@@ -1,5 +1,7 @@
 """Tests for the per-agent launchability probe (Phase 3 task 3.2)."""
 
+from unittest.mock import patch
+
 import pytest
 
 from hub.launchability import (
@@ -12,6 +14,7 @@ from hub.launchability import (
     resolve_access_path,
     resolve_agent_env,
 )
+from tests.test_agent_trigger import _await_background_run, _fake_pty
 
 
 class TestProbeAgent:
@@ -155,6 +158,119 @@ async def test_launchability_endpoint_reports_configured_agents(app, auth_header
     assert agents["claude"]["present"] is False
     assert agents["backup"]["runnable"] is False
     assert agents["backup"]["reason"] == "Runner is set to manual — no CLI to launch automatically."
+
+
+@pytest.mark.asyncio
+async def test_launchability_lifecycle_filter_matches_the_roster(app, auth_headers):
+    """F181: the probe must apply the same lifecycle filter `list_agents` does, with the same
+    "no `Agent` row counts as open" rule — see `get_agents_launchability`'s docstring. Covers
+    4.3's four cases in one sequence: default omits archived, `?lifecycle=archived` returns it,
+    `?lifecycle=all` returns both, and a name that exists only in session config (no `Agent` row
+    at all) is excluded from the archived filter too.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"config-only": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "db-agent", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg.status_code == 200
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/db-agent/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+    default = await app.get("/api/v1/projects/proj-test/agents/launchability", headers=auth_headers)
+    assert default.status_code == 200
+    default_agents = default.json()["agents"]
+    assert "db-agent" not in default_agents
+    assert "config-only" in default_agents
+
+    archived_only = await app.get(
+        "/api/v1/projects/proj-test/agents/launchability?lifecycle=archived", headers=auth_headers
+    )
+    assert archived_only.status_code == 200
+    archived_agents = archived_only.json()["agents"]
+    assert "db-agent" in archived_agents
+    # A name with no `Agent` row cannot have been archived -- it counts as open, so it must not
+    # leak into the archived filter. This is the case the 4.3 mutation (filtering the `Agent`
+    # query instead of the merged roster) gets wrong.
+    assert "config-only" not in archived_agents
+
+    everything = await app.get(
+        "/api/v1/projects/proj-test/agents/launchability?lifecycle=all", headers=auth_headers
+    )
+    assert everything.status_code == 200
+    all_agents = everything.json()["agents"]
+    assert "db-agent" in all_agents
+    assert "config-only" in all_agents
+
+
+@pytest.mark.asyncio
+async def test_every_agent_the_default_probe_calls_runnable_is_not_refused_as_archived(
+    app, auth_headers, bind_runner
+):
+    """F181's actual violation: before the lifecycle filter existed, an archived agent's probe
+    still reported `runnable: true`, and `POST /agent/trigger` then refused it with 409. Drives
+    both endpoints as one sequence over every name the default probe reports runnable, rather
+    than a single hand-picked agent, so a future agent added here is covered for free.
+    """
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={
+            "data": {
+                "agents": {
+                    "open-runnable": {"runner": "claude"},
+                    "archived-runnable": {"runner": "claude"},
+                }
+            }
+        },
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("open-runnable", cli="claude")
+    await bind_runner("archived-runnable", cli="claude")
+
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/archived-runnable/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        probe = await app.get(
+            "/api/v1/projects/proj-test/agents/launchability", headers=auth_headers
+        )
+    assert probe.status_code == 200
+    probe_agents = probe.json()["agents"]
+    assert "archived-runnable" not in probe_agents
+    assert probe_agents["open-runnable"]["runnable"] is True
+
+    runnable_names = [name for name, result in probe_agents.items() if result["runnable"]]
+    assert runnable_names, "the sequence below is vacuous if nothing is runnable"
+
+    fake_spawn = _fake_pty(
+        [
+            '{"type":"system","subtype":"init","session_id":"sess-f181"}\n',
+            '{"type":"result","subtype":"success","is_error":false,"session_id":"sess-f181"}\n',
+        ]
+    )
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            for name in runnable_names:
+                resp = await app.post(
+                    "/api/v1/projects/proj-test/agent/trigger",
+                    json={"agent": name, "message": "hi", "session_mode": "new"},
+                    headers=auth_headers,
+                )
+                assert resp.status_code != 409, f"{name}: {resp.text}"
+                assert "archived" not in resp.text.lower(), f"{name}: {resp.text}"
+            await _await_background_run()
 
 
 class TestCollaborationReadiness:
