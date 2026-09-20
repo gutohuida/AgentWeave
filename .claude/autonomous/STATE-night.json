@@ -6,89 +6,35 @@
     "permission_mode":  "unattended-full-access",
     "branch":  "autonomous/2026-09-17-daily",
     "parent_branch":  "master",
-    "parent_sha":  "a435f48",
-    "stop_at":  "2026-09-20T07:00:00+01:00",
-    "iteration":  9,
-    "log_file":  ".claude/autonomous/2026-09-19-night-log.md",
+    "parent_sha":  "802a8c7",
+    "stop_at":  "2026-09-21T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-20-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  null,
-    "next_action":  null,
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
     "queue":  [
                   {
                       "id":  "compose",
-                      "status":  "done",
-                      "title":  "Compose this window's queue from the playbook",
-                      "detail":  "Backlog page current, nothing moved. APPROVALS.md 2026-09-19 section has an ORDER: line -- used verbatim. Baseline (109 tests across both approved changes' regression files) green at 77.45s before any build."
-                  },
-                  {
-                      "id":  "arc-impl",
-                      "status":  "done",
-                      "title":  "a-refused-capability-reaches-the-operator: tasks 0.3, 0.4, 0.5, 4.12 ONLY",
-                      "detail":  "Additive/nullable migration 0104 + column + optional param + coexistence test. Do not build §1-§3/§5 -- gated on F386 (day window 2026-09-20's job). Committed 3b7718d: found and fixed a broken 4.12 test (missing required QuestionCreate fields caused 422s), 111 passed/1 skipped after. Tasks 0.3/0.4/0.5/4.12 marked [x] in tasks.md."
-                  },
-                  {
-                      "id":  "arc-drive",
-                      "status":  "done",
-                      "title":  "Drive arc-impl's change",
-                      "detail":  "Fresh Hub from source, port 8091, fresh profiles/drive0919 db (never seen a revision before). alembic head landed on 0104 from empty; subject_key column and the partial ix_questions_open_subject_key index (with its WHERE clause) confirmed via sqlite_master. Ordinary POST/PATCH /questions flow exercised on a disposable fixture project and unregressed. No finding -- recorded as D-2 in scripts/drive/FINDINGS.md. Drive Hub shut down (verified via netstat), fixture dirs and project deleted."
-                  },
-                  {
-                      "id":  "unrh-impl",
-                      "status":  "done",
-                      "title":  "an-unstaffed-review-names-its-holders: group 1 ONLY (tasks 1.1-1.4)",
-                      "detail":  "Committed f663898: AgentAvailability/Holding dataclasses + _roster_availability(session, project_id) in hub/hub/scheduler.py; _agents_that_are_free re-expressed as the has_runner/running/held/reachable projection over it; resolve_reviewer now reads _roster_availability once for both rung 2's walk and the roster-held check (call sites confirmed by grep at :348/:1263/:1444, matching R7's prediction, not the stale :298/:1298 numbers). Two new tests in test_a_task_nothing_will_move_holds_nobody.py (1.3 record test with a 6th NONLIVE fixture agent added to actually catch the Task.status mutation; 1.4 one-read test staged as a single-agent project so it reaches the roster-held read). All three 1.3 mutations and the one 1.4 mutation applied by hand, observed failing, reverted -- see tasks.md notes. Baseline held: 55 -> 57 passed (pytest hub/tests/test_a_held_agent_is_busy.py hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q); wider regression (reviewer_ladder/flow_width/busy_guard/actor_aware_claimability/loop_does_not_staff_its_own_review) 124 passed. openspec validate --strict passes. Did not touch groups 2/5/6."
-                  },
-                  {
-                      "id":  "unrh-drive",
-                      "status":  "done",
-                      "title":  "Drive unrh-impl's change",
-                      "detail":  "57 passed (matches unrh-impl). F388's operator-live-db trap fired a second time, harmlessly -- inline DATABASE_URL prefix before `py -3.11 -m uvicorn` again failed to reach the child; caught via DEAD-ENDS.md's own mode=ro verify-before-believing practice, no harm done, confirmed not assumed. Restarted correctly via PowerShell $env: + pre-created directory. resolve_reviewer's rung-2 pool walk needs a spec-linked loop to reach live (F161: a documentless loop never calls it) -- out of this slice's scope, said so rather than built past it or silently skipped. Instead drove the reachable half: a real one-agent documentless loop claimed and completed its task through the refactored roster-availability projection, then correctly stayed at completed (F161's own stall_reason sentence, unchanged). Recorded as D-3 in FINDINGS.md; appended the second F388 occurrence to DEAD-ENDS.md (no new finding filed). Cleanup verified: drive Hub killed by exact PID both times, fixture dirs removed, operator's :8000 db re-confirmed unchanged after teardown."
-                  },
-                  {
-                      "id":  "alsn-impl-1",
-                      "status":  "done",
-                      "title":  "a-loop-staffs-the-agent-it-names: groups 0-4 (preconditions, scope filter, staffing!=resumption, busy guard, F70 exception)",
-                      "model": "sonnet",
-                      "effort": "high",
-                      "detail":  "Committed 831ac16. _agents_a_loop_may_staff(session, loop) added to hub/hub/scheduler.py: empty pool for a documentless loop (design D2), unfiltered _agents_that_are_free for a flow. decide_firing's fresh-work draw and _loop_flow_busy_reason's pool check both point at it (D3), closing F128. resolve_reviewer and run_divergence's silent-reviewer recovery confirmed untouched per D5 -- test_a_loops_wedged_review_still_recovers stays green unmodified (4.1), and a new test covers the run_divergence path (4.2). 10 new tests in hub/tests/test_a_loop_staffs_the_agent_it_names.py; every load-bearing mutation named in tasks.md hand-applied, observed failing, reverted. One exception: 1.6's own named mutation ('return [default_agent]') is inert against its own fixture -- traced and recorded in tasks.md, with the mutation it's actually caught by (1.1's variant) instead. Baseline held 54 -> 64 passed. openspec validate --strict passes. Groups 5/6/7/8 untouched -- 5 is explicitly out of scope for this window, 6/7/8 are separate queue items."
-                  },
-                  {
-                      "id":  "alsn-impl-2",
-                      "status":  "done",
-                      "title":  "a-loop-staffs-the-agent-it-names: group 6 (what must not move)",
-                      "model": "sonnet",
-                      "effort": "high",
-                      "detail":  "Committed adca56b (built by a prior process that died before advancing state/log; reconciled and independently re-verified in iteration 7, not redone). Tasks 6.1/6.2/6.3/6.6/6.7 all [x] in tasks.md with measurements. Regression set 54 baseline + 10 new -> 64 passed (52.87s on re-verify), full hub suite green, ruff/black/mypy clean (black also caught and fixed a pre-existing unrelated drift in test_questions.py from arc-impl's earlier commit). test_flow_width.py's docstring corrected per R4-N3 (D2 retires a documentless loop's width in full, not just review). D8b cross-reference to agent-loops/spec.md:1242 confirmed as a no-edit outcome -- the two requirements read as one rule for the row they share. openspec validate --strict passes."
-                  },
-                  {
-                      "id":  "alsn-drive",
-                      "status":  "done",
-                      "title":  "a-loop-staffs-the-agent-it-names: group 7 (drive it)",
-                      "detail":  "Fresh Hub from source, port 8093, brand-new drive0920 profile (never seen a revision before, confirmed by mtime and the 0001->0104 startup log). Fixture project proj-3c1791d525a7, three Haiku agents. scripts/drive/d7_0920_alsn_drive.py: a documentless loop naming busy gamma (alpha/beta genuinely idle) now gets 409 on Run ('gamma... is already running a turn, and no other agent is free...'), no conversation created, task stays pending/unassigned, and GET /loops/{id} carries stall_reason with ending_state null and firing_active false -- hand-evaluated against loopCounts.ts:23's endingBucket() literally: bucket=stalled. This is the change working as designed (D2/D3), stated plainly, not flagged as a defect. A spec-linked flow in the identical busy-gamma shape got 200, both tasks moved in_progress onto alpha/beta, stall_reason null, bucket running -- width and staffing unaffected, confirming D1/D7. 13/13 verdicts held. Recorded as D-4 in scripts/drive/FINDINGS.md. Did not build group 5. Cleanup: jobs stopped via stop_reason, loops archived, tasks rejected, agents confirmed idle before project delete (one 409 mid-turn, retried after idle -> 204). Drive Hub killed by the exact netstat-confirmed listening PID (24504, not the launching shell's reported 23164). Profile dir and fixture project dir removed. Operator's :8000 db re-verified read-only before and after: alembic_version 0103, event_logs count unchanged at 12888 both times."
-                  },
-                  {
-                      "id":  "alsn-closeout",
-                      "status":  "done",
-                      "title":  "a-loop-staffs-the-agent-it-names: group 8 (close it out, F128)",
-                      "model": "sonnet",
-                      "effort": "medium",
-                      "detail":  "F128 set to fixed (831ac16/adca56b, D-4 2026-09-20) in scripts/drive/FINDINGS.md, authority-hole account kept verbatim. F127 note appended (409 sentence re-derived, Status untouched -- fixed c8e3bbd 2026-09-14). DECISIONS.md correction appended after the F128-fix row (line had drifted from :748 to ~768): the row's 'F127's 500 must be fixed in the same change' sentence was already stale when written 2026-09-19, since F127 was fixed five days earlier. Row itself untouched, correction appended per task 8.4. Wrote test-guide.md covering groups 0-4/6/7 as agent-verifiable; group 5's wording checks explicitly named as not-yet-written (decision: does not wait for group 5). tasks.md 8.1-8.4 all [x]. openspec validate --strict passes. Change NOT archived -- group 5 stays open in openspec/changes/. backlog_page.py regenerated: F128 now reads 'no longer open' (211->210, fixed 155->156). Queue finished -- next_action set to null."
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
                   }
               ],
     "decisions_for_user":  [
-                               "F388 (a Hub started from source can silently land on the operator's live :8000 database) fired a second time tonight during unrh-drive, harmlessly -- caught by read-only verification before any action, no restart or write occurred. F388's fix shape is still undecided by the operator; this is only a note that it has now fired twice in one day, which may bear on priority."
+
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
