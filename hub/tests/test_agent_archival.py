@@ -176,6 +176,89 @@ async def test_archive_and_unarchive_responses_state_the_bindings_fate(app, auth
 
 
 @pytest.mark.asyncio
+async def test_archiving_and_unarchiving_persist_events(app, auth_headers):
+    """F391 (design.md D10, group 2b): the transition leaves a trace in event_logs/SSE.
+
+    Positive control (F391's own reproduction shape): a heartbeat on the same agent must land an
+    `agent_heartbeat` event, so an empty `agent_archived`/`agent_unarchived` result can never be
+    misread as evidence of a broken `/events/history` endpoint rather than a real gap.
+    """
+    charter = await app.post(
+        "/api/v1/projects/proj-test/charters",
+        json={"name": "Traced On Archive", "content": "Do the thing."},
+        headers=auth_headers,
+    )
+    charter_id = charter.json()["id"]
+
+    await _register(app, auth_headers, "traced")
+    bound = await app.patch(
+        "/api/v1/projects/proj-test/agents/traced",
+        json={"charter_id": charter_id},
+        headers=auth_headers,
+    )
+    assert bound.status_code == 200
+
+    before = (
+        await app.get("/api/v1/projects/proj-test/events/history", headers=auth_headers)
+    ).json()
+    assert not [e for e in before if e["type"] in ("agent_archived", "agent_unarchived")]
+
+    heartbeat = await app.post(
+        "/api/v1/projects/proj-test/agents/traced/heartbeat",
+        json={"status": "ok", "message": "control"},
+        headers=auth_headers,
+    )
+    assert heartbeat.status_code == 201
+
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/traced/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+    unarchived = await app.post(
+        "/api/v1/projects/proj-test/agents/traced/unarchive", headers=auth_headers
+    )
+    assert unarchived.status_code == 200
+
+    after = (
+        await app.get("/api/v1/projects/proj-test/events/history", headers=auth_headers)
+    ).json()
+    assert [
+        e for e in after if e["type"] == "agent_heartbeat" and e["agent"] == "traced"
+    ], "the positive control itself did not land -- events/history is not exercising real events"
+
+    archived_events = [e for e in after if e["type"] == "agent_archived"]
+    assert len(archived_events) == 1
+    assert archived_events[0]["agent"] == "traced"
+    assert archived_events[0]["data"]["released_charter_id"] == charter_id
+
+    unarchived_events = [e for e in after if e["type"] == "agent_unarchived"]
+    assert len(unarchived_events) == 1
+    assert unarchived_events[0]["agent"] == "traced"
+    assert "released_charter_id" not in unarchived_events[0]["data"]
+
+
+@pytest.mark.asyncio
+async def test_archiving_a_never_chartered_agent_still_records_an_event(app, auth_headers):
+    """2b.3: an agent archived holding nothing records `released_charter_id: null`, not no event."""
+    await _register(app, auth_headers, "traced-bare")
+
+    archived = await app.post(
+        "/api/v1/projects/proj-test/agents/traced-bare/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200
+
+    after = (
+        await app.get("/api/v1/projects/proj-test/events/history", headers=auth_headers)
+    ).json()
+    archived_events = [
+        e for e in after if e["type"] == "agent_archived" and e["agent"] == "traced-bare"
+    ]
+    assert len(archived_events) == 1
+    assert archived_events[0]["data"]["released_charter_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_archiving_is_idempotent(app, auth_headers):
     await _register(app, auth_headers, "twice")
     first = await app.post("/api/v1/projects/proj-test/agents/twice/archive", headers=auth_headers)

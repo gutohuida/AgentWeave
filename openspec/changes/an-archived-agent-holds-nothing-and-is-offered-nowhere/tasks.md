@@ -150,7 +150,7 @@ change happened to notice.
 > kind at `:460`, so a client that does not know these kinds ignores them; displaying the
 > transition stays a later change, and no task here may claim otherwise.
 
-- [ ] 2b.1 `hub/hub/api/v1/agents.py` `archive_agent` — after `session.commit()` and
+- [x] 2b.1 `hub/hub/api/v1/agents.py` `archive_agent` — after `session.commit()` and
       `session.refresh(agent_row)`, `await persist_event(session, project_id, "agent_archived",
       payload, agent=agent_row.name)` then `await sse_manager.broadcast(project_id,
       "agent_archived", payload)`, in that order and with the same payload object, matching
@@ -158,28 +158,49 @@ change happened to notice.
       from the same pre-release capture task 2.1 already takes — not re-read after the release,
       where it is always `None`. Order matters: 2.1's capture must happen before
       `archive_agent_row`, and this event is written after the commit that persisted the release.
-- [ ] 2b.2 Same file, `unarchive_agent` — the same two calls with `"agent_unarchived"`. The payload
+      **Done 2026-09-20:** `event_payload = {"agent": ..., "lifecycle": ..., "released_charter_id":
+      released_charter_id}` built after `session.refresh`; `persist_event` then `broadcast`, same
+      object, same order as `agent_created`.
+- [x] 2b.2 Same file, `unarchive_agent` — the same two calls with `"agent_unarchived"`. The payload
       names the agent and its lifecycle and **MUST NOT** carry a `released_charter_id` or any field
       implying a charter was restored (`design.md` D2: reopening does not restore it).
-- [ ] 2b.3 The event SHALL be written **whether or not a charter was bound** — an agent archived
+      **Done 2026-09-20:** `event_payload = {"agent": ..., "lifecycle": ...}` — no
+      `released_charter_id` key at all; `persist_event` then `broadcast`.
+- [x] 2b.3 The event SHALL be written **whether or not a charter was bound** — an agent archived
       holding nothing records `released_charter_id: null`, not no event. Otherwise "nothing was
       released" and "nothing was recorded" are the same row, which is the gap this group closes.
-- [ ] 2b.4 `hub/tests/test_agent_archival.py` — assert against `GET /events/history` (the route
+      **Done 2026-09-20:** unconditional — no `if released_charter_id is not None` guard around the
+      event calls (unlike the response `message`); covered by
+      `test_archiving_a_never_chartered_agent_still_records_an_event`.
+- [x] 2b.4 `hub/tests/test_agent_archival.py` — assert against `GET /events/history` (the route
       F391's own reproduction used), not against a mock: empty before, one `agent_archived` naming
       the released charter after, one `agent_unarchived` after unarchiving. **Include F391's
       positive control** — a heartbeat on the same agent lands an `agent_heartbeat` — so an empty
       result can never be read as a passing assertion about a broken endpoint.
-- [ ] 2b.5 Mutation, applied by hand and observed: delete the `persist_event` call in
+      **Done 2026-09-20:** `test_archiving_and_unarchiving_persist_events` — asserts empty before,
+      heartbeat positive control present, exactly one `agent_archived` with
+      `data.released_charter_id == charter_id`, exactly one `agent_unarchived` with no
+      `released_charter_id` key in `data`. Plus
+      `test_archiving_a_never_chartered_agent_still_records_an_event` for 2b.3.
+- [x] 2b.5 Mutation, applied by hand and observed: delete the `persist_event` call in
       `archive_agent` and watch 2b.4's named assertion fail; delete the `released_charter_id` key
       and watch it fail differently. Revert both. A test that passes with the event gone is testing
       the control.
-- [ ] 2b.6 **Do not set `**Status:** fixed` on F391 unless both the persist and the broadcast
+      **Done 2026-09-20:** deleting the `persist_event` line failed `len(archived_events) == 1`
+      (`0 == 1`, positive control still passed, confirming the endpoint itself works). Deleting
+      `released_charter_id` from `event_payload` failed differently: `KeyError:
+      'released_charter_id'` on the data-key assertion. Both reverted; file green again (17 passed).
+- [x] 2b.6 **Do not set `**Status:** fixed` on F391 unless both the persist and the broadcast
       landed**, and when setting it, state in the same edit that the *display* half is untouched and
       name `useSSE.ts:31`/`:460` as where it would live. F391's text is about recording and
       broadcasting; it is not about rendering, and neither is this group.
-- [ ] 2b.7 Confirm at build time that no `hub/ui/src` file changed and `make ui` was not run. If
+      **Done 2026-09-20:** both `persist_event` and `sse_manager.broadcast` land on both routes; set
+      `**Status:** fixed` on F391 in `scripts/drive/FINDINGS.md` with that statement.
+- [x] 2b.7 Confirm at build time that no `hub/ui/src` file changed and `make ui` was not run. If
       this group somehow acquires one, stop — the operator's decision was explicitly the
       server-side route, and a bundle refresh reaches their live app.
+      **Confirmed 2026-09-20:** `git diff --stat` shows only `hub/hub/api/v1/agents.py` and
+      `hub/tests/test_agent_archival.py`; no `hub/ui/src` file touched, `make ui` not run.
 
 ## 3. Already-archived agents (design D5)
 

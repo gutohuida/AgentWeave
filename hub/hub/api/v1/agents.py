@@ -2672,6 +2672,15 @@ async def archive_agent(
     archive_agent_row(agent_row)
     await session.commit()
     await session.refresh(agent_row)
+
+    event_payload = {
+        "agent": agent_row.name,
+        "lifecycle": agent_row.lifecycle,
+        "released_charter_id": released_charter_id,
+    }
+    await persist_event(session, project_id, "agent_archived", event_payload, agent=agent_row.name)
+    await sse_manager.broadcast(project_id, "agent_archived", event_payload)
+
     response = {
         "name": agent_row.name,
         "lifecycle": agent_row.lifecycle,
@@ -2696,6 +2705,13 @@ async def unarchive_agent(
     unarchive_agent_row(agent_row)
     await session.commit()
     await session.refresh(agent_row)
+
+    event_payload = {"agent": agent_row.name, "lifecycle": agent_row.lifecycle}
+    await persist_event(
+        session, project_id, "agent_unarchived", event_payload, agent=agent_row.name
+    )
+    await sse_manager.broadcast(project_id, "agent_unarchived", event_payload)
+
     return {
         "name": agent_row.name,
         "lifecycle": agent_row.lifecycle,
