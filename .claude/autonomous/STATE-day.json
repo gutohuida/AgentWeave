@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "a435f48",
     "stop_at": "2026-09-20T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-20-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f185-r2",
-    "next_action": "Item 1 R2 -- independently re-derive openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere against the actual code. A FRESH comparison, not a re-read of R1's reasoning: open charters.py, agent_lifecycle.py, agents.py (patch_agent at :2440-2480, get_agents_launchability at :159-243, list_agents' filter at :350-369, archive/unarchive routes at :2601-2660) and runners.py:164-187 yourself and check what the proposal claims against what they do. Attack in particular: (1) D3's charter-vs-runner asymmetry -- is 'a charter governs future turns, a runner records what it ran with' actually true of this code, or is it a story? (2) D2(c)'s unarchive sentence -- would it read as a false claim to an operator whose agent never had a charter? (3) D6's filter placement -- does launchability really have the same multi-source hazard list_agents has, or fewer sources? (4) whether group 5 (F390/runners.py) belongs in this change at all. (5) whether task 2.1's 'released_charter_id' field is read by anything or is dead payload. Fix the proposal where the code disagrees; say explicitly what changed. openspec validate --strict must pass before done.",
+    "current": "f185-r3",
+    "next_action": "Item 1 R3 -- a SECOND independent re-derivation of openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere against the actual code, independent of R2. Open charters.py, agent_lifecycle.py, agents.py (patch_agent, get_agents_launchability, list_agents, archive/unarchive), runners.py, db/models.py and usage_accounting.py yourself BEFORE reading design.md's Round 2 section, then compare. Attack in particular R2's OWN new claims, which have had no second reader: (1) C1 -- is TurnUsage really written for every run, or only on paths that parse output? If a run can end with no TurnUsage row, R2's 'the record already exists elsewhere' weakens and D3 needs restating a third time. (2) D3's rewritten conclusion -- now that the asymmetry is admitted to be a display dependency rather than a principle, is keeping runner_id still the right call, given it is what creates F390/group 5? Weigh it on R2's terms: clearing it costs the line in archive(), a second UPDATE in 0105, the blanked archived-agent row -- and DELETES group 5. (3) C2's replacement sentence -- read it as an agent that never had a charter, and as one that did; does 'bind one only if this agent should have one' now read as too weak, i.e. does an operator who DID lose a charter get enough to act on? (4) C3/D9 -- confirm useArchiveAgent's onSuccess really takes no argument and no other component reads either response; if R2 is wrong, group 2 is user-visible and the change acquires a bundle refresh. (5) whether keeping group 2 at all is right once it is admitted nothing renders it. Say EXPLICITLY if nothing changed -- a round that changes nothing is a real outcome, not a failure. openspec validate --strict must pass before done.",
     "queue": [
         {
             "id": "compose",
@@ -35,15 +35,15 @@
         },
         {
             "id": "f185-r2",
-            "status": "open",
+            "status": "done",
             "title": "Item 1 R2 -- independently re-derive against the code",
-            "detail": "Fresh comparison of R1's proposal against the actual charters.py/agent_lifecycle.py/agents.py code, not a re-read of R1's reasoning. Fix where they disagree. openspec validate --strict must pass."
+            "detail": "Done iteration 4. Code read before the proposal, fresh comparison. R1's findings all reproduce; FOUR claims corrected. C1: D3's 'a runner records what it ran with' is false -- TurnUsage (models.py:1235-1248, written by record_turn_usage from 6 sites in agent_trigger.py + run_reconciliation.py:80) is that record and survives archival; Run has no runner/model column. The asymmetry is a DISPLAY dependency (list_agents:517-524 reads only the live binding), not a principle -- conclusion kept, reason rewritten, and the same false sentence removed from the NORMATIVE agent-configuration spec text. C2: R1's unarchive sentence implied a charter is required (contradicting its own D8) and never said the release is permanent (the operator's literal rider); replaced in D2, task 2.2/2.3, the spec + 2 scenarios, and the test guide. C3 (new D9): useArchiveAgent's onSuccess takes NO argument, so nothing renders either response -- group 2's tests pass while the operator sees nothing; group 2 kept but retitled, proposal's 'the product says so' struck, task 2.5 added. C4: D6's 'the settings page is entitled to probe' is false (zero callers anywhere but a test); param kept for roster symmetry, F181's fix relabelled PREVENTIVE. C5: group 5 exists BECAUSE D3 keeps runner_id -- cutting it is not free. C6: D1 grep count off by one. Confirmed unchanged: D1's single caller, the PRAGMA claim, D7's hole, D8's trigger refusals, D5's necessity. validate --strict passes; tree staged clean."
         },
         {
             "id": "f185-r3",
             "status": "open",
             "title": "Item 1 R3 -- independently re-derive again",
-            "detail": "A second fresh comparison, independent of R2. Say explicitly if nothing changed. openspec validate --strict must pass before done."
+            "detail": "A second fresh comparison, independent of R2 -- and R2's own new claims (C1-C6, D9) have had no second reader, so attack those too. Say explicitly if nothing changed. openspec validate --strict must pass before done."
         },
         {
             "id": "f388-r1",
@@ -85,13 +85,14 @@
     "decisions_for_user": [
         {
             "id": "f185-ui-half",
-            "question": "Fold the UI half of an-archived-agent-holds-nothing-and-is-offered-nowhere in, or ship the backend refusal alone?",
-            "context": "R1 measured that PATCH /agents/{name} re-binds a charter to an archived agent (200, no lifecycle check), so the change adds a refusal. But the archived agent's Charter section keeps rendering CharterPicker (AgentSettingsPage.tsx:124-135), and on failure it shows only its own generic 'Could not update charter binding.' -- the server's sentence is dropped, which is the F187 shape. Disabling the control for an archived agent and surfacing the server detail is a hub/ui/src change, therefore a bundle refresh, therefore it reaches the :8000 app. The change is complete and shippable without it.",
+            "question": "Does an-archived-agent-holds-nothing-and-is-offered-nowhere accept a hub/ui/src bundle refresh, or ship API-only?",
+            "context": "WIDENED BY R2 into one decision with two halves, both the same wall (a hub/ui/src change -> make ui -> reaches the operator's live :8000 app). Half (a), found by R1: the change makes PATCH /agents/{name} refuse binding a charter to an archived agent, but the archived agent's Charter section keeps rendering CharterPicker (AgentSettingsPage.tsx:124-135) and on failure shows only its own generic 'Could not update charter binding.' -- the server's sentence is dropped, the F187 shape. Half (b), found by R2: nothing renders the archive or unarchive response AT ALL -- useArchiveAgent (hub/ui/src/api/agents.ts:214-241) is the only client of both routes and its onSuccess takes no argument, so the body is discarded. So every sentence group 2 adds (released_charter_id, the archive sentence, the unarchive standing sentence) is an API fact no operator can read, and the operator's own rider ('unarchive must then say the bindings are gone') is only half discharged. The change is complete and shippable without either half.",
             "options": [
-                "fold the UI half in and accept the bundle refresh",
-                "ship the backend refusal alone and file the picker as its own finding"
+                "accept the bundle refresh and do both halves (disable the picker + surface the server detail; render what archive/unarchive say)",
+                "accept the bundle refresh for half (a) only",
+                "ship API-only and file both halves as their own findings"
             ],
-            "raised": "2026-09-20 iteration 3 (R1)"
+            "raised": "2026-09-20 iteration 3 (R1), widened iteration 4 (R2)"
         }
     ],
     "limits": [

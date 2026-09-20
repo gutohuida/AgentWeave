@@ -40,7 +40,10 @@ standing on exactly the databases where it was met.
 is bound and that archival is why.** Reopening MUST NOT restore the binding, so the product SHALL
 say so rather than leaving the operator to discover it at the agent's next turn. The sentence
 unarchiving states MUST be true of an agent that never had a charter bound: it states the rule and
-the agent's current state, and MUST NOT assert that this agent's charter was removed.
+the agent's current state, and MUST NOT assert that this agent's charter was removed. It MUST NOT
+imply that a charter is required before the agent can run, because an agent with no charter is
+fully usable, and it MUST state that unarchiving does not restore the released binding rather than
+leaving that to be inferred from the rule.
 
 **Binding a charter to an archived agent SHALL be refused, naming unarchiving as the repair.**
 Releasing the binding at archival is undone by any route that can re-bind one afterwards, and the
@@ -48,9 +51,15 @@ agent's own configuration offers exactly that. Clearing a binding SHALL remain p
 archived agent, because clearing is not re-binding and refusing it would break a repair the product
 already names.
 
-An agent's runner binding SHALL NOT be released by archival. A runner records what the agent ran
-with, which remains true of an archived agent and is what its configuration displays; releasing it
-would blank that on the one surface that still shows it.
+An agent's runner binding SHALL NOT be released by archival. The reason is the display and not a
+difference in the bindings' meaning: an archived agent's configuration reports the runner and model
+it was bound to, that report is derived from the live binding and from nothing else, and releasing
+it would blank what the agent was configured to run on the one surface that still shows it. What
+each run actually ran with is recorded separately, per run, and archival does not touch that record.
+
+A consequence of holding the runner binding SHALL be carried rather than hidden: an archived agent
+can still be named as a runner's holder, which is why the runner-deletion refusal is required to
+qualify it (see `runner-registry`).
 
 An agent MUST NOT be able to send a message to an archived agent. The send SHALL fail with a
 response carrying three things: that the recipient is archived, what to do instead, and the content
@@ -106,7 +115,15 @@ would sit queued forever.
 
 - **WHEN** an archived agent is unarchived
 - **THEN** the response states that no charter is bound and that archiving releases one
+- **AND** the response states that unarchiving does not restore the released binding
+- **AND** the response does not require a charter to be bound before the agent can run
 - **AND** the binding the agent held before archival is not restored
+
+#### Scenario: An agent that never had a charter is not told one was removed
+
+- **WHEN** an agent that was never bound to a charter is unarchived
+- **THEN** every clause of the response is true of that agent
+- **AND** nothing in it asserts that this agent's charter was released
 
 #### Scenario: A charter cannot be bound to an archived agent
 
@@ -122,7 +139,7 @@ would sit queued forever.
 #### Scenario: Archival does not release the runner binding
 
 - **WHEN** an agent bound to a runner is archived
-- **THEN** its configuration still reports that runner and the model it would run
+- **THEN** its configuration still reports the runner and model it was bound to
 
 #### Scenario: History survives archival
 

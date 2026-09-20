@@ -1,15 +1,22 @@
 # Tasks — an archived agent holds nothing and is offered nowhere
 
 Findings: **F185 (B)**, **F181 (C)**, **F390 (C)** — the third site in `runners.py`, filed by this
-round after finding it by reading (`design.md` D4). Written by **R1, 2026-09-20**; R2 and R3 have not run yet, so **no task here may
-be built until R3 is done and an operator token names this change in `spec-queue/APPROVALS.md`.**
+round after finding it by reading (`design.md` D4). Written by **R1, 2026-09-20**, re-derived against the code by **R2, 2026-09-20** (see
+`design.md`'s Round 2 section for what R2 changed and why). **R3 has not run**, so **no task here
+may be built until R3 is done and an operator token names this change in
+`spec-queue/APPROVALS.md`.**
 
 Tests run under `py -3.11`, never bare `python`. `black` needs `--target-version py311`. Each test
 named below must **fail with its mutation applied** before it counts — record the mutation and the
 observed failure beside the task when ticking it.
 
-**Group 5 is the cut line.** If the change has to be narrowed to `DIRECTION.md`'s stated blast
-radius, drop group 5 whole; nothing in groups 1-4 depends on it.
+**Group 5 is the cut line — and R2 corrected what cutting it means.** No task in groups 1-4
+depends on group 5, so it drops cleanly. But group 5 is not an unrelated third site: it exists
+*because* D3 chooses to keep `runner_id` bound through archival (`design.md` D4, R2's note). If
+`archive()` released `runner_id` too, no archived agent could hold a runner and `runners.py`'s
+refusal could not name one. So cutting group 5 ships a change that knowingly leaves its own
+consequence open, and whoever cuts it SHALL record it that way — not as deferring a finding this
+change happened to notice.
 
 ## 1. Archival releases the charter binding (design D1, D2)
 
@@ -46,27 +53,46 @@ radius, drop group 5 whole; nothing in groups 1-4 depends on it.
       snapshot: after an archive and an attempted re-bind, no row in `agents` has both
       `lifecycle = 'archived'` and a non-NULL `charter_id`.
 
-## 2. The operator is told what archival released (design D2)
+## 2. The archive and unarchive responses state the binding's fate (design D2, D9)
+
+> **R2: nothing renders any of this today.** `useArchiveAgent` is the only client of both routes and
+> its `onSuccess` takes no argument (`hub/ui/src/api/agents.ts:214-241`), so the response body is
+> discarded. Every field and sentence below is a true API fact that **no operator can currently
+> read**, and this group's tests will pass without that changing. The group is kept deliberately —
+> `design.md` D9 says why — but it MUST NOT be described as telling the operator anything.
 
 - [ ] 2.1 `hub/hub/api/v1/agents.py` `archive_agent` — read `agent_row.charter_id` **before**
       calling `archive_agent_row`, and return it in the response as `released_charter_id` alongside
       `charter_id: None`, plus a sentence naming the charter (by name, resolved from the `Charter`
       row) when one was released. No sentence when nothing was bound.
 - [ ] 2.2 `hub/hub/api/v1/agents.py` `unarchive_agent` — response carries `charter_id: None`
-      explicitly and the standing sentence: *"No charter is bound. Archiving releases an agent's
-      charter, so bind one before this agent's next turn."* It states the rule and the current
-      state, never a claim about this agent's history — an agent that never had a charter must not
-      be told one was removed.
+      explicitly and the standing sentence, **as revised by R2**: *"No charter is bound. Archiving
+      releases an agent's charter and unarchiving does not restore it. An agent with no charter
+      still runs — bind one only if this agent should have one."* Use this wording, not R1's.
+      R1's sentence ended *"so bind one before this agent's next turn"*, which implies a charter is
+      required — `design.md` D8 measured the opposite — and never said the release is permanent,
+      which is the one thing the operator's rider asked unarchive to say. Every clause of the
+      revised sentence is true of an agent that never had a charter: its state, then the rule, then
+      the product's behaviour, then a conditional rather than an instruction.
 - [ ] 2.3 `hub/tests/test_agent_archival.py` — archive names the charter it released; archive of an
       unbound agent names none; unarchive carries `charter_id: None` and the standing sentence, and
-      the same sentence comes back for an agent that never had a charter. *Mutation: move the
-      `charter_id` read in 2.1 to after the archive call; the "names the charter" assertion must
-      fail.*
-- [ ] 2.4 Confirm no UI change is needed: `useArchiveAgent`/`useUnarchiveAgent`
-      (`hub/ui/src/api/agents.ts:225`) type the response as `{ name, lifecycle }`, and added fields
-      are ignored by `getJson`. If R2 finds a component that renders the raw response, this task
-      becomes a real UI task and the change acquires a bundle refresh (`make ui`) — **it does not
-      have one today.**
+      the same sentence comes back for an agent that never had a charter. Assert the revised
+      wording from 2.2, including that it does **not** contain "before this agent's next turn".
+      *Mutation: move the `charter_id` read in 2.1 to after the archive call; the "names the
+      charter" assertion must fail.*
+- [ ] 2.4 **No UI change is made, and R2 established what that costs.** Measured 2026-09-20:
+      `useArchiveAgent` (`hub/ui/src/api/agents.ts:214-241`) serves both routes, types the response
+      `{ name: string; lifecycle: string }`, and its `onSuccess` **takes no argument** — it
+      invalidates the roster queries and returns, so the body is discarded rather than
+      under-typed. Its only non-test caller is `AgentSettingsPage.tsx:224`. Re-confirm this at
+      build time; if a component has begun rendering the raw response, this becomes a real UI task
+      and the change acquires a bundle refresh (`make ui`) — **it does not have one today.**
+- [ ] 2.5 Record the half-discharge in the change's own record, not only here: the operator's rider
+      asked that unarchiving *say* the bindings are gone, and after this group the API says it while
+      the app shows nothing. Whoever builds this SHALL state that in the commit message and SHALL
+      NOT set `**Status:** fixed` on any finding on the strength of group 2 alone. Rendering it is
+      part of the one operator decision this change carries (`design.md` D7, D9), not a separate
+      follow-up to be invented at build time.
 
 ## 3. Already-archived agents (design D5)
 

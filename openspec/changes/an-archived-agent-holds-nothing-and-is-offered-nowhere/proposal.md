@@ -1,8 +1,11 @@
 # Proposal — an archived agent holds nothing and is offered nowhere
 
-**Round 1, 2026-09-20 (day window).** Findings: **F185 (B)**, **F181 (C)**. The remedy was decided
-on 2026-09-19 (`spec-queue/DECISIONS.md:637`) — *clear an archived agent's bindings at source* —
-so R1's job was the directory and the exploration, not the argument. It is queued for R2 and R3.
+**Round 1, 2026-09-20 (day window); re-derived against the code by Round 2, 2026-09-20.**
+Findings: **F185 (B)**, **F181 (C)**, **F390 (C)**. The remedy was decided on 2026-09-19
+(`spec-queue/DECISIONS.md:637`) — *clear an archived agent's bindings at source* — so R1's job was
+the directory and the exploration, not the argument. **R2 re-opened the code independently and
+corrected four claims in this proposal**; what changed is listed in `design.md`'s Round 2 section.
+R3 has not run.
 
 ## Why
 
@@ -51,15 +54,21 @@ missed. R1 found a third (below).
    settings page's `CharterPicker` makes, puts an archived agent back into F185's state. Without
    the refusal this change adds, the fix is undoable by the surface that shipped with it
    (`design.md` D7). **One operator decision comes out of this** and is the only one the change
-   carries: whether to also disable that picker for an archived agent and surface the server's
-   sentence — a `hub/ui/src` change, therefore a bundle refresh, therefore the operator's live app.
-   The change is complete and shippable without it.
+   carries — **R2 widened what it covers**: whether this change accepts a `hub/ui/src` bundle
+   refresh at all, which would reach the operator's live app, and which now covers two halves —
+   disabling that picker for an archived agent while surfacing the server's sentence, and rendering
+   what archive/unarchive say, which nothing does today (`design.md` D9). The change is complete
+   and shippable without either half.
 5. **`Agent.runner_id` is deliberately *not* cleared**, though the decision said "bindings" in the
-   plural. `list_agents` reads the bound runner to render an agent's runner and model
-   (`agents.py:518`, `:568-569`), and the agent's own settings page resolves an archived agent
-   through `?lifecycle=archived`. Clearing `runner_id` would blank what an archived agent ran with
-   on the one screen that still shows it. `design.md` D3 states the distinction it rests on: a
-   charter governs turns the agent will never take again; a runner records what it ran with.
+   plural. `list_agents` derives an archived agent's runner and display model from the live binding
+   and from nothing else (`agents.py:517-524`, `:568-569`), and the agent's own settings page
+   resolves an archived agent through `?lifecycle=archived` — so clearing it would blank that row
+   with no fallback. **R2 corrected the reason R1 gave for this.** R1 argued the two bindings differ
+   in kind ("a runner records what it ran with"); they do not — `TurnUsage`
+   (`db/models.py:1235-1248`) already records the runner and model of every run and survives
+   archival untouched, and `patch_agent` treats the two bindings identically. The asymmetry is a
+   display dependency, not a principle, and it has a price: **F390 and tasks group 5 exist because
+   of it.** `design.md` D3 states the trade on those terms for R3 to weigh.
 
 ## What changes
 
@@ -69,8 +78,12 @@ missed. R1 found a third (below).
    `charters.py:95-98` can no longer name one — the wall is removed at source rather than by a
    filter at each reader.
 2. The archive response states which charter it released; the unarchive response states that no
-   charter is bound and that archival is why. Reopening does not restore the binding, and the
-   product says so rather than letting the operator find out at the next turn.
+   charter is bound, that archival is why, and that reopening does not restore it. **R2: no screen
+   renders either response today** — `useArchiveAgent`'s `onSuccess` takes no argument
+   (`hub/ui/src/api/agents.ts:214-241`), so the body is discarded. These are true API facts that no
+   operator can currently read, which is why this change does **not** claim to tell the operator
+   anything; `design.md` D9 states why the group is kept anyway and folds rendering it into the one
+   operator decision below.
 3. Migration `0105` clears `charter_id` for every already-archived agent.
 4. `get_agents_launchability` gains the roster's lifecycle filter — the same `lifecycle` query
    parameter, the same default, applied in the same place, after every source has contributed a
@@ -83,8 +96,13 @@ missed. R1 found a third (below).
 - **Affected code:** `hub/hub/agent_lifecycle.py`, `hub/hub/api/v1/agents.py`,
   `hub/hub/api/v1/charters.py` (comment + invariant test only), `hub/hub/api/v1/runners.py`,
   one new migration.
-- **No UI change, no bundle refresh.** Nothing under `hub/ui/src` reads
-  `/agents/launchability`, and the archive/unarchive responses only gain fields.
+- **No UI change, no bundle refresh — and R2 priced that.** Nothing under `hub/ui/src` reads
+  `/agents/launchability` (zero call sites; a drive measured 41 requests with the agent rail open
+  and none to that route), so F181's fix here is **preventive** rather than user-visible. The
+  archive/unarchive responses only gain fields, and nothing reads those either. The cost of holding
+  the line at the API is that two operator-facing halves stay undone — the archived agent's
+  `CharterPicker`, and rendering what archive/unarchive now say — and both are folded into the one
+  decision this change carries.
 - **Affected specs:** `agent-configuration` (MODIFIED), `runner-registry` (MODIFIED + ADDED),
   `agent-charter` (ADDED).
 - **Shares no file with item 2 of today's `DIRECTION.md`** (`hub/hub/config.py`), nor with

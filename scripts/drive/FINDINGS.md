@@ -14640,7 +14640,7 @@ discard.
 ## F181 (C) — `GET /agents/launchability` does not apply the lifecycle filter, and its docstring says it feeds a selector
 
 **Status:** open, **specced 2026-09-20** in
-`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 only -- R2/R3 not
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 + **R2** done 2026-09-20 -- R3 not
 run, no operator token, nothing built). Re-reproduced that day on `1fdfc4d`: the archived agent
 came back `runnable: true, collaboration_ready: true` one call before `POST /agent/trigger`
 refused it as archived. Remedy already chosen and unimplemented.
@@ -14849,7 +14849,7 @@ the response echoes `"name": "   "`.
 ## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
 
 **Status:** open, **specced 2026-09-20** in
-`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 only -- R2/R3 not
+`openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere` (R1 + **R2** done 2026-09-20 -- R3 not
 run, no operator token, nothing built); re-reproduced that day on `1fdfc4d` through the API, and
 that round measured a hole the finding did not name: `PATCH /agents/{name}` re-binds a charter to
 an **archived** agent with no lifecycle check (200), so clearing on archive alone would not hold.
@@ -30224,7 +30224,10 @@ finding. `a-refused-capability-reaches-the-operator`'s actual refusal-reaches-op
 
 **Status:** open, **specced 2026-09-20** in
 `openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere`, group 5 -- which is
-that change's declared cut line, so this may come back unspecced. Found **by reading** during that
+that change's declared cut line, so this may come back unspecced. **R2, 2026-09-20:** that cut
+is not free and is not the deferral of an unrelated site -- group 5 exists *because* the change
+chooses to keep `Agent.runner_id` bound through archival (its `design.md` D3/D4). If archival
+released the runner binding too, this finding would close by construction. Found **by reading** during that
 change's R1, not by a drive. Not independently reproduced through HTTP; the claim below is a
 code read of `1fdfc4d`.
 
