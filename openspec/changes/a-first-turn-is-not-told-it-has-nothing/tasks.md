@@ -99,17 +99,37 @@
   is the correct outcome and should be written here as such, not left ambiguous.
 - [ ] 3.3 Add one test that fails on the defect itself: a turn built for an agent with **no prior
   run carrying `mcp_adapter_online_at`**, asserting the prompt makes no claim that the tool surface
-  is unavailable. This is the scenario `A run holding the tools is not told it is empty`. **R2
+  is unavailable **and still carries the plane content the requirement demands** — `HUB_URL`,
+  `AW_RUN_TOKEN`, `Authorization: Bearer`, `/api/v1/agent-actions`. *(R3 added the second half. D5's
+  own stated trap — "a bare `not in` assertion passes against an empty prompt" — is written into
+  3.1 and into 3.3b but was missing from 3.3, which is the task that carries the change's
+  headline scenario. A negative-only 3.3 would pass against a prompt that lost the notice
+  entirely.)* This is the scenario `A run holding the tools is not told it is empty`. **R2
   checked: no test in `hub/tests/` today asserts on `mcp_adapter_online_at` together with the notice
-  text, so this is genuinely absent rather than duplicated.** The existing
+  text, so this is genuinely absent rather than duplicated. R3 re-checked and confirms it: the only
+  `mcp_adapter_online_at` writes in `hub/tests/` are `test_agent_trigger.py` (the positive fixture),
+  `test_mcp_adapter_online.py` (the route) and `test_migrations.py` (the column).** The existing
   `test_an_observed_harness_earns_the_mcp_description_for_the_next_run` sets the column and is the
   fixture to model the new test on.
 - [ ] 3.3b **R2 added — the context side of 3.3, which the spec now names explicitly.** Assert that
   the same fresh-agent turn's **rendered canonical context** makes no claim that the tool surface is
   unavailable, paired with a positive on the HTTP content it must still carry. This is the
-  scenario's `AND` clause about the canonical context, and
-  `hub/tests/test_tool_surface_matches_server.py` already asserts on that text. Without this, the
-  `agents.py` edit from 2.4 ships untested.
+  scenario's `AND` clause about the canonical context. Without this, the `agents.py` edit from 2.4
+  ships untested.
+
+  **R3 corrected the home.** R2 pointed this at `hub/tests/test_tool_surface_matches_server.py`,
+  which calls `_tool_surface_lines(access_path=HTTP_PATH)` **directly, with no turn behind it** — it
+  would prove the string changed, not that a fresh agent's turn stops carrying it. The scenario is
+  about *a turn*. The right home already exists and already does exactly this shape:
+  **`hub/tests/test_agent_trigger.py::test_a_run_without_mcp_is_described_the_operations_it_can_actually_perform`**,
+  which triggers a real turn with `hub_client` unset and then asserts on *both* halves — the
+  rendered `context` (`"POST /api/v1/agent-actions/messages" in context`,
+  `"Authorization: Bearer $AW_RUN_TOKEN" in context`, `"prefixed `mcp__agentweave__`" not in
+  context`) **and** the same turn's prompt, under the comment *"The notice in the turn prompt agrees
+  with the description in the same turn's context."* That test is the one place both sites of this
+  change are already captured from one trigger, so put the paired assertion there. Adding a
+  string-level assertion in `test_tool_surface_matches_server.py` as well is fine and cheap, but it
+  is not what satisfies the scenario.
 - [ ] 3.4 **Mutation check — R2 extended it to both files.** Restore the removed clause in
   `access_path_notice`, run the tests from 3.1, 3.2 and 3.3, and record here that they fail, with
   the count. **Then, separately, restore the removed clause in `_tool_surface_lines`' non-MCP
@@ -155,12 +175,31 @@
 
 ## 6. What must not move
 
-> **R2 caution on every `git diff` in this group.** On 2026-09-20 another agent held uncommitted
-> edits in this same working tree to `hub/hub/launchability.py`, `hub/hub/runner_commands.py` and
-> five files under `src/agentweave/`. A bare `git diff` will therefore show work that is not this
-> change's, and 6.3's "byte-identical to `master`" will read as a violation when it is not. Diff
-> named paths, and establish the pre-existing modifications before starting so they can be told
-> apart from anything this change causes.
+> **R3 (2026-09-20) replaced R2's caution here, because the situation it described has changed and
+> the guard it warned about is now actually broken.** R2 wrote that another agent held *uncommitted*
+> edits to `hub/hub/launchability.py`, `hub/hub/runner_commands.py` and five files under
+> `src/agentweave/`. Those edits have since been committed as **`4bd966e` ("dead-code: annotate 36
+> legacy paths")**, and `git status` is clean. The hazard is no longer a dirty tree — it is that
+> **`4bd966e` is on this branch and not on `master`**, so `master` is the wrong baseline for any
+> "unchanged" guard:
+>
+> ```
+> $ git diff master --stat -- hub/hub/runner_commands.py hub/hub/launchability.py hub/hub/api/v1/agents.py
+>  hub/hub/api/v1/agents.py   |  8 ++++++++
+>  hub/hub/launchability.py   | 18 ++++++++++++++++++
+>  hub/hub/runner_commands.py | 15 +++++++++++++++
+> ```
+>
+> **The correct baseline for every guard in this group is the commit this change is implemented on
+> top of** (`git rev-parse HEAD` before the first edit — record it in 6.0), not `master`.
+
+- [ ] 6.0 **R3 added.** Before editing anything, record the implementation baseline here:
+  `git rev-parse HEAD` → `________`, and confirm `git status --short` is empty. Every "unchanged"
+  guard below diffs against that sha. Diffing against `master` is wrong on this branch and will
+  report `4bd966e`'s annotation pass as this change's work. **This governs every bare `git diff` in
+  this file** — 2.3's `--stat`, 5.4's `--name-only`, 6.3 and 6.4 — each means `git diff <6.0-sha>`.
+  With a clean tree at 6.0 a bare `git diff` happens to agree, which is exactly why it must be
+  written down: the next agent to touch this tree makes it disagree again without telling anyone.
 
 - [ ] 6.1 `py -3.11 -m pytest hub/tests/test_launchability.py hub/tests/test_agent_trigger.py
   hub/tests/test_agent_facing_text.py hub/tests/test_tool_surface_matches_server.py -q` — **write
@@ -169,14 +208,35 @@
   inline in this task.** Per **F392**, a tick on this line citing a log entry that does not exist is
   the exact process defect that let a three-test regression reach `master`; if the number is not
   written here, this task is not done.
-- [ ] 6.3 Confirm no permission posture changed: `grep -n "acceptEdits\|permission-prompt-tool"` in
-  `hub/hub/runner_commands.py` is byte-identical to `master`, and `git diff` touches neither
+- [ ] 6.3 Confirm no permission posture changed. **R3 rewrote this task's first clause: as R2 left
+  it, it was already false against the tree and would have fired a false alarm at implementation
+  time.** It read *"`grep -n "acceptEdits\|permission-prompt-tool"` in `hub/hub/runner_commands.py`
+  is byte-identical to `master`"*. Two things are wrong with that. **(a) `-n` prints line numbers,
+  so the guard compares positions, not content** — and `4bd966e` has already moved every one of
+  them. **(b) `master` is the wrong baseline** (see 6.0). R3 measured both halves:
+
+  ```
+  # text of the matched lines, master vs working tree:  IDENTICAL
+  # the same grep WITH -n:                              DIFFERS (57→65, 63→71, 71→79, 73→81, 75→83, 254→269)
+  ```
+
+  The guard means *"the permission posture's code is unchanged"*, so express it that way: compare
+  the matched lines' **text** with no `-n`, against the **6.0 baseline sha**, and require an empty
+  diff —
+
+  ```
+  diff <(git show <6.0-sha>:hub/hub/runner_commands.py | grep "acceptEdits\|permission-prompt-tool") \
+       <(grep "acceptEdits\|permission-prompt-tool" hub/hub/runner_commands.py)
+  ```
+
+  — and confirm `git diff <6.0-sha> --name-only` names neither
   `runner_commands.py` nor `mcp_server.py`. The spec scenario *"A truer description does not
   silently widen permission"* is the requirement this guards. **R2: `agent_trigger.py` must also be
   absent from the diff — it holds both `access_path` and `described_path`, and the whole change
   rests on those two staying separate. And within `hub/hub/api/v1/agents.py`, confirm the diff is
-  the one `preamble` string: `git diff hub/hub/api/v1/agents.py` must show no change to `over_mcp`,
-  `_http_lines`, `_mcp_lines`, `_operations()` or any route handler.**
+  the one `preamble` string: `git diff <6.0-sha> -- hub/hub/api/v1/agents.py` must show no change to
+  `over_mcp`, `_http_lines`, `_mcp_lines`, `_operations()` or any route handler.** *(R3: baseline
+  sha substituted for R2's bare `git diff`, for the reason in 6.0.)*
 - [ ] 6.4 Confirm nothing under `hub/ui/src/` or `hub/hub/static/ui/` is in the diff, so no bundle
   refresh is owed and nothing reaches the operator's live app on its next reload.
 
@@ -197,32 +257,128 @@
 > first turn separates them**, because it is the one moment the steer acts with no learned method
 > behind it.
 
+> ### R3 (2026-09-20) audited this group. The experiment is the right one; its **baseline is not
+> what the cited source says**, and as written the comparison in 7.5 could not have been made
+> honestly. Corrections are inline below. This group had had no verification pass before now.
+
 - [ ] 7.1 On a **throwaway Hub** — never `:8000`, never the operator's database; a scratch profile
   under `testbed/scratch/` per `.claude/reference/hubs.md` — create a **brand-new agent** whose
   `Run.mcp_adapter_online_at` has never been set, so `described_access_path` takes the no-grounds
   branch while `resolve_access_path` still injects the server. Confirm that state in the database
   before the turn rather than assuming it; an agent that has already earned grounds measures
   nothing.
+
+- [ ] 7.1b **R3 added — three preconditions 7.1 does not state, each of which silently voids the
+  measurement.** The state 7.1 wants is `access_path == "mcp"` **and** `described_path == "cli"`
+  in the same turn (`agent_trigger.py`: `access_path = resolve_access_path(...)`, then
+  `described_path = described_access_path(...)`). Confirm all three before the turn, not after:
+  - **`hub_client` must be unset** for the agent *and* session-wide. `resolve_access_path` returns
+    `"cli"` on `override == "cli"`, so **nothing is injected at all** and the agent genuinely has
+    no tools — a run that measures the opposite of the intended condition while looking identical
+    in the transcript. Equally, `hub_client: "mcp"` is grounds on its own
+    (`described_access_path`'s `if override == "mcp"`), so the notice would never take the
+    no-grounds branch. Check `get_agent_config`'s resolved `hub_client` is `None`.
+  - **The bound runner must be one `resolve_access_path` injects for** (`MCP_INJECTABLE_RUNNERS`);
+    a runner outside it resolves to `"cli"` for the same reason.
+  - **No prior run of that agent carries the column:**
+    `SELECT COUNT(*) FROM runs WHERE agent = ? AND project_id = ? AND mcp_adapter_online_at IS NOT NULL`
+    must be `0` — that is exactly what `harness_has_honoured_mcp` reads. For a brand-new agent it
+    is trivially 0, which is why 7.1's own wording is safe *only* if the agent really is new.
+
+  The state is genuinely reachable and genuinely verifiable before the turn: the adapter stamps
+  `mcp_adapter_online_at` *during* the run, while `described_access_path` was evaluated at turn
+  start. So the first turn is a no-grounds turn even though the tools work — which is the whole
+  defect, and here it is the experimental condition.
+
 - [ ] 7.2 Give it **one** instruction that requires a capability-plane operation it cannot fake —
   creating a task, or sending a message — and let it take exactly one turn. **Bind Haiku**
   (standing directive: real agent turns in a drive always bind a cheap model). Record the run id.
+  **R3: record the model, the instruction verbatim, whether the project has peers, and whether a
+  charter is bound** — 7.5b needs all four, and `_tool_surface_lines`' own text changes on
+  `has_peers`.
 - [ ] 7.3 Repeat 7.1-7.2 with **at least three** distinct fresh agents. One turn is one sample and
   the behaviour is stochastic; a single run settles nothing in either direction and must not be
   written up as if it did.
-- [ ] 7.4 For each run, record inline here: the run id, whether the first turn called an
-  `mcp__agentweave__*` tool or shelled out, and the transcript line that shows which. **Write the
-  counts, not a conclusion** — e.g. "3 of 3 first turns called `create_task` over MCP".
-- [ ] 7.5 State the verdict against the **pre-change baseline**, which is the 2026-09-14 LoopEngine
-  observation: **4 of 4 agents took the HTTP path on their first turn**
-  (`openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`).
-  - **Fresh agents now use the MCP tools** → the falsehood was the cause, the conditional text is
-    unnecessary, and D2's declined alternative closes. Say so in `DECISIONS.md` under a dated
-    heading, and only then may F302 be marked `fixed` without qualification.
-  - **Fresh agents still shell out** → the positive HTTP steer is the cause, R2's dissent is
-    vindicated, and the conditional text becomes a live proposal. **File it as a new finding rather
-    than widening this change**, which will already be archived.
-  - **Mixed** → record the split and leave D2 open. Do not round a mixed result to either verdict.
+- [ ] 7.4 For each run, record inline here: the run id, **which of four outcomes the first turn
+  reached**, and the transcript line that shows which. **Write the counts, not a conclusion.**
+
+  **R3 replaced R2's binary here.** It read *"whether the first turn called an `mcp__agentweave__*`
+  tool or shelled out"*, which assumes every run lands in one of two buckets. It cannot: a turn may
+  do **both** (the LoopEngine Architect did exactly that across its session — `curl` for drafts,
+  MCP for `ask_user`), and a Haiku turn may do **neither**. Record one of:
+  - **MCP** — called an `mcp__agentweave__*` tool and did not shell out for a plane operation;
+  - **HTTP** — shelled out (`curl`, `python -c`, `Invoke-WebRequest`, …) to `/api/v1/agent-actions`;
+  - **both** — did each at least once, in which case record which came *first*, since the question
+    is what the turn reaches for;
+  - **neither** — the turn failed, was refused by the approver, ended in prose, or asked a question
+    without performing the operation. **A `neither` run is not a sample**: it says nothing about
+    which surface the agent prefers. Replace it and record that it was replaced, with why. Do not
+    let replacements run until three agree — if more than about half the runs land in `neither`,
+    the instruction in 7.2 is the problem and must be fixed before the counts mean anything.
+
+- [ ] 7.5 **BASELINE — R3 corrected this, and it was the most load-bearing error in the group.**
+  R2 wrote the pre-change baseline as *"**4 of 4 agents took the HTTP path on their first turn**
+  (`openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`)"*. **The source does not say
+  that, and cannot.** What it and
+  `spec-queue/observations/2026-09-14-LoopEngine.md` establish is:
+  - **4 of 4 agents were *told* the false sentence** — "All four of LoopEngine's agents opened
+    their first turn with *'Tool access: no MCP tools this turn'*"; the observation repeats it as
+    "**All three first turns were told there were no MCP tools**" for `dev_2`, `dev` and `tester`.
+    *Told*, not *took*.
+  - **1 of 1 agents whose behaviour was actually read took HTTP** — the Architect
+    (`run-2445bbbe1d6d`), and it kept to `curl` for ten runs.
+  - The other three agents' behaviour was **never read**. The observation says so explicitly, under
+    *"What went unread for these three"*: "**Transcripts.** Their `agent_outputs` rows, their
+    thinking blocks and any sidechains."
+
+  **So the honest baseline is n=1, not n=4.** Write it that way and nowhere write "4 of 4 took
+  HTTP". A three-run result compared against a four-run baseline that was never measured is the
+  defect this repo's round discipline exists to catch — a number that is green while the thing it
+  counts could not have been counted.
+
+- [ ] 7.5b **R3 added — the confounds, recorded before the runs, so the writeup cannot quietly
+  assume comparability.** The baseline and 7.1-7.3 differ in at least three ways that each
+  plausibly move the outcome. State each in the writeup:
+  - **Model.** The baseline agents were **Opus 5** (`Architect`, `tester`) and **Sonnet 5** (`dev`,
+    `dev_2`) — `2026-09-14-LoopEngine.md`'s agent table. 7.2 binds **Haiku**. Whether a model
+    reaches for an injected tool or for `curl` is exactly the kind of thing that differs by model.
+  - **Task shape.** The Architect's first turn opened a **spec interview** with a charter bound, on
+    a live multi-agent project, in a session that then resumed for ten runs. 7.2 is one
+    self-contained instruction on a throwaway. The habit the exploration describes forms *because*
+    the session continues; a single turn cannot form it.
+  - **Surrounding text.** The baseline turns carried **both** false sentences. 7.1-7.3 carry
+    neither, and also carry whatever `has_peers` and the charter change in the context file.
+
+  None of these voids the experiment. They mean its result is **about 7.1-7.3's own condition**,
+  and the 2026-09-14 record is context rather than a control.
+
+- [ ] 7.5c **The verdict — R3 restructured it as an absolute measurement, which is what three fresh
+  runs can actually carry, rather than as a comparison against a baseline that does not exist.**
+  The question from the group header is unchanged: *with no false sentence in front of it, does a
+  fresh agent's first turn use the MCP tools, or does it still shell out?* Answer it directly.
+  - **Every sampled first turn reached for MCP** → the positive HTTP steer does not dominate a
+    fresh turn. This weakens R2's dissent substantially. It does **not** close D2 on three runs:
+    record it, say so in `DECISIONS.md` under a dated heading, and mark F302 `fixed` with the
+    counts beside it. *(R3 narrowed this bullet: R2's version licensed marking F302 "fixed
+    **without qualification**" off 3 samples. Three runs do not support an unqualified claim, and
+    an unqualified tick is the F392 defect this group exists to prevent.)*
+  - **No sampled first turn reached for MCP** → the steer plausibly dominates and R2's dissent is
+    supported. **File the conditional text as a new finding rather than widening this change**,
+    which will already be archived.
+  - **Split** → record the split with its counts and leave D2 open. Do not round it.
+  - **Fewer than three usable samples** (too many `neither` runs) → **the measurement did not
+    happen.** Say so plainly, leave D2 open, and do not write a verdict. This outcome was missing
+    from R2's three and is the one most likely on Haiku.
+
+  In every branch, write the counts and the condition (model, instruction, peers, charter) beside
+  the verdict, so the next reader can tell what was measured from what was concluded.
 - [ ] 7.6 Whatever the outcome, append the measurement to **F302**'s entry in
   `scripts/drive/FINDINGS.md`, and correct the 2026-09-14 exploration's "the notice heals on turn
-  two; the agent does not" line if 7.5 shows that framing was about a learned method rather than
-  the steer. An exploration that keeps a superseded reading is how the next round inherits it.
+  two; the agent does not" line if **7.5c** shows that framing was about a learned method rather
+  than the steer. An exploration that keeps a superseded reading is how the next round inherits it.
+- [ ] 7.7 **R3 added.** In the same edit, correct the exploration's *own* overreach if it is still
+  there: its "What we saw" lists four agents under one heading, and a later reader took that as
+  four measured behaviours (R2's 7.5 did exactly that, in this file). Make explicit in the
+  exploration that **four were told and one was read**, which is what its own source says. The
+  exploration already lists the other three as unmeasured under "Risks and open questions"; the
+  repair is to stop the summary from reading as though it did not.

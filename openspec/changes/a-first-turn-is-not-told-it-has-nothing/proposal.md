@@ -50,12 +50,25 @@ sets them (`agent_trigger.py` sets both: `env["AW_WORKSPACE_DIR"] = effective_wo
 | control — `curl -s http://127.0.0.1:9/api/v1/agent-actions/tasks` | deny | is a network address |
 | control — `echo hi > ../outside.txt` | deny | is outside your workspace |
 
+> **R3 (2026-09-20) re-ran this measurement independently, from a scratch script with a throwaway
+> `DATABASE_URL`, and every row above reproduces exactly** — the two `curl` shapes allow as *"inside
+> your workspace"*, and all three controls deny with the reasons stated. The claim this change's
+> **Why** rests on is measured, twice, by two rounds that did not share a session.
+
 **`HUB_URL` is load-bearing in the measurement itself and a probe that leaves it unset gets a false
 result.** `_judge_word`'s rule 2 trusts a `$HUB_URL` reference only when `trusted and base` — `base`
-being `os.environ["HUB_URL"]` in the approver's *own* process. R2 ran both ways: with `HUB_URL`
-unset, all three allowed shapes flip to **deny**, with the misleading reason *"contains a variable,
+being `os.environ["HUB_URL"]` in the approver's *own* process. Run both ways: with `HUB_URL`
+unset, the two `curl` shapes flip to **deny**, with the misleading reason *"contains a variable,
 '~' or a command substitution that the shell expands when it runs"*. Any later round re-running this
 must export `HUB_URL` or it will conclude the precondition is unmet.
+
+> **R3 correction — R2 wrote "all three allowed shapes flip to deny"; two of the three do.**
+> Measured: with `HUB_URL` unset, `Bash` and `PowerShell` flip to deny, and **`python -c` reading
+> `os.environ` stays `allow`**. It does not flip because rule 2 never fires on it — the command text
+> contains no `$HUB_URL` word at all, which is precisely the property 1d picked it for. The
+> correction matters beyond arithmetic: read literally, R2's sentence tells a later round that the
+> `python -c` shape is also `HUB_URL`-dependent, and it is not. The caveat is real and applies to
+> the two `curl` shapes only.
 
 Two further things the measurement establishes, neither of which R1 recorded:
 
@@ -139,6 +152,54 @@ None.
 
 *R2 rewrote this section. R1's version named one product file and asserted the change touched
 nothing else; it touches two.*
+
+> ### R3 (2026-09-20) — the scope is **complete at two sites**, and here is the derivation
+>
+> R1 found one site, R2 found a second and called R1's exclusion blocking. Neither asked whether
+> there is a **third**. R3 derived the whole set rather than grepping for the two known strings.
+>
+> **The rule used:** a site is in scope if it is (a) text placed in front of the model at turn
+> start, (b) selected by `described_path`, and (c) a claim about whether the tool surface is
+> present or absent. All three, or it is not this defect.
+>
+> **(a) — everything the model sees at turn start is exactly two artefacts.**
+> `agent_trigger.py` builds `prompt = "\n\n".join([*notices, message])`, where `notices` has at most
+> three entries: `access_path_notice(described_path)`, then `auto_snapshot_notice()` (keyed on
+> having a worktree), then `spec_turn_notice(...)` (keyed on the spec phase). `message` is the
+> operator's own text from `format_turn_prompt`. The only file written for the model is the
+> canonical context — `agent_trigger.py` has exactly **one** `write_text`, to
+> `.agentweave/context/<agent>.md` — delivered as `--append-system-prompt-file` (`claude`) or
+> `-c model_instructions_file=` (`codex`). There is no third artefact: no CLAUDE.md, no AGENTS.md,
+> nothing else written or passed.
+>
+> **(b) — exactly two functions in `hub/` take an access path and emit agent-facing text.**
+> `access_path_notice` (`launchability.py`) and `_tool_surface_lines` (`api/v1/agents.py`, reached
+> only through `_render_hub_agent_context(access_path=...)`). The other three functions carrying the
+> parameter — `resolve_access_path`, `described_access_path`, `harness_has_honoured_mcp` — return
+> decisions, not text. `_render_hub_agent_context`'s two non-turn callers (`POST /agents/register`,
+> `GET /agents/agent-context`) take the `"mcp"` default and are not turn-start.
+>
+> **So (a) ∩ (b) = the notice and the context file. There is no third site.** The two this change
+> already names are the whole set.
+>
+> **Three near-misses, examined and excluded — named so the next round knows this was searched
+> rather than skipped:**
+>
+> - **`ask_user`'s `http_note` (`agents.py`)** — rendered only by `_http_lines`, so it *is* keyed on
+>   `described_path` and *does* reach the model at turn start. It says waiting "*is what the injected
+>   tool does on an agent's behalf*". **Excluded:** that is a true statement about the MCP tool, in
+>   the third person. It asserts nothing about what this run holds — it is contrastive implicature,
+>   not a claim of absence, and the requirement expressly permits describing the HTTP form. It is the
+>   closest thing to a third site and it does not meet (c). *If the implementer disagrees, the fix is
+>   the same one-clause shape as D1 — but R3's reading is that editing it is out of scope.*
+> - **`mcp_server.py`'s FastMCP `instructions=`** ("AgentWeave outbound collaboration tools…") —
+>   asserts **presence**, and is keyed on the *true* `access_path`, so it is delivered exactly when
+>   the tools are real. Not a defect. It is, however, **direct corroboration**: on the defective
+>   turn the model receives this presence statement *from the server it is holding* alongside the
+>   two denials. One turn, three statements, two of them false.
+> - **`spec_turn_notice`'s "You have no file-write tool this turn"** and **`_tool_surface_lines`'
+>   "There is no inbox tool"** — both claims of absence, both true, and neither keyed on
+>   `described_path`. Out of scope.
 
 - `hub/hub/launchability.py` — `access_path_notice`, the no-MCP branch's returned string only. The
   comment above that branch already explains the credential-naming prohibition and must survive.

@@ -195,6 +195,29 @@ the delta's new scenarios reach it: a shipped product with this sentence still i
 grounds means no denial either"* and *"A run holding the tools is not told it is empty"* on the day
 the notice change lands. A change cannot be allowed to violate the requirement it is writing.
 
+> **R3 (2026-09-20) — D6 had an argument and no specimen; there is one, and it is unusually
+> direct.** R2 argued the `agents.py` sentence is *stronger* than the notice's but cited no agent
+> acting on it. `testbed/scratch/c2verify/driveA.json` is a captured drive in which a real agent
+> reads it and reasons about it aloud, twice:
+>
+> > *"I notice the system message says \"No AgentWeave tools are injected this turn\" but then lists
+> > the tools I can use. … This seems like a contradiction or the tools have overly strict
+> > sandboxing."*
+>
+> > *"in the AgentWeave context, the system said \"No AgentWeave tools are injected this turn, so
+> > each capability below is one HTTP request instead.\" This tells me I need to make HTTP requests.
+> > The curl approach is the right one."*
+>
+> The agent then spent its turn fighting the approver to `curl`, while holding the tools. This is
+> the change's causal claim — an unfounded denial steering an agent to HTTP — observed at the
+> `agents.py` site specifically, which is the half with no test pinning it. **Note the contrast with
+> the LoopEngine record**: that one is about the *notice*, and its behavioural half is one agent
+> (see tasks 7.5). This one is about the *context preamble*. Two sites, one specimen each.
+>
+> *This file is evidence, not a fixture: task 1.1b is right that nothing under `testbed/scratch/`
+> gets edited. It is cited here so the next round does not re-derive it — or, worse, conclude D6
+> rests on reasoning alone.*
+
 *The edit, in D1's shape:* drop the absence claim and keep every load-bearing part — the `HUB_URL`
 address, the `Authorization: Bearer $AW_RUN_TOKEN` header, the read-from-your-own-environment
 instruction, the `*`-means-required and `{...}`-means-substitute conventions, and the

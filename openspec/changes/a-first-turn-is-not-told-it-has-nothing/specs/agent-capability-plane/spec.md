@@ -19,6 +19,34 @@ Diffed clause by clause and scenario by scenario against openspec/specs/agent-ca
 spec.md: both requirement headers match exactly, the second requirement's SHALL line is
 byte-identical to the live one, all three of the first requirement's live scenarios and all three of
 the second's survive verbatim, and nothing else was dropped or reworded.
+
+R3 (2026-09-20) re-derived that diff mechanically rather than re-reading R2's note, by parsing both
+files and comparing requirement by requirement, paragraph by paragraph, scenario by scenario:
+
+  - DROPPED SCENARIOS: none, in either requirement.
+  - No live scenario body altered by even one character; the first requirement gains exactly two
+    ("No grounds means no denial either", "A run holding the tools is not told it is empty").
+  - Paragraph diff is additions only, plus the two intended rewrites: the first requirement's SHALL
+    line, and the second's F301 mechanism paragraph (which splits into two paragraphs, relocating
+    the live trailing clause "on the `cli` path what it asks for still cannot be carried out by the
+    agent's own tools" into "The conclusion is unchanged: unreachable by the agent's own tools on
+    the `cli` path" -- relocated, not dropped).
+  - Both SHALLs sit on their requirement's first physical line, which is all --strict reads.
+  - `openspec validate a-first-turn-is-not-told-it-has-nothing --strict` -> valid.
+
+R3 also re-derived R2's correction 1 rather than accepting it, and it is right. The live third
+clause reads "when it has no such grounds", where "such grounds" refers back to grounds that the
+harness will honour the surface -- so the live obligation fires on any absence of grounds-for-
+presence. R1's "when it has grounds for neither" narrows that; R2's "whenever it lacks grounds to
+believe the surface will be honoured" restores it exactly. The prose gloss below ("including when
+the system has grounds to believe the surface is absent") is consistent with the restored clause,
+since grounds for absence entail lacking grounds for presence.
+
+R3 confirms the delta binds BOTH product sites in three independent places: the scope paragraph
+("every text the system places ahead of the operator's message"), the two new scenarios' THEN
+clauses ("the text delivered ahead of the operator's message"), and the explicit AND on the
+canonical context in "A run holding the tools is not told it is empty". Each new scenario pairs a
+negative with something positive and is assertable by a test (tasks 3.3 and 3.3b).
 -->
 
 ## MODIFIED Requirements
