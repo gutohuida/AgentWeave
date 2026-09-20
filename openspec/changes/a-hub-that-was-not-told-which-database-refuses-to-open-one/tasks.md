@@ -1,6 +1,9 @@
 # Tasks — a Hub that was not told which database refuses to open one
 
-**Round 1, 2026-09-20. Not approved. Nothing here is built.**
+**Round 1, 2026-09-20. Round 2, 2026-09-20. Not approved. Nothing here is built.**
+
+**R2 added 1.9, 3.5, 4.9 and rewrote 4.7 and 5.2.** Numbers of existing tasks are unchanged, so a
+reference to "task 2.4" still means the same task it meant in R1.
 
 **Read before starting:** this change removes a default that every unattended window on this machine
 currently relies on without knowing it. **Group 3 is not optional and is not cleanup** — the moment
@@ -47,7 +50,15 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       and D4's rejection of the stronger guard rests on that seam being real.
 - [ ] 1.8 Run `py -3.11 -m pytest hub/tests/test_config.py -v` and record the count here. Before this
       change it is `4 passed`; under a naive required-field version it is `2 failed, 2 passed`
-      (measured 2026-09-20). **Write the number you actually saw**, not the number expected.
+      (measured 2026-09-20, re-measured under R2's probe: same). **Write the number you actually
+      saw**, not the number expected.
+- [ ] 1.9 **(R2)** Fix the docstring of `hub/tests/test_config.py:56-58`, which states that the CLI
+      and the Hub are *"independently-installable distributions with **no dependency edge** between
+      them"*. `pyproject.toml:34` is `dependencies = ["agentweave-hub>=1.1.0"]` — there is an edge,
+      it is a floor with no ceiling, and that is **why** the class matters: `pip install -U
+      agentweave-hub` gives a newer Hub with an unchanged CLI that still satisfies the floor, so the
+      two path computations really can drift. R1 read this docstring and carried its false sentence
+      into `design.md` D4; leaving it fixes one copy and not the source.
 
 ## Group 2 — (b): the Hub names its database before it opens it
 
@@ -57,7 +68,12 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       directory (`engine.py:346-350`) and SQLite creates the file, so the answer changes one line
       later.
 - [ ] 2.2 Emit one line carrying: the **absolute** resolved path; whether the file existed before
-      this process opened it; and `os.getpid()`.
+      this process opened it; and `os.getpid()`. **(R2)** The line must **identify itself in its own
+      words** — do not rely on a `WARNING [hub.main]` prefix, because at this site there is none.
+      Measured from a running Hub on 2026-09-20: before `init_db` the record is emitted by
+      `logging.lastResort`, which has **no formatter**, so it prints as the bare message; only after
+      `init_db`'s `fileConfig` does the same record print as `WARNI [hub.db.engine] ...`. A reader
+      seeing this line has one sentence and nothing else to tell them what it is.
 - [ ] 2.3 **Do not print a port** (D6). `settings.aw_port` is configured intent — only
       `hub/hub/main.py:540` honours it, and a `--port` on the uvicorn command line never reaches
       `settings`. `hub/hub/bound_address.py` is the module that knows the real port and it is
@@ -79,7 +95,7 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       Hub its own logging configuration, this test fails and tells them 2.4's comment is now stale
       rather than leaving a false comment in place.
 
-## Group 3 — the one caller that breaks, and it breaks `make ui`
+## Group 3 — the callers that break, and one of them is `make ui`
 
 - [ ] 3.1 `scripts/refresh_ui_bundle.py:110` does `from hub.main import UI_BUILD_STAMP,
       ui_source_fingerprint` with no `DATABASE_URL` set. Measured under the probe: `make ui` and
@@ -97,6 +113,14 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       last two do not import `hub` and are unaffected — **re-measure rather than trusting that line.**
 - [ ] 3.4 Do **not** change `hub/tests/conftest.py`. It assigns `os.environ["DATABASE_URL"]` before
       importing anything from `hub` (`:57-67`), so the whole Hub suite is already a told path.
+- [ ] 3.5 **(R2)** `scripts/drive/n10_route_reachability.py:119-121` runs
+      `subprocess.run([sys.executable, "-c", "from hub.main import app..."], cwd=REPO / "hub")` with
+      **no `DATABASE_URL`**. It survives on this machine only because the gitignored `hub/.env`
+      happens to exist; on a clean checkout it already opens the home default today, and under (a) it
+      will die with `could not import the Hub app`. It wants the route table, not a database — pass
+      `env={**os.environ, "DATABASE_URL": "sqlite+aiosqlite:///:memory:"}` to the subprocess, with a
+      one-line comment. (`:memory:` is enough: `engine.py:199` skips the alembic upgrade for it.)
+      This is task 3.2's sweep done for the one entry it should not have left to judgement.
 
 ## Group 4 — (d) and the prose that carried the guarantee
 
@@ -130,12 +154,31 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       *"confirm which database a running instance serves before trusting it"* now has a mechanism
       behind it. Add at most **one sentence** — this file is re-read on every request of every session
       and its size is a standing constraint.
-- [ ] 4.7 `hub/.env.example:5` ships `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db`, a
-      **relative** path — the pre-`D1` bug, still in the file `hub/.env` on this machine was copied
-      from. Make it absolute or comment it out with the absolute form shown. Do **not** touch
-      `hub/.env` itself; it is gitignored local state.
+- [ ] 4.7 **(rewritten by R2 — R1's version of this task would have broken Docker.)**
+      `hub/.env.example:5` ships `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db`. **Do not make
+      it absolute.** That file is the *container's* template and the relative value is correct there:
+      `hub/Dockerfile:11` sets `WORKDIR /app`, `hub/docker-compose.yml:23` mounts the `hub-data`
+      volume at `/app/data`, the file's own line 4 says *"inside the container"*, and
+      `docker-compose.yml:31-34` supplies the same value under `environment:` (which overrides
+      `env_file:`) so line 5 is inert in the documented install anyway. **Instead, add two comment
+      lines** saying that this value is the container path, and that a **source checkout** copying
+      this file to `hub/.env` must replace it with an absolute path — because a `.env` satisfies the
+      refusal (D3) while still being cwd-relative, which is the one way the launch-directory
+      dependence survives (a). Do **not** touch `hub/.env` itself; it is gitignored local state.
 - [ ] 4.8 Do **not** change `hub/docker-compose.yml:34`. Its relative `data/agentweave.db` is
       container-internal and paired with a named volume; it is a told path and it is correct.
+- [ ] 4.9 **(R2)** `tests/test_hub_commands.py`, the **CLI** suite — not `hub/tests/`. The test
+      `test_first_start_migrations_leave_a_database_that_can_hold_a_conversation` (`:700-735`) does a
+      bare `import hub.config` at `:707` to find the package directory, with no `DATABASE_URL` set.
+      Measured under R2's probe: it fails, and its own
+      `with patch.object(settings, "database_url", db_url)` cannot save it, because the module-level
+      `Settings()` has already raised during the import. Set `DATABASE_URL` (the test already builds
+      `db_url` from `tmp_path`) via `monkeypatch.setenv` **before** the import, or import
+      `hub.config` behind the same guard. Do not weaken what the test asserts — it is F329's only
+      regression guard at the CLI boundary. Then run `py -3.11 -m pytest tests/ -q` and record the
+      count: under the probe it was `3 failed, 532 passed, 3 skipped`, of which **two failures are
+      pre-existing `test_skill_sync.py` ones unrelated to this change** (confirmed on a clean tree
+      2026-09-20). Expect them; do not fix them here, and do not let them hide a third.
 
 ## Group 5 — the spec, and what it costs
 
@@ -143,10 +186,20 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       scenario *"The Hub's own database is launch-directory-independent"*, which normatively required
       a no-`DATABASE_URL` `uvicorn hub.main:app` to resolve to the home path. That scenario **is**
       F388. Removing it is the point; saying so out loud is the task.
-- [ ] 5.2 Check that the guarantee the removed scenario existed to protect is still carried. It is, by
-      the new scenario *"The database a launch path names does not depend on its working directory"* —
-      which is the real requirement (no cwd-relative paths) separated from the fallback that was doing
-      the work.
+- [ ] 5.2 **(rewritten by R2.)** Check that the guarantee the removed scenario existed to protect is
+      still carried. It is, by the new scenario *"The database a launch path names does not depend on
+      its working directory"* — the real requirement (no cwd-relative paths) separated from the
+      fallback that was doing the work. **R2 narrowed two scenarios that the code falsifies as R1
+      wrote them; apply them as they now stand and check the narrowing rather than the claim:**
+      (i) that scenario originally required *any* environment file shipped with the Hub to carry an
+      absolute path, which is false of `hub/.env.example` and correctly so (task 4.7), so it is now
+      scoped to launch paths that resolve a path **for the host**; (ii) *"A told database is named
+      before it is opened"* originally required the statement to precede *"creating a directory,
+      creating a file, or applying a migration"* for every told launch, which native `agentweave`
+      (`src/agentweave/cli.py:1054`) and Docker (`hub/Dockerfile:31`) both falsify by migrating in a
+      separate step before `lifespan()` ever runs, so it is now scoped to a direct
+      `uvicorn hub.main:app` — the launch F388 happened on — with the other paths covered by a
+      weaker "states it at startup" clause.
 - [ ] 5.3 `openspec validate a-hub-that-was-not-told-which-database-refuses-to-open-one --strict`
       passes. **Not evidence of anything but the file's shape** — record it, do not lean on it.
 - [ ] 5.4 Run `py -3.11 -m pytest hub/tests/ -q` in full and **write the count into this file.** Not

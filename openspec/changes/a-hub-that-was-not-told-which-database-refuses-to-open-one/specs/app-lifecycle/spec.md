@@ -23,10 +23,12 @@ purpose.
 The refusal SHALL name the path it declined to open and SHALL name both supported ways to say what to
 open. It SHALL occur before the runtime opens, creates, or migrates any database file.
 
-A runtime that *was* told which database to open SHALL state, before opening it, the absolute path it
-resolved and whether that file already existed. That statement SHALL be emitted at a level the
-runtime's default logging configuration actually shows, so that an unintended attachment is readable
-at the moment it happens rather than inferred afterwards from output that is missing.
+A runtime that *was* told which database to open SHALL state the absolute path it resolved and
+whether that file already existed. When the runtime's server process is itself the first thing to
+touch that database, it SHALL state this **before** opening it. That statement SHALL be emitted at a
+level the runtime's default logging configuration actually shows, and SHALL be intelligible on its
+own, so that an unintended attachment is readable at the moment it happens rather than inferred
+afterwards from output that is missing.
 
 #### Scenario: First run
 
@@ -63,12 +65,21 @@ at the moment it happens rather than inferred afterwards from output that is mis
 
 #### Scenario: A told database is named before it is opened
 
-- **WHEN** the Hub starts with a database it was told to open, by environment variable, by an
-  environment file, or through bare `agentweave`
+- **WHEN** the Hub is started by a direct `uvicorn hub.main:app` invocation with a database it was
+  told to open, by environment variable or by an environment file
 - **THEN** it states the resolved absolute path and whether that file already existed, before it
   creates a directory, creates a file, or applies a migration to it
 - **AND** that statement appears in the runtime's output under its own default logging configuration,
-  with no additional flag or configuration required
+  with no additional flag or configuration required, and names what it is without depending on a
+  logger-name or level prefix being present
+
+#### Scenario: A told database is named on every other launch path too
+
+- **WHEN** the Hub is started through bare `agentweave` or `docker compose up`, both of which apply
+  migrations in a separate step before the server process starts
+- **THEN** the server process still states the resolved absolute path and whether that file already
+  existed
+- **AND** it is not required to do so before that separate migration step, which has already run
 
 #### Scenario: An explicitly named database is opened whatever path it names
 
@@ -79,10 +90,18 @@ at the moment it happens rather than inferred afterwards from output that is mis
 
 #### Scenario: The database a launch path names does not depend on its working directory
 
-- **WHEN** a launch path supplies a database path of its own — bare `agentweave`, `agentweave
-  --profile <name>`, or an environment file shipped with the Hub
+- **WHEN** a launch path supplies a database path of its own that is resolved on the host — bare
+  `agentweave`, or `agentweave --profile <name>`
 - **THEN** that path is absolute, and two invocations from two different working directories resolve
   to the same file
+
+#### Scenario: A container's own relative database path is not a host path
+
+- **WHEN** the Hub ships an environment file or compose file whose `DATABASE_URL` is relative, for
+  resolution against a fixed working directory inside a container image
+- **THEN** that value is left relative, because it names a mount point rather than a host location
+- **AND** the file states that it is a container path, so that copying it into a source checkout is
+  recognisably a change that must supply an absolute path instead
 
 #### Scenario: Docker Compose produces the same instance regardless of launch directory
 

@@ -4,12 +4,19 @@
 (`spec-queue/DIRECTION.md`, item 2): **(a) refuse the implicit default, (b) name the resolved path at
 startup, (d) fix the docstring that calls the dangerous path the safe one.** *Rejected* were logging
 alone (prevents nothing) and **(c)** the sentinel row, which needs a migration installed against the
-very database being protected. **R1's job was to explore how to build (a), not whether.** R2 and R3
-have not run.
+very database being protected. **R1's job was to explore how to build (a), not whether.**
+
+**Round 2, 2026-09-20.** An independent re-derivation against the code. **Every R1 decision survives**
+— (a), (b), (d), the `config.py` site, the raising `default_factory`, the `WARNING` level, the
+rejection of a path-keyed guard. What changed is the *evidence*: D5 was re-taken from two real
+running Hubs rather than a hand-called `fileConfig`, D9's question was answered by measurement, and
+three claims that were wrong are corrected — D3's `.env.example` consequence (R1's fix would have
+broken Docker), D4's "no dependency edge" premise, and the blast radius, which is larger than R1
+found. Four tasks added. **R3 has not run.**
 
 ## Why
 
-On 2026-09-19 a day window started a throwaway Hub from `hub/` with `py -3.11 -m uvicorn
+On 2026-09-19 a day window started a throwaway Hub from source with `py -3.11 -m uvicorn
 hub.main:app`. Its `DATABASE_URL` did not survive a `kill` + `rm` + restart sequence inside one Bash
 tool call, the process fell back to `_default_database_url()`, and it attached to
 `~/.agentweave/hub/data/agentweave.db` — **the operator's live `:8000` database, 348 runs and 12,500
@@ -52,16 +59,23 @@ Three things make the default dangerous rather than merely present:
 3. **`.env` is a third source, and it is resolved against the working directory.**
    `SettingsConfigDict(env_file=".env")` (`config.py:21`) takes a *relative* name.
    `hub/.env` on this machine sets `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db` — itself a
-   **relative** path, the exact bug `2026-08-16-one-hub-and-a-window-of-its-own` D1 removed from
-   `config.py` and left standing in `hub/.env.example:5`. So "the variable is absent" is not one
-   condition but three, and a refusal must be defined over all of them (D3).
-4. **The blast radius includes `make ui`.** `scripts/refresh_ui_bundle.py:110` imports `hub.main`
-   with no `DATABASE_URL` set. Probed by making the field required for real: `make ui` and
-   `make ui-check` die with a raw `pydantic_core.ValidationError`. `agentweave --help` and
-   `agentweave doctor` are **unaffected** (neither imports `hub`), Docker mode is unaffected
-   (`hub/docker-compose.yml:34` sets the variable), and native `agentweave` is unaffected
-   (`src/agentweave/cli.py:1028` sets it before importing `hub`). Group 3 covers the one caller that
-   breaks.
+   **relative** path, copied from `hub/.env.example:5`. So "the variable is absent" is not one
+   condition but three, and a refusal must be defined over all of them (D3). **R2 corrected R1 here:**
+   that value in `.env.example` is the *container's* default and is correct there (`Dockerfile:11`'s
+   `WORKDIR /app`, the `hub-data` volume at `/app/data`), so it is not "the pre-`D1` bug still
+   shipped" — it is a container default that is wrong only once copied into a source checkout. The
+   task comments it; it does not absolutize it, which would have broken Docker.
+4. **The blast radius includes `make ui` — and, R2 found, two more things.**
+   `scripts/refresh_ui_bundle.py:110` imports `hub.main` with no `DATABASE_URL` set; probed for real,
+   `make ui` and `make ui-check` die at import. **R2 adds:** (i) the **CLI suite** breaks —
+   `tests/test_hub_commands.py:707` does a bare `import hub.config`, and measured under the probe
+   `py -3.11 -m pytest tests/ -q` gives `3 failed, 532 passed, 3 skipped`, of which **exactly one**
+   is caused by this change (the other two are pre-existing `test_skill_sync.py` failures, confirmed
+   on a clean tree); (ii) `scripts/drive/n10_route_reachability.py:119-121` imports `hub.main` in a
+   subprocess with no `DATABASE_URL`, surviving today only because the gitignored `hub/.env` exists.
+   **Unaffected, measured:** `agentweave --help` and `agentweave doctor` (neither imports `hub`),
+   Docker (`hub/docker-compose.yml:34`), native `agentweave` (`src/agentweave/cli.py:1028`), and the
+   Hub suite (`hub/tests/conftest.py:57-67` assigns the variable before importing).
 5. **A required field alone produces a message that helps nobody.** Measured verbatim:
    `1 validation error for Settings / database_url / Field required [type=missing, input_value={},
    input_type=dict]`. It names neither the database it refused to open nor either way to set the
@@ -80,10 +94,14 @@ Three things make the default dangerous rather than merely present:
   raises a Hub-specific error naming the path it refused to open and both supported ways to say what
   to open. `_default_database_url()` survives as a function — it is what the message quotes and what
   the CLI-drift test compares against (D7).
-- **(b)** The Hub names its database at `WARNING` **before anything opens it**, saying whether the
-  file already existed and carrying this process's OS PID, so the recovery is killing that PID
-  rather than a blanket `taskkill /IM python.exe /T`. It deliberately does **not** print a port,
-  because `settings.aw_port` is not the port uvicorn was given (D5, D6, D9).
+- **(b)** The Hub names its database at `WARNING`, saying whether the file already existed and
+  carrying this process's OS PID, so the recovery is killing that PID rather than a blanket
+  `taskkill /IM python.exe /T`. It deliberately does **not** print a port, because `settings.aw_port`
+  is not the port uvicorn was given (D5, D6, D9). **R2:** it is before anything is opened for a
+  direct `uvicorn hub.main:app` — the launch F388 happened on — and *after* the migration step for
+  native `agentweave` (`cli.py:1054`) and Docker (`Dockerfile:31`), both of which migrate in a
+  separate step that never reaches `lifespan()`. D6 says so and the delta scenario is scoped to
+  match.
 - **(d)** The docstring is rewritten to say what is true.
 - The `app-lifecycle` requirement and its scenario are modified; `hub/.env.example`'s relative path is
   made absolute; `CLAUDE.md` and `.claude/reference/hubs.md` lose the guarantee they cannot keep and
@@ -104,8 +122,11 @@ the review page to notice.
   D6 fixes which module).
 - **Tests:** `hub/tests/test_config.py` — two tests in `TestDatabaseUrlDefault` /
   `TestDatabaseUrlDriftAgainstCli` fail under (a) as written (measured: `2 failed, 2 passed`) and are
-  rewritten, not deleted.
-- **Callers:** `scripts/refresh_ui_bundle.py` only.
+  rewritten, not deleted. **R2:** plus **one** in the CLI suite,
+  `tests/test_hub_commands.py::test_first_start_migrations_leave_a_database_that_can_hold_a_conversation`
+  (measured; task 4.9).
+- **Callers:** `scripts/refresh_ui_bundle.py` **and** `scripts/drive/n10_route_reachability.py`
+  (R2; tasks 3.1 and 3.5).
 - **Specs:** `app-lifecycle` — one `MODIFIED` requirement.
 - **Prose:** `CLAUDE.md`, `.claude/reference/hubs.md`, `.claude/handoffs/DEAD-ENDS.md`,
   `hub/.env.example`.

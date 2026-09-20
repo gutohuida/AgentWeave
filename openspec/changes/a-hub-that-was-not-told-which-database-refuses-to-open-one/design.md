@@ -4,6 +4,24 @@
 *unverified*. The measurement scripts were throwaway (`testbed/scratch/f388/`, deleted); what they
 returned is transcribed here so R2 and R3 can re-derive rather than re-run.
 
+**Round 2, 2026-09-20.** An independent re-derivation against the code, not a re-read of R1. Method:
+every file opened before any part of this document was read; R1's probe shape re-applied to
+`config.py` and reverted; **two throwaway Hubs driven from source** (ports 8093 and 8094, fresh
+profile directories under `testbed/scratch/f388r2/`, killed by exact PID, never `:8000`/`:8010` and
+never `~/.agentweave/hub/data/`). **R1's four named weak points all survive, three of them with
+their reasoning corrected** - and R2 found four things R1 did not, marked **R2** below. Nothing R1
+decided is re-opened; what changed is what the document claims while deciding it.
+
+| R1 asked R2 to attack | R2's verdict |
+|---|---|
+| **D9** - does (a)+(b) remove the route or narrow it? | **Removes it.** No remaining launch reaches the live database with no `DATABASE_URL` - measured, D9 below. |
+| **D5** - measured by hand-calling `fileConfig`, not from a running Hub | **Holds, now driven.** 104 alembic `INFO` lines, **zero** `hub.*` `INFO` lines. Plus a detail R1 could not see: D5 below. |
+| **D3** - does a `.env` count as "told"? | **Yes, unchanged** - but D3's *consequence* about `.env.example` was wrong, and R1's fix for it would have broken Docker. |
+| **D4** - rejected on a *reasoned* version-skew argument | **Conclusion holds; its premise was false.** There **is** a dependency edge. Corrected below, and the corrected version argues D4 harder. |
+
+R2 also corrects the blast radius (the CLI suite and a second script), and narrows two scenarios in
+the delta that the code falsifies as written. Four new tasks: 1.9, 3.5, 4.9, and the rewritten 4.7.
+
 ---
 
 ## D11 — what the resolver returns today, and what each caller does with it
@@ -30,9 +48,12 @@ Four consequences the rest of this document leans on:
 3. **There is no path the Hub refuses.** Directory missing → it makes one. File missing → SQLite
    makes one. A typo does not fail; it silently forks a second database. This is why (a) has to act
    on *absence of instruction*, since it cannot act on *badness of path*.
-4. **The relative row is live, not hypothetical.** `hub/.env` on this machine carries it, copied from
-   `hub/.env.example:5`, which still ships the pre-`D1` relative default that
-   `2026-08-16-one-hub-and-a-window-of-its-own` removed from `config.py`.
+4. **The relative row is live, not hypothetical.** `hub/.env` on this machine carries it, copied
+   from `hub/.env.example:5`. **R2:** that value is the *container's* default and is correct there
+   (`WORKDIR /app` + the `hub-data` volume at `/app/data`) - it is not, as R1 called it, the pre-`D1`
+   bug still shipped; it is a container default in a source checkout. See D3. **R2, measured:**
+   `hub/data/` does not exist on this machine, so this row is reachable in code but no start has
+   yet taken it here.
 
 ---
 
@@ -86,12 +107,37 @@ would mean refusing Docker mode, which supplies the variable through
 
 Two consequences carried as tasks rather than argued away:
 
-- **`hub/.env.example:5` ships a relative path** and is what `hub/.env` was copied from. A `.env`
+- **`hub/.env.example:5` ships a relative path**, and it is what `hub/.env` was copied from. A `.env`
   that satisfies the refusal while naming a cwd-dependent file reintroduces the launch-directory
-  dependence D1 of `2026-08-16-one-hub-and-a-window-of-its-own` removed. Task 4.3 makes the example
-  absolute and comments why.
+  dependence D1 of `2026-08-16-one-hub-and-a-window-of-its-own` removed.
 - **The refusal message must say which sources were consulted**, or an operator who *has* a `.env`
   one directory up will read the message as false. Task 1.4.
+
+**R2 - the `.env.example` half of that was wrong, and the fix R1 wrote for it would have broken
+Docker.** R1 called `hub/.env.example:5` "the pre-`D1` bug, still shipped" and had task 4.7 make it
+absolute. Measured, `.env.example` is **the container's** template and its relative value is correct
+there:
+
+- `hub/Dockerfile:11` sets `WORKDIR /app` and `hub/docker-compose.yml:23` mounts the named volume at
+  `/app/data`, so `sqlite+aiosqlite:///data/agentweave.db` resolves to `/app/data/agentweave.db` -
+  which is the volume. An absolute *host* path there names nothing inside a container.
+- `.env.example:4`'s own comment already says so: *"(default: `data/agentweave.db` **inside the
+  container**)"*.
+- It is **inert in the documented install anyway**: `docker-compose.yml:31-34` supplies the same
+  value under `environment:`, which takes precedence over `env_file:`, and compose's own comment
+  (`:13-14`) says the documented install is this file curled alone into an empty directory.
+
+So `.env.example` is not the pre-`D1` bug. It is a container default that is right for containers
+and **wrong the moment somebody copies it into a source checkout** - which is exactly what `hub/.env`
+on this machine is. Measured: from `hub/`, `Settings()` returns
+`sqlite+aiosqlite:///data/agentweave.db`, i.e. `hub/data/agentweave.db`; and `hub/data/` **does not
+exist on this machine**, so that branch of the resolver is live in code but has never yet been the
+path a start actually took here.
+
+The task therefore **adds a comment**, it does not absolutize (rewritten 4.7), and the delta's
+scenario *"The database a launch path names does not depend on its working directory"* is narrowed
+(task 5.2): as R1 wrote it, it required *any* environment file shipped with the Hub to carry an
+absolute path, and was therefore falsified by the Docker configuration being **correct**.
 
 ## D4 — refusing the default *path* (not just the implicit default) was considered and rejected
 
@@ -102,15 +148,30 @@ it needs no migration, so it escapes the objection that killed **(c)**.
 **It is rejected, and the reason is not caution.** `src/agentweave/cli.py:1028` sets
 `os.environ["DATABASE_URL"]` to **exactly that path** for the default profile before importing
 `hub`. A path-keyed refusal therefore refuses the operator's own app, and distinguishing "the CLI set
-it" from "a human typed it" requires the CLI to pass a marker — but `agentweave-ai` and
-`agentweave-hub` are **independently installable distributions with no dependency edge between
-them** (`hub/tests/test_config.py::TestDatabaseUrlDriftAgainstCli` exists to guard exactly that
-seam). An older installed CLI would not set the marker, and the operator's app would stop starting
-after a Hub upgrade. **Trading an A that fires on agents for an A that fires on the operator is not
-an improvement**, and the version skew is not detectable from inside the Hub.
+it" from "a human typed it" requires the CLI to pass a marker - and the two distributions can sit at
+different versions on one machine. An older installed CLI would not set the marker, and the
+operator's app would stop starting after a Hub upgrade. **Trading an A that fires on agents for an A
+that fires on the operator is not an improvement**, and the version skew is not detectable from
+inside the Hub.
 
-Recorded so R2 and R3 do not re-raise it. If it is ever revisited, the missing piece is a CLI-side
-change, which is a different distribution and a different change.
+Recorded so R3 does not re-raise it. If it is ever revisited, the missing piece is a CLI-side change,
+which is a different distribution and a different change.
+
+**R2 - D4's conclusion stands, but it was resting on a false sentence, and the true one argues it
+harder.** R1 wrote that `agentweave-ai` and `agentweave-hub` are *"independently installable
+distributions with **no dependency edge** between them"*. **There is an edge**: `pyproject.toml:34`
+is `dependencies = ["agentweave-hub>=1.1.0"]`, and `CLAUDE.md` states it as the CLI's one runtime
+dependency. R1 did not invent the claim - the same false sentence is in the docstring of
+`hub/tests/test_config.py:56-58`, which R1 read and carried forward. Task 1.9 fixes it there too, so
+the next round to read that file is not misled the same way.
+
+The corrected fact is **worse for a CLI-sent marker, not better.** The edge is a floor with no
+ceiling, and both distributions sit at `1.1.0` today (`pyproject.toml:7`, `hub/pyproject.toml:7`), so
+`pip install -U agentweave-hub` yields a **newer Hub with an unchanged `agentweave-ai` that still
+satisfies `>=1.1.0`** - precisely the skew direction that would leave the operator's app unable to
+start. An edge that only sets a floor does not make two versions move together; it only guarantees
+the Hub is present. `TestDatabaseUrlDriftAgainstCli` (task 1.7) remains the right guard for the right
+reason: the two path computations are independent code, whatever the packaging declares.
 
 ## D5 — (b) is a `WARNING`, and this is the load-bearing decision of the whole change
 
@@ -135,6 +196,34 @@ line and a green test, which is this repository's named dominant failure mode.
 **(b) is `logger.warning`.** It is not a warning about a problem; it is the one fact that is worth
 more than the level it has to be emitted at to exist. Task 2.4 records that reasoning in the code, so
 that a later tidy-up does not "correct" it back to INFO.
+
+**R2 - driven, from a real `uvicorn hub.main:app`, which is what R1 asked for.** Two throwaway Hubs
+from source against fresh profile directories, full `0001→0104` migration chain both times:
+
+| what was emitted | where | appeared? |
+|---|---|---|
+| `hub.db.engine` `logger.info` - the existing `:228` line | after migrations | **no** - 0 occurrences in 108 lines of output |
+| `hub.db.engine` `logger.info` probe | before `init_db`'s first write | **no** |
+| `hub.db.engine` `logger.warning` probe | before `init_db`'s first write | **yes** |
+| `hub.db.engine` `logger.warning` probe | after migrations | **yes** |
+
+Every one of the 104 `alembic.runtime.migration` `INFO` lines appeared, which is what makes the
+absence of the `hub.*` ones evidence rather than an empty log. **D5's conclusion survives a real
+drive: (b) must be `WARNING`.**
+
+**And one thing a hand-called `fileConfig` could not have shown, which changes what task 2.2 must
+specify.** At D6's chosen site - before `init_db`, therefore before `fileConfig` - the line is
+emitted by `logging.lastResort`, which has **no formatter**. Measured verbatim, the same warning
+prints differently in the two states:
+
+```
+before init_db :  PROBE-PREWRITE-WARNING sqlite+aiosqlite:///C:/.../agentweave.db pid=28980
+after  init_db :  WARNI [hub.db.engine] PROBE-POSTMIGRATE-WARNING sqlite+aiosqlite:///C:/...
+```
+
+So at the site (b) is going to, the line carries **no level, no logger name and no timestamp - just
+the message**. It cannot lean on a `WARNING [hub.main]` prefix to announce what it is; the sentence
+itself has to. Task 2.2 now requires that.
 
 *A rejected alternative, recorded:* have the Hub configure its own logging so INFO is visible.
 Correct, larger than this change, and it collides with the F151 comment in `migrations/env.py` that
@@ -168,6 +257,24 @@ that printed `aw_port` would name the wrong port in exactly the drive scenario F
 The "existed before" half replaces an inference with a fact: `DEAD-ENDS.md` currently tells a driver
 to infer a wrong attachment from the *absence* of a migration chain in the log. Absence is not a
 safeguard; this makes it a presence.
+
+**R2 - "before the first write" is true of the launch path this change is for, and false of the other
+two. Say so rather than letting the delta claim it universally.** Both production launch paths apply
+migrations in a step that never reaches `lifespan()`:
+
+- **native `agentweave`** runs `_hub_run_migrations(hub_pkg_dir)` at `src/agentweave/cli.py:1054`
+  (step 7, "Running database migrations...") and only then spawns uvicorn (step 8);
+- **Docker** runs `alembic -c hub/alembic.ini upgrade head && uvicorn hub.main:app` as one `CMD`
+  (`hub/Dockerfile:31`), so the file is created and migrated by a *separate process* first.
+
+For those two, (b) names a database this install has already written to - a receipt, which D6 itself
+says is the thing it is trying not to be. For a direct `uvicorn hub.main:app` - **the launch F388
+happened on, and the only one an unattended window uses** - it is genuinely before the first write.
+That is enough for the change to do its job, and it is not enough for the delta's scenario as R1 drew
+it (*"before it creates a directory, creates a file, or applies a migration to it"*, over a `WHEN`
+that included bare `agentweave`). Task 5.2 narrows the scenario to the launch path the site can hold
+for; `lifespan()` stays the chosen site, because moving the line earlier costs more than it buys
+(candidates 1 and 2 above, still rejected for the same reasons).
 
 ## D7 — `_default_database_url()` survives as a function
 
@@ -226,12 +333,40 @@ Honestly stated:
   `taskkill /IM python.exe` does **not** match `pythonw.exe`, and the operator's app is
   `pythonw`-hosted, so "no python is running" was never evidence it survived.
 
-**Left standing, deliberately:** a Hub that is *already* attached still has no in-product detach —
+**Left standing, deliberately:** a Hub that is *already* attached still has no in-product detach -
 no endpoint, no signal, no "this is the wrong database, close it" path. That would be a change to
 `main.py`'s shutdown surface, not to `config.py`, and the operator scoped this one to
 `hub/hub/config.py` + tests + prose. **R2 and R3 should check this section hardest**: if (a) + (b)
 do not in fact remove the route, the severity argument in the proposal is wrong and the change is
 under-scoped.
+
+### R2 - the question R1 posed, answered by measurement: name a launch that still reaches the live database with no `DATABASE_URL`
+
+**There is none.** R1's probe shape (a `default_factory` that raises instead of returning the home
+path) was re-applied to `config.py`, which makes the question safe to ask directly: every route that
+*would have* opened the live database instead names it in an exception. Measured:
+
+| launch | with (a) in place | reaches `~/.agentweave/hub/data/agentweave.db`? |
+|---|---|---|
+| `uvicorn hub.main:app` from a cwd with no `.env` | raises, naming the absolute home path, **unwrapped** | **no** |
+| `uvicorn hub.main:app` from `hub/` (this machine) | `hub/.env` supplies a value, so (a) never fires | **no** - it resolves to `hub/data/agentweave.db` |
+| `uvicorn hub.main:app` from `hub/` on a **fresh checkout** | `hub/.env` is gitignored (`.gitignore:69`) and absent, so (a) fires | **no** |
+| bare `agentweave` | `cli.py:1028` sets the variable to that path on purpose | **yes, and correctly** - told, not guessed |
+| `docker compose up` | `docker-compose.yml:34` sets it | n/a - container path |
+| `make ui` / `refresh_ui_bundle.py` | raises today; task 3.1 points it at `:memory:` | **no** |
+| `scripts/drive/n10_route_reachability.py` | raises today; task 3.5 points it at `:memory:` | **no** |
+
+The third row is the one that matters most and R1 did not draw it. `hub/.env` is **gitignored**, so
+the file that currently absorbs a missing `DATABASE_URL` from `hub/` **does not exist in a clean
+checkout** - which means the launch `CLAUDE.md` itself instructs (*"Start it from `hub/`, from
+source"*) lands on the home default on any machine that has not hand-made that file. That is the
+route, it is reachable from the repository's own documented procedure, and (a) closes it.
+
+**One residue, and it is D3's rule working as intended, not a gap:** a `.env` in the launch directory
+that names the home path *would* still be honoured. That is "told" by D3's definition, and refusing
+it is the path-keyed guard D4 rejects for reasons R2 has since strengthened. Nothing on this machine
+does it (`hub/.env` names the relative container path; the repository root's `.env` sets no
+`DATABASE_URL` at all - both read).
 
 ## D10 — one sentence in `DEAD-ENDS.md`'s F388 practice is false, and is corrected rather than dropped
 
@@ -253,14 +388,47 @@ Hub would have created it, so its absence proves **the URL never reached the pro
 
 ---
 
-## What R2 and R3 should attack first
+## What R1 asked R2 to attack, and what R2 returned
 
-1. **D9.** The whole severity argument rests on (a) + (b) removing the route rather than narrowing
-   it. Name a launch that still reaches the live database with no `DATABASE_URL`.
-2. **D5's measurement.** It was taken with a script that called `fileConfig` by hand, not from a
-   running Hub. If a real `uvicorn hub.main:app` shows `hub.*` INFO lines, D5 is wrong and (b)'s
-   level is over-specified. **Drive it; do not re-read this table.**
-3. **D3.** Whether a `.env` should satisfy the refusal is the one judgement call here, and it is the
-   difference between "told" and "told by someone who is still in the room".
-4. **D4.** Rejected on a version-skew argument that was *reasoned*, not measured. If the CLI and Hub
-   are in practice always installed together, the argument is weaker than it reads.
+R1's four items are answered in place, above: **D9** (route removed - the measured table), **D5**
+(driven from two real Hubs; conclusion holds, one new constraint on task 2.2), **D3** (the judgement
+call stands; its `.env.example` consequence was wrong and its fix would have broken Docker), **D4**
+(conclusion stands; the premise was false and the true one is worse for the rejected option).
+
+**R2's own four, none of which R1 had:**
+
+1. **The blast radius is bigger than "`refresh_ui_bundle.py` only".** Measured under the probe, the
+   **CLI suite** breaks too: `tests/test_hub_commands.py::test_first_start_migrations_leave_a_database_that_can_hold_a_conversation`
+   does a bare `import hub.config` at `:707` with no `DATABASE_URL`, and the module-level
+   `Settings()` raises before its own `patch.object(settings, "database_url", ...)` can help. Exactly
+   one new failure: `py -3.11 -m pytest tests/ -q` gives `3 failed, 532 passed, 3 skipped` under the
+   probe, and **two of the three are pre-existing** (`test_skill_sync.py`, confirmed failing on a
+   clean tree). New task 4.9; the proposal's Impact is corrected.
+2. **A second script caller.** `scripts/drive/n10_route_reachability.py:119-121` runs
+   `subprocess.run([sys.executable, "-c", "from hub.main import app..."], cwd=REPO / "hub")` with no
+   `DATABASE_URL`. It survives here only because the gitignored `hub/.env` exists; it wants routes,
+   not a database, so it belongs with 3.1 rather than with the drive scripts that are *correct* to
+   fail. New task 3.5.
+3. **Two scenarios in the delta are falsified by the code being right.** The environment-file
+   scenario is falsified by Docker's relative path being correct (D3), and the
+   named-before-it-is-opened scenario is falsified by native `agentweave` and Docker migrating before
+   `lifespan()` runs (D6). Task 5.2 narrows both.
+4. **The false "no dependency edge" sentence is in the test file too**, not only in D4
+   (`hub/tests/test_config.py:56-58`). New task 1.9.
+
+## What R3 should attack first
+
+1. **The narrowed delta (task 5.2).** R2 rewrote two scenarios against measurements it took itself.
+   Re-derive them from `hub/Dockerfile`, `hub/docker-compose.yml` and `src/agentweave/cli.py:1054`
+   without reading R2's version first, and say whether the narrowing is right or merely convenient.
+2. **Group 3's completeness.** R2 found one caller R1 missed by reading; neither round has *run* the
+   probe over `scripts/` exhaustively. Apply the probe and run every entry point the Makefile and CI
+   invoke - that is a measurement, and it is cheap.
+3. **Task 2.2 against D5's new constraint.** The line must identify itself with no logger-name or
+   level prefix. Check that what 2.2 asks for actually reads as a warning when printed bare.
+4. **The proposal's "Why".** It says the 2026-09-19 start was "from `hub/`". Measured (D3, D9), from
+   `hub/` with `hub/.env` present - and it is dated 2026-09-09, so it was present - an absent
+   `DATABASE_URL` resolves to `hub/data/agentweave.db`, not the home path; and `hub/data/` does not
+   exist. R2 has softened the sentence to what the finding supports rather than re-deriving F388's
+   cause, which DIRECTION item 2 forbids. **R3 should not re-derive it either** - but if the
+   discrepancy still looks load-bearing, that is a note for the operator, not a round's decision.

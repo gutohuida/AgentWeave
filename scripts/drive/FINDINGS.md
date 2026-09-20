@@ -29950,10 +29950,26 @@ it. **Do not read this finding as a decision that it should be built.**
 
 ## F388 (A) — a Hub started from source silently opens the operator's live database, and the code comment says it cannot
 
-**Status:** open — **specced 2026-09-20 (R1 only), no token, nothing built.** Change directory
+**Status:** open — **specced 2026-09-20 (R1 + R2), no token, nothing built.** Change directory
 `openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one` carries the decided
-fix (a) + (b) + (d); `openspec validate --strict` passes. **R2 and R3 have not run**, so the
-proposal is one round's argument and nothing more, and no line of `hub/hub/config.py` has changed.
+fix (a) + (b) + (d); `openspec validate --strict` passes. **R3 has not run**, and no line of
+`hub/hub/config.py` has changed.
+
+**R2, 2026-09-20 — every R1 decision survived an independent re-derivation; five claims did not.**
+Driven, not reasoned: two throwaway Hubs from source (8093/8094, fresh profiles, killed by exact
+PID) settled D5 — 104 `alembic` `INFO` lines appeared and **zero** `hub.*` `INFO` lines did, so (b)
+must be `WARNING`; and at the site (b) is going to, the line prints **bare** (no level, no logger
+name), because `logging.lastResort` has no formatter. Corrected: (1) the **CLI** suite breaks too
+(`tests/test_hub_commands.py:707`'s bare `import hub.config`) — exactly one new failure, measured;
+(2) `scripts/drive/n10_route_reachability.py` is a second caller, surviving today only on the
+gitignored `hub/.env`; (3) R1's task to absolutize `hub/.env.example` **would have broken Docker** —
+that value is the container's path (`WORKDIR /app` + the `hub-data` volume at `/app/data`) and the
+task now comments it instead; (4) "no dependency edge between `agentweave-ai` and `agentweave-hub`"
+is false (`pyproject.toml:34`) — D4's conclusion holds and the true premise argues it harder;
+(5) two delta scenarios were falsified by the code being right, and are narrowed. **D9's question is
+answered: no launch still reaches the live database with no `DATABASE_URL`** — and the sharpest form
+of the route is that `hub/.env` is gitignored, so on a clean checkout the launch `CLAUDE.md` itself
+prescribes lands on the home default.
 Filed 2026-09-19 by the interactive DECIDE session, at the operator's explicit instruction
 ("Yeah becomes a finding"), after the 2026-09-19 day window hit it against the real `:8000`
 database.
