@@ -173,13 +173,26 @@ async def delete_runner(
         raise HTTPException(status_code=404, detail="Runner not found")
 
     bound = await session.execute(
-        select(Agent.name).where(Agent.project_id == project_id, Agent.runner_id == runner_id)
+        select(Agent.name, Agent.lifecycle).where(
+            Agent.project_id == project_id, Agent.runner_id == runner_id
+        )
     )
-    bound_names = bound.scalars().all()
-    if bound_names:
+    bound_rows = bound.all()
+    if bound_rows:
+        labels = [
+            f"{name} (archived)" if lifecycle == "archived" else name
+            for name, lifecycle in bound_rows
+        ]
+        if any(lifecycle == "archived" for _, lifecycle in bound_rows):
+            detail = (
+                f"Runner is bound to agent(s): {', '.join(labels)}. Unbind before deleting; "
+                "an archived agent is listed under Agents with the archived filter."
+            )
+        else:
+            detail = f"Runner is bound to agent(s): {', '.join(labels)}. Unbind before deleting."
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Runner is bound to agent(s): {', '.join(bound_names)}. Unbind before deleting.",
+            detail=detail,
         )
 
     await session.delete(runner)

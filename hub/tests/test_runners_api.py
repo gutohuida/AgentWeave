@@ -262,6 +262,81 @@ async def test_delete_runner_bound_to_agent_is_refused(app, auth_headers):
         f"/api/v1/projects/proj-test/runners/{runner['id']}", headers=auth_headers
     )
     assert resp.status_code == 409
+    assert "(archived)" not in resp.json()["detail"]
+    assert "bound-agent" in resp.json()["detail"]
+
+
+async def _make_runner_bound_agent(app, auth_headers, runner_name, agent_name):
+    runner = (
+        await app.post(
+            "/api/v1/projects/proj-test/runners",
+            json={"name": runner_name, "cli": "claude"},
+            headers=auth_headers,
+        )
+    ).json()
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": agent_name, "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg.status_code in (200, 201)
+    bind = await app.patch(
+        f"/api/v1/projects/proj-test/agents/{agent_name}",
+        json={"runner_id": runner["id"]},
+        headers=auth_headers,
+    )
+    assert bind.status_code == 200
+    return runner
+
+
+@pytest.mark.asyncio
+async def test_delete_runner_bound_to_only_archived_agent_names_it_archived(app, auth_headers):
+    runner = await _make_runner_bound_agent(app, auth_headers, "OnlyArchived", "archived-only")
+    arch = await app.post(
+        "/api/v1/projects/proj-test/agents/archived-only/archive", headers=auth_headers
+    )
+    assert arch.status_code == 200
+
+    resp = await app.delete(
+        f"/api/v1/projects/proj-test/runners/{runner['id']}", headers=auth_headers
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert "archived-only (archived)" in detail
+    assert "an archived agent is listed under Agents with the archived filter" in detail
+
+
+@pytest.mark.asyncio
+async def test_delete_runner_bound_to_mixed_holders_qualifies_only_the_archived_one(
+    app, auth_headers
+):
+    runner = await _make_runner_bound_agent(app, auth_headers, "Mixed", "mixed-open")
+    reg2 = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "mixed-archived", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg2.status_code in (200, 201)
+    bind2 = await app.patch(
+        "/api/v1/projects/proj-test/agents/mixed-archived",
+        json={"runner_id": runner["id"]},
+        headers=auth_headers,
+    )
+    assert bind2.status_code == 200
+    arch = await app.post(
+        "/api/v1/projects/proj-test/agents/mixed-archived/archive", headers=auth_headers
+    )
+    assert arch.status_code == 200
+
+    resp = await app.delete(
+        f"/api/v1/projects/proj-test/runners/{runner['id']}", headers=auth_headers
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert "mixed-open" in detail
+    assert "mixed-open (archived)" not in detail
+    assert "mixed-archived (archived)" in detail
+    assert "an archived agent is listed under Agents with the archived filter" in detail
 
 
 @pytest.mark.asyncio

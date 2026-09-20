@@ -281,15 +281,25 @@ change happened to notice.
 
 ## 5. The third site — `runners.py` (design D4). **Cut this group first.**
 
-- [ ] 5.1 `hub/hub/api/v1/runners.py` `delete_runner` — select `Agent.name` **and**
+- [x] 5.1 `hub/hub/api/v1/runners.py` `delete_runner` — select `Agent.name` **and**
       `Agent.lifecycle`, and qualify each archived holder inline in the refusal, e.g.
       `Runner is bound to agent(s): a1, b2 (archived). Unbind before deleting; an archived agent is
       listed under Agents with the archived filter.` Open-only holders keep today's sentence
-      unchanged.
-- [ ] 5.2 `hub/tests/test_runners_api.py` — three cases: only-archived holder, mixed, only-open
+      unchanged. Done: `bound_rows` now carries `(name, lifecycle)` pairs; each archived name gets
+      `" (archived)"` appended inline, and the trailing clause is appended only when at least one
+      holder is archived — an open-only refusal is byte-identical to today's sentence.
+- [x] 5.2 `hub/tests/test_runners_api.py` — three cases: only-archived holder, mixed, only-open
       holder (the third asserts today's sentence is unchanged). *Mutation: drop the lifecycle
-      column from the select; the first two must fail and the third must pass.*
-- [ ] 5.3 Set `**Status:** fixed <sha>` on **F390** in `scripts/drive/FINDINGS.md` in the same
+      column from the select; the first two must fail and the third must pass.* Done: added
+      `test_delete_runner_bound_to_only_archived_agent_names_it_archived` and
+      `test_delete_runner_bound_to_mixed_holders_qualifies_only_the_archived_one`; extended the
+      pre-existing `test_delete_runner_bound_to_agent_is_refused` with an assertion that `(archived)`
+      never appears in an open-only refusal. Mutation applied by hand (selected only `Agent.name`,
+      synthesized `lifecycle="open"` for every row) and reverted: the only-archived and mixed tests
+      failed (`'mixed-archived (archived)' not in '...mixed-archived, mixed-open...'`) while the
+      only-open test stayed green, confirming the lifecycle column is what the qualification
+      depends on. 23 passed after revert; ruff/black clean.
+- [x] 5.3 Set `**Status:** fixed <sha>` on **F390** in `scripts/drive/FINDINGS.md` in the same
       commit. It is already filed (R1, 2026-09-20) and records that it was found by reading rather
       than by a drive — and that it was never reproduced through HTTP, which 5.2 discharges.
 
