@@ -4,7 +4,7 @@ Opens the Activity tab, PATCHes TID to TO (default under_review) -- a TRUE resol
 divergence -- and counts the feed line. Measured: task_updated renders live, run_divergence_resolved
 does not (F251). AW_HUB AW_KEY AW_PROJECT TID SHOT [TO].
 """
-import os, sys, json, time
+import os, sys, json
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from aw import api, require_key

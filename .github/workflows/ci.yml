@@ -63,8 +63,12 @@ jobs:
 
     - name: Lint with ruff
       if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
+      # scripts/ gets only the rules that catch bugs (syntax, undefined names, unused imports and
+      # locals): refresh_ui_bundle.py runs behind `make ui` and nothing else in CI exercises
+      # scripts/, while full style on the throwaway drive harnesses would be churn, not safety.
       run: |
         ruff check src/ hub/ tests/
+        ruff check scripts/ --select E9,F63,F7,F82,F401,F841
 
     - name: Format check with black
       if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'

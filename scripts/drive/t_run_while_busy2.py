@@ -17,7 +17,6 @@ Run:  AW_HUB=... AW_KEY=... AW_PROJECT=... py -3.11 -u t_run_while_busy2.py
 Never pipe this through `head` -- SIGPIPE kills the teardown.
 """
 
-import json
 import os
 import sys
 import time

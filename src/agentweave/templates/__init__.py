@@ -69,5 +69,4 @@ __all__ = [
     "list_skill_templates",
     "TEMPLATES_DIR",
     "SKILLS_DIR",
-    "SKILL_REFERENCES_DIR",
 ]

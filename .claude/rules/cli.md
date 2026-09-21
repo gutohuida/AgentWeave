@@ -14,7 +14,9 @@ sixth. Layout: `.claude/reference/architecture.md`.
   `agentweave-hub`. Do not add a second. `HttpTransport` uses stdlib `urllib.request` only.
 - Agent names are validated by `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` — any match
   accepted. `VALID_MODES = ["hierarchical", "peer", "review"]`.
-- ALL saves pass through `validator.py` sanitize functions.
+- Nothing in the CLI validates a save itself: `validator.py` is dead, imported only by its own test
+  (see its `# DEAD` header), and the Hub's pydantic schemas validate every write. Do not route new
+  code through it.
 - ALL task modifications use `with lock("name"):`. `is_locked()` is read-only — never delete files.
 - Templates via `get_template("name")` — never hardcode in `cli.py`.
 

@@ -123,7 +123,6 @@ def main():
     )
 
     step("2. Continue while that agent is mid-turn")
-    before = {x["id"] for x in conversations("all")}
     c, t = api(
         "POST",
         f"/projects/{P}/agent/trigger",

@@ -827,7 +827,6 @@ leg(11, "What the operator's own screens can do with any of this")
 import urllib.request  # noqa: E402
 
 def bundle_text():
-    url = HUB.rstrip("/") + "/assets/"
     try:
         with urllib.request.urlopen(HUB.rstrip("/") + "/", timeout=20) as r:
             index = r.read().decode("utf-8", "replace")

@@ -21,7 +21,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from sqlalchemy import Column, Integer, String, event, text
+from sqlalchemy import Column, Integer, String, event
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import declarative_base
 

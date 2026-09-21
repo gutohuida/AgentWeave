@@ -106,6 +106,7 @@ cd hub/ui && npm install && npm run dev   # http://localhost:5173
 
 ```bash
 ruff check src/ hub/ tests/
+ruff check scripts/ --select E9,F63,F7,F82,F401,F841   # bug rules only, no style
 black --check src/ hub/hub/ hub/tests/ tests/   # add --target-version py311 on this machine
 mypy src/
 cd hub/ui && npm run lint

@@ -323,7 +323,6 @@ def main():
         check("the loop's task reached `completed` with nobody's hand on it", True, t_a)
 
         tip_is_stale = tip_at_completed == base_head or tip_at_completed is None
-        agent_still_running = bool(busy_at_completed)
         note("base commit", base_head[:12])
         note("tip at the instant the task read `completed`", (tip_at_completed or "none")[:12])
         note("agent status at that instant", str(busy_at_completed))

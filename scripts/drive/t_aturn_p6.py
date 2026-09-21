@@ -23,7 +23,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aturn_model import AGENT, evaluate, output_rows, read_state, roster_row, wait_idle  # noqa: E402
+from aturn_model import AGENT, output_rows, read_state, roster_row, wait_idle  # noqa: E402
 from aw import P, api  # noqa: E402
 
 LEG = os.environ.get("LEG", "stop")
