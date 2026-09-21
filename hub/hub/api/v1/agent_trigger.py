@@ -1913,7 +1913,7 @@ async def _record_run_failure_tail(
         # is the release below.
         if run is not None and run.status == "running":
             run.status = "failed"
-            run.error = str(exc)
+            run.error = str(exc) or type(exc).__name__
             run.ended_at = datetime.now(timezone.utc)
             await expire_pending_for_run(db, run_id)
             # The last terminal site either transport reaches, and the only one reached without

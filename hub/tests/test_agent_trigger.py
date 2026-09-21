@@ -2994,3 +2994,30 @@ async def test_a_run_with_mcp_is_still_described_the_injected_tools(
     assert seen["access_path"] == "mcp"
     assert "`send_message(to_agent" in seen["context"]
     assert "POST /api/v1/agent-actions/messages" not in seen["context"]
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_run_records_a_reason_rather_than_an_empty_string(app, auth_headers):
+    """F304 -- `str(asyncio.CancelledError())` is `''`, which a truthiness test reads as unset."""
+    import asyncio
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        db.add(Run(id="run-f304", project_id="proj-test", agent="f304", status="running"))
+        await db.commit()
+
+    await agent_trigger._record_run_failure_tail(
+        project_id="proj-test",
+        agent="f304",
+        run_id="run-f304",
+        conversation_id="conv-f304",
+        runner="claude",
+        exc=asyncio.CancelledError(),
+    )
+
+    async with async_session_factory() as db:
+        run = await db.get(Run, "run-f304")
+        assert run.status == "failed"
+        assert run.error == "CancelledError"

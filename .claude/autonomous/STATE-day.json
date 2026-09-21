@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "802a8c7",
     "stop_at": "2026-09-21T17:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-4",
-    "next_action": "Second no-spec repair, or a bounded FINDINGS status sweep: If another finding qualifies for the no-spec carve-out (no openspec/specs/ requirement, no migration/schema change, existing repro, fix smaller than the argument for it), take it. Otherwise: grep FINDINGS.md for findings whose fix commit already exists in git log but whose Status: line still reads open or is missing, and correct them -- bounded to ~20 minutes, do not attempt all ~211 open entries in one pass.",
+    "current": "D-5",
+    "next_action": "spec-queue/review/review-2026-09-21.html per day-window.md D-5's 6-point structure: branch/gate status (report the PREVIOUS gate, i.e. this morning's step-1 finding that CI was in_progress for 66779df and the gate did not open), what night built and what was driven vs only tested, today's drive findings, note that no spec loop ran today (drain=4) and name the four gated changes, what the night default queue will do if the operator approves nothing, and the two research candidates with their AgentWeave-shaped ending. Append today's section to APPROVALS.md (no status tokens -- operator supplies those). Commit and push.",
     "queue": [
         {
             "id": "D-1",
@@ -37,7 +37,7 @@
         },
         {
             "id": "D-4",
-            "status": "open",
+            "status": "done",
             "title": "Second no-spec repair, or a bounded FINDINGS status sweep",
             "detail": "If another finding qualifies for the no-spec carve-out (no openspec/specs/ requirement, no migration/schema change, existing repro, fix smaller than the argument for it), take it. Otherwise: grep FINDINGS.md for findings whose fix commit already exists in git log but whose Status: line still reads open or is missing, and correct them -- bounded to ~20 minutes, do not attempt all ~211 open entries in one pass.",
             "model": "sonnet",

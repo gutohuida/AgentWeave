@@ -25031,7 +25031,7 @@ it.
 
 ## F304 (C) — a run cancelled by shutdown stores an empty string as its reason
 
-**Status:** open. Observed 2026-09-09 while driving `F298`'s fix, in the two `f295` drive databases
+**Status:** fixed (day D-4, 2026-09-21; sha in the commit that carries this line). `run.error = str(exc) or type(exc).__name__`; regression test fails without it. Original observation: Observed 2026-09-09 while driving `F298`'s fix, in the two `f295` drive databases
 either side of it — so it is **pre-existing and unchanged by that fix**, which is why it is filed
 rather than folded into it.
 
