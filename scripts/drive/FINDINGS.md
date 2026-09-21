@@ -30889,3 +30889,42 @@ tags archived holders and points at the archived filter; launchability omits arc
 runs a real Haiku turn charterless. The one BAD line was the script's wrong expectation: archiving
 mid-turn is refused 409 "cc has a run in progress. Wait for it to finish, or stop it first." --
 a gate that held and says what to do.
+
+## F398 (C) -- `dismiss-checkpoint-warning` accepts a conversation that was never warned, and the pre-emptive dismissal silences its first warning for good
+
+**Source:** drive
+
+**Status:** open. **Found 2026-09-21** by the day window's D-2 drive of sweep row 13 (Checkpoints),
+`scripts/drive/t_sweep_row13_checkpoints.py` leg 5 (70 pass / 5 fail; this is 2 of the fails).
+
+**Repro.** Conversation `conv-5317a4b4f3a9`, `checkpoint_warning` null, threshold not yet crossed.
+`POST /conversations/{id}/dismiss-checkpoint-warning` -> **200**, `checkpoint_warning: "dismissed"`.
+Lower the threshold and run another turn so it crosses: the warning stays `'dismissed'` -- the first
+warning is never shown. The route (`hub/hub/api/v1/checkpoints.py:~244`) refuses only `final`; it
+writes `dismissed` from any other state, including none.
+
+**Why C.** The app only shows the dismiss button on a warned conversation, so an operator does not
+reach this from the UI; an API caller or a stale tab does, and the cost is a conversation that grows
+to the provider's compaction with no warning ever raised. Suggested fix: 409 (or a 200 no-op) unless
+the current state is `due`.
+
+## F399 (D) -- taking a checkpoint does not clear a `dismissed` warning, so the conversation is never offered another
+
+**Source:** drive
+
+**Status:** open. **Found 2026-09-21**, same drive as F398, legs 4 and 12.
+
+**Repro.** Warn -> dismiss -> operator takes the checkpoint. `checkpoint_warning` stays `'dismissed'`
+(`checkpoints.py:190` clears only `due` and `final`), and one turn later it is still `'dismissed'`. The
+control conversation, never dismissed, is cleared to null on taking and offered `'due'` again on the
+next crossing -- the two conversations diverge only by whether the operator once said "not yet".
+
+**Why D.** A normal cutover archives the predecessor, so the stale state rarely lives on a
+conversation that continues; it bites only a conversation kept running after its checkpoint.
+
+**Not filed:** leg 8's "second checkpoint took a note written before the first" (1 fail) -- the
+script's expectation about which notes a second checkpoint should consume is unverified against the
+consumption rule; read `checkpoint` note selection before treating it as a defect.
+
+**What held (same drive):** 70 checks including the agent plane grants, visibility, 404 shapes,
+cutover, and the served UI bundle agreeing with source.
