@@ -700,6 +700,26 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-21 late evening — F375's change approved after three rounds
+
+**DECIDED 2026-09-21 ~19:50, by the operator, in an interactive session** ("approve"), after the
+spec loop on `a-word-without-a-separator-can-still-leave` (R1 `38c243a`, R2 `55ae8e7`, R3 `4f87390`)
+and a summary of its five open questions with a recommendation on each. Approved as recommended:
+
+- DECIDED   f375-tilde  **R3's narrowed `~` check** (design Open Question 5): refuse only the shapes a
+  shell substitutes (`~`, `~+`, `~-`, `~name`); `~N` and `~30%` stand.
+- DECIDED   f375-d7  **Option-joined values stay in scope** (Open Question 3), with R3's widening of
+  the colon form to both dialects and `--name:`.
+- DECIDED   f375-d9  **Archived `a-url-is-not-a-path` D9 is superseded** (Open Question 4) for R8
+  (`cd ..`), R9 (`git -C ..`) and its two PowerShell residuals.
+- DECIDED   f375-findings  **File D5, D6 and brace expansion as findings** (Open Question 1): F401,
+  F402, F403, all (B).
+- DECIDED   f375-8000  **Task 0.4 is satisfied by this approval**: the operator was told, before
+  approving, that editing `mcp_server.py` changes `:8000`'s next run, committed or not.
+- Noted, not waived by name: the standing Opus review before approval was offered (R3's fixes are
+  unreviewed) and the operator approved without it. The build's own tests (tasks 1.x, 2.3) are the
+  check on R3's text.
+
 ### 2026-09-21 evening — the week's scorecard asks for decisions, and four are made
 
 **DECIDED 2026-09-21 ~17:30, by the operator, in an interactive session** reviewing the week

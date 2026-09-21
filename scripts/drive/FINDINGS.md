@@ -30968,3 +30968,56 @@ told it runs only the agent its job names; drop *"for another agent to take"* fo
 (R4-2: a three-way answer does not fit a two-way SHALL); and test the absence of each false clause,
 not only the presence of the true one. Read `_stall_reason_from_walk`'s current sentence before
 asserting what `jobs.py:355` replaces on the board (5.4). **Needs its own proposal and rounds.**
+
+---
+
+## F401 (B) -- a bare variable or command substitution names a directory the shell judge never checks
+
+**Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**
+(`DECISIONS.md` `### 2026-09-21 late evening`), as non-goal D5 of
+`a-word-without-a-separator-can-still-leave` (F375).
+**Source:** review
+**Theme:** Workspace & permissions
+**Related:** F375, F402, F403
+
+**What happens.** `cp notes.md $HOME` and `cp notes.md $(dirname $PWD)` are answered **allow,
+"inside your workspace"** by `_decide` (measured 2026-09-21), and both land outside. Rule 3 of
+`_judge_word` (`hub/hub/mcp_server.py:1156`) refuses a word that expands only when it also contains a
+separator, and a bare `$HOME` does not. **Why it was not fixed with F375:** refusing every
+separator-less word containing `$` would refuse `echo $x`, `for f in $files` and most ordinary shell,
+and `_decide`'s docstring already disclaims paths built at run time (`:1448-1449`). The fix needs its
+own trade-off: for example, refuse a bare expansion only in an argument position a known file tool
+reads as a destination, or accept the disclaimer and close this as documented.
+
+---
+
+## F402 (B) -- a PowerShell drive-qualified word (`Z:`) reaches the judge with its colon trimmed
+
+**Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**, as non-goal
+D6 of `a-word-without-a-separator-can-still-leave` (F375).
+**Source:** review
+**Theme:** Workspace & permissions
+**Related:** F375, F401
+
+**What happens.** `Copy-Item notes.md Z:` is allowed (measured): `_WORD_TRIM` includes `:`
+(`mcp_server.py:981`) and `_words` strips it from both ends (`:1396`), so rule 4 judges `Z`. In
+PowerShell, `Z:` is drive Z's current location, which is outside a workspace on another drive; PS 7's
+`Temp:` drive is the multi-letter form. **Constraints any fix must meet (measured):** Git Bash writes
+a file literally named `C:`, so the fix is PowerShell-only; and it must not refuse
+`git show HEAD:README.md`.
+
+---
+
+## F403 (B) -- bash brace expansion assembles `..` that no rule sees
+
+**Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**, from R2 of
+`a-word-without-a-separator-can-still-leave` (F375), design Open Question 1.
+**Source:** review
+**Theme:** Workspace & permissions
+**Related:** F375, F401
+
+**What happens.** `cp notes.md .{,.}` and `cp notes.md {.,.}.` land in the parent directory in Git Bash
+5.2.37 (R2, measured) and are allowed by the judge, before and after F375's change: `_lex` does not
+model brace expansion for any rule. `..$x` with `x` unset lands there too (a bare `$` word, F401's
+shape). The fix belongs in the lexer, or in a rule that refuses a separator-less word whose braces
+could expand to `..`.

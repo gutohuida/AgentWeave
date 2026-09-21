@@ -32,7 +32,7 @@ The four gated changes below carry no row from the day window; the operator may 
 section is the authority for tonight. Decisions behind it: `DECISIONS.md` `### 2026-09-21 evening`.
 Aimed at the week scorecard: O5 (close changes), O4 (severity A), O2 (CI green rate).
 
-ORDER: archive a-first-turn-is-not-told-it-has-nothing, then F380 as a no-spec repair, then F292 fix-or-quarantine, then a-loop-staffs-the-agent-it-names group 7 then archive it -- NOT group 5
+ORDER: archive a-first-turn-is-not-told-it-has-nothing, then F380 as a no-spec repair, then F292 fix-or-quarantine, then a-loop-staffs-the-agent-it-names group 7 then archive it -- NOT group 5, then a-word-without-a-separator-can-still-leave (only if the four above are done)
 
 **1. Archive `a-first-turn-is-not-told-it-has-nothing`.** Every task is ticked (7.5/7.5b tidied this
 evening; 7.4 carries counts, so D2's archive bar is met). Sync specs, archive, and in the same commit
@@ -66,6 +66,17 @@ Haiku on every real turn, never leave a job enabled. Task 7.4's "read-only again
 database" means `mode=ro` SQLite only. Then archive; F128/F161/F70 statuses per the playbook.
 
 - APPROVED  a-loop-staffs-the-agent-it-names   group 7 and archive; §5 moved out to F400, NOT built
+
+**5. `a-word-without-a-separator-can-still-leave` (F375, A) — added ~19:50 by the operator ("approve"),
+last in the ORDER.** Three rounds (R1-R3), decisions in `DECISIONS.md` `### 2026-09-21 late evening`.
+Tasks 0.3 and 0.4 are satisfied by that entry; tick them citing it. Build groups 1-3 in order: tests
+first, each recorded failing today; then the rule; then task 2.3's exact-diff check (only P7, R8, R9,
+H10 change -- anything else is a defect, stop and log it). Group 3's real-shell rows run in a scratch
+directory, never the repo root. **Editing `mcp_server.py` reaches `:8000`'s next run at once** --
+the operator knows; do not restart anything. If group 1 or 2.3 disagrees with the design, stop and
+log rather than adjusting the design unattended. Archive (4.2) only with every task ticked with counts.
+
+- APPROVED  a-word-without-a-separator-can-still-leave   groups 1-4; F375; last in tonight's ORDER
 
 **Not tonight:** `a-hub-that-was-not-told-which-database-refuses-to-open-one` (REVISING, needs R4);
 `a-refused-capability-reaches-the-operator` (§1 gated on F386); `an-unstaffed-review-names-its-holders`
