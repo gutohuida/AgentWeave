@@ -1354,6 +1354,13 @@ session from the one that wrote what was reviewed.
 - **A test command with an unbalanced quote passes the judge for the wrong reason.** `_lex` reads an
   unclosed quote to the end instead of refusing, so `.""."` lexes to `..` while bash will not run it
   at all. Run a sandbox test row's command in the real shell first (F375 R2-3). *(2026-09-21)*
+- **Never add tomorrow's `## <date>` section to `APPROVALS.md` before tonight's night window has
+  run.** The night reads the newest section **only if its date is the date it armed**
+  (`night-window.md` step 2). A `## 2026-09-22` placed above `## 2026-09-21` at 21:30 would have made
+  the 22:55 night read no approvals at all, and tonight's whole ORDER would have been dropped
+  silently. Caught before commit. An approval for a future night goes in tonight's section as prose
+  with **no** `- APPROVED` token at line start, plus a DECISIONS row, and the next DECIDE session
+  copies it forward. *(2026-09-21)*
 
 ## RESOLVED
 
