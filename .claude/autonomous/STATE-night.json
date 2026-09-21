@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-loop-staffs-drive",
-    "next_action": "Do queue item a-loop-staffs-drive: drive group 7 of openspec/changes/*a-loop-staffs-the-agent-it-names* only (NOT section 5, moved to F400). Fresh Hub from hub/ source on a free port (check netstat), DATABASE_URL on C:/, AW_BOOTSTRAP_API_KEY, Haiku turns, leave no job enabled, never touch 8000/8010; 7.4 read-only = mode=ro SQLite only. Also note the ci.yml F292 hit/miss for any new post-b630252 sha in the log (F292 standing tally, 0 of 1 so far).",
+    "current": "a-loop-staffs-archive",
+    "next_action": "Do queue item a-loop-staffs-archive: archive openspec/changes/a-loop-staffs-the-agent-it-names. Groups 7 ticked with counts on 2026-09-22 (7.1-7.4); confirm every task in tasks.md is ticked with counts (F392 rules), run the union guard-file run per F392 rule 2, set F128/F161/F70 statuses per the playbook in the same commit. Note ci.yml F292 hit/miss for any new post-b630252 sha (3d9e2e4 run 35666358888 was in progress; standing tally 0 of 1).",
     "queue": [
         {
             "id": "a-first-turn-archive",
@@ -42,7 +42,7 @@
         },
         {
             "id": "a-loop-staffs-drive",
-            "status": "open",
+            "status": "done",
             "title": "a-loop-staffs-the-agent-it-names group 7 drive",
             "detail": "Group 7 only; NOT section 5 (moved to F400). Fresh Hub on free port (netstat), C:/ DATABASE_URL, AW_BOOTSTRAP_API_KEY, Haiku turns, no job left enabled, never 8000/8010. 7.4 read-only = mode=ro SQLite only."
         },

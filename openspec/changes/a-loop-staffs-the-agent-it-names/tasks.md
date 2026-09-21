@@ -414,17 +414,25 @@ else means the tree has moved further than this list knows.
 
 ## 7. Drive it
 
-- [ ] 7.1 Reproduce F128 against a **trial** Hub before the fix, in the finding's own shape: a
+- [x] 7.1 Reproduce F128 against a **trial** Hub before the fix, in the finding's own shape: a
       three-agent project, a documentless loop naming one agent, that agent mid-turn, Run pressed.
       Record the conversation id and the task's assignee. Bind Haiku for every agent turn.
-- [ ] 7.2 Repeat after the fix: 409, no conversation created, assignee still empty.
-- [ ] 7.3 Drive a **flow** in the same project through a two-task firing and confirm both start. A
+
+      **Driven 2026-09-22, pre-fix (worktree at `e41b607`, the parent of `831ac16`, own Hub :8094, migration head 0104), `scripts/drive/d7_0920_alsn_drive.py`, three Haiku agents:** gamma mid-turn, alpha/beta idle, documentless loop naming gamma, Run pressed. **200**, conversation `conv-fe95c98c3048` created, task `in_progress` with assignee `alpha001811`, no `stall_reason`, bucket `running`. 7 of 13 verdicts held; the 6 that failed are exactly the refusal-shape ones. F128 reproduces.
+- [x] 7.2 Repeat after the fix: 409, no conversation created, assignee still empty.
+
+      **Driven 2026-09-22 on this checkout (HEAD `3d9e2e4`, fresh Hub :8093, migration head 0105), same script and shape:** **409** *"gamma001614 is already running a turn, and no other agent is free to take this loop's work. Nothing was started."*, 0 conversations for the loop, the task `pending` with no assignee, `stall_reason` set, `endingBucket()` = `stalled`. 13 of 13 verdicts held. (The sentence's *"no other agent is free"* is false here — alpha and beta were idle — which is F400's content, not this group's.)
+- [x] 7.3 Drive a **flow** in the same project through a two-task firing and confirm both start. A
       drive that only shows the refusal has not shown that width survived.
-- [ ] 7.4 **Answer design.md's open question.** Read-only, against the operator's database
+
+      **Same 13-of-13 run:** a spec-linked flow in the identical busy-gamma shape, Run pressed: **200**, both tasks `in_progress` (alpha001614, beta001614), neither on gamma, `stall_reason` null, bucket `running`. Width survived. Side observation, not a claim about cause: the pre-fix run started only one of the two flow tasks (beta; the other stayed `pending`), so the flow started both only post-fix on this run.
+- [x] 7.4 **Answer design.md's open question.** Read-only, against the operator's database
       (`mode=ro`, never a write, never a restart): does any task sit in a review status whose
       assignee is the agent that completed it, on a loop with no `spec_document_id`? That decides
       whether task 4.1 is a regression guard or a live repair.
 
+
+      **Answered 2026-09-22, `mode=ro` on `~/.agentweave/hub/data/agentweave.db` (`:8000`'s), reads only:** the database holds **1** loop (`loop-103ecb8aeb89`), and it has a `spec_document_id`; **0** loops are documentless, so **0** review-status tasks sit on a documentless loop. The two review-status loop tasks (`task-9e89a55ccc84` `under_review`/Architect, `task-20d6abe330b7` `revision_needed`/dev_2) belong to that flow; 0 review-status tasks are loop-less. **Task 4.1 is a regression guard, not a live repair.** One snapshot on 2026-09-22, not a claim about earlier data.
 ## 8. Close it out
 
 - [x] 8.1 Wrote `test-guide.md`, covering groups 0-4/6/7 (built and driven) as agent-verifiable and
