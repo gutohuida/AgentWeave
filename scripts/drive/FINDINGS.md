@@ -30686,3 +30686,58 @@ green rate — a hung run is neither green nor red, and `gh run list` counts it 
 **Reproduce:** `gh run list --branch master --limit 10`, then
 `gh run view 35218523888 --json jobs -q '.jobs[] | .name + ": " + .conclusion + " " + .startedAt + " -> " + .completedAt'`
 and `gh run view 35218523888 --log | grep '^hub-test' | tail -30`.
+
+## F395 (B) -- `POST /messages` treats every operator-sent message as if it were the deepest possible agent hop, and mislabels its origin
+
+**Source: found by driving** (e2e-loop SWEEP, 2026-09-21, port 8030, `proj-05c8aa160921`).
+
+**What happens.** The one route that injects a message into an agent's inbound queue —
+`POST /projects/{id}/messages`, body `{"from": ..., "to": ..., "content": ...}` — is used both by
+an agent's `send_message` tool (which always supplies `run_id`, so `hop_depth` is computed from the
+sending run's real `turn_depth`) and by an operator sending a message directly with no `run_id`
+(`hub/hub/api/v1/messages.py:56-71`). For the no-`run_id` case the code does not treat the message
+as hop 0 (an operator's message from outside the chain, having consumed none of the hop budget). It
+falls through to `hop_depth = hop_budget + 1` — a value written to always exceed the project's own
+`hop_budget` — so the entry is queued already over budget and immediately suspended
+(`queue_chain_suspended`), needing a manual `POST /queue/entries/{id}/release` before the agent ever
+sees it. Separately, the entry this produces is stamped `"origin_type": "agent"` unconditionally,
+even though `origin_agent` correctly says `"operator"` — so the record a reviewer would use to
+diagnose *why* an entry is suspended says the wrong thing about who sent it.
+
+**Evidence.** Sent as the operator (Bearer = the Hub's own API key, `from: "operator"`, no
+`run_id`) to agent `reviewer`, project hop_budget 6:
+
+```
+POST /projects/proj-05c8aa160921/messages {"to":"reviewer","from":"operator","content":"operator injected note: hold for now"}
+-> 201 {"id":"msg-ed378c68d2ad", ...}
+```//not shown in queue GET directly; queue entry:
+```
+GET /projects/proj-05c8aa160921/queue/reviewer
+-> {"id":"entry-304fc29eea8e","agent":"reviewer","origin_type":"agent","origin_agent":"operator",
+    "content":"operator injected note: hold for now","hop_depth":7,"state":"queued", ...}
+```
+`event_logs` row (read directly from `profiles/drive0920/agentweave.db`):
+```
+('queue_chain_suspended', '{"entry_id": "entry-304fc29eea8e", "agent": "reviewer", "hop_depth": 7, "hop_budget": 6}')
+```
+7 = `hop_budget(6) + 1`, confirming the fallback branch fired rather than any real chain depth. In
+the same batch, a same-endpoint agent-to-agent message (`alpha` -> `reviewer`, sent from inside a
+real run so `run_id` was present) got `hop_depth: 1` and delivered normally — the bug is specific to
+the no-`run_id` path, i.e. specific to how an operator's own send lands.
+
+**One defect or a design gap?** One defect (a missing `is_operator` / no-`run_id` branch that should
+assign `hop_depth: 0` and `origin_type: "operator"`), not a symptom of something broader — the
+agent-to-agent path in the same function is correct.
+
+**Does an existing openspec change cover it?** No hit for `hop_depth`, `origin_type`, or
+`queue_chain_suspended` combined with "operator" in `openspec/specs/` (checked
+`agent-conversation-workspace`, `agent-flows`, `agent-tool-surface`, `local-project-workspace`,
+`run-task-binding` — the five specs that mention hops at all). This looks like new news, not a
+known gap.
+
+**Severity: B** (wrong/misleading) rather than A: the operator's message is not lost — `release`
+recovers it, and withdrawal also works cleanly (verified: `DELETE /queue/entries/{id}` moved it to
+`state: "withdrawn"`) — but every operator-authored queue injection is silently held back and
+mislabeled as agent-originated until the operator separately discovers and clears the suspension,
+which nothing in the response to the original POST surfaces (the 201 body has no `hop_depth` or
+suspension warning at all).

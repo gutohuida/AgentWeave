@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 10,
+  "iteration": 11,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "e2e-sweep-drive",
-  "next_action": "Full-surface e2e sweep (id e2e-sweep-drive in queue). Use the e2e-loop skill. Operator asked for this explicitly (APPROVALS.md 2026-09-20). FOUR CONSTRAINTS: (1) NOT port 8010 or 8000 -- pick a free port via netstat and record it. (2) Set DATABASE_URL explicitly to profiles/drive0920/agentweave.db -- SKILL.md:144 sets none and falls through to hub/.env. (3) Fresh project; never proj-5e960453, proj-18e5d4e0, proj-d85a82bf4216 (this repo's own registration) or this repo's own directory. (4) Haiku on every turn, never leave a job enabled. File findings with Source: found by driving. Commit, push, advance current/next_action to i-6.2-redo, or to null if the window's time budget is spent.",
+  "current": "i-6.2-redo",
+  "next_action": "If time remains: run `py -3.11 -m pytest hub/tests/ -q` in full for a-loop-staffs-the-agent-it-names task 6.2 and write the ACTUAL pass/fail count into tasks.md (APPROVALS.md 2026-09-20 flagged the current tick cites a log entry that was never written -- do not trust it, re-run for real). Section 5 of that change is still NOT approved; do not build it. If the window's time budget is spent, set next_action to null instead.",
   "queue": [
     {
       "id": "group1-impl",
@@ -71,11 +71,11 @@
     },
     {
       "id": "e2e-sweep-drive",
-      "status": "open",
+      "status": "done",
       "title": "Full-surface e2e sweep - LAST, only if everything above is finished",
       "model": "sonnet",
       "effort": "medium",
-      "detail": "Operator asked for this explicitly (APPROVALS.md 2026-09-20). Use the e2e-loop skill. LAST on purpose: must not eat the window before the builds land. FOUR CONSTRAINTS because SKILL.md's own reference conflicts with this playbook: (1) NOT port 8010 - that is the trial Hub and THIS repo is registered in it as proj-d85a82bf4216, so driving it points the Hub being edited at the tree being edited (CLAUDE.md forbids it). Pick a free port via netstat and record it. (2) Set DATABASE_URL explicitly to profiles/drive0920/agentweave.db - SKILL.md:144 sets none and falls through to hub/.env. (3) Fresh project; never proj-5e960453 or proj-18e5d4e0, never this repo's own directory. (4) Haiku on every turn, never leave a job enabled. File findings with Source: found by driving."
+      "detail": "Operator asked for this explicitly (APPROVALS.md 2026-09-20). Use the e2e-loop skill. LAST on purpose: must not eat the window before the builds land. FOUR CONSTRAINTS because SKILL.md's own reference conflicts with this playbook: (1) NOT port 8010 - that is the trial Hub and THIS repo is registered in it as proj-d85a82bf4216, so driving it points the Hub being edited at the tree being edited (CLAUDE.md forbids it). Pick a free port via netstat and record it. (2) Set DATABASE_URL explicitly to profiles/drive0920/agentweave.db - SKILL.md:144 sets none and falls through to hub/.env. (3) Fresh project; never proj-5e960453 or proj-18e5d4e0, never this repo's own directory. (4) Haiku on every turn, never leave a job enabled. File findings with Source: found by driving. Done iteration 11: sweep run on port 8030, project proj-05c8aa160921 under testbed/scratch/e2e_sweep_0921/. 10 of 19 matrix rows fully driven and held up (task transitions, dependencies, full spec lifecycle, evidence->integration->coverage with a verified real git merge, ask_user block/release, loop mechanics); 6 partial; 3 explicitly not-reached (Flows, Checkpoints, Resilience) rather than silently skipped. One new finding F395 (B, inbound queue: POST /messages with no run_id sets hop_depth=hop_budget+1 and mislabels origin_type as agent for an operator-sent message) filed in scripts/drive/FINDINGS.md with live-db evidence. Cleanup verified independently: netstat showed port 8030 free (only TIME_WAIT), job archived, token_budget override reset. Report written to testbed/scratch/e2e_sweep_0921/REPORT.md."
     },
     {
       "id": "i-6.2-redo",
