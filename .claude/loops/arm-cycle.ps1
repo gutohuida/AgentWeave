@@ -162,12 +162,18 @@ $installer = (Resolve-Path $installer).Path
 $insideWorkTree = (& git -C $Repo rev-parse --is-inside-work-tree 2>$null)
 if ($LASTEXITCODE -ne 0 -or $insideWorkTree -ne "true") { throw "$Repo is not a Git working tree." }
 
-# A dirty tree is the operator's, or a window that died mid-iteration. Either way it is not ours to
-# commit over, and the driver refuses to arm on one anyway. Skip the day loudly.
-$dirty = @(& git -C $Repo status --short)
+# A dirty tree is the operator's, or a window that died mid-iteration -- both are TRACKED
+# modifications. Either way it is not ours to commit over, and the driver refuses to arm on one
+# anyway. Untracked files are not counted (F380 a): a healthy window leaves scratch, and the arm's
+# checkout leaves untracked files alone. Skip the day loudly, and leave a line where the operator
+# reads (the gitignored driver log), because Task Scheduler records only a bare exit code.
+$dirty = @(& git -C $Repo status --short --untracked-files=no)
 if ($dirty.Count -gt 0) {
-  Say "REFUSING: working tree is dirty. Leaving this window unarmed."
+  Say "REFUSING: working tree has tracked modifications. Leaving this window unarmed."
   $dirty | ForEach-Object { Say "    $_" }
+  $logPath = Join-Path $Repo $w.LogFile
+  $stamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
+  Add-Content -Path $logPath -Encoding utf8 -Value @("[$stamp] arm-$Window REFUSED (exit 3): tracked modifications:") + @($dirty | ForEach-Object { "    $_" })
   exit 3
 }
 

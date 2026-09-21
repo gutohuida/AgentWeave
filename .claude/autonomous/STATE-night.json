@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f380-impl",
-    "next_action": "Do queue item f380-impl: Dirty check -> tracked-only (--untracked-files=no); every refusal writes a line to the day/night log. Take (b) if small. Test dirty-check logic alone vs a scratch untracked file, remove it. Do NOT register/trigger tasks or run arm for real. Status fixed <sha> only for landed part.",
+    "current": "f292-impl-1",
+    "next_action": "Do queue item f292-impl-1: Read the FOOT of F292 only. Cheap shape: serialise the two racing files or give them own DB. Measure on CI, not locally. Record CI green rate across the night's pushes. Timebox 2 firings total.",
     "queue": [
         {
             "id": "a-first-turn-archive",
@@ -23,7 +23,7 @@
         },
         {
             "id": "f380-impl",
-            "status": "open",
+            "status": "done",
             "title": "F380 no-spec repair: arm-cycle.ps1:167 ignores untracked files",
             "detail": "Dirty check -> tracked-only (--untracked-files=no); every refusal writes a line to the day/night log. Take (b) if small. Test dirty-check logic alone vs a scratch untracked file, remove it. Do NOT register/trigger tasks or run arm for real. Status fixed <sha> only for landed part.",
             "model": "sonnet"

@@ -29358,7 +29358,7 @@ is legible at a glance, an empty input is not — and leave them editable where 
 
 ## F380 (A) — two independent ways the day window silently fails to arm, and neither leaves anything to read
 
-**Status:** open. Filed 2026-09-18 00:15 by an interactive session, from the live scheduled tasks
+**Status:** part (a) fixed in the commit that follows 2026-09-21 night iteration 3 (tracked-only dirty check in `arm-cycle.ps1` and `install-driver.ps1`; refusal now also appends to the gitignored driver log); part (b) was decided 2026-09-18 and is not touched here. Filed 2026-09-18 00:15 by an interactive session, from the live scheduled tasks
 and `arm-cycle.ps1` / `install-driver.ps1` on this machine.
 
 **Source:** drive — found by exercising the product and reading what it actually recorded.

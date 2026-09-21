@@ -169,7 +169,7 @@ if (-not (Test-Path $gitignore) -or -not (Select-String -Path $gitignore -Simple
   throw "Added '$ignoreLine' to .gitignore. Commit it, then run the installer again so the first firing starts clean."
 }
 
-$dirty = @(& git -C $Repo status --short)
+$dirty = @(& git -C $Repo status --short --untracked-files=no)
 if ($LASTEXITCODE -ne 0) { throw "Could not inspect the Git working tree." }
 if ($dirty.Count -gt 0) {
   throw "Refusing to arm with a dirty tree:`n$($dirty -join [Environment]::NewLine)"
