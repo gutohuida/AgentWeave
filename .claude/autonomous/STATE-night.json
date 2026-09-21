@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-loop-staffs-archive",
-    "next_action": "Do queue item a-loop-staffs-archive: archive openspec/changes/a-loop-staffs-the-agent-it-names. Groups 7 ticked with counts on 2026-09-22 (7.1-7.4); confirm every task in tasks.md is ticked with counts (F392 rules), run the union guard-file run per F392 rule 2, set F128/F161/F70 statuses per the playbook in the same commit. Note ci.yml F292 hit/miss for any new post-b630252 sha (3d9e2e4 run 35666358888 was in progress; standing tally 0 of 1).",
+    "current": "f375-g1-impl",
+    "next_action": "Do queue item f375-g1-impl: a-word-without-a-separator-can-still-leave group 1 (tests first). Tick 0.3/0.4 citing DECISIONS '2026-09-21 late evening'; each test recorded failing today. Stop and log if design disagrees. F292 tally standing 0 of 2 (3d9e2e4 green; 69f1531 run 35667056235 pending).",
     "queue": [
         {
             "id": "a-first-turn-archive",
@@ -48,7 +48,7 @@
         },
         {
             "id": "a-loop-staffs-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-loop-staffs-the-agent-it-names",
             "detail": "Every task ticked with counts (F392 rules); F128/F161/F70 statuses per playbook in same commit. Union guard-file run per F392 rule 2."
         },
