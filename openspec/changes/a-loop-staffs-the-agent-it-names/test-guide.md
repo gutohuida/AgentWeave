@@ -1,10 +1,9 @@
 # Test guide — a loop staffs the agent it names
 
 Covers groups 0–4, 6 and 7 (built and driven, `831ac16`/`adca56b`, `D-4, 2026-09-20`). Group 5
-(what the operator is told — the wording of the 409/board sentences) is **unbuilt**; its checks are
-not listed here, and this guide does not wait for it — it describes what shipped, not what didn't.
-Re-derive a Group 5 section against the actual `run_job`/board diff once that group lands, rather
-than pre-writing checks against text that does not exist yet.
+(what the operator is told — the wording of the 409/board sentences) was **moved out of this change
+on 2026-09-21 by operator decision, to F400** (`scripts/drive/FINDINGS.md`); its checks belong to
+F400's own change, not here.
 
 ## Agent-verifiable (run by IMPL and DRIVE)
 
@@ -18,23 +17,22 @@ than pre-writing checks against text that does not exist yet.
 | 6 | Full regression set unaffected: `test_a_loop_does_not_staff_its_own_review.py`, `test_loop_busy_guard.py`, `test_flow_width.py`, `test_actor_aware_claimability.py` | Group 6, 54 → 64 passed |
 | 7 | `openspec validate a-loop-staffs-the-agent-it-names --strict` passes | Run directly |
 
-## Human-only (for the operator, on their own Hub, once Group 5 ships)
+## Human-only (for the operator, on their own Hub, once F400 ships)
 
 These depend on wording that does not exist yet — do not judge them against today's text:
 
 1. **Does the 409 tell you what actually happened?** Press Run on a documentless loop pinned to a
-   busy agent with siblings idle. Today's sentence still reads the pre-Group-5 F127 text (*"no other
-   agent is free to take this loop's work"*), which is **true but potentially confusing** now that
-   the real reason is scope, not headcount — siblings *are* free, just not eligible. *Judge, once
-   5.3/5.5 ship:* does the new wording say "this loop only runs its own agent" rather than implying
+   busy agent with siblings idle. Today's sentence still reads F127's text (*"no other agent is
+   free to take this loop's work"*), which is **false** in that shape — siblings *are* free, just
+   not eligible; that is F400. *Judge, once F400 ships:* does the new wording say "this loop only runs its own agent" rather than implying
    nobody is around?
 2. **Does the board's stall reason match?** Same shape, on the *Loops* board. *Judge:* does the
-   amber line read as "waiting for its own agent," not "no claimable task" (task 5.4's own
+   amber line read as "waiting for its own agent," not "no claimable task" (moved task 5.4's, now F400's
    distinction)?
 
 ## Not covered by this change
 
-- **The wording itself** (group 5) — filed as the change's own remaining scope, not a defect; F128
+- **The wording itself** (group 5) — moved out to **F400** on 2026-09-21; F128
   is closed on the substitution being fixed (see `scripts/drive/FINDINGS.md`), independent of when
   the wording lands.
 - **Which agents count as free for a flow's roster** — untouched by this change; that is

@@ -150,6 +150,24 @@ busy agent and a pending task, `decide_firing` records nothing at `:1621-1625`,
 `jobs.py:355` replaces it with the busy reason. Task 3.4's insistence on asserting the decision
 **kind** as well as the sentence is load-bearing, not belt-and-braces.
 
+**2026-09-21 — D4 moved out of this change, to F400 (`scripts/drive/FINDINGS.md`), by operator
+decision.** It was never approved (`proposal.md`'s banner): its half of D10 was written in R4 and
+no round re-derived it, and Open Question 2 was never answered. Moving it lets the built groups
+(0-4, 6, 8) and tonight's drive (7) archive without syncing a requirement the code does not meet.
+**Removed from the delta, because `run_job` (`hub/hub/api/v1/jobs.py:1347-1361`) still answers a
+documentless loop with an open task *"no other agent is free to take this loop's work"* whoever is
+free:** the MODIFIED `:791` paragraph *"Where a refusal is reported to the operator, its stated
+reason SHALL be true…"* and its scenario *"The refusal of a documentless loop does not blame a busy
+roster"*; in the MODIFIED `:1471`, the three-way *"SHALL say which of those three held"* paragraph
+and the scenario *"Run on a documentless loop while another agent is free"*. **Kept**, because the
+built code does them: `:1471`'s three-condition description of the guard (`scheduler.py:312-350`,
+`_agents_a_loop_may_staff` returns `[]` for a documentless loop at `:1237-1257`), now followed by
+the two answers the code does give truthfully — the empty queue (`jobs.py:1355-1359`, tested by
+`test_run_on_a_busy_agents_empty_loop_names_the_empty_queue`) and a flow's exhausted roster — and an
+explicit statement that the documentless open-task sentence is not yet governed. The board scenario
+*"The loop's summary names the hold rather than a stall"* is unchanged from the main spec and true
+via `jobs.py:355` (`test_a_held_single_agent_loop_reads_held_not_no_claimable_task`).
+
 ### D5 — `resolve_reviewer` stays project-scoped, and the F70 recovery is an explicit exception
 
 **R1 was wrong and R2-1 is the blocking finding.** R1 claimed a documentless loop never reaches
@@ -316,6 +334,12 @@ third clause (it is D4, and the whole operator-facing point of the change — th
 telling the operator to free an agent that changes nothing); leaving `:1471` for a later change (it
 is false the day this ships, which is what "dormant" meant in D9 and cost this change two rounds).
 
+**2026-09-21:** D10's reason for existing survives D4's move, in half. `:1471`'s two-way guard
+description is false of the built code (D3), so the MODIFIED requirement stays and describes three
+conditions. What went is the mandate that the answer name the third one — the code does not, and
+that is F400. The requirement now says which answers it governs and states that the documentless
+open-task sentence is undecided, rather than ship a SHALL the 409 violates.
+
 ## Risks / Trade-offs
 
 - **The operator's live loops start idling**, and while their agent is held they stop resuming even
@@ -420,6 +444,12 @@ on `:8000`; it ran only two test files (12 passed), not the 16-file baseline, th
 `_stall_reason_from_walk`'s body, so **D4's claim about the exact sentence it replaces is still
 unverified**; and it audited only 4 of the 16 baseline files beyond the greps it reported.
 
+### 2026-09-21 — §5 / D4 moved out (operator decision, not a round)
+
+Not an adversarial round: an edit made so the change can archive. §5 re-filed as **F400**; the delta
+trimmed to what the built code does (D4's and D10's dated notes list each removal and each keep
+with its code evidence). Open Question 2 moves with it — it only ever gated task 5.4.
+
 ## Open Questions
 
 1. **Does `:8000` actually hold a wedged review row on a documentless loop?** R2-1's path is real in
@@ -429,6 +459,6 @@ unverified**; and it audited only 4 of the 16 baseline files beyond the greps it
    unobserved in life. What remains open is only whether task 4.1 is a guard over a hypothetical or
    over rows the operator is actually holding, which changes the urgency of shipping and nothing
    about the design. Answerable by a read-only query, which **task 7.4** carries.
-2. **`_stall_reason_from_walk`'s exact current sentence is still unverified** (R4's own gap). D4
+2. **Moved to F400 with §5, 2026-09-21.** **`_stall_reason_from_walk`'s exact current sentence is still unverified** (R4's own gap). D4
    asserts which string `jobs.py:355` replaces. **Task 5.4** must read that function's body before the
    operator-visible sentence is changed, not after.

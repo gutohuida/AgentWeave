@@ -255,30 +255,36 @@ else means the tree has moved further than this list knows.
       actually requires; this task's phrasing predates that move and names the pre-group-1
       function. No code change was made to `resolve_reviewer` for either 4.1 or 4.2.
 
-## 5. What the operator is told (design D4)
+## ~~5. What the operator is told (design D4)~~
 
-- [ ] 5.1 **Test:** pressing Run on a documentless loop whose agent is busy, with a sibling free,
+> **MOVED OUT 2026-09-21 by operator decision → F400 in `scripts/drive/FINDINGS.md`.** §5 was never
+> approved (see `proposal.md`'s banner) and none of it was built. The text below is kept for
+> provenance only; its checkboxes are removed so it neither blocks this change's archive nor reads
+> as open work here. The delta's §5-only sentences and scenarios were removed in the same edit —
+> see `design.md` D4's 2026-09-21 note. Build it under F400's own proposal and rounds, not here.
+
+- ~~5.1 **Test:** pressing Run on a documentless loop whose agent is busy, with a sibling free,
       answers **409** and the detail **does not contain** "no other agent is free". Assert the
-      absence as well as the presence; the defect is a true-sounding sentence.
-- [ ] 5.2 **Test:** the same press on a flow keeps today's wording.
-- [ ] 5.3 Split the `why` clause in `run_job` (`hub/hub/api/v1/jobs.py`, the branch that re-asks the
+      absence as well as the presence; the defect is a true-sounding sentence.~~
+- ~~5.2 **Test:** the same press on a flow keeps today's wording.~~
+- ~~5.3 Split the `why` clause in `run_job` (`hub/hub/api/v1/jobs.py`, the branch that re-asks the
       busy guard) so a documentless loop is told the loop runs only the agent its job names.
       The empty-queue clause drops its trailing *"for another agent to take"* for a loop.
       **R4-2: this third clause is what forced `agent-loops:1471` into the delta.** That requirement
       said the answer *"SHALL say which of those **two** held"*, and a third reason does not fit a
       two-way SHALL. Build 5.3 and the `:1471` delta together, or the code satisfies one requirement
       by violating another in the same capability — which `openspec validate --strict` cannot
-      detect, because it checks no requirement against any other.
-- [ ] 5.5 **Test:** the `:1471` answer names the condition that held and **not** one that did not.
+      detect, because it checks no requirement against any other.~~
+- ~~5.5 **Test:** the `:1471` answer names the condition that held and **not** one that did not.
       Three cases, one assertion each on absence: documentless loop with a sibling free (names the
       single-agent scope, not the roster); flow with the roster exhausted (names the roster); any
       loop with an empty queue (names the queue). **The absence assertions are the test** — all
-      three sentences are individually plausible, which is how F127's survived.
-- [ ] 5.4 **Test:** the board. A documentless loop in this state reports the busy reason, not "no
+      three sentences are individually plausible, which is how F127's survived.~~
+- ~~5.4 **Test:** the board. A documentless loop in this state reports the busy reason, not "no
       claimable task". **Assert the decision kind as well as the sentence** — R2 traced that the
       sentence is only correct because `jobs.py:355` replaces `_stall_reason_from_walk`'s
       *"no claimable task among 1 open (1 pending)"*, so the sentence can be right for the wrong
-      reason.
+      reason.~~
 
 ## 6. What must not move
 
@@ -424,6 +430,11 @@ else means the tree has moved further than this list knows.
 - [x] 8.1 Wrote `test-guide.md`, covering groups 0-4/6/7 (built and driven) as agent-verifiable and
       naming group 5's wording checks as not-yet-written rather than pre-writing them against text
       that doesn't exist. Decision: does not wait for group 5 — it describes what shipped.
+
+      **2026-09-21:** group 5 moved out to **F400**, so it is no longer this change's remaining
+      scope and nothing here waits on it. `test-guide.md`'s group-5 references now point at F400,
+      and its human-only check 1 no longer calls today's 409 sentence true: for a documentless loop
+      with a free sibling, *"no other agent is free"* is false, which is F400's whole content.
 - [x] 8.2 F128's `**Status:**` set to fixed, naming `831ac16`/`adca56b` and `D-4, 2026-09-20`, with
       the authority-hole account (`charter_id`, `runner_id`, the three flags) kept verbatim in the
       entry body.

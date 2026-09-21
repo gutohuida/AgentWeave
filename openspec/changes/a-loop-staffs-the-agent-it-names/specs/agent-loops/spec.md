@@ -128,11 +128,6 @@ Where the loop's summary reports why the loop is not proceeding, and this refusa
 loop's next firing, the summary SHALL report this refusal's reason. It SHALL NOT report a stalled
 queue with no claimable task, since the next firing is refused before it looks at the queue.
 
-**Where a refusal is reported to the operator, its stated reason SHALL be true of the loop it
-refused.** A refusal of a loop that declares no specification document SHALL NOT be reported as no
-other agent being free, since another agent may well be free and freeing one more would change
-nothing. It SHALL instead state that the loop runs only the agent its job names.
-
 The loop's job SHALL remain enabled and remain scheduled, so that a later firing proceeds once the
 agent is free.
 
@@ -176,13 +171,6 @@ agent is free.
 - **THEN** the firing is not refused
 - **AND** the free agent is started for that task
 
-#### Scenario: The refusal of a documentless loop does not blame a busy roster
-
-- **WHEN** a loop declares no specification document, its agent has a running turn, another agent in
-  the project is free, and the operator fires the loop's job by hand
-- **THEN** the refusal states that the loop runs only the agent its job names
-- **AND** it does not state that no other agent is free
-
 #### Scenario: The loop's summary names the hold rather than a stall
 
 - **WHEN** a loop's agent's queue is held, no other agent in the project is free, and the loop has one pending unassigned task
@@ -221,12 +209,16 @@ the loop's queue holds no task in a non-terminal status.** It records nothing, d
 there is no firing record to read a reason from, and the most recent record is some earlier
 firing's.
 
-The answer SHALL say which of those three held, and SHALL NOT name a condition that did not hold.
-Stating that no other agent is free when one is free tells the operator to free an agent, which
-would change nothing. For a loop that declares no document, freeing an agent changes nothing
-whether or not one is free — what that loop lacks is its own agent — so the answer SHALL name the
-loop's single-agent scope and SHALL NOT name the roster. Where the loop declares a document and the
-roster is genuinely exhausted, the roster is the true reason and the answer SHALL name it.
+Where the loop's queue holds no task in a non-terminal status, the answer SHALL say so, and SHALL
+NOT state that no other agent is free. Stating that no other agent is free when one is free tells
+the operator to free an agent, which would change nothing; what the loop lacks is work. Where the
+loop declares a specification document and its queue holds an open task, the guard refused because
+no other agent is free, and the answer SHALL say so.
+
+This requirement does not state what the answer says, beyond the reason the guard gave, for a loop
+that declares no specification document and whose queue holds an open task. That loop is refused
+whether or not another agent is free, so the roster is not its reason; which sentence names that
+reason is not yet decided.
 
 The route SHALL answer from a firing record only when the manual firing wrote that record. Where it
 wrote none, the route SHALL ask the guard again before anything else, because the guard is the
@@ -251,13 +243,6 @@ start until the hold ends.
 - **THEN** the answer is a conflict naming the agent that is running
 - **AND** it does not state that no other agent is free
 - **AND** no inbound queue entry is created for the loop's agent
-
-#### Scenario: Run on a documentless loop while another agent is free
-
-- **WHEN** a loop declares no specification document, its agent is running a turn, its queue holds a pending task, another agent in the project is free, and the operator presses Run
-- **THEN** the answer is a conflict naming the agent that is running
-- **AND** it states that the loop runs only the agent its job names
-- **AND** it does not state that no other agent is free
 
 #### Scenario: Run while the loop's agent is held
 

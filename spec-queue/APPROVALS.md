@@ -26,6 +26,51 @@ The four gated changes below carry no row from the day window; the operator may 
 - `a-refused-capability-reaches-the-operator`
 - `an-unstaffed-review-names-its-holders`
 
+### Operator, 2026-09-21 evening — tonight's queue
+
+**Written in an interactive session with the operator present, after the review page above.** This
+section is the authority for tonight. Decisions behind it: `DECISIONS.md` `### 2026-09-21 evening`.
+Aimed at the week scorecard: O5 (close changes), O4 (severity A), O2 (CI green rate).
+
+ORDER: archive a-first-turn-is-not-told-it-has-nothing, then F380 as a no-spec repair, then F292 fix-or-quarantine, then a-loop-staffs-the-agent-it-names group 7 then archive it -- NOT group 5
+
+**1. Archive `a-first-turn-is-not-told-it-has-nothing`.** Every task is ticked (7.5/7.5b tidied this
+evening; 7.4 carries counts, so D2's archive bar is met). Sync specs, archive, and in the same commit
+confirm F302's Status line — it is already `fixed 802a8c7` for the text; do not claim more than its
+own entry does.
+
+- APPROVED  a-first-turn-is-not-told-it-has-nothing   archive only; nothing left to build
+
+**2. F380 (A), no-spec repair — part (a) at minimum.** `arm-cycle.ps1:167` refuses to arm on
+`git status --short`, which counts **untracked** files; any stray file disarms the next window with
+nothing to read. Make the dirty check ignore untracked files (`--untracked-files=no`) or refuse only
+on tracked modifications, and make every refusal **write a line somewhere a morning reader looks**
+(the day/night log, not only stdout). Read F380's (b) and take it too if it is small. **Constraints:**
+do not re-register or trigger any scheduled task; do not run the arm for real — test it by running
+the dirty-check logic alone, against a scratch untracked file, and remove the file after. Lint any
+PowerShell by running it with `-WhatIf`-style dry paths only. Set F380's Status to `fixed <sha>` only
+for the part that landed.
+
+**3. F292 (B), fix-or-quarantine — timeboxed to two firings.** The CI flake (`database is locked` at
+setup) took 3 of 16 runs this week and blocks O2 (≥ 90%). Read the **foot** of F292 first, not all
+1,400 lines. Prefer the cheap shape: stop the two known files racing (serialise them, or give them
+their own database). **Measure it on CI, not locally** — F292 does not reproduce locally (entry
+line ~201). Record the CI green rate across the night's pushes in the log. If neither shape lands in
+two firings, write down what was learned and move on.
+
+**4. `a-loop-staffs-the-agent-it-names` — group 7 (the drive), then archive.** Group 7 was approved on
+2026-09-19 and never run. **§5 is moved out by operator decision → F400**, and its delta was trimmed
+this evening to what the built groups do. Do not build §5. Drive per group 7 — **never `:8000`, never
+`:8010`**, fresh Hub on a free port with an explicit `DATABASE_URL` (a `C:/...` path, not `/c/...`),
+Haiku on every real turn, never leave a job enabled. Task 7.4's "read-only against the operator's
+database" means `mode=ro` SQLite only. Then archive; F128/F161/F70 statuses per the playbook.
+
+- APPROVED  a-loop-staffs-the-agent-it-names   group 7 and archive; §5 moved out to F400, NOT built
+
+**Not tonight:** `a-hub-that-was-not-told-which-database-refuses-to-open-one` (REVISING, needs R4);
+`a-refused-capability-reaches-the-operator` (§1 gated on F386); `an-unstaffed-review-names-its-holders`
+(a verification round is running now — if it returns clean, a row will be added below this line).
+
 ---
 
 ## 2026-09-20
