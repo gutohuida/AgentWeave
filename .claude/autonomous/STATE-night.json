@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-first-turn-archive",
-    "next_action": "Do queue item a-first-turn-archive: archive openspec change a-first-turn-is-not-told-it-has-nothing per APPROVALS 2026-09-21 item 1 (openspec-archive-change skill), confirm F302 Status line in same commit.",
+    "current": "f380-impl",
+    "next_action": "Do queue item f380-impl: Dirty check -> tracked-only (--untracked-files=no); every refusal writes a line to the day/night log. Take (b) if small. Test dirty-check logic alone vs a scratch untracked file, remove it. Do NOT register/trigger tasks or run arm for real. Status fixed <sha> only for landed part.",
     "queue": [
         {
             "id": "a-first-turn-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-first-turn-is-not-told-it-has-nothing",
             "detail": "APPROVALS 2026-09-21 item 1: sync specs, archive, confirm F302 Status line (already fixed 802a8c7; claim no more) in same commit. All tasks ticked; nothing to build."
         },

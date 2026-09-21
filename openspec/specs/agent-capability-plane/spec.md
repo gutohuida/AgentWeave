@@ -196,14 +196,21 @@ false.
 **Told is not the same as able, and only the first is required here.** Driven 2026-09-09, no
 permission posture on a Claude harness let such a run make the request under its own power: the
 default `workspace` posture read a URL's path out of the shell command and refused it as outside
-the workspace (F300), and the `cli` path's `acceptEdits` has no approver to overrule a harness that
-statically refuses an interpolated credential (F301). The first of those no longer holds where the
-`workspace` posture's approver runs. A run is told this HTTP form on its first turn, before the
-system has grounds to describe MCP, while that posture is deciding its shell commands, and a shell
-command naming the run's own Hub address is now allowed there (`agent-run-sandboxing`, *"A network
-address in a shell command is decided as a network address"*). The plane is genuinely reachable
-from that process environment — the MCP adapter reaches it from exactly there — so the notice is
-true, and on the `cli` path what it asks for still cannot be carried out by the agent's own tools.
+the workspace (F300), and on the `cli` path `acceptEdits` has no approver at all, so a command that
+needs approval is denied for want of anything to answer it (F301). **The reason recorded for F301
+was wrong and is corrected here.** It read that the harness *statically refuses* an interpolated
+credential; measurement on 2026-09-10 refuted that — with the approval gate removed those same
+commands execute, and a bare literal request naming no variable at all is denied identically. The
+refusals are the harness's reasons a command *needs approval*, not reasons it is forbidden, and on
+a path with no answerer needing approval is denial. The conclusion is unchanged: unreachable by the
+agent's own tools on the `cli` path.
+
+The first of those no longer holds where the `workspace` posture's approver runs. A run is told this
+HTTP form on its first turn, before the system has grounds to describe MCP, while that posture is
+deciding its shell commands, and a shell command naming the run's own Hub address is now allowed
+there (`agent-run-sandboxing`, *"A network address in a shell command is decided as a network
+address"*). The plane is genuinely reachable from that process environment — the MCP adapter reaches
+it from exactly there — so the notice is true.
 
 This is the deployment the equal-capability requirement was written for: MCP forbidden by policy,
 ordinary local API calls permitted. Capability that exists and is unreachable because it was never
@@ -241,13 +248,31 @@ operation added to the plane cannot be described to one kind of caller and hidde
 
 ### Requirement: A run is told the access path it actually has
 
-The system SHALL NOT tell a run that a tool-protocol surface is available unless it has grounds to believe the run's harness will honour the surface it was given, and SHALL describe the plane's direct HTTP form instead when it has no such grounds.
+The system SHALL NOT tell a run that a tool-protocol surface is available unless it has grounds to believe the run's harness will honour the surface it was given, SHALL NOT tell a run that a tool-protocol surface is absent unless it has grounds to believe that it is, and SHALL describe the plane's direct HTTP form whenever it lacks grounds to believe the surface will be honoured.
 
 Providing a harness with a tool-protocol server is not the same as that harness offering it. A
 deployment may forbid tool-protocol servers by policy while permitting ordinary local API calls; a
 run there receives the configuration, cannot use it, and is told in its first line to call tools
 that are not present. That is the same defect as telling a run it has no capability when it does,
 and it is the more likely of the two to be met, because it is what an unconfigured run gets.
+
+**The prohibition is symmetric, and it was not.** Until 2026-09-20 this requirement forbade
+asserting presence without grounds and said nothing about asserting absence, so a notice that told
+every new agent it had no tool-protocol tools was compliant with the words while being false in
+fact: the grounds for describing the surface come from a *previous* run of the same agent reporting
+its adapter online, and the injection that provides the surface is decided separately and
+unconditionally. Every agent's first turn therefore held the tools it was told it did not have.
+Absence and presence are the same kind of claim about the same unobserved fact, and neither is
+available without grounds. Describing the HTTP form is not an assertion about the tool surface and
+remains the correct thing to do whenever there are no grounds to assert the surface — including
+when the system has grounds to believe the surface is absent, which is the case where the HTTP form
+is the run's only path.
+
+This binds every text the system places ahead of the operator's message, not only the first line of
+the turn. A run's canonical context is placed there too, and it describes the same operations from
+the same decision about the same access path; a claim of absence removed from one and left in the
+other has not been removed. Where the system has no grounds either way, neither text asserts, and
+both describe.
 
 An explicit statement by the operator about a run's access path remains authoritative. This
 requirement governs what the system asserts on its own, not what it is told.
@@ -272,6 +297,23 @@ is told.
   tool-protocol surface it was configured with
 - **THEN** the text delivered ahead of the operator's message describes reaching the plane over HTTP
 - **AND** it does not state that tool-protocol tools are available
+
+#### Scenario: No grounds means no denial either
+
+- **WHEN** a turn begins and the system has no grounds about whether the run's harness will offer
+  the tool-protocol surface it was configured with
+- **THEN** the text delivered ahead of the operator's message does not state that the run has no
+  tool-protocol tools, for this turn or at all
+- **AND** it still describes reaching the plane over HTTP
+
+#### Scenario: A run holding the tools is not told it is empty
+
+- **WHEN** a turn begins on a run that was provided a tool-protocol server, and no previous run of
+  that agent has reported the server online
+- **THEN** the text delivered ahead of the operator's message makes no claim that the tool-protocol
+  surface is unavailable
+- **AND** the run's canonical context, which is delivered ahead of the operator's message in the
+  same turn, makes no such claim either
 
 #### Scenario: The operator's own statement is honoured
 
