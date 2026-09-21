@@ -31021,3 +31021,53 @@ a file literally named `C:`, so the fix is PowerShell-only; and it must not refu
 model brace expansion for any rule. `..$x` with `x` unset lands there too (a bare `$` word, F401's
 shape). The fix belongs in the lexer, or in a rule that refuses a separator-less word whose braces
 could expand to `..`.
+
+---
+
+## F404 (C) -- `from agentweave.templates import *` raises: `__all__` names a constant nothing defines
+
+**Status:** fixed 542418e -- the name is removed and `tests/test_package_exports.py` walks every
+module's `__all__` in the package (mutation-checked: it fails with the name restored).
+**Source:** review
+**Theme:** Harness & CI
+**Related:** the dead-code annotation pass `4bd966e` (handoff 0134), which found it.
+
+**What happens.** `src/agentweave/templates/__init__.py`'s `__all__` listed `SKILL_REFERENCES_DIR`,
+which the module never defines. `from agentweave.templates import *` raised
+`AttributeError: module 'agentweave.templates' has no attribute 'SKILL_REFERENCES_DIR'` (re-measured
+2026-09-21) in the published `agentweave-ai` package. Filed 2026-09-21 by operator decision, after
+being offered across four sessions.
+
+---
+
+## F405 (C) -- both `examples/*.py` raise `ImportError` on their first line, and no CI job runs them
+
+**Status:** fixed 542418e -- both files deleted; `examples/README.md` now says nothing in the
+directory works with the current product. `examples/cli_session.sh` and `.bat` remain and still call
+removed commands (`agentweave init`, `task`, `msg`); deleting the whole directory is the operator's
+call (the wider deletion was held for approval).
+**Source:** review
+**Theme:** Harness & CI
+**Related:** F404.
+
+**What happens.** `examples/basic_workflow.py` and `examples/parallel_workflow.py` did
+`from agentweave import ... Message ...`, the messaging API deleted when the Hub took over execution,
+and both died with `ImportError: cannot import name 'Message' from 'agentweave'` (re-measured
+2026-09-21). The README pointed new users at them as the "Learning Path". Filed 2026-09-21 by
+operator decision.
+
+---
+
+## F406 (D) -- an auto-loaded agent rule guarantees every save passes through `validator.py`, which nothing imports
+
+**Status:** fixed 542418e -- `.claude/rules/cli.md` now says the module is dead and the Hub's
+pydantic schemas validate writes.
+**Source:** review
+**Theme:** Harness & CI
+**Related:** F404; `src/agentweave/validator.py`'s own `# DEAD (2026-09-20)` header, which asked for
+this correction.
+
+**What happens.** `.claude/rules/cli.md:17` stated *"ALL saves pass through `validator.py` sanitize
+functions."* The only importer of `validator.py` is `tests/test_validator.py`. The rule loads into
+every session that reads a file under `src/agentweave/`, so it steered agents toward a dead module.
+Filed 2026-09-21 by operator decision.

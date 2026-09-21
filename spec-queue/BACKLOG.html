@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-21 19:47 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-17-daily</b> @ <b>4f87390</b> · uncommitted changes present<br>
+      generated <b>2026-09-21 20:11 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-17-daily</b> @ <b>542418e</b> · uncommitted changes present<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -776,7 +776,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
             <div class="chg-main">
               <code class="chg-name">a-hub-that-was-not-told-which-database-refuses-to-open-one</code>
               <span class="chg-badge want">waiting on you</span>
-              <p class="chg-facts">41 unticked · 3 rounds · 1 delta spec</p>
+              <p class="chg-facts">45 unticked · 4 rounds · 1 delta spec</p>
               
             </div>
             <div class="chg-links"><a href="../openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/proposal.md" target="_blank" rel="noopener">proposal.md</a> · <a href="../openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/design.md" target="_blank" rel="noopener">design.md</a> · <a href="../openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md" target="_blank" rel="noopener">tasks.md</a> · <a href="../openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/test-guide.md" target="_blank" rel="noopener">test-guide.md</a></div>
@@ -802,11 +802,54 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <p>Also measured and deliberately <em>not</em> filed as blast radius: a bare <code>alembic -c hub/alembic.ini</code> from <code>hub/</code> with no <code>DATABASE_URL</code> raises, because <code>migrations/env.py:10</code> imports <code>settings</code>. That is the change <strong>working</strong>. Docker and native both set the variable before migrating, and no documented workflow runs alembic bare — <code>.claude/rules/db-migrations.md</code> does not, and <code>.claude/skills/copilot-test-setup/SKILL.md:73</code> sets <code>$env:DATABASE_URL</code> first. Recorded so a fourth reader does not re-open it.</p>
 <p><strong>4. Task 2.2 holds, and R3 closed the gap underneath it.</strong> 2.2&#x27;s requirement — that the line identify itself in its own words, because at this site there is no <code>WARNING [hub.main]</code> prefix — is consistent with 2.1&#x27;s placement before <code>await init_db()</code> and with 2.4&#x27;s <code>logger.warning</code>. But the delta&#x27;s clause <em>&quot;names what it is without depending on a logger-name or level prefix being present&quot;</em> was the one normative sentence in the change with <strong>no task verifying it</strong>: 2.6 asserted <code>levelno</code> and text, and <code>caplog.text</code> interpolates exactly the prefix this site does not have. 2.6 now asserts against <code>record.getMessage()</code> alone.</p>
 <p><strong>5. The proposal&#x27;s &quot;Why&quot; — a note for the operator, not a decision.</strong> R2 softened the &quot;from <code>hub/</code>&quot; sentence and flagged it; R3 did not re-derive F388&#x27;s cause (DIRECTION item 2 forbids it) and reports only this: <strong>the discrepancy is not load-bearing for this change.</strong> The case for (a) rests on <code>config.py:23</code> making a missing variable indistinguishable from a deliberate one, on the docstring naming the dangerous path as the safe one, and on nothing downstream ever refusing a path. None of those depends on which directory the 2026-09-19 start ran from, and (a) refuses whichever path the default would have named. It <em>is</em> load-bearing for one thing: the <code>DEAD-ENDS.md</code> entry group 4 rewrites is advice to a future agent, and it must not assert a launch directory the finding does not establish. Task 4.2 now carries that as a guard over the whole group. Whether the incident&#x27;s cwd is worth establishing at all is the operator&#x27;s call.</p>
-<p><strong>Nothing else changed.</strong> R3 reopened no decision, added no task outside group 3, and left every number, level, site and rejection exactly where R1 and R2 put them.</p></div></details>
+<p><strong>Nothing else changed.</strong> R3 reopened no decision, added no task outside group 3, and left every number, level, site and rejection exactly where R1 and R2 put them.</p>
+<h5>Round 4 — the verification round after the Opus DO NOT APPROVE (2026-09-21)</h5>
+<p><strong>Why a fourth round.</strong> The operator&#x27;s standing adversarial Opus pass ran on 2026-09-20 and returned <strong>DO NOT APPROVE</strong>, with four blocking items and one unreconciled premise (<code>spec-queue/APPROVALS.md</code> § <em>REVISING</em>). R4 was run by a session that wrote none of R1–R3. It took the reviewer&#x27;s items as targets, not as conclusions, and re-derived each from the code. <strong>Every decision survives a fourth time:</strong> (a), (b), (d), D1–D11 and the <code>WARNING</code> level. The core mechanism was never in question, and the reviewer could not break D2 or D3 either. <strong>All four blockers are real, and all four are in the tasks and the delta.</strong> Two findings go beyond what the reviewer reported.</p>
+<p><strong>1. The delta contradicted itself (blocker 1): confirmed and fixed.</strong> The first paragraph of the modified requirement still required <em>&quot;a direct <code>uvicorn hub.main:app</code> invocation&quot;</em> to resolve to the same database from any directory. D3 makes a <code>.env</code> a told source, and task 4.7 keeps <code>.env.example</code>&#x27;s value relative. So a direct launch from <code>hub/</code> with a copied <code>.env</code> resolves cwd-relative, and does so correctly. The paragraph now scopes directory-independence to <strong>launch paths that choose a database for themselves</strong>: bare <code>agentweave</code>, <code>--profile</code>, and <code>docker compose</code>. It states that a direct <code>uvicorn</code> opens exactly what it was told, a relative value included, because that is the operator&#x27;s instruction and not the runtime&#x27;s guess. The paragraph that follows was reworded to refer back to it. <code>openspec validate --strict</code> passes. Only the requirement&#x27;s first physical line counts for <code>SHALL</code>, and that line is unchanged.</p>
+<p><strong>2. Task 2.7 could not fail (blocker 2): confirmed, and the mechanism is plainer than &quot;the pytest plugin&quot;.</strong> The Hub suite runs on <code>:memory:</code>, and <code>engine.py:199</code> skips the alembic upgrade for it, so <code>migrations/env.py:28</code>&#x27;s <code>fileConfig</code> <strong>never runs under <code>pytest</code></strong>. The &quot;alembic-configured root&quot; the test names does not exist there. What the test sees is Python&#x27;s default <code>WARNING</code> root, and the assertion holds whatever the Hub&#x27;s logging does. R4 replaced it with the test D5 actually wanted:</p>
+<ul>
+<li>a real <code>uvicorn hub.main:app --port 0</code> in a subprocess, on a <code>tmp_path</code> database with <code>cwd=tmp_path</code>;</li>
+<li>it reads <code>stderr</code> until <code>startup complete</code> (<strong>4.4 s, measured</strong>);</li>
+<li>it asserts the line appears before the first <code>Running upgrade</code>.</li>
+</ul>
+<p>That test fails under <code>logger.info</code>, which is the mutation that matters, and it does not care whether <code>alembic.ini</code> exists (task 2.7). The same shape, with <code>USERPROFILE</code>/<code>HOME</code> pointed at a throwaway directory, turns 6.1&#x27;s refusal into a regression guard that never names the operator&#x27;s home (new task 2.8). This retires the claim, carried since R1, that <em>&quot;no unit test can make&quot;</em> that check.</p>
+<p><strong>3. Group 3 was complete for imports and blind to launches (blocker 3): confirmed, and worse.</strong> R3&#x27;s sweep asked <em>which <code>scripts/</code> import <code>hub.config</code></em>. The reviewer&#x27;s three misses are not imports. They are <strong>launches</strong>: two skills plus their <code>.agents/</code> mirrors, and <code>make dev</code>. R4 ran the launch sweep (task 3.7). The finding the reviewer did not have: the two skills start <code>:8010</code> from <code>hub/</code> with no variable, so they read <code>hub/.env</code>, whose relative value resolves to <strong><code>hub/data/agentweave.db</code></strong>. That is not the trial profile at all, and <code>hubs.md:22</code> records that file as deleted on 2026-09-07. <strong>Today those skills open, and silently re-create, a third database. That is F388&#x27;s own shape, live on this machine, and not only a clean-checkout problem.</strong> <code>make dev</code> needs no code change: with a copied <code>.env</code> it is a told launch, and without one it refuses before migrating, which is correct.</p>
+<p><strong>4. Remedy (d) left a live copy (blocker 4): confirmed.</strong> The <code>hub/tests/test_config.py:1-7</code> module docstring restates the removed guarantee (new task 4.10). 4.1&#x27;s replacement text was unqualified in the same way, because <code>cli.py:617-621</code> passes a pre-existing <code>DATABASE_URL</code> through (4.1 amended). <strong>R4 found a third copy, and it is user-facing:</strong> <code>docs/getting-started/installation.md:52-62</code> tells readers that a direct <code>uvicorn</code> launch is <em>&quot;fixed going forward&quot;</em> onto the shared database. That page ships to GitHub Pages (new task 4.11). No earlier round swept <code>docs/</code>.</p>
+<p><strong>5. The <code>:8000</code> premise: reconciled by measurement, and the doc is false.</strong> Every earlier round asserted that <code>:8000</code> is a native <code>agentweave</code> start. The reviewer refuted the &quot;brick&quot; reading of <code>hubs.md:37</code>, but did it by inference from a PID file. R4 closed it read-only, with no call to <code>:8000</code>:</p>
+<ul>
+<li>the desktop shortcut <code>AgentWeave.lnk</code> is <code>pythonw.exe -m agentweave</code>;</li>
+<li>PID 9940&#x27;s command line is byte-for-byte the spawn at <code>cli.py:1070-1079</code>, which inherits the</li>
+</ul>
+<p><code>DATABASE_URL</code> set at <code>:1038</code>;</p>
+<ul>
+<li>the CLI&#x27;s <code>.env</code> loader only <code>setdefault</code>s.</li>
+</ul>
+<p><code>:8000</code> is a told launch, and <strong>(a) does not brick it.</strong> <code>hubs.md:36-38</code> is corrected under task 4.5. The same measurement exposes a limit that the delta&#x27;s <em>&quot;named on every other launch path&quot;</em> scenario satisfies only on paper. The native child&#x27;s <code>stdout</code> and <code>stderr</code> are <code>DEVNULL</code> (<code>cli.py:1096-1097</code>), so on the operator&#x27;s own Hub group 2&#x27;s line is emitted and read by nobody. This is recorded as a known limit rather than widened into scope. F388&#x27;s launch was a direct one, where the line is seen. Surfacing it on native starts would be a CLI change, outside this change&#x27;s blast radius.</p>
+<p><strong>Human-only item 5 (test guide), partly answered.</strong> On this machine, the one non-CLI Hub starter the operator owns is the desktop shortcut, and it goes through the CLI. The three <code>AgentWeave*</code> scheduled tasks start loop windows, not a Hub. What will refuse after this lands are the two skill launches of task 3.7, and that is the reason to fix them in the same commit as group 1.</p>
+<p><strong>What R4 did not do.</strong> It changed no product code and ran no suite. The subprocess measurement used a <code>tempfile.mkdtemp</code> database, deleted afterwards, and touched no Hub. R4&#x27;s own edits to the tasks have not been through the adversarial pass. The operator&#x27;s standing step applies before an APPROVED row.</p></div></details>
           <details class="chg-read" open><summary>Read the proposal</summary><div class="md-body"><h4>Proposal — a Hub that was not told which database refuses to open one</h4>
 <p><strong>Round 1, 2026-09-20 (day window).</strong> Finding: <strong>F388 (A)</strong>. The remedy was decided on 2026-09-19 (<code>spec-queue/DIRECTION.md</code>, item 2): <strong>(a) refuse the implicit default, (b) name the resolved path at startup, (d) fix the docstring that calls the dangerous path the safe one.</strong> <em>Rejected</em> were logging alone (prevents nothing) and <strong>(c)</strong> the sentinel row, which needs a migration installed against the very database being protected. <strong>R1&#x27;s job was to explore how to build (a), not whether.</strong></p>
 <p><strong>Round 2, 2026-09-20.</strong> An independent re-derivation against the code. <strong>Every R1 decision survives</strong> — (a), (b), (d), the <code>config.py</code> site, the raising <code>default_factory</code>, the <code>WARNING</code> level, the rejection of a path-keyed guard. What changed is the <em>evidence</em>: D5 was re-taken from two real running Hubs rather than a hand-called <code>fileConfig</code>, D9&#x27;s question was answered by measurement, and three claims that were wrong are corrected — D3&#x27;s <code>.env.example</code> consequence (R1&#x27;s fix would have broken Docker), D4&#x27;s &quot;no dependency edge&quot; premise, and the blast radius, which is larger than R1 found. Four tasks added.</p>
-<p><strong>Round 3, 2026-09-20.</strong> A second independent re-derivation, code before document. <strong>Every decision survives a third time</strong> and none was reopened. R3 confirmed R2&#x27;s narrowing of the delta from the Docker and CLI sources without reading R2&#x27;s version first, and found the stronger reason for it (<code>cli.py:599-616</code> names no database at all on the default profile, so R1&#x27;s broad scenario was unsatisfiable on the native path). It found <strong>one real defect</strong>: the container-path scenario required a statement in <em>&quot;an environment file or compose file&quot;</em> that task 4.8 forbids adding to the compose file — the delta contradicted its own tasks, and the clause is now scoped to templates that get copied. And it <strong>ran</strong> the probe R1 and R2 had only read from, with <code>hub/.env</code> moved aside so a clean checkout was what was measured: group 3 is now a settled list rather than a judgement call, both CI jobs are measured unaffected, and <strong>no CI job guards either script fix</strong> (new task 3.6). One verification gap closed (task 2.6). <strong>The change is ready to implement.</strong></p>
+<p><strong>Round 3, 2026-09-20.</strong> A second independent re-derivation, code before document. <strong>Every decision survives a third time</strong> and none was reopened. R3 confirmed R2&#x27;s narrowing of the delta from the Docker and CLI sources without reading R2&#x27;s version first, and found the stronger reason for it (<code>cli.py:599-616</code> names no database at all on the default profile, so R1&#x27;s broad scenario was unsatisfiable on the native path). It found <strong>one real defect</strong>: the container-path scenario required a statement in <em>&quot;an environment file or compose file&quot;</em> that task 4.8 forbids adding to the compose file — the delta contradicted its own tasks, and the clause is now scoped to templates that get copied. And it <strong>ran</strong> the probe R1 and R2 had only read from, with <code>hub/.env</code> moved aside so a clean checkout was what was measured: group 3 is now a settled list rather than a judgement call, both CI jobs are measured unaffected, and <strong>no CI job guards either script fix</strong> (new task 3.6). One verification gap closed (task 2.6). <strong>The change is ready to implement.</strong> <em>(R4: it was not. The adversarial Opus pass returned DO NOT APPROVE that night.)</em></p>
+<p><strong>Round 4, 2026-09-21: the verification round after the Opus DO NOT APPROVE.</strong> <strong>Every decision survives a fourth time. All four blocking items are real, and all four are fixed in the tasks and the delta</strong> (<code>design.md</code> § <em>Round 4</em>):</p>
+<ul>
+<li>the delta&#x27;s opening paragraph no longer requires a direct <code>uvicorn</code> to be directory-independent;</li>
+<li>task 2.7, which could not fail, is replaced by a real-subprocess test of the startup line, and a</li>
+</ul>
+<p>new task 2.8 does the same for the refusal;</p>
+<ul>
+<li>group 3 gains the <em>launch</em> sweep R3 never ran (task 3.7);</li>
+<li>the false guarantee&#x27;s remaining copies are tasked (4.10, and 4.1 qualified).</li>
+</ul>
+<p>R4 found two things beyond the review:</p>
+<ul>
+<li><strong>the two skills that restart <code>:8010</code> open <code>hub/data/agentweave.db</code>, not the trial profile, today.</strong></li>
+</ul>
+<p>This is F388&#x27;s shape, live on this machine;</p>
+<ul>
+<li><strong>the user-facing <code>docs/getting-started/installation.md</code> states the removed guarantee</strong> (task 4.11).</li>
+</ul>
+<p>The <code>:8000</code> question is closed by measurement. It is a <code>pythonw -m agentweave</code> launch, so it is told, and (a) does not refuse it. <code>hubs.md</code>&#x27;s description of it is false and is corrected under 4.5.</p>
 <h5>Why</h5>
 <p>On 2026-09-19 a day window started a throwaway Hub from source with <code>py -3.11 -m uvicorn hub.main:app</code>. Its <code>DATABASE_URL</code> did not survive a <code>kill</code> + <code>rm</code> + restart sequence inside one Bash tool call, the process fell back to <code>_default_database_url()</code>, and it attached to <code>~/.agentweave/hub/data/agentweave.db</code> — <strong>the operator&#x27;s live <code>:8000</code> database, 348 runs and 12,500 event logs of real work.</strong> The recovery (<code>taskkill /IM python.exe /T</code>) also killed the operator&#x27;s own app, which was down for roughly three hours. The cause is measured and is not re-derived here (<code>scripts/drive/FINDINGS.md</code> § F388; <code>.claude/handoffs/DEAD-ENDS.md</code> § <em>Starting a Hub from source can land on the operator&#x27;s real database</em>).</p>
 <p>Three things make the default dangerous rather than merely present:</p>
@@ -880,7 +923,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <li><strong>Specs:</strong> <code>app-lifecycle</code> — one <code>MODIFIED</code> requirement.</li>
 <li><strong>Prose:</strong> <code>CLAUDE.md</code>, <code>.claude/reference/hubs.md</code>, <code>.claude/handoffs/DEAD-ENDS.md</code>,</li>
 </ul>
-<p><code>hub/.env.example</code>.</p>
+<p><code>hub/.env.example</code>, <strong>(R4)</strong> <code>docs/getting-started/installation.md</code>, <code>hub/Makefile</code> (one comment), and the <code>:8010</code> launch lines in <code>.claude/skills/{e2e-loop,autonomous-session}/SKILL.md</code> and their <code>.agents/</code> mirrors.</p>
 <ul>
 <li><strong>No migration.</strong> **No <code>hub/ui/src</code> change, so no bundle refresh and nothing reaches the operator&#x27;s</li>
 </ul>
@@ -1952,8 +1995,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <h2 class="sec">Findings by severity</h2>
     <p class="lede">
       <b>A</b> is wrong behaviour an operator will act on, <b>B</b> a wrong or misleading surface,
-      <b>C</b> friction or vestige. 163 are fixed and 12 retired, of
-      403 ever filed; neither is counted here.
+      <b>C</b> friction or vestige. 166 are fixed and 12 retired, of
+      406 ever filed; neither is counted here.
     </p>
     <div class="bars"><div class="bar-row"><span class="bar-lab">A</span><div class="bar-track"><div class="bar-fill" data-sev="A" style="width:3.7%"></div></div><span class="bar-n">8</span></div>
 <div class="bar-row"><span class="bar-lab">B</span><div class="bar-track"><div class="bar-fill" data-sev="B" style="width:45.6%"></div></div><span class="bar-n">99</span></div>
@@ -2004,15 +2047,15 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-21T19:47:26+01:00",
+ "generated": "2026-09-21T20:11:47+01:00",
  "branch": "autonomous/2026-09-17-daily",
- "sha": "4f87390",
+ "sha": "542418e",
  "open": 217,
  "items": 221,
  "requests": 4,
- "fixed": 163,
+ "fixed": 166,
  "retired": 12,
- "filed": 403,
+ "filed": 406,
  "drain": 5,
  "awaiting": 3,
  "sev_A": 8,
@@ -2370,6 +2413,9 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
   "F401",
   "F402",
   "F403",
+  "F404",
+  "F405",
+  "F406",
   "F41",
   "F42",
   "F43",
