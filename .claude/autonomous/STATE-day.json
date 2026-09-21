@@ -1,105 +1,40 @@
 {
-    "purpose": "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds').",
-    "playbook": ".claude/loops/day-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-17-daily",
-    "parent_branch": "master",
-    "parent_sha": "a435f48",
-    "stop_at": "2026-09-20T17:00:00+01:00",
-    "iteration": 9,
-    "log_file": ".claude/autonomous/2026-09-20-day-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d7-gate",
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose this window's queue from the playbook",
-            "detail": "Done iteration 1. Drain count 0 (verified independently); DIRECTION.md#2026-09-20 confirms both spec loops run (approval token verified in APPROVALS.md). Gate not run this morning -- CI for HEAD 1f0d5c5 still in_progress."
-        },
-        {
-            "id": "d1-drive",
-            "status": "done",
-            "title": "D-1 -- scoped drive of what the night built",
-            "detail": "Done iteration 2. Fresh Hub :8020, profiles/drive0920. No new findings. Cleanup verified: jobs archived, projects deleted, :8020 process killed."
-        },
-        {
-            "id": "f185-r1",
-            "status": "done",
-            "title": "Item 1 R1 -- explore + propose F185+F181 as one change",
-            "detail": "Done iteration 3. Directory an-archived-agent-holds-nothing-and-is-offered-nowhere; validate --strict passes. F390 (C) filed. Both findings re-driven before writing."
-        },
-        {
-            "id": "f185-r2",
-            "status": "done",
-            "title": "Item 1 R2 -- independently re-derive against the code",
-            "detail": "Done iteration 4. Four claims corrected (C1-C6), D9 added. validate --strict passes."
-        },
-        {
-            "id": "f185-r3",
-            "status": "done",
-            "title": "Item 1 R3 -- independently re-derive again",
-            "detail": "Done iteration 5. All of R1's and R2's conclusions survive; three narrowed, F391 (C) filed and driven, D10 added. validate --strict passes."
-        },
-        {
-            "id": "f185-operator-decision",
-            "status": "done",
-            "title": "Item 1's one operator decision -- RESOLVED by the operator, not by this window",
-            "detail": "Resolved 2026-09-20 in an interactive DECIDE session, found UNCOMMITTED at iteration 6 and committed as 51b17bd. The operator chose the MIDDLE of the three shapes R3 offered: API plus a persisted archival event (persist_event + sse_manager.broadcast on both archive and unarchive routes), and NO hub/ui/src bundle refresh. That is design.md D10 and the new tasks.md group 2b. APPROVALS.md's ## 2026-09-20 section carries 'APPROVED an-archived-agent-holds-nothing-and-is-offered-nowhere -- all groups, including the new 2b and group 5; no UI, no bundle refresh' and an ORDER: line for tonight. The standing adversarial-Opus pass was SKIPPED at the operator's explicit instruction, recorded there so its absence is not read as an oversight. Carry while building: D10 and group 2b are R3-and-later work that nothing has re-derived -- if a task in 2b disagrees with the code, the task is the thing more likely to be wrong. Item 1 needs nothing further from this window."
-        },
-        {
-            "id": "f388-r1",
-            "status": "done",
-            "title": "Item 2 R1 -- explore + propose F388 (A) fix",
-            "detail": "Done iteration 6. Directory openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one; validate --strict passes; proposal/design(D1-D11)/tasks(43 in 6 groups)/test-guide + one MODIFIED delta on app-lifecycle. No code changed; the probe patch to config.py was reverted and test_config.py is back to 4 passed. Six R1 discoveries, all measured: (1) F388 is SPEC'D -- app-lifecycle's scenario 'The Hub's own database is launch-directory-independent' normatively requires a no-DATABASE_URL uvicorn to resolve to the home path, so (a) reverses a current requirement; (2) engine.py:228's logger.info naming the database has NEVER been visible (root has no handler before init_db, and alembic.ini:20-22's level=WARN after), so (b) at INFO would be invisible -- D5 makes it WARNING; (3) .env is a third source and is cwd-relative, and hub/.env.example:5 still ships the pre-D1 RELATIVE path; (4) blast radius includes make ui (refresh_ui_bundle.py:110 imports hub.main with no DATABASE_URL) -- group 3, do it with group 1 or neither; agentweave --help/doctor, Docker and native agentweave all measured unaffected; (5) a bare required field's pydantic message names neither the database nor the fix, so D2 uses a raising default_factory (measured to propagate unwrapped); (6) DEAD-ENDS.md's F388 practice has one false sentence about aiosqlite not creating a parent directory -- the Hub does (engine.py:346-350) -- corrected, not dropped, in task 4.2. Third loss HELD in D9 (states what (a)+(b) reach and that an already-attached Hub still has no in-product detach). D4 records and REJECTS the stronger path-keyed guard: cli.py:1028 sets DATABASE_URL to exactly that path, and a CLI-sent marker breaks under agentweave-ai/agentweave-hub version skew."
-        },
-        {
-            "id": "f388-r2",
-            "status": "done",
-            "title": "Item 2 R2 -- independently re-derive against the code",
-            "detail": "Done iteration 7. All four of R1's named weak points attacked; EVERY R1 DECISION SURVIVES ((a)/(b)/(d), config.py site, raising default_factory, WARNING level, lifespan() site, D4's rejection, the MODIFIED delta). D5 DRIVEN from two real Hubs (8093/8094, fresh profiles, killed by exact PID, testbed removed): 104 alembic INFO lines appeared, ZERO hub.* INFO lines -- D5 holds -- plus a new constraint R1 could not see, that at lifespan() the record goes through logging.lastResort and prints BARE with no level or logger prefix (task 2.2 updated). D9 ANSWERED: no launch still reaches the live database with no DATABASE_URL; the sharpest form is that hub/.env is GITIGNORED, so on a clean checkout the launch CLAUDE.md itself prescribes ('from hub/, from source') lands on the home default. FIVE claims corrected: (1) blast radius includes the CLI suite -- tests/test_hub_commands.py:707's bare `import hub.config` fails; measured `3 failed, 532 passed, 3 skipped` of which TWO are pre-existing test_skill_sync.py failures, so this change costs exactly one (task 4.9); (2) n10_route_reachability.py is a second caller (task 3.5); (3) R1's task to absolutize hub/.env.example WOULD HAVE BROKEN DOCKER -- it is the container's path (WORKDIR /app + hub-data at /app/data) and inert under compose's environment: override -- task 4.7 rewritten to comment, not absolutize; (4) 'no dependency edge' is false (pyproject.toml:34 `agentweave-hub>=1.1.0`), and the true premise argues D4 HARDER -- the false sentence is also in hub/tests/test_config.py:56-58 (task 1.9); (5) two delta scenarios falsified by the code being RIGHT -- the environment-file one by Docker, and 'named before it is opened' by native agentweave (cli.py:1054) and Docker (Dockerfile:31) both migrating BEFORE lifespan(); narrowed, two scenarios added, D6 states the limit. Four tasks added (1.9, 3.5, 4.9) and two rewritten (4.7, 5.2); test-guide gained A14-A16. validate --strict passes; pytest hub/tests/test_config.py back to 4 passed; probe reverted; no code changed. CARRY TO R3: R2's narrowing of the delta is R2's own weakest work, and neither round has RUN the probe over scripts/ exhaustively. Also observed, not filed: tests/test_skill_sync.py has 2 failures on a CLEAN tree, a third reason `pytest tests/` is red and therefore bears on d7-gate."
-        },
-        {
-            "id": "f388-r3",
-            "status": "done",
-            "title": "Item 2 R3 -- independently re-derive again",
-            "detail": "Done iteration 8. ALL decisions survive a third time; none reopened. (1) R2's narrowing re-derived independently from Dockerfile:31, docker-compose.yml:23,34 and cli.py BEFORE reading R2's version -- RIGHT, not convenient, with a stronger reason R2 lacked: _hub_resolve_database_source (cli.py:599-616) returns message=None on the DEFAULT profile, so plain `agentweave` names its database nowhere before cli.py:1054 opens it, making R1's broad scenario unsatisfiable on the native path without changing the CLI. (2) ONE REAL DEFECT: the container-path scenario covered 'an environment file OR compose file' and required the file to STATE it is a container path, but docker-compose.yml:34 carries no such statement and task 4.8 forbids adding one -- the delta contradicted its own tasks. Clause now scoped to a template intended to be COPIED (hub/.env.example, task 4.7). (3) GROUP 3 RUN, not read, with hub/.env MOVED ASIDE so a clean checkout was measured: refresh_ui_bundle and n10 confirmed broken by running; CLI cost exactly one test, name captured (test_first_start_migrations_leave_a_database_that_can_hold_a_conversation, 1 failed/40 passed); every hub.* import under scripts/ resolved by importlib + sys.modules -- pty_runner/runner_commands/runner_parsing are False so the three t_d*_0913_*.py are UNAFFECTED, setup_d2_cutover and churn_sessions_plugin reach it and are correct to fail; task 3.2 is now a list, not a judgement call. BOTH CI jobs measured unaffected (ci.yml:61, :131; hub/hub/__init__.py never imports hub.config) and BOTH suites collect clean -- COLLECTION IS THE WRONG INSTRUMENT, the CLI break is an import inside a test body. NO CI JOB GUARDS EITHER FIX (grep of .github/workflows is empty) -> new task 3.6. Bare `alembic -c hub/alembic.ini` raises: that is the change WORKING, recorded so a fourth reader does not re-open it. (4) Task 2.2 holds; closed the change's one normative clause with no verifying task -- 2.6 now asserts record.getMessage() alone, since caplog.text interpolates the prefix this site lacks. (5) The 'Why' discrepancy is NOT load-bearing for the change, but IS for the DEAD-ENDS rewrite -> task 4.2 now guards all of group 4 against asserting a launch directory the finding does not establish; establishing it is the operator's call. validate --strict passes; probe reverted; hub/.env restored diff-identical; test_config.py 4 passed; no code changed."
-        },
-        {
-            "id": "f386-387-impl",
-            "status": "cut",
-            "title": "D-6 carve-out -- F386 + F387 (conditional, cut first if short on time)",
-            "detail": "CUT at iteration 8, per this entry's own clock note. R3 landed 16:36 against a 17:00 stop. F386 needs a UI bundle refresh that reaches the operator's live :8000 app on their next reload and must not be rushed into 20 minutes. Both findings remain open and unchanged in scripts/drive/FINDINGS.md; F387 is API-only (questions.py:318 order_by, blocking first then newest) and is the cheaper half if a later window wants one of them."
-        },
-        {
-            "id": "d5",
-            "status": "cut",
-            "title": "D-5 -- write the review page",
-            "detail": "CUT at iteration 8, as its own entry authorised ('CUT THIS BEFORE CUTTING f388-r3'). The operator's ## 2026-09-20 APPROVALS section already states it is the authority for tonight regardless of whether the day window reaches this step, and item 1 is approved and ORDERed there. Item 2 is therefore left UNDECIDED for the operator, with three rounds behind it -- no APPROVALS row was added for it, and no second ## 2026-09-20 section was opened."
-        },
-        {
-            "id": "d7-gate",
-            "status": "done",
-            "title": "D-7 -- the merge gate, LAST",
-            "detail": "Done iteration 9. Two rounds needed: CI for a09e4a2 (35518457958) passed after ~13min polling, but a re-check before merging found the concurrent operator session had moved HEAD to 45d4576 while polling -- re-ran all four conditions and polled CI for 45d4576 (35518709191) instead, success after ~7.5min. Merged: git merge --ff-only, c6fccc5..45d4576 fast-forward, 14 files, pushed to origin/master. Item 2 (a-hub-that-was-not-told-which-database-refuses-to-open-one) is unaffected by this merge's decision -- stays specced (R1-R3 done, no operator token) for tomorrow."
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "F388 is live on this machine and this window is now specking it: a Hub started from source with a DATABASE_URL that does not reach the process lands on ~/.agentweave/hub/data/agentweave.db, the operator's live database. Set the variable in PowerShell ($env:DATABASE_URL) before Start-Process, pre-create the profile directory, and kill only the exact PID netstat -ano names LISTENING on the target port -- never taskkill /IM python.exe.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today\u0027s DIRECTION.md section names one under an operator\u0027s DECISIONS.md row (day-window.md, \u0027A day that builds\u0027).",
+    "playbook":  ".claude/loops/day-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-17-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "802a8c7",
+    "stop_at":  "2026-09-21T17:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-21-day-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
