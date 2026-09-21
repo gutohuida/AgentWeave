@@ -78,7 +78,27 @@ log rather than adjusting the design unattended. Archive (4.2) only with every t
 
 - APPROVED  a-word-without-a-separator-can-still-leave   groups 1-4; F375; last in tonight's ORDER
 
-**Not tonight:** `a-hub-that-was-not-told-which-database-refuses-to-open-one` (REVISING, needs R4);
+**Not tonight:** `a-hub-that-was-not-told-which-database-refuses-to-open-one` (F388, A).
+**Approved by the operator at ~21:30 for the night of 2026-09-22, not tonight** (`DECISIONS.md`
+`### 2026-09-21 night`). R4 (`da19eb5`) fixed the four blockers, and a second Opus pass returned
+APPROVE WITH FIXES, applied in `b14342b`. There is deliberately no `APPROVED` token for it in this
+section. **Tomorrow's DECIDE session copies this row into `## 2026-09-22`**, with the build rules
+below:
+`- APPROVED  a-hub-that-was-not-told-which-database-refuses-to-open-one   all groups; F388; groups 1+3 in one commit; drive in the 8090s`.
+The build rules:
+- groups 1 and 3 land in one commit, or neither;
+- for task 3.7, edit the two `.claude/skills/` sources, then run `scripts/sync_skills.py`, never
+  `.agents/` by hand;
+- `config.py`/`main.py` reach `:8000` on its next restart (a told launch, measured safe); never
+  restart it or call it;
+- tasks 2.7 and 2.8 follow their implementation notes (a stderr reader thread, a `wait()` timeout,
+  pop `DATABASE_URL`), with both mutation checks in the commit;
+- run the group 6 drive in the 8090s on a throwaway profile, and set F388 `fixed` only after 6.1-6.3
+  are observed;
+- stop and log if a task disagrees with the code;
+- write both suite counts into `tasks.md`.
+
+Also not tonight:
 `a-refused-capability-reaches-the-operator` (§1 gated on F386); `an-unstaffed-review-names-its-holders`
 (a verification round is running now — if it returns clean, a row will be added below this line).
 

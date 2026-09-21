@@ -700,6 +700,24 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-21 night — F388's change approved after R4 and a second Opus pass
+
+**DECIDED 2026-09-21 ~21:30, by the operator, in an interactive session** ("yes approve"). This came
+after R4 on `a-hub-that-was-not-told-which-database-refuses-to-open-one` (`da19eb5`), which answered
+the 2026-09-20 Opus DO NOT APPROVE. The standing adversarial Opus pass then ran over R4 and returned
+APPROVE WITH FIXES, with one blocking item (the `agentweave-hub` console script and
+`docs/reference/env-variables.md`). All of its items were applied in `b14342b`.
+
+- DECIDED   f388-approve  **The change is approved, all groups (1-6).** It is queued for the night of
+  2026-09-22 in `APPROVALS.md` `## 2026-09-22`, not tonight: tonight's ORDER was already full.
+- DECIDED   f388-8000  **The `:8000` effect is accepted as measured.** `:8000` is a CLI-started, told
+  launch (R4, corrected by the Opus pass), so (a) does not refuse it. On the operator's next restart
+  it runs the new `config.py`/`main.py` with no migration and no UI bundle. Group 2's startup line
+  goes to `DEVNULL` there, and that is a known limit, not a defect.
+- DECIDED   f388-unreviewed  **The Opus pass's fixes are not re-reviewed**, the same call as F375. The
+  build's own tests and the group 6 drive are the check. If a task disagrees with the code, the task
+  is the more likely thing to be wrong.
+
 ### 2026-09-21 late evening — F375's change approved after three rounds
 
 **DECIDED 2026-09-21 ~19:50, by the operator, in an interactive session** ("approve"), after the
