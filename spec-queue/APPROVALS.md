@@ -16,6 +16,18 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-21
+
+Review page: `review/review-2026-09-21.html`. **No change proposed; no spec loop ran** (drain count 4).
+The four gated changes below carry no row from the day window; the operator may act on any of them.
+
+- `a-hub-that-was-not-told-which-database-refuses-to-open-one` -- REVISING by the night; Opus DO NOT APPROVE, four blocking items for R4.
+- `a-loop-staffs-the-agent-it-names`
+- `a-refused-capability-reaches-the-operator`
+- `an-unstaffed-review-names-its-holders`
+
+---
+
 ## 2026-09-20
 
 Written in session with the operator present, not by the day window — the day window hit the weekly

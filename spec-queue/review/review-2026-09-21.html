@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentWeave daily review — 2026-09-21</title>
+<style>
+  :root { --bg:#fbfbfa; --panel:#fff; --ink:#1c1c1a; --dim:#5c5c56; --rule:#e0e0da; --accent:#6b4fbb; --warn-bg:#fdf6e0; --warn-rule:#d9b84a; --code:#f2f2ee; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16161a; --panel:#1e1e23; --ink:#e9e9e6; --dim:#b0b0a8; --rule:#33333a; --accent:#b09aec; --warn-bg:#322a14; --warn-rule:#8a7527; --code:#24242a; }
+  }
+  * { box-sizing: border-box; }
+  body { background:var(--bg); color:var(--ink); margin:0; padding:2rem 1.25rem 4rem; font:16px/1.6 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  .wrap { max-width: 56rem; margin: 0 auto; }
+  h1 { font-size:1.6rem; margin:0 0 .3rem; }
+  h2 { font-size:1.2rem; margin:2.2rem 0 .5rem; padding-top:1rem; border-top:1px solid var(--rule); }
+  h2 .n { color:var(--accent); margin-right:.5rem; }
+  .sub { color:var(--dim); }
+  code { background:var(--code); padding:.05rem .3rem; border-radius:3px; font-size:.9em; }
+  .note { background:var(--warn-bg); border-left:4px solid var(--warn-rule); padding:.7rem 1rem; margin:1rem 0; }
+  table { border-collapse:collapse; width:100%; margin:.6rem 0; }
+  th,td { text-align:left; border-bottom:1px solid var(--rule); padding:.4rem .5rem; vertical-align:top; font-size:.95rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>AgentWeave daily review — 2026-09-21</h1>
+<div class="sub">Branch <code>autonomous/2026-09-17-daily</code> · spans 2026-09-17 → 2026-09-21 (5 days) · 31 commits ahead of <code>master</code> (<code>802a8c7</code>)</div>
+
+<h2><span class="n">1</span>The branch, and the previous merge gate</h2>
+<div class="note"><b>The branch is still unmerged.</b> <code>master</code> has not moved since 2026-09-20 21:33 (+01). This page reports the <i>previous</i> gate — this morning's step-1 fallback — not today's; today's D-7 runs after this page is written.</div>
+<p>This morning's gate <b>did not open</b>. Branch clean, <code>HEAD</code> = <code>@{u}</code> = <code>66779df</code>, nothing to fast-forward past (<code>master</code>..HEAD = 0 behind). The failing condition was <b>CI</b>: run <code>35575245187</code> for <code>66779df</code> was still <code>in_progress</code>. The earlier sha <code>cd7a4ed</code> had failed with two <code>database is locked</code> setup errors (the F292 signature) but was superseded, so no rerun applied.</p>
+
+<h2><span class="n">2</span>What the night window built</h2>
+<ul>
+<li><b>Shipped and archived</b> <code>an-archived-agent-holds-nothing-and-is-offered-nowhere</code> (closes F185, F181, F390, F391). <b>Driven</b> mid-flow and at handoff, not only tested.</li>
+<li><b>Measured</b> group 7 of <code>a-first-turn-is-not-told-it-has-nothing</code>: 3/3 fresh Haiku first turns reached MCP. <b>Driven.</b></li>
+<li><b>Full-surface sweep</b>: 10 of 19 matrix rows driven; filed F395 (B) and F396 (B, needs the operator's <code>F396-rekey</code> decision).</li>
+<li><b>Full suite measured</b> at <code>8508377</code>: 4474 passed, 86 skipped, 47:37 — <b>tested</b>, written into task 6.2-REDO.</li>
+<li>Stopped with ~4 h unspent: every remaining change is gated and the night may not propose.</li>
+</ul>
+
+<h2><span class="n">3</span>What today's drive and repairs found</h2>
+<table>
+<tr><th>Item</th><th>Result</th></tr>
+<tr><td>Archived-agent change, real Hub, Haiku</td><td>16/17 checks OK; the one BAD was my script's assumption (archive mid-turn is refused 409 with a remedy — a gate that held). <b>F397 (D)</b>: re-archiving an archived agent re-stamps <code>archived_at</code> and writes a duplicate event.</td></tr>
+<tr><td>Group 7 independent replication</td><td>3 MCP / 0 HTTP / 0 neither — agrees with last night's n=3.</td></tr>
+<tr><td>Flows, Checkpoints, Resilience (the three unreached rows)</td><td>Flows 1/1; Resilience 4/4 (Hub force-killed mid-run recovers, no orphan). Checkpoints 70 pass / 5 fail: <b>F398 (C)</b> dismiss accepts a never-warned conversation and silences its first warning; <b>F399 (D)</b> taking a checkpoint never clears <code>dismissed</code>. A fifth failure is recorded unverified, not filed.</td></tr>
+<tr><td>Repair: F394 (A) CI hang</td><td>Added <code>--timeout=300 --timeout-method=thread</code> and <code>pytest-timeout</code> (<code>3491580</code>). Kill behaviour measured locally; <b>not yet seen on CI</b>. Mitigation only — root cause unknown.</td></tr>
+<tr><td>Repair: F304 empty <code>run.error</code></td><td>Fixed at <code>agent_trigger.py:1916</code> (<code>8a2ab77</code>). New test fails without the fix (measured). <b>Unit-tested, not driven</b> against a live Hub.</td></tr>
+</table>
+
+<h2><span class="n">4</span>What was specced</h2>
+<p><b>Nothing.</b> No spec loop ran today. The drain count is <b>4</b> (changes with an unticked task and no APPROVED/REJECTED token), and 2 or more means the whole day goes to draining work. The four gated changes:</p>
+<ul>
+<li><code>a-hub-that-was-not-told-which-database-refuses-to-open-one</code> — REVISING; adversarial Opus returned DO NOT APPROVE with four blocking items for R4.</li>
+<li><code>a-loop-staffs-the-agent-it-names</code></li>
+<li><code>a-refused-capability-reaches-the-operator</code></li>
+<li><code>an-unstaffed-review-names-its-holders</code></li>
+</ul>
+<p>No round has anything to report — none ran.</p>
+
+<h2><span class="n">5</span>If you approve nothing</h2>
+<p>The whole night goes to the backlog (night-window step 2: no section for today means the operator did not sit down). It first confirms the tree is green and reads CI's verdict for the inherited sha, then takes repairs and drives. It cannot propose changes. Last night it ran out of buildable work after 12 iterations, so expect a short night unless you approve or unblock one of the four above. Available tokens: <code>APPROVED</code>, <code>REVISING</code>, <code>REJECTED</code>, <code>ORDER:</code>, <code>NOTHING TONIGHT</code>.</p>
+
+<h2><span class="n">6</span>Research (2026-09-21)</h2>
+<ol>
+<li><b>Live "waiting for you" rail (S).</b> The cross-page attention rail is correct, but 94 of 101 <code>sse_manager.broadcast</code> sites omit <code>conversation_id</code>, including all eleven question/permission sites, so the amber dot never appears or clears live. <i>For AgentWeave:</i> a small self-contained slice that makes the operator-in-the-loop signal reliable; a candidate for the trial Hub.</li>
+<li><b><code>ghcp</code> Copilot runner (M).</b> CLI profile written, Hub side a deliberate 501; Copilot CLI shipped four MCP-reliability fixes this week on the injection path. <i>For AgentWeave:</i> a third runner becomes practical, but Codex is undrivable and only Claude runners can be verified here.</li>
+</ol>
+</div>
+</body>
+</html>

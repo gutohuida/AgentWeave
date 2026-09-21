@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "802a8c7",
     "stop_at": "2026-09-21T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-5",
-    "next_action": "spec-queue/review/review-2026-09-21.html per day-window.md D-5's 6-point structure: branch/gate status (report the PREVIOUS gate, i.e. this morning's step-1 finding that CI was in_progress for 66779df and the gate did not open), what night built and what was driven vs only tested, today's drive findings, note that no spec loop ran today (drain=4) and name the four gated changes, what the night default queue will do if the operator approves nothing, and the two research candidates with their AgentWeave-shaped ending. Append today's section to APPROVALS.md (no status tokens -- operator supplies those). Commit and push.",
+    "current": "D-6",
+    "next_action": "D-6 is a spare repair slot: take a no-spec-carve-out repair only if one clearly qualifies (day-window.md D-6), else mark it done and move on. Then D-7, the merge gate, per its queue detail. Then next_action: null.",
     "queue": [
         {
             "id": "D-1",
@@ -45,7 +45,7 @@
         },
         {
             "id": "D-5",
-            "status": "open",
+            "status": "done",
             "title": "Write the review page",
             "detail": "spec-queue/review/review-2026-09-21.html per day-window.md D-5's 6-point structure: branch/gate status (report the PREVIOUS gate, i.e. this morning's step-1 finding that CI was in_progress for 66779df and the gate did not open), what night built and what was driven vs only tested, today's drive findings, note that no spec loop ran today (drain=4) and name the four gated changes, what the night default queue will do if the operator approves nothing, and the two research candidates with their AgentWeave-shaped ending. Append today's section to APPROVALS.md (no status tokens -- operator supplies those). Commit and push."
         },
