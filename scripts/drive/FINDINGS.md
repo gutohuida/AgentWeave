@@ -22304,7 +22304,7 @@ obvious fix.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open; **a per-test database file landed 2026-09-21 night and is awaiting its CI rate** (see the foot of this entry, `f292-impl-1`). Before it: still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
+**Status:** open; **a per-test database file landed 2026-09-21 night and is awaiting its CI rate: 0 F292 in 1 post-fix run as of `b630252`, 11 needed** (see the foot of this entry, `f292-impl-1`/`-2`). Before it: still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
 
 **Re-measured 2026-09-20 (interactive session, at the operator's request for a verification scan) —
 the rate escalated far past 22.6%, and the consequence is now structural.** Over the `ci.yml` runs
@@ -23807,6 +23807,16 @@ runs red, both F292** (`3e06634` run `35659893420`, `1fd204d` run `35660385419`,
 Full local hub suite with the fix: 4478 passed, 86 skipped. The ledger's own method note
 applies: the rate on this sha onward is recorded in the night log per push. Zero F292 in 11
 completed runs is what puts a 25% rate below p = 0.05 (0.75^11 ≈ 0.042).
+
+**`f292-impl-2` (2026-09-21 night, second and last timeboxed firing): 1 of 1 post-fix run green,
+which is not a rate.** `b630252` (the fix commit), run `35665344029`: every job green, hub-test
+`4471 passed, 20 skipped` in 11 min, no `database is locked` in its log. Every run on this
+branch: pre-fix 2 of 4 red (both F292), post-fix 0 of 1. At the 25% baseline, one clean run
+happens 75% of the time by chance, so this says nothing yet. The timebox is spent and nothing
+further was built. The tally carries on over later pushes (the night log records each one), and
+F292 stays **open** until 11 consecutive post-fix completed runs show no F292, or one shows it.
+If one does, the per-file move did not reach the holder. The next lead is then the one above:
+the holder follows the test, so it is not a connection on the old file.
 
 
 ---

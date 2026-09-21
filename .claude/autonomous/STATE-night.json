@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f292-impl-2",
-    "next_action": "Do queue item f292-impl-2: tally ci.yml conclusions on autonomous/2026-09-21-daily for every sha from the F292 per-test-DB commit onward (pre-fix baseline 2 of 4 red, both F292). Record in the F292 foot + log; F292 stays open unless the rate is measured. If a post-fix run shows 'database is locked', write up what was learned and move on. Timebox this one firing.",
+    "current": "a-loop-staffs-drive",
+    "next_action": "Do queue item a-loop-staffs-drive: drive group 7 of openspec/changes/*a-loop-staffs-the-agent-it-names* only (NOT section 5, moved to F400). Fresh Hub from hub/ source on a free port (check netstat), DATABASE_URL on C:/, AW_BOOTSTRAP_API_KEY, Haiku turns, leave no job enabled, never touch 8000/8010; 7.4 read-only = mode=ro SQLite only. Also note the ci.yml F292 hit/miss for any new post-b630252 sha in the log (F292 standing tally, 0 of 1 so far).",
     "queue": [
         {
             "id": "a-first-turn-archive",
@@ -36,7 +36,7 @@
         },
         {
             "id": "f292-impl-2",
-            "status": "open",
+            "status": "done",
             "title": "F292 firing 2 / write up what was learned",
             "detail": "If not landed in 2 firings, log learnings and move on."
         },
