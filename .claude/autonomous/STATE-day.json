@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "802a8c7",
     "stop_at": "2026-09-21T17:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-7",
-    "next_action": "D-7, the merge gate, per its queue detail (git status empty, CI run for exact HEAD sha, poll up to 25 min). Then next_action: null.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "D-1",
@@ -57,7 +57,7 @@
         },
         {
             "id": "D-7",
-            "status": "open",
+            "status": "done",
             "title": "The merge gate, last",
             "detail": "Per day-window.md 'The merge gate': git status must be empty first. Find CI's run for the exact HEAD sha, wait up to 25 min polling ~90s. success + other 3 conditions (no HOLD MERGE in DIRECTION.md's newest section, HEAD==@{u}) -> git merge --ff-only master forward, push, start tomorrow's branch from new master. failure matching F292/F314 signature only -> one rerun, take its conclusion. still running at budget -> do not wait further, log the run id, leave it for tomorrow's step 1. Then next_action: null.",
             "model": "sonnet",
