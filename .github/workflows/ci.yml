@@ -132,8 +132,11 @@ jobs:
         pip check
 
     - name: Test Hub with pytest
+      # --timeout turns a wedged test into a dumped stack and a failure in minutes instead of
+      # a silent 6-hour job timeout (F394). "thread" kills the whole process, so it works
+      # for a test blocked in a sqlite lock, where a signal would not be delivered.
       run: |
-        pytest tests/ -v
+        pytest tests/ -v --timeout=300 --timeout-method=thread
 
   ui-test:
     runs-on: ubuntu-latest
