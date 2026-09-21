@@ -174,8 +174,11 @@ _TABLE = [
     _row("R5", 'echo hi > "$HOME/stray.txt"', False, _UNCHECKED),
     _row("R6", "D=/tmp; echo hi > $D/stray.txt", False, _outside("/tmp")),
     _row("R7", "echo hi > /tmp/stray.txt", False, _outside("/tmp/stray.txt")),
-    _row("R8", "cd .. && echo hi > stray.txt", True),
-    _row("R9", "git -C .. status", True),
+    # R8 and R9: a-word-without-a-separator-can-still-leave supersedes the archived
+    # a-url-is-not-a-path D9 for these two rows -- a bare `..` is the parent, and a word the shell
+    # reads as a path is judged as one, separator or not.
+    _row("R8", "cd .. && echo hi > stray.txt", False, _outside("..")),
+    _row("R9", "git -C .. status", False, _outside("..")),
     _row("R10", "curl -s https://example.com/x", False, _NETWORK),
     _row("R11", 'curl "$HUB_URL/api/v1/agent-actions/tasks"', True),
     # F321: paths inside the workspace.
@@ -203,7 +206,10 @@ _TABLE = [
     _row("H7", "curl -s http://127.0.0.1:8016@evil.example/x", False, _NETWORK),
     _row("H8", "curl -s $HUB_URL@evil.example/x", False, _UNCHECKED),
     _row("H9", "HUB_URL=https://evil.example; curl -s $HUB_URL/x", False, _NETWORK),
-    _row("H10", "HUB_URL=.. ; cat $HUB_URL/x", False, _UNCHECKED),
+    _row("H10", "HUB_URL=.. ; cat $HUB_URL/x", False, _outside("..")),
+    # H10b carries H10's old job: pinning `_read_command`'s `trusted` guard. `sub` is no traversal,
+    # so the refusal can only come from the unchecked reference.
+    _row("H10b", "HUB_URL=sub ; cat $HUB_URL/x", False, _UNCHECKED),
     _row("H11", _S1_PYTHON_C, False, ("outside", "/api/v1/agent-actions/tasks")),
     _row("H13", "curl -s http://u:p@127.0.0.1:8016/x", False, _NETWORK),
     _row("H14", "curl -s http://127.0.0.1:8016.evil.example/x", False, _NETWORK),
@@ -515,10 +521,10 @@ _ANSI_C = [
     # separator plus a leading, unsentineled `$` -- unchecked on both platforms (F375's hole reached
     # a different way, not something this change decodes further).
     _ansi("P6", f"echo hi > $$'..{_BS}x2fq'", False, _UNCHECKED),
-    # `\x00` decodes to a real NUL: the word has no separator at all, so rule 4 returns before the
-    # NUL is ever checked. A real flip on Windows, not a neutral non-fix -- F375 owns the underlying
-    # hole (cp notes.md .. is already allowed, unescaped, independent of this change).
-    _ansi("P7", f"cp notes.md $'..{_BS}x00x'", True),
+    # `\x00` decodes to a real NUL: the word has no separator at all. Rule 4 used to return before
+    # the NUL was ever checked; a-word-without-a-separator-can-still-leave closes that -- the shell
+    # truncates at the NUL, so the word is `..`, the parent.
+    _ansi("P7", f"cp notes.md $'..{_BS}x00x'", False, _outside("..\x00x")),
     # A decoded non-word character with no `..` at all: rule 5's whole-word match used to miss it,
     # falling through to rule 6's backstop, which resolves only the matched tail against the drive
     # root and so wrongly denies a path that is genuinely inside (design D6).
@@ -572,6 +578,138 @@ def test_a_quote_is_judged_by_what_it_decodes_to(workspace, monkeypatch, command
             raise _WrongReasonError(said)
     elif reason is not None and (reason[1] not in said or "is outside your workspace" not in said):
         raise _WrongReasonError(said)
+
+
+# --- A word without a separator (a-word-without-a-separator-can-still-leave, design D1-D7) ----
+#
+# `..` is the parent directory with no separator in it, so rule 4 ("not a path") let it stand. Every
+# refusal row below FAILED on the code before this change (tasks 1.1-1.7); the negative controls
+# PASSED there and must keep passing. Each control names the wrong implementation it catches.
+
+_BOTH = ("Bash", "PowerShell")
+
+
+def _each(label, command, allow, reason=None, *, tools=_BOTH):
+    return [pytest.param(t, command, allow, reason, id=f"{label}-{t}") for t in tools]
+
+
+def _rows(*groups):
+    return [row for group in groups for row in group]
+
+
+_PARENT_WORD = _rows(
+    _each("cp-dotdot", "cp notes.md ..", False, _outside("..")),
+    _each("copy-item-dotdot", "Copy-Item notes.md ..", False, _outside("..")),
+    _each("quoted", "cp notes.md '..'", False, _outside("..")),
+    _each("empty-quote-joined", 'cp notes.md ."".', False, _outside("..")),
+    _each("escaped", r"cp notes.md \.\.", False, _outside(".."), tools=("Bash",)),
+    _each("target-directory", "cp --target-directory=.. notes.md", False, _outside("..")),
+    _each("ls", "ls ..", False, _outside("..")),
+    _each("cd-and-cat", "cd .. && cat notes.md", False, _outside("..")),
+)
+
+_TILDE_WORD = _rows(
+    _each("home", "cp notes.md ~", False, _UNCHECKED),
+    _each("user-home", "cp notes.md ~root", False, _UNCHECKED),
+    _each("oldpwd", "cp notes.md ~-", False, _UNCHECKED),
+    _each("pwd", "cp notes.md ~+", False, _UNCHECKED),
+    _each("copy-item-home", "Copy-Item notes.md ~", False, _UNCHECKED),
+    _each(
+        "colon-home", "Copy-Item notes.md -Destination:~", False, _UNCHECKED, tools=("PowerShell",)
+    ),
+)
+
+_OPTION_JOINED = _rows(
+    _each("t-dotdot", "cp -t.. notes.md", False, _outside("-t.."), tools=("Bash",)),
+    _each("xt-dotdot", "cp -xt.. notes.md", False, _outside("-xt.."), tools=("Bash",)),
+    _each("tar-C", "tar -C.. -xf a.tar", False, _outside("-C..")),
+    _each(
+        "destination-colon",
+        "Copy-Item notes.md -Destination:..",
+        False,
+        _outside("-Destination:.."),
+        tools=("PowerShell",),
+    ),
+    _each(
+        "dest-colon-quoted",
+        "Copy-Item notes.md -Dest:'..'",
+        False,
+        _outside("-Dest:.."),
+        tools=("PowerShell",),
+    ),
+    _each("dotnet-o", "dotnet publish -o:..", False, _outside("-o:..")),
+    _each("dotnet-output", "dotnet publish --output:..", False, _outside("--output:..")),
+    _each(
+        "t-nul",
+        f"cp -t$'..{_BS}x00x' notes.md",
+        False,
+        _outside("-t..\x00x"),
+        tools=("Bash",),
+    ),
+)
+
+_STAY_ALLOWED = _rows(
+    # A prefix match on `..`.
+    _each("dot", "cp notes.md .", True),
+    _each("three-dots", "cp notes.md ...", True),
+    # A substring match on `..` / on `~`.
+    _each("range-diff", "git diff a..b", True),
+    _each("range-log", "git log main..HEAD", True),
+    _each("tilde-one", "git log HEAD~1", True),
+    # A glued-option rule that judges more than an exact `..`.
+    _each("ls-la", "ls -la", True),
+    _each("log-1", "git log -1", True),
+    _each("t-three-dots", "cp -t... notes.md", True, tools=("Bash",)),
+    # The `~` check applied to a glued short option.
+    _each("t-tilde", "cp -t~ notes.md", True, tools=("Bash",)),
+    # A parameter rule that refuses every value.
+    _each("destination-sub", "Copy-Item notes.md -Destination:sub", True, tools=("PowerShell",)),
+    _each("filter", "Get-ChildItem -Filter:*.md", True, tools=("PowerShell",)),
+    _each("recurse", "Get-ChildItem -Recurse:$true", True, tools=("PowerShell",)),
+    _each("commas", "echo a,b", True),
+    # A `~` check on every word that begins with `~` (R3-1, R3-2).
+    _each("commit-percent", 'git commit -m "cuts time by ~30%, ~2x, ~13 files"', True),
+    _each(
+        "commit-heredoc",
+        "git commit -m \"$(cat <<'EOF'\nspeeds it up by ~30%\nEOF\n)\"",
+        True,
+        tools=("Bash",),
+    ),
+    # A `~` check on every colon value: PowerShell writes a file named `~5` inside the workspace.
+    _each("destination-tilde-5", "Copy-Item notes.md -Destination:~5", True, tools=("PowerShell",)),
+    # The `~` check applied to a colon value in bash.
+    _each("colon-tilde", "cp notes.md -x:~", True, tools=("Bash",)),
+)
+
+
+@pytest.mark.parametrize(
+    "tool, command, allow, reason", _PARENT_WORD + _TILDE_WORD + _OPTION_JOINED + _STAY_ALLOWED
+)
+def test_a_word_the_shell_reads_as_a_path_is_judged_as_one(
+    workspace, monkeypatch, tool, command, allow, reason
+):
+    monkeypatch.setenv("HUB_URL", _HUB)
+    decision = _decide(tool, {"command": command})
+    assert decision["allow"] is allow, decision["reason"]
+    if reason == _UNCHECKED:
+        assert "cannot be checked" in decision["reason"]
+        assert "outside your workspace" not in decision["reason"]
+    elif reason is not None:
+        assert reason[1] in decision["reason"]
+        assert "is outside your workspace" in decision["reason"]
+
+
+@pytest.mark.parametrize("tool", _BOTH)
+def test_dotdot_is_judged_like_dotdot_slash(workspace, monkeypatch, tool):
+    """D2: a bare `..` and `../` are the same directory, so they get the same answer -- and where
+    that directory is inside the boundary (a filesystem-root workspace) both are allowed. The
+    second half is what stops a rule that refuses `..` outright instead of resolving it."""
+    bare = _decide(tool, {"command": "cp notes.md .."})
+    slashed = _decide(tool, {"command": "cp notes.md ../"})
+    assert bare["allow"] == slashed["allow"], (bare["reason"], slashed["reason"])
+    monkeypatch.setenv("AW_WORKSPACE_DIR", os.path.abspath(os.sep))
+    for command in ("cp notes.md ..", "cp notes.md ../"):
+        assert _decide(tool, {"command": command})["allow"] is True
 
 
 # --- What a refusal may say (D5) --------------------------------------------------------------
