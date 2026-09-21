@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "802a8c7",
     "stop_at": "2026-09-21T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-3",
-    "next_action": "D-3: F394 (A): hub-test hangs 6h on master instead of erroring, defeats the merge gate. Fix suggested in the finding itself: add --timeout=120 --timeout-method=thread (pytest-timeout) to ci.yml:136's hub-test pytest invocation. No requirement in openspec/specs/ touches CI config; no migration; no schema change -- qualifies for the no-spec carve-out (day-window.md D-6). Verify pytest-timeout is already a dev dependency or add it; run the lint set; do not just trust a passing local run -- confirm the flag actually appears in the workflow that runs on push. Set F394's Status: line to fixed <sha> only once this lands and the workflow file is correct.",
+    "current": "D-4",
+    "next_action": "Second no-spec repair, or a bounded FINDINGS status sweep: If another finding qualifies for the no-spec carve-out (no openspec/specs/ requirement, no migration/schema change, existing repro, fix smaller than the argument for it), take it. Otherwise: grep FINDINGS.md for findings whose fix commit already exists in git log but whose Status: line still reads open or is missing, and correct them -- bounded to ~20 minutes, do not attempt all ~211 open entries in one pass.",
     "queue": [
         {
             "id": "D-1",
@@ -29,7 +29,7 @@
         },
         {
             "id": "D-3",
-            "status": "open",
+            "status": "done",
             "title": "No-spec repair: F394 CI hang, add pytest timeout",
             "detail": "F394 (A): hub-test hangs 6h on master instead of erroring, defeats the merge gate. Fix suggested in the finding itself: add --timeout=120 --timeout-method=thread (pytest-timeout) to ci.yml:136's hub-test pytest invocation. No requirement in openspec/specs/ touches CI config; no migration; no schema change -- qualifies for the no-spec carve-out (day-window.md D-6). Verify pytest-timeout is already a dev dependency or add it; run the lint set; do not just trust a passing local run -- confirm the flag actually appears in the workflow that runs on push. Set F394's Status: line to fixed <sha> only once this lands and the workflow file is correct.",
             "model": "sonnet",

@@ -30645,7 +30645,7 @@ started the same afternoon.
 
 ## F394 (A) -- `hub-test` does not error on `master`, it HANGS: three runs stopped dead at 13% and were killed by GitHub's 6-hour job timeout
 
-**Status:** open. **Found 2026-09-20** in an interactive session, while doing nothing more than
+**Status:** fixed 3491580 (mitigation, 2026-09-21): `hub-test` now runs `pytest tests/ -v --timeout=300 --timeout-method=thread` and `pytest-timeout` is in `hub/pyproject.toml` dev extras. Verified locally that a sleeping test is killed with a stack; NOT verified on CI until the next push run. The root cause of the hang is still unknown -- the next occurrence now yields a stack. **Found 2026-09-20** in an interactive session, while doing nothing more than
 checking whether CI was green enough to merge. It is filed separately from **F292** on purpose:
 F292 is an `ERROR at setup` that ends the run in ~15 minutes with a summary line, and every
 statement in this repository about CI's cost — the 22.6% rate, the 16-in-a-row escalation, the
