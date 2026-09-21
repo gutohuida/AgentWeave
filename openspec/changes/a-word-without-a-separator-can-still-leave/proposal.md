@@ -1,9 +1,9 @@
 # Proposal — a word without a separator can still leave
 
 **Round 1, 2026-09-21** (interactive, operator-requested); **corrected by R2, 2026-09-21** (design
-round log, R2-1 to R2-11). Finding: **F375 (A)**. **Nothing here is implemented yet.** R3 still has
-to compare this proposal against the code independently before any task is built (CLAUDE.md, "the
-round discipline").
+round log, R2-1 to R2-11) **and by R3, 2026-09-21** (R3-1 to R3-9). Finding: **F375 (A)**.
+**Nothing here is implemented yet.** The three rounds are done; tasks 0.3 and 0.4 (operator answers,
+and a warning before the edit reaches `:8000`) remain before any task is built.
 
 ## Why
 
@@ -19,8 +19,8 @@ a word containing no `/` (or, on Windows, `\`) returns `None` before `_where` is
 because a name without a separator resolves to an entry of the shell's current directory. It fails
 for the words that name *another directory by themselves*: `..` is the parent, and `~` (with `~user`,
 `~+`, `~-`) is a home or remembered directory. It also fails for a word that carries one of those
-as an option's value in the same word: `cp -t..`, `tar -C..`, and PowerShell's
-`-Destination:..` and `-Destination:~` (R2-2).
+as an option's value in the same word: `cp -t..`, `tar -xvC..`, `dotnet publish -o:..`, and
+PowerShell's `-Destination:..` and `-Destination:~` (R2-2, R3-2).
 
 This session measured today's decisions by calling `_decide` directly, with the workspace a
 subdirectory of a scratch directory:
@@ -32,6 +32,7 @@ subdirectory of a scratch directory:
 | `cp notes.md '..'`, `cp notes.md ."".` | Bash | allow | the parent (the quotes join to `..`; R2 measured `."".` in Git Bash) |
 | `cp --target-directory=.. notes.md` | Bash | allow | the parent (`_words` splits at `=`) |
 | `cp -t.. notes.md` | Bash | allow | the parent (R2, Git Bash 5.2.37: the file appears there) |
+| `cp -xt.. notes.md`, `tar -xvC.. -f a.tar` | Bash | allow | the parent (R3, Git Bash 5.2.37, GNU tar 1.35: the file appears there) |
 | `Copy-Item notes.md -Destination:..` | PowerShell | allow | the parent (R2, PowerShell 5.1.26100: the file appears there) |
 | `Copy-Item notes.md -Destination:~\x.md` | PowerShell | **deny**, `'\x.md'` outside (rule 6) | the home directory (R2: the file appeared in `$HOME`); `-Destination:~` alone is allowed |
 | `cp notes.md $'..\x00x'` | Bash | allow | the parent (bash ends the argument at the NUL; measured this session: the copy appears in the parent) |
@@ -53,34 +54,45 @@ F375 as the owner of the underlying hole (`hub/tests/test_permission_approver.py
   itself:
   - A word that is exactly `..`, compared by what precedes its first NUL, is judged as a path, the way
     rule 5 already judges `../`. It is refused as outside the workspace, with the word quoted.
-  - A word that begins with `~` is refused as uncheckable, with the same reason rule 3 already gives
-    `~/x`. It is not refused as "outside": `~` can in principle name the workspace.
-  - The same two checks apply to the value an option carries in the same word (R2-2). In
-    PowerShell, the value of `-Name:value` is checked for both (`-Destination:..`,
-    `-Destination:~`). In both dialects, the value glued to a short option (`-t..`, `-C..`) is
-    checked for `..` only: bash does not expand a `~` there (measured: `cp -t~ notes.md` looked for
-    a file literally named `~`), and PowerShell passes it to a native program unchanged. The
-    existing requirement already demands this once `..` alone is refused: a word that joins a path
-    to an option "SHALL be judged at least as strictly as the path within it would be if it stood
-    alone" (`openspec/specs/agent-run-sandboxing/spec.md:630-632`).
+  - A word that is `~` in a shape the shell substitutes (`~`, `~+`, `~-`, or `~` followed by a user
+    name that begins with a letter or `_`) is refused as uncheckable, with the same reason rule 3
+    already gives `~/x`. It is not refused as "outside": `~` can in principle name the workspace.
+    `~13`, `~2x` and `~30%` stand (R3-1, design D3): they are the commonest separator-less `~`
+    words, as approximate figures in commit messages. A shell substitutes none of them, except a
+    directory-stack entry that a judged `pushd` put there, or an account whose name begins with a
+    digit.
+  - The same two checks apply to the value an option carries in the same word (R2-2, R3-2). A
+    value joined by a colon (`-Destination:..`, `-o:..`, `--output:..`) is checked for `..` in both
+    dialects, because the program splits it, and for `~` in PowerShell only, whose parameters
+    resolve it (`-Destination:~`). A value glued to a short option or a run of them (`-t..`,
+    `-xvC..`) is checked for `..` only: bash does not expand a `~` there (measured: `cp -t~
+    notes.md` looked for a file literally named `~`), and PowerShell passes it to a native program
+    unchanged. The existing requirement already demands this once `..` alone is refused: a word
+    that joins a path to an option "SHALL be judged at least as strictly as the path within it
+    would be if it stood alone" (`openspec/specs/agent-run-sandboxing/spec.md:630-632`).
   - Every other separator-less word is still exempt, unchanged: `.`, `...`, `notes.md`, `-la`,
-    `git log -1`, `HEAD~1`, `a..b`, `-Destination:sub`.
+    `git log -1`, `HEAD~1`, `a..b`, `-Destination:sub`, `~30%`, `-t~`.
 - Test rows flip, and new rows pin each case above on both dialects. **Four existing rows change,
   not one** (R2-1, measured by running the judge's eight test files with the proposed rule 4
-  patched in: 4 failed, 380 passed):
+  patched in: 4 failed, 380 passed. R3 re-measured over ten files, 453 tests, from a patched copy
+  of the whole package, which also reaches the tests that spawn `mcp_server.py` as a process: the
+  same four, for R2's rule and for R3's):
   - `P7` (`cp notes.md $'..\x00x'`) flips from allow to deny, as R1 said.
   - `R8` (`cd .. && echo hi > stray.txt`) and `R9` (`git -C .. status`) flip from allow to deny.
     Both were pinned as allow on purpose, as "residual, unchanged" by the archived
     `a-url-is-not-a-path` (its `design.md:173-174` and D9, `:552-569`). This change supersedes that
-    decision for these two rows.
+    decision for these two rows, and for D9's two PowerShell residuals,
+    `Set-Content (Join-Path .. stray.txt) "hi"` and `[IO.Path]::Combine('..', 'x')`, which no row
+    pins and which are now refused too (R3-6).
   - `H10` (`HUB_URL=.. ; cat $HUB_URL/x`) stays refused, but for a different reason: `_words`
     splits the assignment at `=`, so the `..` word is refused as outside before the untrusted
     `$HUB_URL/x` is reached. H10 is the only row that pins the `trusted` guard of `_read_command`,
     so a companion row with a value that is not `..` takes over that job.
-- **Behaviour change an operator will see:** `cd ..`, `ls ..`, `git -C .. status` and `pushd ..`
-  are now refused, exactly as `cd ../` and `ls ../` already are. `cp x ~` and `ls ~` are now
-  refused, exactly as `ls ~/` already is. A quoted `~` used as a pattern (`grep '~' notes.md`,
-  `find . -name '~*'`) is also refused (design D3).
+- **Behaviour change an operator will see:** `cd ..`, `ls ..`, `git -C .. status`, `pushd ..` and
+  an out-of-source `cd build && cmake ..` are now refused, exactly as `cd ../` and `ls ../` already
+  are. `cp x ~` and `ls ~` are now refused, exactly as `ls ~/` already is. A lone quoted `~` used as
+  a pattern (`grep '~' notes.md`) is also refused, and so is a lone `..` or `~` in the prose of a
+  commit message, as `../` there already is (design D3, Risks).
 
 ## Capabilities
 
@@ -146,6 +158,7 @@ Each of these is stated so that omission is not read as coverage.
   the new rule governs every `:8000` run whose MCP server starts after the file changes on disk,
   committed or not.
 - **Operator-visible:** more refusals for commands that already leave the workspace (`cd ..`,
-  `git -C .. status`, `ls ~`, `Copy-Item x -Destination:..`), and for a quoted `~` pattern. Each
+  `git -C .. status`, `ls ~`, `Copy-Item x -Destination:..`), for `cd build && cmake ..`, for a
+  quoted `~` pattern, and for a lone `..` or `~` in commit-message prose. Each
   refusal names the word and why. A `cd ..` an agent used to get away with on `:8000` is refused
   from the first run that starts after implementation.

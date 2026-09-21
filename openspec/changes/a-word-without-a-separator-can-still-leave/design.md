@@ -10,6 +10,11 @@ round log. R2 measured with the same two methods, plus a third: the judge's eigh
 with the proposed rule 4 swapped in (a pytest plugin in the session scratchpad that replaces
 `hub.mcp_server._judge_word` after collection; no repo file was edited).
 
+**R3, 2026-09-21.** Re-derived independently; corrections are marked R3-n in place and listed in the
+round log. R3 measured the same ways, except that the proposed rule 4 was patched into a scratch copy
+of the whole `hub` package and `hub/tests`, so the tests that spawn `mcp_server.py` as a process
+also ran it (a plugin that swaps `_judge_word` in-process cannot reach those).
+
 ## Context
 
 The shell-command judge reads a command in the tool's dialect and judges each word by the first of
@@ -59,15 +64,17 @@ In Git Bash, `globskipdots` is `on`: `echo .?` and `echo .*` printed only `.x`, 
 
 **Goals:**
 
-- A separator-less word that is the parent directory is judged exactly as `../` is. A leading `~`
-  is refused as uncheckable, exactly as `~/` is.
+- A separator-less word that is the parent directory is judged exactly as `../` is. A word that is
+  the home-directory shorthand, in a shape the shell substitutes (`~`, `~+`, `~-`, `~name`), is
+  refused as uncheckable, exactly as `~/` is (R3-1 narrowed this from "a leading `~`").
 - A separator-less word that carries one of those two spellings as an option's value in the same
   word is judged the same way (D7, R2-2).
 - No other separator-less word changes decision.
 - Rows P7, R8 and R9 of `test_permission_approver.py` flip to deny, and H10's reason changes
   (R2-1). R1 said P7 was the only pinned evidence of the hole. It is not: R8 (`cd .. && echo hi >
   stray.txt`) and R9 (`git -C .. status`) pin it as allow on purpose, as residuals of the archived
-  `a-url-is-not-a-path` (its D9). This change supersedes that decision for those two rows.
+  `a-url-is-not-a-path` (its D9). This change supersedes that decision for those two rows, and for
+  D9's two PowerShell residuals, which no row pins (R3-6).
 
 **Non-Goals:** as listed in `proposal.md`. The two that are near-misses of this one are argued here
 (D5, D6), so a later round can overturn them with evidence rather than rediscover them. R2 added
@@ -78,40 +85,54 @@ two more to the proposal's list, both measured: bash brace expansion and a bare 
 ### D1 — Route the two spellings; do not judge every separator-less word
 
 Rule 4 keeps its exemption, and names the two spellings it no longer covers. R2 extended R1's
-version to read the value an option carries in the same word (D7):
+version to read the value an option carries in the same word (D7). R3 made two further changes
+(R3-1, R3-2): the `~` check matches only the shapes a shell substitutes, and the colon-joined form
+is read in both dialects for `..`:
 
 ```python
-# A value an option carries in its own word. PowerShell's `-Name:value` (checked for `~` and `..`),
-# and a short option with its value glued on, `cp -t..`, `tar -C..` (checked for `..` only: bash
-# does not expand a `~` there, and PowerShell hands a native program the word unchanged).
-_POWERSHELL_PARAMETER_RE = re.compile(r"-[A-Za-z_][A-Za-z0-9_-]*:")
+# A value an option carries in its own word (D7): joined by a colon, `-Destination:..`,
+# `-o:..`, `--output:..` (checked for `..` in both dialects, and for `~` in PowerShell, whose
+# provider cmdlets resolve it there), or a short option with its value glued on, `cp -t..`,
+# `tar -xvC..` (checked for `..` only: bash does not expand a `~` there).
+_COLON_OPTION_RE = re.compile(r"--?[A-Za-z_][A-Za-z0-9_-]*:")
 _GLUED_OPTION_RE = re.compile(r"-[A-Za-z0-9]+")
+# The home-directory shorthand in the shapes a shell substitutes for a word with no separator
+# (D3): alone, with a sign, or with a user name. `~30%` and `~2x` are left alone.
+_TILDE_PREFIX_RE = re.compile(r"~(?:[+-]|[A-Za-z_][A-Za-z0-9._-]*)?")
 
 if not has_separator:  # 4: a name in the directory the shell runs in -- unless it names another
     value = word
-    parameter = _POWERSHELL_PARAMETER_RE.match(word) if dialect == "powershell" else None
-    if parameter:
-        value = word[parameter.end() :]
-    if value.startswith("~"):
-        return _refuse(word, _UNCHECKED)
-    glued = None if parameter else _GLUED_OPTION_RE.match(word)
-    if glued:
-        value = word[glued.end() :]
+    joined = _COLON_OPTION_RE.match(word)
+    if joined:
+        value = word[joined.end() :]
+        if dialect == "powershell" and _TILDE_PREFIX_RE.fullmatch(value):
+            return _refuse(word, _UNCHECKED)
+    else:
+        if _TILDE_PREFIX_RE.fullmatch(word):
+            return _refuse(word, _UNCHECKED)
+        glued = _GLUED_OPTION_RE.match(word)
+        if glued:
+            value = word[glued.end() :]
     if value.partition("\x00")[0] == "..":
         return _judge_path("..", root, word, argument, continues)
     return None
 ```
 
-R2 measured this exact logic through `_decide` (scratchpad plugin, not a repo edit): `-t..` and
-`-C..` in both dialects, `-Destination:..`, `-Destination:~` and `-t$'..\x00x'` are refused, each
-quoting the whole word; `-la`, `git log -1`, `-t...`, `-t~`, `-Destination:sub`, `-Filter:*.md`
-and `-Recurse:$true` stay allowed.
+R2 measured its version of this logic through `_decide`. R3 measured the version above from a
+patched scratch copy of the whole `hub` package (so the tests that spawn `mcp_server.py` as a
+process ran it too). `-t..`, `-xt..`, `-C..` and `-xvC..` in both dialects, `-Destination:..`,
+`-Dest:'..'`, `-o:..` and `--output:..` in both dialects, `-Destination:~` and `-t$'..\x00x'` are
+refused, each quoting the whole word. `-la`, `git log -1`, `-t...`, `-t~`, bash `-x:~`,
+`-Destination:sub`, `-Destination:~5`, `-Filter:*.md`, `-Recurse:$true`, `~30%`, `~2x` and `~13`
+stay allowed.
 
 **Totality is load-bearing here.** `approve_tool_call` calls `_decide` with no `try` around it
 (`mcp_server.py:1609`), so an exception in rule 4 would reach Claude as a failed MCP tool call, not
-as a decision. The added code is two `re.match` calls on a `str`, a slice, `startswith` and
+as a decision. The added code is `re.match` and `re.fullmatch` calls on a `str`, a slice and
 `partition`, none of which raises, plus `_judge_path`, which is total because `_where` catches
-`OSError` and `ValueError` (`:1041-1051`).
+`OSError` and `ValueError` (`:1041-1051`). `_judge_path` is handed the literal `".."`, never the
+word, so a NUL in the word never reaches `os.path` (R3 checked this; the word itself only reaches
+`_quote`, which renders it with `repr`).
 
 **Alternative rejected: judge every separator-less word with `_where`.** It catches `..`, but
 measurement shows it is wrong in three ways:
@@ -164,6 +185,46 @@ and tells the agent to write a workspace-relative path. Accepted, but it is the 
 over-refusal, and R3 should weigh it against refusing only an unquoted `~`, which needs the lexer
 to mark a quoted `~` the way it marks a quoted `$` (`_LITERAL_DOLLAR`, `:1002`).
 
+**R3-1: the over-refusal was wider than that, and the rule is narrowed to the shapes a shell
+substitutes.** A leading `~` is ordinary prose for an approximate figure, and prose reaches the
+judge: a commit message or PR body is lexed like any other argument, and the body of the heredoc
+Claude Code uses for commits (`git commit -m "$(cat <<'EOF' … EOF)"`) is lexed as a nested command,
+unquoted. R3 measured `git commit -m "cuts time by ~30%"`, `gh pr create --body 'about ~5 files'`
+and that heredoc form carrying `~30%`: all allowed today, all refused by R2's rule. In this
+repository's last 3,000 commit messages, 106 carry a separator-less word that begins with `~`
+(`~13`, `~30`, `~19s`, `~22%`, `~3.5`), against 2 that carry a lone `..` (a regex count that
+approximates `_words`; under the shapes below, 3 of the 106 would still be refused).
+
+A word with no separator is, to the shell, one whole tilde-prefix. Bash substitutes it only in
+these shapes (measured in Git Bash 5.2.37): `~` (home), `~+` and `~-` (`PWD`, `OLDPWD`), `~N`,
+`~+N` and `~-N` (directory-stack entries), and `~name` for a user that exists (`~huida` expanded,
+`~nosuchuser` stayed literal). `~30%`, `~2x` and `~5` with no stack stayed literal. PowerShell's
+provider resolves only `~` (`Resolve-Path ~huida` and `~5` failed as literal paths; R3 also measured
+`Copy-Item notes.md -Destination:~5` writing a file named `~5` inside the workspace). So the check
+is `_TILDE_PREFIX_RE.fullmatch`: `~`, `~+`, `~-`, or `~` followed by a name that begins with a
+letter or `_` and continues with letters, digits, `.`, `_` or `-`. Two shapes are left out on
+purpose:
+
+- **`~N`, `~+N`, `~-N`.** A directory-stack entry is a directory some `pushd` put there, and
+  `pushd` names it as a word the judge reads. So the entry was judged when it was pushed, unless it
+  came from a variable, which is D5's hole, not a new one. The digit forms are also exactly the
+  shape of prose figures (`~13`, `~30`).
+- **A user name that begins with a digit** (`~2x`). Linux's default `useradd` refuses such names;
+  Windows accounts may have them. The residual is a real account whose name begins with a digit,
+  on a machine where an agent would guess it.
+
+`~root`, `~huida` and `~approximately` are still refused, and so is a lone `~` in prose
+(`approx ~ 5`) and as a quoted pattern (`grep '~' notes.md`).
+
+**R3 on the quoted-`~` alternative: not in this change.** Marking a quoted `~` in the lexer the way
+`_LITERAL_DOLLAR` marks a quoted `$` is right for bash only. In PowerShell quoting does not protect
+a `~`: `Resolve-Path '~'` and `Resolve-Path "~"` both printed `C:\Users\huida`, and an MSYS program
+started from PowerShell expands a leading `~` and `~user` itself (Git's `echo.exe ~ ~huida '~' "~"`
+printed the home directory four times; `-t~` and `~+` stayed literal). It would also leave the
+commonest carrier, the unquoted heredoc body, exactly as refused as before, and it changes what
+rule 3 sees for a quoted `'~/x'`, which is existing behaviour this change does not own. It can be
+filed as a finding if a quoted `~` pattern turns out to block real work.
+
 ### D4 — The NUL comparison lives in rule 4, not in the lexer
 
 An argument the shell passes on is a C string: it ends at the first NUL. Measured: in Git Bash,
@@ -182,7 +243,7 @@ shell's argument is `..`, so the refusal is right and its reason names a path no
 
 `cp notes.md $HOME` is an escape, and it is measured as allowed. Refusing separator-less words that
 contain `$` would refuse `echo $x`, `for f in $files` and `test -n "$VAR"`, which is most real shell.
-`_decide`'s docstring already disclaims paths built at run time (`:1447-1449`). This is proposed as
+`_decide`'s docstring already disclaims paths built at run time (`:1448-1449`; R3-8). This is proposed as
 a separate finding, where the trade-off can be decided on its own evidence.
 
 ### D6 — PowerShell drive-qualified words stay out (non-goal)
@@ -208,23 +269,35 @@ proposal calls a defect: `cp -t../ notes.md` is refused today (rule 6 finds `/`)
 
 Two joins put a value in the option's own word with no separator for `_words` to split at:
 
-- **PowerShell's `-Name:value`.** PowerShell binds the text after the colon as the parameter's value
-  and resolves it as a provider path, so `~` there is the home directory (R2 measured
-  `-Destination:~\x.md` landing in `$HOME`). Both checks apply. The pattern is PowerShell-only: in
-  bash, `-x:..` is one literal argument.
-- **A short option with its value glued on**, `cp -t..`, `tar -C..`, `make -C..`. The program parses
-  this from its own argv, so it holds in both dialects: PowerShell passes `-C..` to a native `tar`
-  unchanged. Only `..` is checked. Bash does not expand a `~` after `-t` (R2 measured
-  `cp -t~ notes.md` looking for a file literally named `~`), and PowerShell does not expand one in
-  an argument to a native program.
+- **An option joined to its value by a colon**, `-Name:value`. PowerShell binds the text after
+  the colon as the parameter's value and resolves it as a provider path, so `~` there is the home
+  directory (R2 measured `-Destination:~\x.md` landing in `$HOME`). Both checks apply in
+  PowerShell. **R3-2:** R2 made the pattern PowerShell-only, because in bash `-x:..` is one literal
+  argument. That is the same argument the glued form below rejects: the shell passes the word on,
+  and the program splits it. .NET's `System.CommandLine` (the `dotnet` CLI) documents `:` as an
+  option delimiter alongside `=` and a space, so `dotnet publish -o:..` and `--output:..` name the
+  parent from either shell (documented, not measured: this machine has no .NET SDK). So the `..`
+  check reads a colon-joined value in both dialects, for `-name:` and `--name:`. The `~` check stays
+  PowerShell-only: bash left `-x:~` literal (measured: `echo -x:~` printed `-x:~`), and a program
+  that splits `-o:~` itself does not expand `~`. No ordinary word is `-name:..` or `--name:..`.
+- **A short option with its value glued on**, `cp -t..`, `tar -C..`, `make -C..`, and combined
+  flags `cp -xt..`, `tar -xvC..` (R3 measured both landing in the parent in Git Bash, with GNU tar
+  1.35). The program parses this from its own argv, so it holds in both dialects: PowerShell passes
+  `-C..` to a native `tar` unchanged. Only `..` is checked. Bash does not expand a `~` after `-t`
+  (R2 measured `cp -t~ notes.md` looking for a file literally named `~`). PowerShell does not
+  expand one in an argument to a native program; an MSYS program expands a *leading* `~` from its
+  own command line (R3, D3), but `-t~` does not lead with it, and Git's `echo.exe -t~` printed
+  `-t~`.
 
 `--name=value` needs nothing new: `_words` already splits at `=`, which is why
 `--target-directory=..` reaches rule 4 as `..`.
 
 **Which option letters take a value is the program's business, and the judge does not know it.**
 `_GLUED_OPTION_RE` therefore treats any run of letters and digits after one `-` as options, and
-judges what follows. The words that match and end in exactly `..` are `-X..` spellings no ordinary
-command uses, so the cost is a refusal of a word nobody writes. `-t...` and `-la` are not touched.
+judges what follows. The words that match and end in exactly `..` are `-X..` spellings ordinary
+commands almost never use, so the cost is small. R3 found two that are not paths, both refused:
+`awk -F.. '{print $1}'` (a field separator of two dots) and a Ruby endless range,
+`ruby -e 'p (-1..)'`, whose `(-1..)` trims to `-1..`. `-t...` and `-la` are not touched.
 `--long..` does not match (the second `-` is not a letter or digit), and needs no rule: a GNU long
 option takes its value after `=` or as the next word.
 
@@ -239,9 +312,17 @@ prefer it; it is Open Question 3.
   `cd sub && make && cd .. && ls`. → This is consistent: `cd ../` is refused today, and so is
   `cd ../other` (the judge resolves every relative word against the root, per the docstring). The
   refusal names `'..'` and says it is outside, so an agent can rewrite it as `(cd sub && make)` or
-  `make -C sub`. Accepted.
+  `make -C sub`. Accepted. **R3-9:** the commonest legitimate form is an out-of-source build,
+  `mkdir build && cd build && cmake ..`, where `..` is the workspace itself. It is refused (measured),
+  as `cmake ../` already is; the rewrite is `cmake -S . -B build`.
 - **`ls ~` or `echo ~` is newly refused**, and so is a quoted `~` pattern (D3). → The refusal says
-  why. Accepted; D3 names the alternative for R3.
+  why. Accepted; D3 records R3's weighing of the quoted-`~` alternative.
+- **Prose in a commit message or PR body is judged** (R3-1). A lone `..` in a message
+  (`git commit -m 'go up with cd .. first'`, measured refused) and a `~` word in one of the shapes
+  D3 keeps (`~`, `~root`, `~approx`) are refused, as `../` and `~/.bashrc` in a message already are.
+  → Accepted. R3 narrowed the `~` check so the common approximate figures (`~30%`, `~13`, `~2x`)
+  stand: 106 of this repository's last 3,000 commit messages carry a `~` word, and 3 of them would
+  still be refused; a lone `..` is in 2.
 - **A `..` that is only a piece of an argument is refused** (R2). `_words` splits at `,` and `=`, so
   `echo a,..` and `cp notes.md ..,x` are refused, although the second writes a file named `..,x`
   inside the workspace (measured). → The same splitting already refuses `../work,y` (row E17), and a
@@ -253,6 +334,11 @@ prefer it; it is Open Question 3.
   `[sys.executable, <checkout>/hub/hub/mcp_server.py]`), and `:8000` runs this checkout. → The
   implementing session tells the operator before editing `mcp_server.py`, since their agents'
   `cd ..` is refused from the next run that starts.
+- **Archived D9's PowerShell residuals are closed too** (R3-6). `a-url-is-not-a-path` D9 named
+  `Set-Content (Join-Path .. stray.txt) "hi"` and `[IO.Path]::Combine('..', 'x')` as allowed
+  residuals, measured writing into the parent. Both carry `..` as a word of its own, so both are now
+  refused (measured). No test row pins them, so no test changes; the supersession of D9 covers them
+  as well as R8 and R9. `Resolve-Path`/`Convert-Path` over a variable remain D5's.
 - **Rows P7, R8 and R9's comments, and the archived designs, describe the old allow.** → The test
   comments are rewritten in the tasks that flip the rows, naming this change. Archived design
   documents are not edited.
@@ -281,11 +367,18 @@ Rollback is a revert of one commit.
 3. **Option-joined values in scope (D7)?** R2 brought `-t..` and `-Destination:..` into this change,
    because the existing joined-word requirement obliges it once `..` alone is refused. The
    alternative is to name them a non-goal and amend that requirement in this change's delta, which
-   R2 does not recommend. Operator's call.
+   R2 does not recommend. Operator's call. R3 widened the colon form to both dialects and to
+   `--name:` (R3-2); it recommends keeping D7 in scope with that widening.
 4. **Superseding archived D9 for R8 and R9.** `a-url-is-not-a-path` pinned `cd .. && …` and
    `git -C .. status` as allowed residuals on purpose. This change refuses them. The operator should
    know that a decision from an archived change is being reversed, and that the reversal reaches
-   `:8000` runs as soon as the file changes.
+   `:8000` runs as soon as the file changes. R3-6: D9's two PowerShell residuals
+   (`Join-Path ..`, `[IO.Path]::Combine('..', …)`) are reversed with them.
+5. **The narrowed `~` check (R3-1).** R3 refuses a separator-less `~` word only in the shapes a
+   shell substitutes, and leaves `~N` (directory stack) and `~` plus a digit-led name (`~2x`)
+   standing, so that approximate figures in commit messages are not refused. The alternative is
+   R2's rule: refuse every word that begins with `~`, and accept refusing about one commit message
+   in 28 (106 of the last 3,000, against 3 under R3's check). R3 recommends the narrowed check. Operator's call.
 
 ## Round log
 
@@ -364,3 +457,96 @@ Rollback is a revert of one commit.
   **Test rows that could not fail:** task 1.5 of R1 (negative controls) can only pass today, by
   design; R2 kept them and named the wrong implementation each one catches (task 1.8). Every other
   group-1 row was checked to fail today by measurement (a) or (b).
+- **R3, 2026-09-21** (interactive subagent, Opus 5). **Verdict: APPROVE WITH FIXES** (all applied
+  in place). R3 formed its conclusions from the proposal, the delta, the tasks and the code before
+  reading R1's and R2's entries above.
+  **Re-derived:** `_lex`, `_words`, `_judge_word`, `_where`, `_judge_path`, `_expands`,
+  `_read_command`, `_decide` and `approve_tool_call` (`mcp_server.py:1593-1613`), and the existing
+  requirement (`spec.md:595-708`). Every spelling in tasks 1.1-1.8 reaches rule 4 as the proposal
+  says: rules 1 and 2 cannot take a word that starts with `.`, `~` or `-`, rule 3 needs a separator,
+  and `_words` splits `--target-directory=..` and `HUB_URL=..` at `=`. `_judge_path` is handed the
+  literal `".."`, so a NUL in the word never reaches `os.path`, and the added code is `re.match`,
+  `re.fullmatch`, a slice and `partition`: total, so `approve_tool_call`, which has no `try` around
+  `_decide` (`:1609`), still always answers.
+  **Measured:** (a) `_decide` in-process with `AW_WORKSPACE_DIR` a `C:/…/scratchpad/r3/land/ws`,
+  from three scratch copies of the `hub` package (today, D1 as R2 wrote it, and R3's D1), selected
+  by `PYTHONPATH`: every row of tasks 1.1-1.8 fails or passes today exactly as each task says, and
+  passes under both rules; the root case (`AW_WORKSPACE_DIR=C:/`) allows `..` and `../` today and
+  under both rules, and refuses `..` alone under a `_refuse(word, _OUTSIDE)` variant; H10b is
+  refused as uncheckable today and allowed with `trusted = True` patched in. (b) A sweep of 100
+  ordinary agent commands (git, npm, pip, pytest, ruff, docker, tar, find, grep, sed, awk, cut,
+  make, `python -c`, `ruby -e`, PowerShell cmdlets with `-Param:value`, ranges `1..10`, `$a[0..2]`)
+  and 54 escapes. (c) Ten test files that reach the judge, 453 tests, each copy run with its own
+  `hub/tests` (so the tests that spawn `mcp_server.py` as a process ran the patched file, which R2's
+  in-process plugin could not reach): D1 as R2 wrote it and R3's D1 each fail exactly P7, R8, R9
+  and H10, confirming task 2.3. Two `test_workspace_writes` tests fail in every scratch copy,
+  today's included, because they read the repository's layout; both pass in the repository
+  (29 passed). (d) Real shells, Git Bash 5.2.37 and Windows PowerShell 5.1.26100: `cp -xt..` and
+  `tar -xvC..` (GNU tar 1.35) landed in the parent; `Copy-Item notes.md -Dest:'..'` landed in the
+  parent; `-Destination:~5` wrote a file named `~5` inside; bash printed `~30% ~2x ~5` literally,
+  expanded `~0`, `~huida` and (after two `pushd`) `~1`, left `-x:~` and `--a=~` literal, and
+  expanded `a=~` and `a=b:~`; `Resolve-Path '~'` and `"~"` gave `C:\Users\huida`; Git's `echo.exe`
+  run from PowerShell printed `~ ~huida '~' "~"` as the home directory four times, and `-t~` and
+  `~+` literally.
+  - **R3-1 (major): the `~` check refused commit messages.** R2's rule refuses every separator-less
+    word that begins with `~`. Prose reaches the judge, including the body of the heredoc Claude
+    Code commits with, which is lexed as a nested command. `git commit -m "cuts time by ~30%"`,
+    `gh pr create --body 'about ~5 files'` and the heredoc form with `~30%` were all allowed today
+    and refused by R2's rule; 106 of this repository's last 3,000 commit messages carry such a word,
+    and 3 of them would still be refused under R3's check.
+    D3 named only `grep '~'`. Fix: `_TILDE_PREFIX_RE`, the shapes a shell substitutes (`~`, `~+`,
+    `~-`, `~` plus a letter-led name); `~N` forms and digit-led names stand, with the reasons in D3.
+    Proposal, D1, D3, Goals, Risks, delta (the refused-shorthand paragraph and scenario, a new
+    "before a figure" scenario, the ordinary SHALL-allow list), tasks 1.8, 2.1 and 3.2, and Open
+    Question 5, which puts R2's wider rule back to the operator.
+  - **R3-2: the colon form escaped in bash.** R2 read `-Name:value` in PowerShell only, reasoning
+    that bash passes `-x:..` literally; D7 rejects that same reasoning for glued options, since the
+    program splits the word. `dotnet publish -o:..` (bash) and `--output:..` (either dialect) were
+    allowed by R2's rule. .NET's `System.CommandLine` documents `:` as an option delimiter
+    (documented, not measured: no .NET SDK here). Fix: `_COLON_OPTION_RE` (`-name:` and `--name:`),
+    checked for `..` in both dialects and for `~` in PowerShell only (bash left `-x:~` literal);
+    task 1.5 rows; D7, D1, proposal, delta scenario.
+  - **R3-3: the delta's option scenario said the reason names the word "as the command wrote it".**
+    It names the word as the shell passes it on: `Copy-Item notes.md -Dest:'..'` is refused naming
+    `'-Dest:..'`. Fix: the scenario, and a task 1.5 row that pins the quoted case.
+  - **R3-4: two scenario gaps.** Task 1.8's `cp -t~ notes.md` had no scenario, and the ordinary
+    scenario's WHEN excluded it ("carry neither as an option's value"). The parameter scenario said
+    a value that "begins with" `~` is refused, which would oblige refusing `-Destination:~5`, a file
+    PowerShell writes inside the workspace. Fix: a scenario for the shorthand joined to an option
+    in bash, the parameter scenario narrowed to the shorthand alone, and the ordinary SHALL-allow
+    list extended so both "stands" scenarios rest on a SHALL.
+  - **R3-5: D7 said PowerShell does not expand `~` for a native program.** True of PowerShell, but
+    an MSYS program expands a leading `~` and `~user` from its own command line, quoted or not
+    (measured above). Decisions unchanged: `-t~` is not leading, and a bare `~` is refused. Fix: D7
+    text; the fact also rules out a PowerShell quoted-`~` sentinel (D3).
+  - **R3-6: archived D9 is reversed wider than R8 and R9.** Its PowerShell residuals,
+    `Set-Content (Join-Path .. stray.txt) "hi"` and `[IO.Path]::Combine('..', 'x')`, carry `..` as a
+    word and are refused under both rules (measured). No row pins them. Fix: proposal, Goals, Risks,
+    Open Question 4, task 0.3.
+  - **R3-7: over-refusals R2 did not list.** Measured refused under both rules: `awk -F..` (a
+    two-dot field separator), `ruby -e 'p (-1..)'` (an endless range trimmed to `-1..`),
+    `grep -F '..'`, and a lone `..` in a commit message. Fix: D7 and Risks name them; accepted.
+    No ordinary command in the sweep was refused by the colon or glued patterns otherwise
+    (`-Recurse:$true`, `-First:5`, `-Format:'yyyy-MM-dd'`, `-c:Release`, `1..10`, `$a[-3..-1]`,
+    `{-5..5}`, `HEAD~3`, `stash@{0}` all stand).
+  - **R3-8: citations.** D5 cited the docstring at `:1447-1449`; it is `:1448-1449`. Task 2.1 cited
+    the patterns at `:955-981`; they begin at `_SEPARATORS`, `:953`. Every other file:line in the
+    proposal, design and tasks was checked and holds (`_judge_word` `:1141-1167`, rule 4 `:1158`,
+    `has_separator` `:1155`, rule 3 `:1156`, `_where` `:1034-1054` with its catches at `:1043` and
+    `:1050`, `_judge_path` `:1057-1073`, `_expands` `:1076-1085`, `_words` `:1385-1400` and `:1396`,
+    `_read_command` `:1403-1435`, `_WORD_TRIM` `:981`, `_PLAIN_RELATIVE_EVERYWHERE` `:973`,
+    `_LITERAL_DOLLAR` `:1002`, `_quote` `:1024`, `:1609`, `agent_trigger.py:1094-1095`, P7 at
+    `test_permission_approver.py:518-521`, R8/R9/H10 at `:177-178` and `:206`, `spec.md:624-628`
+    and `:630-632`, archived `design.md:221`, `:173-174` and D9 `:552-569`).
+  - **R3-9: `cmake ..` was not in Risks.** The out-of-source build `cd build && cmake ..` is the
+    commonest legitimate `..`, and it is refused (measured). Fix: Risks, proposal, test guide, with
+    the rewrite `cmake -S . -B build`.
+  **D3's quoted-`~` question, answered:** not in this change. A lexer mark for a quoted `~` would be
+  correct in bash only, would not reach the unquoted heredoc body that carries most prose, and would
+  change what rule 3 sees for `'~/x'`. R3-1's shape check removes most of the cost instead.
+  **Consistency:** the delta stays ADDED; the existing requirement's uncheckable clause is scoped to
+  separator-bearing words and its joined-word clause is satisfied, not changed. Each requirement's
+  SHALL is on its first physical line, and every scenario is exercised by a task 1.x row: parent
+  alone (1.1, 1.6), judged alike (1.2), quotes (1.1), option value (1.1, 1.5), NUL (1.4, 1.5),
+  shorthand alone (1.3), parameter value (1.3), ordinary (1.8), before a figure (1.8), joined in
+  bash (1.8). `openspec validate --strict` passes.
