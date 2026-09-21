@@ -1,109 +1,40 @@
 {
-  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-  "playbook": ".claude/loops/night-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-09-17-daily",
-  "parent_branch": "master",
-  "parent_sha": "802a8c7",
-  "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 12,
-  "log_file": ".claude/autonomous/2026-09-20-night-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "group1-impl",
-      "status": "done",
-      "title": "Group 1 - archival releases the charter binding",
-      "detail": "Tasks 1.1-1.8. archive() nulls charter_id, keeps runner_id; patch_agent refuses re-binding a charter to an archived agent (409); tests + mutation checks. Done iteration 2, commit pending in this same push."
-    },
-    {
-      "id": "group2-impl",
-      "status": "done",
-      "title": "Group 2 - archive/unarchive responses state the binding's fate",
-      "detail": "Tasks 2.1-2.5. released_charter_id + sentence on archive; revised D8 sentence on unarchive (use R2 wording exactly, not R1's 'before this agent's next turn'). No UI change; confirm useArchiveAgent still discards body. Done iteration 3: 38 tests pass, mutation confirmed, 2.5's half-discharge stated, no finding's Status touched."
-    },
-    {
-      "id": "group2b-impl",
-      "status": "done",
-      "title": "Group 2b - the transition leaves a trace (F391)",
-      "detail": "Tasks 2b.1-2b.7. persist_event + sse_manager.broadcast for agent_archived/agent_unarchived, server-side only, no hub/ui/src change, no make ui. Payload carries released_charter_id (pre-release capture, not re-read after). Done iteration 4: 40 tests pass, mutation confirmed both ways (persist_event delete vs released_charter_id delete give distinct failures), no hub/ui/src touched. F391 set fixed 06161a7 in FINDINGS.md, display half explicitly stated as untouched (useSSE.ts:31/:460)."
-    },
-    {
-      "id": "group3-impl",
-      "status": "done",
-      "title": "Group 3 - migration 0105 clears archived agents' charter bindings",
-      "detail": "Tasks 3.1-3.5. down-revision 0104, guard missing agents table, no-op downgrade documented, bump head assertions in test_migrations.py + test_project_persistence.py, data test with mutation. Done iteration 5: 103 passed/1 skipped across both test files, mutation confirmed (dropping the WHERE clause cleared the open agent's binding too), ruff/black clean, no hub/ui/src touched."
-    },
-    {
-      "id": "group4-impl",
-      "status": "done",
-      "title": "Group 4 - launchability applies the roster's lifecycle filter (F181)",
-      "detail": "Tasks 4.1-4.5. lifecycle query param on get_agents_launchability matching list_agents; filter after session_agents_meta, before per-name loop; probe/spawn agreement test. Done iteration 6: 124 passed across the four touched test files, mutation confirmed (query-only filter leaks a session-config-only name into ?lifecycle=archived, and leaks a session-config archived agent into the default probe -> 409 on trigger), ruff/black clean, 4.5 re-confirmed zero real hub/ui/src call sites (definition + 11 vi.mock stubs only)."
-    },
-    {
-      "id": "group5-impl",
-      "status": "done",
-      "title": "Group 5 - the third site, runners.py delete_runner (F390)",
-      "detail": "Tasks 5.1-5.3. Qualify archived holders in the refusal message; three-case test with mutation; set F390 fixed <sha> in same commit. Done iteration 7: 23 passed in test_runners_api.py, mutation confirmed (dropping the lifecycle column fails only-archived and mixed, leaves only-open green), ruff/black clean. F390 set fixed 861429d in FINDINGS.md, first HTTP reproduction of this finding recorded."
-    },
-    {
-      "id": "group-verify-drive",
-      "status": "done",
-      "title": "Group 6 - full suite, lint, and a real drive",
-      "detail": "Tasks 6.1-6.4. pytest hub/tests/ -v green, ruff/black/mypy clean, drive on a fresh throwaway Hub (not 8000/8010) covering F185 end to end, F181 probe/trigger, and the 0105 migration against a seeded db. Haiku for any real agent turn. Set F185/F181/(F390) fixed in FINDINGS.md with evidence. Done iteration 8: 4474 passed/86 skipped, lint/type-check clean, drive on port 8025 (proj-b99d375d4baf) confirmed F185's release/409/unarchive sentences, F181's default-probe/trigger agreement, and migration 0105's charter_id clear against a hand-seeded 0104 db. F185 fixed 10cf98e, F181 fixed 2bf4816 in FINDINGS.md."
-    },
-    {
-      "id": "change-archive",
-      "status": "done",
-      "title": "openspec validate --strict, then sync-specs/archive-change",
-      "detail": "Task 6.5. Done iteration 9: validate --strict passed clean. Synced delta specs by hand-merging (openspec-sync-specs skill, agent-driven merge) into openspec/specs/agent-charter/spec.md (added the new charter-deletion requirement), openspec/specs/agent-configuration/spec.md (merged the modified archive requirement's new paragraphs/scenarios), and openspec/specs/runner-registry/spec.md (merged the modified launchability requirement plus the new runner-refusal requirement). Confirmed all 38 tasks in tasks.md ticked before archiving. Moved the change directory to openspec/changes/archive/2026-09-21-an-archived-agent-holds-nothing-and-is-offered-nowhere via openspec-archive-change. Checked FINDINGS.md for F185/F181/F390/F391: all four sections already carry a clean 'Status: fixed <sha>' line with no stray 'open' wording, and none of the four appears in any current open-severity summary list (the only such lists predate these findings or are historical narrative about a classifier script) -- no ledger edit was needed beyond what group-verify-drive already made."
-    },
-    {
-      "id": "group7-drive",
-      "status": "done",
-      "title": "a-first-turn group 7 - the D2 measurement (APPROVED 2026-09-20, in session)",
-      "detail": "Tasks 7.1-7.7 done iteration 10. Throwaway Hub on :8091, scratch profile testbed/scratch/f302_measure/, project proj-c3039d3069b2. Three fresh Haiku agents (f302agent1/2/3), preconditions (7.1b) confirmed by direct sqlite read before triggering: no session-wide or per-agent hub_client override, runner cli=claude in MCP_INJECTABLE_RUNNERS, 0 prior runs with mcp_adapter_online_at. Same one-shot create_task instruction, one turn each. Result: 3 of 3 MCP, 0 HTTP, 0 both, 0 neither (run-3e7497554e98, run-63c923499c5d, run-9ddb13b6dfeb) -- every sampled first turn reached for mcp__agentweave__create_task directly, no curl/python -c anywhere in transcripts. 7.5c verdict: first branch (every sample MCP) but D2 NOT closed on n=3 -- confounds (model, task shape, no resumed session) stated. Appended to F302 in FINDINGS.md, new dated entry in DECISIONS.md, tasks.md 7.1-7.7 ticked with inline evidence, openspec/changes/.../2026-09-14-the-first-turn-has-its-tools.md 'What we saw' corrected per 7.7 (only Architect was read, other three only told). Hub stopped, port 8091 confirmed free. This change is NOT archived this iteration -- archiving (sync-specs + archive-change for a-first-turn-is-not-told-it-has-nothing) is unscoped work left for a future queue item if the operator wants it; the change's own bar (7.4 carries counts) is met."
-    },
-    {
-      "id": "e2e-sweep-drive",
-      "status": "done",
-      "title": "Full-surface e2e sweep - LAST, only if everything above is finished",
-      "model": "sonnet",
-      "effort": "medium",
-      "detail": "Operator asked for this explicitly (APPROVALS.md 2026-09-20). Use the e2e-loop skill. LAST on purpose: must not eat the window before the builds land. FOUR CONSTRAINTS because SKILL.md's own reference conflicts with this playbook: (1) NOT port 8010 - that is the trial Hub and THIS repo is registered in it as proj-d85a82bf4216, so driving it points the Hub being edited at the tree being edited (CLAUDE.md forbids it). Pick a free port via netstat and record it. (2) Set DATABASE_URL explicitly to profiles/drive0920/agentweave.db - SKILL.md:144 sets none and falls through to hub/.env. (3) Fresh project; never proj-5e960453 or proj-18e5d4e0, never this repo's own directory. (4) Haiku on every turn, never leave a job enabled. File findings with Source: found by driving. Done iteration 11: sweep run on port 8030, project proj-05c8aa160921 under testbed/scratch/e2e_sweep_0921/. 10 of 19 matrix rows fully driven and held up (task transitions, dependencies, full spec lifecycle, evidence->integration->coverage with a verified real git merge, ask_user block/release, loop mechanics); 6 partial; 3 explicitly not-reached (Flows, Checkpoints, Resilience) rather than silently skipped. One new finding F395 (B, inbound queue: POST /messages with no run_id sets hop_depth=hop_budget+1 and mislabels origin_type as agent for an operator-sent message) filed in scripts/drive/FINDINGS.md with live-db evidence. Cleanup verified independently: netstat showed port 8030 free (only TIME_WAIT), job archived, token_budget override reset. Report written to testbed/scratch/e2e_sweep_0921/REPORT.md."
-    },
-    {
-      "id": "i-6.2-redo",
-      "status": "done",
-      "title": "If time remains: a-loop-staffs-the-agent-it-names group 6.2-REDO",
-      "detail": "Done iteration 12. Full suite at HEAD 8508377, nothing excluded: 4474 passed, 86 skipped, 266 warnings, 2857.30s (47:37), exit 0, zero failures/errors. Written into openspec/changes/a-loop-staffs-the-agent-it-names/tasks.md task 6.2-REDO itself (not a log), which is what F392 asks for; openspec validate --strict passes after the edit. 4474+86=4560 collected vs 4545 at 09237f6 = exactly +15 = 14 hand-written tests plus one generated parametrize case from migration 0105 -- recorded against F190. Section 5 of that change untouched and still unapproved. Same iteration reconciled an uncommitted tree left by a killed iteration: F396 (B, the MISREPORT ratchet is keyed by file:line and was already holding 5 dead keys on the day its ceiling was measured) independently re-derived at HEAD and in a throwaway worktree at 6484de4 before being committed -- every number reproduces; the F190 addendum and F395 status line verified; BACKLOG.html regenerated and reported nothing moved. CI on the inherited sha 8508377 concluded success."
-    },
-    {
-      "id": "window-closed",
-      "status": "done",
-      "title": "Window queue empty -- driver unregisters",
-      "detail": "The 2026-09-20 APPROVALS.md ORDER: line is fully discharged (archived-agent change all groups, a-first-turn group 7, the full-surface e2e sweep) and so is its time-permitting fallback (6.2-REDO). next_action is null per night-window.md 'Ending the window'. About four hours of the window are left unspent deliberately: every remaining unarchived change is REVISING (a-hub-that-was-not-told-which-database -- adversarial Opus returned DO NOT APPROVE, four blocking items for R4), gated on an unapproved section, or waiting on a re-derivation round, and this window may not write proposals. One operator decision is waiting in spec-queue/DECISIONS.md under ## Open: F396-rekey."
-    }
-  ],
-  "decisions_for_user": [
-    "F396-rekey (spec-queue/DECISIONS.md ## Open): RENDERS in scripts/drive/n11_query_error_surface.py is keyed by (file, line); 8 of its 57 MISREPORT keys match no live site and the ceiling of 52 was already holding 5 dead keys when it was frozen at 6484de4, so the drop to 49 is decay, not repair. Three parts: (1) re-anchor the key to something a line shift cannot move -- (file, hook) is the obvious candidate; (2) whether to re-measure the ceiling from the re-anchored table, which will jump back toward 57 and must NOT be read as a regression; (3) whether the 18 currently UNCLASSIFIED live sites get hand-triaged in the same change or a later one. MUST NOT HAPPEN MEANWHILE: lowering MISREPORT_CEILING to 49 -- which is exactly what the suite warns on every green run, including tonight's.",
-    "Whether a-first-turn-is-not-told-it-has-nothing should now be archived (sync-specs + archive-change). Group 7 is done and its own bar (7.4 carries counts) is met; iteration 10 left the archive step unscoped rather than deciding it."
-  ],
-  "limits": [
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-21-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "72cfb99",
+    "stop_at":  "2026-09-22T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-21-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
