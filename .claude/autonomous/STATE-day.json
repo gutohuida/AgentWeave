@@ -8,16 +8,16 @@
     "parent_branch": "master",
     "parent_sha": "802a8c7",
     "stop_at": "2026-09-21T17:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-1",
-    "next_action": "D-1: drive what last night built, scoped and end to end, as a real operator would. Use the e2e-loop skill. Fresh drive project (never proj-5e960453 or proj-18e5d4e0), fresh Hub on a free port from source (uvicorn, never `agentweave --port`), fresh profiles/drive0921/ db, every real agent turn on claude-haiku-4-5. Scope: the archived-agent change (F185/F181/F390/F391) and the group-7 MCP first-turn measurement. Append any new findings to FINDINGS.md with Status: open and a repro. Never leave a job enabled.",
+    "current": "D-2",
+    "next_action": "D-2: drive the three not-reached sweep rows (Flows, Checkpoints, Resilience) on a fresh Hub from source (free port e.g. 8097, profile drive0921 already exists -- use a new profiles/drive0921b), Haiku only, e2e-loop skill. Traps: GET /events is SSE (use /events/history); run drive scripts to a file, never through tail/head. Existing harnesses: scripts/drive/t_row12_flows.py, t_row19*, checkpoint scripts. File findings as usual; never leave a job enabled.",
     "queue": [
         {
             "id": "D-1",
-            "status": "open",
+            "status": "done",
             "title": "Drive what last night built",
             "detail": "Scoped e2e drive of the archived-agent change and group-7 MCP measurement, on a fresh drive Hub, Haiku agents only. e2e-loop skill. New findings go into FINDINGS.md with Status: open + repro."
         },

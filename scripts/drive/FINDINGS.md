@@ -30862,3 +30862,30 @@ theoretical: `hub/tests/test_surface_ceilings.py:103: UserWarning: operator-reac
 surfaces dropped to 49 from a ceiling of 52. Lower the constant in test_surface_ceilings.py so the
 ratchet holds the new floor.` A reader who does what that sentence says freezes eight dead keys as
 the floor. It is emitted on every green run, so it will keep asking.
+
+## F397 (D) -- archiving an already-archived agent is a 200 that re-stamps `archived_at` and writes a second `agent_archived` event
+
+**Source:** drive
+
+**Status:** open. **Found 2026-09-21** by the day window's D-1 drive of
+`an-archived-agent-holds-nothing-and-is-offered-nowhere` (`scripts/drive/d1_0921_archived_agent_drive.py`).
+
+**Repro.** Fresh project, agents `aa`, `bb`, a charter bound to both. `POST /agents/bb/archive`
+twice. Both return 200 (the second with `released_charter_id: None`). `GET /events/history` then
+lists `agent_created` x3 and `agent_archived` x3 (aa, bb, bb): the no-op second call is
+indistinguishable in the log from a real archival. `agent_lifecycle.archive`
+(`hub/hub/agent_lifecycle.py:73-75`) assigns `archived_at = now()` unconditionally, so the original
+archival time is also lost.
+
+**Why D.** Nothing reads `archived_at` or the event today (design D10 says nothing renders these),
+so no operator sees it. It matters only once the event is displayed or `archived_at` is shown.
+Suggested fix when it does: `archive_agent` returns early (still 200) when `lifecycle == "archived"`
+and writes no event.
+
+**What held (same drive, 16 of 17 checks):** charter wall (F185) clears at archive and names the
+released charter; re-bind to an archived agent 409s naming "Unarchive it first"; runner wall (F390)
+tags archived holders and points at the archived filter; launchability omits archived agents and
+`POST /agent/trigger` refuses them (F181); unarchive returns the standing sentence and the agent
+runs a real Haiku turn charterless. The one BAD line was the script's wrong expectation: archiving
+mid-turn is refused 409 "cc has a run in progress. Wait for it to finish, or stop it first." --
+a gate that held and says what to do.
