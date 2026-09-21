@@ -700,6 +700,24 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-21 late night — `an-unstaffed-review`'s three questions answered; `examples/` deleted
+
+**DECIDED 2026-09-21 ~21:40, by the operator, in an interactive session** ("delete. yes"). The
+three questions had been carried since handoff 0135.
+
+- DECIDED   unstaffed-booked  **`an-unstaffed-review-names-its-holders`: the holdings clause reads
+  `is booked for`** (R8-2), and R8's clause order stands: excluded, no runner, held, booked, running.
+- DECIDED   unstaffed-bundle  **A night window may commit group 5's UI bundle.** The rule is still
+  task 5.4's: commit only if 5.3's served-bundle drive passed. The operator accepts that a committed
+  bundle reaches `:8000`'s live app on its next reload.
+- DECIDED   unstaffed-r8-review  **Before anything is built, a short review of Round 8 only runs in
+  the day window of 2026-09-22** (`DIRECTION.md` `## 2026-09-22`). It checks R8-1 to R8-5's fixes
+  against the tree, not the whole change. **This decision is not an approval**: groups 2, 5 and 6
+  still carry no token. If the review returns clean, that day's DECIDE session may add the row.
+- DECIDED   examples-delete  **`examples/` is deleted whole**, and `CONTRIBUTING.md`'s tree line
+  with it. Without `cli_session.sh`/`.bat`, whose commands no longer exist, only a README saying
+  nothing there works would have been left (F405).
+
 ### 2026-09-21 night — F388's change approved after R4 and a second Opus pass
 
 **DECIDED 2026-09-21 ~21:30, by the operator, in an interactive session** ("yes approve"). This came

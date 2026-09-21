@@ -167,7 +167,6 @@ agentweave/
 │   ├── utils.py             # Utilities
 │   └── templates/           # Templates
 ├── tests/                   # Tests
-├── examples/                # Examples
 └── docs/                    # Documentation
 ```
 

@@ -25,6 +25,32 @@ operator, or by a DECIDE session on the operator's behalf.
 
 ---
 
+## 2026-09-22
+
+**Written 2026-09-21 ~21:40 by an interactive DECIDE session, at the operator's instruction.**
+No `DAY WINDOW` line: the window is the standard 09:00–17:00, armed at 08:55. Decisions behind this
+section: `DECISIONS.md` `### 2026-09-21 late night`.
+
+### Item 1: a Round-8-only review of `an-unstaffed-review-names-its-holders`
+
+The operator asked for one short verification round before groups 2, 5 and 6 are built. Scope it to
+**`design.md` `## Round 8` (R8-1 to R8-5) and the `tasks.md` / delta text those fixes changed**,
+compared against the tree as it is today. Tonight's night window may have landed commits in
+`scheduler.py` or `jobs.py`, so check `git log` since `7e2f663` first. Re-derive; do not re-read
+R8's conclusions. Run R8's regression guard (`test_a_held_agent_is_busy.py`,
+`test_a_task_nothing_will_move_holds_nobody.py`) before and after.
+
+- Settled, so do not reopen: `is booked for` is the wording, and a night may commit group 5's bundle
+  under task 5.4's rule.
+- Write the result as `## Round 9` in `design.md`: fix what it finds, and say "clean" if it is.
+  Report it on the review page. **Do not write an `APPROVED` row**; the DECIDE session does that.
+
+### Everything else
+
+Compose the queue as usual after item 1. F388's R4 is done and approved for tonight's night window
+(22 Sept). Its `APPROVED` row goes into `APPROVALS.md` `## 2026-09-22` through the DECIDE session,
+copied from `## 2026-09-21`'s "Not tonight" paragraph. It is not this window's job to add it.
+
 ## 2026-09-20
 
 **Written 2026-09-19 afternoon by an interactive DECIDE session, at the operator's instruction.**
