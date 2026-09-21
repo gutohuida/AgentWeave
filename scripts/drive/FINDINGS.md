@@ -24804,6 +24804,42 @@ turn of every agent created in it.
 > refused `_NETWORK` and `../outside.txt` still `_OUTSIDE`. So 1d's remedy addressed a constraint
 > that no longer exists; the notice needs no rewrite to the `python -c` shape.
 
+> **2026-09-21, group 7 measured: 3 of 3 fresh first turns reached for MCP, none shelled out.**
+> Throwaway Hub on `:8091` (never `:8000`/`:8010`), scratch profile
+> `testbed/scratch/f302_measure/` (its own sqlite `agentweave.db`, project `proj-c3039d3069b2`),
+> started from `hub/` via `py -3.11 -m uvicorn hub.main:app --port 8091`. Three brand-new agents
+> (`f302agent1`/`2`/`3`, runner `haiku-f302` bound to `claude-haiku-4-5-20251001`, `cli=claude`) —
+> preconditions confirmed by direct read of the scratch db *before* triggering: `project_sessions`
+> had no row for the project (no session-wide `hub_client`), each `agents.config` was `{}` (no
+> per-agent override), the bound runner's `cli` is `claude` (in `MCP_INJECTABLE_RUNNERS`), and
+> `SELECT COUNT(*) FROM runs WHERE agent=? AND project_id=? AND mcp_adapter_online_at IS NOT NULL`
+> was 0 for all three. Each agent got the same one-shot instruction — *"Create a task titled 'F302
+> probe task' with description 'measurement probe' in this project, then stop."* — bound to
+> `claude-haiku-4-5-20251001`, one turn, `session_mode=new`. No charter was bound on any of the
+> three (`charter_id` null); the project's roster held all three agents at once, so each had peers.
+>
+> All three runs completed, exit code 0, and each stamped `mcp_adapter_online_at` *during* the run
+> (turn start had no grounds, exactly 7.1b's target condition — the first turn is a no-grounds turn
+> even though the tools work). Reading each run's `agent_outputs` directly:
+> - `run-3e7497554e98` (f302agent1) — **MCP**: `ToolSearch` for `mcp__agentweave__create_task`,
+>   then called it. No HTTP shellout anywhere in the transcript.
+> - `run-63c923499c5d` (f302agent2) — **MCP**, same shape.
+> - `run-9ddb13b6dfeb` (f302agent3) — **MCP**, same shape.
+>
+> Zero `neither` runs; no replacement needed. **Verdict (7.5c, first branch): every sampled first
+> turn reached for MCP.** This weakens R2's dissent substantially — on Haiku, with a charter-free
+> single-shot instruction and peers present, a fresh no-grounds turn did not reach for `curl`. It
+> does **not** close D2 on three runs (n=3, one model, one instruction shape, one throwaway
+> project): recorded as a dated verdict here and in `DECISIONS.md`, and F302 is marked **fixed
+> (measured)** rather than fixed without qualification. The baseline it is read against is **n=1**
+> (the Architect only — see 7.5 above), not the earlier "4 of 4" claim; the confounds in tasks.md
+> 7.5b (model: baseline was Opus/Sonnet, this measurement is Haiku; task shape: baseline opened a
+> resumed multi-turn spec interview, this measurement is one self-contained instruction on a
+> throwaway; surrounding text: baseline carried both false sentences, this measurement carries
+> neither) all still apply — this result is about the fixed shape's own first turn, not a controlled
+> A/B against 2026-09-14. Hub stopped cleanly afterward; scratch db and uvicorn log left on disk at
+> `testbed/scratch/f302_measure/` as evidence, untracked per testbed conventions.
+
 > **2026-09-20, interactive session: decided, unbuilt, and its stated precondition is now
 > measured satisfied.** The verdict is `DECISIONS.md` `#### DAY-2 / F302 — the notice stops
 > asserting, and does not start trusting` (2026-09-09): **drop the `no MCP tools this turn`

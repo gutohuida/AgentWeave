@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 9,
+  "iteration": 10,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "group7-drive",
-  "next_action": "a-first-turn group 7 (id group7-drive in queue). Tasks 7.1-7.7 of openspec/changes/a-first-turn-is-not-told-it-has-nothing (APPROVALS.md 2026-09-20 has the approval; groups 1-6 built, merged at 802a8c7, CI green). READ 7.1b BEFORE 7.1: three preconditions that silently void the run while the transcript looks identical -- resolved hub_client must be None (not 'cli', not 'mcp'), runner in MCP_INJECTABLE_RUNNERS, and 0 prior runs with mcp_adapter_online_at. Three fresh agents, fresh throwaway Hub (not 8000, not 8010), Haiku, FIRST TURN ONLY. 7.5 baseline is n=1, NOT '4 of 4'. 7.4 must carry counts inline or the task is not done (F392). Append the result to F302 in FINDINGS.md even if it shows the change did not help. Commit, push, advance current/next_action to e2e-sweep-drive.",
+  "current": "e2e-sweep-drive",
+  "next_action": "Full-surface e2e sweep (id e2e-sweep-drive in queue). Use the e2e-loop skill. Operator asked for this explicitly (APPROVALS.md 2026-09-20). FOUR CONSTRAINTS: (1) NOT port 8010 or 8000 -- pick a free port via netstat and record it. (2) Set DATABASE_URL explicitly to profiles/drive0920/agentweave.db -- SKILL.md:144 sets none and falls through to hub/.env. (3) Fresh project; never proj-5e960453, proj-18e5d4e0, proj-d85a82bf4216 (this repo's own registration) or this repo's own directory. (4) Haiku on every turn, never leave a job enabled. File findings with Source: found by driving. Commit, push, advance current/next_action to i-6.2-redo, or to null if the window's time budget is spent.",
   "queue": [
     {
       "id": "group1-impl",
@@ -65,11 +65,9 @@
     },
     {
       "id": "group7-drive",
-      "status": "open",
+      "status": "done",
       "title": "a-first-turn group 7 - the D2 measurement (APPROVED 2026-09-20, in session)",
-      "model": "sonnet",
-      "effort": "medium",
-      "detail": "Tasks 7.1-7.7 of openspec/changes/a-first-turn-is-not-told-it-has-nothing. APPROVALS.md 2026-09-20 has the approval. Groups 1-6 are built, merged at 802a8c7, CI green. READ 7.1b BEFORE 7.1: three preconditions that silently void the run while the transcript looks identical - resolved hub_client must be None (not 'cli', not 'mcp'), runner in MCP_INJECTABLE_RUNNERS, and 0 prior runs with mcp_adapter_online_at. Three fresh agents, fresh throwaway Hub (not 8000, not 8010), Haiku, FIRST TURN ONLY. 7.5 baseline is n=1, NOT '4 of 4'. 7.4 must carry counts inline or the task is not done (F392). Append the result to F302 in FINDINGS.md even if it shows the change did not help."
+      "detail": "Tasks 7.1-7.7 done iteration 10. Throwaway Hub on :8091, scratch profile testbed/scratch/f302_measure/, project proj-c3039d3069b2. Three fresh Haiku agents (f302agent1/2/3), preconditions (7.1b) confirmed by direct sqlite read before triggering: no session-wide or per-agent hub_client override, runner cli=claude in MCP_INJECTABLE_RUNNERS, 0 prior runs with mcp_adapter_online_at. Same one-shot create_task instruction, one turn each. Result: 3 of 3 MCP, 0 HTTP, 0 both, 0 neither (run-3e7497554e98, run-63c923499c5d, run-9ddb13b6dfeb) -- every sampled first turn reached for mcp__agentweave__create_task directly, no curl/python -c anywhere in transcripts. 7.5c verdict: first branch (every sample MCP) but D2 NOT closed on n=3 -- confounds (model, task shape, no resumed session) stated. Appended to F302 in FINDINGS.md, new dated entry in DECISIONS.md, tasks.md 7.1-7.7 ticked with inline evidence, openspec/changes/.../2026-09-14-the-first-turn-has-its-tools.md 'What we saw' corrected per 7.7 (only Architect was read, other three only told). Hub stopped, port 8091 confirmed free. This change is NOT archived this iteration -- archiving (sync-specs + archive-change for a-first-turn-is-not-told-it-has-nothing) is unscoped work left for a future queue item if the operator wants it; the change's own bar (7.4 carries counts) is met."
     },
     {
       "id": "e2e-sweep-drive",

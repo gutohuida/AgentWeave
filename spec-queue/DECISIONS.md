@@ -721,6 +721,26 @@ past. R1 had also silently narrowed a MODIFIED SHALL, dropping the HTTP-form obl
 world where HTTP is the run's only path, and had described the 2026-09-09 verdict as conditional
 when it is flat.
 
+### 2026-09-21 — F302 group 7 measured: 3 of 3 fresh first turns reached for MCP
+
+**MEASURED 2026-09-21**, tasks 7.1-7.5c of `a-first-turn-is-not-told-it-has-nothing`. Throwaway Hub
+(`:8091`, scratch profile `testbed/scratch/f302_measure/`), three brand-new agents, Haiku
+(`claude-haiku-4-5-20251001`), one capability-plane instruction each ("create a task..."), one turn,
+no charter, peers present in the roster. Preconditions confirmed against the scratch db before
+triggering: no session-wide or per-agent `hub_client` override, runner `cli=claude` (MCP-injectable),
+zero prior runs with `mcp_adapter_online_at` set for all three agents.
+
+- DECIDED   f302-d2-measurement  **All three sampled first turns called `mcp__agentweave__create_task`
+  directly, with no HTTP shellout anywhere in any transcript** (run-3e7497554e98, run-63c923499c5d,
+  run-9ddb13b6dfeb; full transcripts quoted in `scripts/drive/FINDINGS.md` F302). Per tasks.md 7.5c's
+  first branch: **the positive HTTP steer does not dominate a fresh turn**, which weakens R2's
+  f302-d2-dissent substantially. **This does not close D2** — n=3, one model (Haiku only), one
+  instruction shape, one throwaway project, and the confounds in 7.5b (model, task shape, surrounding
+  text) are unaddressed by this sample. F302 is marked **fixed, measured** in `scripts/drive/FINDINGS.md`
+  — not fixed without qualification. *Not decided here:* whether the conditional text R2 preferred is
+  still worth building; this measurement answers only whether the shipped shape's own first turn
+  reaches for MCP, and on this sample it does.
+
 ### 2026-09-20 — archival's blast radius, and an approval taken without the adversarial pass
 
 **DECIDED 2026-09-20 afternoon, by the operator, in the interactive session that resumed handoff

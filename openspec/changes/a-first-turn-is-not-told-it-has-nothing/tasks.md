@@ -367,46 +367,53 @@
 > what the cited source says**, and as written the comparison in 7.5 could not have been made
 > honestly. Corrections are inline below. This group had had no verification pass before now.
 
-- [ ] 7.1 On a **throwaway Hub** — never `:8000`, never the operator's database; a scratch profile
-  under `testbed/scratch/` per `.claude/reference/hubs.md` — create a **brand-new agent** whose
-  `Run.mcp_adapter_online_at` has never been set, so `described_access_path` takes the no-grounds
-  branch while `resolve_access_path` still injects the server. Confirm that state in the database
-  before the turn rather than assuming it; an agent that has already earned grounds measures
-  nothing.
+- [x] 7.1 **Done 2026-09-21.** Throwaway Hub on `:8091` (never `:8000`, never `:8010`), scratch
+  profile `testbed/scratch/f302_measure/` (its own sqlite `agentweave.db`, `DATABASE_URL` pointed
+  at it, started from `hub/` via `py -3.11 -m uvicorn hub.main:app --port 8091`, never the
+  installed console script), project `proj-c3039d3069b2`. Three brand-new agents created —
+  `f302agent1`/`f302agent2`/`f302agent3`, runner `haiku-f302` (`runner-ea4085e0bd6c`,
+  `cli="claude"`, `model="claude-haiku-4-5-20251001"`). Confirmed by direct sqlite read of the
+  scratch db **before** any turn: `runs` had zero rows for all three agents with
+  `mcp_adapter_online_at IS NOT NULL` (trivially true — brand new — confirmed rather than assumed).
 
-- [ ] 7.1b **R3 added — three preconditions 7.1 does not state, each of which silently voids the
-  measurement.** The state 7.1 wants is `access_path == "mcp"` **and** `described_path == "cli"`
-  in the same turn (`agent_trigger.py`: `access_path = resolve_access_path(...)`, then
-  `described_path = described_access_path(...)`). Confirm all three before the turn, not after:
-  - **`hub_client` must be unset** for the agent *and* session-wide. `resolve_access_path` returns
-    `"cli"` on `override == "cli"`, so **nothing is injected at all** and the agent genuinely has
-    no tools — a run that measures the opposite of the intended condition while looking identical
-    in the transcript. Equally, `hub_client: "mcp"` is grounds on its own
-    (`described_access_path`'s `if override == "mcp"`), so the notice would never take the
-    no-grounds branch. Check `get_agent_config`'s resolved `hub_client` is `None`.
-  - **The bound runner must be one `resolve_access_path` injects for** (`MCP_INJECTABLE_RUNNERS`);
-    a runner outside it resolves to `"cli"` for the same reason.
-  - **No prior run of that agent carries the column:**
-    `SELECT COUNT(*) FROM runs WHERE agent = ? AND project_id = ? AND mcp_adapter_online_at IS NOT NULL`
-    must be `0` — that is exactly what `harness_has_honoured_mcp` reads. For a brand-new agent it
-    is trivially 0, which is why 7.1's own wording is safe *only* if the agent really is new.
+- [x] 7.1b **Done 2026-09-21, all three preconditions confirmed before triggering, by direct read
+  of `testbed/scratch/f302_measure/agentweave.db`:**
+  - `hub_client` unset: `project_sessions` had **no row** for `proj-c3039d3069b2` (no session-wide
+    default), and each of the three agents' `agents.config` was the literal `{}` (no per-agent
+    override). Neither the CLI override path nor a session-wide default was set anywhere.
+  - Bound runner `cli` is `"claude"` — in `MCP_INJECTABLE_RUNNERS`.
+  - `SELECT COUNT(*) FROM runs WHERE agent=? AND project_id=? AND mcp_adapter_online_at IS NOT NULL`
+    was `0` for `f302agent1`, `f302agent2`, `f302agent3` — confirmed, not assumed.
 
-  The state is genuinely reachable and genuinely verifiable before the turn: the adapter stamps
-  `mcp_adapter_online_at` *during* the run, while `described_access_path` was evaluated at turn
-  start. So the first turn is a no-grounds turn even though the tools work — which is the whole
-  defect, and here it is the experimental condition.
+  Post-turn, all three runs' own `mcp_adapter_online_at` stamped **during** the run (timestamps
+  ~30-40s after trigger, run start had no grounds) — confirming the no-grounds-but-injected
+  condition actually held for the turn being measured, exactly as 7.1b describes.
 
-- [ ] 7.2 Give it **one** instruction that requires a capability-plane operation it cannot fake —
-  creating a task, or sending a message — and let it take exactly one turn. **Bind Haiku**
-  (standing directive: real agent turns in a drive always bind a cheap model). Record the run id.
-  **R3: record the model, the instruction verbatim, whether the project has peers, and whether a
-  charter is bound** — 7.5b needs all four, and `_tool_surface_lines`' own text changes on
-  `has_peers`.
-- [ ] 7.3 Repeat 7.1-7.2 with **at least three** distinct fresh agents. One turn is one sample and
-  the behaviour is stochastic; a single run settles nothing in either direction and must not be
-  written up as if it did.
-- [ ] 7.4 For each run, record inline here: the run id, **which of four outcomes the first turn
-  reached**, and the transcript line that shows which. **Write the counts, not a conclusion.**
+- [x] 7.2 / [x] 7.3 **Done 2026-09-21.** Same instruction, all three, bound to
+  `claude-haiku-4-5-20251001`, `session_mode=new`, one turn each:
+  > Create a task titled "F302 probe task" with description "measurement probe" in this project,
+  > then stop.
+
+  | agent | run id | model | peers? | charter bound? |
+  |---|---|---|---|---|
+  | f302agent1 | `run-3e7497554e98` | claude-haiku-4-5-20251001 | yes (2 other agents in roster) | no (`charter_id` null) |
+  | f302agent2 | `run-63c923499c5d` | claude-haiku-4-5-20251001 | yes | no |
+  | f302agent3 | `run-9ddb13b6dfeb` | claude-haiku-4-5-20251001 | yes | no |
+
+  All three runs `status=completed`, `exit_code=0`.
+
+- [x] 7.4 **Done 2026-09-21.** Read each run's `agent_outputs` directly from the scratch db (full
+  dump preserved at `testbed/scratch/f302_measure/transcript_dump.txt`). All three:
+  - `run-3e7497554e98` (f302agent1) — **MCP.** seq=2 `ToolSearch` for
+    `select:mcp__agentweave__create_task`, seq=4 calls `mcp__agentweave__create_task` directly with
+    `{"description": "measurement probe", "title": "F302 probe task"}`. No `curl`/`python -c`/
+    `Invoke-WebRequest` anywhere in the transcript.
+  - `run-63c923499c5d` (f302agent2) — **MCP**, identical shape (`ToolSearch` then
+    `mcp__agentweave__create_task`, no HTTP).
+  - `run-9ddb13b6dfeb` (f302agent3) — **MCP**, identical shape.
+
+  **Counts: 3 MCP, 0 HTTP, 0 both, 0 neither.** No replacement runs were needed — every sampled
+  turn was usable.
 
   **R3 replaced R2's binary here.** It read *"whether the first turn called an `mcp__agentweave__*`
   tool or shelled out"*, which assumes every run lands in one of two buckets. It cannot: a turn may
@@ -442,6 +449,9 @@
   defect this repo's round discipline exists to catch — a number that is green while the thing it
   counts could not have been counted.
 
+- [x] 7.5 **Confirmed 2026-09-21** — baseline stated as n=1 throughout this measurement's writeup
+  (`scripts/drive/FINDINGS.md`, `DECISIONS.md`, this file). Nowhere is "4 of 4 took HTTP" written.
+
 - [ ] 7.5b **R3 added — the confounds, recorded before the runs, so the writeup cannot quietly
   assume comparability.** The baseline and 7.1-7.3 differ in at least three ways that each
   plausibly move the outcome. State each in the writeup:
@@ -458,7 +468,13 @@
   None of these voids the experiment. They mean its result is **about 7.1-7.3's own condition**,
   and the 2026-09-14 record is context rather than a control.
 
-- [ ] 7.5c **The verdict — R3 restructured it as an absolute measurement, which is what three fresh
+  **Confirmed present in this run, 2026-09-21:** model was Haiku (`claude-haiku-4-5-20251001`), not
+  Opus/Sonnet; task shape was one self-contained instruction on a throwaway project, no resumed
+  session, no charter; surrounding text carried neither false sentence (the fix already merged at
+  `802a8c7`) but did carry `has_peers=true` (2 other agents existed in the same project's roster for
+  each of the three).
+
+- [x] 7.5c **The verdict — R3 restructured it as an absolute measurement, which is what three fresh
   runs can actually carry, rather than as a comparison against a baseline that does not exist.**
   The question from the group header is unchanged: *with no false sentence in front of it, does a
   fresh agent's first turn use the MCP tools, or does it still shell out?* Answer it directly.
@@ -478,13 +494,34 @@
 
   In every branch, write the counts and the condition (model, instruction, peers, charter) beside
   the verdict, so the next reader can tell what was measured from what was concluded.
-- [ ] 7.6 Whatever the outcome, append the measurement to **F302**'s entry in
-  `scripts/drive/FINDINGS.md`, and correct the 2026-09-14 exploration's "the notice heals on turn
-  two; the agent does not" line if **7.5c** shows that framing was about a learned method rather
-  than the steer. An exploration that keeps a superseded reading is how the next round inherits it.
-- [ ] 7.7 **R3 added.** In the same edit, correct the exploration's *own* overreach if it is still
-  there: its "What we saw" lists four agents under one heading, and a later reader took that as
-  four measured behaviours (R2's 7.5 did exactly that, in this file). Make explicit in the
-  exploration that **four were told and one was read**, which is what its own source says. The
-  exploration already lists the other three as unmeasured under "Risks and open questions"; the
-  repair is to stop the summary from reading as though it did not.
+
+  **Done 2026-09-21. Counts: 3 MCP / 0 HTTP / 0 both / 0 neither** (see 7.4). **This is the first
+  branch — every sampled first turn reached for MCP.** Condition: Haiku, one-shot task-creation
+  instruction, throwaway project, no charter, peers present (2 other agents in the roster). Recorded
+  in `DECISIONS.md` under `### 2026-09-21 — F302 group 7 measured: 3 of 3 fresh first turns reached
+  for MCP`, and F302 marked **fixed, measured** (not fixed without qualification) in
+  `scripts/drive/FINDINGS.md`. D2 is **not** closed by this: n=3, one model, one instruction shape,
+  one throwaway project — the confounds in 7.5b are unaddressed by this sample and are stated
+  alongside the verdict in both files.
+
+- [x] 7.6 **Done 2026-09-21.** Measurement appended to F302's entry in `scripts/drive/FINDINGS.md`
+  (new `2026-09-21` blockquote, after the `2026-09-20, implemented` block). **The "the notice heals
+  on turn two; the agent does not" line was left unchanged, deliberately — 7.5c's outcome does not
+  trigger the correction this task's condition is written for.** That line, read carefully, already
+  attributes *turn 2 onward* persistence to a learned method (the Architect's already-paid-for
+  `curl` routine), not to the notice's continued presence — the notice being healed by turn 2 is
+  precisely what the sentence says. This run's result — a genuinely fresh first turn, no false
+  sentence in front of it, no learned method yet possible (it is the first turn) — went to MCP in
+  3/3 samples. That is consistent with, not contrary to, the existing framing: it suggests the
+  false sentence on the *original* first turn was what set the Architect's HTTP habit in the first
+  place, and the habit's later persistence past a healed notice is exactly the learned-method
+  reading the line already states. Correcting it would overstate what 3 Haiku samples on a
+  throwaway project can say about one Opus agent's ten-run session. No edit made to that line for
+  this reason, recorded here rather than silently skipped.
+- [x] 7.7 **Done 2026-09-21.** Edited `openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`'s
+  "What we saw" section: the four-bullet list is now explicitly labelled as who was *told* the false
+  sentence, with an inline note that only the Architect's behaviour was actually read (transcript,
+  thinking blocks, sidechains) and the other three are listed only because the log shows they were
+  told the same sentence. Cross-references this file's own 2026-09-20 "4 of 4 agents took the HTTP
+  path" line (task 7.5, above, since corrected by R3) as the overreach the fix stops the next reader
+  from inheriting.

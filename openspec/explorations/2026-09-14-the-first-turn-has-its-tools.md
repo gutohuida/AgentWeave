@@ -13,15 +13,24 @@ the verdict assumed about turn two.
 
 ## What we saw
 
-All four of LoopEngine's agents opened their first turn with *"[AgentWeave] Tool access: no MCP
-tools this turn — but the AgentWeave capability plane is reachable over HTTP"*:
-- the Architect at 20:39 (`run-2445bbbe1d6d`);
-- `dev_2` at 16:35;
-- `dev` at 16:45;
-- `tester` at 18:50.
+**Corrected 2026-09-21 (task 7.7 of `a-first-turn-is-not-told-it-has-nothing`): the four bullets
+below record who was *told* the false sentence, not four measured behaviours. Only the Architect's
+transcript, thinking blocks and sidechains were actually read** — see "What went unread for these
+three" in `spec-queue/observations/2026-09-14-LoopEngine.md`, which says so explicitly. A later
+reader took this list as four read behaviours (R2's task 7.5 in
+`openspec/changes/a-first-turn-is-not-told-it-has-nothing/tasks.md` wrote "4 of 4 agents took the
+HTTP path on their first turn"); R3 corrected that reading there. It is corrected here too, at the
+source, so the next reader does not inherit the same overreach.
 
-In every case the server had been injected and was working. The Architect's adapter reported online
-five seconds after that line. This is by design: `described_access_path` describes MCP only once
+All four of LoopEngine's agents were *told*, at their first turn, *"[AgentWeave] Tool access: no MCP
+tools this turn — but the AgentWeave capability plane is reachable over HTTP"*:
+- the Architect at 20:39 (`run-2445bbbe1d6d`) — **behaviour read**, below;
+- `dev_2` at 16:35 — told only, behaviour unread;
+- `dev` at 16:45 — told only, behaviour unread;
+- `tester` at 18:50 — told only, behaviour unread.
+
+In every case the server had been injected and was working (a database fact, not a transcript
+read). The Architect's adapter reported online five seconds after that line. This is by design: `described_access_path` describes MCP only once
 some earlier run of the same agent has an `mcp_adapter_online_at` (`hub/hub/launchability.py:232-260`,
 `:263-295`). Its docstring prices the cost at *"convenience for one turn"* (`:285-289`).
 
