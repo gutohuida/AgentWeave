@@ -333,5 +333,11 @@ change happened to notice.
       **Done 2026-09-21:** F185 -> fixed `10cf98e`, F181 -> fixed `2bf4816` (F390 already fixed
       `861429d` from group 5), each rewritten in place with the drive's evidence per the F390
       pattern.
-- [ ] 6.5 `openspec validate --strict an-archived-agent-holds-nothing-and-is-offered-nowhere`, then
+- [x] 6.5 `openspec validate --strict an-archived-agent-holds-nothing-and-is-offered-nowhere`, then
       `openspec-sync-specs`/`openspec-archive-change` per the repo's own skills — not by hand.
+      **Done 2026-09-21:** validate --strict passed. Synced delta specs into `openspec/specs/agent-charter/spec.md`
+      (added the new charter-deletion requirement), `openspec/specs/agent-configuration/spec.md`
+      (merged the modified archive requirement's new paragraphs and scenarios), and
+      `openspec/specs/runner-registry/spec.md` (merged the modified launchability requirement's new
+      paragraphs/scenarios and added the new runner-refusal requirement). Archived the change via
+      `openspec-archive-change`.

@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 8,
+  "iteration": 9,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "change-archive",
-  "next_action": "Task 6.5 of openspec/changes/an-archived-agent-holds-nothing-and-is-offered-nowhere: run `openspec validate --strict an-archived-agent-holds-nothing-and-is-offered-nowhere`, fix anything it flags, then use the repo's own openspec-sync-specs and openspec-archive-change skills (not by hand) to archive the change. Per night-window.md's archiving rule, retire F185/F181/F390/F391's presence in FINDINGS.md's open-severity listing/summary (their per-finding Status lines are already 'fixed <sha>' from group-verify-drive -- this step is about the ledger's open-count/summary bookkeeping, not re-touching those four entries' Status lines). Tick 6.5 in tasks.md, commit, push. Advance current/next_action to group7-drive.",
+  "current": "group7-drive",
+  "next_action": "a-first-turn group 7 (id group7-drive in queue). Tasks 7.1-7.7 of openspec/changes/a-first-turn-is-not-told-it-has-nothing (APPROVALS.md 2026-09-20 has the approval; groups 1-6 built, merged at 802a8c7, CI green). READ 7.1b BEFORE 7.1: three preconditions that silently void the run while the transcript looks identical -- resolved hub_client must be None (not 'cli', not 'mcp'), runner in MCP_INJECTABLE_RUNNERS, and 0 prior runs with mcp_adapter_online_at. Three fresh agents, fresh throwaway Hub (not 8000, not 8010), Haiku, FIRST TURN ONLY. 7.5 baseline is n=1, NOT '4 of 4'. 7.4 must carry counts inline or the task is not done (F392). Append the result to F302 in FINDINGS.md even if it shows the change did not help. Commit, push, advance current/next_action to e2e-sweep-drive.",
   "queue": [
     {
       "id": "group1-impl",
@@ -59,9 +59,9 @@
     },
     {
       "id": "change-archive",
-      "status": "open",
+      "status": "done",
       "title": "openspec validate --strict, then sync-specs/archive-change",
-      "detail": "Task 6.5. Use the repo's own skills, not by hand. Retire F185/F181/F390/F391 statuses per night-window.md's archiving rule; correct FINDINGS.md's open severity list."
+      "detail": "Task 6.5. Done iteration 9: validate --strict passed clean. Synced delta specs by hand-merging (openspec-sync-specs skill, agent-driven merge) into openspec/specs/agent-charter/spec.md (added the new charter-deletion requirement), openspec/specs/agent-configuration/spec.md (merged the modified archive requirement's new paragraphs/scenarios), and openspec/specs/runner-registry/spec.md (merged the modified launchability requirement plus the new runner-refusal requirement). Confirmed all 38 tasks in tasks.md ticked before archiving. Moved the change directory to openspec/changes/archive/2026-09-21-an-archived-agent-holds-nothing-and-is-offered-nowhere via openspec-archive-change. Checked FINDINGS.md for F185/F181/F390/F391: all four sections already carry a clean 'Status: fixed <sha>' line with no stray 'open' wording, and none of the four appears in any current open-severity summary list (the only such lists predate these findings or are historical narrative about a classifier script) -- no ledger edit was needed beyond what group-verify-drive already made."
     },
     {
       "id": "group7-drive",
