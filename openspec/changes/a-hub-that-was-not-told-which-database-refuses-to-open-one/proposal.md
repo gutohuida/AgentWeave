@@ -24,7 +24,25 @@ file — the delta contradicted its own tasks, and the clause is now scoped to t
 copied. And it **ran** the probe R1 and R2 had only read from, with `hub/.env` moved aside so a clean
 checkout was what was measured: group 3 is now a settled list rather than a judgement call, both CI
 jobs are measured unaffected, and **no CI job guards either script fix** (new task 3.6). One
-verification gap closed (task 2.6). **The change is ready to implement.**
+verification gap closed (task 2.6). **The change is ready to implement.** *(R4: it was not. The
+adversarial Opus pass returned DO NOT APPROVE that night.)*
+
+**Round 4, 2026-09-21: the verification round after the Opus DO NOT APPROVE.** **Every decision
+survives a fourth time. All four blocking items are real, and all four are fixed in the tasks and the
+delta** (`design.md` § *Round 4*):
+- the delta's opening paragraph no longer requires a direct `uvicorn` to be directory-independent;
+- task 2.7, which could not fail, is replaced by a real-subprocess test of the startup line, and a
+  new task 2.8 does the same for the refusal;
+- group 3 gains the *launch* sweep R3 never ran (task 3.7);
+- the false guarantee's remaining copies are tasked (4.10, and 4.1 qualified).
+
+R4 found two things beyond the review:
+- **the two skills that restart `:8010` open `hub/data/agentweave.db`, not the trial profile, today.**
+  This is F388's shape, live on this machine;
+- **the user-facing `docs/getting-started/installation.md` states the removed guarantee** (task 4.11).
+
+The `:8000` question is closed by measurement. It is a `pythonw -m agentweave` launch, so it is
+told, and (a) does not refuse it. `hubs.md`'s description of it is false and is corrected under 4.5.
 
 ## Why
 
@@ -141,6 +159,8 @@ the review page to notice.
   (R2; tasks 3.1 and 3.5).
 - **Specs:** `app-lifecycle` — one `MODIFIED` requirement.
 - **Prose:** `CLAUDE.md`, `.claude/reference/hubs.md`, `.claude/handoffs/DEAD-ENDS.md`,
-  `hub/.env.example`.
+  `hub/.env.example`, **(R4)** `docs/getting-started/installation.md`, `hub/Makefile` (one comment),
+  and the `:8010` launch lines in `.claude/skills/{e2e-loop,autonomous-session}/SKILL.md` and their
+  `.agents/` mirrors.
 - **No migration.** **No `hub/ui/src` change, so no bundle refresh and nothing reaches the operator's
   live `:8000` app on their next reload.**

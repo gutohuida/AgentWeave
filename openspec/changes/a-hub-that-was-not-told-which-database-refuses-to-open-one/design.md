@@ -495,3 +495,81 @@ worth establishing at all is the operator's call.
 **Nothing else changed.** R3 reopened no decision, added no task outside group 3, and left every
 number, level, site and rejection exactly where R1 and R2 put them.
 
+## Round 4 — the verification round after the Opus DO NOT APPROVE (2026-09-21)
+
+**Why a fourth round.** The operator's standing adversarial Opus pass ran on 2026-09-20 and returned
+**DO NOT APPROVE**, with four blocking items and one unreconciled premise (`spec-queue/APPROVALS.md`
+§ *REVISING*). R4 was run by a session that wrote none of R1–R3. It took the reviewer's items as
+targets, not as conclusions, and re-derived each from the code. **Every decision survives a fourth
+time:** (a), (b), (d), D1–D11 and the `WARNING` level. The core mechanism was never in question, and
+the reviewer could not break D2 or D3 either. **All four blockers are real, and all four are in the
+tasks and the delta.** Two findings go beyond what the reviewer reported.
+
+**1. The delta contradicted itself (blocker 1): confirmed and fixed.** The first paragraph of the
+modified requirement still required *"a direct `uvicorn hub.main:app` invocation"* to resolve to the
+same database from any directory. D3 makes a `.env` a told source, and task 4.7 keeps
+`.env.example`'s value relative. So a direct launch from `hub/` with a copied `.env` resolves
+cwd-relative, and does so correctly. The paragraph now scopes directory-independence to **launch
+paths that choose a database for themselves**: bare `agentweave`, `--profile`, and `docker compose`.
+It states that a direct `uvicorn` opens exactly what it was told, a relative value included, because
+that is the operator's instruction and not the runtime's guess. The paragraph that follows was
+reworded to refer back to it. `openspec validate --strict` passes. Only the requirement's first
+physical line counts for `SHALL`, and that line is unchanged.
+
+**2. Task 2.7 could not fail (blocker 2): confirmed, and the mechanism is plainer than "the pytest
+plugin".** The Hub suite runs on `:memory:`, and `engine.py:199` skips the alembic upgrade for it, so
+`migrations/env.py:28`'s `fileConfig` **never runs under `pytest`**. The "alembic-configured root" the
+test names does not exist there. What the test sees is Python's default `WARNING` root, and the
+assertion holds whatever the Hub's logging does. R4 replaced it with the test D5 actually wanted:
+- a real `uvicorn hub.main:app --port 0` in a subprocess, on a `tmp_path` database with `cwd=tmp_path`;
+- it reads `stderr` until `startup complete` (**4.4 s, measured**);
+- it asserts the line appears before the first `Running upgrade`.
+
+That test fails under `logger.info`, which is the mutation that matters, and it does not care whether
+`alembic.ini` exists (task 2.7). The same shape, with `USERPROFILE`/`HOME` pointed at a throwaway
+directory, turns 6.1's refusal into a regression guard that never names the operator's home (new
+task 2.8). This retires the claim, carried since R1, that *"no unit test can make"* that check.
+
+**3. Group 3 was complete for imports and blind to launches (blocker 3): confirmed, and worse.** R3's
+sweep asked *which `scripts/` import `hub.config`*. The reviewer's three misses are not imports.
+They are **launches**: two skills plus their `.agents/` mirrors, and `make dev`. R4 ran the launch
+sweep (task 3.7). The finding the reviewer did not have: the two skills start `:8010` from `hub/` with
+no variable, so they read `hub/.env`, whose relative value resolves to **`hub/data/agentweave.db`**.
+That is not the trial profile at all, and `hubs.md:22` records that file as deleted on 2026-09-07.
+**Today those skills open, and silently re-create, a third database. That is F388's own shape, live on
+this machine, and not only a clean-checkout problem.** `make dev` needs no code change: with a
+copied `.env` it is a told launch, and without one it refuses before migrating, which is correct.
+
+**4. Remedy (d) left a live copy (blocker 4): confirmed.** The `hub/tests/test_config.py:1-7` module
+docstring restates the removed guarantee (new task 4.10). 4.1's replacement text was unqualified in
+the same way, because `cli.py:617-621` passes a pre-existing `DATABASE_URL` through (4.1 amended).
+**R4 found a third copy, and it is user-facing:** `docs/getting-started/installation.md:52-62` tells
+readers that a direct `uvicorn` launch is *"fixed going forward"* onto the shared database. That
+page ships to GitHub Pages (new task 4.11). No earlier round swept `docs/`.
+
+**5. The `:8000` premise: reconciled by measurement, and the doc is false.** Every earlier round
+asserted that `:8000` is a native `agentweave` start. The reviewer refuted the "brick" reading of
+`hubs.md:37`, but did it by inference from a PID file. R4 closed it read-only, with no call to
+`:8000`:
+- the desktop shortcut `AgentWeave.lnk` is `pythonw.exe -m agentweave`;
+- PID 9940's command line is byte-for-byte the spawn at `cli.py:1070-1079`, which inherits the
+  `DATABASE_URL` set at `:1038`;
+- the CLI's `.env` loader only `setdefault`s.
+
+`:8000` is a told launch, and **(a) does not brick it.** `hubs.md:36-38` is corrected under task 4.5.
+The same measurement exposes a limit that the delta's *"named on every other launch path"* scenario
+satisfies only on paper. The native child's `stdout` and `stderr` are `DEVNULL` (`cli.py:1096-1097`),
+so on the operator's own Hub group 2's line is emitted and read by nobody. This is recorded as a
+known limit rather than widened into scope. F388's launch was a direct one, where the line is seen.
+Surfacing it on native starts would be a CLI change, outside this change's blast radius.
+
+**Human-only item 5 (test guide), partly answered.** On this machine, the one non-CLI Hub starter the
+operator owns is the desktop shortcut, and it goes through the CLI. The three `AgentWeave*` scheduled
+tasks start loop windows, not a Hub. What will refuse after this lands are the two skill launches of
+task 3.7, and that is the reason to fix them in the same commit as group 1.
+
+**What R4 did not do.** It changed no product code and ran no suite. The subprocess measurement used
+a `tempfile.mkdtemp` database, deleted afterwards, and touched no Hub. R4's own edits to the tasks
+have not been through the adversarial pass. The operator's standing step applies before an APPROVED
+row.
+

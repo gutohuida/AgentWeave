@@ -6,14 +6,19 @@ Running `agentweave` with no subcommand SHALL launch or reuse the one local Agen
 open or register the invocation directory as a project through that runtime, and open the app at
 that project's overview. This SHALL be the only supported way to begin using AgentWeave.
 
-The one local AgentWeave runtime SHALL resolve to the same database and instance state regardless
-of which directory it was launched from, whether started through bare `agentweave` (with or without
-`--docker`/`--local`), a direct `uvicorn hub.main:app` invocation, or `docker compose up` against the
-Hub's compose file. Only the directory-scoped *project* registered against that runtime SHALL vary by
+Every launch path that chooses a database for itself SHALL resolve to the same database and
+instance state regardless of which directory it was launched from: bare `agentweave` (with or without
+`--docker`/`--local`), `agentweave --profile <name>`, and `docker compose up` against the Hub's
+compose file. Only the directory-scoped *project* registered against that runtime SHALL vary by
 launch directory.
 
-That guarantee SHALL hold for every launch path that says which database it wants, and SHALL NOT be
-discharged by guessing on behalf of one that does not. **A runtime that was not told which database
+A direct `uvicorn hub.main:app` invocation chooses no database of its own. It SHALL open exactly the
+database it was told to open, by environment variable or by an environment file, and a relative
+value it was told SHALL be resolved against its working directory as written, because that value is
+the operator's instruction and not the runtime's guess.
+
+The runtime SHALL NOT discharge the directory-independence guarantee by guessing on behalf of a
+launch that did not say which database it wants. **A runtime that was not told which database
 to open SHALL refuse to open one**, rather than falling back to the path bare `agentweave` would have
 used. A missing instruction and a deliberate choice of the default path are different states and MUST
 NOT produce the same outcome, because the default path is where an operator's real work lives and a
