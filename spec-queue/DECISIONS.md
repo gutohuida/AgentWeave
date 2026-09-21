@@ -700,6 +700,34 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-21 evening — the week's scorecard asks for decisions, and four are made
+
+**DECIDED 2026-09-21 ~17:30, by the operator, in an interactive session** reviewing the week
+scorecard (O4: severity A 8 → 2; O5: ≤ 2 open changes / ≤ 40 tasks). The day window had finished
+its whole queue by 10:08 because every open change was gated on spec work or on the operator, and
+the drain rule stopped it doing the spec work.
+
+- DECIDED   f299-f301  **Triage: won't build now.** F299 + F301, with F339 and F340 grouped in
+  (the 2026-09-13 afternoon shapes (i)/(ii)/(iii) stay parked). Both creatable runners take MCP
+  (`RUNNER_CLIS = ("claude", "codex")`, both in `MCP_INJECTABLE_RUNNERS`), `hub_client` has no UI
+  control, and shape (ii) buys editing only. **Reopen when a runner that cannot take MCP — GHCP —
+  is implemented.** Each finding's Status line now carries this; they stay counted as open.
+- DECIDED   f325  **Keep open.** The operator declined to retire it, although Codex is cancelled as
+  undrivable (2026-08-29). It remains an open severity A nobody can currently drive.
+- DECIDED   loop-staffs-s5  **Move §5 out of `a-loop-staffs-the-agent-it-names` as a finding (F400),
+  drive §7 and archive the rest.** §5 was never approved (its `:1471` requirement was rewritten in R4
+  and never re-rounded). The change's delta is trimmed to what the built groups do before archive,
+  so archiving syncs nothing the code does not meet.
+- DECIDED   unstaffed-review  **One verification round now, then build if it comes back clean.**
+  First put to the operator on a false premise — a stale "STOPPED 2026-09-14" banner in `tasks.md`
+  was read as the change's state — and corrected before acting: `proposal.md` records R5/R6
+  re-derived it against (f) on 2026-09-19, group 1 is built (`f663898`), and groups 2/5/6 are
+  F352's visibility half, the only proposal for that severity A. The operator's first answer
+  ("reject") was given on the false premise and is **void**.
+- DECIDED   tonight-order  **Tonight's `ORDER:`** — archive `a-first-turn-is-not-told-it-has-nothing`;
+  F380 as a no-spec repair; F292 fix-or-quarantine; `a-loop-staffs-the-agent-it-names` §7 then
+  archive. Written into `APPROVALS.md`'s `## 2026-09-21`.
+
 ### 2026-09-20 evening — F302 reaches R2, and its one dissent is answered with a measurement
 
 **DECIDED 2026-09-20 evening, by the operator, in the same interactive session.** F302's 2026-09-09

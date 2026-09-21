@@ -429,7 +429,7 @@
     let replacements run until three agree — if more than about half the runs land in `neither`,
     the instruction in 7.2 is the problem and must be fixed before the counts mean anything.
 
-- [ ] 7.5 **BASELINE — R3 corrected this, and it was the most load-bearing error in the group.**
+- [x] 7.5 **(Superseded by the ticked 7.5 below, 2026-09-21 — this is the R3 instruction; the confirmation follows it.)** **BASELINE — R3 corrected this, and it was the most load-bearing error in the group.**
   R2 wrote the pre-change baseline as *"**4 of 4 agents took the HTTP path on their first turn**
   (`openspec/explorations/2026-09-14-the-first-turn-has-its-tools.md`)"*. **The source does not say
   that, and cannot.** What it and
@@ -452,7 +452,7 @@
 - [x] 7.5 **Confirmed 2026-09-21** — baseline stated as n=1 throughout this measurement's writeup
   (`scripts/drive/FINDINGS.md`, `DECISIONS.md`, this file). Nowhere is "4 of 4 took HTTP" written.
 
-- [ ] 7.5b **R3 added — the confounds, recorded before the runs, so the writeup cannot quietly
+- [x] 7.5b **(Done 2026-09-21 — all three confounds stated in F302's writeup, `scripts/drive/FINDINGS.md`, and confirmed present at the foot of this task.)** **R3 added — the confounds, recorded before the runs, so the writeup cannot quietly
   assume comparability.** The baseline and 7.1-7.3 differ in at least three ways that each
   plausibly move the outcome. State each in the writeup:
   - **Model.** The baseline agents were **Opus 5** (`Architect`, `tester`) and **Sonnet 5** (`dev`,

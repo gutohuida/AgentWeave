@@ -24471,7 +24471,10 @@ Shutdown took 0.38 s. Covered by `hub/tests/test_a_cancelled_run_is_not_reported
 
 ## F299 (A) — a `claude` run whose harness has no MCP cannot write a file, and blames the operator's machine for it
 
-**Status:** open. Driven 2026-09-09 by the night window, task §4.9 of
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Ready:** parked
+
+**Original status:** open. Driven 2026-09-09 by the night window, task §4.9 of
 `openspec/changes/2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`. The prediction being
 tested was the repository's own, written at `hub/hub/runner_commands.py:245-248` and never driven:
 *"naming an approver that will not be there makes every tool call fail, which the model reports as
@@ -24697,7 +24700,10 @@ that gap.
 
 ## F301 (A) — on the `cli` access path a `claude` run has no tool that can make the request it is told to make
 
-**Status:** open. Same session and fixture as F300; agent `httpagent`, `config.hub_client = "cli"`,
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Ready:** parked
+
+**Original status:** open. Same session and fixture as F300; agent `httpagent`, `config.hub_client = "cli"`,
 so no MCP server is injected and the posture falls to
 `DEFAULT_CLAUDE_PERMISSION_MODE_WITHOUT_APPROVER = "acceptEdits"`. Raw run in
 `testbed/scratch/c2verify/driveA.json` (uncommitted); `run-dceb35938752`, 2 minutes 14 seconds,
@@ -27453,7 +27459,10 @@ refused review.
 
 ## F339 (B) — `acceptEdits` is path-confined by Claude Code on a headless run, and four places in the repository, one of them a binding verdict's reason, say it checks nothing
 
-**Status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Ready:** parked
+
+**Original status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
 candidate 2. **Measured twice on `claude` 2.1.269, Haiku, through the Hub's own argv and PTY.** An
 operator question goes with it (below), so this is not a repair.
 
@@ -27546,7 +27555,10 @@ turn and writes `%TEMP%\d7_0913_accept_edits\results.json` and `transcript.txt`.
 
 ## F340 (B) — the Hub's MCP grounds are positive-only and permanent, while the harness reports the server's state on every run and the Hub parses none of it
 
-**Status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Ready:** parked
+
+**Original status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
 candidate 3. **The code half was read from the source, and the permanence was measured with a
 one-off test. The harness half is measured, from the F299 rounds' and the research's evidence.**
 Overlaps `openspec/changes/an-absent-approver-is-not-named` (design D3, D9, D11). That change does
@@ -30928,3 +30940,31 @@ consumption rule; read `checkpoint` note selection before treating it as a defec
 
 **What held (same drive):** 70 checks including the agent plane grants, visibility, 404 shapes,
 cutover, and the served UI bundle agreeing with source.
+
+## F400 (B) -- Run on a documentless loop whose agent is busy answers "no other agent is free" while another agent is free
+
+**Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**: this is
+`a-loop-staffs-the-agent-it-names` §5 (tasks 5.1-5.5, design D4), moved out of that change so the
+rest of it can be driven and archived (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). §5 was
+never approved: its requirement (`agent-loops` *"Pressing Run on a loop that declines names why it
+declined"*, the `:1471` MODIFIED block) was rewritten in R4 and no round re-derived it, and design
+Open Question 2 (`_stall_reason_from_walk`'s exact current sentence) was never read.
+**Source:** review
+**Theme:** Flows & loops
+**Related:** F127, F128
+
+**What happens.** `run_job`'s busy-guard branch (`hub/hub/api/v1/jobs.py:1347-1361`) builds its 409
+as `f"{busy_reason}, and {why}. Nothing was started."`, where `why` is either *"no other agent is free
+to take this loop's work"* or *"this loop's queue holds no open task for another agent to take"*.
+Since `a-loop-staffs-the-agent-it-names` §1/§3, a loop that declares no specification document is
+refused whenever its own agent is busy **regardless of who else is free** -- so for that loop the
+first clause can be false (another agent *is* free, and freeing one more changes nothing) and the
+second clause's *"for another agent to take"* describes something the loop would never do. F127's
+shape: a true-sounding sentence that tells the operator to do something useless.
+
+**What the fix needs (from the moved §5, not re-derived).** Split `why` so a documentless loop is
+told it runs only the agent its job names; drop *"for another agent to take"* for a loop; change the
+`:1471` requirement's *"which of those two held"* to cover the third condition in the same edit
+(R4-2: a three-way answer does not fit a two-way SHALL); and test the absence of each false clause,
+not only the presence of the true one. Read `_stall_reason_from_walk`'s current sentence before
+asserting what `jobs.py:355` replaces on the board (5.4). **Needs its own proposal and rounds.**
