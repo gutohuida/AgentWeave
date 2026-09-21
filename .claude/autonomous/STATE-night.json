@@ -8,12 +8,12 @@
   "parent_branch": "master",
   "parent_sha": "802a8c7",
   "stop_at": "2026-09-21T07:00:00+01:00",
-  "iteration": 11,
+  "iteration": 12,
   "log_file": ".claude/autonomous/2026-09-20-night-log.md",
   "findings_file": "scripts/drive/FINDINGS.md",
   "approvals_file": "spec-queue/APPROVALS.md",
-  "current": "i-6.2-redo",
-  "next_action": "If time remains: run `py -3.11 -m pytest hub/tests/ -q` in full for a-loop-staffs-the-agent-it-names task 6.2 and write the ACTUAL pass/fail count into tasks.md (APPROVALS.md 2026-09-20 flagged the current tick cites a log entry that was never written -- do not trust it, re-run for real). Section 5 of that change is still NOT approved; do not build it. If the window's time budget is spent, set next_action to null instead.",
+  "current": null,
+  "next_action": null,
   "queue": [
     {
       "id": "group1-impl",
@@ -79,12 +79,21 @@
     },
     {
       "id": "i-6.2-redo",
-      "status": "open",
+      "status": "done",
       "title": "If time remains: a-loop-staffs-the-agent-it-names group 6.2-REDO",
-      "detail": "Run py -3.11 -m pytest hub/tests/ -q in full and write the actual count into the task (APPROVALS.md 2026-09-20: 6.2's tick cites a log entry that was never written -- do not trust it). Section 5 of that change is still NOT approved, do not build it."
+      "detail": "Done iteration 12. Full suite at HEAD 8508377, nothing excluded: 4474 passed, 86 skipped, 266 warnings, 2857.30s (47:37), exit 0, zero failures/errors. Written into openspec/changes/a-loop-staffs-the-agent-it-names/tasks.md task 6.2-REDO itself (not a log), which is what F392 asks for; openspec validate --strict passes after the edit. 4474+86=4560 collected vs 4545 at 09237f6 = exactly +15 = 14 hand-written tests plus one generated parametrize case from migration 0105 -- recorded against F190. Section 5 of that change untouched and still unapproved. Same iteration reconciled an uncommitted tree left by a killed iteration: F396 (B, the MISREPORT ratchet is keyed by file:line and was already holding 5 dead keys on the day its ceiling was measured) independently re-derived at HEAD and in a throwaway worktree at 6484de4 before being committed -- every number reproduces; the F190 addendum and F395 status line verified; BACKLOG.html regenerated and reported nothing moved. CI on the inherited sha 8508377 concluded success."
+    },
+    {
+      "id": "window-closed",
+      "status": "done",
+      "title": "Window queue empty -- driver unregisters",
+      "detail": "The 2026-09-20 APPROVALS.md ORDER: line is fully discharged (archived-agent change all groups, a-first-turn group 7, the full-surface e2e sweep) and so is its time-permitting fallback (6.2-REDO). next_action is null per night-window.md 'Ending the window'. About four hours of the window are left unspent deliberately: every remaining unarchived change is REVISING (a-hub-that-was-not-told-which-database -- adversarial Opus returned DO NOT APPROVE, four blocking items for R4), gated on an unapproved section, or waiting on a re-derivation round, and this window may not write proposals. One operator decision is waiting in spec-queue/DECISIONS.md under ## Open: F396-rekey."
     }
   ],
-  "decisions_for_user": [],
+  "decisions_for_user": [
+    "F396-rekey (spec-queue/DECISIONS.md ## Open): RENDERS in scripts/drive/n11_query_error_surface.py is keyed by (file, line); 8 of its 57 MISREPORT keys match no live site and the ceiling of 52 was already holding 5 dead keys when it was frozen at 6484de4, so the drop to 49 is decay, not repair. Three parts: (1) re-anchor the key to something a line shift cannot move -- (file, hook) is the obvious candidate; (2) whether to re-measure the ceiling from the re-anchored table, which will jump back toward 57 and must NOT be read as a regression; (3) whether the 18 currently UNCLASSIFIED live sites get hand-triaged in the same change or a later one. MUST NOT HAPPEN MEANWHILE: lowering MISREPORT_CEILING to 49 -- which is exactly what the suite warns on every green run, including tonight's.",
+    "Whether a-first-turn-is-not-told-it-has-nothing should now be archived (sync-specs + archive-change). Group 7 is done and its own bar (7.4 carries counts) is met; iteration 10 left the archive step unscoped rather than deciding it."
+  ],
   "limits": [
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
     "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",

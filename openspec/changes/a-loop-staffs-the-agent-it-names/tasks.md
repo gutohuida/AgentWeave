@@ -383,6 +383,29 @@ else means the tree has moved further than this list knows.
       then green at `09237f6` and `c6fccc5`. **A green local suite is not evidence that this change
       can merge**; that was the gap F392 exists to name.
 
+      **Re-measured 2026-09-21 at branch HEAD `8508377`, in full, nothing excluded: 4474 passed,
+      86 skipped, 266 warnings, 2857.30s (47:37).** Exit code 0, zero failures, zero errors. The
+      number above (`09237f6`) is not stale-and-wrong, it is stale-and-superseded: five commits of
+      `an-archived-agent-holds-nothing-and-is-offered-nowhere` landed in between. **4474 + 86 =
+      4560 collected against 4545 at `09237f6` — exactly +15**, and `git diff 09237f6..8508377 --
+      hub/tests/` adds **14** `def test_` and removes none. The fifteenth is
+      `test_no_console_flash.py::test_every_spawn_reaches_console_suppression[0105_clear_archived_agent_charter_bindings.py]`,
+      a case *generated* from the migration file that change's group 3 added — recorded against
+      F190 in `scripts/drive/FINDINGS.md` as a second instance of 6.8's blindness, since that
+      change names `test_no_console_flash.py` nowhere either. It passed, so this instance cost
+      nothing.
+
+      **CI is green on this exact sha**, which the `09237f6` measurement could not say: run for
+      `85083771ae89a904d4d0851aaab78632d2151cf6` concluded `success` (2026-09-21 00:33Z). That does
+      not retire F292 or F394 — the last branch failure was `61dd95c`, four commits back — but the
+      paragraph above should no longer be read as "this tree cannot pass CI".
+
+      **One thing this run surfaced that is not about this change.** It emitted
+      `UserWarning: operator-reachable MISREPORT surfaces dropped to 49 from a ceiling of 52. Lower
+      the constant...` — **do not**. Filed as **F396 (B)**: that table is keyed by `(file, line)`,
+      eight of its keys now match no live site, and it was already holding five dead keys on the
+      day the ceiling was measured. The drop is decay, not repair.
+
 ## 7. Drive it
 
 - [ ] 7.1 Reproduce F128 against a **trial** Hub before the fix, in the finding's own shape: a

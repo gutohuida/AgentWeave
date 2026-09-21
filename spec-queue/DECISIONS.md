@@ -20,7 +20,28 @@ DECIDED. Absence is not consent.
 
 ## Open
 
-**Nothing is open here. Both rows below are discharged, and both were verified so on 2026-09-19.**
+### The MISREPORT ratchet measures a decayed table -- 2026-09-21 night, OPEN
+
+- OPEN      F396-rekey  **How should `RENDERS` be re-anchored, and who triages the 18 sites that
+  now carry no classification at all?** Measured tonight (F396 in `scripts/drive/FINDINGS.md`):
+  `n11_query_error_surface.RENDERS` is keyed by `(file, line)`, **8** of its 57 `MISREPORT`
+  classifications match no live call site, and the ceiling `MISREPORT_CEILING = 52` was **already
+  holding 5 dead keys on the day it was measured** (`6484de4`, 2026-09-10) -- so the current count
+  of 49 is decay, not repair, and zero surfaces were actually fixed. The window did not change
+  anything, because the repair is a change and the night window does not write proposals.
+
+  **Three parts; only the operator should answer the second and third:** (1) re-anchor the key to
+  something a line shift cannot move -- `(file, hook)` is the obvious candidate and is already in
+  every site record; (2) whether to re-measure the ceiling from the re-anchored table, which will
+  jump back up toward 57 and must not be read as a regression; (3) whether the **18** currently
+  `UNCLASSIFIED` live sites get hand-triaged in the same change or a later one -- six are
+  recoverable from the dead keys' recorded `why` strings, twelve have never been classified at all.
+
+  **What must not happen meanwhile:** lowering `MISREPORT_CEILING` to 49. `_ratchet`'s warning text
+  asks for exactly that on every run, and this window's own iteration 8 wrote it down as a chore.
+
+**One row is open, immediately above. The two rows below it are discharged, and both were
+verified so on 2026-09-19.**
 They are kept in place, not deleted, because each carries the reasoning and the measurements behind
 a decision the corpus still relies on — and a decision log that is silently rewritten stops being
 evidence. **Read them as history. Neither is work waiting on the operator.**

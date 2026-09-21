@@ -30566,6 +30566,27 @@ change's named guard files rather than only this one's.
 
 ---
 
+**A second instance of point 2, measured 2026-09-21** (night window, `i-6.2-redo`). Re-running
+6.2-REDO at branch HEAD `8508377` collects **4560** tests against **4545** at `09237f6`, the tree
+6.2-REDO's own number was measured on. A `git diff` for added `def test_` over `hub/tests/` finds
+only **14**. The fifteenth is
+`test_no_console_flash.py::test_every_spawn_reaches_console_suppression[0105_clear_archived_agent_charter_bindings.py]`
+-- not a test anyone wrote, but a **parameter generated from the new migration file** that
+`an-archived-agent-holds-nothing-and-is-offered-nowhere` group 3 added. That change names
+`test_no_console_flash.py` nowhere, exactly as `a-loop-staffs-the-agent-it-names` named
+`test_a_task_nothing_will_move_holds_nobody.py` nowhere. It passed, so this instance cost nothing;
+it is recorded because it shows the blindness is not only "a sibling change's guard file" but
+**any test that parametrizes over source files a change adds** -- a set no artifact of the change
+can enumerate, and which only the full suite reaches.
+
+**The full run behind that number, completed 2026-09-21 02:53** (the collection count above was
+measured first; this is the suite itself, not `--collect-only`): `py -3.11 -m pytest hub/tests/ -q`
+at `8508377` gave **4474 passed, 86 skipped, 266 warnings, 2857.30s (47:37)**, exit code 0, zero
+failures and zero errors. `4474 + 86 = 4560` closes the arithmetic: the generated case is in the
+*passing* set, not skipped past. Written into
+`openspec/changes/a-loop-staffs-the-agent-it-names/tasks.md` task 6.2-REDO in the same commit, which
+is where F392 says a count belongs.
+
 ## F393 (B) -- three runner registries disagree, the two that lie are the ones a reader finds first, and nothing marks them legacy
 
 **Status:** open. **Found 2026-09-20** in an interactive session, by being taken in by it: the
@@ -30691,6 +30712,11 @@ and `gh run view 35218523888 --log | grep '^hub-test' | tail -30`.
 
 **Source: found by driving** (e2e-loop SWEEP, 2026-09-21, port 8030, `proj-05c8aa160921`).
 
+**Status:** open. No fix commit references it; filed 2026-09-21 by the night window's full-surface
+sweep and reproduced there against a live Hub, not re-checked since. (Status line added 2026-09-21
+by the next iteration -- the sweep filed the finding without one, which
+`scripts/backlog_page.py` reports as "nothing says whether they are done".)
+
 **What happens.** The one route that injects a message into an agent's inbound queue —
 `POST /projects/{id}/messages`, body `{"from": ..., "to": ..., "content": ...}` — is used both by
 an agent's `send_message` tool (which always supplies `run_id`, so `hop_depth` is computed from the
@@ -30741,3 +30767,98 @@ recovers it, and withdrawal also works cleanly (verified: `DELETE /queue/entries
 mislabeled as agent-originated until the operator separately discovers and clears the suspension,
 which nothing in the response to the original POST surfaces (the 201 body has no `hop_depth` or
 suspension warning at all).
+
+## F396 (B) -- the MISREPORT ratchet is keyed by file:line, was already decayed on the day its ceiling was measured, and its own warning tells the next reader to make the decay permanent
+
+**Source:** audit
+
+**Status:** open. **Found 2026-09-21** by the night window, while deciding whether to act on a
+chore the same window's iteration 8 had noticed and not converted ("`MISREPORT_CEILING` reports the
+live count dropped to 49 from a ceiling of 52 -- the constant should be lowered to hold the new
+floor, but that is a separate, unscoped chore"). Acting on it would have been wrong.
+
+**The instrument.** `hub/tests/test_surface_ceilings.py:35` freezes `MISREPORT_CEILING = 52`
+("Measured 2026-09-10") and `test_no_new_misreporting_surface` ratchets
+`len(n11.operator_reachable_misreports(n11.unhandled_sites()))` against it. `_ratchet` (`:59-64`)
+warns when the count *shrinks*: *"Lower the constant in test_surface_ceilings.py so the ratchet
+holds the new floor."* The live count today is **49**.
+
+**The drop is not repair. It is the classification table falling off its own keys.**
+`operator_reachable_misreports` (`scripts/drive/n11_query_error_surface.py:395-406`) looks each
+unhandled site up in `RENDERS` by `(file, line)`; a miss silently returns `UNCLASSIFIED`, which is
+not counted. So a line shift *anywhere above* a classified site demotes it to invisible. Measured,
+by asking how many `MISREPORT`-and-not-`DEAD` keys match no live unhandled site at all:
+
+| tree | MISREPORT non-DEAD keys | stale keys | counted |
+|---|---|---|---|
+| `6484de4` (the commit that froze the ceiling, 2026-09-10) | 57 | **5** | 52 |
+| `8508377` (today) | 57 | **8** | 49 |
+
+`57 - 5 = 52` and `57 - 8 = 49` exactly. **The three-surface "improvement" is three more
+classifications going stale, and zero surfaces were fixed.** All three are in
+`AgentOutputPanel.tsx` (keys `319`, `330`, `346`), whose only commits since 2026-09-10 are
+`e9f71c0` and `1731522` (2026-09-13) -- the F341/F342/F344/F345 fixes, which repaired *other*
+findings and shifted lines past these ones.
+
+**The surfaces are still there.** 18 live unhandled sites are `UNCLASSIFIED` today, and six of them
+are the stale keys' own hooks at new line numbers, still reported by `unhandled_sites()` (i.e. the
+call site still never binds and uses its query's error):
+
+| stale key | `why` recorded for it | live today, unclassified |
+|---|---|---|
+| `AgentActivityTab.tsx:24` | "same feed, same sentence (:112)" | `:26` `useAgentTimeline` |
+| `AgentOutputPanel.tsx:207` | "`conversations = []` drives the list" | `:256` `useAgentConversations` |
+| `AgentOutputPanel.tsx:319` | "`roster = []` ... the agent's own row missing" | `:368` `useAgents` |
+| `AgentOutputPanel.tsx:346` | "`workspacePaths={[]}` (:1152)" | `:394` `useWorkspacePaths` |
+| `AgentOutputPanel.tsx:347` | "`timelineEntries = chat.data?.entries ?? []`" | `:395` `useAgentChatHistory` |
+| `AgentOutputPanel.tsx:348` | "the same `chat` when no conversation is selected" | `:396` `useAgentRecentChat` |
+
+**Read that table as a reconstruction, not a measurement.** The dead keys carry no hook name, so
+nothing machine-checkable links a stale key to the live site it became; the pairs above are read
+off the `why` strings the table recorded. What *is* measured is the part the severity rests on:
+**8** `MISREPORT` keys match no live site, **18** live unhandled sites carry no classification, and
+`unhandled_sites()` still reports every site in the right-hand column -- so those six surfaces
+still never bind their query's error, whichever key each one used to be.
+
+**It was born decayed, which is the part worth keeping.** At `6484de4` itself, keys `346`/`347`/`348`
+pointed at `const recentChat = useAgentRecentChat(...)`, `const chat = ...` and
+`const timelineEntries = ...`, while the `why` string filed under key *N* describes the code at
+*N+1*. `6484de4` touched no `.tsx` file (its diffstat is two `scripts/drive/` reports, two test
+files and two loop-state files) and `6484de4^` has the identical lines, so the table was authored
+against a revision older than the one it shipped in and **never matched the tree it was committed
+with**. The ceiling has never been a measurement of 52 live misreporting surfaces.
+
+**The sibling ratchet is intact and already names this hazard.** `UNHANDLED_SITE_CEILING = 100` is
+exactly met today (100 live), and `test_no_new_query_call_site_ignores_its_error`'s docstring says
+outright that it *"reads no classification at all, which also makes it immune to the line shifts
+that silently re-key that table."* The hazard it names is real and has now fired twice.
+
+**What must not happen:** lowering `MISREPORT_CEILING` to 49. That is what `_ratchet`'s warning
+text asks for on every run, and what this window's iteration 8 wrote down as a chore. It would
+freeze a floor that eight dead dictionary keys produced.
+
+**The fix is re-keying, not re-numbering** -- anchor `RENDERS` to something a line shift cannot move
+(the `(file, hook)` pair, or the site's own text) and re-measure from there; the 18 `UNCLASSIFIED`
+sites then need triage, not just the 6 that were classified before. **Not done in this firing**:
+that is a change, and the night window does not write proposals. Queued as an operator decision
+instead.
+
+**Severity B**, not C: the instrument exists to stop new operator-visible lies from landing, it has
+silently stopped seeing at least six it had already identified, the loss reads as progress in the
+one number anyone looks at, and its own warning instructs the action that makes the loss permanent.
+It is not A -- no product behaviour regressed, and the underlying `UNHANDLED_SITE_CEILING = 100`
+ratchet still catches a genuinely *new* offender.
+
+**Independently re-derived 2026-09-21 by the next iteration**, before committing the filing above,
+because the whole finding turns on two counts and the round that wrote them died before it could
+commit. At HEAD `8508377`: 100 live unhandled sites, **49** `operator_reachable_misreports`, 57
+`MISREPORT` non-`DEAD` keys, **8** stale, **18** live `UNCLASSIFIED`. In a throwaway worktree at
+`6484de4` (`git worktree add --detach`, removed afterwards): 100 live unhandled, **52** misreports,
+the same 57 keys, **5** stale. The three keys that went stale in between are exactly
+`AgentOutputPanel.tsx` `319`, `330`, `346`, as claimed. Every number above reproduces.
+
+**And the warning fired in tonight's full suite run**, which is what makes this urgent rather than
+theoretical: `hub/tests/test_surface_ceilings.py:103: UserWarning: operator-reachable MISREPORT
+surfaces dropped to 49 from a ceiling of 52. Lower the constant in test_surface_ceilings.py so the
+ratchet holds the new floor.` A reader who does what that sentence says freezes eight dead keys as
+the floor. It is emitted on every green run, so it will keep asking.
