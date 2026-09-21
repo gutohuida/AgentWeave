@@ -49,6 +49,9 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       returns it and **the factory does not run** (D2's measured property — assert by pointing the
       factory at something that would fail loudly, or by asserting the returned value alone if that
       reads cleaner). Also add: a value supplied only by an env *file* satisfies the refusal (D3).
+      **(R4 review)** Also add the test for the delta's relative-value SHALL. A **relative**
+      `DATABASE_URL` comes back from `Settings` unchanged, and not absolutized against the home
+      default. 2.6 asserts that group 2's line names `<cwd>/<relative path>`.
 - [ ] 1.7 Repoint `TestDatabaseUrlDriftAgainstCli::test_hub_default_matches_cli_hub_dir` at
       `_default_database_url()` directly instead of at `Settings(...).database_url`. **Do not delete
       it.** It is the only thing in the tree guarding the `agentweave-ai` / `agentweave-hub` seam,
@@ -117,9 +120,21 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
         not exist, and carries the child's PID (`proc.pid`, which 6.3 relies on).
       - Measured by R4 on 2026-09-21: this launch reaches `startup complete` in **4.4 s** and emits 110
         stderr lines (the full migration chain).
-      - **Mutation check, recorded in the commit:** change 2.4's `logger.warning` to `logger.info`,
-        and this test must fail. Also delete `alembic.ini`, and it must still pass, because the line
-        precedes `init_db`.
+      - Require **at least one** `Running upgrade` line. A fresh database always emits the chain, and
+        with zero lines the ordering assertion proves nothing.
+      - **Mutation checks, recorded in the commit:**
+        - change 2.4's `logger.warning` to `logger.info`, and the test must fail;
+        - move the line after `await init_db()`, and the test must fail.
+        (R4's original second mutation, deleting `alembic.ini`, is dropped: it removes the upgrade
+        lines the ordering check depends on. Found by the R4 review.)
+      - **Implementation, from the R4 review's measurements:**
+        - read `stderr` on a separate thread with a deadline, because `readline()` has no timeout;
+        - set `stdout=DEVNULL`;
+        - kill the process in `try/finally`.
+      - `proc.pid` is the listening PID only when `sys.executable` is a real interpreter. That holds
+        on Linux CI and under `py -3.11`, but not in a Windows venv, whose launcher starts a child
+        process. Where they differ, assert the PID on the line is that of a live process that is
+        not the launcher.
       This replaces both R1's 2.7 and the unit-level proxy. 2.6 stays as the fast check on the text
       and the level.
 - [ ] 2.8 **(R4)** Automate 6.1's refusal the same way, because it was the one check the change said
@@ -130,6 +145,13 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
         declines is a throwaway one and the operator's real home is never named.
       - Assert a non-zero exit, and that `stderr` holds 1.4's three facts.
       - Assert **`<fake home>/.agentweave` does not exist afterwards**.
+      - **Pop `DATABASE_URL` from the child env explicitly.** `hub/tests/conftest.py:65` exports
+        `:memory:` into `os.environ`, so a copied env is a told one. Put a timeout on `wait()`: a
+        broken refusal leaves a server running, and the test would hang.
+      - Measured by the R4 review: `Path.home()` follows `USERPROFILE` in a Windows child process,
+        and uvicorn exits 1 with the message on `stderr` when the app module raises at import.
+        Nothing else in `lifespan()` touches the real home: `instance_identity` writes beside the
+        database (`instance_identity.py:39-45`).
       6.1 stays as the drive, and this makes it a regression guard on Linux CI as well.
 
 ## Group 3 — the callers that break, and one of them is `make ui`
@@ -189,17 +211,28 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       one-line comment. (`:memory:` is enough: `engine.py:199` skips the alembic upgrade for it.)
       This is task 3.2's sweep done for the one entry it should not have left to judgement.
 
-- [ ] 3.7 **(R4)** The launch sweep. `grep -rn "uvicorn hub.main:app"` over the live tree, excluding
-      handoffs, archives, logs, `FINDINGS.md` and `.agentweave/tasks/` copies. Measured 2026-09-21, the
-      launches that carry no `DATABASE_URL` are:
+- [ ] 3.7 **(R4)** The launch sweep. Run it as `git grep -n "hub.main:app\|hub.main:run"`, excluding
+      archives, logs and `FINDINGS.md`. **(R4 review)** R4's own pattern, `"uvicorn hub.main:app"`,
+      misses list-form launches (`["-m", "uvicorn", "hub.main:app"]`). The review checked the ten it
+      missed (`d1_0909_shutdown.py`, the two `f295_*`, `t_d4_retry_by_hand.py`, the six
+      `t_row19_crash*.py`, and `copilot-test-setup/SKILL.md:102`), and every one sets
+      `DATABASE_URL`. The list below was right, but by luck. Measured 2026-09-21, the launches that
+      carry no `DATABASE_URL` are:
+      - **(R4 review) The `agentweave-hub` console script.** It maps `hub/pyproject.toml:43` to
+        `hub.main:run`, which is `main.py:536-540`. It chooses no database, and it now refuses at
+        import unless `DATABASE_URL` is set. Change no code. The delta's refusal scenario names it,
+        and 4.11 fixes the docs that describe it.
       - **`.claude/skills/e2e-loop/SKILL.md:144`**, **`.claude/skills/autonomous-session/SKILL.md:265`**,
         and both `.agents/skills/` mirrors. Each starts `:8010` from `hub/` with no variable, so today
         it survives on the gitignored `hub/.env`. **Worse than the reviewer said:** that file's value
         `sqlite+aiosqlite:///data/agentweave.db` resolves from `hub/` to `hub/data/agentweave.db`.
         That is **not** the trial profile `hubs.md:15` documents, and `hubs.md:22` records that the
         file was deleted on 2026-09-07. So these launches open, and silently re-create, a third
-        database today. **Fix all four** by naming the trial profile's `DATABASE_URL` inside the
-        `cmd.exe /c` string (`set "DATABASE_URL=…" && …`). After this change a clean checkout
+        database today. **Fix the two `.claude/skills/` sources** by naming the trial profile's
+        `DATABASE_URL` inside the `cmd.exe /c` string (`set "DATABASE_URL=…" && …`), **then run
+        `scripts/sync_skills.py`**. `.agents/` is gitignored (`.gitignore:129`) and generated from
+        those sources, so never edit it by hand. The R4 review measured this quoting through
+        `Invoke-CimMethod`: the child saw the exact value, with no trailing space, and cwd `hub\`. After this change a clean checkout
         refuses them, and on this machine they would keep landing on the wrong file.
       - **`hub/Makefile:25` (`make dev`)** runs `alembic … upgrade head` then `uvicorn` with no
         variable. **Change no code.** On a checkout that followed `.env.example:2` ("Copy this file to .env and adjust
@@ -260,11 +293,14 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       brick the operator's app on its next restart. Measured read-only on 2026-09-21:
       - The desktop shortcut `C:\Users\huida\Desktop\AgentWeave.lnk` targets `pythonw.exe -m
         agentweave`, with cwd `C:\Users\huida`.
-      - That CLI sets `DATABASE_URL` (`cli.py:1038`) and spawns `[sys.executable, "-m", "uvicorn",
-        "hub.main:app", "--host", "127.0.0.1", "--port", "8000"]` with `env=os.environ.copy()`
-        (`cli.py:1066-1093`).
-      - PID 9940's command line is exactly that spawn. `hub.pid` holds `9940` / `8000`, written at
-        `cli.py:1108`.
+      - That CLI sets `DATABASE_URL` (`cli.py:1038`) before `import hub.main`, and spawns
+        `[sys.executable, "-m", "uvicorn", "hub.main:app", "--host", "127.0.0.1", "--port", "8000"]`
+        with `env=os.environ.copy()` (`cli.py:1066-1093`).
+      - PID 9940's command line is that spawn, in that argument order. `hub.pid` holds `9940` /
+        `8000`, written at `cli.py:1108`. **But its interpreter is `python.exe`, not `pythonw.exe`**,
+        so 9940 came from a terminal run of `agentweave`, **not from the shortcut** (R4 review). Do
+        **not** write that 9940 is the shortcut's spawn. Both routes go through the CLI, so both
+        are told.
       - `_hub_load_env_into` only `setdefault`s, so `~/.agentweave/hub/.env` cannot displace the
         variable.
       So `:8000` is a **told** launch, and (a) does not refuse it. Replace the sentence with that chain,
@@ -282,10 +318,13 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       volume at `/app/data`, the file's own line 4 says *"inside the container"*, and
       `docker-compose.yml:31-34` supplies the same value under `environment:` (which overrides
       `env_file:`) so line 5 is inert in the documented install anyway. **Instead, add two comment
-      lines** saying that this value is the container path, and that a **source checkout** copying
-      this file to `hub/.env` must replace it with an absolute path — because a `.env` satisfies the
-      refusal (D3) while still being cwd-relative, which is the one way the launch-directory
-      dependence survives (a). Do **not** touch `hub/.env` itself; it is gitignored local state.
+      lines** saying that this value is the container path, and that in a **source checkout** that
+      copies this file to `hub/.env` the value resolves against whatever directory the Hub is
+      launched from (`hub/data/` for `make dev`). So replace it with an absolute path wherever the
+      launch directory can vary. A `.env` satisfies the refusal (D3) while still being cwd-relative,
+      and that is the one way launch-directory dependence survives (a). **(R4 review)** This wording
+      matches 3.7: a relative value is legitimate for `make dev`, which always runs from `hub/`, so
+      the comment warns rather than forbids. Do **not** touch `hub/.env` itself; it is gitignored local state.
 - [ ] 4.8 Do **not** change `hub/docker-compose.yml:34`. Its relative `data/agentweave.db` is
       container-internal and paired with a named volume; it is a told path and it is correct.
 - [ ] 4.10 **(R4)** `hub/tests/test_config.py:1-7`, the **module** docstring. It restates the
@@ -305,6 +344,11 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       - bare `agentweave` is how to get the shared default.
       Keep the existing note that nothing migrates data automatically. No round before R4 swept
       `docs/`.
+      **(R4 review, blocking) Also `docs/reference/env-variables.md`:**
+      - `:17` gives `DATABASE_URL` the default `sqlite+aiosqlite:///data/agentweave.db`. Replace it
+        with *"none. Bare `agentweave` sets it to `~/.agentweave/hub/data/agentweave.db`; a direct
+        `uvicorn hub.main:app` or the `agentweave-hub` console script refuses to start without it."*
+      - `:14` describes `agentweave-hub`. Note there that it needs `DATABASE_URL`.
 - [ ] 4.9 **(R2)** `tests/test_hub_commands.py`, the **CLI** suite — not `hub/tests/`. The test
       `test_first_start_migrations_leave_a_database_that_can_hold_a_conversation` (`:700-735`) does a
       bare `import hub.config` at `:707` to find the package directory, with no `DATABASE_URL` set.

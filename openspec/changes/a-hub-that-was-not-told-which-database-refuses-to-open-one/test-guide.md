@@ -33,7 +33,7 @@ that needs `~/.agentweave/hub/data/agentweave.db` to be touched, and if one appe
 | A17 | **(R4)** The line reaches a real process's output, before the migrations | Task 2.7 — a subprocess `uvicorn hub.main:app --port 0` on a `tmp_path` database with `cwd=tmp_path`. The line precedes the first `Running upgrade`, says `did not exist`, and carries `proc.pid`. **Mutation:** `logger.info` must fail it. Deleting `alembic.ini` must not. About 4.5 s |
 | A18 | **(R4)** The refusal, in a real process, with the real home out of reach | Task 2.8 — no `DATABASE_URL`, `cwd=tmp_path`, and `USERPROFILE`/`HOME` pointed at a throwaway directory. Check for a non-zero exit, 1.4's three facts on `stderr`, and no `<fake home>/.agentweave` afterwards |
 | A19 | **(R4)** No launch site was left relying on `hub/.env` | Task 3.7 — rerun the launch grep. Every live `uvicorn hub.main:app` line either sets `DATABASE_URL` or is `make dev`, with its comment |
-| A20 | **(R4)** No surviving copy of the removed guarantee | `grep -rn "regardless of its launch directory\|fixed going forward\|never fires there" hub/ docs/ .claude/reference/` returns nothing but the deliberate history |
+| A20 | **(R4)** No surviving copy of the removed guarantee | `grep -rn "regardless of its launch directory\|fixed going forward\|never fires there\|sqlite+aiosqlite:///data/agentweave.db\` |" hub/ docs/ .claude/reference/` returns nothing but the deliberate history. The last pattern catches `docs/reference/env-variables.md:17`'s default column (R4 review) |
 
 ## The drive (task group 6) — and why the unit tests are not enough here
 

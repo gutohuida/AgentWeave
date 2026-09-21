@@ -8,11 +8,13 @@ that project's overview. This SHALL be the only supported way to begin using Age
 
 Every launch path that chooses a database for itself SHALL resolve to the same database and
 instance state regardless of which directory it was launched from: bare `agentweave` (with or without
-`--docker`/`--local`), `agentweave --profile <name>`, and `docker compose up` against the Hub's
-compose file. Only the directory-scoped *project* registered against that runtime SHALL vary by
-launch directory.
+`--docker`/`--local`) and `agentweave --profile <name>` whenever the environment does not already
+name a `DATABASE_URL` (one that does is passed through unchanged and is then the operator's
+instruction), and `docker compose up` against the Hub's compose file. Only the directory-scoped
+*project* registered against that runtime SHALL vary by launch directory.
 
-A direct `uvicorn hub.main:app` invocation chooses no database of its own. It SHALL open exactly the
+A direct `uvicorn hub.main:app` invocation, and the `agentweave-hub` console script, choose no
+database of their own. Each SHALL open exactly the
 database it was told to open, by environment variable or by an environment file, and a relative
 value it was told SHALL be resolved against its working directory as written, because that value is
 the operator's instruction and not the runtime's guess.
@@ -62,8 +64,8 @@ afterwards from output that is missing.
 
 #### Scenario: A runtime that was not told which database to open refuses to open one
 
-- **WHEN** the Hub is started via a direct `uvicorn hub.main:app` invocation, from any working
-  directory, with no `DATABASE_URL` in the environment and none supplied by an environment file
+- **WHEN** the Hub is started via a direct `uvicorn hub.main:app` invocation or the `agentweave-hub`
+  console script, from any working directory, with no `DATABASE_URL` in the environment and none supplied by an environment file
 - **THEN** the runtime fails to start, without opening, creating or migrating any database file
 - **AND** the failure names the absolute path it declined to open, names `DATABASE_URL` as the way to
   say which database to open, and names bare `agentweave` as the way to get that default deliberately
