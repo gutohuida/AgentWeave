@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f292-impl-1",
-    "next_action": "Do queue item f292-impl-1: Read the FOOT of F292 only. Cheap shape: serialise the two racing files or give them own DB. Measure on CI, not locally. Record CI green rate across the night's pushes. Timebox 2 firings total.",
+    "current": "f292-impl-2",
+    "next_action": "Do queue item f292-impl-2: tally ci.yml conclusions on autonomous/2026-09-21-daily for every sha from the F292 per-test-DB commit onward (pre-fix baseline 2 of 4 red, both F292). Record in the F292 foot + log; F292 stays open unless the rate is measured. If a post-fix run shows 'database is locked', write up what was learned and move on. Timebox this one firing.",
     "queue": [
         {
             "id": "a-first-turn-archive",
@@ -30,7 +30,7 @@
         },
         {
             "id": "f292-impl-1",
-            "status": "open",
+            "status": "done",
             "title": "F292 fix-or-quarantine, firing 1",
             "detail": "Read the FOOT of F292 only. Cheap shape: serialise the two racing files or give them own DB. Measure on CI, not locally. Record CI green rate across the night's pushes. Timebox 2 firings total."
         },

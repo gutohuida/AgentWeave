@@ -116,6 +116,46 @@ def _test_only_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ANN
     cursor.close()
 
 
+#: The file every *new* connection opens. `TEST_DATABASE_URL` names the first; the `app` fixture
+#: moves this to a fresh file in the same directory for every test (F292, below).
+_current_test_db_file = str(Path(_TEST_DB_DIR) / "hub-test.db")
+_test_db_generation = 0
+
+
+@event.listens_for(engine.sync_engine, "do_connect")
+def _test_only_current_database_file(dialect, connection_record, cargs, cparams):  # noqa: ANN001
+    """Open whichever file the current test owns, not the one the engine was built with.
+
+    F292 (B): on CI, 1 run in 4-5 errored at the *setup* of a test with `database is locked` on
+    the schema reset's `BEGIN IMMEDIATE`, and the ledger measured the holder as present before
+    the reset begins: a connection holding an uncommitted write that `dispose()` cannot reach,
+    because it is checked out by (or orphaned from) a previous test's task. Nine instruments never
+    named that task. This does not need to: each test gets its own database file, so whatever a
+    previous test left holding the old file is holding a file nobody reads again. The engine keeps
+    its URL — every guard reading `engine.url` still sees `_TEST_DB_DIR` — and only the path a new
+    connection opens changes, which is why the switch happens right after the pool is emptied.
+    """
+    del dialect, connection_record, cparams
+    cargs[0] = _current_test_db_file
+
+
+def _move_to_a_fresh_database_file() -> None:
+    """Point new connections at a new file, and delete the previous test's file if nobody holds it.
+
+    Deletion is best-effort and is what keeps a 4,000-test run from leaving 4,000 databases (and
+    their WAL files) in TEMP. On Linux an unlink succeeds even while a leaked connection holds the
+    file, which simply keeps its now-nameless inode; on Windows it fails, the file stays, and the
+    whole directory goes at `pytest_sessionfinish`.
+    """
+    global _current_test_db_file, _test_db_generation
+    previous = _current_test_db_file
+    _test_db_generation += 1
+    _current_test_db_file = str(Path(_TEST_DB_DIR) / f"hub-test-{_test_db_generation}.db")
+    for suffix in ("", "-wal", "-shm"):
+        with contextlib.suppress(OSError):
+            os.remove(previous + suffix)
+
+
 # The real engine, bound once. `test_suite_database_isolation.py` monkeypatches this module's
 # `engine` name with a stand-in to exercise the guard without binding to a file, and the teardown
 # fixture below must dispose the actual engine rather than whatever the name points at mid-test.
@@ -768,6 +808,11 @@ async def app(monkeypatch):
     # locks at all. It is the cost of the pool that fixes F285, and it is paid here.
     _f292_before_dispose = _f292_snapshot("before dispose")
     await _REAL_ENGINE.dispose()
+    # F292's fix: the pool is empty, so every connection from here on opens a file no earlier
+    # test has touched. The dispose above is kept - it closes idle connections, so their file
+    # can actually be deleted - and so is the reset below, which on a fresh file finds nothing
+    # to drop but still builds the schema under one write lock.
+    _move_to_a_fresh_database_file()
     _f292_before_drop = _f292_snapshot("before drop_all")
 
     # ASGITransport does not trigger the FastAPI lifespan, so we run init_db

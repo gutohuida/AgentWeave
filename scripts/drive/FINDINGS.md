@@ -22304,7 +22304,7 @@ obvious fix.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open, and still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
+**Status:** open; **a per-test database file landed 2026-09-21 night and is awaiting its CI rate** (see the foot of this entry, `f292-impl-1`). Before it: still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
 
 **Re-measured 2026-09-20 (interactive session, at the operator's request for a verification scan) —
 the rate escalated far past 22.6%, and the consequence is now structural.** Over the `ci.yml` runs
@@ -23780,6 +23780,33 @@ What this adds:
   unmeasured.
 - Two runs (`1b3d52c`, `44879bb`) were in flight at the time of writing and are excluded from both
   counts, per the method note above.
+
+### 2026-09-21 night (`f292-impl-1`): each test gets its own database file — landed, not yet measured on CI
+
+Taken as the operator's "cheap shape" (APPROVALS 2026-09-21 item 3: *give them their own
+database*), timeboxed to two firings, and deliberately **not** another attempt to name the holder.
+Every section above agrees on one fact: the holder is present *before* the reset and `dispose()`
+cannot reach it. So the reset no longer shares a file with it. `hub/tests/conftest.py` adds a
+`do_connect` listener that opens `_current_test_db_file` rather than the URL's path, and the `app`
+fixture moves that to a fresh `hub-test-<n>.db` in `_TEST_DB_DIR` right after its `dispose()`,
+best-effort deleting the previous file and its `-wal`/`-shm` (an unlink succeeds on Linux even
+while a leaked connection holds the file; on Windows it fails silently and the directory goes at
+session end). `engine.url` is unchanged, so `assert_engine_is_disposable` and every guard on it
+still see `_TEST_DB_DIR`. Tests that do not take `app` keep seeing the last `app` test's file,
+exactly as they saw its tables before.
+
+**Measured locally**, `hub/tests/test_each_test_gets_its_own_database.py`: a raw `sqlite3`
+connection holding `BEGIN IMMEDIATE` plus an uncommitted write on the current file, then the
+fixture's own sequence — the reset completes. **Control:** the same test with the file move deleted
+fails after 30 s with `database is locked` on `BEGIN IMMEDIATE`, CI's signature statement for
+statement. Removing the move from the fixture fails the file-identity test. What this does **not**
+show: that the CI holder is a connection on the old *file* rather than something that would follow
+the test to the new one. Only CI can say, and the pre-fix baseline tonight is **2 of 4 completed
+runs red, both F292** (`3e06634` run `35659893420`, `1fd204d` run `35660385419`, both
+`test_a_wedged_review_is_restaffed_to_a_real_reviewer`, `1 error`; `85efe66` and `5bb9e6c` green).
+Full local hub suite with the fix: 4478 passed, 86 skipped. The ledger's own method note
+applies: the rate on this sha onward is recorded in the night log per push. Zero F292 in 11
+completed runs is what puts a 25% rate below p = 0.05 (0.75^11 ≈ 0.042).
 
 
 ---
