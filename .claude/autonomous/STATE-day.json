@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "802a8c7",
     "stop_at": "2026-09-21T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-21-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "D-6",
-    "next_action": "D-6 is a spare repair slot: take a no-spec-carve-out repair only if one clearly qualifies (day-window.md D-6), else mark it done and move on. Then D-7, the merge gate, per its queue detail. Then next_action: null.",
+    "current": "D-7",
+    "next_action": "D-7, the merge gate, per its queue detail (git status empty, CI run for exact HEAD sha, poll up to 25 min). Then next_action: null.",
     "queue": [
         {
             "id": "D-1",
@@ -51,7 +51,7 @@
         },
         {
             "id": "D-6",
-            "status": "open",
+            "status": "done",
             "title": "Spare repair slot if time remains",
             "detail": "Only if there is room before the 45-minute review-page reservation and D-7. Same no-spec carve-out rules as D-3/D-4."
         },
