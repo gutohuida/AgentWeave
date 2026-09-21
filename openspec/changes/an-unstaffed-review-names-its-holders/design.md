@@ -14,6 +14,13 @@ D2's clause 3 now filters by reachability and names each holding's loop; the fre
 the remedy (f) created, archiving the loop that holds them, and is forbidden from suggesting pause.
 The `OPERATOR QUESTION` in `proposal.md` is closed and should no longer be read as open.
 
+**2026-09-21, R8: the paragraph above is partly superseded — do not build from it.** Its *"names
+each holding's loop"* and *"archiving the loop that holds them"* were both removed by R6 (R6-3); the
+remedy is rejecting only. R8 then changed three more things D2 below still reads as current: the
+**hold precedes the holdings clause**, the holdings clause reads **`is booked for`** rather than
+`holds`, and the join is written out (capitalised remedy, conditional rejecting sentence,
+hold-aware tail). The build instruction is `tasks.md` 2.3's R8 block; the argument is `## Round 8`.
+
 R1, 2026-09-14. Line numbers are at `2d5674c`. R2, 2026-09-14, re-derived at `e8ea490`: every
 decision it changed is marked **R2**, and *Round 2* at the end lists what changed and why. R3,
 2026-09-14, re-derived at `fb469e2`: marked **R3**, listed in *Round 3* at the end. REV,
@@ -124,6 +131,11 @@ are all archived, or that has none. The clauses are then empty, and the sentence
 has no agent on its roster"* in their place, before the remedy.
 
 ### D2 — what rung 3 says, and in what order
+
+> **R8 (2026-09-21): the clause order and wording below are superseded by `## Round 8`** (R8-1,
+> R8-2, R8-3, R8-4, R8-5). The order is now excluded, no runner, **held, booked**, running; clause
+> 3's verb is `is booked for`. The reasoning below is kept; where it argues for *holds before
+> held*, R8-1 is the answer.
 
 For each record, the **first** of these that holds becomes that agent's clause:
 
@@ -1130,3 +1142,201 @@ helper is untouched, because `review_dispatch_refusal` shares it.
 
 The test instruction now says to assert **the joined string**, which is the only reason this was
 findable.
+
+## Round 8 — a fresh verification of groups 2, 5 and 6, 2026-09-21
+
+Independent, adversarial, at the operator's request after R5, R6 and R6-measured/R6-8 each found a
+hidden regression. Compared groups 2, 5, 6 and D1 (as amended), D2, D3, D6 and the delta against the
+tree at `7e2f663`, re-deriving rather than re-reading. There is no `## Round 7` in this file; "R7"
+exists only as the 2026-09-19 annotation in `tasks.md` 1.2. The next number is therefore 8.
+
+**What changed in the tree since 2026-09-19**, `git log --since=2026-09-19 -- hub/hub/scheduler.py
+hub/hub/api/v1/jobs.py hub/hub/api/v1/agents.py`: `f663898` (group 1, this change), `831ac16`
+(`a-loop-staffs-the-agent-it-names`: `_agents_a_loop_may_staff`, the busy guard and `decide_firing`
+now draw a documentless loop's pool as empty — `resolve_reviewer` still reads the project-wide
+roster, which is right, because only a flow reviews), and six `agents.py`-only commits (F185, F302,
+dead-code annotations). None touches rung 3, the ladder or `own_review_remedy`. `4b59ee0`'s
+reachability and `a-spent-allowance-holds-the-queue`'s hold are both intact in `_roster_availability`
+(`scheduler.py:1102-1172`) and in the projection (`:1227-1234`), and group 1's pool walk
+(`:1358-1374`) repeats the projection exactly.
+
+**Checks run.** `openspec validate an-unstaffed-review-names-its-holders --strict`: valid, before and
+after this round's edits. Regression guard `py -3.11 -m pytest hub/tests/test_a_held_agent_is_busy.py
+hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q`: **57 passed** in 36.3 s (42 s wall),
+before any edit. No product code was changed by this round.
+
+### R8-1 — HIGH — R6's clause order silently reverts the shipped hold. Same class as R5-0 and R6-1
+
+R6 placed the hold **after** the holdings clause: *"excluded, no runner, holds, HELD, running"*.
+Today, `resolve_reviewer` names the hold whenever **any** held, bound, non-excluded agent exists,
+**regardless of what it holds** — `roster_held = any(record.held and record.has_runner and
+record.name not in exclude …)` (`scheduler.py:1394-1396`). Under R6's order an agent that is both
+usage-held and holding one reachable task takes the holdings clause, and the hold is named
+**nowhere** in the sentence. That breaks the shipped SHALL (`openspec/specs/agent-flows/spec.md:873-875`,
+*"an agent was passed over because its queue is held … SHALL name the hold among the grounds"*),
+reverts behaviour the code has today, and no shipped test would notice: the hold tests at
+`test_a_held_agent_is_busy.py:370-404` stage held agents that hold nothing.
+
+It is also a false remedy. The rejecting sentence would sit beside that agent's tasks, and rejecting
+them frees nothing — the agent is still held (`not record.held` is its own term of the projection).
+The delta's own *"that way SHALL have the stated effect for every agent the reason named"* forbids it.
+
+D2's stated reason for the order (*"holds is the actionable one"*) is exactly what fails here: for a
+held agent the holdings are **not** actionable. **Fixed:** the order is excluded, no runner, held,
+booked, running (`tasks.md` 2.3 R8 block; delta renumbered, a precedence paragraph and a scenario
+added); `tasks.md` 2.15 gains the held-and-booked case with R6's order as its mutation.
+
+### R8-2 — MEDIUM — a SHALL in the delta with no task behind it; `holds` is the roster's word
+
+D2's R5 paragraph decided the sentence and the roster disagree on purpose and that *"the remedy
+sentence says the list is what something will still move"*; the delta carries it as a SHALL
+(*"worded so that a reader is not told the two disagree about the same fact"*, `specs/agent-flows/spec.md`,
+the paragraph after the reachability one). No task ever wrote that wording — 2.3's clause remained
+`"{name} holds {id} ({status})"`, and the rejecting sentence says nothing of the kind. `holds` is
+the word the delta itself gives the roster's question (*"what an agent holds"*), so printing a
+subset under it is the contradiction. **Fixed** by the verb, not by a gloss: `"{name} is booked for
+{id} ({status})"` — *something will bring this agent back to this task*, which is (f)'s definition.
+Measured both: the verb costs 8 characters per booked agent; the cheapest gloss sentence cost 44
+once and put LoopEngine-plus-one-hold at 536. The rejecting sentence becomes *"Rejecting booked
+tasks that are no longer wanted can free their agents."*
+
+### R8-3 — MEDIUM — the other join nobody concatenated
+
+R6-8 found `.;` by concatenating the `completed` join. The `under_review` remedy is
+`"decide it yourself: approve, …"`, **lowercase** (`scheduler.py:2020`); after the clauses' `". "`
+it starts a sentence in lowercase. Every round measured and printed only the `completed` string.
+**Fixed:** 2.3 capitalises the helper's first character at rung 3's join (the helper is shared, so
+it is not changed); 2.8 asserts the exact string with `". Decide it yourself:"`, and its new
+mutation (drop the capitalisation) fails only because the assertion is exact.
+
+*Not fixed, outside this directory:* the shipped `review_dispatch_refusal` already prints
+`"… Let the review in flight finish. decide it yourself: …"` for an `under_review` task
+(`api/v1/agent_trigger.py:503, 848`). Worth a finding; it is the archived sibling's sentence.
+
+### R8-4 — LOW/MEDIUM — the rejecting sentence was unconditional
+
+With no booked agent — everyone else held, running or unbound, or a one-agent project — the sentence
+still said *"Rejecting held tasks … can free their agents"*, a remedy with no agent it applies to.
+**Fixed:** appended only when some record took the booked clause; delta and 2.17 carry it.
+
+### R8-5 — MEDIUM — the fit can drop the hold, reverting the shipped SHALL by length
+
+2.4 fits clauses in name order and counts the rest under *"excluded, busy or unbound"*. A held agent
+late in name order on a large roster is counted, and the hold is then named nowhere — the shipped
+SHALL again, reached through the budget rather than the clause list. **Fixed:** the tail reads
+*"…excluded, busy, waiting for a usage limit or unbound"* when it counts a held agent (78 characters
+at N=999; the fit reserves the actual tail length). Delta scenario and 2.9 (iv) added.
+
+### R8-6 — HIGH (test integrity, F190's shape) — 2.6's REV mutation cannot fail under (f)
+
+REV added *"the author also holds one live task outside the loop"* so that mutation (b) (holds before
+excluded) could fail. Under (f) a task outside every loop with nothing queued is **unreachable**;
+rung 3 prints nothing for it, so the author's clause reads the same in either order and (b) is a
+no-op. R6 rewrote the non-author fixture and said the author's task *"stays as it is"* — it cannot.
+**Fixed:** every holding in 2.6 (the author's included) lives in a second live loop the test never
+fires (reachable, not walked, so R3's claim-instead-of-stall caveat cannot arise); 2.9, 2.9b and 2.7
+say the same. 2.6 also now states what the route returns — **409**, with `detail` equal to the stall
+row's `error_summary` (`scheduler.py:3114-3135`, `api/v1/jobs.py:1363-1367`) — and that the job's
+agent must be the author, neither running nor held, or `_loop_flow_busy_reason`
+(`scheduler.py:312-352`) refuses before `decide_firing` runs. The delta scenario *"A task nothing will
+move is not named as a reason"* had no test in group 2; 2.6 gains one, with a mutation that ignores
+`reachable`.
+
+### R8-7 — HIGH — 2.14 as placed would disable divergence handling for all ordinary work
+
+*"At the same screen as `blocked`"* (`run_divergence.py:753-754`) is a screen every run passes. A
+status screen there returns `None` for every work run whose task is `assigned` or `in_progress` —
+the normal divergence case. **Fixed:** the screen goes inside the review branch (`:769-773`), before
+`_answer_failed_review`. Its test asserted *"no `review_unstaffed` is recorded"*, which cannot fail:
+divergence never emits `review_unstaffed` (only a firing does, `scheduler.py:3053`); it emits
+`run_diverged` (`run_divergence.py:835-842`). Rewritten with a free agent, so the mutation restaffs
+and fails **before** 2.3 lands — which is what makes the "2.14 before 2.3" order buildable.
+
+*What the raise would do:* `evaluate_run_end` is awaited bare after the run row commits
+(`api/v1/agent_trigger.py:2420, 3006`) and in `run_reconciliation.py:126`'s loop at Hub start. An
+`AssertionError` from `own_review_remedy` would skip the F43 handover at run end and, at start,
+abort the remaining evaluations and the `schedule_or_defer` after them.
+
+### R8-8 — MEDIUM (F190's shape) — 2.10 cannot fail once 2.4 exists
+
+Its reason must exceed 500, and 2.4 makes every rung-3 reason ≤ 500, so raw and fitted are equal and
+the mutation is a no-op. The comparison it guards already shipped (`scheduler.py:975`, not `:923`)
+and nothing tests it. **Rewritten** as a direct test of `_stall_run_to_increment` with a 600-character
+reason.
+
+### R8-9 — LOW — citations and a missed call site, again
+
+2.1's list omitted `test_a_task_nothing_will_move_holds_nobody.py:684` — group 1's own 1.4 test,
+which passes a set and reaches rung 3, so it raises `TypeError` under a `Mapping`. It is the fourth
+consecutive round at which the list was incomplete. Also: `test_a_flow_names_what_it_cannot_staff.py`
+`:472, :482` (not `:471, :478`), `decide_firing`'s exclusion at `:1808-1843`, `models.py:1367-1379`
+and `:1413`. 2.1 now records the grep count: 21 call sites.
+
+### R8-10 — LOW — 2.3 still carried the pre-REV prefix
+
+`could not staff this step: nobody is free.` — the prefix REV replaced as false. D2 and
+R6-measured's table use `no reviewer is free.`; the build instruction never got it. Fixed.
+
+### R8-11 — MEDIUM — 6.3 drives a remedy R6 removed
+
+6.3 still told the drive to archive the holding loop because *"the second is the remedy the sentence
+now prints"* — R6-3 removed it and the delta forbids it. Its other R5 check was self-defeating (an
+unreachable-only holder in the pool is staffed, so no rung-3 reason exists to not-name it). Two
+bullets drive D5's refusals, which archived with the sibling. **Fixed:** replaced with a drive of the
+rejecting remedy the sentence does print, and of the unreachable holder being staffed.
+
+### R8-12 — FLAG — group 5 ships a UI bundle to the operator's live app
+
+5.1 edits `hub/ui/src/components/spec/LoopsIndexTab.tsx` (the stall `<p>`, `:237-244`, unchanged), so
+5.2's refresh changes `hub/hub/static/ui`, which the operator's `:8000` serves from this checkout on
+their next reload. The committed bundle is current with `hub/ui/src` (stamp `src_commit 46dd58e`,
+built 2026-09-13; last `hub/ui/src` commit `1731522`, 2026-09-13), so tonight's rebuild would carry
+only the attribute. The `title` calls nothing new. It is the operator's call whether a night may
+commit a bundle; 5.4's gate is otherwise sound. 5.1's test now names the existing test file and a
+mutation that sets `title` to the stripped text.
+
+### R8-13 — budget, re-measured with the R8 strings (scratchpad `r8len2.py`)
+
+| piece | characters |
+|---|---|
+| prefix `could not staff this step: no reviewer is free. ` | 48 |
+| `". "` + remedy, `completed` / `under_review` | 46 / 76 |
+| rejecting sentence (conditional) | 72 |
+| tail / hold-aware tail, at N=999 | 51 / 78 |
+| clause budget with the hold-aware tail, `completed` / `under_review` | 256 / 226 |
+| widest booked clause (32-char name, 64-char ids, `revision_needed`), 3 / 2 / 1 named | 311 / 227 / 143 |
+| held clause / excluded clause, 32-char name | 83 / 75 |
+
+| shape (17-char ids) | `completed` | `under_review` |
+|---|---|---|
+| LoopEngine (author + 3 booked, 5 named holdings) | 432 | 462 |
+| the same plus one usage-held agent | 488 | **518 — over** |
+| five / six agents, one holding each | 408 / 458 | 438 / 488 |
+| seven agents | **508 — over** | **538 — over** |
+
+R3's floor holds: the widest one-task clause (143) fits inside the smallest clause budget (226), so at
+least one agent is always named. The fit fires one roster size earlier than R6-measured's table.
+
+### Routes, and what they return when the function they call raises
+
+- `POST /jobs/{id}/run` on a rung-3 stall: **409**, `detail` = the stall row's fitted reason, on the
+  first firing and on the counted ones. If `decide_firing` **raises**, `_do_fire_job` marks the run
+  row `failed` with the exception text (`scheduler.py:3314-3337`) and returns `False`; the route then
+  re-derives through `_loop_in_flight_decision`, which calls `decide_firing` again, raises again, and
+  the route's own `except` writes a **second** failed row and answers **500** (`api/v1/jobs.py:1407-1414`).
+  A scheduled firing gets only the first failed row and a log line. Nothing in groups 2/5/6 can raise
+  there once 2.14 is in: `decide_firing` reaches the ladder only for `completed` and the F70
+  `under_review` row, both accepted by `own_review_remedy`, and `exclude[...]` is indexed only for
+  names in it.
+- `GET /jobs/{id}/history`: bounded by the shipped `@validates`; the remaining failure mode is a
+  silently cut remedy, which 2.9's second mutation now catches.
+- The divergence path has no route; see R8-7 for what a raise there does.
+
+### What R8 did not do
+
+- Implemented nothing and ran no test beyond the guard. Every test described above is specified, not
+  observed; each must still be watched failing under its mutation.
+- Did not re-derive `test-guide.md` (task 6.5 owns it; it still describes option (e)).
+- Did not audit D1's R2 paragraph citations (`:298`, `:1298`, `:1137`) — stale, but group 1 is built
+  and tasks 1.2's R7 note already records the correct callers.
+- Did not drive anything. No Hub was started or called; `:8000` and `:8010` were not touched.

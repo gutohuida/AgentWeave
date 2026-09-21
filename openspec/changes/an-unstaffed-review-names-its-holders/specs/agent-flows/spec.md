@@ -13,16 +13,24 @@ work outside the flow.
 For each non-archived agent, the reason SHALL state the first of these that applies:
 1. it is excluded from this review, stated with the reason the resolution applied to that agent;
 2. it has no runner bound;
-3. it holds tasks that still make it unavailable, naming each such task by identifier and status,
+3. its queue is held by a refusal of its provider's usage allowance;
+4. it holds tasks that still make it unavailable, naming each such task by identifier and status,
    where a bounded number MAY be named and the rest counted;
-4. its queue is held by a refusal of its provider's usage allowance;
 5. it is running a turn.
 
-Clause 4 is not optional and SHALL NOT be folded into clause 5. An agent whose queue is held is not
+Clause 3 is not optional and SHALL NOT be folded into clause 5. An agent whose queue is held is not
 running a turn, and saying that it is states a false cause for a condition that clears on its own
 schedule rather than on the operator's. Naming every agent's reason individually is what satisfies
 *"the reason surfaced SHALL name the hold among the grounds"*; a sentence built only from clauses
-1, 2, 3 and 5 would violate that requirement in the ordinary case.
+1, 2, 4 and 5 would violate that requirement in the ordinary case.
+
+Clause 3 SHALL take precedence over clause 4. An agent whose queue is held and which also holds
+tasks was passed over because its queue is held, and the hold SHALL be named for it. Naming its
+tasks in the hold's place would drop a required ground, and would offer a way to free it that does
+not: rejecting its tasks leaves its queue held.
+
+Where agents are counted rather than named and any agent counted is held, the count SHALL name the
+hold among the grounds it summarises.
 
 A task in an active status that nothing will move SHALL NOT be named as a reason an agent could not
 take the review. Such a task does not make its assignee unavailable, so naming it would state a
@@ -42,7 +50,9 @@ that agent for a different reason, such as having reviewed the task without reco
 
 Where the reason names a way to free a held agent, that way SHALL have the stated effect for every
 agent the reason named. Rejecting a task that is no longer wanted frees whoever held it, and the
-operator can reach `rejected` from every status that makes an agent unavailable.
+operator can reach `rejected` from every status that makes an agent unavailable. Where no agent is
+unavailable because of the tasks it holds, the reason SHALL NOT offer rejecting a task as a way
+forward.
 
 The reason SHALL NOT name pausing, which does not free an agent: a paused loop still holds, because
 resuming it briefs the assignee on the same task again. Naming a control that does not have the
@@ -93,6 +103,24 @@ decides that.
   active status that no live loop walks and no queued turn names
 - **THEN** that agent is not described as held by that task
 - **AND** the task's identifier does not appear in the surfaced reason
+
+#### Scenario: An agent whose queue is held and which holds tasks is named as held
+
+- **WHEN** a flow cannot staff a review and an agent whose queue is held by a refusal of its
+  provider's usage allowance is also assigned a task that a live loop still walks
+- **THEN** the surfaced reason names that agent's hold as its reason
+- **AND** it does not name that task as the agent's reason
+
+#### Scenario: A counted held agent still has its hold named
+
+- **WHEN** so many agents are unavailable that some are counted rather than named, and one of those
+  counted is held by a refusal of its provider's usage allowance
+- **THEN** the surfaced reason still names the provider's usage limit among the grounds
+
+#### Scenario: No task-rejecting remedy is offered when no agent holds work
+
+- **WHEN** a flow cannot staff a review and no agent is unavailable because of the tasks it holds
+- **THEN** the surfaced reason does not offer rejecting a task as a way forward
 
 #### Scenario: An agent whose queue is held is named as held, not as running
 
