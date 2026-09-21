@@ -1341,6 +1341,20 @@ session from the one that wrote what was reviewed.
   `/events/history`. A drive script piped through `tail` hid that hang for 10 minutes (day window
   D-1). *(2026-09-21)*
 
+## 2026-09-21 (late evening)
+
+- **"No spec mentions it" needs a grep of `openspec/changes/`, not only `openspec/specs/`.** Handoff
+  0135 told the operator F376 needed a spec from scratch; `a-refused-capability-reaches-the-operator`
+  had been F376's approved, partly built change since 09-18. Before saying a finding has no spec:
+  `grep -rln F<nnn> openspec/changes --include=*.md | grep -v archive/`. *(2026-09-21)*
+- **A Python heredoc that rewrites a tracked file on Windows turns it CRLF.** `open(p,'w')` in text
+  mode writes `
+`; git then warns "CRLF will be replaced by LF". Open with `newline=''`, or
+  `sed -i 's/$//'` after. *(2026-09-21)*
+- **A test command with an unbalanced quote passes the judge for the wrong reason.** `_lex` reads an
+  unclosed quote to the end instead of refusing, so `.""."` lexes to `..` while bash will not run it
+  at all. Run a sandbox test row's command in the real shell first (F375 R2-3). *(2026-09-21)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
