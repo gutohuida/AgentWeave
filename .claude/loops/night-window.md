@@ -122,6 +122,14 @@ Only the first firing of the window does this.
      because nothing was looking. A streak is a fact about whether the week's work can land, and it
      belongs in front of the operator the next morning, not in a gate that may never run.
    - **No run for that sha at all** — say so. It is not a pass and it is not a failure.
+   - **`in_progress` for more than 60 minutes** — that run is **hung**, not pending (F394). A normal
+     `ci.yml` run concludes in 13-20 minutes; F394 measured three `master` runs sitting
+     `in_progress` for 5-6 hours until GitHub's job timeout killed them, and a window reading "no
+     conclusion yet" waited on them as if they had just started. Compute the age from the run's
+     `createdAt`, write **`HUNG`** with the run id and its age in the log, and treat it as red with
+     an unknown signature — triage it, do not wait on it. (`3491580` added a per-test
+     `--timeout=300`, so a wedged test should now fail in minutes; a run still hung past 60 minutes
+     is wedged outside a test, which is exactly the case nothing else will report.)
 
 4. **Write the queue**, in this order unless `ORDER:` says otherwise. Backlog first, decided
    2026-09-01; the rejected alternative was approved-first, which would let 8 unarchived changes and
@@ -159,6 +167,22 @@ time:
   the test was asserting over nothing.
 - **Never mark a task complete on the strength of a plan existing.** This matters more when nobody
   is checking, not less.
+- **F392 rule 1 — a full-suite task carries its count inline, or it is not ticked.** Any task that
+  runs `pytest hub/tests/` or `pytest tests/` in full (typically a "what must not move" group's
+  6.x) is ticked `[x]` only with the actual result written **into that task line in `tasks.md`**:
+  passed / failed / skipped / errors and the wall-clock duration, e.g. *"4474 passed, 86 skipped,
+  47:37"*. A pointer — *"see the log"*, *"recorded in iteration N"* — does not count. Measured
+  2026-09-20 (F392): a 6.2 ticked *"recorded in the log rather than here"* cited a log entry that
+  was never written, while three tests in a sibling change's guard file were red. If the run has not
+  finished, the task stays `[ ]` and the log says it is still running.
+- **F392 rule 2 — a change's regression set is the union of every open change's guard files.**
+  Before starting a change and again before closing it, list the guard/regression test files named
+  by **every** unarchived change under `openspec/changes/` (grep each `tasks.md` for
+  `hub/tests/test_*.py` and `tests/test_*.py` in its "what must not move" or regression group), and
+  run that union — not only the files your own change names. Record the file list and the counts in
+  the log. Measured 2026-09-20 (F392): `a-loop-staffs-the-agent-it-names` task 3.3 broke three cases
+  in `test_a_task_nothing_will_move_holds_nobody.py`, a guard file named only by a *sibling* change,
+  and no artifact of the change that broke it mentioned that file anywhere.
 - Adding a database column: field in `hub/hub/db/models.py`, a migration that **guards for a missing
   table** (as `0033`/`0034` do, because upgrades from an early revision reach it with only that
   revision's tables), bump the head assertions in **both** `hub/tests/test_migrations.py` and

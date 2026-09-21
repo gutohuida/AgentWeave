@@ -129,6 +129,13 @@ Only the first firing of the window does this. It ends by writing a full `queue`
      absent for that sha is **not** a pass — leave it for a later firing rather than accepting a
      stale green from an earlier commit.
 
+     **Except a hung run: `in_progress` for more than 60 minutes (from its `createdAt`) is not
+     pending, it is wedged (F394).** Normal runs conclude in 13-20 minutes; F394 measured three
+     `master` runs sitting `in_progress` for 5-6 hours until GitHub's job timeout killed them. Do not
+     wait on it: write **`HUNG`** with the run id and its age in the log, treat the gate as closed
+     for that sha, and name it in the review page so the operator sees it the same evening. The
+     one-re-run allowance below does not apply — a hang carries no signature to classify.
+
      **Write nothing until that run concludes.** Any commit, even a log line, moves `HEAD` to a sha
      whose CI has not started, and the gate then waits another ~13 minutes on nothing. The
      2026-09-12 window opened the gate by waiting; 2026-09-13's measured the same wait twice.
