@@ -1318,6 +1318,29 @@ session from the one that wrote what was reviewed.
   silently tell the next day window to run zero spec loops. Check that line before reading the
   count as good or bad news.
 
+## 2026-09-21 (evening) — reading a change's state, and moving work out of one
+
+- **A change's `tasks.md` banner can be days stale while its `proposal.md` banner is current.**
+  `an-unstaffed-review-names-its-holders/tasks.md` opened with *"STOPPED AT REV, 2026-09-14. Do not
+  build any task here"* while `proposal.md` said *"RESOLVED 2026-09-19 — the re-derivation is done"*.
+  An interactive session read only `tasks.md`, told the operator the change was stale, and the
+  operator answered "reject it" on that false premise (voided minutes later, recorded in
+  `DECISIONS.md` `### 2026-09-21 evening`). **Before characterising a change's state to the
+  operator, read the top of `proposal.md`, `design.md`'s round log, and `APPROVALS.md`'s rows for
+  it — not one file's banner.** *(2026-09-21; that banner is now marked superseded, b065713.)*
+- **Moving a task group out of a change is not a `tasks.md` edit — its spec delta has to be trimmed
+  too.** A group's requirement text is woven into MODIFIED requirements; archiving the change with
+  the text still there syncs SHALLs the code does not meet into `openspec/specs/`. `a-loop-staffs`
+  §5 → F400 needed a trim of two requirements and three scenarios, each checked against
+  `jobs.py:1349-1361` (07c6298). **Check the delta for every scenario the moved tasks were the only
+  implementation of.** *(2026-09-21)*
+- **A bash-style path in `DATABASE_URL` creates a stray database under `C:\c\Users\...`.**
+  `sqlite+aiosqlite:////c/Users/...` resolves on Windows to a directory named `c` at the drive
+  root. Use `C:/Users/...`. Found by the day window's D-2. *(2026-09-21)*
+- **`GET /api/v1/events` is an SSE stream and blocks forever**; event history is
+  `/events/history`. A drive script piped through `tail` hid that hang for 10 minutes (day window
+  D-1). *(2026-09-21)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
