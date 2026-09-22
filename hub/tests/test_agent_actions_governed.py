@@ -263,6 +263,46 @@ async def test_create_loop_via_agent_actions_with_initial_tasks_seeds_the_queue(
 
 
 @pytest.mark.asyncio
+async def test_seeding_a_loop_that_runs_another_agent_is_refused_before_anything_exists(
+    app, auth_headers
+):
+    """F265: only the agent a loop runs, or the operator, may add to its queue (D8). This call
+    was refused by that gate *after* the job and loop were committed, leaving an enabled cron loop
+    whose queue could never drain. It must be refused with nothing written."""
+    headers = await _actor(run_id="run-loop-for-another")
+    await _allow_agent_jobs(app, auth_headers)
+    synced = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"lead": {}, "worker": {}}}},
+        headers=auth_headers,
+    )
+    assert synced.status_code == 200, synced.text
+    body = {
+        "name": "worker's loop",
+        "agent": "worker",
+        "message": "work the queue",
+        "cron": "0 2 * * *",
+        "stop_when_queue_empties": True,
+        "initial_tasks": [{"title": "Seeded for worker"}],
+    }
+
+    refused = await app.post("/api/v1/agent-actions/jobs", headers=headers, json=body)
+
+    assert refused.status_code == 403, refused.text
+    async with async_session_factory() as session:
+        for model in (AIJob, Loop, Task):
+            count = await session.scalar(select(func.count()).select_from(model))
+            assert count == 0, f"a refused create_loop left {count} {model.__name__} row(s)"
+    detail = refused.json()["detail"]
+    assert "'worker'" in detail and "Nothing was created" in detail
+
+    # The way out the refusal names: the same loop without the seed.
+    del body["initial_tasks"]
+    created = await app.post("/api/v1/agent-actions/jobs", headers=headers, json=body)
+    assert created.status_code == 201, created.text
+
+
+@pytest.mark.asyncio
 async def test_archive_job_via_agent_actions_refuses_when_the_job_has_a_loop(app, auth_headers):
     """B3.3: a loop is archived by the operator only (mirrors B2.2's operator-only loop rule) —
     an agent's own governed archive route must not be a back door around that, even though the

@@ -38,6 +38,11 @@ enabled loop it does not know about is left behind — one whose `stop_when_queu
 fire, because "empty" means drained and this queue never filled. Leg 2a drives that; leg 2b then
 makes the same call without the seed, which is what the rest of the harness needs.
 
+**Since 2026-09-22 it verifies both repairs** (Round 3, group 3b): leg 2a expects F265's refusal
+with nothing written, and legs 4-6 expect the loop's own project's message despite a newer foreign
+one (F264). The candidate mail is sent by real `worker` turns, one per project, since F261's repair
+refuses the runless `from` this harness used to forge it with. Not yet run in this form.
+
 **Re-runnable on the state it leaves.** Every row this harness writes carries the run tag, the
 reason is asserted against *this* run's own foreign subject rather than a constant, and no count is
 absolute. The loop ends itself (`end_loop` disables the job), and `--teardown` deletes both
@@ -223,12 +228,28 @@ def db_rows(sql, args=()):
         con.close()
 
 
-def send(project_path, sender, recipient, subject, content):
-    return api(
-        "POST",
-        f"{project_path}/messages",
-        {"from": sender, "to": recipient, "subject": subject, "content": content},
+def agent_sends(project_path, project_id, sender, recipient, subject):
+    """One real turn in which *sender* sends *recipient* one message, and the row it wrote.
+
+    This used to be a runless `POST /messages` with `from` set to the agent. F261's repair refuses
+    that (identity is never taken from a request body), so the mail is sent the way agent mail is:
+    by the agent, from its own run. Returns `(message_row or None, why)`.
+    """
+    prompt = (
+        "Do exactly one thing, then stop. Call the send_message tool once, with to_agent "
+        f'"{recipient}", subject "{subject}", and the one-sentence body "Drive fixture, no reply '
+        'needed." Call no other tool, and end the turn when send_message returns.'
     )
+    run_id, why = trigger(project_path, sender, prompt)
+    if run_id is None:
+        return None, why
+    status = wait_run(run_id)
+    rows = db_rows(
+        "SELECT id, project_id, subject, read, timestamp FROM messages "
+        "WHERE project_id = ? AND created_by_run_id = ?",
+        (project_id, run_id),
+    )
+    return (rows[0] if len(rows) == 1 else None), f"run {run_id} {status}, {len(rows)} rows"
 
 
 def bundle_files():
@@ -372,10 +393,9 @@ def loop_rows(name):
 
 # ---- 2a. The call as an agent would naturally write it: seed the queue in the same call. -------
 #
-# `create_loop`'s own docstring advertises `initial_tasks`, and `jobs.py:697` states in a comment
-# that the loop-authorship gate "is satisfied for free" here. It is not: D8 collapses "the loop's
-# creator" into `AIJob.agent`, which is the agent the loop *triggers* — so an agent creating a loop
-# for somebody else is not the creator of the loop it just created.
+# F265, repaired 2026-09-22. D8 lets only the agent a loop *triggers*, or the operator, add to its
+# queue, so `boss` seeding a loop for `worker` is refused. This leg found that refusal arriving
+# after the job and loop were committed and left enabled; it now checks nothing is written.
 SEEDED_NAME = f"f264-seeded-{TAG}"
 SEED_TITLE = f"f264 seed {TAG}"
 jobs_before = db_rows("SELECT COUNT(*) c FROM ai_jobs WHERE project_id = ?", (P,))[0]["c"]
@@ -390,47 +410,17 @@ errs = db_rows(
     (SEED_RUN or "",),
 )
 err_text = " ".join(e["payload"] or "" for e in errs)
-refused = "403" in err_text and "creator" in err_text
-ok("the Hub REFUSED the agent's create_loop because of its initial_tasks", refused,
-   err_text[:400] or "no tool_result recorded")
+ok("the Hub refused the agent's create_loop because of its initial_tasks",
+   "403" in err_text and "initial_tasks" in err_text, err_text[:400] or "no tool_result recorded")
+ok("...and told it nothing was created", "Nothing was created" in err_text, err_text[:400])
 note("what the agent was told", re.sub(r"\\n", " ", err_text)[:260])
 
 seeded = loop_rows(SEEDED_NAME)
-ok("...and yet the job and loop it refused exist anyway (F54's rule breached)",
-   len(seeded) == 1, f"{len(seeded)} rows")
-if seeded:
-    S = seeded[0]
-    note("orphaned loop / job", f"{S['id']} / {S['job_id']}")
-    stasks = db_rows("SELECT COUNT(*) c FROM tasks WHERE loop_id = ?", (S["id"],))[0]["c"]
-    ok("the queue the call was refused for is empty", stasks == 0, str(stasks))
-    ok("the orphan is left ENABLED, so it fires on its cron with nothing to do",
-       bool(S["enabled"]), repr(S["enabled"]))
-    ok("its stop condition can never fire: 'empty' means drained, and this one never filled",
-       bool(S["stop_when_queue_empties"]) and stasks == 0,
-       f"swqe={S['stop_when_queue_empties']} ever={stasks}")
-    jobs_after = db_rows("SELECT COUNT(*) c FROM ai_jobs WHERE project_id = ?", (P,))[0]["c"]
-    ok("the refusal added a job row", jobs_after == jobs_before + 1, f"{jobs_before} -> {jobs_after}")
-    ok("the scheduler took it: a next firing is already stamped",
-       bool(db_rows("SELECT next_run FROM ai_jobs WHERE id = ?", (S["job_id"],))[0]["next_run"]),
-       str(db_rows("SELECT next_run FROM ai_jobs WHERE id = ?", (S["job_id"],))))
-
-    # And what that firing does, driven rather than argued: `_loop_stop_reason` returns None for a
-    # queue that never filled, so the stop condition does not catch it and a real turn starts on
-    # an empty queue. One firing is enough to show the shape; the cron would repeat it.
-    worker_runs_before = db_rows(
-        "SELECT COUNT(*) c FROM runs WHERE project_id = ? AND agent = ?", (P, WORKER)
-    )[0]["c"]
-    c, b = api("POST", f"{A}/jobs/{S['job_id']}/run", None, timeout=300)
-    note("firing the loop the Hub said it had refused", f"{c} {str(b)[:160]}")
-    ok("that firing is NOT skipped — the stop condition cannot see a queue that never filled",
-       c in (200, 201), f"{c} {str(b)[:200]}")
-    worker_runs_after = db_rows(
-        "SELECT COUNT(*) c FROM runs WHERE project_id = ? AND agent = ?", (P, WORKER)
-    )[0]["c"]
-    ok("...and it spends a real agent turn on a loop with nothing in its queue",
-       worker_runs_after == worker_runs_before + 1, f"{worker_runs_before} -> {worker_runs_after}")
-
-    # Leave nothing running: the operator's only way to stop a loop the product says was never made.
+ok("no loop exists for the refused call", not seeded, f"{len(seeded)} rows: {seeded}")
+jobs_after = db_rows("SELECT COUNT(*) c FROM ai_jobs WHERE project_id = ?", (P,))[0]["c"]
+ok("no job exists for the refused call either", jobs_after == jobs_before,
+   f"{jobs_before} -> {jobs_after}")
+for S in seeded:  # only if the repair regressed: leave nothing running behind this harness
     api("PATCH", f"{A}/jobs/{S['job_id']}", {"enabled": False})
     api("POST", f"{A}/jobs/{S['job_id']}/archive")
 
@@ -468,11 +458,12 @@ note("cron the agent set", L["cron"])
 
 leg(2, "the two candidate messages — same names, two projects, the foreign one newest")
 
-# **Seeded after every real turn, deliberately.** This block used to run first, and on the fourth
-# run the orphan loop's own firing (leg 1) spent a turn in which `worker` sent `boss` a genuine
-# "Loop stall diagnosis" message — newer than both fixtures, in the victim's own project — and the
-# measurement below correctly flipped. The defect is "whichever is newest anywhere", so the
-# harness has to own which row is newest, and no agent turn may run between here and the firing.
+# **Seeded after every other real turn, deliberately.** This block used to run first, and on the
+# fourth run the orphan loop's own firing spent a turn in which `worker` sent `boss` a genuine
+# "Loop stall diagnosis" message — newer than both fixtures — and the measurement flipped. The
+# harness has to own which row is newest, so each project goes idle before the next send, and
+# before the firing. (Each send is a real `worker` turn now, and `boss` is woken by its delivery;
+# `wait_idle` waits that out too.)
 
 ok("no turn is in flight before the candidates are seeded", wait_idle(P) == 0,
    f"{busy_runs(P)} runs still going")
@@ -480,15 +471,15 @@ ok("no turn is in flight before the candidates are seeded", wait_idle(P) == 0,
 VICTIM_SUBJ = f"victim-own {TAG}"
 FOREIGN_SUBJ = f"FOREIGN-PROJECT {TAG}"
 
-code, m1 = send(A, WORKER, BOSS, VICTIM_SUBJ, f"the victim project's own worker->boss mail {TAG}")
-ok("the victim project's own worker->boss message is created", code == 201, f"{code} {str(m1)[:200]}")
-M_VICTIM = (m1 or {}).get("id") if isinstance(m1, dict) else None
+m1, why1 = agent_sends(A, P, WORKER, BOSS, VICTIM_SUBJ)
+ok("the victim project's own worker->boss message is sent by worker's run", m1 is not None, why1)
+M_VICTIM = (m1 or {}).get("id")
+ok("the victim project is idle again", wait_idle(P) == 0, f"{busy_runs(P)} runs still going")
 
-time.sleep(1.5)  # so `timestamp desc` has something unambiguous to order by
-
-code, m2 = send(A2, WORKER, BOSS, FOREIGN_SUBJ, f"another project's private mail {TAG}")
-ok("the foreign project's worker->boss message is created", code == 201, f"{code} {str(m2)[:200]}")
-M_FOREIGN = (m2 or {}).get("id") if isinstance(m2, dict) else None
+m2, why2 = agent_sends(A2, P2, WORKER, BOSS, FOREIGN_SUBJ)
+ok("the foreign project's worker->boss message is sent by worker's run", m2 is not None, why2)
+M_FOREIGN = (m2 or {}).get("id")
+ok("the foreign project is idle again", wait_idle(P2) == 0, f"{busy_runs(P2)} runs still going")
 note("victim message / foreign message", f"{M_VICTIM} / {M_FOREIGN}")
 
 pair = db_rows(
@@ -498,19 +489,21 @@ pair = db_rows(
 )
 ok("both rows exist, one per project", len(pair) == 2 and pair[0]["project_id"] != pair[1]["project_id"],
    str(pair))
+ok("the agents kept the subjects they were given",
+   {r["subject"] for r in pair} == {VICTIM_SUBJ, FOREIGN_SUBJ}, str([r["subject"] for r in pair]))
 ok("neither is marked read (F259: nothing in the product ever marks one)",
    all(r["read"] in (0, False) for r in pair), str([r["read"] for r in pair]))
 ok("the FOREIGN message is the newer of the two", bool(pair) and pair[-1]["id"] == M_FOREIGN,
    f"newest is {pair[-1]['id'] if pair else None}")
 
-# The candidate set the unfiltered query sees, instance-wide, before the loop exists.
+# The candidate set an unfiltered query would see, instance-wide, before the loop fires.
 cands = db_rows(
     "SELECT id, project_id, subject FROM messages WHERE sender = ? AND recipient = ? AND read = 0 "
     "ORDER BY timestamp DESC",
     (WORKER, BOSS),
 )
 note("unread worker->boss messages instance-wide", f"{len(cands)} in {len({c['project_id'] for c in cands})} projects")
-ok("the newest candidate instance-wide is this run's FOREIGN message",
+ok("the newest candidate instance-wide is this run's FOREIGN message — the bait is set",
    bool(cands) and cands[0]["id"] == M_FOREIGN, str(cands[:2]))
 
 
@@ -590,12 +583,13 @@ ok("its kind is 'message' — the branch F264 is about", pending.get("kind") == 
    repr(pending.get("kind")))
 ok("its addressee is the loop's creator", pending.get("to") == BOSS, repr(pending.get("to")))
 
-# THE MEASUREMENT. Filed as mirrored on 2026-09-01; this is the live answer.
-ok("THE REASON THE OPERATOR IS SHOWN IS THE FOREIGN PROJECT'S MESSAGE",
-   pending.get("reason") == FOREIGN_SUBJ,
+# THE MEASUREMENT. F264 repaired 2026-09-22 (the query is project-scoped): the newest candidate on
+# the instance is the foreign one, and the reason must still be this project's own.
+ok("the reason the operator is shown is THIS project's message",
+   pending.get("reason") == VICTIM_SUBJ,
    f"reason={pending.get('reason')!r} foreign={FOREIGN_SUBJ!r} victim={VICTIM_SUBJ!r}")
-ok("...and is NOT the victim project's own candidate",
-   pending.get("reason") != VICTIM_SUBJ, repr(pending.get("reason")))
+ok("...and not the foreign project's, though it is newer",
+   pending.get("reason") != FOREIGN_SUBJ, repr(pending.get("reason")))
 
 
 # ---------------------------------------------------------------------------- LEG 5
@@ -608,18 +602,17 @@ src = db_rows(
 )
 ok("the reason text is a real message row", len(src) == 1, str(src))
 if src:
-    ok("that row belongs to the OTHER project",
-       src[0]["project_id"] == P2, f"{src[0]['project_id']} (victim is {P})")
-    ok("it is not the run's own project", src[0]["project_id"] != P, src[0]["project_id"])
+    ok("that row belongs to the loop's own project",
+       src[0]["project_id"] == P, f"{src[0]['project_id']} (victim is {P}, foreign is {P2})")
 
 scoped = db_rows(
     "SELECT id, subject FROM messages WHERE project_id = ? AND sender = ? AND recipient = ? "
     "AND read = 0 ORDER BY timestamp DESC LIMIT 1",
     (P, WORKER, BOSS),
 )
-note("what a project-scoped query would have returned", str(scoped))
-ok("the correct answer existed and differs from the one printed",
-   bool(scoped) and scoped[0]["subject"] == VICTIM_SUBJ and scoped[0]["subject"] != pending.get("reason"),
+note("what a project-scoped query returns", str(scoped))
+ok("the printed reason is the project-scoped answer",
+   bool(scoped) and scoped[0]["subject"] == pending.get("reason"),
    f"scoped={scoped} printed={pending.get('reason')!r}")
 
 # F259's half: the `read` predicate is not what bounds the candidate set.
@@ -638,7 +631,7 @@ ok("the read predicate excludes nothing, so the candidate set is every such mess
 
 # ---------------------------------------------------------------------------- LEG 6
 
-leg(6, "reachability — can an operator actually read the leaked text?")
+leg(6, "reachability — what an operator reads now: this project's reason, and no foreign text")
 
 code, detail = api("GET", f"{A}/loops/{LOOP}")
 ok("the loop detail route answers", code == 200, f"{code} {str(detail)[:200]}")
@@ -646,9 +639,9 @@ det_events = (detail or {}).get("events") or []
 det_hit = next(
     (e for e in det_events if (e.get("data") or {}).get("pending_request")), None
 )
-ok("GET /loops/{id} hands the whole payload to the caller, foreign text included",
+ok("GET /loops/{id} hands the caller this project's reason",
    det_hit is not None
-   and ((det_hit.get("data") or {}).get("pending_request") or {}).get("reason") == FOREIGN_SUBJ,
+   and ((det_hit.get("data") or {}).get("pending_request") or {}).get("reason") == VICTIM_SUBJ,
    json.dumps(det_hit, default=str)[:300] if det_hit else "no event carried one")
 
 code, logs = api("GET", f"{A}/logs?event_type=loop_queue_exhausted&limit=500")
@@ -659,8 +652,8 @@ log_hit = next(
      and ((r.get("data") or {}).get("pending_request") or {}).get("reason") == FOREIGN_SUBJ),
     None,
 )
-ok("the Logs route — the one the shipped Logs screen reads — serves it too",
-   log_hit is not None, f"{code}, {len(rows)} rows")
+ok("the Logs route — the one the shipped Logs screen reads — serves no foreign text",
+   code == 200 and log_hit is None, f"{code}, {len(rows)} rows")
 note("LogLine renders raw data on expand", "hub/ui/src/components/logs/LogLine.tsx:132")
 
 # And the two places that could have *explained* it instead.

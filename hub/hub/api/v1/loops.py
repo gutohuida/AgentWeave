@@ -168,13 +168,15 @@ async def archive_loop(
     loop = await session.get(Loop, loop_id)
     if loop is None or loop.project_id != project_id:
         raise HTTPException(status_code=404, detail="Loop not found")
+    # Archived first: a loop archived through its job used to reach the running check and be told
+    # it was still running, when the Hub had already archived it (F224).
+    if loop.archived_at is not None:
+        raise HTTPException(status_code=400, detail="loop is already archived")
     if loop.ending_state is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="this loop is still running; it must stop or complete before it can be archived",
         )
-    if loop.archived_at is not None:
-        raise HTTPException(status_code=400, detail="loop is already archived")
 
     loop.archived_at = datetime.now(timezone.utc)
     await session.commit()

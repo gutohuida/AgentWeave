@@ -20,6 +20,7 @@ holds no open task.
 Every test here names the mutation that makes it fail; the tick in `tasks.md` records it.
 """
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -211,9 +212,9 @@ async def test_an_ended_loop_holds_nobody(app, auth_headers, bind_runner, ending
 
 
 async def test_a_loop_archived_through_the_job_route_holds_nobody(app, auth_headers, bind_runner):
-    """1.5, Round 2. The operator's `POST /jobs/{id}/archive` retires a looping job **without
-    ending its loop** -- driven through the route so that is what is tested, not a row this test
-    wrote. The loop is then hidden from the default listing, so a hold here would be invisible."""
+    """1.5, Round 2. The operator's `POST /jobs/{id}/archive` retires a looping job -- driven
+    through the route. The loop is then hidden from the default listing, so a hold here would be
+    invisible. Since F224 the route also ends the loop, so the ending clause releases it here."""
     await _roster(app, auth_headers, bind_runner, DEV)
     async with async_session_factory() as db:
         job, loop = await _loop(db, suffix="archived")
@@ -223,10 +224,24 @@ async def test_a_loop_archived_through_the_job_route_holds_nobody(app, auth_head
     assert res.status_code == 200, res.text
     async with async_session_factory() as db:
         archived = await db.get(Loop, loop.id)
-        # Loudly, first: if the route ever starts ending the loop, this test stops testing the
-        # archived clause and must be re-staged rather than silently keep passing.
-        assert archived.ending_state is None
+        assert archived.ending_state == "stopped"
         assert archived.archived_at is not None
+
+    assert DEV in await _free()
+
+
+async def test_a_loop_archived_without_an_ending_holds_nobody(app, auth_headers, bind_runner):
+    """1.5, re-staged for F224. Before F224 the job route archived a loop and left `ending_state`
+    NULL, and databases still hold loops in that state. The archived clause alone must release
+    their holdings -- written as a row here, since no route produces this state any more."""
+    await _roster(app, auth_headers, bind_runner, DEV)
+    async with async_session_factory() as db:
+        job, loop = await _loop(db, suffix="archived-legacy", enabled=False)
+        loop.archived_at = datetime.now(timezone.utc)
+        job.archived_at = loop.archived_at
+        await db.commit()
+        await _holding(db, loop_id=loop.id)
+        assert (await db.get(Loop, loop.id)).ending_state is None
 
     assert DEV in await _free()
 

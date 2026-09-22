@@ -467,6 +467,9 @@ async def _pending_loop_request(
         message_result = await session.execute(
             select(Message)
             .where(
+                # Agent names repeat across projects; without this the newest unread mail between
+                # two same-named agents anywhere on the instance became this loop's reason (F264).
+                Message.project_id == job.project_id,
                 Message.sender == job.agent,
                 Message.recipient == creator_agent,
                 Message.read == False,  # noqa: E712

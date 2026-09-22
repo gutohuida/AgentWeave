@@ -71,6 +71,61 @@ async def test_archive_refuses_a_running_loop(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_a_running_loop_archived_through_its_job_is_recorded_as_ended(app, auth_headers):
+    """F224: archiving is final since F222, so a running loop archived with its job has stopped
+    for good. It used to keep `ending_state` NULL, and the loop route then told the operator it was
+    still running, forever, with no route left that could end it."""
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="via-job")
+        loop = await _make_loop(db, job_id=job.id, purpose="still going")
+
+    archived = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job.id}/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200, archived.text
+
+    async with async_session_factory() as db:
+        refreshed = await db.get(Loop, loop.id)
+        assert refreshed.archived_at is not None
+        assert refreshed.ending_state == "stopped"
+        assert refreshed.stop_reason == "archived with its job"
+        assert refreshed.stopped_at is not None
+
+    again = await app.post(
+        f"/api/v1/projects/proj-test/loops/{loop.id}/archive", headers=auth_headers
+    )
+    assert again.status_code == 400
+    assert again.json()["detail"] == "loop is already archived"
+
+
+@pytest.mark.asyncio
+async def test_archiving_the_job_keeps_an_ending_the_loop_already_had(app, auth_headers):
+    """An ending a firing or the operator already recorded is a governance fact; archiving the
+    job afterwards must not overwrite it."""
+    async with async_session_factory() as db:
+        job = await _make_job(db, suffix="ended-first")
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="done",
+            ending_state="completed",
+            stop_reason="loop queue is empty",
+        )
+
+    archived = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job.id}/archive", headers=auth_headers
+    )
+    assert archived.status_code == 200, archived.text
+
+    async with async_session_factory() as db:
+        refreshed = await db.get(Loop, loop.id)
+        assert (refreshed.ending_state, refreshed.stop_reason) == (
+            "completed",
+            "loop queue is empty",
+        )
+
+
+@pytest.mark.asyncio
 async def test_archive_a_stopped_loop_then_it_still_answers_its_own_history(app, auth_headers):
     """B2.2 + B2.6 (design D16's guarantee): a loop archived after stopping still returns its
     purpose, queue history, firings, and stop reason — archiving hides it from default listings,

@@ -1934,6 +1934,79 @@ async def test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator
 
 
 @pytest.mark.asyncio
+async def test_a_loops_pending_message_is_never_another_projects():
+    """F264: agent names repeat across projects. A newer unread message between the same two names
+    in another project must not become this loop's reason — it used to, since the query had no
+    project filter and picked the newest row anywhere on the instance."""
+    from hub.db.models import Project
+
+    now = datetime.now(timezone.utc)
+    async with async_session_factory() as db:
+        db.add(Project(id="proj-f264-other", name="f264-other"))
+        creator_run = Run(
+            id="run-f264-creator",
+            project_id="proj-test",
+            agent="f264-creator",
+            status="completed",
+        )
+        db.add(creator_run)
+        await db.commit()
+
+        job = await _make_job(db, suffix="f264", agent="f264-executor")
+        loop = await _make_loop(
+            db,
+            job_id=job.id,
+            purpose="wait on the creator",
+            stop_when_queue_empties=True,
+            created_by_run_id=creator_run.id,
+        )
+        db.add(
+            Task(
+                id="task-f264-1",
+                project_id="proj-test",
+                title="finished",
+                status="approved",
+                loop_id=loop.id,
+            )
+        )
+        for msg_id, project_id, subject, at in (
+            ("msg-f264-own", "proj-test", "this project's question", now - timedelta(minutes=5)),
+            ("msg-f264-foreign", "proj-f264-other", "another project's secret", now),
+        ):
+            db.add(
+                Message(
+                    id=msg_id,
+                    project_id=project_id,
+                    sender="f264-executor",
+                    recipient="f264-creator",
+                    subject=subject,
+                    content=subject,
+                    read=False,
+                    timestamp=at,
+                )
+            )
+        await db.commit()
+
+    scheduler = JobScheduler()
+    async with async_session_factory() as db:
+        fresh_job = await db.get(AIJob, job.id)
+        await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    async with async_session_factory() as db:
+        events = (
+            (
+                await db.execute(
+                    select(EventLog).where(EventLog.event_type == "loop_queue_exhausted")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    [event] = [e for e in events if e.data.get("loop_id") == loop.id]
+    assert event.data["pending_request"]["reason"] == "this project's question"
+
+
+@pytest.mark.asyncio
 async def test_loop_queue_exhausted_event_names_an_unanswered_question_from_a_prior_firing():
     """The `Question` case. Loop jobs never resume a conversation — task 8.1 refuses
     `session_mode="resume"` for the whole lifetime of a loop job, not just at creation — so THIS

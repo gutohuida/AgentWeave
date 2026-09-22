@@ -408,6 +408,47 @@ async def test_run_job_success(app, auth_headers):
     assert len(get.json()["history"]) == 1
 
 
+@pytest.mark.asyncio
+async def test_the_detail_history_carries_what_a_failure_is_read_by(app, auth_headers):
+    """F226: the detail route's embedded history was a hand-built six-key copy that dropped
+    `error_summary` and `tick_count`. It must answer the same rows the history route does."""
+    from datetime import datetime, timezone
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import JobRun
+
+    create = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={"name": "Failing Job", "agent": "kimi", "message": "m", "cron": "0 9 * * *"},
+        headers=auth_headers,
+    )
+    job_id = create.json()["id"]
+    async with async_session_factory() as session:
+        session.add(
+            JobRun(
+                id="jobrun-f226",
+                job_id=job_id,
+                project_id="proj-test",
+                fired_at=datetime.now(timezone.utc),
+                status="skipped",
+                trigger="scheduled",
+                error_summary="kimi was already running",
+                tick_count=4,
+            )
+        )
+        await session.commit()
+
+    detail = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    history = await app.get(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/history", headers=auth_headers
+    )
+
+    [embedded] = detail.json()["history"]
+    assert embedded["error_summary"] == "kimi was already running"
+    assert embedded["tick_count"] == 4
+    assert detail.json()["history"] == history.json()
+
+
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------

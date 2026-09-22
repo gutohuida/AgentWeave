@@ -31,6 +31,10 @@ from .db.models import AIJob, Loop
 #: it into `ending_state` cannot drift from the thing it compares against.
 QUEUE_DRAINED_REASON = "loop queue is empty"
 
+#: The reason recorded when the operator archives a still-running loop's job (F224). Archiving is
+#: final since F222, so this is an ending like any other: `ending_state` becomes `stopped`.
+ARCHIVED_WITH_JOB_REASON = "archived with its job"
+
 
 def end_loop(job: AIJob, loop: Optional[Loop], *, reason: str, when: datetime) -> None:
     """Record that this loop has ended and take its job out of the schedule.

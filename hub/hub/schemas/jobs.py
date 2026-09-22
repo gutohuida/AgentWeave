@@ -215,7 +215,8 @@ class JobResponse(BaseModel):
     source: str = Field(default="hub", max_length=64)  # "local" or "hub"
     # D16: NULL means live and listed by default; set only by `POST /jobs/{id}/archive`.
     archived_at: Optional[datetime] = None
-    history: Optional[List[Dict[str, Any]]] = None  # Included in get_job only
+    # Included in get_job only: the last ten firings, the same rows `GET /jobs/{id}/history` answers.
+    history: Optional[List[JobRunResponse]] = None
     loop: Optional[LoopSummary] = None
     # Set only when creating a loop into a project that cannot produce checkpoints. A loop's
     # continuity between firings *is* its checkpoint (design D5, tasks 7.1-7.3, 9.1), so without

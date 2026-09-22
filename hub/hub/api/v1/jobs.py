@@ -14,7 +14,7 @@ from ... import refused_capability, task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
-from ...loop_ending import end_loop
+from ...loop_ending import ARCHIVED_WITH_JOB_REASON, end_loop
 from ...operator_direction import require_operator_direction
 from ...scheduler import FiringDecision, cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
@@ -636,6 +636,27 @@ async def create_job(
                 detail=f"invalid initial_tasks entry: {e}",
             ) from e
 
+    # F265: the seeding below goes through `_authorize_loop_task_creation`, which admits the
+    # operator and the agent the loop triggers (D8) and nobody else. An agent creating a loop for
+    # another agent was refused there, after the job and loop had been committed and left enabled
+    # with a queue that could never drain. The same rule, asked here, before any row exists.
+    seeding_agent = agent_identity if agent_identity and run_identity else None
+    if (
+        initial_task_bodies
+        and seeding_agent is not None
+        and seeding_agent != body.agent
+        and _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"initial_tasks can seed only a loop that runs you: this one runs "
+                f"'{body.agent}', and only '{body.agent}' or the operator may add to its queue. "
+                "Nothing was created. Create the loop without initial_tasks, then send_message "
+                f"'{body.agent}' the tasks to add, or ask_user the operator to add them."
+            ),
+        )
+
     # F54: checked here, before the job row is created, for the same reason `initial_tasks` and the
     # `session_mode`/loop check above are — a `409` response must not leave a half-created job
     # behind. This used to run after the job was already committed (right where the loop itself is
@@ -713,9 +734,10 @@ async def create_job(
             ) from e
         # Seeds the new loop's queue in the same call that creates it (design D2's "definition
         # window"). `create_task_for_actor` is the single `Task(` construction site — reused here
-        # rather than duplicated — and its own loop-authorship gate (`_authorize_loop_task_creation`)
-        # is satisfied for free: `job.run_count` is always 0 for a job this call just created, so
-        # the "already fired" restriction it enforces never applies here.
+        # rather than duplicated. Its loop-authorship gate (`_authorize_loop_task_creation`) passes
+        # because the F265 check above already refused every caller it would refuse: its creator
+        # rule was asked before any row existed, and `job.run_count` is always 0 for a job this
+        # call just created, so the "already fired" restriction never applies here.
         actor = (
             run_actor(run_identity, agent_identity)
             if agent_identity and run_identity
@@ -820,17 +842,9 @@ async def get_job(
         "source": job.source,
         "archived_at": job.archived_at,
         "loop": loop_summaries.get(job_id),
-        "history": [
-            {
-                "id": run.id,
-                "job_id": run.job_id,
-                "fired_at": run.fired_at,
-                "status": run.status,
-                "trigger": run.trigger,
-                "session_id": run.session_id,
-            }
-            for run in runs
-        ],
+        # The model `GET /jobs/{id}/history` answers with, not a hand-built copy: the copy carried
+        # six keys and dropped `error_summary` and `tick_count`, the two a failure is read by (F226).
+        "history": [JobRunResponse.model_validate(run) for run in runs],
     }
 
     return job_dict
@@ -1218,6 +1232,11 @@ async def archive_job(
     job.enabled = False
     job.updated_by_run_id = run_identity
     if loop is not None:
+        if loop.ending_state is None:
+            # F224: an archived job cannot be switched back on (F222), so a loop archived with it
+            # has stopped for good — and must say so. Its record used to keep `ending_state` NULL,
+            # read as "still running" forever, with no route left that could give it an ending.
+            end_loop(job, loop, reason=ARCHIVED_WITH_JOB_REASON, when=archived_at)
         loop.archived_at = archived_at
 
     await session.commit()
