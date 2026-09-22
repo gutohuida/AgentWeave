@@ -9983,10 +9983,7 @@ project has been used, the likelier it is.
 
 ## F130 (B) — a checkpoint over an empty span makes the NEXT checkpoint re-summarise the whole conversation
 
-**Status:** open. Verified 2026-09-09: `hub/hub/checkpoints.py:386` still stores
-`covers_through_run_id=runs[-1].id if runs else None`, and `runs_to_cover` still reads that NULL as
-*cover everything*. None of the three fix shapes below was taken. The 2026-08-30 release roadmap
-lists it as decided and queued for a full spec loop; no change carries it. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — option 1 (carry the anchor's boundary forward), plus a read that heals chains already broken; see FIXED at the end of this entry.
 
 **Severity: B**, rated by the operator 2026-09-19. It had been filed with no severity anywhere, so
 the night window's A-before-B-before-C queue could never reach it. **B and not A** because it needs
@@ -10081,6 +10078,8 @@ cost here was a checkpoint that says the work was not done.
 (`AW_PROJECT`, `AW_AGENT`, `AW_RUNNER` override the defaults). The F130 assertion is written in the
 direction the product **actually behaves** — "#3 ALSO re-covers the first turn" — so the day it is
 fixed that line goes red and says why.
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3c).** A repair, not a spec track: `conversation-checkpoint`'s *A checkpoint is anchored on its predecessor rather than regenerated* already says generation "SHALL NOT re-read the whole conversation from its start". New `checkpoints.boundary_of(anchor)` walks the chain to the nearest checkpoint that recorded a `covers_through_run_id`, and is used twice: `compute_envelope` stores it when the span is empty (the empty checkpoint now reads `covers_from=None, covers_through=<the anchor's>`), and `runs_to_cover` reads through it, so empty checkpoints written before this fix — which databases, `:8000`'s included, may hold — no longer send the next checkpoint back to turn one. The "anchor names a run that is gone → cover everything" fallback is unchanged. Both other readers of the column get more right, not less: `checkpoint_trigger._nothing_new_since_last_checkpoint` saw NULL after an empty checkpoint and offered another; `checkpoint_handover._already_checkpointed` matches by run id. A legacy NULL row is still read raw by `_nothing_new_since_last_checkpoint`, which can cost one more empty checkpoint that then carries the boundary. Note for whoever touches this next: `Checkpoint`'s primary key is `sequence`, so `db.get(Checkpoint, "<ckpt-id>")` finds nothing; the first version of the walk made that mistake and the legacy test caught it. Tests: `test_a_checkpoint_over_an_empty_span_keeps_the_boundary_where_it_was`, `test_an_empty_checkpoint_written_before_the_fix_is_read_through_its_predecessor` (`test_checkpoint_record.py`), both failing on the old code. `t_row15_chain.py`'s F130 assertion was written in the defect's direction and should now go red there, as its own note says (not run live).
 
 ---
 
@@ -17980,10 +17979,7 @@ away"*, and leaves it pending.
 
 ## F233 (D) — a checkpoint warning can be dismissed before it is shown, and that silences it for good
 
-**Status:** open. Verified 2026-09-09: `dismiss_checkpoint_warning` still guards only
-the `final` state (`hub/hub/api/v1/checkpoints.py:235`) and still writes `dismissed` over a NULL, so
-a warning can still be silenced before it is shown, and the state it writes is still terminal and
-shown nowhere. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22], with F398 — the same guard; see FIXED at the end of F398.
 
 `dismiss_checkpoint_warning` has exactly one guard, and it is for the `final` state:
 
@@ -18026,12 +18022,11 @@ looks exactly like one that is simply below its threshold.
 
 **Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, leg 5.
 
+**FIXED 2026-09-22 (interactive session, Round 3, group 3c)** by F398's guard: a NULL state is no longer written to `dismissed`.
+
 ## F234 (D) — taking the checkpoint answers a `due` warning and a `final` one, but not a dismissal
 
-**Status:** open. Still the live entry for this defect: its 2026-09-21 duplicate F399 was folded in here on 2026-09-22. Verified 2026-09-09: `take_checkpoint` still clears only
-`("due", "final")` (`hub/hub/api/v1/checkpoints.py:190`), so a dismissed conversation still keeps the
-state after the checkpoint that answers it. The control run recorded below is what makes this a
-divergence rather than a reading. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — taking a checkpoint clears `dismissed` as it clears `due` and `final`; see FIXED at the end of this entry. F399 was its duplicate.
 
 `take_checkpoint` clears the warning when the operator does the thing it asked about:
 
@@ -18074,6 +18069,8 @@ banner exists for `automatic` mode, where the Hub generated one unasked. Recorde
 version was three lines from being written down.
 
 **Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, legs 4 and 12.
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3c).** `take_checkpoint` clears `("due", "final", "dismissed")`. Test: `test_taking_the_checkpoint_answers_a_dismissal_too` (`test_checkpoint_cutover.py`) — the first test to post to the take route at all; it fails on the old code.
 
 ## F235 (C) — "Still bounded by each checkpoint's own visibility" is a bound that cannot exist
 
@@ -18131,9 +18128,7 @@ access" is not a comment about an intention. It is enforced.
 
 ## F236 (D) — a stranded note is handed to a later checkpoint as though it were fresh
 
-**Status:** open. Verified 2026-09-09: the notes query still takes the newest unconsumed
-note (`hub/hub/checkpoint_generation.py:419`) and still marks only that one consumed (`:570`), so a
-passed-over note still surfaces in a later checkpoint as though it were fresh. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — the notes a checkpoint passes over are retired with the one it takes; see FIXED at the end of this entry.
 
 `pending_notes` takes **the most recent unconsumed note** for the conversation, and
 `checkpoint_generation` marks only that one consumed:
@@ -18174,6 +18169,8 @@ oldest first, which is closest to what the agent meant by writing several) or ma
 ones consumed-and-discarded so they cannot resurface.
 
 **Reproduction:** `scripts/drive/t_sweep_row13_checkpoints.py`, leg 9.
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3c).** Of the entry's two repairs, the one ROUNDS chose: retire, not concatenate. New `checkpoint_generation.consume_note(db, note, checkpoint_id)` marks the note taken and every older unconsumed note in the same conversation with the same checkpoint id; a note written *after* the chosen one stays pending, since it may have arrived during generation. Both consuming sites use it (`generate_checkpoint` and `checkpoint_handover`). Test: `test_notes_passed_over_are_retired_with_the_one_taken` (`test_checkpoint_notes.py`) — three notes, the first checkpoint takes the newest and retires two, a later note goes to the second checkpoint alone; fails on the old code.
 
 ---
 
@@ -27449,13 +27446,7 @@ only evidence is the unit/wire-level tests, not the live turn.
 
 ## F333 (B) — a `continue` whose pass gives up its conversation's input answers that the conversation "had nothing queued"
 
-**Status:** open. **Rendered 2026-09-13 by the day window's `d1-drive`**, in Chromium against the
-served bundle on a live Hub at `4521625`. The operator reads the sentence this finding predicts,
-beneath the conversation's own "NOT DELIVERED — delivery failed 3 times (…)" row, which says the
-opposite. Filed 2026-09-13 by the night window, from the fixed-tree drive of
-`a-refused-review-leaves-nothing-behind` (queue item `r8-drive-fixed`, §5.3, leg F). **Measured
-through the route on a live Hub.** This is a new interaction: the F320 fix is what made the pass
-go on, and it is out of that change's scope.
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — the answer is taken from the entries the pass gave up, with their refusal; see FIXED at the end of this entry.
 
 **Rendered (d1-drive, 2026-09-13).** Leg F rebuilt through real routes, with Haiku as X. H is
 queued at 2 attempts, refused by the author guard. Then **Continue was pressed in the UI** on H's
@@ -27499,6 +27490,8 @@ named conversation's input was given up in this pass, say that, with its refusal
 of `~/.agentweave/hub/profiles/drive0913s/r8-fixed-transcripts/r8f-drive.out` has the answer.
 
 **Related:** F320 (the pass going on), F131 (the other-conversation answer).
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3c).** The finding's own suggested repair. `continue_conversation` records the conversation's queued entry ids before the pass. When a turn starts elsewhere and none of this conversation's input is still queued, but some was before, the answer is `"this conversation's input was given up: <abandoned_reason>"` (read fresh, `populate_existing`, since the scheduler wrote those rows in its own session), or a plain "taken out of the queue" when no reason was recorded. The trailing full stop of the quoted refusal is dropped because `AgentOutputPanel` appends its own. "had nothing queued" now means only that. Test: `test_input_the_pass_gave_up_is_reported_as_given_up_with_its_reason` (`test_a_start_is_reported_to_its_own_input.py`), which gives the entry up inside the real `schedule_agent` pass; on the old code it answers "had nothing queued". Not rendered in a browser.
 
 ## F334 (B) — the author guard's refusal of a dispatched review names an assignment the rollback discarded
 
@@ -29093,7 +29086,7 @@ tightening either one.
 
 ## F364 (C) — `submit_checkpoint_notes` enforces caps its description never states, and the refusal names neither the entry nor the overshoot
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — the refusal names the entry and the overshoot, and the tool description states the caps; see FIXED at the end of this entry.
 
 **Measured.** `dev` made 36 calls and 23 failed:
 - 9 were pydantic's *"Input should be a valid list"*;
@@ -29106,6 +29099,8 @@ It happened in 11 sessions, and each took two to five calls to get one note thro
 entry (`hub/hub/api/v1/agent_actions.py:337-346`). The message at `:346` names neither which entry
 failed nor its length. The tool description says *"a few hundred words in total is right"* and
 states none of the caps (`mcp_server.py:511-535`), and that half is not edited on 2026-09-14 (F354).
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3c).** Caps named once (`agent_actions.NOTE_INTENT_MAX_CHARS`, `NOTE_LIST_MAX_ENTRIES`, `NOTE_ENTRY_MAX_CHARS`). An overlong entry now reads e.g. *"suspicions[1] is 412 characters, 12 over the 400 each entry may have; shorten that entry or split it in two (at most 8 entries)"*. `mcp_server.submit_checkpoint_notes`'s description states all three caps and says to pass the lists as lists even for one entry (the 9 *"Input should be a valid list"* refusals); `mcp_server.py` may import nothing from the Hub, so `test_the_tool_states_the_caps_the_hub_enforces` checks the restated numbers against the constants. This file is respawned per agent turn on `:8000`, so the description reaches the operator's agents on their next turn. The list-count and `intent` refusals are pydantic's own, which already state the limit. Test: `test_an_overlong_entry_is_refused_by_name_and_overshoot`.
 
 ## F365 (B) — a loop with two stuck reviews records both on every firing, because "unchanged" is judged against the loop's newest record rather than the task's
 
@@ -31445,8 +31440,7 @@ a gate that held and says what to do.
 
 **Source:** drive
 
-**Status:** open. **Found 2026-09-21** by the day window's D-2 drive of sweep row 13 (Checkpoints),
-`scripts/drive/t_sweep_row13_checkpoints.py` leg 5 (70 pass / 5 fail; this is 2 of the fails).
+**Status:** fixed (this commit) [Round 3, 2026-09-22], with F233 — `dismiss-checkpoint-warning` requires a showing (`due`) warning; see FIXED at the end of this entry.
 
 **Repro.** Conversation `conv-5317a4b4f3a9`, `checkpoint_warning` null, threshold not yet crossed.
 `POST /conversations/{id}/dismiss-checkpoint-warning` -> **200**, `checkpoint_warning: "dismissed"`.
@@ -31458,6 +31452,8 @@ writes `dismissed` from any other state, including none.
 reach this from the UI; an API caller or a stale tab does, and the cost is a conversation that grows
 to the provider's compaction with no warning ever raised. Suggested fix: 409 (or a 200 no-op) unless
 the current state is `due`.
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3c)**, the guard this entry suggested. `due` → `dismissed` as before; `final` → the existing 409; already `dismissed` → 200, unchanged (a repeated dismissal is not an error); never warned (`None`) → 409 *"This conversation has no checkpoint warning to dismiss: it has not reached its threshold…"*, state untouched. The UI only offers Dismiss on a `due` banner, so nothing shipped is refused. Tests: `test_a_warning_that_is_not_showing_cannot_be_dismissed` (fails on the old code), `test_dismissing_twice_is_not_an_error`.
 
 ## F399 (D) -- taking a checkpoint does not clear a `dismissed` warning, so the conversation is never offered another
 
