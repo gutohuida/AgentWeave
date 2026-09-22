@@ -108,13 +108,12 @@ Only the first firing of the window does this.
    **Record the verdict for your inherited sha in the log's first entry, every night**, in one line,
    including when it is `success` or absent. Then:
 
-   - **Red with a failure signature other than F292 or F314** — triage it the way you would triage a
-     red local suite: it is tonight's first queue item.
-   - **Red on F292 (`database is locked`) or F314 (`bound to a different event loop`) alone** — these
-     are the two known intermittents the gate already has a one-re-run allowance for
-     (`day-window.md`, the gate's conditions; operator, 2026-09-13). **Do not spend the night on
-     them and do not re-run them here** — the gate owns that. Name the signature and the run id in
-     the log and carry on building.
+   - **Red, whatever the signature** — triage it the way you would triage a red local suite: it is
+     tonight's first queue item. **That includes F292 (`database is locked`) and F314 (`bound to a
+     different event loop`).** This file used to let the night name those two and carry on
+     building. Both are fixed (F292 `b630252`, F314 `416f6e8`), so either signature now is a
+     regression of a closed finding, not a known flake, and waving it through would hide exactly
+     that (operator, 2026-09-22). Do not re-run it here; find why it came back.
    - **Red for more than three consecutive shas** — say so explicitly and in those words. This is
      the case the loop has no other way to see. Measured 2026-09-19/20: CI was red for **16
      consecutive runs across 20 hours and 14 pushes**, every one of them F292 alone, while the local
