@@ -1366,6 +1366,31 @@ $//'` after. *(2026-09-21)*
 
 ## 2026-09-22
 
+- **An unborn `HEAD` is not "this repository has no commits".** `git checkout --orphan <name>`
+  leaves `HEAD` unborn in a repository whose other branches carry commits, so
+  `git rev-parse --verify --quiet HEAD` exits 1 while `git worktree add <path> <branch>` still
+  succeeds. A guard built on the `HEAD` check therefore refuses work that git would have done, and
+  tells the operator to make a first commit they already made (caught by the Opus review of F347,
+  same day it shipped). Ask `git rev-list -n 1 --all` for "any commit anywhere", and ask
+  `rev-parse --verify <ref>^{commit}` for the ref the call actually needs. *(2026-09-22)*
+- **A backgrounded `pytest ... | tail -N` writes nothing until it exits.** The output file stays
+  0 bytes for the whole run, which reads exactly like a job that died. Twice today that prompted a
+  second full suite to be started alongside the first (~25 min each). Either drop the pipe, or
+  treat "0 bytes and the process is alive" as normal and wait for the completion notification.
+  *(2026-09-22)*
+- **Never use `-x` when measuring the blast radius of a shape change.** Migrating `GET /tasks` to an
+  envelope, `pytest -q -x -k ...` reported "1 failed, 623 passed" and stopped — the real number was
+  18 failures across 10 files. The first run read as "almost done" and cost a wasted cycle.
+  *(2026-09-22)*
+- **A Python `bytes` literal cannot hold non-ASCII**, so editing `FINDINGS.md` through
+  `b"""..."""` blocks dies with `SyntaxError: bytes can only contain ASCII literal characters` the
+  moment the prose has an em dash — which this ledger's prose always does. Write the note to a file
+  in the scratchpad and have the script read it, or use `str` + `encoding="utf-8"`. *(2026-09-22)*
+- **The "do not write Python source through a Python-in-heredoc replacement" entry above recurred
+  today**, in the same shape: a `"\ntasks:"` inside a replacement string reached
+  `scripts/drive/d1_0921_g7_mcp_first_turn.py` as a real newline and broke the literal. The rule is
+  not "be careful with escapes"; it is **use Edit for code**. *(2026-09-22)*
+
 - **A Linux-only test failure can be reproduced on this machine, in WSL.** `wsl.exe -d Ubuntu`
   exists and has `uv` plus a real 3.11 at `~/.local/bin/python3.11` (3.12 is the system one). A
   throwaway checkout takes about a minute and does not touch `~/projects/agentweave`:
