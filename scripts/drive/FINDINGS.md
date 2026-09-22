@@ -10866,7 +10866,7 @@ person to look at titles knows nothing generates one.
 
 ## F138 (B) — three drive harnesses are hard-wired to a forbidden project, and one of them writes
 
-**Status:** open, with the larger half fixed. The three hard-wired harnesses were repaired in
+**Status:** fixed 40e9efa (2026-09-22; the residual, see the foot). Was: open, with the larger half fixed. The three hard-wired harnesses were repaired in
 the filing commit. The residual left for the operator is now half-closed too: `aw.py`'s `KEY`
 default is gone (`scripts/drive/aw.py:18`, plus a `require_key()` that exits, 2026-09-07), but
 `HUB` still defaults to `http://127.0.0.1:8010` -- the one instance a drive must not disturb. [classified 2026-09-09, D-2]
@@ -10926,6 +10926,8 @@ directory is run with all three variables exported, so the defaults serve nobody
 one instance the drive must not disturb. Removing them — or defaulting `HUB` to nothing and
 refusing — is a one-line change with no caller to break, but it changes how every file in the
 directory is invoked, so it is stated here rather than done unattended.
+
+**Residual fixed 2026-09-22, `40e9efa`.** `aw.py`'s `HUB` has no default any more. `require_hub()`, called by `api()`, raises `SystemExit` with instructions when `AW_HUB` is unset, as `require_key()` does for the key. Checked by hand: with `AW_HUB` unset the call stops before any request, and with it set the request is made. Importers that read `aw.HUB` directly for a browser URL now get `""` and fail at navigation, not against `:8010`.
 
 ## F139 (B) — the agent reached for the host's `SendMessage`, and reported AgentWeave's own roster as unreachable
 
@@ -12946,7 +12948,7 @@ line change the answer for?"* would have found it in one grep.
 
 ## F160 (C) — the tool-surface parity tests cannot see an *optional* argument the inventory omits
 
-**Status:** open. Verified 2026-09-09: `hub/tests/test_tool_surface_matches_server.py`
+**Status:** fixed d8b1a71 (2026-09-22; see the foot). Was: open. Verified 2026-09-09: `hub/tests/test_tool_surface_matches_server.py`
 carries 18 tests and none of them asserts that a tool's *optional* arguments are described, so the
 one-word-wide gap is exactly as filed. The repair was left for its own piece of work and nothing has
 taken it. [classified 2026-09-09, D-3]
@@ -12983,6 +12985,8 @@ once, and triaging those is its own piece of work with its own rounds.
 The inventory lines for `create_loop` and `create_flow` were updated by hand in this change (task
 7.3), so nothing is stale today. That is the point: it was correct by attention, and attention is
 what this repository's guards exist to stop relying on.
+
+**Fixed 2026-09-22, `d8b1a71`.** New test `test_every_optional_argument_is_described_or_deliberately_excluded`. When added, it found 14 omissions across 8 tools. `ask_user.blocking`, `create_task.requirement_ids/spec_document/loop_id`, `update_task.notes`, `read_spec_document.include`, `record_evidence.kind/locator/document/task_id`, `list_evidence.document` and `send_message.conversation_id/start_new_thread` are now in each tool's `args`. The HTTP rendering's `fields` already listed every one, so the MCP agent was told less than the HTTP agent, the inequality design D3 was meant to remove. Only `submit_spec_document.schema_version` is excluded, in the new `UNDESCRIBED_ARGUMENTS` (`hub/hub/api/v1/agents.py`), because the Hub refuses any value but its one version. A second test holds that map to the same rules as `UNDESCRIBED_TOOLS`: each entry is really accepted and states a reason of at least 8 words. The new test fails on the old `args` lines. 498 passed and 1 skipped across the 15 files that render or read the tool surface. `docs/reference/mcp-tools.md` signatures were updated to match.
 
 ## F161 (D) — a loop that declares its work needs no evidence still stalls asking for evidence
 **Status:** fixed, group 5 of approval-waits-for-the-turn-to-end (f468bf5, "a loop stops entering the review arm"); closed and driven, see line 13222 (`t_drive2_loop_lands.py`, 36/36)
@@ -13523,7 +13527,7 @@ runs in about thirty seconds, and — because it never spawns an agent — it pr
 structural rather than a consequence of the reviewer's tool loop. Any fix now has a live check that
 can be pressed before and after.
 
-### F167 (B, new) — the F70/F142 recovery cannot see an author whose history is entirely the operator's
+## F167 (B) — the F70/F142 recovery cannot see an author whose history is entirely the operator's
 
 **Status:** open, and said so by the change that met it:
 `2026-09-01-a-review-nobody-is-doing-is-named/proposal.md:119` -- *"it does not repair the
@@ -13979,7 +13983,7 @@ exists, with the reasoning written into the harness so the next run does not re-
 
 ## F170 (C) — the Hub's own project marker is the one working file it leaves untracked
 
-**Status:** open. Verified 2026-09-09: `hub/hub/repo_hygiene.py`'s `EXCLUDE_PATTERNS`
+**Status:** fixed 6e26065 (2026-09-22; see the foot). Was: open. Verified 2026-09-09: `hub/hub/repo_hygiene.py`'s `EXCLUDE_PATTERNS`
 still contains no entry matching `.agentweave/project.json`, so both symptoms stand -- the operator's
 `git add -A` sweeps the marker in, and the `@path` picker offers it. [classified 2026-09-09, D-3]
 
@@ -14029,6 +14033,8 @@ now, with the second symptom it did not know about.
 
 **Regression assertion:** `scripts/drive/t_sweep_row1_projects.py`, *"F170: the Hub's own project
 marker is not offered as a workspace path"*.
+
+**Fixed 2026-09-22, `6e26065`.** `.agentweave/project.json` is now in `EXCLUDE_PATTERNS`, with a comment explaining why it is the one entry the module's "would the Hub's own commit sweep it in" rule does not cover. `seed_repo_excludes` rewrites an existing block in place, so already-registered projects get the pattern the next time they are seeded. New test `test_repo_hygiene.py::test_the_project_marker_stays_out_of_the_operators_history_and_the_path_picker` checks both consumers: `git status` is clean, and `git ls-files --cached --others --exclude-standard` lists only `README.md`. It fails without the pattern. 106 passed and 9 skipped across the seven files that touch hygiene or workspace paths. Not driven on a live Hub.
 
 ---
 
@@ -17887,7 +17893,7 @@ looks exactly like one that is simply below its threshold.
 
 ## F234 (D) — taking the checkpoint answers a `due` warning and a `final` one, but not a dismissal
 
-**Status:** open. F399 (2026-09-21) is a duplicate, retired 2026-09-22 into this entry. Verified 2026-09-09: `take_checkpoint` still clears only
+**Status:** open. Still the live entry for this defect: its 2026-09-21 duplicate F399 was folded in here on 2026-09-22. Verified 2026-09-09: `take_checkpoint` still clears only
 `("due", "final")` (`hub/hub/api/v1/checkpoints.py:190`), so a dismissed conversation still keeps the
 state after the checkpoint that answers it. The control run recorded below is what makes this a
 divergence rather than a reading. [classified 2026-09-09, D-3]
@@ -24253,7 +24259,7 @@ does not fix, and it still wants a third sample.
 
 ## F296 (C, harness) - a drive assertion that can never be non-zero was reported as evidence about the product
 
-**Status:** open
+**Status:** fixed 40e9efa (2026-09-22; see the foot). Was: open
 
 `t_d4_instructions_failed_load.py:316` counts F271's cross-project switcher with
 
@@ -24366,6 +24372,8 @@ The second was checked against the mutation it actually guards - `data`-first sw
 about - and it **fails**: 4 passed / 4 failed. So the honest statement is **7 of 8 are
 mutation-checked** (six against the pre-fix component, one against the branch-order inversion) and
 the eighth is a baseline that must pass in both. Restored, the file is 8/8 green.
+
+**Fixed 2026-09-22, `40e9efa`, and the column it gated has now been driven.** The locator is `get_by_role("combobox", name="Switch project")`. The branch it unlocked had never run: it clicked the `<select>` and then an `<option>`, which Playwright cannot do, so it now reads the options and calls `select_option`. Its fixture directories also no longer existed, and opening a project now refuses a missing directory (409 `project_workspace_missing`), so they are temp dirs. **Driven on a throwaway `:8031` Hub with a fresh database: 31 passed, 0 failed.** For column C the switcher lists `['d4-bravo', 'd4-alpha']`. Selecting bravo leaves the instructions page for bravo's Overview (screenshot `d4-07-c-on-b.png`), which unmounts the editor. F271 column C's cross-project leak therefore cannot be reached through the switcher. That is now measured, where before it was inferred from a locator that could only return 0.
 
 ---
 
@@ -27951,7 +27959,7 @@ new file, or of a deletion, still holds after the commit (three tests in
 
 ## F346 (C) — the route-reachability instrument lets a sibling route's literal satisfy a `{param}` slot, so it undercounts clientless routes by one
 
-**Status:** open. Filed 2026-09-13 by a DECIDE session. The defect was first noticed in handoff 0120
+**Status:** fixed 40e9efa (2026-09-22; see the foot). Was: open. Filed 2026-09-13 by a DECIDE session. The defect was first noticed in handoff 0120
 (2026-09-11) and carried unfiled through two handoffs. **Measured**, not only read.
 
 `segment_match` in `scripts/drive/n10_route_reachability.py:201-210` returns `"exact"` as soon as the
@@ -27974,6 +27982,8 @@ that is one short, and would stay green while that route stays clientless.
 
 **Shape of a fix (a sketch, not verified beyond the measurement above):** a parameter segment
 matches a placeholder or `~`-glued URL segment, never a bare literal that a sibling route declares.
+
+**Fixed 2026-09-22, `40e9efa`.** `segment_match` fills a `{param}` route segment only from a whole (`*`) or glued (`~`) interpolation, never from a bare literal. Output diffed before and after: exactly one route moved, `GET /api/v1/projects/{project_id}/runners/{runner_id}`, into *no client anywhere*. **The figures are 34 → 35 today, not 35 → 36**, because routes have been removed since 2026-09-13 (today's `PATCH /queue/settings`, F196). The 35 quoted in `spec-queue/DECISIONS.md` R-1 was one short at the time; the true count then was 36.
 
 ## F347 (B) — a project whose repository has no commit yet refuses every agent turn with git's plumbing error, including the message asking the agent to fix it
 
@@ -29647,7 +29657,7 @@ not waiting).
 
 ## F382 (C) — `pytest hub/tests/ -q` stalled indefinitely overnight with no error, and a same-morning rerun could not reproduce the stall
 
-**Status:** open, undiagnosed; the rerun that motivated it concluded clean (addendum below).
+**Status:** fixed f9e6dee (2026-09-22; diagnosed as F394, see the foot). Was: open, undiagnosed; the rerun that motivated it concluded clean (addendum below).
 Filed 2026-09-18 by the day window's D-6 unit, from reading a background run's own log rather than
 from a drive.
 
@@ -29699,6 +29709,8 @@ open question of whether the fresh rerun itself would stall too: it did not. The
 as an unexplained one-time environmental stall, not as a suspected-still-broken suite.
 
 **Related:** none yet — first time this shape has been filed.
+
+**Diagnosed 2026-09-22: this was F394, and `f9e6dee` fixed it.** The stalled log shows 669 results (72 `s` plus dots) before it froze at `[ 14%]`. Collecting `hub/tests/` as it stood at `f4ff939` (the last commit before the 2026-09-17 night run) puts test #670 at `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event`. That test patches `PtySession.spawn` to raise `FileNotFoundError` and then calls `_await_background_run()`. At that commit this was still `while _background_runs: for task in list(...): await task`, the loop F394's root cause shows spinning forever when a spawn-failure retry finishes behind the waiter. The test just before it, `test_an_unexpectedly_failed_run_still_gets_an_accounting_outcome`, is one of F394's two instrumented CI hangs. The same afternoon's CI hang (`35218523888`) also stopped at 13–14% in `test_agent_trigger.py`. The race is intermittent, which is why the morning rerun passed. Not explained: why the process was gone by morning instead of still spinning. The likeliest cause is the night window's process tree ending, but that is unverified. The plan had this as "watch-only, the operator confirms in D13"; it is now a diagnosis, so no decision is needed.
 
 ## F383 (C) — the CI branch's own commits fail on a genuine flaky test, not only on the docs-only commits noted earlier
 
