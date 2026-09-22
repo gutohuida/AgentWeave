@@ -469,7 +469,7 @@ mutation and the observed failure beside the task when ticking it.
       Built there, not here.
 ~~- [ ] 2.13~~ **MOVED 2026-09-15** to the same directory's task 4.10 (it tests D5's guard
       sentence, which moved with group 4). Built there, not here.
-- [ ] 2.14 (REV) The divergence restaff returns `None` for a task whose status is no longer
+- [x] 2.14 (REV) The divergence restaff returns `None` for a task whose status is no longer
       `completed` or `under_review`, at the same screen as `blocked` (`run_divergence.py:746`).
 
       > **R8, 2026-09-21 — placement and test corrected; build from this block.**
@@ -505,6 +505,22 @@ mutation and the observed failure beside the task when ticking it.
       *Mutation:* drop the new screen. The test must fail.
       **R6: this task runs BEFORE 2.3** — see the ordering note at the top of this group. Its
       citation has drifted: the `blocked` screen is at `run_divergence.py:753-754`, not `:746`.
+
+      **Built 2026-09-23, night iteration 7.** Screen added in `evaluate_run_end`, inside the
+      review branch, before `_answer_failed_review` — exactly the R8 placement. Test added:
+      `hub/tests/test_review_divergence.py::test_a_review_run_ending_after_its_task_left_review_restaffs_nobody`
+      (the first case only — a free agent on the roster is genuinely restaffed onto the moved task
+      without the screen). Mutation: replaced the screen's condition with `False and …`; test failed
+      (`assert 'div-...' is None` — a divergence was recorded and the free agent would have been
+      restaffed). Reverted; `git diff --stat` back to the one-line addition only.
+      **The second case (nobody free, `AssertionError` from `own_review_remedy`) is deferred to
+      when 2.3 lands** — today's `resolve_reviewer` rung 3 does not yet call `own_review_remedy`
+      (that call arrives with 2.3), so the assert this screen protects against cannot fire yet and
+      a test for it would have no mutation that bites. Added as a follow-up note rather than a
+      test asserting nothing.
+      Full relevant suite: `pytest hub/tests/test_review_divergence.py
+      hub/tests/test_run_divergence.py hub/tests/test_a_task_nothing_will_move_holds_nobody.py
+      hub/tests/test_reviewer_ladder.py -q` → 77 passed. CI's exact ruff/black/mypy clean.
 - [ ] 2.15 (R6) Test: an agent whose queue is held, running no turn and holding nothing, is named
       by the **held** clause and **not** by the **running** clause. **(R9: this line said "clause
       4 … not clause 5", R6's numbering; under the delta's R8 numbering clause 4 is *booked*, so

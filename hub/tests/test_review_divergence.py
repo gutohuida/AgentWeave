@@ -38,7 +38,7 @@ from hub.run_divergence import evaluate_run_end
 from hub.run_task_binding import bind_run_to_task
 from hub.spec_payload import SCHEMA_VERSION, embed_payload
 from hub.task_transition_service import apply_transition
-from hub.task_transitions import run_actor
+from hub.task_transitions import operator, run_actor
 
 from .test_agent_trigger import _init_repo
 from .test_review_turn import _roster
@@ -668,3 +668,43 @@ async def test_a_retry_continues_in_the_thread_the_run_diverged_in(
     responses = await _divergence_responses("worker")
     assert len(responses) == 1
     assert responses[0].conversation_id == original_conversation
+
+
+# ---------------------------------------------------------------------------
+# 2.14 — the task moved off review while its review run was still live
+# ---------------------------------------------------------------------------
+
+
+async def test_a_review_run_ending_after_its_task_left_review_restaffs_nobody(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """2.14 (`an-unstaffed-review-names-its-holders`). An operator can move a task to
+    `revision_needed` while its review run is still bound to it. `review_task_for_run` reads only
+    the queue entries and never looks at status, so without a screen the run boundary would still
+    treat this as a review that gave no verdict and try to restaff it -- reassigning a task the
+    operator has already moved on from, and (once rung 3 calls `own_review_remedy`, task 2.3) an
+    unhandled `AssertionError` the moment nobody is free instead.
+
+    `free-agent` is on the roster and genuinely free, so this is the case that would actually get
+    restaffed today without the screen -- not a shape the ladder would refuse anyway.
+    """
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, AUTHOR, "critic", "free-agent")
+
+    async with async_session_factory() as db:
+        task = await _completed_by_the_author(db, "task-rev-moved-off")
+        await _review_run_that_said_nothing(db, "run-rev-moved-off", task, reviewer="critic")
+        task = await db.get(Task, "task-rev-moved-off")
+        await apply_transition(db, task, "revision_needed", operator())
+        await db.commit()
+
+    assert await evaluate_run_end("run-rev-moved-off") is None
+
+    assert await _divergence("run-rev-moved-off") is None
+    assert await _diverged_event("run-rev-moved-off") is None
+    assert await _divergence_responses("free-agent") == [], "nobody was restaffed onto this task"
+
+    async with async_session_factory() as db:
+        task = await db.get(Task, "task-rev-moved-off")
+        assert task.status == "revision_needed"
+        assert task.assignee == "critic", "the operator's move, not a restaff, owns the assignee"

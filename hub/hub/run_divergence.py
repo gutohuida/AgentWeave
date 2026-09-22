@@ -767,6 +767,18 @@ async def evaluate_run_end(run_id: str, *, input_returned: bool = False) -> Opti
         # them was unbound and returned above on `if not run.task_id`.
         reason: Optional[str] = None
         if await review_task_for_run(session, run) is not None:
+            # An operator can move a task away from `completed`/`under_review` while its review run
+            # is still live (`an-unstaffed-review-names-its-holders`, task 2.14). `_answer_failed_review`
+            # restaffs through `resolve_reviewer`, whose rung 3 calls `own_review_remedy(task)` —
+            # which asserts exactly those two statuses (`scheduler.py`). Reached with, say,
+            # `revision_needed`, that assert raises inside a bare-awaited call
+            # (`api/v1/agent_trigger.py`, and `run_reconciliation.py`'s own start-up loop), aborting
+            # whatever ran after it for every other run being reconciled. `review_task_for_run` reads
+            # only the queue entries and never looks at status, so it is the one thing that can still
+            # say "this was a review" once the task has moved on — the screen belongs here, not at
+            # the `blocked` check above, which runs for every ordinary work run too.
+            if task.status not in ("completed", "under_review"):
+                return None
             policy = POLICY_REVIEW
             outcome, response_agent, previous_assignee, reason = await _answer_failed_review(
                 session, run, task
