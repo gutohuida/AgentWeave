@@ -30745,7 +30745,7 @@ started the same afternoon.
 
 ## F394 (A) -- `hub-test` does not error on `master`, it HANGS: three runs stopped dead at 13% and were killed by GitHub's 6-hour job timeout
 
-**Status:** fixed 3491580 (mitigation, 2026-09-21): `hub-test` now runs `pytest tests/ -v --timeout=300 --timeout-method=thread` and `pytest-timeout` is in `hub/pyproject.toml` dev extras. Verified locally that a sleeping test is killed with a stack. **Now verified on CI once (2026-09-22): run `35667708908` (`45d769f`) hung, was killed after 300 s instead of 6 h, and dumped a stack naming `test_agent_trigger.py::test_spawn_failure_marks_run_failed` blocked in `_await_background_run` — see the foot.** The root cause of the hang is still unknown. **Found 2026-09-20** in an interactive session, while doing nothing more than
+**Status:** fixed f9e6dee (root cause, 2026-09-22): the hang was the tests' own wait, not the product. `_await_background_run`'s `while set: for task in list(set): await task` never yields on a finished task, and a spawn-failure retry that finishes behind the waiter leaves exactly that — see the foot. Earlier: 3491580 (mitigation, 2026-09-21): `hub-test` now runs `pytest tests/ -v --timeout=300 --timeout-method=thread` and `pytest-timeout` is in `hub/pyproject.toml` dev extras. Verified locally that a sleeping test is killed with a stack. **Now verified on CI once (2026-09-22): run `35667708908` (`45d769f`) hung, was killed after 300 s instead of 6 h, and dumped a stack naming `test_agent_trigger.py::test_spawn_failure_marks_run_failed` blocked in `_await_background_run` — see the foot.** The root cause of the hang is still unknown. **Found 2026-09-20** in an interactive session, while doing nothing more than
 checking whether CI was green enough to merge. It is filed separately from **F292** on purpose:
 F292 is an `ERROR at setup` that ends the run in ~15 minutes with a summary line, and every
 statement in this repository about CI's cost — the 22.6% rate, the 16-in-a-row escalation, the
@@ -30834,6 +30834,27 @@ test awaits it, rather than at any one test. It is still inference: no dump show
 is parked. Unrelated to the commit it ran on, whose `hub-test` changes are in
 `test_refused_capability.py` only. The two earlier runs of the same change passed `hub-test`
 (`229a708`, `24f3655`). **Reproduce:** `gh run view 35719649675 --log-failed | grep -A6 'line 1876'`.
+
+**Root cause, 2026-09-22 (interactive session): the waiting test spins; nothing in the product is stuck.**
+Both dumps show the main thread's stack *running* the test coroutine — `_run_once` → `handle._run` →
+`test_…:1701` → `:47 await task`. A coroutine that was genuinely waiting on a pending task leaves the
+thread parked in the selector with no test frames on it, so the coroutine was executing at the moment of
+the dump. `await` on an already-finished task returns without yielding, and the helper was
+`while _background_runs: for task in list(_background_runs): await task`. `_execute_run`'s
+spawn-failure branch ends in `redrain_queued_agents`, which starts the retry run B as the failing run
+A's last action. When B finishes in the loop pass right after A, the ready queue is `discard(A)`,
+*wake test*, `discard(B)`. The test wakes, finds B done and still registered, awaits it without
+yielding, and loops for ever; `discard(B)` never runs. That is why only spawn-failure tests hung (their
+retry chain is fast enough), and why it was intermittent (it needs B's last step in that exact pass).
+Reproduced in isolation (the old loop never returns). The CI occurrence itself is **not** reproduced
+locally: the mechanism is inferred from the stack shape plus the isolated reproduction, and it matches both dumps.
+**Fix `f9e6dee`:** one shared helper, `hub/tests/_background_runs.py`, that gathers and then removes
+what it awaited from the set itself, so every pass progresses. It replaces six local copies and four
+inline `while` loops. Single-pass `for` loops (e.g. `test_scheduler.py`) are bounded and left alone.
+No product code has the pattern. `test_background_runs_helper.py` pins the ordering in a thread; it
+fails against the old loop. Affected files: 268 passed, 1 skipped. **Proof on CI is the absence
+of further `hub-test` timeouts at `_await_background_run`**; the `--timeout=300` mitigation stays.
+F109's intermittent `test_spawn_failure_marks_run_failed` is plausibly the same thing (not checked).
 
 ## F395 (B) -- `POST /messages` treats every operator-sent message as if it were the deepest possible agent hop, and mislabels its origin
 
