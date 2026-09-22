@@ -700,6 +700,22 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-22 — `an-unstaffed-review-names-its-holders` groups 2, 5, 6 approved; R9-5 dropped
+
+**DECIDED 2026-09-22, by the operator, in an interactive session** ("Great, approve.", then "yes
+dropp it"). This follows the Round 9 that the 2026-09-21 late-night `unstaffed-r8-review` decision
+asked for. It ran in the 2026-09-22 day window (`design.md` `## Round 9`): R8-1..R8-5 hold, three
+LOW text fixes were applied, and F407 was filed and fixed the same day.
+
+- DECIDED   unstaffed-approve  **Groups 2, 5 and 6 are approved** (group 1 is already built). They are
+  queued for the night of 2026-09-22, after F388's change. The `unstaffed-bundle` rule stands: group
+  5's bundle is committed only if 5.3's served-bundle drive passed.
+- DECIDED   unstaffed-r9-5  **R9-5 is dropped: accepted as is**, with neither cure (a) nor (b)
+  applied. A sentence over 500 characters may end with the REJECT remedy even when no booked clause
+  survived the fit. The remedy is still true, and the delta's SHALLs are met. Round 9 recommended (b),
+  but each cure changes the fit's arithmetic, and three earlier rounds shipped fixes to that
+  arithmetic that a later round found broken. Revisit only if it is seen live.
+
 ### 2026-09-21 late night — `an-unstaffed-review`'s three questions answered; `examples/` deleted
 
 **DECIDED 2026-09-21 ~21:40, by the operator, in an interactive session** ("delete. yes"). The

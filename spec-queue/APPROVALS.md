@@ -16,6 +16,41 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-22
+
+Review page: `review/review-2026-09-22.html`. **Written in an interactive session with the operator
+present** (DECIDE). Decisions behind it: `DECISIONS.md` `### 2026-09-22` and
+`### 2026-09-21 night`.
+
+ORDER: a-hub-that-was-not-told-which-database-refuses-to-open-one all groups, then an-unstaffed-review-names-its-holders groups 2, 5, 6
+
+**1. `a-hub-that-was-not-told-which-database-refuses-to-open-one` (F388, A).** Approved 2026-09-21
+~21:30 for tonight. The row is copied from `## 2026-09-21`, where the build rules are written out
+in full, and they bind tonight unchanged: groups 1 and 3 land in one commit or neither; for 3.7,
+edit the `.claude/skills/` sources and then run `scripts/sync_skills.py`; tasks 2.7 and 2.8 follow
+their implementation notes, with both mutation checks; run the group 6 drive in the 8090s on a
+throwaway profile, and set F388 `fixed` only after 6.1-6.3 are observed; stop and log if a task
+disagrees with the code; write both suite counts into `tasks.md`. `config.py`/`main.py` reach
+`:8000` on its next restart. Never restart it or call it.
+
+- APPROVED  a-hub-that-was-not-told-which-database-refuses-to-open-one   all groups; F388; groups 1+3 in one commit; drive in the 8090s
+
+**2. `an-unstaffed-review-names-its-holders` (F352's visibility half), groups 2, 5 and 6.** Group 1
+is built. Round 9 (this morning's day window) found R8-1..R8-5 holding against the tree. **R9-5 is
+dropped: build the fit as the tasks say, and apply neither cure (a) nor (b).** Group 5 edits
+`hub/ui/` and ships a bundle. Commit it only if 5.3's served-bundle drive passed (task 5.4); the
+operator accepts that it reaches `:8000`'s live app on their next reload (`unstaffed-bundle`). In
+group 6.3, drive R8's replacement bullets, not the stale ones struck through above them. Drive Hub
+on a free port with a fresh profile, Haiku on every real turn, never `:8000` or `:8010`, and no job
+left enabled. Second in the ORDER. If F388 takes the night, this carries to the next.
+
+- APPROVED  an-unstaffed-review-names-its-holders   groups 2, 5, 6; group 1 built; R9-5 dropped (accepted as is); second in tonight's ORDER
+
+**Not tonight:** `a-refused-capability-reaches-the-operator`. §1 is still gated on F386, which is
+open.
+
+---
+
 ## 2026-09-21
 
 Review page: `review/review-2026-09-21.html`. **No change proposed; no spec loop ran** (drain count 4).
