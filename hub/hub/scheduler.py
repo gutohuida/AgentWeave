@@ -2665,9 +2665,12 @@ class JobScheduler:
 
         self.scheduler.start()
 
-        # Load enabled jobs from DB
+        # Load enabled jobs from DB. Not an archived one: a Hub before F222 could leave a job both
+        # enabled and archived, and registering it would fire work nobody can see.
         async with async_session_factory() as session:
-            q = select(AIJob).where(AIJob.enabled == True)  # noqa: E712
+            q = select(AIJob).where(
+                AIJob.enabled == True, AIJob.archived_at.is_(None)  # noqa: E712
+            )
             result = await session.execute(q)
             jobs = result.scalars().all()
 

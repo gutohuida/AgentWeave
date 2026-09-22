@@ -836,6 +836,19 @@ async def get_job(
     return job_dict
 
 
+def _archived_job_detail(job: AIJob) -> Dict[str, Any]:
+    archived_at = job.archived_at.isoformat() if job.archived_at else None
+    return {
+        "message": (
+            f"This job was archived at {archived_at} and cannot run again: archiving retires it, "
+            "and there is no unarchive. Create a new job with the work instead."
+        ),
+        "code": "job_archived",
+        "job_id": job.id,
+        "archived_at": archived_at,
+    }
+
+
 @router.patch("/{job_id}", response_model=JobResponse)
 async def update_job(
     job_id: str,
@@ -852,6 +865,13 @@ async def update_job(
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
     loop_ended = False
+
+    # F222: archiving is the one way to retire a job, and it hides the job (and its loop) from the
+    # default listings. Re-enabling one used to be accepted, which registered it with the scheduler
+    # while it stayed hidden: an archived loop claimed a task and spent a turn on it, the exact
+    # governance failure D17 names. There is no unarchive, so the remedy is a new job.
+    if body.enabled is True and job.archived_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_archived_job_detail(job))
 
     # F13: re-enabling a loop that has already ended used to be accepted, and then silently
     # undone — the job fired once more a minute later, hit `_loop_stop_reason` again, and set
@@ -1298,6 +1318,11 @@ async def run_job(
     job = await session.get(AIJob, job_id)
     if job is None or job.project_id != project_id:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Before the `enabled` check, because "disabled" names a remedy (enable it) that F222's guard
+    # in `update_job` refuses. Also covers a row a pre-F222 Hub left enabled and archived.
+    if job.archived_at is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_archived_job_detail(job))
 
     if not job.enabled:
         raise HTTPException(
