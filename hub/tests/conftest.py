@@ -914,6 +914,36 @@ def bind_runner(app, auth_headers):
 
 
 @pytest.fixture
+def start_run():
+    """Returns an async helper: `run_id = await start_run(agent_name)`.
+
+    A `running` run for *agent_name*, so a test can send as that agent: `POST /messages` takes a
+    `from` other than the operator only with the `run_id` of that agent's live run (F261). Without
+    one the send is the operator's, at depth zero (F258).
+    """
+    from hub.db.models import Run
+    from hub.utils import short_id
+
+    async def _start(agent_name, *, project_id="proj-test", turn_depth=0, conversation_id=None):
+        run_id = f"run-{short_id()}"
+        async with async_session_factory() as session:
+            session.add(
+                Run(
+                    id=run_id,
+                    project_id=project_id,
+                    agent=agent_name,
+                    status="running",
+                    turn_depth=turn_depth,
+                    conversation_id=conversation_id,
+                )
+            )
+            await session.commit()
+        return run_id
+
+    return _start
+
+
+@pytest.fixture
 def drain_conversation():
     """Returns an async helper: `await drain_conversation(conversation_id)`.
 

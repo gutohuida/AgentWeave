@@ -12,6 +12,7 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Message, Question, Task
 from ...schemas.common import StatusResponse
+from ...schemas.messages import OPERATOR_SENDER
 
 router = APIRouter(prefix="/status", tags=["status"])
 
@@ -59,7 +60,12 @@ async def get_status(
         session.execute(
             select(Message.sender)
             .distinct()
-            .where(Message.project_id == project_id, Message.timestamp >= cutoff)
+            .where(
+                Message.project_id == project_id,
+                Message.timestamp >= cutoff,
+                # `agents_active`: the operator sends mail too, and is not an agent (F261).
+                Message.sender != OPERATOR_SENDER,
+            )
         ),
         session.execute(
             select(Task.assignee)

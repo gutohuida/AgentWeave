@@ -69,7 +69,6 @@ async def project_a_resources(app, project_a):
     msg_resp = await app.post(
         f"{base}/messages",
         json={
-            "from": "user",
             "to": "alice",
             "subject": "hello",
             "content": "project a message",
@@ -352,7 +351,6 @@ async def test_cross_project_conversation_mutations_return_404(
     sent = await app.post(
         f"{b_base}/messages",
         json={
-            "from": "intruder",
             "to": "alice",
             "content": "Cross-project delivery",
             "conversation_id": conversation_id,

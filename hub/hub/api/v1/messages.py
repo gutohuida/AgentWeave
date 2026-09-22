@@ -1,7 +1,7 @@
 """Message endpoints — POST/GET/PATCH."""
 
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import List, Literal, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import and_, or_, select
@@ -22,7 +22,7 @@ from ...db.models import Agent, Message, Run
 from ...inbound_queue import new_entry, project_limits
 from ...run_task_binding import resolve_task_for_project
 from ...schemas.common import SuccessResponse
-from ...schemas.messages import MessageCreate, MessageResponse
+from ...schemas.messages import OPERATOR_SENDER, MessageCreate, MessageResponse
 from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
@@ -55,7 +55,14 @@ async def create_message_for_actor(
         created_by_run_id=run_id,
     )
     hop_budget, _ = await project_limits(session, project_id)
-    hop_depth = hop_budget + 1
+    # No run means the operator: the route refuses any other sender without one. An operator's
+    # message starts a chain rather than continuing one, so it is depth zero, as the chat and
+    # answer routes already queue it (F258, F395). It used to default to `hop_budget + 1`, a guard
+    # from when agents also posted here without a run, which held every operator send as spent.
+    by_operator = run_id is None
+    # Timeline attribution: the operator has no agent timeline for this to land on.
+    event_agent = None if by_operator else sender
+    hop_depth = 0
     source_conversation_id = None
     if run_id:
         source_run = await session.get(Run, run_id)
@@ -99,7 +106,7 @@ async def create_message_for_actor(
                 "reason": "unknown_recipient",
                 "recipient": body.recipient,
             },
-            agent=sender,
+            agent=event_agent,
             severity="warn",
         )
         raise HTTPException(
@@ -125,7 +132,7 @@ async def create_message_for_actor(
                 "reason": "archived_agent",
                 "recipient": body.recipient,
             },
-            agent=sender,
+            agent=event_agent,
             severity="warn",
         )
         raise HTTPException(
@@ -151,7 +158,7 @@ async def create_message_for_actor(
                 "recipient": body.recipient,
                 "conversation_id": body.conversation_id,
             },
-            agent=sender,
+            agent=event_agent,
             severity="warn",
         )
         raise HTTPException(
@@ -190,7 +197,7 @@ async def create_message_for_actor(
                     "recipient": body.recipient,
                     "conversation_id": body.conversation_id,
                 },
-                agent=sender,
+                agent=event_agent,
                 severity="warn",
             )
             raise HTTPException(
@@ -207,7 +214,9 @@ async def create_message_for_actor(
         # lookups on purpose. The newest binding wins subsequent forward lookups (task 4.4), so
         # this becomes the recipient's active thread with no extra state to track.
         recipient_conversation = new_conversation(
-            project_id=project_id, agent=body.recipient, origin="peer"
+            project_id=project_id,
+            agent=body.recipient,
+            origin="operator" if by_operator else "peer",
         )
         recipient_conversation.bound_sender_conversation_id = source_conversation_id
         recipient_conversation.bound_sender_agent = None if source_conversation_id else sender
@@ -242,7 +251,9 @@ async def create_message_for_actor(
             # thread the operator archived is not the sender's doing, so it gets a successor
             # bound to the same sender rather than an error about a decision it did not make.
             recipient_conversation = new_conversation(
-                project_id=project_id, agent=body.recipient, origin="peer"
+                project_id=project_id,
+                agent=body.recipient,
+                origin="operator" if by_operator else "peer",
             )
             recipient_conversation.bound_sender_conversation_id = source_conversation_id
             recipient_conversation.bound_sender_agent = None if source_conversation_id else sender
@@ -254,8 +265,8 @@ async def create_message_for_actor(
     entry = new_entry(
         project_id=project_id,
         agent=body.recipient,
-        origin_type="agent",
-        origin_agent=sender,
+        origin_type="operator" if by_operator else "agent",
+        origin_agent=None if by_operator else sender,
         content=body.content,
         hop_depth=hop_depth,
         message_id=msg.id,
@@ -271,12 +282,12 @@ async def create_message_for_actor(
     await session.commit()
     await session.refresh(msg)
     await sse_manager.broadcast(project_id, "message_created", _msg_dict(msg))
-    await persist_event(session, project_id, "message_created", _msg_dict(msg), agent=msg.sender)
+    await persist_event(session, project_id, "message_created", _msg_dict(msg), agent=event_agent)
     queue_payload = {
         "entry_id": entry.id,
         "agent": entry.agent,
-        "origin_type": "agent",
-        "origin_agent": sender,
+        "origin_type": entry.origin_type,
+        "origin_agent": entry.origin_agent,
         "hop_depth": hop_depth,
         "conversation_id": recipient_conversation.id,
         "source_conversation_id": source_conversation_id,
@@ -315,6 +326,18 @@ async def create_message(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    if body.run_id is None and body.sender != OPERATOR_SENDER:
+        # Identity is never taken from a request body. Without a run to check it against, a
+        # `from` naming an agent is the operator speaking as that agent, and a name no one
+        # registered became a listed agent through the roster's activity fallback (F261).
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"'from' is '{body.sender}', but a message sent here without a run_id is the "
+                f"operator's: omit 'from' or send it as '{OPERATOR_SENDER}'. An agent sends "
+                "through its own run, with the send_message tool."
+            ),
+        )
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -335,7 +358,9 @@ async def list_messages(
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     history: bool = Query(False),
-    sort: str = Query("asc"),
+    # Refused rather than read as ascending: `DESC` or `newest` used to answer the oldest page
+    # with a 200, which reads as the newest (F263).
+    sort: Literal["asc", "desc"] = Query("asc"),
     conversation: Optional[str] = Query(None),
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
@@ -347,15 +372,25 @@ async def list_messages(
     if agent:
         q = q.where(Message.recipient == agent)
     if conversation:
-        parts = conversation.split(":", 1)
-        if len(parts) == 2:
-            a, b = parts[0], parts[1]
-            q = q.where(
-                or_(
-                    and_(Message.sender == a, Message.recipient == b),
-                    and_(Message.sender == b, Message.recipient == a),
-                )
+        # Here a conversation is an agent pair, `a:b`. Anything else, a `conv-` thread id above
+        # all, is refused: it used to be dropped, so the answer was the whole project's mail read
+        # as that thread's (F262).
+        a, sep, b = conversation.partition(":")
+        if not (sep and a and b):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"conversation '{conversation}' is not an agent pair: this filter takes "
+                    "'<agent>:<agent>', the two agents whose messages to each other to list. A "
+                    "thread's messages are in that conversation's timeline."
+                ),
             )
+        q = q.where(
+            or_(
+                and_(Message.sender == a, Message.recipient == b),
+                and_(Message.sender == b, Message.recipient == a),
+            )
+        )
     order_col = Message.timestamp.desc() if sort == "desc" else Message.timestamp.asc()
     q = q.order_by(order_col).offset(offset).limit(limit)
     result = await session.execute(q)

@@ -417,7 +417,9 @@ async def test_an_archived_agent_keeps_its_name_reserved(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(app, auth_headers):
+async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(
+    app, auth_headers, start_run
+):
     """The archived-*agent* case, which the archived-*conversation* contract does not cover.
 
     Opening a new conversation would not help: nothing runs an archived agent, so the entry would
@@ -432,6 +434,7 @@ async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(app,
         "/api/v1/projects/proj-test/messages",
         json={
             "from": "sender",
+            "run_id": await start_run("sender"),
             "to": "gone",
             "subject": "still there?",
             "content": "The thing I did not want to have to write twice.",
@@ -447,15 +450,20 @@ async def test_a_peer_send_to_an_archived_agent_is_refused_with_its_content(app,
 
 
 @pytest.mark.asyncio
-async def test_an_archived_agent_keeps_its_history(app, auth_headers):
+async def test_an_archived_agent_keeps_its_history(app, auth_headers, start_run):
     """Archival is tidying, not deletion — the messages an agent sent keep their attribution."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
     await _register(app, auth_headers, "historian")
     await _register(app, auth_headers, "listener")
+    run_id = await start_run("historian")
 
     sent = await app.post(
         "/api/v1/projects/proj-test/messages",
         json={
             "from": "historian",
+            "run_id": run_id,
             "to": "listener",
             "subject": "before",
             "content": "Said before archiving.",
@@ -464,6 +472,10 @@ async def test_an_archived_agent_keeps_its_history(app, auth_headers):
         headers=auth_headers,
     )
     assert sent.status_code in (200, 201)
+    # The turn that sent it ends, as it would before anyone archives the agent.
+    async with async_session_factory() as session:
+        (await session.get(Run, run_id)).status = "completed"
+        await session.commit()
 
     await app.post("/api/v1/projects/proj-test/agents/historian/archive", headers=auth_headers)
 

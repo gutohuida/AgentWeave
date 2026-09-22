@@ -9,10 +9,16 @@ from .common import RequestModel
 
 _MESSAGE_TYPES = ["message", "delegation", "review", "discussion", "direct_trigger"]
 
+# Who a message sent on the operator plane without a `run_id` is from. The operator is not an
+# agent: the message is a depth-zero `origin_type="operator"` queue entry like every other operator
+# input, and a surface that lists agents from message activity must skip this name (F258, F261).
+OPERATOR_SENDER = "operator"
+
 
 class MessageCreate(RequestModel):
-    # JSON uses "from"/"to"; Python model uses sender/recipient
-    sender: str = Field(alias="from", max_length=64)
+    # JSON uses "from"/"to"; Python model uses sender/recipient. Without a `run_id` the only
+    # accepted sender is the operator, so it may be omitted (F261).
+    sender: str = Field(default=OPERATOR_SENDER, alias="from", max_length=64)
     recipient: str = Field(alias="to", max_length=64)
     subject: Optional[str] = Field(default=None, max_length=256)
     content: str = Field(max_length=10000)

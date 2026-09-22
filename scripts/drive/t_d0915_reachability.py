@@ -28,7 +28,7 @@ Phase LANES. `beta` and `gamma` are created, and given work outside every loop t
         Archived: a third loop holds them again; fire flow 3 (unstaffed, the control), then archive
         its job through `POST /jobs/{id}/archive` WITHOUT stopping it, confirm `ending_state` is
         null on `GET /loops/{id}`, fire again: staffed.
-  5.4b  A peer message to `beta` naming its out-of-loop task, through `POST /messages` with a
+  5.4b  RETIRED 2026-09-22 (its precondition was F258). Was: a peer message to `beta` naming its out-of-loop task, through `POST /messages` with a
         `task_id` and no run, queues at hop_budget + 1. Fire flow 4: `beta` is still staffed.
   5.4c  An empty plain loop on `alpha`. While `alpha` runs a real turn, press Run: 409 naming
         `alpha`, and no new entry on `alpha`'s queue.
@@ -591,52 +591,17 @@ def lane_archived():
 
 
 def lane_budget():
-    head("5.4b PAST THE HOP BUDGET -- a peer message naming beta's out-of-loop task")
-    free_reviewers()
-    held = live_holdings(B)
-    check(f"5.4b precondition: {B} holds nothing in a live loop", not held, str(held))
-    before = {e["id"] for e in queue(B)}
-    msg = call(
-        f"peer message {C} -> {B}",
-        "POST",
-        f"/projects/{P()}/messages",
-        {
-            "from": C,
-            "to": B,
-            "content": "About your task: nothing to do, this is a drive.",
-            "task_id": S["bookmarks"][B],
-        },
+    head("5.4b PAST THE HOP BUDGET -- retired 2026-09-22")
+    # This leg built its precondition from F258: a runless `POST /messages` was born at
+    # hop_budget + 1, so one call put an entry past the budget. F258 is repaired -- that send is
+    # now the operator's, at depth 0, and would start a turn for `beta` rather than hold one -- and
+    # F261's repair refuses a runless `from` naming an agent. A past-budget entry can now only come
+    # from a real chain of agent turns, which this harness does not build. Reported as skipped, not
+    # passed: the question "does input past the budget hold anybody?" is still open here.
+    note(
+        "5.4b SKIPPED",
+        "its precondition was F258's defect; a past-budget entry now needs a real agent chain",
     )
-    new = [e for e in queue(B) if e["id"] not in before]
-    note("5.4b: the new entry on beta's queue", blob(new, 600))
-    # `GET /queue/{agent}` does not expose an entry's `task_id` (QueueEntryResponse), so the task is
-    # read off the message, and the budget off the queue settings. The 2026-09-15 run confirmed the
-    # entry's own `task_id` with a mode=ro read of the drive database: `task-7aec1c02e253`, depth 7.
-    budget = api("GET", f"/projects/{P()}/queue/settings")[1].get("hop_budget")
-    code, msgs = api("GET", f"/projects/{P()}/messages?agent={B}")
-    sent = next((m for m in (msgs if isinstance(msgs, list) else []) if m["id"] == msg["id"]), {})
-    check(
-        "5.4b: one entry queued past the hop budget, from a message naming the task",
-        len(new) == 1
-        and isinstance(budget, int)
-        and new[0].get("hop_depth", 0) > budget
-        and new[0].get("state") == "queued"
-        and sent.get("task_id") == S["bookmarks"][B],
-        f"budget={budget} depth={new[0].get('hop_depth') if new else None} "
-        f"message task={sent.get('task_id')}",
-    )
-    lane = S["lanes"]["budget"]
-    code, detail = fire(lane["job"], "5.4b")
-    wait_for(lambda: statuses().get(B) == "running", 90, f"{B} to start")
-    row = task(lane["task"])
-    check(
-        f"5.4b: {B} is still staffed -- input past the budget holds nobody",
-        code == 200 and row["status"] == "under_review" and row.get("assignee") == B,
-        f"{code} {row['status']} / {row.get('assignee')}",
-    )
-    settle("5.4b review", tids=(lane["task"],))
-    left = [e for e in queue(B) if e["id"] in {n["id"] for n in new}]
-    note("5.4b: the suspended entry afterwards", blob(left, 400))
 
 
 def lane_busy_empty():

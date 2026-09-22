@@ -53,12 +53,17 @@ async def test_an_operator_started_conversation_records_operator(app, auth_heade
 
 
 @pytest.mark.asyncio
-async def test_a_peer_created_conversation_records_peer(app, auth_headers) -> None:
+async def test_a_peer_created_conversation_records_peer(app, auth_headers, start_run) -> None:
     await _sync_agents(app, auth_headers, "sender", "recipient")
 
     sent = await app.post(
         "/api/v1/projects/proj-test/messages",
-        json={"from": "sender", "to": "recipient", "content": "Please review the migration"},
+        json={
+            "from": "sender",
+            "run_id": await start_run("sender"),
+            "to": "recipient",
+            "content": "Please review the migration",
+        },
         headers=auth_headers,
     )
     assert sent.status_code == 201, sent.text
@@ -71,11 +76,18 @@ async def test_a_peer_created_conversation_records_peer(app, auth_headers) -> No
 
 
 @pytest.mark.asyncio
-async def test_origin_survives_rename_and_archive(app, auth_headers, drain_conversation) -> None:
+async def test_origin_survives_rename_and_archive(
+    app, auth_headers, drain_conversation, start_run
+) -> None:
     await _sync_agents(app, auth_headers, "sender", "recipient")
     await app.post(
         "/api/v1/projects/proj-test/messages",
-        json={"from": "sender", "to": "recipient", "content": "Please review the migration"},
+        json={
+            "from": "sender",
+            "run_id": await start_run("sender"),
+            "to": "recipient",
+            "content": "Please review the migration",
+        },
         headers=auth_headers,
     )
     conversation_id = (await _conversations(app, auth_headers, "recipient"))[0]["id"]

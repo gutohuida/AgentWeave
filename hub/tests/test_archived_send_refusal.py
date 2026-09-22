@@ -50,7 +50,7 @@ def _assert_carries_all_three(detail: str, conversation_id: str) -> None:
 
 @pytest.mark.asyncio
 async def test_the_http_send_is_refused_with_cause_instruction_and_content(
-    app, auth_headers, drain_conversation
+    app, auth_headers, drain_conversation, start_run
 ) -> None:
     conversation_id = await _archived_conversation(app, auth_headers, drain_conversation)
 
@@ -58,6 +58,7 @@ async def test_the_http_send_is_refused_with_cause_instruction_and_content(
         "/api/v1/projects/proj-test/messages",
         json={
             "from": "sender",
+            "run_id": await start_run("sender"),
             "to": "recipient",
             "content": CONTENT,
             "conversation_id": conversation_id,
@@ -71,7 +72,7 @@ async def test_the_http_send_is_refused_with_cause_instruction_and_content(
 
 @pytest.mark.asyncio
 async def test_nothing_is_written_to_the_archived_conversation(
-    app, auth_headers, drain_conversation
+    app, auth_headers, drain_conversation, start_run
 ) -> None:
     conversation_id = await _archived_conversation(app, auth_headers, drain_conversation)
     async with async_session_factory() as session:
@@ -91,6 +92,7 @@ async def test_nothing_is_written_to_the_archived_conversation(
         "/api/v1/projects/proj-test/messages",
         json={
             "from": "sender",
+            "run_id": await start_run("sender"),
             "to": "recipient",
             "content": CONTENT,
             "conversation_id": conversation_id,
@@ -121,7 +123,9 @@ async def test_nothing_is_written_to_the_archived_conversation(
 
 
 @pytest.mark.asyncio
-async def test_the_message_is_not_silently_rehomed(app, auth_headers, drain_conversation) -> None:
+async def test_the_message_is_not_silently_rehomed(
+    app, auth_headers, drain_conversation, start_run
+) -> None:
     """The agent decides where its message goes. A refusal that quietly picked another
     conversation would be worse than the stranding it was meant to prevent."""
     conversation_id = await _archived_conversation(app, auth_headers, drain_conversation)
@@ -130,6 +134,7 @@ async def test_the_message_is_not_silently_rehomed(app, auth_headers, drain_conv
         "/api/v1/projects/proj-test/messages",
         json={
             "from": "sender",
+            "run_id": await start_run("sender"),
             "to": "recipient",
             "content": CONTENT,
             "conversation_id": conversation_id,
@@ -146,14 +151,19 @@ async def test_the_message_is_not_silently_rehomed(app, auth_headers, drain_conv
 
 @pytest.mark.asyncio
 async def test_omitting_the_conversation_id_opens_a_new_one(
-    app, auth_headers, drain_conversation
+    app, auth_headers, drain_conversation, start_run
 ) -> None:
     """The recovery the refusal instructs actually works."""
     conversation_id = await _archived_conversation(app, auth_headers, drain_conversation)
 
     sent = await app.post(
         "/api/v1/projects/proj-test/messages",
-        json={"from": "sender", "to": "recipient", "content": CONTENT},
+        json={
+            "from": "sender",
+            "run_id": await start_run("sender"),
+            "to": "recipient",
+            "content": CONTENT,
+        },
         headers=auth_headers,
     )
     assert sent.status_code == 201, sent.text
@@ -168,7 +178,9 @@ async def test_omitting_the_conversation_id_opens_a_new_one(
 
 
 @pytest.mark.asyncio
-async def test_an_open_conversation_id_is_honoured(app, auth_headers, drain_conversation) -> None:
+async def test_an_open_conversation_id_is_honoured(
+    app, auth_headers, drain_conversation, start_run
+) -> None:
     """Targeting is not archive-only: naming an open conversation sends into that one."""
     await _sync_agents(app, auth_headers, "sender", "recipient")
     first = await app.post(
@@ -188,6 +200,7 @@ async def test_an_open_conversation_id_is_honoured(app, auth_headers, drain_conv
         "/api/v1/projects/proj-test/messages",
         json={
             "from": "sender",
+            "run_id": await start_run("sender"),
             "to": "recipient",
             "content": CONTENT,
             "conversation_id": target,
@@ -212,7 +225,9 @@ async def test_an_open_conversation_id_is_honoured(app, auth_headers, drain_conv
 
 
 @pytest.mark.asyncio
-async def test_a_conversation_belonging_to_another_agent_is_not_found(app, auth_headers) -> None:
+async def test_a_conversation_belonging_to_another_agent_is_not_found(
+    app, auth_headers, start_run
+) -> None:
     await _sync_agents(app, auth_headers, "sender", "recipient", "bystander")
     other = await app.post(
         "/api/v1/projects/proj-test/agent/trigger",
@@ -224,6 +239,7 @@ async def test_a_conversation_belonging_to_another_agent_is_not_found(app, auth_
         "/api/v1/projects/proj-test/messages",
         json={
             "from": "sender",
+            "run_id": await start_run("sender"),
             "to": "recipient",
             "content": CONTENT,
             "conversation_id": other.json()["conversation_id"],
@@ -235,7 +251,7 @@ async def test_a_conversation_belonging_to_another_agent_is_not_found(app, auth_
 
 @pytest.mark.asyncio
 async def test_the_mcp_adapter_carries_the_same_three_parts(
-    app, auth_headers, drain_conversation, monkeypatch
+    app, auth_headers, drain_conversation, monkeypatch, start_run
 ) -> None:
     """`HubAPIError` puts the Hub's detail in its message, so what the HTTP caller is told is
     what the agent is told.
@@ -271,6 +287,7 @@ async def test_the_mcp_adapter_carries_the_same_three_parts(
             "/messages",
             {
                 "from": "sender",
+                "run_id": await start_run("sender"),
                 "recipient": "recipient",
                 "content": CONTENT,
                 "conversation_id": conversation_id,

@@ -59,6 +59,7 @@ from ...schemas.agents import (
     RunFacts,
 )
 from ...schemas.common import RequestModel
+from ...schemas.messages import OPERATOR_SENDER
 from ...sse import sse_manager
 from ...task_transitions import LIVE_STATUSES
 from ...utils import persist_event, short_id
@@ -301,7 +302,12 @@ async def list_agents(
         senders_q = (
             select(Message.sender)
             .distinct()
-            .where(Message.project_id == project_id, Message.timestamp >= cutoff)
+            .where(
+                Message.project_id == project_id,
+                Message.timestamp >= cutoff,
+                # The operator sends mail too, and is not an agent (F261).
+                Message.sender != OPERATOR_SENDER,
+            )
         )
         recipients_q = (
             select(Message.recipient)

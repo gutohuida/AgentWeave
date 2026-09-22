@@ -9,9 +9,12 @@ is printed, not asserted). `FINDINGS.md` has no finding against `api/v1/messages
 side of peer mail is well ploughed (T-HOP, row 7); the *messages* side is not. So this harness asks
 the questions that only a caller of these three routes can answer:
 
-* **What the operator's own `POST /messages` produces.** `create_message_for_actor` sets
-  `hop_depth = hop_budget + 1` whenever `run_id` is absent — which is every operator call, since
-  only a live run has one. And what the agent's queue panel then tells the operator about it.
+* **What the operator's own `POST /messages` produces.** `create_message_for_actor` set
+  `hop_depth = hop_budget + 1` whenever `run_id` was absent — which is every operator call, since
+  only a live run has one. And what the agent's queue panel then told the operator about it.
+
+**Since 2026-09-22 legs 1, 1b, 4 and 6 verify the repairs** of what they found (F258/F395, F261,
+F262, F263) rather than detecting the defects; the questions below are the ones first asked.
 * **Who ever marks a message read.** `msg.read = True` appears once in the whole Hub
   (`messages.py:375`). Two consumers depend on it: `GET /status`'s `message_counts.pending`, which
   the StatusBar renders as the `N msgs` chip, and `scheduler.py:420`'s loop pending-request reason.
@@ -216,7 +219,11 @@ def db_rows(sql, args=()):
 
 
 def send(project_path, sender, recipient, content, **extra):
-    body = {"from": sender, "to": recipient, "subject": f"row17 {TAG}", "content": content}
+    """`sender=None` is the operator. A named sender without a `run_id` is refused 422 since
+    F261's repair, so only leg 4 still passes one — to check that it is."""
+    body = {"to": recipient, "subject": f"row17 {TAG}", "content": content}
+    if sender is not None:
+        body["from"] = sender
     body.update(extra)
     return api("POST", f"{project_path}/messages", body)
 
@@ -285,15 +292,18 @@ note("project hop_budget / turn_delivery_cap", limits)
 
 # ---------------------------------------------------------------------------- LEG 1
 
-leg(1, "the operator's own POST /messages is born over budget and is never delivered on its own")
+leg(1, "the operator's own POST /messages starts a chain at depth 0 and is delivered on its own")
+# F258/F395, repaired 2026-09-22. This leg found the defect: the entry was born at hop_budget + 1,
+# labelled origin_type "agent", and moved only when released by hand. It now checks the repair.
 
 runs_before = db_rows(
     "SELECT COUNT(*) c FROM runs WHERE project_id = ? AND agent = ?", (P, BRAVO)
 )[0]["c"]
-code, msg = send(A, ALPHA, BRAVO, f"operator-plane send {TAG}")
+code, msg = send(A, None, BRAVO, f"operator-plane send {TAG}")
 ok("POST /messages accepts an operator-plane send", code == 201, f"{code} {str(msg)[:200]}")
 MSG1 = (msg or {}).get("id") if isinstance(msg, dict) else None
 note("message id", MSG1)
+ok("...sent as the operator", isinstance(msg, dict) and msg.get("from") == "operator", str(msg))
 
 entry = db_rows(
     "SELECT id, hop_depth, state, agent, origin_type, origin_agent, conversation_id "
@@ -303,79 +313,57 @@ ok("it queued exactly one inbound entry", len(entry) == 1, str(entry))
 if entry:
     e = entry[0]
     note("entry", e)
-    ok("its hop_depth is hop_budget + 1 — over budget on arrival",
-       e["hop_depth"] == HOP_BUDGET + 1, f"depth={e['hop_depth']} budget={HOP_BUDGET}")
+    ok("its hop_depth is 0: the operator starts a chain, it does not continue one",
+       e["hop_depth"] == 0, f"depth={e['hop_depth']} budget={HOP_BUDGET}")
+    ok("it is labelled the operator's, with no origin agent",
+       e["origin_type"] == "operator" and e["origin_agent"] is None, str(e))
     susp = db_rows(
         "SELECT id FROM event_logs WHERE project_id = ? AND event_type = 'queue_chain_suspended' "
         "AND data LIKE ?", (P, "%" + e["id"] + "%")
     )
-    ok("the Hub recorded queue_chain_suspended for it", bool(susp), str(susp))
-
-print("  ..   waiting 45s to see whether any turn starts for the recipient")
-time.sleep(45)
-runs_after = db_rows(
-    "SELECT COUNT(*) c FROM runs WHERE project_id = ? AND agent = ?", (P, BRAVO)
-)[0]["c"]
-ok("no turn started for the recipient", runs_after == runs_before,
-   f"before={runs_before} after={runs_after}")
-still = db_rows("SELECT state FROM inbound_queue_entries WHERE message_id = ?", (MSG1,))
-ok("the entry is still queued, undelivered", bool(still) and still[0]["state"] == "queued",
-   str(still))
-
-code, listed = api("GET", f"{A}/messages?history=true&limit=1000")
-ids = [m["id"] for m in listed] if isinstance(listed, list) else []
-ok("the message is nevertheless listed as sent", MSG1 in ids, f"{code} {len(ids)} messages")
-
-stranded = db_rows(
-    "SELECT COUNT(*) c FROM inbound_queue_entries WHERE project_id = ? AND state = 'queued' "
-    "AND hop_depth > ?", (P, HOP_BUDGET)
-)[0]["c"]
-note("over-budget entries stranded in this fixture's queues", stranded)
-
-
-# ---------------------------------------------------------------------------- LEG 1b
-
-leg("1b", "what the operator is told about it, and the way out")
+    ok("no queue_chain_suspended was recorded for it", not susp, str(susp))
 
 code, qstatus = api("GET", f"{A}/queue/{BRAVO}/status")
-ok("the agent's queue panel counts it as waiting",
-   code == 200 and (qstatus or {}).get("waiting_count", 0) >= 1, f"{code} {qstatus}")
-ok("the reason shown blames the hop budget — a chain that never hopped",
-   (qstatus or {}).get("waiting_reason") == "hop budget exhausted", str(qstatus))
-code, entries = api("GET", f"{A}/queue/{BRAVO}?state=queued")
-shown = [e for e in entries if e.get("id") == (entry[0]["id"] if entry else None)]     if isinstance(entries, list) else []
-ok("the entry itself is listed for the operator, at depth budget+1",
-   bool(shown) and shown[0]["hop_depth"] == HOP_BUDGET + 1, str(shown[:1]))
-ok("...and it says it came from an agent, not from the operator who actually sent it",
-   bool(shown) and shown[0]["origin_type"] == "agent" and shown[0]["origin_agent"] == ALPHA,
-   str(shown[:1]))
+ok("the queue panel does not blame the hop budget",
+   (qstatus or {}).get("waiting_reason") != "hop budget exhausted", f"{code} {qstatus}")
 
-runs_pre_release = db_rows(
-    "SELECT COUNT(*) c FROM runs WHERE project_id = ? AND agent = ?", (P, BRAVO)
-)[0]["c"]
-code, released = api("POST", f"{A}/queue/entries/{entry[0]['id']}/release" if entry else "/x",
-                     {}, timeout=90)
-ok("the operator can release it by hand, and that is the only way it moves", code == 200,
-   f"{code} {str(released)[:160]}")
-rel_event = db_rows(
-    "SELECT data FROM event_logs WHERE project_id = ? AND event_type = 'queue_entry_released' "
-    "ORDER BY timestamp DESC LIMIT 1", (P,)
-)
-ok("the release is recorded with the depth it was released from", bool(rel_event), str(rel_event))
+print("  ..   waiting up to 5 minutes for the recipient's turn, with no release")
 deadline = time.time() + 300
-state_now, runs_post = None, runs_pre_release
+state_now, runs_post = None, runs_before
 while time.time() < deadline:
-    r = db_rows("SELECT state, hop_depth FROM inbound_queue_entries WHERE message_id = ?", (MSG1,))
+    r = db_rows("SELECT state FROM inbound_queue_entries WHERE message_id = ?", (MSG1,))
     runs_post = db_rows(
         "SELECT COUNT(*) c FROM runs WHERE project_id = ? AND agent = ?", (P, BRAVO)
     )[0]["c"]
     state_now = r[0]["state"] if r else None
-    if state_now == "delivered" and runs_post > runs_pre_release:
+    if state_now == "delivered" and runs_post > runs_before:
         break
     time.sleep(10)
-ok("after the release it is delivered", state_now == "delivered", str(state_now))
-ok("and only then does a turn start for the recipient", runs_post > runs_pre_release,
-   f"{runs_pre_release} -> {runs_post}")
+ok("it is delivered without anyone releasing it", state_now == "delivered", str(state_now))
+ok("and a turn started for the recipient", runs_post > runs_before,
+   f"{runs_before} -> {runs_post}")
+released = db_rows(
+    "SELECT id FROM event_logs WHERE project_id = ? AND event_type = 'queue_entry_released' "
+    "AND data LIKE ?", (P, "%" + (entry[0]["id"] if entry else "none") + "%")
+)
+ok("no release was needed or recorded", not released, str(released))
+
+code, listed = api("GET", f"{A}/messages?history=true&limit=1000")
+ids = [m["id"] for m in listed] if isinstance(listed, list) else []
+ok("the message is listed as sent", MSG1 in ids, f"{code} {len(ids)} messages")
+
+
+# ---------------------------------------------------------------------------- LEG 1b
+
+leg("1b", "the operator is not an agent: no roster row, no active-agent entry")
+
+code, roster_api = api("GET", f"{A}/agents")
+names = [a.get("name") for a in roster_api] if isinstance(roster_api, list) else []
+ok("'operator' is not listed on the agent roster", "operator" not in names, str(names))
+_, st1b = api("GET", f"{A}/status")
+ok("nor among GET /status's active agents",
+   "operator" not in ((st1b or {}).get("agents_active") or []), str(st1b))
+
 
 
 # ---------------------------------------------------------------------------- LEG 2
@@ -394,8 +382,8 @@ read_before = db_rows(
 )[0]["c"]
 note("messages this harness has marked read in earlier runs", read_before)
 
-send(A, ALPHA, BRAVO, f"unread accrual a {TAG}")
-code, m2 = send(A, ALPHA, BRAVO, f"unread accrual b {TAG}")
+send(A, None, BRAVO, f"unread accrual a {TAG}")
+code, m2 = send(A, None, BRAVO, f"unread accrual b {TAG}")
 MSG2 = (m2 or {}).get("id") if isinstance(m2, dict) else None
 _, st2 = api("GET", f"{A}/status")
 pending2 = (st2 or {}).get("message_counts", {}).get("pending")
@@ -470,49 +458,43 @@ with open(feed, encoding="utf-8") as _fh:
 
 # ---------------------------------------------------------------------------- LEG 4
 
-leg(4, "the recipient is checked against the roster; the sender is not")
+leg(4, "the sender is checked: without a run it can only be the operator")
+# F261, repaired 2026-09-22. This leg found a forged `from` accepted, listed on the roster, and then
+# refused as a recipient. It now checks the refusal and that nothing the forgery touched appears.
 
 GHOST = f"ghost-{TAG}"
+msgs_before_ghost = db_rows("SELECT COUNT(*) c FROM messages WHERE project_id = ?", (P,))[0]["c"]
 code, ghost_msg = send(A, GHOST, BRAVO, f"forged sender {TAG}")
-ok("a sender who is on no roster is accepted", code == 201, f"{code} {str(ghost_msg)[:200]}")
-GHOST_ID = (ghost_msg or {}).get("id") if isinstance(ghost_msg, dict) else None
-row = db_rows("SELECT sender, recipient FROM messages WHERE id = ?", (GHOST_ID,))
-ok("the message is stored attributed to that name", bool(row) and row[0]["sender"] == GHOST,
-   str(row))
-roster = [r["name"] for r in db_rows("SELECT name FROM agents WHERE project_id = ?", (P,))]
-ok("no agent by that name exists", GHOST not in roster, str(roster))
+ok("a sender that is not the operator, with no run, is refused 422", code == 422,
+   f"{code} {str(ghost_msg)[:200]}")
+detail = json.dumps(ghost_msg) if not isinstance(ghost_msg, str) else ghost_msg
+ok("...naming the name, and the way an agent does send", GHOST in detail and "send_message" in detail,
+   detail[:240])
+msgs_after_ghost = db_rows("SELECT COUNT(*) c FROM messages WHERE project_id = ?", (P,))[0]["c"]
+ok("no message row was written", msgs_after_ghost == msgs_before_ghost,
+   f"{msgs_before_ghost} -> {msgs_after_ghost}")
 _, st4 = api("GET", f"{A}/status")
 active = (st4 or {}).get("agents_active") or []
-ok("and GET /status now lists it as an active agent", GHOST in active, str(active))
-
-# The roster, not just the status counts: `list_agents` falls back to "names seen in 24h of
-# activity" when there is no session config, and distinct message senders are one of its sources.
+ok("GET /status does not list it as an active agent", GHOST not in active, str(active))
 code, roster_api = api("GET", f"{A}/agents")
 names = [a.get("name") for a in roster_api] if isinstance(roster_api, list) else []
-ghost_row = next((a for a in roster_api if a.get("name") == GHOST), None)     if isinstance(roster_api, list) else None
-ok("the forged name is now listed on the project's agent ROSTER", GHOST in names, str(names))
-if ghost_row:
-    ok("...as an agent with no runner and no binding, presented as a native one",
-       ghost_row.get("runner") == "native" and ghost_row.get("runner_id") is None,
-       str({k: ghost_row.get(k) for k in ("runner", "display_model", "runner_id", "lifecycle")}))
-code, to_ghost = send(A, ALPHA, GHOST, f"reply to the ghost {TAG}")
-ok("but sending TO that same listed name is refused 404 — the roster offers what the send "
-   "route rejects", code == 404, f"{code} {str(to_ghost)[:160]}")
+ok("nor does the agent roster", GHOST not in names, str(names))
 
-code, self_msg = send(A, BRAVO, BRAVO, f"self send {TAG}")
-ok("an agent may be made to send to itself", code == 201, f"{code} {str(self_msg)[:120]}")
+code, registered = send(A, BRAVO, ALPHA, f"a registered name, no run {TAG}")
+ok("a REGISTERED agent's name without its run is refused the same way", code == 422,
+   f"{code} {str(registered)[:160]}")
 
-code, unknown = send(A, GHOST, f"nobody-{TAG}", f"unknown recipient {TAG}")
-ok("an unknown RECIPIENT is refused 404", code == 404, f"{code} {str(unknown)[:200]}")
+code, unknown = send(A, None, f"nobody-{TAG}", f"unknown recipient {TAG}")
+ok("an unknown RECIPIENT is still refused 404", code == 404, f"{code} {str(unknown)[:200]}")
 rej = db_rows(
     "SELECT agent, severity, data FROM event_logs WHERE project_id = ? "
     "AND event_type = 'agent_action_rejected' AND data LIKE ? ORDER BY timestamp DESC LIMIT 1",
     (P, f"%nobody-{TAG}%")
 )
-ok("the refusal is recorded on the sender's timeline", bool(rej), str(rej))
+ok("the refusal is recorded", bool(rej), str(rej))
 if rej:
-    ok("...attributed to the forged sender, an agent that does not exist",
-       rej[0]["agent"] == GHOST, str(rej[0]))
+    ok("...on no agent's timeline, since the operator sent it", rej[0]["agent"] is None,
+       str(rej[0]))
 
 
 # ---------------------------------------------------------------------------- LEG 5
@@ -522,32 +504,32 @@ leg(5, "the refusals that are there — archived agent, archived thread, contrad
 api("POST", f"{A}/agents/{RETIRED}/archive")
 arch = db_rows("SELECT lifecycle FROM agents WHERE project_id = ? AND name = ?", (P, RETIRED))
 note("retired agent lifecycle", arch)
-code, body = send(A, ALPHA, RETIRED, f"to an archived agent {TAG}")
+code, body = send(A, None, RETIRED, f"to an archived agent {TAG}")
 ok("sending to an archived agent is refused 409", code == 409, f"{code} {str(body)[:160]}")
 detail = json.dumps(body) if not isinstance(body, str) else body
 ok("...and the refusal hands the sender its own content back", TAG in detail, detail[:200])
 
-code, body = send(A, ALPHA, BRAVO, f"both directives {TAG}",
+code, body = send(A, None, BRAVO, f"both directives {TAG}",
                   conversation_id="conv-does-not-matter", start_new_thread=True)
 ok("conversation_id together with start_new_thread is refused 409", code == 409,
    f"{code} {str(body)[:160]}")
 
 conv2 = db_rows("SELECT id FROM conversations WHERE project_id = ? LIMIT 1", (P2,))
 foreign = conv2[0]["id"] if conv2 else "conv-00000000"
-code, body = send(A, ALPHA, BRAVO, f"foreign thread {TAG}", conversation_id=foreign)
+code, body = send(A, None, BRAVO, f"foreign thread {TAG}", conversation_id=foreign)
 ok("a conversation id from another project is refused 404", code == 404,
    f"{code} {str(body)[:160]}")
 
 code, t2 = api("POST", f"{A2}/tasks", {"title": f"row17 foreign task {TAG}"})
 foreign_task = (t2 or {}).get("id") if isinstance(t2, dict) else None
 note("foreign task", f"{code} {foreign_task}")
-code, body = send(A, ALPHA, BRAVO, f"foreign task {TAG}", task_id=foreign_task or "task-nope")
+code, body = send(A, None, BRAVO, f"foreign task {TAG}", task_id=foreign_task or "task-nope")
 ok("a task id from another project is refused", code >= 400, f"{code} {str(body)[:160]}")
 
-code, body = send(A, ALPHA, BRAVO, f"bad type {TAG}", type="shout")
+code, body = send(A, None, BRAVO, f"bad type {TAG}", type="shout")
 ok("an unknown message type is refused", code == 422, f"{code} {str(body)[:120]}")
 
-code, body = api("POST", f"{A}/messages", {"from": ALPHA, "to": BRAVO, "content": "x" * 10001})
+code, body = api("POST", f"{A}/messages", {"to": BRAVO, "content": "x" * 10001})
 ok("content past 10,000 characters is refused", code == 422, f"{code} {str(body)[:120]}")
 
 
@@ -563,19 +545,21 @@ real_conv = db_rows(
     "SELECT id FROM conversations WHERE project_id = ? ORDER BY created_at DESC LIMIT 1", (P,)
 )
 conv_id = real_conv[0]["id"] if real_conv else ""
+# F262 and F263, repaired 2026-09-22: this leg found both filters dropping what they could not
+# honour and answering 200. It now checks that they refuse.
 code, filtered = api("GET", f"{A}/messages?history=true&limit=1000&conversation={conv_id}")
-n_conv = len(filtered) if isinstance(filtered, list) else -1
-ok("filtering by a real conversation id returns the WHOLE project's mail unfiltered",
-   n_conv == n_all, f"conversation={conv_id} -> {n_conv} of {n_all}")
+ok("filtering by a conversation id is refused 422, not answered with the whole project",
+   code == 422, f"conversation={conv_id} -> {code} {str(filtered)[:160]}")
 
 code, pair = api("GET", f"{A}/messages?history=true&limit=1000&conversation={ALPHA}:{BRAVO}")
 n_pair = len(pair) if isinstance(pair, list) else -1
-ok("the filter actually means an agent PAIR, 'a:b'", 0 < n_pair < n_all, f"{n_pair} of {n_all}")
-code, halfpair = api("GET", f"{A}/messages?history=true&limit=1000&conversation={ALPHA}:")
-note("conversation='alpha:' returns", len(halfpair) if isinstance(halfpair, list) else halfpair)
-code, junk = api("GET", f"{A}/messages?history=true&limit=1000&conversation=zzz")
-ok("a filter value with no colon is silently ignored rather than refused",
-   isinstance(junk, list) and len(junk) == n_all, str(code))
+# The pair filter is still honoured. No floor on the count: leg 7's real agent mail comes later,
+# and the operator is not one of the pair.
+ok("an agent PAIR, 'a:b', is still a filter", code == 200 and 0 <= n_pair <= n_all,
+   f"{code} {n_pair} of {n_all}")
+for bad_conv in (f"{ALPHA}:", "zzz"):
+    code, got = api("GET", f"{A}/messages?history=true&limit=1000&conversation={bad_conv}")
+    ok(f"conversation={bad_conv!r} is refused 422", code == 422, f"{code} {str(got)[:120]}")
 
 code, desc = api("GET", f"{A}/messages?history=true&limit=5&sort=desc")
 code, asc = api("GET", f"{A}/messages?history=true&limit=5&sort=asc")
@@ -586,10 +570,7 @@ ok("sort=desc really reverses the page",
    f"{asc[0]['id'] if isinstance(asc, list) and asc else None}")
 for bad in ("DESC", "descending", "newest", "()"):
     code, got = api("GET", f"{A}/messages?history=true&limit=5&sort={bad}")
-    same_as_asc = isinstance(got, list) and isinstance(asc, list) and got and asc \
-        and got[0]["id"] == asc[0]["id"]
-    ok(f"sort={bad!r} is silently treated as ascending, not refused",
-       code == 200 and bool(same_as_asc), str(code))
+    ok(f"sort={bad!r} is refused 422, not read as ascending", code == 422, str(code))
 
 code, default_page = api("GET", f"{A}/messages?history=true")
 if isinstance(default_page, list) and isinstance(asc, list) and default_page and asc:
@@ -635,7 +616,7 @@ if RUN:
             "SELECT hop_depth, state, origin_type, origin_agent FROM inbound_queue_entries "
             "WHERE message_id = ?", (m["id"],)
         )
-        ok("its entry is within the hop budget, unlike the operator's",
+        ok("its entry is within the hop budget, one hop past its run",
            bool(e) and e[0]["hop_depth"] <= HOP_BUDGET, str(e))
         print("  ..   waiting up to 6 minutes for the recipient's turn")
         deadline = time.time() + 360
@@ -668,22 +649,9 @@ ok("this project's mail is not listed by the other project", MSG1 not in other_i
 code, _ = api("PATCH", f"{A2}/messages/{MSG1}/read")
 ok("marking it read through the other project is refused 404", code == 404, str(code))
 
-# scheduler.py:420 — `_pending_loop_request` picks the loop's pending request out of `messages`
-# with NO project filter. Mirrored read-only here rather than driven: the code path needs a loop
-# created BY AN AGENT (`loop.created_by_run_id` -> `Run.agent`), which this harness does not build.
-# The mirror is validated first against the project-scoped form of the same query.
-send(A2, ALPHA, BRAVO, f"peer-project mail {TAG}")
-unfiltered = db_rows(
-    "SELECT id, project_id, timestamp FROM messages WHERE sender = ? AND recipient = ? "
-    "AND read = 0 ORDER BY timestamp DESC", (ALPHA, BRAVO)
-)
-scoped = [r for r in unfiltered if r["project_id"] == P]
-ok("the mirror agrees with the scoped query on this project's rows",
-   bool(scoped) and all(r["project_id"] == P for r in scoped), str(len(scoped)))
-ok("but as written the query reaches across projects — the newest row can belong to another",
-   any(r["project_id"] != P for r in unfiltered),
-   str({r["project_id"] for r in unfiltered}))
-note("newest row the unfiltered query would pick", unfiltered[0] if unfiltered else None)
+# This leg used to mirror F264 here: `_pending_loop_request`'s message query had no project filter.
+# The mirror needed `alpha -> bravo` mail in both projects, written through a runless `from`, which
+# F261's repair refuses. F264 is driven live, with agent-sent mail, by `t_f264_live_loop_reason.py`.
 
 
 # ---------------------------------------------------------------------------- LEG 9

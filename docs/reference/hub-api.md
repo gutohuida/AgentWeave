@@ -26,6 +26,14 @@ http://localhost:8000/api/v1
 | `GET` | `/messages` | List messages (with filters) |
 | `PATCH` | `/messages/{id}/read` | Mark a message as read |
 
+`POST /messages` without a `run_id` is a message **from the operator**: omit `from`, or send it as
+`"operator"`. It queues for the recipient at hop depth 0, as the operator's own input, and starts a
+turn like any other operator message. A `from` naming an agent is refused with 422 unless `run_id`
+names that agent's running run; agents send through their own run with the `send_message` tool.
+
+`GET /messages` takes `sort` as `asc` (the default) or `desc`, and `conversation` as an agent pair,
+`<agent>:<agent>`. Any other value of either is refused with 422 rather than ignored.
+
 ### Tasks
 
 | Method | Path | Description |
