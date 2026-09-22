@@ -2429,6 +2429,25 @@ def _validated_waiting_seconds(field: str, value: object) -> Optional[int]:
     return value
 
 
+# What `patch_agent` below reads from its body, and nothing else. A key added to the handler must be
+# added here too, or the route refuses it -- which is the direction this is meant to fail in.
+_PATCH_AGENT_FIELDS = frozenset(
+    {
+        "contact_mode",
+        "description",
+        "mcp_endpoint",
+        "spawn_cmd",
+        "runner_id",
+        "charter_id",
+        "config",
+        "default_permission_mode",
+        *WAITING_SETTING_FIELDS,
+        *CHECKPOINT_OVERRIDE_FIELDS,
+        *GRANT_FIELDS,
+    }
+)
+
+
 @router.patch("/{name}")
 async def patch_agent(
     name: str,
@@ -2442,6 +2461,21 @@ async def patch_agent(
     (existing keys preserved unless overridden).
     """
     project_id, _ = project
+
+    # Every key this handler honours, and it refuses the rest before touching anything (F117).
+    # The body is an untyped dict (`NO_CONTRACT_BY_DESIGN`), so this is the only vocabulary check:
+    # without it `{"permission_timeout_secondz": 5}` answered 200 and changed nothing, on the
+    # route that carries an agent's safety settings. Refused whole, so a body that is half right
+    # does not leave the operator believing all of it was saved.
+    unknown = sorted(set(body) - _PATCH_AGENT_FIELDS)
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown agent field(s): {', '.join(unknown)}. "
+                f"Valid: {', '.join(sorted(_PATCH_AGENT_FIELDS))}"
+            ),
+        )
 
     # Reject collision with configured agents — except for the fields the CLI's legacy
     # session-sync config never owned. runner_id/charter_id are runner-agent-charter-separation
