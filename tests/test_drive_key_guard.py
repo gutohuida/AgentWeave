@@ -25,9 +25,10 @@ AW = DRIVE / "aw.py"
 KEY_LITERAL = re.compile(r"aw_live_[0-9a-f]{32}")
 
 
-def _load_aw(monkeypatch, key):
-    """Import `aw.py` fresh under a chosen AW_KEY. It reads the environment at import time."""
+def _load_aw(monkeypatch, key, hub="http://127.0.0.1:1"):
+    """Import `aw.py` fresh under a chosen AW_KEY and AW_HUB. It reads both at import time."""
     monkeypatch.setenv("AW_KEY", key)
+    monkeypatch.setenv("AW_HUB", hub)
     spec = importlib.util.spec_from_file_location("aw_under_test", AW)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -62,6 +63,20 @@ def test_an_unset_key_fails_before_any_http_call(monkeypatch):
         aw.api("GET", "/projects")
 
     assert "AW_KEY" in str(exc.value)
+    assert attempted == [], "the guard let a request reach the network"
+
+
+def test_an_unset_hub_fails_before_any_http_call(monkeypatch):
+    """F138: `AW_HUB` has no default either. It used to be `:8010`, the trial Hub, so a script run
+    with no environment drove the one instance a drive must not disturb."""
+    aw = _load_aw(monkeypatch, "aw_live_" + "0" * 32, hub="")
+    attempted = []
+    monkeypatch.setattr(aw.urllib.request, "urlopen", lambda *a, **k: attempted.append(a) or None)
+
+    with pytest.raises(SystemExit) as exc:
+        aw.api("GET", "/projects")
+
+    assert "AW_HUB" in str(exc.value)
     assert attempted == [], "the guard let a request reach the network"
 
 
