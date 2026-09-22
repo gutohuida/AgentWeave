@@ -49,7 +49,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "")
 KEY = os.environ.get("AW_KEY", "")
@@ -381,7 +381,7 @@ def sweep_board():
     isolation assertions measure the wrong work.
     """
     _, rows = api("GET", f"{A}/tasks")
-    rows = rows if isinstance(rows, list) else (rows or {}).get("tasks") or []
+    rows = task_rows(rows)
     stale = [
         t for t in rows
         if t.get("status") not in ("approved", "rejected")

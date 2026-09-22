@@ -48,7 +48,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api, task_rows# noqa: E402
+from aw import api, task_rows  # noqa: E402
 
 P = os.environ.get("AW_PROJECT") or ""
 AUTHOR = os.environ.get("AW_AGENT") or "alpha"

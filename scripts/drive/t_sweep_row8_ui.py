@@ -33,7 +33,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows  # noqa: E402
 from playwright.sync_api import sync_playwright  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8011")
@@ -61,13 +61,13 @@ def check(label, ok, detail=""):
 paged = []
 for page in range(0, 20):
     _, chunk = api("GET", f"{A}/tasks?limit=1000&offset={page * 1000}")
-    chunk = chunk if isinstance(chunk, list) else []
+    chunk = task_rows(chunk)
     paged.extend(chunk)
     if len(chunk) < 1000:
         break
 TOTAL = len(paged)
 _, default_page = api("GET", f"{A}/tasks")
-DEFAULT = len(default_page) if isinstance(default_page, list) else 0
+DEFAULT = len(task_rows(default_page))
 _, board = api("GET", f"{A}/tasks/board")
 BOARD = len(board.get("tasks") or []) if isinstance(board, dict) else 0
 print(

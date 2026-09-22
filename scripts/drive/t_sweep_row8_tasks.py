@@ -49,7 +49,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import P, api  # noqa: E402
+from aw import P, api, task_rows  # noqa: E402
 
 FORBIDDEN = {"proj-5e960453", "proj-18e5d4e0"}
 if P in FORBIDDEN or not P:
@@ -595,9 +595,8 @@ try:
     )
     if other:
         _, other_tasks = api("GET", f"/projects/{other}/tasks")
-        foreign = (
-            (other_tasks or [None])[0] if isinstance(other_tasks, list) and other_tasks else None
-        )
+        other_rows = task_rows(other_tasks)
+        foreign = other_rows[0] if other_rows else None
         if foreign:
             code, _ = api("GET", f"{PROJ}/tasks/{foreign['id']}")
             check("a foreign task id is 404 on this project's GET", code == 404, f"[{code}]")
@@ -626,7 +625,7 @@ try:
     listed = {}
     for page in range(0, 20):
         _, chunk = api("GET", f"{PROJ}/tasks?limit=1000&offset={page * 1000}")
-        chunk = chunk if isinstance(chunk, list) else []
+        chunk = task_rows(chunk)
         listed.update({t["id"]: t for t in chunk})
         if len(chunk) < 1000:
             break
@@ -642,21 +641,27 @@ try:
     print("-" * 78)
     total = len(rows)
     _, unpaged = api("GET", f"{PROJ}/tasks")
-    unpaged = unpaged if isinstance(unpaged, list) else []
-    note(f"table holds {total}; the unfiltered route returned {len(unpaged)}")
+    page = task_rows(unpaged)
+    note(
+        f"table holds {total}; the unfiltered route returned {len(page)} "
+        f"of a reported total {unpaged.get('total')}, has_more={unpaged.get('has_more')}"
+    )
     if total > 100:
+        # F202's repair, measured where F202 was found: the default page is still 100, and that is
+        # fine as long as the answer says so. A page that carried everything would also pass.
         check(
-            "the default page carries every task, or says it did not",
-            len(unpaged) == total,
-            f"{len(unpaged)} of {total}, and the body is a bare {type(unpaged).__name__} with no "
-            "total, no has_more and no next",
+            "the default page says how much of the ledger it is",
+            unpaged.get("total") == total and unpaged.get("has_more") == (len(page) < total),
+            f"{len(page)} rows, total={unpaged.get('total')} (table {total}), "
+            f"has_more={unpaged.get('has_more')}",
         )
         newest = make(f"row8 FIND-ME {TAG}")
         _, again = api("GET", f"{PROJ}/tasks")
         check(
-            "a task created one second ago is in the default page",
-            any(t["id"] == newest["id"] for t in (again if isinstance(again, list) else [])),
-            "ordered by created_at ASC and cut at 100, so the NEWEST work is what is dropped",
+            "a task created one second ago is reachable through the pages the answer admits to",
+            any(t["id"] == newest["id"] for t in task_rows(again)) or again.get("has_more") is True,
+            "ordered by created_at ASC, so the NEWEST work is what a page drops — the answer has "
+            "to say it was dropped",
         )
         check(
             "  (contrast) the same task is reachable by id",
@@ -665,7 +670,7 @@ try:
         _, filtered = api("GET", f"{PROJ}/tasks?agent={os.environ.get('AGENT_A', '')}")
         note(
             "  the ?agent= filter the MCP tool DOES offer narrows below the cut",
-            f"{len(filtered) if isinstance(filtered, list) else filtered} rows",
+            f"{len(task_rows(filtered))} rows",
         )
         # The board over the same table has no limit at all, so the two disagree.
         _, bd = api("GET", f"{PROJ}/tasks/board")
@@ -753,9 +758,7 @@ finally:
     print()
     # There is no DELETE route for a task (leg 8), so the fixture PROJECT is what gets removed.
     _, left = api("GET", f"{PROJ}/tasks")
-    print(
-        f"  {len(CREATED)} tasks created; {len(left) if isinstance(left, list) else left} in the project"
-    )
+    print(f"  {len(CREATED)} tasks created; {left.get('total')} in the project")
     print("  no DELETE /tasks/{id} exists — delete the fixture project to clean up")
     print()
     print("=" * 78)

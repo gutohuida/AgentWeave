@@ -380,5 +380,7 @@ class TaskListResponse(BaseModel):
     tasks: List[TaskResponse]
     #: Rows matching the filters, ignoring `limit`/`offset` — what the Overview must count.
     total: int
-    #: True when `offset + len(tasks) < total`, i.e. this answer is not the whole of it.
+    #: True when `offset + len(tasks) < total`: there are rows *after* this page. It is therefore
+    #: false for an `offset` past the end, where the rows a caller has not seen are behind them
+    #: rather than ahead — `total` is what tells them that, and it is always the honest count.
     has_more: bool

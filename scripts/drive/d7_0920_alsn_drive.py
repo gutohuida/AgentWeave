@@ -27,7 +27,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api, show, task_rows# noqa: E402
+from aw import api, show, task_rows  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "")
 if HUB.endswith(":8000") or HUB.endswith(":8010"):
@@ -247,14 +247,13 @@ def main():
         started = wait_for(
             lambda: any(
                 t.get("loop_id") == flow_loop_id and t.get("status") in ("in_progress", "under_review", "completed")
-                for t in (api("GET", "%s/tasks" % A)[1] or [])
-                if isinstance(t, dict)
+                for t in task_rows(api("GET", "%s/tasks" % A)[1])
             ),
             90,
             "the flow to start at least one task",
         )
         c, tasks2 = api("GET", "%s/tasks" % A)
-        flow_tasks = [t for t in (tasks2 if isinstance(tasks2, list) else []) if t.get("loop_id") == flow_loop_id]
+        flow_tasks = [t for t in task_rows(tasks2) if t.get("loop_id") == flow_loop_id]
         started_count = sum(1 for t in flow_tasks if t.get("status") != "pending" or t.get("assignee"))
         verdict(
             "at least one of the flow's two tasks actually started (assigned to a free sibling)",

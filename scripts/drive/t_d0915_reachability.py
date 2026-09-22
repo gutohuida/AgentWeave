@@ -53,7 +53,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
 import aw  # noqa: E402
-from aw import api  # noqa: E402
+from aw import api, task_rows  # noqa: E402
 
 HAIKU = "claude-haiku-4-5-20251001"  # the id the catalog declares; the bare name is refused
 AUTHOR, B, C = "alpha", "beta", "gamma"
@@ -130,7 +130,7 @@ def statuses():
 
 def tasks():
     code, body = api("GET", f"/projects/{P()}/tasks?limit=500")
-    return body if isinstance(body, list) else []
+    return task_rows(body)
 
 
 def task(tid):

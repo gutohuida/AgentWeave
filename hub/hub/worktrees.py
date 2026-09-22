@@ -337,19 +337,26 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
             )
         return path
 
-    _refuse_an_unborn_head(repo_root)
-
     # A worktree directory can be gone (manually deleted, or removed by something
     # other than `release_worktree`) while git's own `.git/worktrees/<name>` metadata
     # still references it — prune first so `worktree add` doesn't refuse to proceed.
     _run_git(repo_root, "worktree", "prune", check=False)
 
-    path.parent.mkdir(parents=True, exist_ok=True)
     branch = branch_name(agent)
-
     branch_exists = (
         _run_git(repo_root, "rev-parse", "--verify", "--quiet", branch, check=False).returncode == 0
     )
+    # Asked of the ref this call will actually use, after `branch_exists` has decided which that
+    # is: reusing an existing agent branch needs that branch, and creating one needs `HEAD`. A
+    # guard that always asked `HEAD` refused a repository whose agent branch was ready (F347's
+    # review).
+    #
+    # Before the `mkdir` below, so a refusal leaves nothing behind — not even an empty
+    # `.agentweave/worktrees/`. `test_the_refusal_creates_no_commit_and_no_branch` asserts that,
+    # and caught this exact ordering when the guard first moved down here.
+    _refuse_a_ref_that_names_no_commit(repo_root, branch if branch_exists else "HEAD")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
     if branch_exists:
         # A released branch with no work beyond the primary checkout can safely catch
         # up before it is reused. Preserve it unchanged when it still carries unique
@@ -367,21 +374,31 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
     return path
 
 
-def _has_a_commit(repo_root: Path) -> bool:
-    """False when the repository has no commit yet, so `HEAD` names nothing to branch from.
-
-    The ordinary first day of a project that becomes a repository: `git init` has run and nothing
-    has been committed. Every git command that resolves `HEAD` then fails, so this is asked
-    *before* provisioning rather than inferred from a failure — `git worktree add` reports
-    `fatal: invalid reference: HEAD`, which names git's plumbing rather than what the operator
-    would change (F347).
-    """
+def _resolves(repo_root: Path, ref: str) -> bool:
+    """Whether *ref* names a commit in this repository."""
     return (
-        _run_git(repo_root, "rev-parse", "--verify", "--quiet", "HEAD", check=False).returncode == 0
+        _run_git(
+            repo_root, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", check=False
+        ).returncode
+        == 0
     )
 
 
-def _refuse_an_unborn_head(repo_root: Path) -> None:
+def _has_a_commit(repo_root: Path) -> bool:
+    """Whether the repository holds any commit at all, on any ref.
+
+    Asked of `--all` rather than of `HEAD`, because the two are not the same question and the
+    first version of this guard confused them. `git checkout --orphan` leaves `HEAD` unborn in a
+    repository whose other branches carry commits — a state where `git worktree add <path>
+    <branch>` still succeeds, and where "make a first commit" is advice the operator has already
+    taken. This is what separates *"there is nothing here yet"* from *"the ref this turn needs
+    does not resolve"*.
+    """
+    result = _run_git(repo_root, "rev-list", "-n", "1", "--all", check=False)
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def _refuse_a_ref_that_names_no_commit(repo_root: Path, ref: str) -> None:
     """Refuse a checkout that has nothing to be cut from, naming the repair (F347, option (a)).
 
     Decided by the operator 2026-09-13 (`spec-queue/DECISIONS.md`, *"F347, decided 2026-09-13
@@ -399,12 +416,24 @@ def _refuse_an_unborn_head(repo_root: Path) -> None:
     {agent}'s own workspace: …"* and *"Could not prepare the checkout for task {id}: …"*
     (`api/v1/agent_trigger.py:963-981`). The obstruction and its repair are identical either way,
     so naming the scope again here would only stutter.
+
+    **Two refusals, because there are two repairs.** A repository with no commit anywhere is asked
+    for a first commit. A repository that *has* commits but whose `ref` does not resolve — an
+    unborn `HEAD` after `git checkout --orphan`, or a `base` branch that has been deleted — is told
+    which ref failed, because making another commit on the orphan branch would not help.
     """
-    if _has_a_commit(repo_root):
+    if _resolves(repo_root, ref):
         return
+    project = repo_root.name or str(repo_root)
+    if not _has_a_commit(repo_root):
+        raise IsolationUnavailableError(
+            f"{project} is a git repository with no commit yet. Make a first commit in "
+            f"{repo_root}, and the turn will start."
+        )
     raise IsolationUnavailableError(
-        f"{repo_root.name} is a git repository with no commit yet. Make a first commit in "
-        f"{repo_root}, and the turn will start."
+        f"{ref} does not name a commit in {project}, so there is nothing to cut this checkout "
+        f"from. The repository has commits on other refs — check out a branch that has one (or, "
+        f"for a task, set the project's integration base to a branch that exists)."
     )
 
 
@@ -548,17 +577,19 @@ def ensure_task_worktree(
             )
         return path
 
-    # The same refusal as `ensure_worktree`'s, and it belongs on this path too: `base` cannot
-    # resolve either when the repository holds no commit, so a task turn hit the identical
-    # `fatal: invalid reference` (measured 2026-09-22; F347 recorded only the agent path).
-    _refuse_an_unborn_head(repo_root)
-
     _run_git(repo_root, "worktree", "prune", check=False)
-    path.parent.mkdir(parents=True, exist_ok=True)
 
     branch_exists = (
         _run_git(repo_root, "rev-parse", "--verify", "--quiet", branch, check=False).returncode == 0
     )
+    # The same refusal as `ensure_worktree`'s, and it belongs on this path too: a task turn hit
+    # the identical `fatal: invalid reference` (measured 2026-09-22; F347 recorded only the agent
+    # path). Asked of the ref this call uses — the task's own branch when it is being resumed,
+    # and `base` when it is being cut — because `base` is a parameter and can name a branch that
+    # was deleted, which is not the same failure as an empty repository.
+    _refuse_a_ref_that_names_no_commit(repo_root, branch if branch_exists else base)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
     if branch_exists:
         # The task was released (design D5) and is being worked again. Its own history is on
         # the branch, so it resumes from there rather than restarting at the base — and its

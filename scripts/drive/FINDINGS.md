@@ -16191,7 +16191,7 @@ nowhere to say it was cut.
   page (1000) rather than accepting the default 100. The board shows a banner
   (`tasks-truncated-banner`) naming how many of how many it is showing when even that is cut,
   because the rows a page drops are the *newest*.
-- **The drives were lying by construction.** 24 sites across 12 harnesses read the board through
+- **The drives were lying by construction.** 41 sites across 23 harnesses read the board through
   `body if isinstance(body, list) else []`, which turns the new object into an empty list — a drive
   whose verdict is *"its queued work is untouched"* would have passed against nothing. They now go
   through `aw.task_rows()`, which raises on a shape it does not recognise.
@@ -16207,6 +16207,31 @@ process. Between this commit landing and their next restart, their agents' `list
 `limit`/`offset` (which the old route already accepts) and receives the old bare array, while the
 tool description promises an envelope. The tool is the half that reaches them immediately; the
 route is the half that waits for the restart they choose.
+
+**Opus review, applied the same session.** The reviewer verified `total` is correct on every filter
+branch (it is counted from the same `q` object before paging, so the `elif` chain and the
+`exclude_archived_completed` NULL-safety are inherited unchanged), that all five UI call sites guard
+`undefined`, and that no `/agents`, `/jobs` or `/runs` site was caught by the drive sweep. Three
+things it found:
+
+- **The drive sweep was incomplete, and the count was wrong.** Eight more `GET /tasks` reads still
+  carried `body if isinstance(body, list) else []`, including two in a file the commit did touch,
+  and one — `t_sweep_row10_jobs_loops.py` — where `len(<the envelope dict>) == 3` made a check
+  **pass vacuously**. Worse, `t_sweep_row8_tasks.py` and `t_sweep_row8_ui.py`, the two drives that
+  *found* F202, would have measured zero. All of them now go through `task_rows()`, and LEG 7b was
+  rewritten to verify the repair rather than detect the defect: it asserts `total` matches the
+  table and that `has_more` is exactly `len(page) < total`. The migrated count is **41 call sites
+  across 23 harnesses**, not the 24/12 first recorded.
+- **The skew note named only half of it.** The entry reasoned about `mcp_server.py` being respawned
+  per turn while the route lives in the running process, and stopped there. The **committed UI
+  bundle** has the same shape and is worse: CLAUDE.md states that a committed bundle reaches the
+  operator's live app on their next reload, and the new bundle reads `{tasks, total, has_more}`.
+  Against the old route still live in their process, `TasksBoard` would render "No tasks yet" and
+  the Overview "0 tasks" for a project full of work — no crash, and strictly worse than the symptom
+  F202 fixed. **The operator has been told to restart `:8000`**; nothing here can do it for them.
+- **`has_more` past the end** is `false` for an `offset` beyond `total`, because the rows the caller
+  has not seen are behind them rather than ahead. `TaskListResponse` now says so, and `total` is
+  what answers the question in that corner.
 
 ## F203 (C) — nothing can read a task's transition history
 **Status:** fixed (this commit) [Round 2, 2026-09-22] — a route on both planes, an MCP tool,
@@ -28207,6 +28232,31 @@ failed (128): fatal: invalid reference: HEAD`, exactly as filed.
 - **Still open, and not this commit's business:** the refusing pass holds the operator's own message
   behind a condition only they can clear, without saying so. `DECISIONS.md` left that half to a
   later round, and it is the reason this entry's last paragraph still stands.
+
+**Opus review, applied the same session.** The reviewer confirmed the guard's placement (no other
+caller can reach `git worktree add` with an unresolvable ref: `ensure_review_checkout` refuses
+earlier through `resolve_review_commit`, and the idempotent early-returns need a prior successful
+provision), that the refusal reaches the operator with the caller's prefix and no stutter, and that
+no commit or branch is left behind. It also found the guard asking the wrong question:
+
+- **An unborn `HEAD` is not "no commit in the repository".** `git checkout --orphan` leaves `HEAD`
+  unborn while other branches carry commits, and `git worktree add <path> <branch>` still succeeds
+  there — so reprovisioning an agent whose branch already existed used to work and was now refused,
+  with a sentence telling the operator to make a first commit they had already made.
+- **The guard now asks about the ref the call actually uses**: the agent's branch when it is being
+  reused and `HEAD` when it is being created; the task's branch when it is being resumed and `base`
+  when it is being cut. `base` is a parameter and can name a deleted branch, which is a third state
+  again — it gets its own sentence, because another commit would not fix it.
+- **Two refusals, two repairs.** "No commit anywhere" (asked of `rev-list -n 1 --all`, not of
+  `HEAD`) keeps the original sentence. A ref that does not resolve in a repository that *has*
+  commits names the ref instead. Two tests pin exactly these: an orphan-branch repository whose
+  agent branch provisions cleanly, and a deleted `base` that is told so.
+- **The reordering broke a promise the existing test caught**: moving the guard below
+  `path.parent.mkdir` left an empty `.agentweave/worktrees/` behind on a refusal, which
+  `test_the_refusal_creates_no_commit_and_no_branch` asserts against. The `mkdir` now follows the
+  guard on both paths.
+- Also fixed from the review: the sentence began with a space for a project at a drive root
+  (`Path("C:/").name` is `""`); it falls back to the full path.
 
 ## F348 (B) — following switches itself off during every running turn, so the newest text drifts below the fold (and under the question tray)
 

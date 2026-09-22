@@ -61,7 +61,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
 import aw  # noqa: E402
-from aw import api  # noqa: E402
+from aw import api, task_rows  # noqa: E402
 
 HAIKU = "claude-haiku-4-5-20251001"
 AUTHOR = "alpha"
@@ -196,9 +196,7 @@ def make_loop(name, title):
 
 def board():
     code, body = api("GET", f"/projects/{P}/tasks")
-    if isinstance(body, dict):
-        body = body.get("tasks") or body.get("items") or []
-    return body if isinstance(body, list) else []
+    return task_rows(body)
 
 
 def task(tid):

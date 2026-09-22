@@ -58,7 +58,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "")
 KEY = os.environ.get("AW_KEY", "")
@@ -525,7 +525,7 @@ ok("the operator can put a task in the loop's queue", code in (200, 201),
    f"{code} {str(seeded_task)[:200]}")
 
 code, qtasks = api("GET", f"{A}/tasks?loop_id={LOOP}")
-queued = qtasks if isinstance(qtasks, list) else []
+queued = task_rows(qtasks)
 ok("the loop's queue now has a task", len(queued) >= 1, f"{code} {str(qtasks)[:200]}")
 for t in queued:
     c, b = api("PATCH", f"{A}/tasks/{t['id']}", {"status": "rejected"})

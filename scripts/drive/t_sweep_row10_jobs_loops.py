@@ -38,7 +38,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 import pathlib  # noqa: E402
 
-from aw import api, require_key  # noqa: E402
+from aw import api, require_key, task_rows  # noqa: E402
 
 P = os.environ.get("AW_PROJECT", "")
 if P in ("proj-5e960453", "proj-18e5d4e0") or not P:
@@ -244,7 +244,8 @@ try:
         str(loopjob["loop"])[:150],
     )
     code, qtasks = api("GET", f"{A}/tasks?loop_id={LOOP}")
-    ok("that id really is the one /tasks scopes by", code == 200 and len(qtasks) >= 1, f"{code} {len(qtasks) if isinstance(qtasks, list) else qtasks}")
+    scoped = task_rows(qtasks) if code == 200 else []
+    ok("that id really is the one /tasks scopes by", code == 200 and len(scoped) >= 1, f"{code} {len(scoped)}")
 
     # The staged edit (D11).
     code, patched = api("PATCH", f"{A}/jobs/{LOOPJOB}", {"purpose": "EDITED purpose"})

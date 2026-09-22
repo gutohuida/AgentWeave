@@ -4,7 +4,7 @@ run's agent_outputs. Never :8000/:8010.  AW_HUB=http://127.0.0.1:8097 AW_KEY=...
 import os, pathlib, sqlite3, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
-from aw import api
+from aw import api, task_rows
 HUB = os.environ.get("AW_HUB", "")
 assert HUB and not HUB.endswith((":8000", ":8010"))
 HAIKU = "claude-haiku-4-5-20251001"
@@ -41,4 +41,4 @@ for n, r in runs.items():
     mcp = "mcp__agentweave__" in blob; http = any(k in blob for k in ("curl ", "Invoke-WebRequest", "python -c", "agent-actions"))
     print("  rows:", len(rows), " MCP:", mcp, " HTTP-ish:", http)
     for x in rows[:8]: print("   ", str(x)[:230])
-_, tk = api("GET", A + "/tasks"); print("\ntasks:", [(t["title"]) for t in (tk if isinstance(tk, list) else tk.get("tasks", []))])
+_, tk = api("GET", A + "/tasks"); print("\ntasks:", [t["title"] for t in task_rows(tk)])

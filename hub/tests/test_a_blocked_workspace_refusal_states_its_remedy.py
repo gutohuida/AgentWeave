@@ -13,11 +13,12 @@ provisions the checkout itself" -- the test performs the operator's half and the
 function again. A remedy is a promise about the product, so an assertion that only reads the
 sentence would leave the promise unmeasured.
 
-A fourth obstruction was added 2026-09-22 (F347): a repository with no commit yet, where nothing
-is in the way and there is simply nothing to cut a checkout from. Its remedy is a first commit,
-and unlike the three above it is the *same* sentence for an agent's workspace and a task's
-checkout, because the obstruction and the repair are identical -- the caller's prefix is what
-names which one failed.
+A fourth obstruction was added 2026-09-22 (F347): nothing is in the way, and there is simply
+nothing to cut a checkout from. It splits the same way the three above do, because the repairs
+differ -- a repository with no commit anywhere is asked for a first commit, while one whose
+commits are on other refs (an unborn HEAD after `git checkout --orphan`, a deleted `base`) is told
+which ref failed, since another commit on the orphan branch would not help. Neither sentence names
+the agent or the task: unlike the three above, the caller's prefix already does.
 """
 
 import shutil
@@ -304,3 +305,35 @@ def test_a_repository_with_a_commit_is_untouched_by_the_guard(repo):
     """The guard must not refuse the ordinary case; `repo` has one commit."""
     assert worktrees._has_a_commit(repo) is True
     assert worktrees.ensure_worktree(repo, AGENT).is_dir()
+
+
+def test_an_unborn_head_beside_real_branches_is_not_called_an_empty_repository(unborn):
+    """The review's case, and a regression the first version of this guard introduced.
+
+    `git checkout --orphan` leaves HEAD unborn in a repository whose other branches carry commits.
+    `git worktree add <path> <branch>` still succeeds there, so provisioning an agent whose branch
+    already exists must not be refused — and telling that operator to "make a first commit" names a
+    repair they have already made.
+    """
+    _first_commit(unborn)
+    _git(unborn, "branch", worktrees.branch_name(AGENT))
+    _git(unborn, "checkout", "-q", "--orphan", "fresh-start")
+    assert not worktrees._resolves(unborn, "HEAD"), "HEAD is unborn"
+    assert worktrees._has_a_commit(unborn), "but the repository is not empty"
+
+    path = worktrees.ensure_worktree(unborn, AGENT)
+    assert path.is_dir()
+
+
+def test_a_base_that_no_longer_exists_says_so_rather_than_asking_for_a_first_commit(unborn):
+    """A task checkout is cut from `base`, which the Hub layer passes in and which can name a
+    branch somebody deleted. "Make a first commit" is the wrong remedy for that."""
+    _first_commit(unborn)
+
+    with pytest.raises(worktrees.IsolationUnavailableError) as caught:
+        ensure_task_worktree(unborn, TASK, base="branch-that-was-deleted")
+
+    message = str(caught.value)
+    assert "branch-that-was-deleted" in message
+    assert "no commit yet" not in message, "the repository has commits; this ref does not resolve"
+    assert not worktrees.task_root(unborn).exists(), "a refusal leaves no directory behind"
