@@ -8620,7 +8620,7 @@ rule belongs.
 
 ## F117 (B) — `PATCH /agents/{name}` takes an untyped body: a misspelled setting answers 200 and changes nothing
 
-**Status:** open. Found 2026-08-29 by F116's own surface walk, confirmed live on 8011.
+**Status:** fixed b8b636d (2026-09-22; see the foot). Found 2026-08-29 by F116's own surface walk, confirmed live on 8011.
 
 F116 made every request body model refuse what it cannot honour. Three routes had no model to put
 the rule on — `body: dict`. One was `PUT …/project/instructions`, fixed in the same change because
@@ -8646,6 +8646,8 @@ is a visible change across the agent settings UI and wants its own review. It is
 `NO_CONTRACT_BY_DESIGN` in `hub/tests/test_request_strictness.py` with that reason, so the exemption
 is a decision on the record rather than a silence — but a named exemption over a live defect is not
 a fix.
+
+**Fixed 2026-09-22, `b8b636d`, without a model, as this entry advised.** `patch_agent` refuses any key outside `_PATCH_AGENT_FIELDS` with a 400 naming it (and listing the valid ones) before touching anything. A half-right body saves nothing, and a configured agent now hears about the field instead of the 409 about its name. The handler's existing hand-raised 400s are unchanged, so the settings UI sees no 400 to 422 shift. `test_patch_agent_refuses_unknown_fields.py`: before the fix, 200, the half-right body partly applied, and 409; after, 400 in all three, plus one body carrying every key the UI sends answering 200. `patch_agent` stays in `NO_CONTRACT_BY_DESIGN`, with its reason rewritten to say the body is untyped but checked. Not driven live.
 
 ---
 
