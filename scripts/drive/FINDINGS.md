@@ -30081,7 +30081,7 @@ tray), `a-refused-capability-reaches-the-operator` (the change whose review foun
 
 ## F387 (B) — the Overview question card shows one question, oldest first, so a non-urgent question hides a blocking one
 
-**Status:** open. Filed 2026-09-19 by the adversarial Opus review of
+**Status:** fixed 6ab4a4a (closed 2026-09-22, found fixed by F386's card work). Filed 2026-09-19 by the adversarial Opus review of
 `a-refused-capability-reaches-the-operator`; confirmed against the code by the session that
 commissioned it.
 **Source:** review
@@ -30123,6 +30123,8 @@ correct deterministic floor, not replace it, since its failure mode is this exac
 **Related:** `F386` (same card, copy and declined filtering), `F381`, `R5`.
 
 ---
+
+**Closed 2026-09-22.** F386's fix (`6ab4a4a`, extended in `24f3655`) changed `QuestionInterruptCard.tsx` to show `visible.find(isWaitedOn) ?? visible[0]`, so a question someone is waiting on is shown ahead of older ones nobody waits on, and declined rows are dropped. `questionInterruptCard.test.tsx` pins it ("still surfaces a later blocking question someone is waiting on"). The route's oldest-first order is unchanged by design (DIRECTION 09-20: fix at the card). The "count beside it" half is moot: the card renders no count. Never seen in a browser.
 
 ## F389 (C) — an allowed permission decision is persisted nowhere, so "the agent was never refused" is unfalsifiable
 
