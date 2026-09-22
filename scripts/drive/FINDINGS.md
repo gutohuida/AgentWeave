@@ -28019,7 +28019,9 @@ matches a placeholder or `~`-glued URL segment, never a bare literal that a sibl
 
 ## F347 (B) — a project whose repository has no commit yet refuses every agent turn with git's plumbing error, including the message asking the agent to fix it
 
-**Status:** open. Filed 2026-09-13 by a DECIDE session, from the operator's own day-to-day use on
+**Status:** fixed (this commit) [Round 2, 2026-09-22] — option (a) built; see FIXED at the end of
+this entry. The decision's second half (the held message) was left to a later round and stays open
+there. Filed 2026-09-13 by a DECIDE session, from the operator's own day-to-day use on
 their `:8000` Hub (project `LoopEngine`, `proj-03b9c6a6c37a`). **Seen live, not driven by a
 harness.** The evidence was read from that Hub's database read-only, and the repository was
 inspected with `git`.
@@ -28071,6 +28073,33 @@ the operator can clear without saying so.
 **DECIDED 2026-09-13 ~22:45, by the operator, in session: option (a).** Refuse, with a sentence that
 names the repair, and create no commit and no orphan branch. See `spec-queue/DECISIONS.md`
 `### F347, decided 2026-09-13 evening`. It is now a decided B, and no spec loop has taken it yet.
+
+
+**FIXED 2026-09-22 (interactive session, Round 2).** Re-verified first, against HEAD `2c99b15`: a
+`git init`-ed directory with nothing committed still raised `GitCommandError: git worktree add ...
+failed (128): fatal: invalid reference: HEAD`, exactly as filed.
+
+- **`worktrees._refuse_an_unborn_head`** asks `git rev-parse --verify --quiet HEAD`
+  (`_has_a_commit`) before provisioning, and raises `IsolationUnavailableError` with the sentence
+  the verdict asked for: *"<project> is a git repository with no commit yet. Make a first commit in
+  <path>, and the turn will start."* No commit is written and no orphan branch is created, which is
+  option (b), rejected.
+- **The task checkout had the same hole, and this entry did not record it.** Measured while fixing:
+  `ensure_task_worktree` raised `fatal: invalid reference: main` on the same repository, because
+  `base` cannot resolve either when nothing is committed. Both entry points now call the guard.
+- **The sentence names no agent and no task, deliberately.** Both callers are already wrapped by a
+  prefix that names the scope (`api/v1/agent_trigger.py:963-981`: *"Could not prepare {agent}'s own
+  workspace: ..."* and *"Could not prepare the checkout for task {id}: ..."*), so naming it again
+  would stutter. The tests assert that absence rather than leaving it to taste.
+- **Tests:** four in `hub/tests/test_a_blocked_workspace_refusal_states_its_remedy.py`, the file
+  whose subject is "each obstruction states its own remedy, and the remedy is true". Following that
+  file's discipline, each performs the operator's half — one commit — and then calls the real
+  function again, so the promise *"and the turn will start"* is measured, not trusted. One asserts
+  the refusal leaves no commit, no branch and no `.agentweave/worktrees/` behind. **All four fail at
+  `2c99b15`** with git's plumbing error; 7 passed, 2 skipped (symlinks, Windows) after the fix.
+- **Still open, and not this commit's business:** the refusing pass holds the operator's own message
+  behind a condition only they can clear, without saying so. `DECISIONS.md` left that half to a
+  later round, and it is the reason this entry's last paragraph still stands.
 
 ## F348 (B) — following switches itself off during every running turn, so the newest text drifts below the fold (and under the question tray)
 
