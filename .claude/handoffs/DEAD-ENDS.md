@@ -1406,6 +1406,13 @@ $//'` after. *(2026-09-21)*
   F383's. Check `git log -S'<cited snippet>'` before investigating. A sweep of 90 open B findings found
   only 3 more like that, so the ledger is mostly accurate. *(2026-09-22)*
 
+- **A new hub test that creates an agent passes locally and fails on CI** because this machine has
+  `claude` on PATH and CI's runners do not: `POST /agents` answers 409 `Runner CLI 'claude' was not
+  found in PATH.` (F117's tests, red on `6c96d75`/`809fa14`/`fea83d8`; fixed by patching
+  `hub.launchability.shutil.which` as the sibling tests do). Before pushing a new test, run it with
+  `claude`'s dir stripped: `PATH=$(echo "$PATH" | tr ':' '
+' | grep -vxF "$(dirname "$(which claude)")" | paste -sd:) py -3.11 -m pytest ...`. *(2026-09-22)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly

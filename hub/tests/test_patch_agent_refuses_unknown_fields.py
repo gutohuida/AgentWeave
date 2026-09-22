@@ -9,6 +9,8 @@ answered 409 about the agent's *name*.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy import select
 
@@ -20,11 +22,13 @@ PROJECT = "proj-test"
 
 async def _create_hub_owned(app, auth_headers, name: str) -> None:
     runners = await app.get(f"/api/v1/projects/{PROJECT}/runners", headers=auth_headers)
-    resp = await app.post(
-        f"/api/v1/projects/{PROJECT}/agents",
-        json={"name": name, "runner_id": runners.json()[0]["id"]},
-        headers=auth_headers,
-    )
+    # Creating an agent checks its runner CLI is on PATH; CI runners have no `claude`.
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        resp = await app.post(
+            f"/api/v1/projects/{PROJECT}/agents",
+            json={"name": name, "runner_id": runners.json()[0]["id"]},
+            headers=auth_headers,
+        )
     assert resp.status_code == 201, resp.text
 
 
