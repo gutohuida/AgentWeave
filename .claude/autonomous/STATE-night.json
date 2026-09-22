@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  4,
+    "iteration":  5,
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "hub-refuses-group5-impl",
-    "next_action":  "Implement group 5 of openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md: the spec, and what it costs (5.1-5.5). Apply the MODIFIED requirement in specs/app-lifecycle/spec.md per 5.1/5.2 as R2/R3 narrowed them (do not re-litigate the narrowing, apply it). Run `openspec validate a-hub-that-was-not-told-which-database-refuses-to-open-one --strict` (5.3). Run the FULL `py -3.11 -m pytest hub/tests/ -q` (not just test_config.py -- this change edited main.py's lifespan()) and write the count into tasks.md (5.4). Run `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` (5.5). For task 3.7 (already done in groups 1+3, commit 384254e) no action needed. Groups 4 and its 4.9 CLI fix landed in commit 8b7fed8 -- do not redo them.",
+    "current":  "hub-refuses-group6-drive",
+    "next_action":  "Drive group 6 of openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md in the 8090s on a throwaway profile directory, never against :8000/:8010/~/.agentweave/hub/data/. 6.1: from a directory with no .env, DATABASE_URL unset, run `py -3.11 -m uvicorn hub.main:app --port 8093` and confirm it fails to start printing 1.4's refusal message, and that nothing was created at the default database path. 6.2: start the same command with DATABASE_URL naming a new throwaway profile file and confirm the startup line appears, names the absolute path, and says the file did not exist; stop and restart against the same file and confirm it now says it did exist. 6.3: kill it by the PID the line printed and confirm that stops it. 6.4 is the port/profile guardrail (already followed by design, not a separate action). 6.5: write a D-n narrative entry in scripts/drive/FINDINGS.md and set F388's Status to 'fixed <sha>' only after 6.1-6.3 are all observed. Delete the throwaway profile directory after.",
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
@@ -41,11 +41,11 @@
                   },
                   {
                       "id":  "hub-refuses-group5-impl",
-                      "status":  "open",
+                      "status":  "done",
                       "model":  "sonnet",
                       "effort":  "high",
                       "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: group 5",
-                      "detail":  "Group 5 -- the spec, and what it costs. For 3.7 (if not already done in the groups1+3 item): edit .claude/skills/ sources then run scripts/sync_skills.py."
+                      "detail":  "Built 2026-09-23 iteration 5, commit 85b4b28. Applied the MODIFIED requirement into openspec/specs/app-lifecycle/spec.md per R2/R3's narrowed scenarios. openspec validate --strict passed. Full hub/tests/: 4640 passed, 86 skipped, no failures. CI's exact ruff/black/mypy clean."
                   },
                   {
                       "id":  "hub-refuses-group6-drive",
