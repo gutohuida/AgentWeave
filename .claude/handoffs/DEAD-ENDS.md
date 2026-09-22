@@ -1350,7 +1350,8 @@ session from the one that wrote what was reviewed.
 - **A Python heredoc that rewrites a tracked file on Windows turns it CRLF.** `open(p,'w')` in text
   mode writes `
 `; git then warns "CRLF will be replaced by LF". Open with `newline=''`, or
-  `sed -i 's/$//'` after. *(2026-09-21)*
+  `sed -i 's/
+$//'` after. *(2026-09-21)*
 - **A test command with an unbalanced quote passes the judge for the wrong reason.** `_lex` reads an
   unclosed quote to the end instead of refusing, so `.""."` lexes to `..` while bash will not run it
   at all. Run a sandbox test row's command in the real shell first (F375 R2-3). *(2026-09-21)*
@@ -1361,6 +1362,21 @@ session from the one that wrote what was reviewed.
   silently. Caught before commit. An approval for a future night goes in tonight's section as prose
   with **no** `- APPROVED` token at line start, plus a DECISIONS row, and the next DECIDE session
   copies it forward. *(2026-09-21)*
+
+## 2026-09-22
+
+- **A local lint pass over `src/ hub/ tests/` is not CI's lint.** CI's ubuntu-3.11 job also runs
+  `ruff check scripts/ --select E9,F63,F7,F82,F401,F841`, and an unused variable in a new
+  `scripts/drive/` harness failed three pushes in a row (`229a708`, `24f3655`, `a4d0976`) while
+  everything local was green. Run both ruff lines from CLAUDE.md's "Code quality" block before
+  pushing anything that adds a drive script. *(2026-09-22)*
+- **`python - <<EOF ... assert ...; EOF; next-command` does not stop on the assert.** The `;` runs
+  the next command anyway: `openspec archive -y` archived a change while the script meant to tick
+  its last task and set its finding's Status had died on an assertion. Chain dependent steps with
+  `&&`, or run them as separate calls. *(2026-09-22)*
+- **A finding's `**Status:**` line can appear verbatim in other entries** (quoted in addenda). F376's
+  appeared 3 times, so `s.count(old) == 1` failed. Anchor on the `## Fnnn` heading and edit the
+  line after it. *(2026-09-22)*
 
 ## RESOLVED
 
