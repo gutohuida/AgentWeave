@@ -25,6 +25,7 @@ Design: `openspec/explorations/2026-09-01-a-daily-research-spec-and-build-loop.m
 | `review/review-YYYY-MM-DD.html` | the FILL window | the operator, via an Artifact published in the DECIDE session |
 | `REQUESTS.md` | the operator | `scripts/backlog_page.py`, and any window reading the backlog |
 | `BACKLOG.html` | **nobody — `scripts/backlog_page.py` generates it** | the operator, and any agent orienting itself |
+| `ROUNDS.md` | an interactive session, at the operator's request (2026-09-22) | the operator and interactive sessions choosing the next repair; a plan, not an authority |
 
 `REQUESTS.md` is the operator's own channel into the backlog. `FINDINGS.md` is a defect ledger —
 every row is something the product does wrong. A request is work nobody has established is broken,
