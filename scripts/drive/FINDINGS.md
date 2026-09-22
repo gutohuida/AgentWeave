@@ -22317,7 +22317,7 @@ obvious fix.
 
 ## F292 (B) - the fix for F285 traded a deterministic rollback for an intermittent lock, and the mitigation written for it did not hold
 
-**Status:** open; **a per-test database file landed 2026-09-21 night and is awaiting its CI rate: 0 F292 in 1 post-fix run as of `b630252`, 11 needed** (see the foot of this entry, `f292-impl-1`/`-2`). Before it: still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
+**Status:** fixed b630252 — **0 F292 in 16 consecutive completed post-fix `ci.yml` runs** (`b630252` through `6c0a467`, 2026-09-21 22:58Z to 2026-09-22 09:09Z), past the 11-run bar; at the 22.6% pre-fix rate that is p ≈ 0.017 (0.774^16). 15 green; the 16th (`45d769f`) was red, but from an F394 hang, not a lock (no `database is locked` in its log). Tally at the foot of this entry (2026-09-22 interactive). Before it: still reproducing on the mitigated tree — re-measured 2026-09-15 (night `ledger-conflicts`) over every `ci.yml` run created after 2026-09-13T02:50Z, where the table at the foot of this entry stops: **19 of 84 completed runs** (22.6%) errored at setup with `database is locked` on `BEGIN IMMEDIATE`, one of them on `master` at `f28bc31` (run `34822760456`), and the mitigation `af69a27` is an ancestor of every sha measured; still the same three tests in `test_reviewer_is_not_the_author.py` and `test_flow_fires_a_review_turn.py`, and `hub/tests/conftest.py` is unchanged since 2026-09-12. The other 4 red runs in that window are F314's event-loop `RuntimeError` and nothing else; 3 of the 19 carried it as well.
 
 **Re-measured 2026-09-20 (interactive session, at the operator's request for a verification scan) —
 the rate escalated far past 22.6%, and the consequence is now structural.** Over the `ci.yml` runs
@@ -23830,6 +23830,18 @@ further was built. The tally carries on over later pushes (the night log records
 F292 stays **open** until 11 consecutive post-fix completed runs show no F292, or one shows it.
 If one does, the per-file move did not reach the holder. The next lead is then the one above:
 the holder follows the test, so it is not a connection on the old file.
+
+**Closed 2026-09-22 (interactive, after the night and day windows): 0 F292 in 16 completed
+post-fix runs.** `gh run list --branch autonomous/2026-09-21-daily --workflow ci.yml`, every
+completed run from the fix commit on: `b630252` `3d9e2e4` `69f1531` `90ef2b1` `a5e5a49` `bda6130`
+`4875f53` `58f773f` `04226a4` `dac9891` `518ea3f` `f430584` `90a5d27` `921384f` `6c0a467`, all
+**success**; `45d769f` (run `35667708908`) **failure**, and `grep -c 'database is locked'` over its
+failed log is **0**: it is an F394 hang (see F394's foot), not F292. The night log's iteration 10
+left that run out of the tally because it was the tests-first commit, assuming the 43 rows written
+to fail were what turned it red. That was wrong: the run never reached them. It was killed at 9%.
+Counting it as a non-F292 run, the post-fix tally is 0 of 16, and it is past the 11-run bar either way.
+Pre-fix on the same branch: 2 of 4 red, both F292. What is still not shown is the mechanism,
+namely that the CI holder was a connection on the old file. That is the reading the result fits, and it was never observed.
 
 
 ---
@@ -30733,7 +30745,7 @@ started the same afternoon.
 
 ## F394 (A) -- `hub-test` does not error on `master`, it HANGS: three runs stopped dead at 13% and were killed by GitHub's 6-hour job timeout
 
-**Status:** fixed 3491580 (mitigation, 2026-09-21): `hub-test` now runs `pytest tests/ -v --timeout=300 --timeout-method=thread` and `pytest-timeout` is in `hub/pyproject.toml` dev extras. Verified locally that a sleeping test is killed with a stack; NOT verified on CI until the next push run. The root cause of the hang is still unknown -- the next occurrence now yields a stack. **Found 2026-09-20** in an interactive session, while doing nothing more than
+**Status:** fixed 3491580 (mitigation, 2026-09-21): `hub-test` now runs `pytest tests/ -v --timeout=300 --timeout-method=thread` and `pytest-timeout` is in `hub/pyproject.toml` dev extras. Verified locally that a sleeping test is killed with a stack. **Now verified on CI once (2026-09-22): run `35667708908` (`45d769f`) hung, was killed after 300 s instead of 6 h, and dumped a stack naming `test_agent_trigger.py::test_spawn_failure_marks_run_failed` blocked in `_await_background_run` — see the foot.** The root cause of the hang is still unknown. **Found 2026-09-20** in an interactive session, while doing nothing more than
 checking whether CI was green enough to merge. It is filed separately from **F292** on purpose:
 F292 is an `ERROR at setup` that ends the run in ~15 minutes with a summary line, and every
 statement in this repository about CI's cost — the 22.6% rate, the 16-in-a-row escalation, the
@@ -30795,6 +30807,21 @@ green rate — a hung run is neither green nor red, and `gh run list` counts it 
 **Reproduce:** `gh run list --branch master --limit 10`, then
 `gh run view 35218523888 --json jobs -q '.jobs[] | .name + ": " + .conclusion + " " + .startedAt + " -> " + .completedAt'`
 and `gh run view 35218523888 --log | grep '^hub-test' | tail -30`.
+
+**First instrumented occurrence, 2026-09-22 (found in an interactive session while closing F292).**
+Run `35667708908` on `45d769f` (`autonomous/2026-09-21-daily`, not `master`, so the hang is not
+master-specific). `hub-test` stopped at **9%** and `pytest-timeout` fired after 300 s, so the
+mitigation works on CI: the run ended in about 6 minutes instead of 6 hours. The dump names
+`tests/test_agent_trigger.py::test_spawn_failure_marks_run_failed`, main thread at
+`test_agent_trigger.py:1701` `await _await_background_run()`, then `:47` `await task`. The
+background run task started by `/agent/trigger`, with `PtySession.spawn` patched to raise
+`FileNotFoundError`, never finished. The other threads are idle aiosqlite
+`_connection_worker_thread`s and a `concurrent.futures` worker. None is shown blocked inside a
+statement, so this dump gives no support to the "F292's lock blocking" guess. The thread-method dump shows threads, not
+asyncio tasks, so *where* the background task is parked is still unmeasured. The next step is an
+asyncio task dump (`asyncio.all_tasks()` + `task.get_stack()`) on timeout. This same test is the
+one F109 carried as intermittent (see F109). **Reproduce:**
+`gh run view 35667708908 --log-failed | grep -A12 'line 1701'`.
 
 ## F395 (B) -- `POST /messages` treats every operator-sent message as if it were the deepest possible agent hop, and mislabels its origin
 
