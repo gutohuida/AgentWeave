@@ -3,8 +3,8 @@
 Findings: **F376 (A)** — closes it; **F378 (B)** — *not* closed here (its repair is deferred by
 DIRECTION.md 2026-09-18; this change only makes the helper it will reuse).
 
-**R1, 2026-09-18; amended by R2 and R3, 2026-09-18; amended by R4, 2026-09-19. Nothing below is
-built.** Tasks carrying **(R2)**, **(R3)** or **(R4)** were changed or answered by that round; see
+**R1, 2026-09-18; amended by R2 and R3, 2026-09-18; amended by R4, 2026-09-19. Built and driven
+2026-09-22 (interactive, with the operator); see `## Build record` at the foot.** Tasks carrying **(R2)**, **(R3)** or **(R4)** were changed or answered by that round; see
 design.md's Rounds section for what moved and why. R3 changed two tasks that would have shipped
 defects: 1.3's dedupe could not detect a typed *"leave it off"* (design **D13**), and 3.1 named an
 MCP tool that does not exist while omitting one that does (**D7**, R3 table). **R4 changed four
@@ -23,7 +23,7 @@ first.
 
 ## 0. What must exist first (R4)
 
-- [ ] 0.1 **`F386` is fixed and merged.** `QuestionInterruptCard` is the record's only route to a
+- [x] 0.1 **`F386` is fixed and merged.** `QuestionInterruptCard` is the record's only route to a
   human (design D1's R4 paragraph), and it says `{first.from_agent} is waiting` unconditionally
   (`QuestionInterruptCard.tsx:35`, `:24`). Opening a deliberately non-blocking record onto it
   violates **this change's own ADDED requirement** — *"SHALL NOT cause any surface to report that
@@ -31,7 +31,7 @@ first.
   before this is in. Not fixed here: it is shipped, it predates this change, its declined half
   fires today with no new code, and it lives in `hub/ui/src/components/`, which this change's
   blast-radius claim says it does not touch and which F379's change owns (design **D18**).
-- [ ] 0.2 **Read `F387` and decide nothing.** The same card shows one question, oldest-first, so
+- [x] 0.2 **Read `F387` and decide nothing.** The same card shows one question, oldest-first, so
   this record would sit in front of every blocking question asked after it. Not a prerequisite —
   it degrades the record's usefulness, it does not make the change state something false — but a
   round that does not know about it will rediscover it. The operator has asked (2026-09-19) that
@@ -54,7 +54,7 @@ first.
 
 ## 1. The record
 
-- [ ] 1.1 **(R4 — signature corrected; design D8's R4 paragraph.)** New
+- [x] 1.1 **(R4 — signature corrected; design D8's R4 paragraph.)** New
   `hub/hub/refused_capability.py`. One coroutine, e.g.
   `refuse_for_project_state(session, *, project_id, agent, subject_key, setting, current_value,
   what_enabling_allows, where_changed)`. It always raises; the caller's `raise` is not optional.
@@ -64,7 +64,7 @@ first.
   signature while D8's prose still told the implementer to pass the attribution *"(`project_id`,
   `agent`, `run_id`)"* meant the only thing standing between an implementer and R2's defect was a
   parenthetical in task 1.4.
-- [ ] 1.2 It composes the question text: names the setting, its current value, what enabling it
+- [x] 1.2 It composes the question text: names the setting, its current value, what enabling it
   allows, and where the operator changes it (Environment › Settings). It **must not** contain the
   requesting agent's name, the run id, or the call's arguments — this is one project-level question
   and naming one caller in it is false (design D5).
@@ -79,7 +79,7 @@ first.
   > the Hub refuses every attempt by an agent to create or change scheduled work — loops, flows and
   > jobs. Enabling it lets agents create and run recurring work, which commits repeated model spend
   > without asking again. You change it yourself at Environment › Settings.
-- [ ] 1.3 **(R3 — rewritten; R4 — rewritten again. Designs D13, D15, D17.)** Dedupe on
+- [x] 1.3 **(R3 — rewritten; R4 — rewritten again. Designs D13, D15, D17.)** Dedupe on
   `subject_key = "capability-refusal:allow_agent_jobs"`, **never on the question's text** and
   **never on the answer's polarity**. Select every `Question` for this `project_id` with that key,
   newest first; branch on the newest and on how many exist:
@@ -117,7 +117,7 @@ first.
   index (task 0.3) makes the database refuse the second insert: catch the integrity error,
   re-select, return the existing record's id, so both callers get the **same** `question_id`.
   Handle it in this task, not by hoping it does not happen.
-- [ ] 1.4 **(R2)** Open through `ask_question_for_actor` (`hub/hub/api/v1/questions.py:235`) — not a
+- [x] 1.4 **(R2)** Open through `ask_question_for_actor` (`hub/hub/api/v1/questions.py:235`) — not a
   hand-built `Question` — so the id scheme, the `question_asked` broadcast and the batch fields are
   the shipped ones. Pass `subject_key` (task 0.5). `from_agent` is the refused agent;
   **`created_by_run_id=None`**, so the row
@@ -125,7 +125,7 @@ first.
   refused run's conversation to `"waiting"` for the rest of its life, `conversations.py:433-441`,
   and make a drained loop report this record as what it is waiting on,
   `scheduler._pending_loop_request:400-452`). `blocking=False` (design D11).
-- [ ] 1.5 **(R2)** Satisfy `QuestionCreate` (`hub/hub/schemas/questions.py:22-34`), which is
+- [x] 1.5 **(R2)** Satisfy `QuestionCreate` (`hub/hub/schemas/questions.py:22-34`), which is
   stricter than it looks (design **D12**): `options` is **required with at least two entries** —
   *"Enabled it — go ahead"* / *"Leave it off"*, each with a `description`; `header` is **required**
   and at most 64 characters, naming the capability; `multi_select` is **required** and is `False`.
@@ -141,7 +141,7 @@ first.
   (`schemas/questions.py:23-24`). `ask_question_for_actor` **discards** `body.from_agent` in favour
   of its own keyword (`questions.py:239`, `:257`) — pass the refused agent to both so they agree,
   and do not spend a cycle deciding what the discarded one should be.
-- [ ] 1.6 Raise `HTTPException(403, detail={...})` carrying `code:
+- [x] 1.6 Raise `HTTPException(403, detail={...})` carrying `code:
   "project_setting_blocks_capability"`, `message` (the sentence), `setting`, `current_value`,
   `question_id`, and one clause saying the answer arrives as input and the call should not be
   polled or repeated (design D2, D6). **(R3)** The `question_id` must also appear **inside
@@ -163,7 +163,7 @@ first.
   *"The operator was asked twice and answered: “Leave it off”. The setting is still off and nothing
   further will be opened for it — raise it with them in a message rather than repeating this call."*
 
-- [ ] 1.7 **(R4 — new; design D16.)** **Opening the record is best-effort; the 403 is not.** Task
+- [x] 1.7 **(R4 — new; design D16.)** **Opening the record is best-effort; the 403 is not.** Task
   1.1 says the helper "always raises" and as written it does not:
   `ask_question_for_actor` does `session.add` → `await session.commit()` → `await
   session.refresh()` (`questions.py:268-270`) and `persist_event` commits again
@@ -189,21 +189,21 @@ first.
 
 ## 2. The gate
 
-- [ ] 2.1 **(R4 — the range was wrong.)** `hub/hub/api/v1/jobs.py:46-51` — replace **only** the
+- [x] 2.1 **(R4 — the range was wrong.)** `hub/hub/api/v1/jobs.py:46-51` — replace **only** the
   `allow_agent_jobs` branch (`:46` fetches the project, `:47-51` is the branch) with a call to 1.1.
   Leave the early return for operator calls (`:39`), the incomplete-attribution refusal (`:41-42`)
   and the **stale-attribution refusal (`:44-45`)** exactly as they are; their order is load-bearing
   (design D9.2). R1-R3 wrote this range as `:44-51`, which names the stale-attribution check — the
   one line the task tells the implementer *not* to touch — inside the range it tells them to
   replace.
-- [ ] 2.2 **(R2 — read and answered; re-confirm only if the routes have moved.)** At all four call
+- [x] 2.2 **(R2 — read and answered; re-confirm only if the routes have moved.)** At all four call
   sites (`:568`, `:847`, `:1163`, `:1294`) the gate is the **first statement** after
   `project_id, _ = project`, so nothing of the route's own is pending in the session when
   `ask_question_for_actor` commits — no half-written job, no partial update is made durable by the
   refusal's commit. The precedent for committing and *then* raising is
   `operator_direction._open_request`. **Keep it that way:** any future route that does work before
   calling the gate breaks this, so the gate stays the first statement.
-- [ ] 2.3 **(R2 — read and answered.)** `archive_job` calls the allowance gate at `:1163` and
+- [x] 2.3 **(R2 — read and answered.)** `archive_job` calls the allowance gate at `:1163` and
   `require_operator_direction` only at `:1182`, inside the `agent_identity is not None` branch. An
   agent with the allowance off therefore raises out of the gate and never reaches the 409 path: the
   new refusal, no permission request, no two records. **That ordering is load-bearing** — reversing
@@ -212,7 +212,7 @@ first.
 
 ## 3. What the agent is told
 
-- [ ] 3.1 **(R3 — the list was wrong in both directions; design D7's table.)**
+- [x] 3.1 **(R3 — the list was wrong in both directions; design D7's table.)**
   `hub/hub/mcp_server.py` — the docstrings of the five job tools that propagate this refusal
   untouched: `create_job` (`:602`), `create_loop` (`:638`), `create_flow` (`:718`), `toggle_job`
   (`:865`), `run_job` (`:871`). They state the new refusal: the setting, that the operator is asked
@@ -220,7 +220,7 @@ first.
   wait** (design D2, D7). **There is no `update_job` MCP tool** — that is the PATCH route, reached
   by `toggle_job` — and `create_job` is the one R1 and R2 both missed; it is the plainest of the six
   and the likeliest for an agent to reach for.
-- [ ] 3.2 `hub/hub/api/v1/agents.py` — the same for each affected `_Operation`'s `text`/`http_note`,
+- [x] 3.2 `hub/hub/api/v1/agents.py` — the same for each affected `_Operation`'s `text`/`http_note`,
   beside `archive_job`'s existing protocol note (`:1276-1289`). The two must not contradict: one
   action on that surface polls, five do not. **(R3)** The six operations are `create_job` (`:1239`),
   `toggle_job` (`:1251`), `run_job` (`:1260`), `archive_job` (`:1269`), `create_loop` (`:1293`) and
@@ -232,24 +232,24 @@ first.
 
 ## 4. Tests
 
-- [ ] 4.1 New `hub/tests/test_refused_capability.py`, **driven through the route with real agent
+- [x] 4.1 New `hub/tests/test_refused_capability.py`, **driven through the route with real agent
   attribution** (a live run, the `X-AgentWeave-Agent` header): first refusal opens exactly one
   question, broadcasts `question_asked`, and the 403 body carries the code and the `question_id`.
-- [ ] 4.2 The record survives the run's end: end the run (the path that calls
+- [x] 4.2 The record survives the run's end: end the run (the path that calls
   `expire_pending_for_run`) and assert the question is still unanswered, and that a
   `PermissionRequest` was never created.
-- [ ] 4.3 A late answer reaches the agent: answer after the run has ended and assert an inbound queue
+- [x] 4.3 A late answer reaches the agent: answer after the run has ended and assert an inbound queue
   entry for that agent carries the answer — the property D1 chose this row for.
-- [ ] 4.4 Dedupe, **sequential**: two refusals one after another, one question, same id in both
+- [x] 4.4 Dedupe, **sequential**: two refusals one after another, one question, same id in both
   bodies.
-- [ ] 4.4b **(R4 — new; design D15.)** Dedupe, **concurrent**: two refusals issued together (two
+- [x] 4.4b **(R4 — new; design D15.)** Dedupe, **concurrent**: two refusals issued together (two
   sessions, both past the existence check before either commits), asserting **one** question row
   for the key and the **same** `question_id` in both 403 bodies. R3 tolerated two rows here and had
   the test assert the sequential case only, while the spec promised the unconditional one — green
   in testing, false in the case F376 measured. If this test cannot be made to interleave reliably,
   assert the integrity-error branch directly instead and say so in the test's own words; do not
   delete the case.
-- [ ] 4.5 **(R3 — rewritten; R4 — the assertion flipped for the first resolution.)** A resolved
+- [x] 4.5 **(R3 — rewritten; R4 — the assertion flipped for the first resolution.)** A resolved
   record is superseded **exactly once** (design **D17**), three ways: (a) answered by **clicking**
   *"Leave it off"* (labels present); (b) answered as **typed free text** — `PATCH` with
   `answer="no, leave it off"` and **no** `labels`, which is what both UI surfaces send for a typed
@@ -259,26 +259,26 @@ first.
   third time, and assert **no third record** and a sentence that does not claim a fresh ask. All
   three paths must behave identically — that is what "the bound is a count, not a polarity test"
   means, and case (b) is the regression test for design D13.
-- [ ] 4.6 An operator call (no attribution headers) is refused by nothing and opens no question.
-- [ ] 4.7 `hub/tests/test_agent_actions_governed.py` — `archive_job` with the allowance off returns
+- [x] 4.6 An operator call (no attribution headers) is refused by nothing and opens no question.
+- [x] 4.7 `hub/tests/test_agent_actions_governed.py` — `archive_job` with the allowance off returns
   the new refusal and opens no permission request (task 2.3's behaviour).
-- [ ] 4.8 A test that asserts the refusal **sentence** an MCP caller sees, through
+- [x] 4.8 A test that asserts the refusal **sentence** an MCP caller sees, through
   `_readable_detail` (`mcp_server.py:124`), not just the dict — and that `HubAPIError.data` still
   carries the `question_id`, which is how an adapter learns it without parsing prose.
-- [ ] 4.9 **(R2)** The record does not claim anybody is waiting. Assert the opened question has
+- [x] 4.9 **(R2)** The record does not claim anybody is waiting. Assert the opened question has
   `created_by_run_id` and `conversation_id` NULL, and that the refused run's conversation's
   attention state is **not** `"waiting"` (`conversations.py:433-441`) — the defect design D10
   exists to avoid. A test that only checks the question exists would pass with the run stamped on
   it.
 
-- [ ] 4.10 **(R3 — pins design D14.)** Assert the record's `asker_waiting` is `true` in
+- [x] 4.10 **(R3 — pins design D14.)** Assert the record's `asker_waiting` is `true` in
   `GET /questions`, with the reason in the test's own words: `_with_asker_state` presumes an
   unknown asker is waiting (`questions.py:333-344`), so any question with no run reports `true`,
   and the conversation tray's `activeQuestionFor` sorts on that unfiltered by `blocking`
   (`lib/pendingQuestions.ts:24-46`). This is the shipped behaviour of every operator-posted
   question and is **not** changed here; the test exists so a later reader sees it was decided
   rather than missed.
-- [ ] 4.11 **(R4 — new; design D16.)** **The refusal survives the record failing to open.** Make
+- [x] 4.11 **(R4 — new; design D16.)** **The refusal survives the record failing to open.** Make
   the record's commit raise (patch `ask_question_for_actor`, or hold a write lock on the table) and
   assert the route still returns **403**, not 500; that the body carries `code`, `setting` and
   `current_value` but **no** `question_id`; and that the sentence tells the agent to raise it with
@@ -291,11 +291,11 @@ first.
 
 ## 5. Drive it
 
-- [ ] 5.1 Reproduce D-1's harness against the fix on the trial Hub `:8010`, from source — a fresh
+- [x] 5.1 Reproduce D-1's harness against the fix on the trial Hub `:8010`, from source — a fresh
   project, one `claude-haiku-4-5-20251001` agent, one real turn calling `create_flow`. Assert: one
   question visible on the operator's Questions destination, the agent's transcript carrying the new
   sentence, `permission_requests` still empty.
-- [ ] 5.2 Then answer it as the operator, with the setting enabled by hand, and **record what the
+- [x] 5.2 Then answer it as the operator, with the setting enabled by hand, and **record what the
   agent does** when it wakes. **This is the task that proves the change**; a green suite without it
   proves only that the code runs.
   **(R4) It no longer asserts "its retry succeeds", and the reason is a limit this change cannot
@@ -315,3 +315,44 @@ first.
   a record nobody is waiting on sitting there is acceptable to look at. That observation, not this
   prediction, is what a later round should argue with.
 - [ ] 5.3 Set F376's `Status:` line to `fixed <sha>` only after 5.2. Never on the strength of 4.x.
+
+## Build record (2026-09-22, interactive with the operator)
+
+- **0.1** — F386 fixed in `6ab4a4a` (card reads `blocking` + `asker_waiting`, drops `declined`; 6
+  vitest rows, 4 failing before). On the cycle branch `autonomous/2026-09-21-daily`; master takes it
+  at the next day window's merge gate. **0.2** — F387 read; nothing decided, as the task says.
+- **1.1-1.7, 2.1** — `hub/hub/refused_capability.py` (new) and the allowance branch of
+  `jobs._require_agent_job_allowance`. One deviation from 1.1's example signature, noted rather
+  than hidden: the per-setting words (setting, value, what enabling allows, where it is changed,
+  header, both option sets) are one frozen `SettingGate` value, `AGENT_JOBS`, instead of loose
+  keywords. `run_id` and `capability` are absent, as R4 required. **One addition to 1.6's
+  sentences:** when a *different* agent is refused while the record is open, its refusal says the
+  answer goes to the agent named on the record rather than "will reach you" (D5's known limit, now
+  stated in the sentence instead of being false in it).
+- **2.2** re-confirmed on today's tree: the gate is the first statement after
+  `project_id, _ = project` at all four call sites (`jobs.py:570`, `:850`, `:1166`, `:1297`).
+  **2.3** is asserted by 4.7.
+- **3.1** — the five propagating tools' docstrings plus `archive_job`'s (six). **3.2** — one
+  `_SCHEDULED_WORK_SETTING` sentence in `agents.py`, named on all six operations; "same allowance"
+  is gone; `archive_job`'s `http_note` now says the 403 precedes and is never polled.
+- **4.x** — `hub/tests/test_refused_capability.py`, **17 tests**; 4.7 in
+  `test_agent_actions_governed.py`; the phase-7 test that asserted the old *"operator approval"*
+  sentence now asserts the new code. Against the pre-change gate: **16 failed, 1 passed** (the
+  operator-call test, which passes either way). Mutations, each caught by exactly its own test:
+  stamping the run on the record (4.9), removing the integrity-error recovery (4.4b), removing the
+  best-effort wrap (4.11), and R3's never-again bound (4.5, all three rows). **4.4b** asserts the
+  integrity-error branch directly, as the task permits, and says why in the test; a real
+  `asyncio.gather` pair is also run but is not claimed to interleave. Allowance-related files
+  together: **283 passed, 3 skipped**. Full hub suite: see 5.3's commit.
+- **5.1/5.2** — `scripts/drive/d_0922_f376_refused_capability.py`, a fresh Hub from this checkout on
+  `:8095` with a throwaway profile (migrated 0001→0105), one Haiku agent, two real turns:
+  **16 ok / 0 bad**. One question of record, non-blocking, no run and no conversation on it,
+  transcript carrying the new sentence and the question id, the old sentence absent,
+  `permission_requests` 0, the refused conversation `idle` (not `waiting`), no job. Then the
+  operator enabled the setting and answered: the agent was woken and **re-created the flow
+  itself** (`f376-flow`, enabled; the harness disabled it and deleted the project).
+  **This disproves R4's prediction in the case driven, and only there.** The answer was queued into
+  the refused turn's own conversation (one conversation existed afterwards; measured), so the woken
+  turn had the original request in context (inferred from the transcript, which ends with the
+  agent reporting the flow it created). A refusal inside a `session_mode="new"` job firing has no
+  such context, and R4's limit still stands for it; that case was not driven.

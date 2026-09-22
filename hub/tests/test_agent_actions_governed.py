@@ -1,7 +1,7 @@
 """Governed agent-request and scheduled-work capabilities."""
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from hub.agent_auth import hash_run_token
 from hub.api.v1.agents import FULL_ACCESS_PERMISSION_MODE
@@ -507,3 +507,33 @@ async def test_the_operators_own_archive_needs_no_direction(app, auth_headers):
     assert archived.status_code == 200, archived.text
     assert archived.json()["archived_at"] is not None
     assert await _cards(job_id) == []
+
+
+@pytest.mark.asyncio
+async def test_archiving_with_the_allowance_off_is_the_allowance_refusal_not_a_direction_card(
+    app, auth_headers
+):
+    """`a-refused-capability-reaches-the-operator` task 2.3/4.7. `archive_job` runs the allowance
+    gate before `require_operator_direction`, so an agent without the allowance gets the
+    allowance's refusal and its question of record — and no turn-scoped direction card for a
+    decision that is not turn-scoped. Reversing that order would open both."""
+    created = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        headers=auth_headers,
+        json={"name": "archivable", "agent": "lead", "message": "run tests", "cron": "0 2 * * *"},
+    )
+    assert created.status_code == 201, created.text
+    job_id = created.json()["id"]
+    headers = await _actor(run_id="run-archive-no-allowance")
+
+    refused = await app.post(f"/api/v1/agent-actions/jobs/{job_id}/archive", headers=headers)
+
+    assert refused.status_code == 403, refused.text
+    detail = refused.json()["detail"]
+    assert detail["code"] == "project_setting_blocks_capability"
+    assert detail["question_id"]
+    assert await _cards(job_id) == []
+    async with async_session_factory() as session:
+        assert (await session.scalar(select(func.count()).select_from(PermissionRequest))) == 0
+        job = await session.get(AIJob, job_id)
+        assert job.archived_at is None

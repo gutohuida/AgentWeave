@@ -3,7 +3,7 @@
 **Round 1, 2026-09-18; amended by Rounds 2 and 3, 2026-09-18** (day window,
 `.claude/autonomous/2026-09-18-day-log.md`); **amended by Round 4, 2026-09-19** (interactive, from
 the adversarial Opus review the operator commissioned before approving). Findings: **F376 (A)**,
-with **F378 (B)**'s refusal shape. **Nothing here is implemented yet.**
+with **F378 (B)**'s refusal shape. **Built and driven 2026-09-22** (`tasks.md`, `## Build record`).
 
 **R4 found the decision sound for a third time and the case for it false in one column.** R1 wrote
 that the record lands on *"a top-level destination"*; there is no such destination — `QuestionsPanel`

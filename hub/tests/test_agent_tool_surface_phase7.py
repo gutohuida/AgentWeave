@@ -205,7 +205,11 @@ async def test_agent_job_mutation_requires_operator_allowance(app, auth_headers)
     }
     denied = await app.post("/api/v1/projects/proj-test/jobs", headers=denied_headers, json=body)
     assert denied.status_code == 403
-    assert "operator approval" in denied.json()["detail"].lower()
+    # It used to promise "operator approval" that nothing opened (F376). It names the setting now.
+    detail = denied.json()["detail"]
+    assert detail["code"] == "project_setting_blocks_capability"
+    assert detail["setting"] == "allow_agent_jobs"
+    assert "approval" not in detail["message"].lower()
 
     settings = await app.patch(
         "/api/v1/projects/proj-test/queue/settings",

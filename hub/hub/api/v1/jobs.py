@@ -10,7 +10,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ... import task_attribution
+from ... import refused_capability, task_attribution
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, AIJob, JobRun, Loop, Project, Question, Run, Task
@@ -45,9 +45,11 @@ async def _require_agent_job_allowance(
         raise HTTPException(status_code=403, detail="Agent job request has stale attribution")
     project = await session.get(Project, project_id)
     if project is None or not project.allow_agent_jobs:
-        raise HTTPException(
-            status_code=403,
-            detail="Scheduled work from agents requires operator approval or an enabled allowance",
+        # Opens (or finds) the operator's question of record and raises the 403 naming it. Every
+        # caller invokes this gate as its first statement, so the record's commit carries nothing
+        # of the route's own (`a-refused-capability-reaches-the-operator`, task 2.2).
+        await refused_capability.refuse_for_project_state(
+            session, project_id=project_id, agent=agent, gate=refused_capability.AGENT_JOBS
         )
 
 

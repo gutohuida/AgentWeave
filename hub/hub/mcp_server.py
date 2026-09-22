@@ -606,7 +606,12 @@ def create_job(
     cron: str,
     session_mode: JobSessionMode = "new",
 ) -> Dict[str, Any]:
-    """Create recurring work only when the operator enabled the agent-job allowance.
+    """Create recurring work.
+
+    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
+    Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
+    and do not repeat the call. If they enable it, their answer reaches you as a message.
 
     Args:
         name: Job name.
@@ -656,6 +661,11 @@ def create_loop(
     Continuity across firings is by checkpoint (see submit_checkpoint_notes), never by a
     resumed session — every firing starts fresh. Refused outright with no stop condition: a
     loop that cannot stop is not created, and refused with a document: that is a flow.
+
+    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
+    Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
+    and do not repeat the call. If they enable it, their answer reaches you as a message.
 
     Args:
         name: Job name.
@@ -743,6 +753,11 @@ def create_flow(
     checkpoint rather than a resumed session, and the checkpoint is the flow's rather than any one
     agent's — so a reviewer starts from what the implementer recorded.
 
+    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
+    Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
+    and do not repeat the call. If they enable it, their answer reaches you as a message.
+
     Args:
         name: Job name.
         agent: Exact name of the registered agent this flow fires by default.
@@ -829,6 +844,10 @@ def archive_job(job_id: str) -> Dict[str, Any]:
     Refused if the job has a loop: a loop is archived by the operator only, never an agent
     (mirrors `create_loop`'s "continuity is by checkpoint, not resume" rule).
 
+    Refused before any of that if the project setting `allow_agent_jobs` is off: that refusal is
+    the same as every other job tool's — the operator is asked about the setting, and this call
+    does not wait for them. Only the direction request described above is waited on.
+
     **The rule above is the Hub's, not this tool's** (§3.2 of
     `2026-09-07-an-agent-without-mcp-is-not-told-it-has-nothing`, 2026-09-09). This function used to
     ask the operator itself and only then call the route; the route asked nothing, so an agent on the
@@ -863,13 +882,25 @@ def archive_job(job_id: str) -> Dict[str, Any]:
 
 @mcp.tool()
 def toggle_job(job_id: str, enabled: bool) -> Dict[str, Any]:
-    """Enable or disable recurring work only under operator allowance."""
+    """Enable or disable recurring work.
+
+    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
+    Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
+    and do not repeat the call. If they enable it, their answer reaches you as a message.
+    """
     return _job_effect("PATCH", f"/jobs/{job_id}", {"enabled": enabled})
 
 
 @mcp.tool()
 def run_job(job_id: str) -> Dict[str, Any]:
-    """Trigger recurring work immediately only under operator allowance."""
+    """Trigger recurring work immediately.
+
+    Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is
+    off, this is refused at once (403) and the Hub asks the operator whether to enable it, on their
+    Questions destination; the refusal names that question. It is a refusal, not a wait: do not poll
+    and do not repeat the call. If they enable it, their answer reaches you as a message.
+    """
     return _job_effect("POST", f"/jobs/{job_id}/run")
 
 

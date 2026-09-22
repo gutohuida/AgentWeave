@@ -894,6 +894,17 @@ def _runner_summary(agent_meta: dict) -> str:
 _AGENT_ACTIONS_PREFIX = "/api/v1/agent-actions"
 
 
+# The allowance refusal, named on every job operation rather than cross-referenced: "same allowance"
+# was the sentence F376 made false, and an agent reading one operation must not need another's.
+_SCHEDULED_WORK_SETTING = (
+    "Needs the project setting `allow_agent_jobs`, which only the operator turns on. While it is "
+    "off this is refused at once with `403` and `code` `project_setting_blocks_capability`, and the "
+    "Hub asks the operator whether to enable it; the refusal names that question. That refusal is "
+    "not a wait: do not poll and do not repeat the call. If they enable it, their answer reaches "
+    "you as a message."
+)
+
+
 class _Operation(NamedTuple):
     """One capability of the plane, described once and rendered for either access path.
 
@@ -1265,10 +1276,7 @@ def _operations() -> List[_Operation]:
             path="/jobs",
             fields=("name", "agent", "message", "cron", "session_mode"),
             required=("name", "agent", "message", "cron"),
-            text=(
-                f"session_mode is one of {values(JobSessionMode)}. Requires the operator's "
-                "scheduled-work allowance."
-            ),
+            text=(f"session_mode is one of {values(JobSessionMode)}. {_SCHEDULED_WORK_SETTING}"),
         ),
         _Operation(
             tool="toggle_job",
@@ -1277,7 +1285,7 @@ def _operations() -> List[_Operation]:
             path="/jobs/{job_id}",
             fields=("enabled",),
             required=(),
-            text="same allowance.",
+            text=_SCHEDULED_WORK_SETTING,
         ),
         _Operation(
             tool="run_job",
@@ -1286,7 +1294,7 @@ def _operations() -> List[_Operation]:
             path="/jobs/{job_id}/run",
             fields=(),
             required=(),
-            text="same allowance.",
+            text=_SCHEDULED_WORK_SETTING,
         ),
         _Operation(
             tool="archive_job",
@@ -1296,13 +1304,14 @@ def _operations() -> List[_Operation]:
             fields=(),
             required=(),
             text=(
-                "same allowance for the capability, but always puts this exact call to the "
+                f"{_SCHEDULED_WORK_SETTING} With it on, this still always puts this exact call to the "
                 "operator and waits for an explicit answer, whatever this run's permission "
                 "posture is. The allowance alone is not enough — it is what makes the call "
                 "reachable, not a standing yes. Refused if the job has a loop: a loop is archived "
                 "by the operator only."
             ),
             http_note=(
+                "The allowance's `403` above comes first and is never polled; only this is. "
                 "So the first attempt is refused with `409` and a body carrying `code` "
                 "`operator_direction_required` and a `permission_request_id`; nothing was archived "
                 "and nothing is wrong with your request. The operator now has that request in "
@@ -1344,7 +1353,7 @@ def _operations() -> List[_Operation]:
                 "evidence for it; left unset, a loop with no document merges the task's own "
                 "branch. It is fixed at creation and cannot be changed afterwards. "
                 "`initial_tasks` seeds the queue at creation, each entry the same shape "
-                "`create_task` takes. Same allowance as `create_job`."
+                f"`create_task` takes. {_SCHEDULED_WORK_SETTING}"
             ),
         ),
         _Operation(
@@ -1369,14 +1378,15 @@ def _operations() -> List[_Operation]:
             ),
             required=("name", "agent", "message", "cron"),
             text=(
-                "a loop that decomposes an approved specification document. Same row and same "
-                "allowance as `create_loop`; what differs is the queue behaviour. Each firing "
+                "a loop that decomposes an approved specification document. Same row as "
+                "`create_loop`; what differs is the queue behaviour. Each firing "
                 "starts every task whose prerequisites are met and for which an agent is free, so "
                 "independent work runs in parallel, and a task somebody finished becomes "
                 "claimable by anybody except its author — which is how work is reviewed without "
                 "the author being asked to hand it over. `agent` is the default, not the mandate. "
                 "Refused if `work_needs_evidence` is given: a flow's requirements are its evidence "
-                "chain, so accepted evidence always decides what approving one of its tasks merges."
+                "chain, so accepted evidence always decides what approving one of its tasks "
+                f"merges. {_SCHEDULED_WORK_SETTING}"
             ),
         ),
     ]
