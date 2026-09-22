@@ -17605,9 +17605,7 @@ so a caller saw an absence; this one substitutes a plausible wrong value, so a c
 
 ## F224 (C) — a loop archived through its job is told "this loop is still running", forever
 
-**Status:** open. Verified 2026-09-09: `archive_loop` still tests `ending_state` before
-`archived_at` (`hub/hub/api/v1/loops.py:174`, `:177`), so a loop archived through its job is still
-told it is running, permanently, and still cannot be given an ending. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — archiving a running loop's job now ends the loop, and `archive_loop` checks `archived_at` first; see FIXED at the end of this entry.
 
 `archive_job` archives the loop alongside the job (`hub/hub/api/v1/jobs.py:1156`:
 `loop.archived_at = archived_at`) and never touches `ending_state`. `archive_loop`
@@ -17644,6 +17642,8 @@ is defensible: a disabled loop genuinely has not ended. This one is not: the loo
 archived.
 
 **Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 6. Two of the nine reds.
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3b).** Both halves. The sentence: `archive_loop` now tests `archived_at` before `ending_state`, so an archived loop is told it is already archived. The record: since F222 an archived job cannot be switched back on, so a loop archived with it has ended, and `archive_job` now says so through `end_loop` (`reason="archived with its job"`, `loop_ending.ARCHIVED_WITH_JOB_REASON`, `ending_state="stopped"`, `stopped_at` = the archive time). Only when no ending was recorded: an ending a firing or the operator already wrote is kept. The open question in `archive_job`'s docstring — whether the operator's archive should *refuse* a running loop — is not decided here; this records a fact, it does not add a refusal. `test_a_loop_archived_through_the_job_route_holds_nobody` asserted `ending_state is None` after the route and said to re-stage it if the route ever ended the loop; it now asserts the ending, and a new `test_a_loop_archived_without_an_ending_holds_nobody` keeps the archived clause covered with a legacy row (databases made before this fix hold such loops). Tests: `test_a_running_loop_archived_through_its_job_is_recorded_as_ended`, `test_archiving_the_job_keeps_an_ending_the_loop_already_had` (`test_loop_archival.py`).
 
 ---
 
@@ -17690,9 +17690,7 @@ Unlike F215, nothing on the screen instructs the operator to use these, which is
 
 ## F226 (D) — the job detail view's embedded history drops the two fields a failure is read by
 
-**Status:** open. Verified 2026-09-09: the detail route's embedded history still carries
-six keys (`hub/hub/api/v1/jobs.py:805-814`) and neither `error_summary` nor `tick_count` is among
-them, so the card's `??` preference is still satisfied by rows with no reasons in them. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — the embedded history is `JobRunResponse`, the history route's own model; see FIXED at the end of this entry.
 
 `GET /jobs/{id}/history` returns `JobRunResponse`, which carries `error_summary` and `tick_count`.
 `GET /jobs/{id}` embeds the last ten firings as a hand-built list (`hub/hub/api/v1/jobs.py:805-814`)
@@ -17720,6 +17718,8 @@ and forty lines above it renders `run.error_summary` for exactly the `failed` an
 reasons in it and no error — `??` is satisfied by the six-key rows.
 
 **Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 7. One of the nine reds.
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3b).** The hand-built six-key dicts are gone: `get_job` builds `JobRunResponse.model_validate(run)` and `JobResponse.history` is typed `List[JobRunResponse]`, so the two routes cannot drift again. The UI type (`api/jobs.ts:119`, `history?: JobRun[]`) already expected these fields. Test: `test_the_detail_history_carries_what_a_failure_is_read_by` (`test_jobs_crud.py`) — the embedded rows equal the history route's; on the old code it fails with `KeyError: 'error_summary'`.
 
 ---
 
@@ -18979,7 +18979,7 @@ them one import away.
 
 ## F258 (B) — every message the operator sends through `POST /messages` is born one hop past the budget, and waits there until somebody releases it by hand
 
-**Status:** open. F395 (2026-09-21) has the same root cause and closes with this one; it adds the `origin_type: "agent"` mislabel. Filed by the row-17 drive (`78461c9`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** fixed (this commit) [Round 3, 2026-09-22], with F395 — an operator `POST /messages` is queued at depth 0 as `origin_type="operator"`; see FIXED at the end of this entry.
 
 `create_message_for_actor` (`hub/hub/api/v1/messages.py:56`) opens with:
 
@@ -19034,6 +19034,8 @@ the app today. `docs/reference/hub-api.md:25` does advertise it — *"`POST` `/m
 message"* — and that table is also stale on the route shape, which is project-scoped.
 
 **Reproduction:** `t_sweep_row17_messages.py`, legs 1 and 1b.
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3a).** Re-verified first against HEAD `a9e934c`: `create_message_for_actor` still opened with `hop_depth = hop_budget + 1` (`messages.py:58`). That default dates from `de5c143` (Phase 6, 2026-08-01), when the CLI's HTTP transport still posted agent mail to this route and a runless send could not be trusted with a depth. Nothing does that now — agents post to `/agent-actions/messages`, where the bound actor always carries a `run_id` — so every runless call is the operator's. It is now queued exactly as the chat (`agent_trigger.py`) and answer (`questions.py`) routes queue operator input: `hop_depth=0`, `origin_type="operator"`, `origin_agent=None`, and a thread it opens has `origin="operator"`. The message row's sender is `"operator"` (`schemas/messages.py:OPERATOR_SENDER`), which `GET /agents`' activity fallback and `GET /status`'s `agents_active` both skip. A send with a `run_id` is unchanged: the run must be live and the sender's, and the entry is one hop past it. Tests: `hub/tests/test_messages.py` (`test_an_operator_message_is_queued_at_depth_zero_as_the_operators`, `..._opens_an_operator_conversation`, `test_an_agent_send_with_its_run_keeps_the_agents_origin_and_depth`), each failing on the old code. `t_sweep_row17_messages.py` legs 1 and 1b now verify the repair (not run live); `t_d0915_reachability.py` leg 5.4b, whose precondition *was* this defect, is retired as skipped rather than passed.
 
 ---
 
@@ -19154,9 +19156,7 @@ done one, and this note exists so the next person does not read six as the answe
 
 ## F261 (C) — the recipient is checked against the roster and the sender is not, so a name nobody registered becomes a listed agent
 
-**Status:** open. The recipient is still checked against the roster and the sender is
-still not, so a name nobody registered still becomes a listed agent that the send route then refuses.
-Reaching it needs a direct API call, which is what holds it at C. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — without a `run_id` the sender can only be the operator; see FIXED at the end of this entry.
 
 `POST /messages` resolves `body.recipient` against the `agents` table and refuses an unknown one
 with a 404 and a persisted `agent_action_rejected` event (`messages.py:74-105`). `body.sender` is
@@ -19201,13 +19201,13 @@ it needs a direct API call: no shipped UI posts a message (F260).
 
 **Reproduction:** `t_sweep_row17_messages.py`, leg 4.
 
+**FIXED 2026-09-22 (interactive session, Round 3, group 3a).** Chosen over "check `from` against the roster": a registered name is no better as an identity claim than a ghost's, and CLAUDE.md's rule is that identity is never accepted from a request body. So the operator route refuses with 422 any runless `from` other than `"operator"` (it may be omitted), naming the value and pointing an agent at `send_message`; with a `run_id` the sender must already equal the live run's agent. Nothing is written for a refused send, so no ghost reaches `GET /agents` or `GET /status`, and a refusal of an operator send is recorded with `agent=None` instead of on a made-up agent's timeline. The route's other refusal tests used `"from": "claude"` and would have passed on the sender check alone; they now omit `from` and assert the field they test. Tests: `test_a_sender_without_a_run_must_be_the_operator`, `test_the_operators_mail_does_not_list_the_operator_as_an_agent`. 11 existing tests that meant an agent send now pass a real `run_id` through a new `start_run` fixture (`hub/tests/conftest.py`). `t_sweep_row17_messages.py` leg 4 verifies the repair (not run live). **Left as it was:** the roster's activity fallback still admits any name from older message rows for 24 hours, and non-message sources (heartbeats, output, assignees) are untouched — they are not this finding.
+
 ---
 
 ## F262 (C) — `GET /messages?conversation=` means an agent pair, and a real conversation id is silently ignored
 
-**Status:** open. Verified 2026-09-09: `hub/hub/api/v1/messages.py:350` still reads
-`conversation` as an agent pair and still drops anything without a colon, so a real thread id is
-still ignored and the answer still reads as everything for that thread. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — a `conversation` that is not `<agent>:<agent>` is refused 422; see FIXED at the end of this entry.
 
 ```python
 # messages.py:349
@@ -19234,13 +19234,13 @@ so the answer reads as *"this is everything for that thread"*. `useMessageHistor
 
 **Reproduction:** `t_sweep_row17_messages.py`, leg 6.
 
+**FIXED 2026-09-22 (interactive session, Round 3, group 3a).** Refused rather than taught thread ids: nothing ships a caller (F260), and a real `conv-` filter would have to join through the inbound entries to find the recipient-side thread. The 422 names the accepted shape and says where a thread's messages are. Empty halves (`alpha:`, `:bravo`) are refused too. Tests: `test_a_conversation_that_is_not_an_agent_pair_is_refused` (4 values), `test_an_agent_pair_filters_to_their_messages`. `t_sweep_row17_messages.py` leg 6 verifies the repair (not run live).
+
 ---
 
 ## F263 (D) — `sort` accepts any string and quietly means ascending, and the default page is the oldest 100 messages
 
-**Status:** open. Verified 2026-09-09: `hub/hub/api/v1/messages.py:359` still reverses
-only on the exact literal `desc`, so any other spelling still means ascending and the default page is
-still the oldest hundred a project recorded. [classified 2026-09-09, D-3]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — `sort` is `Literal["asc", "desc"]`; see FIXED at the end of this entry.
 
 ```python
 # messages.py:356
@@ -19261,15 +19261,13 @@ show a recent one. `useMessageHistory` sends no limit, so the dead screen would 
 
 **Reproduction:** `t_sweep_row17_messages.py`, leg 6.
 
+**FIXED 2026-09-22 (interactive session, Round 3, group 3a).** Any other value is now a 422. The default stays `asc`: the CLI transport's `get_pending_messages` reads the unread inbox oldest-first, so flipping it would change the one remaining caller's order. The oldest-page complaint is therefore answered by making `desc` the only way to ask for newest-first, not by changing the default. Tests: `test_a_sort_other_than_asc_or_desc_is_refused` (the four measured spellings), `test_desc_answers_newest_first`.
+
 ---
 
 ## F264 (B) — the query that decides what a loop is waiting on has no project filter, and the flag it depends on is never set
 
-**Status:** open, and half-driven. The code half is established: `_pending_loop_request`
-(`hub/hub/scheduler.py:415`) has no project filter and depends on a flag nothing sets (F259). The
-live pass of 2026-09-01 fired the branch but **did not reproduce the leak**, and this entry records
-itself as inconclusive rather than negative. It names the drive still owed -- one pass in which the
-foreign row is the newest at firing time -- and that pass has not been run. [classified 2026-09-09, D-2]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — `_pending_loop_request`'s message query is project-scoped; see FIXED at the end of this entry. The dead `read` predicate is F259's and is untouched.
 
 `_pending_loop_request` (`hub/hub/scheduler.py:415`) explains the loop's stall to the operator. Its
 message branch is:
@@ -19357,11 +19355,11 @@ The cost is letting leg 1's orphan turn finish before leg 2 seeds; 300 s was not
 **Reproduction:** `scripts/drive/t_f264_live_loop_reason.py` (the 7 failures are the six leak
 assertions, which fail because the leak did not occur, plus the precondition that explains why).
 
+**FIXED 2026-09-22 (interactive session, Round 3, group 3b).** `Message.project_id == job.project_id` added (`scheduler.py`). **The unit test reproduces what the live pass could not:** two same-named `executor -> creator` messages, the foreign one newer, and on the old query the loop's reason was `"another project's secret"`; now it is this project's. Test: `test_a_loops_pending_message_is_never_another_projects` (`test_scheduler.py`). That file's exhaustion tests only pass after an earlier test has created the schema (run alone they fail with `no such table`; the pre-existing `..._names_an_unread_message_to_the_creator` does too), so the pre-fix check was run as the `-k "pending or exhausted"` batch. `t_f264_live_loop_reason.py` now sends its candidate mail through real `worker` turns — F261's repair refuses the runless `from` it used to forge it with — and legs 4-6 expect the loop's own project's message (not run live).
+
 ## F265 (B) — an agent's `create_loop` with `initial_tasks` is refused 403 *after* the loop and job it refused have been committed and left enabled
 
-**Status:** open. Filed by the row-14 drive, never fixed and never specced. The refused
-`create_loop` still leaves a committed job **enabled** with a next firing stamped, which is the half
-of this entry that costs something. [classified 2026-09-09, D-2]
+**Status:** fixed (this commit) [Round 3, 2026-09-22] — the refusal is asked before any row exists; see FIXED at the end of this entry.
 
 A real `claude-haiku-4-5` turn as `boss` called `create_loop` with `agent="worker"` and
 `initial_tasks=[...]` — exactly as the tool's own docstring advertises. What came back to the agent:
@@ -19390,6 +19388,8 @@ contaminated F264's second pass above — the defect is not hypothetical, it int
 measurement in the same run.)
 
 **Reproduction:** `scripts/drive/t_f264_live_loop_reason.py`, leg 2a (printed under LEG 1).
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3b).** Re-verified first: `create_job` committed the job (`jobs.py:677`) and the loop (`:707`) and only then called `create_task_for_actor` for each seed, whose `_authorize_loop_task_creation` refused an agent that is not `AIJob.agent`. A comment beside the seeding claimed the gate was "satisfied for free". The same rule is now asked next to F54's check, before the job row: an agent caller (both identity headers present) seeding a loop whose `agent` is not itself gets a 403 that names the agent the loop runs, says nothing was created, and gives both ways on — create it without `initial_tasks` and `send_message` that agent, or `ask_user` the operator. D8 itself is unchanged (the operator's decision). The false comment is corrected. Test: `test_seeding_a_loop_that_runs_another_agent_is_refused_before_anything_exists` (`test_agent_actions_governed.py`) — no `AIJob`, `Loop` or `Task` row afterwards, and the same call without the seed succeeds; on the old code it fails on `left 1 AIJob row(s)`. `t_f264_live_loop_reason.py` leg 2a now verifies the repair (not run live).
 
 
 # F190 phase 0 — the observation gate, driven 2026-09-01
@@ -31209,10 +31209,7 @@ F109's intermittent `test_spawn_failure_marks_run_failed` is plausibly the same 
 
 **Source: found by driving** (e2e-loop SWEEP, 2026-09-21, port 8030, `proj-05c8aa160921`).
 
-**Status:** open. Same root cause as F258 (`messages.py:58` `hop_depth = hop_budget + 1` without a `run_id`; re-checked 2026-09-22). Fix and close both together in Round 3 of `spec-queue/ROUNDS.md`; the `origin_type` half (`messages.py:257`, `:278`) is this entry's own and must be fixed with it. No fix commit references it; filed 2026-09-21 by the night window's full-surface
-sweep and reproduced there against a live Hub, not re-checked since. (Status line added 2026-09-21
-by the next iteration -- the sweep filed the finding without one, which
-`scripts/backlog_page.py` reports as "nothing says whether they are done".)
+**Status:** fixed (this commit) [Round 3, 2026-09-22], with F258 — see FIXED at the end of F258. The entry is labelled `origin_type="operator"` with no `origin_agent`, and the `queue_entry_queued` payload reports the entry's own origin rather than a literal `"agent"`.
 
 **What happens.** The one route that injects a message into an agent's inbound queue —
 `POST /projects/{id}/messages`, body `{"from": ..., "to": ..., "content": ...}` — is used both by
@@ -31264,6 +31261,8 @@ recovers it, and withdrawal also works cleanly (verified: `DELETE /queue/entries
 mislabeled as agent-originated until the operator separately discovers and clears the suspension,
 which nothing in the response to the original POST surfaces (the 201 body has no `hop_depth` or
 suspension warning at all).
+
+**FIXED 2026-09-22 (interactive session, Round 3, group 3a)** together with F258, one change. Both halves are covered by `test_an_operator_message_is_queued_at_depth_zero_as_the_operators`: depth 0, `origin_type == "operator"`, `origin_agent is None`, no `queue_chain_suspended` event, and a `waiting_reason` that does not blame the hop budget.
 
 ## F396 (B) -- the MISREPORT ratchet is keyed by file:line, was already decayed on the day its ceiling was measured, and its own warning tells the next reader to make the decay permanent
 
