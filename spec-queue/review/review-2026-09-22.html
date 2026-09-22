@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AgentWeave — review 2026-09-22</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --fg: #1b1b18; --card: #ffffff; --border: #ddd8cf;
+    --accent: #8a5a2b; --muted: #6b6559; --warn-bg: #fff3e0; --warn-border: #d98a2b;
+    --ok-bg: #eef6ee; --ok-border: #4c8c4c; --code-bg: #f0ede6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16151a; --fg: #e9e6df; --card: #201f26; --border: #38363f;
+      --accent: #d69a5c; --muted: #a39d90; --warn-bg: #3a2c14; --warn-border: #d98a2b;
+      --ok-bg: #17301a; --ok-border: #4c8c4c; --code-bg: #2a2830;
+    }
+  }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, Segoe UI, sans-serif;
+         line-height: 1.5; max-width: 880px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  h2 { font-size: 1.15rem; margin-top: 2.2em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { font-size: 1rem; margin-top: 1.4em; color: var(--accent); }
+  .sub { color: var(--muted); font-size: 0.92rem; margin-top: 0; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin: 10px 0; }
+  .warn { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .ok { background: var(--ok-bg); border: 1px solid var(--ok-border); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--code-bg);
+         padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 0.93rem; }
+  th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  ul { margin: 6px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .sev-A { color: #c0392b; font-weight: 600; }
+  .sev-B { color: #c0781e; font-weight: 600; }
+  .sev-C { color: var(--muted); font-weight: 600; }
+  footer { margin-top: 3em; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Review — 2026-09-22</h1>
+<p class="sub">FILL window (day), branch <code>autonomous/2026-09-21-daily</code> · iteration 5 of the day window</p>
+
+<h2>1 · Branch and the last merge gate</h2>
+<div class="card">
+  <p><strong>Branch <code>autonomous/2026-09-21-daily</code> now spans two days</strong> (2026-09-21,
+  2026-09-22). It was not merged at yesterday's close because master kept moving after the gate ran, so
+  today continued on it rather than starting a fresh branch.</p>
+  <p><strong>This reports the previous gate — yesterday's closing <code>D-7</code></strong> (2026-09-21
+  iteration 8), not today's, which has not run yet (it is queued last, as <code>D-7</code>, after this
+  page).</p>
+  <ul>
+    <li>Yesterday's <code>D-7</code> fast-forwarded <code>master</code> to <code>68b40fd</code>. All four
+      gate conditions held for that sha.</li>
+    <li><code>master</code> has since moved further <strong>by hand</strong> (not by any window) to
+      <code>72cfb99</code>, a <code>decisions(2026-09-21 late night)</code> commit — the branch already
+      contains it, so today's fast-forward candidate stayed genuine
+      (<code>git rev-list --count HEAD..master</code> = 0 at arm time).</li>
+    <li>Today's iteration 1 checked this morning's step-1 fallback (per <code>day-window.md</code>, "run
+      the gate here if the previous close did not land it" — it did land, so this was the ordinary
+      inherited-sha check): <code>HEAD</code> was <code>58f773f</code> (the arm commit), its CI run was
+      still <code>in_progress</code> (created 07:55:09Z), so <strong>condition 3 failed</strong> and no
+      gate opened here. Nothing was lost — the branch already sat at a genuine fast-forward point from
+      yesterday, and today's real <code>D-7</code> runs at window close as usual.</li>
+  </ul>
+</div>
+
+<h2>2 · What the night window built</h2>
+<div class="ok">
+  <p><strong>F375</strong> — "a word without a separator can still leave" — closed and archived at
+  <code>4875f53</code>. Rule 4 of the permission approver now catches a bare <code>..</code>,
+  colon-joined option values, glued short-option values, and a leading <code>~</code>, in
+  <code>hub/hub/mcp_server.py</code>. Synced into
+  <code>openspec/specs/agent-run-sandboxing/spec.md</code>. <code>FINDINGS.md</code> now reads
+  <code>fixed a5e5a49</code>.</p>
+  <p><strong>Driven, not only tested.</strong> Night verification: 336/337 new+existing rows in
+  <code>test_permission_approver.py</code>, a full <code>hub/tests/</code> run (4544 passed, 86 skipped),
+  and real-shell rows run by hand in both Git Bash and PowerShell in a scratch directory outside the
+  repo. Today's <code>D-1</code> drove it a second time, independently, through the real permission
+  pipeline: a fresh drive Hub, two Haiku agent turns in <code>permission_mode: workspace</code>, all
+  seven rows (four refusal shapes, three false-positive controls) landed exactly as
+  <code>tasks.md</code> claims. <strong>No new finding — the fix holds live.</strong></p>
+</div>
+
+<h2>3 · What today's drive found</h2>
+<div class="card">
+  <p><span class="sev-C" style="color:var(--muted)">No new finding.</span> <code>D-1</code>'s scoped
+  drive of F375 (above) reconfirmed the night's fix with no deviation. No full-surface sweep ran today
+  — the last one was 2026-09-21, not seven days stale.</p>
+</div>
+
+<h2>4 · What was specced</h2>
+<div class="warn">
+  <p><strong>No spec loop ran today.</strong> The drain count (changes with an unticked task and no
+  <code>APPROVED</code>/<code>REJECTED</code> token in <code>APPROVALS.md</code>'s newest section) was
+  <strong>2</strong>:</p>
+  <ul>
+    <li><code>a-refused-capability-reaches-the-operator</code></li>
+    <li><code>an-unstaffed-review-names-its-holders</code></li>
+  </ul>
+  <p>Both are still awaiting a word from the operator. Under the 2026-09-19 rule ("count only changes
+  waiting on the operator"), a drain of 2 or more means no new proposal today — writing a third would
+  add to a pile the operator has not yet cleared, not help them. The day's slots went to the draining
+  column instead: a scoped drive (<code>D-1</code>) and two no-spec repairs (<code>D-3</code>,
+  <code>D-4</code>), below.</p>
+</div>
+
+<div class="warn">
+  <p><strong>A process miss, found while writing this page.</strong>
+  <code>spec-queue/DIRECTION.md</code> in fact carries a <code>## 2026-09-22</code> section (line 28),
+  written 2026-09-21 ~21:40 by the operator's DECIDE session. Iteration 1's compose step read the
+  newest section as <code>## 2026-09-17</code> and missed it — a read error, not an absent section.
+  The section's item 1 asks for a short, scoped <strong>Round 9</strong> re-derivation of
+  <code>an-unstaffed-review-names-its-holders</code>, limited to <code>design.md</code>'s Round 8
+  fixes (R8-1..R8-5) and the <code>tasks.md</code>/delta text they changed, against the tree as it is
+  today — with no <code>APPROVED</code> row (the DECIDE session writes that). <strong>It has not run
+  yet.</strong> Queued now as the next item this window reaches, ahead of the spare repair slot; if
+  the window runs out first, it is tomorrow's first item instead of the usual compose step.</p>
+</div>
+
+<h2>5 · What tonight's night window will do if the operator approves nothing</h2>
+<div class="card">
+  <p>The default queue falls to open findings, severity A first. The two open severity-A findings with
+  no proposal in flight, in ledger order, are:</p>
+  <ul>
+    <li><span class="sev-A">A</span> <strong>F299</strong> — a <code>claude</code> run whose harness has
+      no MCP cannot write a file, and blames the operator's machine for it.</li>
+    <li><span class="sev-A">A</span> <strong>F301</strong> — on the <code>cli</code> access path a
+      <code>claude</code> run has no tool that can make the request it is told to make.</li>
+  </ul>
+  <p><strong>F388</strong> (A, "a Hub started from source silently opens the operator's live database")
+  is separate from this default: its R4 is done, and per today's <code>DIRECTION.md</code> section it
+  is already approved for tonight (22 Sept) — the <code>APPROVED</code> row is the DECIDE session's to
+  write into <code>APPROVALS.md</code>'s <code>## 2026-09-22</code> section, not this window's.</p>
+  <p><code>a-refused-capability-reaches-the-operator</code> and
+  <code>an-unstaffed-review-names-its-holders</code> both remain on the operator's desk from yesterday,
+  the latter pending the Round 9 check named above before its remaining task groups (2, 5, 6) build.</p>
+</div>
+
+<h2>6 · Research, briefly</h2>
+<div class="card">
+  <p><strong>One ranked candidate today (S cost).</strong> AgentWeave's agent-plane writes
+  (<code>send_message</code>, <code>create_task</code>) have no retry-safe identifier: a Hub timeout on
+  the client side (measured live — a slow response surfaces as a bare <code>TimeoutError</code>, caught
+  by neither of <code>_hub_request</code>'s two exception branches) can hit an agent after the server has
+  already committed the write and started scheduling the recipient. A retry then writes it twice.
+  <code>create_task</code> is one field away from safe — the Hub already accepts and dedupes a
+  client-supplied task <code>id</code> (since 2026-06-17), but the MCP tool stopped sending one.
+  <code>send_message</code> has no id field at all. The motivating evidence is that
+  <code>openai/codex</code> merged the same primitive (an agent message board with caller-supplied,
+  deduplicated request IDs) as eight PRs on 2026-09-21. Measured on the live instance (read-only,
+  <code>mode=ro</code>): 274 agent-sent messages and 23 agent-created tasks over five days, zero
+  duplicates — so this is <strong>latent, not observed</strong>. What it would mean for AgentWeave: a
+  client-minted, Hub-deduplicated id on both writes, so a timed-out retry becomes a no-op instead of a
+  second recipient turn or a second task — closing the same class of bug the ledger already has open
+  once from the UI side (F315).</p>
+  <p>Everything else in today's research file confirmed ground already covered or was checked and
+  dropped — see <code>spec-queue/research/2026-09-22.md</code> for the full list (Codex's message-board
+  design contrast, three Cline releases, LangGraph's typed <code>interrupt()</code>, Copilot CLI
+  policy fixes, Foremerge, spec-kit, two arXiv papers, and the rest).</p>
+</div>
+
+<footer>
+  Generated by the day window, iteration 5. Sources: <code>.claude/autonomous/2026-09-22-day-log.md</code>,
+  <code>scripts/drive/FINDINGS.md</code>, <code>spec-queue/APPROVALS.md</code>,
+  <code>spec-queue/DIRECTION.md</code>, <code>spec-queue/research/2026-09-22.md</code>.
+</footer>
+
+</body>
+</html>

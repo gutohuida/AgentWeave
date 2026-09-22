@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T17:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d5",
-    "next_action": "D-5: spec-queue/review/review-2026-09-22.html per day-window.md D-5's 6-point order: branch/gate status (report YESTERDAY's D-7, which fast-forwarded master to 68b40fd), what night built (F375, driven), today's drive findings, no specs today (drain=2, say why), the default night queue, research briefly. Append a row to spec-queue/APPROVALS.md only if a change was specced (none today). Also mention iteration 3's F223 no-spec repair (d5d605c) and iteration 4's ledger sweep (zero backlog warnings now).",
+    "current": "d5b-r9-verify",
+    "next_action": "d5b-r9-verify: spec-queue/DIRECTION.md's ## 2026-09-22 section item 1 (missed by iteration 1's compose step, found writing d5). Scoped Round 9 re-derivation of an-unstaffed-review-names-its-holders: read design.md's Round 8 (R8-1..R8-5) and the tasks.md/delta text those fixes changed; check git log since 7e2f663 for scheduler.py/jobs.py commits from last night; re-derive against today's tree, do not re-read R8's conclusions. Run test_a_held_agent_is_busy.py and test_a_task_nothing_will_move_holds_nobody.py before and after. Write the result as '## Round 9' in design.md: fix what it finds, or say 'clean'. No APPROVED row (DECIDE session's job). Note the result in the day log for the operator's evening review.",
     "queue": [
         {
             "id": "compose",
@@ -43,9 +43,17 @@
         },
         {
             "id": "d5",
-            "status": "open",
+            "status": "done",
             "title": "Write the review page",
-            "detail": "spec-queue/review/review-2026-09-22.html per day-window.md D-5's 6-point order: branch/gate status (report YESTERDAY's D-7, which fast-forwarded master to 68b40fd), what night built (F375, driven), today's drive findings, no specs today (drain=2, say why), the default night queue, research briefly. Append a row to spec-queue/APPROVALS.md only if a change was specced (none today)."
+            "detail": "review-2026-09-22.html written, 6-point order. Research copied in. No change specced -> no APPROVALS.md row. Found DIRECTION.md's 2026-09-22 section, missed by iteration 1 -> corrected below."
+        },
+        {
+            "id": "d5b-r9-verify",
+            "status": "open",
+            "title": "Corrected: Round 9 verification named by today's DIRECTION.md, missed at compose time",
+            "detail": "spec-queue/DIRECTION.md ## 2026-09-22 item 1: scoped Round 9 re-derivation of an-unstaffed-review-names-its-holders against design.md Round 8 (R8-1..R8-5) and the tasks.md/delta text those fixes changed. git log since 7e2f663 for scheduler.py/jobs.py first. Regression guard before and after. Write '## Round 9' in design.md. No APPROVED row.",
+            "model": "opus",
+            "effort": "high"
         },
         {
             "id": "d6-repair-impl",
