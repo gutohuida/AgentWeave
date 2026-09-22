@@ -106,6 +106,11 @@ it. **Next: Round 2.**
 
 ## Round 2 — decided, unbuilt (~1 day)
 
+**Status:** deferred 2026-09-22 by the operator, who said at the end of Round 1: *"on resume we
+will begin round 3."* Nothing here was started, and nothing here is withdrawn — all 7 findings
+stay open and the verdicts below still hold. It is passed over, not finished, so the tracker
+shows R3 as current and this round keeps its own 0/7. Pick it up whenever the operator says.
+
 The operator has already answered these, so none needs a question or a spec.
 
 | Finding | Sev | Verdict | Fix |

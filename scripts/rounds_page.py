@@ -138,14 +138,17 @@ def parse_plan(text: str) -> list[dict]:
                 break
         # A round can be declared done while some of its findings stay open, because they were
         # handed on to a later round or to D. `**Status:** done YYYY-MM-DD ...` in the plan says so.
-        done = re.search(r"^\*\*Status:\*\*\s*done\s+(\d{4}-\d{2}-\d{2})", body, re.M)
+        # `**Status:** deferred YYYY-MM-DD ...` is the operator passing over a round that is still
+        # entirely open: it is not the current round, and it is not finished either.
+        done = re.search(r"^\*\*Status:\*\*\s*(done|deferred)\s+(\d{4}-\d{2}-\d{2})", body, re.M)
         rounds.append(
             {
                 "key": key,
                 "title": title,
                 "kind": kind,
                 "blurb": blurb,
-                "closed_on": done.group(1) if done else "",
+                "state": done.group(1) if done else "",
+                "closed_on": done.group(2) if done else "",
                 "groups": _parse_groups(kind, body),
             }
         )
@@ -246,7 +249,9 @@ def build() -> tuple[str, dict]:
             items = "".join(item_html(fid, note, r) for fid, note in g["items"])
             groups_html.append(f'<div class="grp">{label}{gnote}<ul>{items}</ul></div>')
         badge = '<span class="now">now</span>' if is_now else ""
-        if total and got == total:
+        if r["state"] == "deferred":
+            complete = f' <span class="donechip">deferred {esc(r["closed_on"])}</span>'
+        elif total and got == total:
             complete = ' <span class="donechip">complete</span>'
         elif r["closed_on"]:
             complete = (
