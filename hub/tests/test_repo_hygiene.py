@@ -73,6 +73,24 @@ def test_git_agrees_about_the_hubs_own_files(tmp_path):
     assert git(repo, "status", "--porcelain").stdout.strip() == ""
 
 
+def test_the_project_marker_stays_out_of_the_operators_history_and_the_path_picker(tmp_path):
+    """F170: registration writes `.agentweave/project.json` into the operator's checkout.
+
+    Two consumers read the same ignore rules: the operator's own `git status`/`git add -A`, and
+    `workspace_paths`, which lists `git ls-files --cached --others --exclude-standard`.
+    """
+    repo = init_repo(tmp_path / "repo")
+    repo_hygiene.seed_repo_excludes(repo)
+
+    marker = repo / ".agentweave" / "project.json"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text('{"project_id": "proj-x"}\n', encoding="utf-8")
+
+    assert git(repo, "status", "--porcelain").stdout.strip() == ""
+    listed = git(repo, "ls-files", "--cached", "--others", "--exclude-standard").stdout.split()
+    assert listed == ["README.md"]
+
+
 def test_the_hubs_own_commit_does_not_sweep_in_build_artefacts(tmp_path):
     """`snapshot_worktree` runs `git add -A`, so whatever is lying there becomes the Hub's commit.
 
