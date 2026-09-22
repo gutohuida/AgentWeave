@@ -31150,7 +31150,7 @@ Filed 2026-09-21 by operator decision.
 
 ## F407 (D) -- a review-dispatch refusal on an `under_review` task starts a sentence in lowercase
 
-**Status:** open
+**Status:** fixed 6961cc4 [D-6, 2026-09-22]
 **Source:** review
 **Theme:** Flows & loops
 **Related:** `an-unstaffed-review-names-its-holders` design.md R8-3 (which noted it as "worth a
@@ -31166,3 +31166,37 @@ Read from source 2026-09-22 (day window, R9); not yet observed on a live Hub. Th
 the unbuilt change capitalises at its own join (task 2.3, `capitalize_first`) and does not change
 the helper; the same treatment at these four sites, or a helper that returns a capitalised
 sentence and a lowercase caller where one exists (none today), would close it.
+
+**Fix, `6961cc4`.** `own_review_remedy`'s `under_review` branch now returns
+`"Decide it yourself: ..."`. Checked all four call sites first: every one places it after a full
+stop, and no caller anywhere needs the lowercase form, so the one-word change at the source closes
+all four without touching `agent_trigger.py`. `hub/tests/test_a_refusal_names_a_remedy_that_works.py`
+updated (the `own_review_remedy` unit assertion plus two `.count("Decide it yourself")` dispatch
+tests) -- mutation-checked by hand: `git stash` on `scheduler.py` alone turned 3 of 18 tests in that
+file red (`assert 0 == 1` against a live-rendered lowercase sentence), restoring it turned them
+green again. `ruff check src/ hub/ tests/` and `black --check --target-version py311 ...` both
+clean.
+
+**Driven, not just tested.** Fresh scratch Hub on port 8013
+(`~/.agentweave/hub/profiles/drive0922c/agentweave.db`), started from `hub/` source.
+`scripts/drive/d6_0922_f407_capitalization.py`: one real Haiku turn (`f407-author`, project
+`proj-844073d6cbc4`, never `proj-5e960453`/`proj-18e5d4e0`) authors a file and completes its task
+with recorded evidence naming a commit -- required because the public dispatch route
+(`agent_trigger.py:1455`, `commit_for_task_review`) gates on it before ever reaching
+`review_dispatch_refusal`. An operator PATCH then wedges that task `under_review` under a second
+agent, and a third agent is dispatched naming `review_task_id`: real `POST /agent/trigger` answers
+`409 "Task task-28028c60dfc9 is already under review by 'f407-rev-a'. Let the review in flight
+finish. Decide it yourself: approve, reject, or send it back with revision_needed."` -- capitalised,
+no stray duplicate, the old `"finish. decide it yourself"` fragment gone. This exercises
+`review_dispatch_refusal` (the site of three of the four callers, 503/511/521, all the same
+function call); site 848 (`trigger_agent_directly`'s own in-flight check, reached only through the
+scheduler's internal dispatch) was not independently reached live -- a cold `POST /jobs/{id}/run`
+against a wedged review hits `_wedged_review_reason`'s unrelated stall detector first (F154's own
+message), a pre-existing scheduler behaviour this fix does not touch. Not a gap in the fix itself:
+`own_review_remedy` is a pure function called identically at all four sites, so one live call
+confirms the source-level change; the case that could differ per-caller (whether the join is a full
+stop) was checked by reading all four sites, not assumed. 11/11 checks passed. Cleanup: all three
+scratch projects from this session deleted (`DELETE /projects/{id}`, including two from earlier
+attempts that hit different guards before the final script version), the job disabled and confirmed
+absent from `GET /jobs?include_archived=true`, the Hub's uvicorn process stopped and confirmed no
+`LISTENING` socket remained on 8013 afterward (only `TIME_WAIT`).
