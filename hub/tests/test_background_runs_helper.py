@@ -47,8 +47,8 @@ def test_a_retry_that_finishes_behind_the_waiter_is_waited_for_not_spun_on(monke
     thread.start()
     thread.join(timeout=10)
 
-    assert not thread.is_alive(), (
-        "the wait spun on a finished run whose discard was queued behind it (F394)"
-    )
+    assert (
+        not thread.is_alive()
+    ), "the wait spun on a finished run whose discard was queued behind it (F394)"
     assert outcome == ["returned"]
     assert runs == set()
