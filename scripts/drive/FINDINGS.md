@@ -30823,6 +30823,18 @@ asyncio task dump (`asyncio.all_tasks()` + `task.get_stack()`) on timeout. This 
 one F109 carried as intermittent (see F109). **Reproduce:**
 `gh run view 35667708908 --log-failed | grep -A12 'line 1701'`.
 
+**Second instrumented occurrence, 2026-09-22 11:15Z: a different test with the same shape.** Run
+`35719649675` on `a4d0976` (same branch). `hub-test` was killed at **13%** by the 300 s timeout in
+`test_agent_trigger.py::test_an_unexpectedly_failed_run_still_gets_an_accounting_outcome`, main
+thread at `:1876` `await _await_background_run()` → `:47` `await task`. **Both instrumented hangs
+are tests that patch `PtySession.spawn` to raise** (`FileNotFoundError` in the first,
+`RuntimeError` in this one) and then await the background run task that `/agent/trigger` started.
+The task never finishes. That points at the spawn-failure path of the background run, or at how the
+test awaits it, rather than at any one test. It is still inference: no dump shows where the task
+is parked. Unrelated to the commit it ran on, whose `hub-test` changes are in
+`test_refused_capability.py` only. The two earlier runs of the same change passed `hub-test`
+(`229a708`, `24f3655`). **Reproduce:** `gh run view 35719649675 --log-failed | grep -A6 'line 1876'`.
+
 ## F395 (B) -- `POST /messages` treats every operator-sent message as if it were the deepest possible agent hop, and mislabels its origin
 
 **Source: found by driving** (e2e-loop SWEEP, 2026-09-21, port 8030, `proj-05c8aa160921`).

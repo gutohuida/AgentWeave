@@ -195,7 +195,6 @@ def main():
     )
     check("the turn was triggered", code == 200, str(trig)[:200])
     conv = trig.get("conversation_id")
-    run_id = trig.get("run_id")
 
     # While the refused run may still be live: nothing may call it waiting.
     time.sleep(2)
