@@ -32,8 +32,14 @@ DRIVE = REPO_ROOT / "scripts" / "drive"
 
 # Measured 2026-09-10. Lower these when the count drops; never raise one.
 CLIENTLESS_ROUTE_CEILING = 35
-MISREPORT_CEILING = 52
 UNHANDLED_SITE_CEILING = 100
+# Re-measured 2026-09-22, the one exception to "never raise". The 52 of 2026-09-10 was counted
+# through a table keyed by line number, and by then 5 of its MISREPORT rows already named lines
+# with no call site. Those 5 surfaces had dropped out of the count while still misreporting, and 3
+# more followed by 2026-09-21, which read as "dropped to 49" (F396). Keyed by hook and occurrence,
+# the same classifications give 55: 49 plus the 6 lost rows whose sites are still live. The other 2
+# were real repairs, and their rows were removed.
+MISREPORT_CEILING = 55
 
 
 def _load(name: str) -> ModuleType:
@@ -79,9 +85,8 @@ def test_no_new_query_call_site_ignores_its_error() -> None:
     """No call site may join the set that never binds and uses its query's error.
 
     This is the assertion that catches a *new* offender. The MISREPORT ceiling below cannot:
-    `n11` classifies by hand, keyed by file and line, so a site added today lands in
-    UNCLASSIFIED and leaves MISREPORT untouched. This count reads no classification at all,
-    which also makes it immune to the line shifts that silently re-key that table.
+    `n11` classifies by hand, so a site added today lands in UNCLASSIFIED and leaves MISREPORT
+    untouched. This count reads no classification at all.
     """
     n11 = _load("n11_query_error_surface")
     if not (REPO_ROOT / "hub" / "ui" / "src").is_dir():
@@ -99,5 +104,41 @@ def test_no_new_misreporting_surface() -> None:
     n11 = _load("n11_query_error_surface")
     if not (REPO_ROOT / "hub" / "ui" / "src").is_dir():
         pytest.skip("hub/ui/src is absent; nothing to measure")
-    live = n11.operator_reachable_misreports(n11.unhandled_sites())
+    unhandled = n11.unhandled_sites()
+    stale = n11.stale_classifications(unhandled)
+    assert not stale, (
+        f"{len(stale)} row(s) in n11's CLASSIFIED name no unhandled call site: {stale}. A row "
+        f"whose site was repaired must be deleted. Otherwise the count below falls with nothing "
+        f"reviewed (F396). A row whose hook was renamed must be re-keyed."
+    )
+    live = n11.operator_reachable_misreports(unhandled)
     _ratchet(len(live), MISREPORT_CEILING, "operator-reachable MISREPORT surfaces")
+
+
+def test_the_misreport_count_does_not_move_when_lines_do() -> None:
+    """F396: an edit above a classified site must not change what the ratchet counts.
+
+    Keyed by line, every row named a number that any edit higher in the file shifted. The row
+    then matched nothing, and the site dropped out of the count while still misreporting. This
+    shifts every site's line and requires the same count.
+    """
+    n11 = _load("n11_query_error_surface")
+    if not (REPO_ROOT / "hub" / "ui" / "src").is_dir():
+        pytest.skip("hub/ui/src is absent; nothing to measure")
+    unhandled = n11.unhandled_sites()
+    shifted = [{**site, "line": site["line"] + 40} for site in unhandled]
+    assert len(n11.operator_reachable_misreports(shifted)) == len(
+        n11.operator_reachable_misreports(unhandled)
+    )
+    assert n11.stale_classifications(shifted) == n11.stale_classifications(unhandled)
+
+
+def test_a_repaired_site_leaves_its_row_stale_rather_than_uncounted() -> None:
+    """The other half of F396: a site that stops being unhandled must be reported, not dropped."""
+    n11 = _load("n11_query_error_surface")
+    if not (REPO_ROOT / "hub" / "ui" / "src").is_dir():
+        pytest.skip("hub/ui/src is absent; nothing to measure")
+    unhandled = n11.unhandled_sites()
+    repaired = n11.operator_reachable_misreports(unhandled)[0]
+    remaining = [site for site in unhandled if site is not repaired]
+    assert n11.stale_classifications(remaining) == [n11.site_key(repaired)]

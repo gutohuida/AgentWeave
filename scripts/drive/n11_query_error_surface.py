@@ -25,7 +25,8 @@ What the script decides mechanically, and what it hands back:
   hook exposes `error`, every call site, whether the site binds `error`/`isError`, and whether the
   bound name is used again in the file (a bound-and-never-used `error` renders nothing).
 * By hand: what each unhandled site *renders instead*. That cannot be derived from a grep, so every
-  unhandled site is classified in `CLASSIFIED`, each entry naming the line it was read off — the
+  unhandled site is classified in `CLASSIFIED`, each entry naming its site by hook and
+  occurrence (not by line, which drifts; see the note above the table) — the
   same discipline as `n10_route_reachability.py`'s `HAND_RESOLVED`. An unclassified site is
   reported as `UNCLASSIFIED` rather than silently bucketed.
 
@@ -88,117 +89,133 @@ API_DIR = UI_SRC / "api"
 #
 # `PICKER` marks the MISREPORT sites whose false statement is an empty `<select>` or option list,
 # so the count can be read with them and without them.
+#
+# A row names its site by **hook and occurrence**, not by line: the `occurrence`-th call of `hook`
+# in that file, counting in source order, 1-based. Until 2026-09-22 the key was the line number,
+# and an edit anywhere above a site silently turned its row into a key nothing matched. That made
+# the MISREPORT count fall with no surface repaired (F396): 19 rows had gone stale and one had
+# landed on a different hook. The `(:N)` references inside the `why` text are prose, read off the
+# tree each row was written against (`894b48e` for all but one), and they drift. The key does not.
+# `stale_classifications` reports any row that no longer names an unhandled site, and
+# `hub/tests/test_surface_ceilings.py` fails on one, so a repaired site has to take its row with it.
 # One row per site, one line each: black would make this table 500 lines.
 # fmt: off
-CLASSIFIED: list[tuple[str, int, str, str, str]] = [
-    # (path under hub/ui/src, line, class, flag, what it renders instead)
-    ('App.tsx', 92, 'MISREPORT', '', '`projects ?? []` reaches ProjectManagerModal (:598) and the current-project lookup (:234): an operator with projects is shown none'),
-    ('App.tsx', 93, 'MISREPORT', '', '`agents = []` is handed to the sidebar (:631) — the roster reads as empty'),
-    ('App.tsx', 161, 'MISREPORT', '', "both behaviours at one site: `conversationsKnown` (:300) correctly treats undefined as 'not known yet', and `conversations={…?? []}` (:632) hands the tree an empty list"),
-    ('App.tsx', 164, 'MISREPORT', '', '`documents={specDocuments?.documents ?? []}` (:633)'),
-    ('App.tsx', 165, 'MISREPORT', '', '`tasks={allTasks ?? []}` (:634)'),
-    ('components/accounting/AccountingPanel.tsx', 15, 'BLANK', '', '`if (!data) return null` (:16)'),
-    ('components/accounting/AccountingPanel.tsx', 22, 'MISREPORT', '', "`if (isLoading || !data)` returns the Budgets skeleton (:34-42); `isLoading` is false after an error, so the skeleton is terminal — F197's shape exactly"),
-    ('components/activity/ActivityLog.tsx', 61, 'BLANK', '', 'agents only build a colour map (:62)'),
-    ('components/agents/AgentActivityTab.tsx', 23, 'MISREPORT', '', "the merged feed renders 'No activity yet' (:112); this hook also hides its own error from every caller"),
-    ('components/agents/AgentActivityTab.tsx', 24, 'MISREPORT', '', 'same feed, same sentence (:112)'),
-    ('components/agents/AgentCreateDialog.tsx', 149, 'MISREPORT', 'PICKER', '`providers = catalog?.providers ?? []` (:168) — the create dialog offers no provider'),
-    ('components/agents/AgentCreateDialog.tsx', 150, 'SUPPRESSED', '', '`launchability?.[…]` (:84, :171) only decides whether a warning verdict is shown'),
-    ('components/agents/AgentCreateDialog.tsx', 151, 'MISREPORT', 'PICKER', '`charters.map` into `<option>` (:231)'),
-    ('components/agents/AgentOutputPanel.tsx', 152, 'BLANK', '', 'only `isLoading` is taken and `lines` is deliberately unread (:148-152)'),
-    ('components/agents/AgentOutputPanel.tsx', 197, 'SUPPRESSED', '', '`permissionRequests = []` (:1127): a run waiting on an approval renders no card'),
-    ('components/agents/AgentOutputPanel.tsx', 198, 'SUPPRESSED', '', '`pendingQuestion` null (:206) and `questions={[]}` (:1129): a run waiting on an answer renders no ask'),
-    ('components/agents/AgentOutputPanel.tsx', 207, 'MISREPORT', '', '`conversations = []` drives the list and `currentConversation` (:317)'),
-    ('components/agents/AgentOutputPanel.tsx', 319, 'MISREPORT', '', "`roster = []` (:1032) and the agent's own row missing (:321)"),
-    ('components/agents/AgentOutputPanel.tsx', 320, 'BLANK', '', '`runners` only resolves a label (:322)'),
-    ('components/agents/AgentOutputPanel.tsx', 330, 'MISREPORT', '', '`timelineEvents = []` (:1033)'),
-    ('components/agents/AgentOutputPanel.tsx', 331, 'BLANK', '', '`recentTurns={accounting?.recent_turns}` (:1040) — the figure is absent'),
-    ('components/agents/AgentOutputPanel.tsx', 332, 'BLANK', '', '`{conversationUsage && …}` (:961)'),
-    ('components/agents/AgentOutputPanel.tsx', 333, 'SUPPRESSED', '', '`queueStatus` undefined — the waiting indicator does not render'),
-    ('components/agents/AgentOutputPanel.tsx', 337, 'SUPPRESSED', '', '`hasQueuedWork` false (:343): queued work reads as none'),
-    ('components/agents/AgentOutputPanel.tsx', 346, 'MISREPORT', 'PICKER', '`workspacePaths={[]}` (:1152)'),
-    ('components/agents/AgentOutputPanel.tsx', 347, 'MISREPORT', '', '`timelineEntries = chat.data?.entries ?? []` (:350) — the transcript reads as empty'),
-    ('components/agents/AgentOutputPanel.tsx', 348, 'MISREPORT', '', 'the same `chat` (:349-350) when no conversation is selected'),
-    ('components/agents/AgentOutputPanel.tsx', 489, 'SUPPRESSED', '', '`offeredCheckpoint` undefined (:490) — the checkpoint offer does not render'),
-    ('components/agents/AgentSettingsControls.tsx', 178, 'MISREPORT', 'PICKER', '`permissionModeValues(catalog)` (:180) yields no options'),
-    ('components/agents/AgentSettingsControls.tsx', 220, 'MISREPORT', 'PICKER', "'Loading runners…' is shown while `isLoading` (:224) and an empty select after the error (:242)"),
-    ('components/agents/AgentSettingsControls.tsx', 259, 'MISREPORT', 'PICKER', 'same shape for charters (:263, :282)'),
-    ('components/agents/AgentSettingsPage.tsx', 42, 'MISREPORT', '', "`roster.find` (:43) fails and the page renders 'This agent is no longer in the roster.' (:55)"),
-    ('components/agents/AgentSettingsPage.tsx', 444, 'MISREPORT', '', "'No sessions yet.' (:451)"),
-    ('components/agents/ComposerModelControls.tsx', 176, 'SUPPRESSED', '', 'the model controls do not render; the file states this intent for an undeclared provider (:167)'),
-    ('components/agents/ConversationView.tsx', 107, 'MISREPORT', '', '`buildInventory(specList)` is empty (:119) and `specList={specList}` (:387) — the spec surface reads as having nothing in it'),
-    ('components/agents/ConversationView.tsx', 112, 'BLANK', '', 'title lookup `?? null` (:114)'),
-    ('components/agents/ConversationView.tsx', 280, 'MISREPORT', 'PICKER', '`paths={workspacePaths}` (:344)'),
-    ('components/agents/ConversationView.tsx', 287, 'MISREPORT', '', '`runningLoopCount(allLoops)` renders a 0 count on the Loops tab (:299)'),
-    ('components/agents/NewConversationSurface.tsx', 53, 'MISREPORT', '', '`roster.map` (:171) is the agent list this surface exists to show'),
-    ('components/agents/NewConversationSurface.tsx', 54, 'BLANK', '', 'runner label lookup (:60)'),
-    ('components/agents/NewConversationSurface.tsx', 55, 'MISREPORT', 'PICKER', '`workspacePaths={…}` (:209)'),
-    ('components/charters/ChartersPage.tsx', 29, 'MISREPORT', '', "`charters.length === 0` renders EmptyState 'No charters yet' (:90-93)"),
-    ('components/environment/DiagnosticsPanel.tsx', 8, 'MISREPORT', '', '`JSON.stringify(data ?? {}, null, 2)` (:10) renders `{}` as the diagnostics'),
-    ('components/environment/ProjectSettingsPanel.tsx', 49, 'BLANK', '', '`projects.find` only names the project (:50)'),
-    ('components/environment/ProjectSettingsPanel.tsx', 53, 'MISREPORT', '', '`if (!settings) return` (:67) leaves `form` unset, so the skeleton at :78 is terminal — this site *is* F197'),
-    ('components/environment/ProjectSettingsPanel.tsx', 54, 'BLANK', '', "placeholder 'Not chosen' (:191); the suggestion button simply does not appear"),
-    ('components/environment/ProjectSettingsPanel.tsx', 55, 'MISREPORT', 'PICKER', 'runner selects (:170, :278)'),
-    ('components/environment/ProjectSettingsPanel.tsx', 56, 'BLANK', '', '`catalog?.providers` optional at both uses (:91, :292)'),
-    ('components/instructions/InstructionsPage.tsx', 9, 'MISREPORT', '', "`if (data) setContent(data.content)` (:15-16) never fires, so the editor renders empty with Save enabled (:38-40) — a save then writes '' over the stored instructions"),
-    ('components/jobs/JobCard.tsx', 251, 'SUPPRESSED', '', '`canOpenQueue` false (:256) hides the open-queue button'),
-    ('components/jobs/JobCard.tsx', 358, 'MISREPORT', '', "RunHistory renders 'No runs yet' (:152-154) although its own comment (:146-147) says that claim must not be made before the answer arrives — the guard it added is `isLoading`, which is false on error"),
-    ('components/jobs/JobForm.tsx', 32, 'MISREPORT', 'PICKER', '`agents?.map` into `<option>` (:168)'),
-    ('components/jobs/JobsPage.tsx', 34, 'MISREPORT', '', "EmptyState 'No jobs yet — Create scheduled jobs to automatically trigger agents' (:133-138) and the totals row (:176-178)"),
-    ('components/layout/AgentTree.tsx', 52, 'MISREPORT', '', "the tree's conversations (:62) and `archivedCount ?? 0` (:98)"),
-    ('components/layout/AgentTree.tsx', 58, 'MISREPORT', '', "`archived.data?.conversations ?? []` (:72) behind the reason 'Nothing archived yet' (:116)"),
-    ('components/layout/RecencyView.tsx', 46, 'MISREPORT', '', '`open.data?.conversations ?? []` (:55) and `archivedCount ?? 0` (:56)'),
-    ('components/layout/RecencyView.tsx', 48, 'MISREPORT', '', "`archived.data?.conversations ?? []` (:57) behind 'Show archived (0)' (:150)"),
-    ('components/layout/Sidebar.tsx', 157, 'MISREPORT', '', "`projects.map` (:364, :504) is the sidebar's project list"),
-    ('components/layout/StatusBar.tsx', 15, 'MISREPORT', '', 'every count falls back to zero (:25-28): 0 pending messages, 0 active tasks, 0 unanswered questions, 0 agents'),
-    ('components/layout/StatusBar.tsx', 16, 'SUPPRESSED', '', '`contextWarningCount` (:21) drops to 0 and the context warning (:113) does not render'),
-    ('components/layout/StatusBar.tsx', 19, 'SUPPRESSED', '', '`exhausted={accounting?.budget.exhausted ?? false}` (:122) — an exhausted budget renders no notice'),
-    ('components/logs/LogsView.tsx', 123, 'MISREPORT', '', "'No log entries yet. Trigger some activity to see entries here.' (:362)"),
-    ('components/logs/LogsView.tsx', 128, 'MISREPORT', 'PICKER', "the agent filter's options (:251)"),
-    ('components/messages/MessagesFeed.tsx', 20, 'MISREPORT', 'DEAD', "EmptyState 'No messages' (:143-145) — in a component nothing imports (F260), so no operator reaches it"),
-    ('components/messages/MessagesFeed.tsx', 21, 'MISREPORT', 'DEAD', "EmptyState 'No message history' (:143-145), same dead component"),
-    ('components/messages/MessagesFeed.tsx', 26, 'MISREPORT', 'DEAD', 'the agent filter built from `allMessages` (:27), same dead component'),
-    ('components/overview/OverviewBudgetSummary.tsx', 11, 'MISREPORT', '', '`if (isLoading || !data)` returns a skeleton (:13) that is terminal after an error'),
-    ('components/overview/OverviewPage.tsx', 79, 'MISREPORT', '', "'No agents connected — Run `agentweave start` to connect agents.' (:145-147), which also tells the operator to do the wrong thing"),
-    ('components/overview/OverviewPage.tsx', 80, 'SUPPRESSED', '', '`unanswered = questions.length` is 0 (:84) so the QuestionInterruptCard does not render (:130)'),
-    ('components/overview/OverviewPage.tsx', 81, 'MISREPORT', '', '`{taskCount} task` in the page header (:117) and the per-status counts (:86-91)'),
-    ('components/overview/OverviewPage.tsx', 82, 'BLANK', '', '`status?.project_name` is conditional (:118)'),
-    ('components/projects/DirectoryPicker.tsx', 28, 'MISREPORT', '', '\'No subdirectories\' (:162-163) — while the branch immediately above it renders the server\'s *stated* refusal, "Can\'t read this directory: {reason}" (:158-161)'),
-    ('components/projects/DirectoryPicker.tsx', 29, 'MISREPORT', 'PICKER', '`roots = rootsData?.roots ?? []` (:47) leaves the roots strip empty'),
-    ('components/projects/ProjectManagerModal.tsx', 33, 'BLANK', '', '`nativeAvailability?.available` (:141, :169) falls back to the manual path — deliberate degradation'),
-    ('components/quality/QualityHealthPanel.tsx', 25, 'MISREPORT', '', "EmptyState 'No quality governance configured' (:43-52) — a claim about the project's governance, made from a failed fetch"),
-    ('components/quality/QualityHealthPanel.tsx', 26, 'MISREPORT', '', "`(tasks ?? [])` filters render 'All reviewed tasks clear' (:103)"),
-    ('components/questions/QuestionsPanel.tsx', 87, 'BLANK', '', '`{answered && answered.length > 0 && …}` (:197) hides a history disclosure'),
-    ('components/questions/QuestionsPanel.tsx', 91, 'BLANK', '', 'the per-agent timeout lookup (:143)'),
-    ('components/runners/RunnersPage.tsx', 22, 'MISREPORT', '', "`{!runners || runners.length === 0}` renders EmptyState 'No runners yet' (:81-84)"),
-    ('components/runners/RunnersPage.tsx', 198, 'NAMED', '', "`catalogAvailable = !!catalog` (:202) renders 'The model catalog is unavailable — this runner will use the provider's default.' (:292). No `error` is bound and none is needed"),
-    ('components/spec/SpecCoverageBar.tsx', 84, 'BLANK', '', '`if (!data …) return null` (:87)'),
-    ('components/spec/SpecDocumentPanel.tsx', 69, 'MISREPORT', '', 'the `specDoc ? … : ` else branch is a second skeleton (:329-334), terminal after an error'),
-    ('components/spec/SpecDocumentTasksLink.tsx', 20, 'BLANK', '', '`if (!document …) return null` (:24)'),
-    ('components/spec/SpecDocumentTasksLink.tsx', 22, 'BLANK', '', 'same guard (:24)'),
-    ('components/spec/SpecPage.tsx', 35, 'MISREPORT', '', "EmptyState 'Everything here is archived' (:98-107) — a failed spec-list fetch tells the operator their documents are archived"),
-    ('components/spec/SpecPhaseBar.tsx', 23, 'SUPPRESSED', '', '`if (!document) return null` (:33) removes the phase controls and the rigor refusal with it'),
-    ('components/spec/SpecProposalsPanel.tsx', 22, 'SUPPRESSED', '', '`if (proposals.length === 0) return null` (:30) — pending edit proposals waiting on the operator do not render'),
-    ('components/spec/SpecRailNav.tsx', 30, 'MISREPORT', '', "`buildInventory(specList)` (:31) leaves the rail's document list empty"),
-    ('components/tasks/DependencyBoard.tsx', 195, 'MISREPORT', '', "'No tasks on this board' (:327)"),
-    ('components/tasks/DependencyBoard.tsx', 196, 'BLANK', '', 'agent colour map (:209)'),
-    ('components/tasks/DependencyBoard.tsx', 200, 'BLANK', '', 'document-title lookup (:203)'),
-    ('components/tasks/DependencyBoardView.tsx', 21, 'MISREPORT', '', "EmptyState 'No tasks yet' (:59-61) and an empty board picker (:71-82)"),
-    ('components/tasks/TaskCard.tsx', 94, 'MISREPORT', 'PICKER', "`agentNames` (:95) is the assignee menu's option list"),
-    ('components/tasks/TaskDetailDrawer.tsx', 35, 'SUPPRESSED', '', "`if (!canApprove || !data) return null` (:36) drops the 'Approving will not merge anything' warning"),
-    ('components/tasks/TaskDetailDrawer.tsx', 146, 'SUPPRESSED', '', '`moves = allowed?.transitions?.[status] ?? []` (:191) — every status button disappears'),
-    ('components/tasks/TaskDetailDrawer.tsx', 150, 'BLANK', '', 'assignee name list (:153)'),
-    ('components/tasks/TaskDetailDrawer.tsx', 151, 'BLANK', '', 'document-path map (:158)'),
-    ('components/tasks/TaskIntegrationNote.tsx', 36, 'SUPPRESSED', '', '`if (rows.length === 0) return null` (:39) removes the integration outcome and its retry button'),
-    ('components/tasks/TasksBoard.tsx', 58, 'BLANK', '', 'colour map and assignee names (:62, :91)'),
-    ('components/tasks/TasksBoard.tsx', 59, 'MISREPORT', '', "`transitions = allowed?.transitions ?? {}` (:96) makes the keyboard move announce 'No allowed status is available to the {direction} of {task}' (:124)"),
-    ('hooks/useRequirementChips.ts', 25, 'BLANK', '', 'requirement-id to path map (:32)'),
+CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
+    # (path under hub/ui/src, hook, occurrence, class, flag, what it renders instead)
+    ('App.tsx', 'useProjects', 1, 'MISREPORT', '', '`projects ?? []` reaches ProjectManagerModal (:598) and the current-project lookup (:234): an operator with projects is shown none'),
+    ('App.tsx', 'useAgents', 1, 'MISREPORT', '', '`agents = []` is handed to the sidebar (:631) — the roster reads as empty'),
+    ('App.tsx', 'useProjectConversations', 1, 'MISREPORT', '', "both behaviours at one site: `conversationsKnown` (:300) correctly treats undefined as 'not known yet', and `conversations={…?? []}` (:632) hands the tree an empty list"),
+    ('App.tsx', 'useSpecDocuments', 1, 'MISREPORT', '', '`documents={specDocuments?.documents ?? []}` (:633)'),
+    ('App.tsx', 'useTasks', 1, 'MISREPORT', '', '`tasks={allTasks ?? []}` (:634)'),
+    ('components/accounting/AccountingPanel.tsx', 'useAccounting', 1, 'BLANK', '', '`if (!data) return null` (:16)'),
+    ('components/accounting/AccountingPanel.tsx', 'useAccounting', 2, 'MISREPORT', '', "`if (isLoading || !data)` returns the Budgets skeleton (:34-42); `isLoading` is false after an error, so the skeleton is terminal — F197's shape exactly"),
+    ('components/activity/ActivityLog.tsx', 'useAgents', 1, 'BLANK', '', 'agents only build a colour map (:62)'),
+    ('components/agents/AgentActivityTab.tsx', 'useAgentOutput', 1, 'MISREPORT', '', "the merged feed renders 'No activity yet' (:112); this hook also hides its own error from every caller"),
+    ('components/agents/AgentActivityTab.tsx', 'useAgentTimeline', 1, 'MISREPORT', '', 'same feed, same sentence (:112)'),
+    ('components/agents/AgentCreateDialog.tsx', 'useModelCatalog', 1, 'MISREPORT', 'PICKER', '`providers = catalog?.providers ?? []` (:168) — the create dialog offers no provider'),
+    ('components/agents/AgentCreateDialog.tsx', 'useProviderLaunchability', 1, 'SUPPRESSED', '', '`launchability?.[…]` (:84, :171) only decides whether a warning verdict is shown'),
+    ('components/agents/AgentCreateDialog.tsx', 'useCharters', 1, 'MISREPORT', 'PICKER', '`charters.map` into `<option>` (:231)'),
+    ('components/agents/AgentOutputPanel.tsx', 'useAgentOutput', 1, 'BLANK', '', 'only `isLoading` is taken and `lines` is deliberately unread (:148-152)'),
+    ('components/agents/AgentOutputPanel.tsx', 'usePendingPermissionRequests', 1, 'SUPPRESSED', '', '`permissionRequests = []` (:1127): a run waiting on an approval renders no card'),
+    ('components/agents/AgentOutputPanel.tsx', 'useQuestions', 1, 'SUPPRESSED', '', '`pendingQuestion` null (:206) and `questions={[]}` (:1129): a run waiting on an answer renders no ask'),
+    ('components/agents/AgentOutputPanel.tsx', 'useAgentConversations', 1, 'MISREPORT', '', '`conversations = []` drives the list and `currentConversation` (:317)'),
+    ('components/agents/AgentOutputPanel.tsx', 'useAgents', 1, 'MISREPORT', '', "`roster = []` (:1032) and the agent's own row missing (:321)"),
+    ('components/agents/AgentOutputPanel.tsx', 'useRunners', 1, 'BLANK', '', '`runners` only resolves a label (:322)'),
+    ('components/agents/AgentOutputPanel.tsx', 'useAccounting', 1, 'BLANK', '', '`recentTurns={accounting?.recent_turns}` (:1040) — the figure is absent'),
+    ('components/agents/AgentOutputPanel.tsx', 'useConversationAccounting', 1, 'BLANK', '', '`{conversationUsage && …}` (:961)'),
+    ('components/agents/AgentOutputPanel.tsx', 'useQueueStatus', 1, 'SUPPRESSED', '', '`queueStatus` undefined — the waiting indicator does not render'),
+    ('components/agents/AgentOutputPanel.tsx', 'useQueuedEntries', 1, 'SUPPRESSED', '', '`hasQueuedWork` false (:343): queued work reads as none'),
+    ('components/agents/AgentOutputPanel.tsx', 'useWorkspacePaths', 1, 'MISREPORT', 'PICKER', '`workspacePaths={[]}` (:1152)'),
+    ('components/agents/AgentOutputPanel.tsx', 'useAgentChatHistory', 1, 'MISREPORT', '', '`timelineEntries = chat.data?.entries ?? []` (:350) — the transcript reads as empty'),
+    ('components/agents/AgentOutputPanel.tsx', 'useAgentRecentChat', 1, 'MISREPORT', '', 'the same `chat` (:349-350) when no conversation is selected'),
+    ('components/agents/AgentOutputPanel.tsx', 'useCheckpoints', 1, 'SUPPRESSED', '', '`offeredCheckpoint` undefined (:490) — the checkpoint offer does not render'),
+    ('components/agents/AgentSettingsControls.tsx', 'useModelCatalog', 1, 'MISREPORT', 'PICKER', '`permissionModeValues(catalog)` (:180) yields no options'),
+    ('components/agents/AgentSettingsControls.tsx', 'useRunners', 1, 'MISREPORT', 'PICKER', "'Loading runners…' is shown while `isLoading` (:224) and an empty select after the error (:242)"),
+    ('components/agents/AgentSettingsControls.tsx', 'useCharters', 1, 'MISREPORT', 'PICKER', 'same shape for charters (:263, :282)'),
+    ('components/agents/AgentSettingsPage.tsx', 'useAgents', 1, 'MISREPORT', '', "`roster.find` (:43) fails and the page renders 'This agent is no longer in the roster.' (:55)"),
+    ('components/agents/AgentSettingsPage.tsx', 'useAgentSessions', 1, 'MISREPORT', '', "'No sessions yet.' (:451)"),
+    ('components/agents/ComposerModelControls.tsx', 'useModelCatalog', 1, 'SUPPRESSED', '', 'the model controls do not render; the file states this intent for an undeclared provider (:167)'),
+    ('components/agents/ConversationView.tsx', 'useSpecList', 1, 'MISREPORT', '', '`buildInventory(specList)` is empty (:119) and `specList={specList}` (:387) — the spec surface reads as having nothing in it'),
+    ('components/agents/ConversationView.tsx', 'useAgentConversations', 1, 'BLANK', '', 'title lookup `?? null` (:114)'),
+    ('components/agents/ConversationView.tsx', 'useWorkspacePaths', 1, 'MISREPORT', 'PICKER', '`paths={workspacePaths}` (:344)'),
+    ('components/agents/ConversationView.tsx', 'useLoops', 1, 'MISREPORT', '', '`runningLoopCount(allLoops)` renders a 0 count on the Loops tab (:299)'),
+    ('components/agents/NewConversationSurface.tsx', 'useAgents', 1, 'MISREPORT', '', '`roster.map` (:171) is the agent list this surface exists to show'),
+    ('components/agents/NewConversationSurface.tsx', 'useRunners', 1, 'BLANK', '', 'runner label lookup (:60)'),
+    ('components/agents/NewConversationSurface.tsx', 'useWorkspacePaths', 1, 'MISREPORT', 'PICKER', '`workspacePaths={…}` (:209)'),
+    ('components/charters/ChartersPage.tsx', 'useCharters', 1, 'MISREPORT', '', "`charters.length === 0` renders EmptyState 'No charters yet' (:90-93)"),
+    ('components/environment/DiagnosticsPanel.tsx', 'useStatus', 1, 'MISREPORT', '', '`JSON.stringify(data ?? {}, null, 2)` (:10) renders `{}` as the diagnostics'),
+    ('components/environment/ProjectSettingsPanel.tsx', 'useProjects', 1, 'BLANK', '', '`projects.find` only names the project (:50)'),
+    ('components/environment/ProjectSettingsPanel.tsx', 'useProjectSettings', 1, 'MISREPORT', '', '`if (!settings) return` (:67) leaves `form` unset, so the skeleton at :78 is terminal — this site *is* F197'),
+    ('components/environment/ProjectSettingsPanel.tsx', 'useMainBranchSuggestion', 1, 'BLANK', '', "placeholder 'Not chosen' (:191); the suggestion button simply does not appear"),
+    ('components/environment/ProjectSettingsPanel.tsx', 'useRunners', 1, 'MISREPORT', 'PICKER', 'runner selects (:170, :278)'),
+    ('components/environment/ProjectSettingsPanel.tsx', 'useModelCatalog', 1, 'BLANK', '', '`catalog?.providers` optional at both uses (:91, :292)'),
+    ('components/instructions/InstructionsPage.tsx', 'useProjects', 1, 'BLANK', '', "`projectName` falls back to 'this project' in the clear dialog (:156); nothing false is said"),
+    ('components/jobs/JobCard.tsx', 'useTasks', 1, 'SUPPRESSED', '', '`canOpenQueue` false (:256) hides the open-queue button'),
+    ('components/jobs/JobCard.tsx', 'useJobHistory', 1, 'MISREPORT', '', "RunHistory renders 'No runs yet' (:152-154) although its own comment (:146-147) says that claim must not be made before the answer arrives — the guard it added is `isLoading`, which is false on error"),
+    ('components/jobs/JobForm.tsx', 'useAgents', 1, 'MISREPORT', 'PICKER', '`agents?.map` into `<option>` (:168)'),
+    ('components/jobs/JobsPage.tsx', 'useJobs', 1, 'MISREPORT', '', "EmptyState 'No jobs yet — Create scheduled jobs to automatically trigger agents' (:133-138) and the totals row (:176-178)"),
+    ('components/layout/AgentTree.tsx', 'useProjectConversations', 1, 'MISREPORT', '', "the tree's conversations (:62) and `archivedCount ?? 0` (:98)"),
+    ('components/layout/AgentTree.tsx', 'useProjectConversations', 2, 'MISREPORT', '', "`archived.data?.conversations ?? []` (:72) behind the reason 'Nothing archived yet' (:116)"),
+    ('components/layout/RecencyView.tsx', 'useProjectConversations', 1, 'MISREPORT', '', '`open.data?.conversations ?? []` (:55) and `archivedCount ?? 0` (:56)'),
+    ('components/layout/RecencyView.tsx', 'useProjectConversations', 2, 'MISREPORT', '', "`archived.data?.conversations ?? []` (:57) behind 'Show archived (0)' (:150)"),
+    ('components/layout/Sidebar.tsx', 'useProjects', 1, 'MISREPORT', '', "`projects.map` (:364, :504) is the sidebar's project list"),
+    ('components/layout/StatusBar.tsx', 'useStatus', 1, 'MISREPORT', '', 'every count falls back to zero (:25-28): 0 pending messages, 0 active tasks, 0 unanswered questions, 0 agents'),
+    ('components/layout/StatusBar.tsx', 'useAgents', 1, 'SUPPRESSED', '', '`contextWarningCount` (:21) drops to 0 and the context warning (:113) does not render'),
+    ('components/layout/StatusBar.tsx', 'useAccounting', 1, 'SUPPRESSED', '', '`exhausted={accounting?.budget.exhausted ?? false}` (:122) — an exhausted budget renders no notice'),
+    ('components/logs/LogsView.tsx', 'useLogs', 1, 'MISREPORT', '', "'No log entries yet. Trigger some activity to see entries here.' (:362)"),
+    ('components/logs/LogsView.tsx', 'useLogAgents', 1, 'MISREPORT', 'PICKER', "the agent filter's options (:251)"),
+    ('components/messages/MessagesFeed.tsx', 'useMessages', 1, 'MISREPORT', 'DEAD', "EmptyState 'No messages' (:143-145) — in a component nothing imports (F260), so no operator reaches it"),
+    ('components/messages/MessagesFeed.tsx', 'useMessageHistory', 1, 'MISREPORT', 'DEAD', "EmptyState 'No message history' (:143-145), same dead component"),
+    ('components/messages/MessagesFeed.tsx', 'useMessageHistory', 2, 'MISREPORT', 'DEAD', 'the agent filter built from `allMessages` (:27), same dead component'),
+    ('components/overview/OverviewBudgetSummary.tsx', 'useAccounting', 1, 'MISREPORT', '', '`if (isLoading || !data)` returns a skeleton (:13) that is terminal after an error'),
+    ('components/overview/OverviewPage.tsx', 'useAgents', 1, 'MISREPORT', '', "'No agents connected — Run `agentweave start` to connect agents.' (:145-147), which also tells the operator to do the wrong thing"),
+    ('components/overview/OverviewPage.tsx', 'useQuestions', 1, 'SUPPRESSED', '', '`unanswered = questions.length` is 0 (:84) so the QuestionInterruptCard does not render (:130)'),
+    ('components/overview/OverviewPage.tsx', 'useTasks', 1, 'MISREPORT', '', '`{taskCount} task` in the page header (:117) and the per-status counts (:86-91)'),
+    ('components/overview/OverviewPage.tsx', 'useStatus', 1, 'BLANK', '', '`status?.project_name` is conditional (:118)'),
+    ('components/projects/DirectoryPicker.tsx', 'useDirectoryListing', 1, 'MISREPORT', '', '\'No subdirectories\' (:162-163) — while the branch immediately above it renders the server\'s *stated* refusal, "Can\'t read this directory: {reason}" (:158-161)'),
+    ('components/projects/DirectoryPicker.tsx', 'useFilesystemRoots', 1, 'MISREPORT', 'PICKER', '`roots = rootsData?.roots ?? []` (:47) leaves the roots strip empty'),
+    ('components/projects/ProjectManagerModal.tsx', 'useNativeDialogAvailability', 1, 'BLANK', '', '`nativeAvailability?.available` (:141, :169) falls back to the manual path — deliberate degradation'),
+    ('components/quality/QualityHealthPanel.tsx', 'useSessionSync', 1, 'MISREPORT', '', "EmptyState 'No quality governance configured' (:43-52) — a claim about the project's governance, made from a failed fetch"),
+    ('components/quality/QualityHealthPanel.tsx', 'useTasks', 1, 'MISREPORT', '', "`(tasks ?? [])` filters render 'All reviewed tasks clear' (:103)"),
+    ('components/questions/QuestionsPanel.tsx', 'useQuestions', 2, 'BLANK', '', '`{answered && answered.length > 0 && …}` (:197) hides a history disclosure'),
+    ('components/questions/QuestionsPanel.tsx', 'useAgents', 1, 'BLANK', '', 'the per-agent timeout lookup (:143)'),
+    ('components/runners/RunnersPage.tsx', 'useRunners', 1, 'MISREPORT', '', "`{!runners || runners.length === 0}` renders EmptyState 'No runners yet' (:81-84)"),
+    ('components/runners/RunnersPage.tsx', 'useModelCatalog', 1, 'NAMED', '', "`catalogAvailable = !!catalog` (:202) renders 'The model catalog is unavailable — this runner will use the provider's default.' (:292). No `error` is bound and none is needed"),
+    ('components/spec/SpecCoverageBar.tsx', 'useSpecCoverage', 1, 'BLANK', '', '`if (!data …) return null` (:87)'),
+    ('components/spec/SpecDocumentPanel.tsx', 'useSpec', 1, 'MISREPORT', '', 'the `specDoc ? … : ` else branch is a second skeleton (:329-334), terminal after an error'),
+    ('components/spec/SpecDocumentTasksLink.tsx', 'useSpecDocuments', 1, 'BLANK', '', '`if (!document …) return null` (:24)'),
+    ('components/spec/SpecDocumentTasksLink.tsx', 'useDocumentTasks', 1, 'BLANK', '', 'same guard (:24)'),
+    ('components/spec/SpecPage.tsx', 'useSpecList', 1, 'MISREPORT', '', "EmptyState 'Everything here is archived' (:98-107) — a failed spec-list fetch tells the operator their documents are archived"),
+    ('components/spec/SpecPhaseBar.tsx', 'useSpecDocuments', 1, 'SUPPRESSED', '', '`if (!document) return null` (:33) removes the phase controls and the rigor refusal with it'),
+    ('components/spec/SpecProposalsPanel.tsx', 'useSpecProposals', 1, 'SUPPRESSED', '', '`if (proposals.length === 0) return null` (:30) — pending edit proposals waiting on the operator do not render'),
+    ('components/spec/SpecRailNav.tsx', 'useSpecList', 1, 'MISREPORT', '', "`buildInventory(specList)` (:31) leaves the rail's document list empty"),
+    ('components/tasks/DependencyBoard.tsx', 'useTaskBoard', 1, 'MISREPORT', '', "'No tasks on this board' (:327)"),
+    ('components/tasks/DependencyBoard.tsx', 'useAgents', 1, 'BLANK', '', 'agent colour map (:209)'),
+    ('components/tasks/DependencyBoard.tsx', 'useTaskBoards', 1, 'BLANK', '', 'document-title lookup (:203)'),
+    ('components/tasks/DependencyBoardView.tsx', 'useTaskBoards', 1, 'MISREPORT', '', "EmptyState 'No tasks yet' (:59-61) and an empty board picker (:71-82)"),
+    ('components/tasks/TaskCard.tsx', 'useAgents', 1, 'MISREPORT', 'PICKER', "`agentNames` (:95) is the assignee menu's option list"),
+    ('components/tasks/TaskDetailDrawer.tsx', 'useTaskIntegrationPreview', 1, 'SUPPRESSED', '', "`if (!canApprove || !data) return null` (:36) drops the 'Approving will not merge anything' warning"),
+    ('components/tasks/TaskDetailDrawer.tsx', 'useAllowedTransitions', 1, 'SUPPRESSED', '', '`moves = allowed?.transitions?.[status] ?? []` (:191) — every status button disappears'),
+    ('components/tasks/TaskDetailDrawer.tsx', 'useAgents', 1, 'BLANK', '', 'assignee name list (:153)'),
+    ('components/tasks/TaskDetailDrawer.tsx', 'useSpecDocuments', 1, 'BLANK', '', 'document-path map (:158)'),
+    ('components/tasks/TaskIntegrationNote.tsx', 'useTaskIntegrations', 1, 'SUPPRESSED', '', '`if (rows.length === 0) return null` (:39) removes the integration outcome and its retry button'),
+    ('components/tasks/TasksBoard.tsx', 'useAgents', 1, 'BLANK', '', 'colour map and assignee names (:62, :91)'),
+    ('components/tasks/TasksBoard.tsx', 'useAllowedTransitions', 1, 'MISREPORT', '', "`transitions = allowed?.transitions ?? {}` (:96) makes the keyboard move announce 'No allowed status is available to the {direction} of {task}' (:124)"),
+    ('hooks/useRequirementChips.ts', 'useSpecDocuments', 1, 'BLANK', '', 'requirement-id to path map (:32)'),
 ]
 # fmt: on
 
 RENDERS = {
-    ("hub/ui/src/" + path, line): (cls, flag, why) for path, line, cls, flag, why in CLASSIFIED
+    ("hub/ui/src/" + path, hook, occurrence): (cls, flag, why)
+    for path, hook, occurrence, cls, flag, why in CLASSIFIED
 }
+UNCLASSIFIED = ("UNCLASSIFIED", "", "")
+
+
+def site_key(site: dict) -> tuple[str, str, int]:
+    """The `RENDERS` key for a call site: its file, its hook, and which call of that hook it is."""
+    return (site["file"], site["hook"], site["occurrence"])
+
 
 DECL_RE = re.compile(r"useQuery\s*[<(]")
 EXPORT_FN_RE = re.compile(r"^export function (use\w+)")
@@ -334,6 +351,7 @@ def call_sites(hooks: list[str], decl_files: set[str]) -> list[dict]:
         text = path.read_text(encoding="utf-8")
         spans = comment_spans(text)
         for hook in hooks:
+            occurrence = 0
             for m in re.finditer(r"\b" + hook + r"\s*\(", text):
                 if in_comment(spans, m.start()):
                     continue
@@ -365,11 +383,13 @@ def call_sites(hooks: list[str], decl_files: set[str]) -> list[dict]:
                     bare = alias.split(".")[0]
                     uses = len(re.findall(rf"\b{re.escape(bare)}\b", text))
                     used = uses > 1 if "." not in alias else uses > 1
+                occurrence += 1
                 out.append(
                     {
                         "file": rel(path),
                         "line": lineno,
                         "hook": hook,
+                        "occurrence": occurrence,
                         "binds_error": binds,
                         "alias": alias,
                         "error_used": used,
@@ -400,10 +420,20 @@ def operator_reachable_misreports(unhandled: list[dict]) -> list[dict]:
     """
     out = []
     for s in unhandled:
-        cls, flag, _why = RENDERS.get((s["file"], s["line"]), ("UNCLASSIFIED", "", ""))
+        cls, flag, _why = RENDERS.get(site_key(s), UNCLASSIFIED)
         if cls == "MISREPORT" and flag != "DEAD":
             out.append(s)
     return out
+
+
+def stale_classifications(unhandled: list[dict]) -> list[tuple[str, str, int]]:
+    """`RENDERS` keys that name no unhandled site: a repaired site, or one whose hook was renamed.
+
+    A stale row is how the MISREPORT count used to fall without a surface being repaired (F396),
+    so the ratchet refuses to read the count while any row is stale.
+    """
+    live = {site_key(s) for s in unhandled}
+    return sorted(key for key in RENDERS if key not in live)
 
 
 def main() -> int:
@@ -444,7 +474,7 @@ def main() -> int:
     print("\nUNHANDLED SITES, by hand classification")
     buckets: dict[str, list[dict]] = {}
     for s in unbound + bound_unused:
-        cls, flag, why = RENDERS.get((s["file"], s["line"]), ("UNCLASSIFIED", "", ""))
+        cls, flag, why = RENDERS.get(site_key(s), UNCLASSIFIED)
         s["why"], s["flag"] = why, flag
         buckets.setdefault(cls, []).append(s)
     for cls in ("MISREPORT", "SUPPRESSED", "BLANK", "NAMED", "UNCLASSIFIED"):
@@ -462,13 +492,15 @@ def main() -> int:
     print(f"    of those, an empty picker rather than a sentence: {len(pickers)}")
     print(f"    a sentence, a number or a terminal skeleton:      {len(live) - len(pickers)}")
     for s in sorted(buckets.get("UNCLASSIFIED", []), key=lambda s: (s["file"], s["line"])):
-        print(f"      unclassified: {s['file']}:{s['line']} {s['hook']}")
+        print(f"      unclassified: {s['file']}:{s['line']} {s['hook']} #{s['occurrence']}")
+    for file, hook, occurrence in stale_classifications(unbound + bound_unused):
+        print(f"      stale row (no unhandled site): {file} {hook} #{occurrence}")
 
     if "--context" in sys.argv:
         print("\nBINDING LINES (what each unhandled site does with the result)")
         for s in sorted(unbound + bound_unused, key=lambda s: (s["file"], s["line"])):
             line = (REPO / s["file"]).read_text(encoding="utf-8").split("\n")[s["line"] - 1]
-            cls = RENDERS.get((s["file"], s["line"]), ("UNCLASSIFIED",))[0]
+            cls = RENDERS.get(site_key(s), UNCLASSIFIED)[0]
             print(f"  {cls:12s} {s['file']}:{s['line']}  {line.strip()}")
 
     if "--json" in sys.argv:
