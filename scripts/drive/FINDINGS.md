@@ -28022,7 +28022,7 @@ the indicator into the turn, or count it in the spacer; it has to keep the 2026-
 
 ## F349 (B) — two agent triggers at the same moment can answer 500 "database is locked" while the message is delivered anyway
 
-**Status:** open. Found 2026-09-13 by the independent test pass (trial Hub); it predates F341–F345.
+**Status:** open, partially fixed fef65d4 (2026-09-22): the measured 500 on `UPDATE projects SET last_seen_at` cannot happen now; a failure after the entry's commit still answers 500 for queued input (see the foot). Found 2026-09-13 by the independent test pass (trial Hub); it predates F341–F345.
 
 **Measured.** Two `POST …/agent/trigger` requests fired together: one returned **500** with
 `database is locked`, raised from the autoflushed `UPDATE projects SET last_seen_at`; the message
@@ -28036,6 +28036,11 @@ all, and must answer with what actually happened to the message. See DEAD-ENDS o
 also ends runs, not just trigger requests. `run-539bd1d44ea1` (35 minutes, 304 outputs),
 `run-d5f4b2972125` and `run-7695d6f7b4b4` each failed on `(sqlite3.OperationalError) database is
 locked` raised by `INSERT INTO agent_outputs`. What the Hub then does with such a run is **F359**.
+
+**Partially fixed 2026-09-22 (interactive session), `fef65d4`.** The measured failure was `resolve_project_workspace` stamping `project.last_seen_at = now` on every call. The trigger route resolves twice, and its next query autoflushed the UPDATE, starting SQLite's write transaction there and holding the lock through the rest of the route (including the synchronous `worktrees.is_git_repo` subprocess) until the entry's commit. The resolver no longer writes `last_seen_at`. Nothing reads it but the projects API, and open/relocate still stamp it via `project_lifecycle._observe`. So the trigger route's first write is now its entry commit. **The suite could not have caught it:** `_default_project_workspace` fakes the resolver in every test. `test_resolving_a_workspace_writes_nothing.py` restores the real one. Before the fix it saw the project modified and recorded **two** `UPDATE projects` per trigger; after, none. 41 resolver-related files: 630 passed, 5 skipped. **Not done:**
+- **A failure after `trigger_agent`'s entry commit (`agent_trigger.py` ~1515) still answers 500 for input that is queued.** `persist_event` and `schedule_agent` both run after it. Answering `queued` instead is only true if something will drain the entry, and nothing on a timer does (see `_execute_run`'s spawn-failure comment on `redrain_queued_agents`). That needs its own design, not a one-line catch.
+- **The 500 itself was never reproduced in a test**, only the write that caused it. Concurrent `database is locked` from other writers (the run-output INSERTs in the 2026-09-14 observation) is F359's and F292's.
+- Not driven live.
 
 ## F350 (C) — below ~560px of height in a narrow window, the composer's send button is off the panel even with nothing pending
 
