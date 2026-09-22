@@ -190,6 +190,14 @@ verification step per row, not a side effect of refreshing a page.
 
 ---
 
+## Step 3b — Refresh the rounds tracker, in an interactive session
+
+`spec-queue/ROUNDS.md` is the operator's round-by-round plan for the B/C/D findings, and
+`spec-queue/ROUNDS.html` tracks it from the same ledger. After a regeneration that closed anything,
+run `py -3.11 scripts/rounds_page.py` too, and commit `ROUNDS.html` with `BACKLOG.html`. **The
+unattended windows skip this step**: C and D are drained by operator-guided sessions only
+(`DECISIONS.md`, the scope footnote of 2026-09-22).
+
 ## Step 4 — Commit, if the page changed
 
 The page is tracked, so a regeneration is a real diff. Commit it with whatever prompted the refresh
