@@ -75,23 +75,43 @@ def test_is_locked_nonexistent(tmp_path, monkeypatch):
 # (same O_EXCL-equivalent semantics). The DEFAULT_RETRY_DELAY is 0.1s,
 # so timeout=0.3s gives T2 ~3 chances to retry before giving up.
 #
-# The joins are bounded by JOIN_TIMEOUT, not by the lock timeouts. Those
-# bound how long a thread *tries*; they say nothing about when a shared CI
-# runner schedules it. A 3s join failed once on windows-latest (run
-# 35753872487): one thread had not returned yet, nothing raised, and the
-# assertion reported a wrong result instead of a slow thread (F408). Each
-# test asserts the threads finished before it reads their results.
+# Every wait between threads is bounded by JOIN_TIMEOUT, not by the lock
+# timeouts. The lock timeouts bound how long a thread *tries*; they say
+# nothing about when a shared CI runner schedules it. A 3s join failed once
+# on windows-latest (run 35753872487): one thread had not returned yet,
+# nothing raised, and the assertion reported a wrong result instead of a
+# slow thread (F408). So the threads run through _run_concurrently, which
+# fails on a thread that never returns and re-raises a thread's own
+# exception, before any test reads a result. Where one thread must still
+# be holding the lock while the other tries, it holds it until told to,
+# not for a fixed sleep.
 # ---------------------------------------------------------------------------
 
 JOIN_TIMEOUT = 30.0
 
 
-def _join_all(*threads):
+def _run_concurrently(*targets):
+    errors = []
+
+    def capture(target):
+        def run():
+            try:
+                target()
+            except BaseException as exc:  # noqa: BLE001 - re-raised on the test's thread below
+                errors.append(exc)
+
+        return run
+
+    threads = [threading.Thread(target=capture(target)) for target in targets]
+    for thread in threads:
+        thread.start()
     for thread in threads:
         thread.join(timeout=JOIN_TIMEOUT)
     assert not any(
         thread.is_alive() for thread in threads
     ), f"a thread did not return within {JOIN_TIMEOUT}s"
+    if errors:
+        raise errors[0]
 
 
 def test_two_threads_serial_acquire(tmp_path, monkeypatch):
@@ -118,15 +138,11 @@ def test_two_threads_serial_acquire(tmp_path, monkeypatch):
     def t2_acquire():
         barrier.wait()
         # T2 waits for T1 to release, then acquires.
-        t2_done.wait(timeout=2.0)
+        assert t2_done.wait(timeout=JOIN_TIMEOUT), "T1 never released"
         with lock("race-serial", timeout=1.0):
             t2_got.append(True)
 
-    t1 = threading.Thread(target=t1_acquire)
-    t2 = threading.Thread(target=t2_acquire)
-    t1.start()
-    t2.start()
-    _join_all(t1, t2)
+    _run_concurrently(t1_acquire, t2_acquire)
     assert t1_got == [True]
     assert t2_got == [True], "T2 must acquire the lock after T1 releases"
 
@@ -136,30 +152,29 @@ def test_lock_held_blocks_other_thread_with_short_timeout(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     barrier = threading.Barrier(2)
     t1_in_critical = threading.Event()
-    t2_started = threading.Event()
+    t2_finished = threading.Event()
     t2_result = []
 
     def t1_hold():
         barrier.wait()
         with lock("race-timeout"):
             t1_in_critical.set()
-            # T2 will try to acquire; hold the lock until it gives up.
-            time.sleep(0.5)
+            # Hold the lock until T2 has given up, however late T2 is scheduled.
+            assert t2_finished.wait(timeout=JOIN_TIMEOUT), "T2 never finished trying"
 
     def t2_try_acquire():
         barrier.wait()
-        # Wait for T1 to actually be in the critical section (deterministic).
-        assert t1_in_critical.wait(timeout=2.0), "T1 never entered the critical section"
-        t2_started.set()
-        # 200ms timeout — T1 will still be holding the lock at that point.
-        t2_result.append(acquire_lock("race-timeout", timeout=0.2))
+        try:
+            # Wait for T1 to actually be in the critical section (deterministic).
+            assert t1_in_critical.wait(
+                timeout=JOIN_TIMEOUT
+            ), "T1 never entered the critical section"
+            # 200ms timeout, and T1 holds the lock until this returns.
+            t2_result.append(acquire_lock("race-timeout", timeout=0.2))
+        finally:
+            t2_finished.set()
 
-    t1 = threading.Thread(target=t1_hold)
-    t2 = threading.Thread(target=t2_try_acquire)
-    t1.start()
-    t2.start()
-    # T2 should time out within 200-400ms; the join bound is for the runner, not the lock.
-    _join_all(t2, t1)
+    _run_concurrently(t1_hold, t2_try_acquire)
     assert t1_in_critical.is_set(), "T1 must have entered the critical section"
     assert t2_result == [
         False
@@ -185,11 +200,7 @@ def test_concurrent_threads_exactly_one_wins(tmp_path, monkeypatch):
         with results_lock:
             results.append(got)
 
-    t1 = threading.Thread(target=attempt)
-    t2 = threading.Thread(target=attempt)
-    t1.start()
-    t2.start()
-    _join_all(t1, t2)
+    _run_concurrently(attempt, attempt)
     assert sorted(results) == [
         False,
         True,
