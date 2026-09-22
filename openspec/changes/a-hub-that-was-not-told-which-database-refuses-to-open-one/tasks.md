@@ -2,7 +2,7 @@
 
 **Round 1, 2026-09-20. Round 2, 2026-09-20. Round 3, 2026-09-20. Round 4, 2026-09-21. Approved
 2026-09-22 (`spec-queue/APPROVALS.md`, F388, A). Groups 1 and 3 built 2026-09-22 night, one commit
-per the approval note. Groups 2, 4, 5, 6 remain unbuilt.**
+per the approval note. Group 2 built 2026-09-22 night. Groups 4, 5, 6 remain unbuilt.**
 
 **R4 (after the adversarial Opus pass returned DO NOT APPROVE on 2026-09-20) rewrote 2.7, 3.2 and
 4.1, extended 4.5, and added 2.8, 3.7, 4.10 and 4.11.** Existing numbers are unchanged. All four
@@ -74,32 +74,32 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
 
 ## Group 2 — (b): the Hub names its database before it opens it
 
-- [ ] 2.1 In `hub/hub/main.py`'s `lifespan()` (`:412`), as the **first statement, before
+- [x] 2.1 In `hub/hub/main.py`'s `lifespan()` (`:412`), as the **first statement, before
       `await init_db()`** (`:413`), resolve the sqlite file path out of `settings.database_url` and
       capture `Path(...).exists()` **into a local, before anything runs** — `init_db` creates the
       directory (`engine.py:346-350`) and SQLite creates the file, so the answer changes one line
       later.
-- [ ] 2.2 Emit one line carrying: the **absolute** resolved path; whether the file existed before
+- [x] 2.2 Emit one line carrying: the **absolute** resolved path; whether the file existed before
       this process opened it; and `os.getpid()`. **(R2)** The line must **identify itself in its own
       words** — do not rely on a `WARNING [hub.main]` prefix, because at this site there is none.
       Measured from a running Hub on 2026-09-20: before `init_db` the record is emitted by
       `logging.lastResort`, which has **no formatter**, so it prints as the bare message; only after
       `init_db`'s `fileConfig` does the same record print as `WARNI [hub.db.engine] ...`. A reader
       seeing this line has one sentence and nothing else to tell them what it is.
-- [ ] 2.3 **Do not print a port** (D6). `settings.aw_port` is configured intent — only
+- [x] 2.3 **Do not print a port** (D6). `settings.aw_port` is configured intent — only
       `hub/hub/main.py:540` honours it, and a `--port` on the uvicorn command line never reaches
       `settings`. `hub/hub/bound_address.py` is the module that knows the real port and it is
       **empty during `lifespan()`** (populated by request middleware, `main.py:466-469`). A port on
       this line would be wrong in exactly the drive scenario F388 came from.
-- [ ] 2.4 Emit it with `logger.warning`, and put the reason in a comment beside it: measured
+- [x] 2.4 Emit it with `logger.warning`, and put the reason in a comment beside it: measured
       2026-09-20, `logging.getLogger("hub.*").isEnabledFor(logging.INFO)` is `False` both before
       `init_db` (root has no handler; `logging.lastResort` is WARNING-only) and after it (root is
       configured by `hub/hub/alembic.ini:20-22`'s `level = WARN` via `migrations/env.py:28`). Without
       the comment, a later tidy-up will "correct" the level and silently delete the feature.
-- [ ] 2.5 Handle the non-sqlite case without crashing: if `settings.database_url` does not start with
+- [x] 2.5 Handle the non-sqlite case without crashing: if `settings.database_url` does not start with
       `sqlite`, log the URL **with any credentials stripped** and skip the existence check. Do not
       let the safety line become a way to print a password into a log.
-- [ ] 2.6 Test it in `hub/tests/` by asserting on the emitted record (`caplog`), **not** by asserting
+- [x] 2.6 Test it in `hub/tests/` by asserting on the emitted record (`caplog`), **not** by asserting
       the string reaches stdout — and assert the record's `levelno` is `>= logging.WARNING`. The level
       is the feature; a test that only checks the text passes on an invisible line. **(R3)** Assert
       the self-identification too, against `record.getMessage()` **alone** — not `caplog.text`, which
@@ -107,7 +107,7 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       line to name what it is *"without depending on a logger-name or level prefix being present"*,
       and as R2 left it that clause was the one normative sentence in the change with no task
       verifying it.
-- [ ] 2.7 **(rewritten by R4. R1's version could not fail.)** R1's test asserted
+- [x] 2.7 **(rewritten by R4. R1's version could not fail.)** R1's test asserted
       `logging.getLogger("hub.main").isEnabledFor(logging.INFO) is False` "under the alembic-configured
       root", but no such root exists inside `pytest`. The Hub suite runs on `:memory:`, and
       `engine.py:199` skips the alembic upgrade for it, so `migrations/env.py:28`'s `fileConfig` never
@@ -141,7 +141,7 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
         not the launcher.
       This replaces both R1's 2.7 and the unit-level proxy. 2.6 stays as the fast check on the text
       and the level.
-- [ ] 2.8 **(R4)** Automate 6.1's refusal the same way, because it was the one check the change said
+- [x] 2.8 **(R4)** Automate 6.1's refusal the same way, because it was the one check the change said
       no unit test could make. It can be made, safely:
       - Launch the same command with `DATABASE_URL` removed from the child env, `cwd=tmp_path` (no
         `.env`), and **`USERPROFILE` and `HOME` both pointed at a second `tmp_path` directory**.
@@ -193,9 +193,9 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       - `ci.yml:61` `python -c "import agentweave"` and `ci.yml:131` `python -c "import agentweave,
         hub"` (cwd `hub/`) both exit 0. `hub/hub/__init__.py` reads only package metadata; it never
         imports `hub.config`.
-      - `pytest tests/ --collect-only` (538) and `pytest tests --collect-only` from `hub/` (4545)
-        both collect clean. **Collection is not the instrument** — 4.9's break is an `import
-        hub.config` inside a test *body*, which only a run catches.
+      - `--collect-only` over the CLI suite (538 items) and over the Hub suite from `hub/` (4545
+        items) both collect clean. **Collection is not the instrument** — 4.9's break is an `import
+        hub.config` inside a test *body*, which only a run catches, not a collect.
       - `.claude/skills/copilot-test-setup/SKILL.md:73-74` sets `$env:DATABASE_URL` before
         `python -m alembic upgrade head`. Unaffected.
       Also measured: a bare `alembic -c hub/alembic.ini current` from `hub/` with no `DATABASE_URL`

@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
+from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -408,8 +409,58 @@ async def _settle_background_runs() -> None:
     )
 
 
+def _url_with_credentials_stripped(url: str) -> str:
+    """A non-sqlite `DATABASE_URL` may carry a password in its netloc; the safety
+    line in `_log_database_before_opening` must not become a way to print one into
+    a log (group 2, task 2.5)."""
+    parts = urlsplit(url)
+    if not parts.username and not parts.password:
+        return url
+    netloc = parts.hostname or ""
+    if parts.port:
+        netloc = f"{netloc}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
+def _log_database_before_opening() -> None:
+    """`lifespan()`'s first statement, before `init_db()` runs -- `init_db` creates
+    the sqlite file's directory (`engine.py:346-350`) and sqlite creates the file
+    itself, so `exists()` answers differently one line later. No port here (D6):
+    `settings.aw_port` is configured intent, not the bound address, and
+    `bound_address.py` is still empty at this point in `lifespan()`.
+    """
+    # Emitted before the root logger is configured (that happens inside `init_db()`'s
+    # alembic upgrade, `migrations/env.py:28`), so `logging.lastResort` prints it with
+    # no formatter -- the bare message, no `WARNING [hub.main]` prefix (2.2). The
+    # message therefore names itself.
+    #
+    # WARNING, not INFO: measured 2026-09-20, `hub.*` loggers are not enabled for
+    # INFO either before `init_db` (no handler; `lastResort` is WARNING-only) or
+    # after it (root level is WARN, `alembic.ini:20-22` via `migrations/env.py:28`).
+    # "Tidying" this to `logger.info` silently deletes the feature (2.7's first
+    # mutation check).
+    url = settings.database_url
+    if url.startswith("sqlite"):
+        db_path = url.replace("sqlite+aiosqlite:///", "")
+        existed_before = Path(db_path).exists()
+        absolute_path = Path(db_path).resolve()
+        logger.warning(
+            "Hub database: opening %s (existed before this process opened it: %s, pid %d)",
+            absolute_path,
+            existed_before,
+            os.getpid(),
+        )
+    else:
+        logger.warning(
+            "Hub database: opening %s (pid %d)",
+            _url_with_credentials_stripped(url),
+            os.getpid(),
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _log_database_before_opening()
     await init_db()
     instance_identity.load_or_create()
     await reconcile_interrupted_runs()
