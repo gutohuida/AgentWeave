@@ -17642,7 +17642,7 @@ The reachable path to it is F228: the Questions page still lists a declined ques
 
 ## F228 (C) — a declined question never leaves the list the operator reads as "Unanswered"
 
-**Status:** open. Verified 2026-09-09: the questions route still filters on
+**Status:** fixed e2f05cf (2026-09-22; see the foot). Was: open. Verified 2026-09-09: the questions route still filters on
 `Question.answered` alone (`hub/hub/api/v1/questions.py:242`), so a declined question is still
 returned to the panel that renders *Unanswered* and still offered an answer box. The 2026-09-04
 second surface narrowed one measurement inside this entry and repaired nothing. [classified 2026-09-09, D-3]
@@ -17680,6 +17680,8 @@ does.
 
 **Reproduction:** `scripts/drive/t_sweep_row11_questions.py` leg 5, and
 `scripts/drive/t_sweep_row11_batch.py` leg 5.
+
+**Fixed 2026-09-22, `e2f05cf`, Hub-side.** `list_questions` with `answered=false` also requires `declined = 0`. A declined question now leaves the list the Questions page renders as *Unanswered*, and the overview's unanswered count, which was `questions.length` over the same list. `agent-capability-plane` already says a declined question "is no longer outstanding", so the route now matches the spec. `?answered=true` and the unfiltered list are unchanged, so the record is still reachable. The client-side `!declined` filters in `QuestionInterruptCard` and `pendingQuestions.ts` stay as defence for an older Hub. `test_question_declined.py::test_a_declined_question_leaves_the_outstanding_list` fails without the fix. 674 tests across the 25 files that read the questions list pass. **Not done:** the page has no *Declined* block, so a declined question is visible only through the unfiltered API. Not driven live or seen in a browser.
 
 ---
 
