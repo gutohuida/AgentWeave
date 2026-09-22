@@ -6,21 +6,40 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+class HubNotToldWhichDatabase(RuntimeError):  # noqa: N818 - "refused" is the outcome, not a fault
+    """Raised when no DATABASE_URL reached the process and the Hub refuses to guess."""
+
+
 def _default_database_url() -> str:
     """Same absolute, home-relative path native mode (cli.py's HUB_DIR) already computes.
 
-    Only consulted by callers that skip the CLI (direct `uvicorn hub.main:app`, or any
-    future embedder) — native mode sets DATABASE_URL in os.environ before this class is
-    ever instantiated, so this default never fires there.
+    Quoted by `_refuse_to_guess_a_database`'s message — bare `agentweave` sets
+    DATABASE_URL to this path before the Hub ever imports this module, so this
+    function is never used as a fallback; it is the CLI's own computation, kept here
+    so the refusal message and `agentweave doctor` cannot drift apart (guarded by
+    TestDatabaseUrlDriftAgainstCli).
     """
     path = Path.home() / ".agentweave" / "hub" / "data" / "agentweave.db"
     return f"sqlite+aiosqlite:///{path.as_posix()}"
 
 
+def _refuse_to_guess_a_database() -> str:
+    """Raised instead of silently defaulting — a caller that skips the CLI (direct
+    `uvicorn hub.main:app`, or any future embedder) must name its database."""
+    default_path = _default_database_url()
+    raise HubNotToldWhichDatabase(
+        "The Hub was not told which database to open. Checked the process "
+        "environment and a .env file in the current working directory for "
+        f"DATABASE_URL and found neither. It declined to open {default_path!r} "
+        "without being asked to. Set DATABASE_URL explicitly, or run bare "
+        "`agentweave` to use that default."
+    )
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = Field(default_factory=_default_database_url)
+    database_url: str = Field(default_factory=_refuse_to_guess_a_database)
     aw_host: str = "127.0.0.1"
     aw_port: int = 8000
 

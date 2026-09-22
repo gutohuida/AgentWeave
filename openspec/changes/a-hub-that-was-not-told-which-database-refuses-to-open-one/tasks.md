@@ -1,7 +1,8 @@
 # Tasks — a Hub that was not told which database refuses to open one
 
-**Round 1, 2026-09-20. Round 2, 2026-09-20. Round 3, 2026-09-20. Round 4, 2026-09-21. Not approved.
-Nothing here is built.**
+**Round 1, 2026-09-20. Round 2, 2026-09-20. Round 3, 2026-09-20. Round 4, 2026-09-21. Approved
+2026-09-22 (`spec-queue/APPROVALS.md`, F388, A). Groups 1 and 3 built 2026-09-22 night, one commit
+per the approval note. Groups 2, 4, 5, 6 remain unbuilt.**
 
 **R4 (after the adversarial Opus pass returned DO NOT APPROVE on 2026-09-20) rewrote 2.7, 3.2 and
 4.1, extended 4.5, and added 2.8, 3.7, 4.10 and 4.11.** Existing numbers are unchanged. All four
@@ -24,43 +25,46 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
 
 ## Group 1 — (a): the Hub refuses to guess
 
-- [ ] 1.1 In `hub/hub/config.py`, add a module-level exception type — `HubNotToldWhichDatabase(RuntimeError)`
+- [x] 1.1 In `hub/hub/config.py`, add a module-level exception type — `HubNotToldWhichDatabase(RuntimeError)`
       — and export it. A distinct type, not a bare `RuntimeError`: `hub/tests/` asserts on it, and a
       future caller that wants to catch this and only this needs something to name.
-- [ ] 1.2 Replace `database_url: str = Field(default_factory=_default_database_url)` (`config.py:23`)
+- [x] 1.2 Replace `database_url: str = Field(default_factory=_default_database_url)` (`config.py:23`)
       with `Field(default_factory=_refuse_to_guess_a_database)`, a new module-level function that
       raises `HubNotToldWhichDatabase`. **Do not make the field required** — measured in D2, a bare
       required field yields `1 validation error for Settings / database_url / Field required
       [type=missing, input_value={}, input_type=dict]`, which names neither the database nor the fix.
-- [ ] 1.3 Keep `_default_database_url()` exactly as it is, and call it from the refusal message
+- [x] 1.3 Keep `_default_database_url()` exactly as it is, and call it from the refusal message
       (D7). It is still the path the CLI computes, still what `agentweave doctor` reports on, and
       still the subject of the CLI-drift test in 1.7.
-- [ ] 1.4 Write the message. It MUST contain, verbatim enough to assert on: the **absolute** path it
+- [x] 1.4 Write the message. It MUST contain, verbatim enough to assert on: the **absolute** path it
       declined to open; `DATABASE_URL`; and bare `agentweave` as the deliberate way to get that
       default. It MUST also say which sources were consulted — the process environment **and** a
       `.env` in the working directory — because an operator with a `.env` one directory up will
       otherwise read the message as false (D3).
-- [ ] 1.5 `hub/tests/test_config.py`: rewrite
+- [x] 1.5 `hub/tests/test_config.py`: rewrite
       `TestDatabaseUrlDefault::test_default_is_absolute_home_relative_path_not_the_old_relative_default`
       into a refusal test. It must `monkeypatch.delenv("DATABASE_URL")`, construct
       `Settings(_env_file=None)`, assert `HubNotToldWhichDatabase` is raised, and assert **all three**
       elements of 1.4's message are present. Do not assert the whole string; assert the three facts.
-- [ ] 1.6 Add the complement in the same class: with `DATABASE_URL` set, `Settings(_env_file=None)`
+- [x] 1.6 Add the complement in the same class: with `DATABASE_URL` set, `Settings(_env_file=None)`
       returns it and **the factory does not run** (D2's measured property — assert by pointing the
       factory at something that would fail loudly, or by asserting the returned value alone if that
       reads cleaner). Also add: a value supplied only by an env *file* satisfies the refusal (D3).
       **(R4 review)** Also add the test for the delta's relative-value SHALL. A **relative**
       `DATABASE_URL` comes back from `Settings` unchanged, and not absolutized against the home
       default. 2.6 asserts that group 2's line names `<cwd>/<relative path>`.
-- [ ] 1.7 Repoint `TestDatabaseUrlDriftAgainstCli::test_hub_default_matches_cli_hub_dir` at
+- [x] 1.7 Repoint `TestDatabaseUrlDriftAgainstCli::test_hub_default_matches_cli_hub_dir` at
       `_default_database_url()` directly instead of at `Settings(...).database_url`. **Do not delete
       it.** It is the only thing in the tree guarding the `agentweave-ai` / `agentweave-hub` seam,
       and D4's rejection of the stronger guard rests on that seam being real.
-- [ ] 1.8 Run `py -3.11 -m pytest hub/tests/test_config.py -v` and record the count here. Before this
+- [x] 1.8 Run `py -3.11 -m pytest hub/tests/test_config.py -v` and record the count here. Before this
       change it is `4 passed`; under a naive required-field version it is `2 failed, 2 passed`
       (measured 2026-09-20, re-measured under R2's probe: same). **Write the number you actually
-      saw**, not the number expected.
-- [ ] 1.9 **(R2)** Fix the docstring of `hub/tests/test_config.py:56-58`, which states that the CLI
+      saw**, not the number expected. **Measured 2026-09-22: `6 passed`** (4 original tests, one
+      rewritten into the refusal test plus two new ones added by 1.6). Mutation-checked: reverting
+      `database_url`'s default_factory to `_default_database_url` makes
+      `test_no_database_url_anywhere_refuses_instead_of_guessing` fail.
+- [x] 1.9 **(R2)** Fix the docstring of `hub/tests/test_config.py:56-58`, which states that the CLI
       and the Hub are *"independently-installable distributions with **no dependency edge** between
       them"*. `pyproject.toml:34` is `dependencies = ["agentweave-hub>=1.1.0"]` — there is an edge,
       it is a floor with no ceiling, and that is **why** the class matters: `pip install -U
@@ -156,13 +160,13 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
 
 ## Group 3 — the callers that break, and one of them is `make ui`
 
-- [ ] 3.1 `scripts/refresh_ui_bundle.py:110` does `from hub.main import UI_BUILD_STAMP,
+- [x] 3.1 `scripts/refresh_ui_bundle.py:110` does `from hub.main import UI_BUILD_STAMP,
       ui_source_fingerprint` with no `DATABASE_URL` set. Measured under the probe: `make ui` and
       `make ui-check` die with a raw `pydantic_core.ValidationError`. Fix it — the script needs a
       build stamp, not a database, so set `os.environ.setdefault("DATABASE_URL",
       "sqlite+aiosqlite:///:memory:")` immediately before the import, with a one-line comment saying
       why.
-- [ ] 3.2 **(R4: R3's list is complete for what it swept, and it swept only half.)** R3 swept
+- [x] 3.2 **(R4: R3's list is complete for what it swept, and it swept only half.)** R3 swept
       *imports* of `hub.*` under `scripts/`. It never swept *launches*: every place that starts
       `uvicorn hub.main:app`. That is where the three misses were (task 3.7). Both sweeps are needed.
       Re-run both before IMPL rather than trusting either list. The imports half, as R3 measured it
@@ -180,7 +184,7 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       - `scripts/check_model_catalog.py` — loads the catalog **by path**; 0 probe hits. Unaffected.
       Fix the first two; leave the rest; say so in the commit. If a new script appears before IMPL,
       re-run the one-liner rather than re-reasoning.
-- [ ] 3.3 Confirm the launch paths that must keep working, by running them: `make ui-check`;
+- [x] 3.3 Confirm the launch paths that must keep working, by running them: `make ui-check`;
       `agentweave --help`; `cd testbed/scratch && agentweave doctor`. Measured 2026-09-20 that the
       last two do not import `hub` and are unaffected — **re-measure rather than trusting that line.**
       **(R3)** R3 ran the probe over both CI jobs as well, with `hub/.env` moved aside so a *clean
@@ -200,9 +204,9 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       (`cli.py:1028`) before either migrates — and no documented workflow runs alembic bare
       (`.claude/rules/db-migrations.md` does not, and the skill above sets it). Recorded so a later
       round does not re-open it.
-- [ ] 3.4 Do **not** change `hub/tests/conftest.py`. It assigns `os.environ["DATABASE_URL"]` before
+- [x] 3.4 Do **not** change `hub/tests/conftest.py`. It assigns `os.environ["DATABASE_URL"]` before
       importing anything from `hub` (`:57-67`), so the whole Hub suite is already a told path.
-- [ ] 3.5 **(R2)** `scripts/drive/n10_route_reachability.py:119-121` runs
+- [x] 3.5 **(R2)** `scripts/drive/n10_route_reachability.py:119-121` runs
       `subprocess.run([sys.executable, "-c", "from hub.main import app..."], cwd=REPO / "hub")` with
       **no `DATABASE_URL`**. It survives on this machine only because the gitignored `hub/.env`
       happens to exist; on a clean checkout it already opens the home default today, and under (a) it
@@ -211,7 +215,7 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       one-line comment. (`:memory:` is enough: `engine.py:199` skips the alembic upgrade for it.)
       This is task 3.2's sweep done for the one entry it should not have left to judgement.
 
-- [ ] 3.7 **(R4)** The launch sweep. Run it as `git grep -n "hub.main:app\|hub.main:run"`, excluding
+- [x] 3.7 **(R4)** The launch sweep. Run it as `git grep -n "hub.main:app\|hub.main:run"`, excluding
       archives, logs and `FINDINGS.md`. **(R4 review)** R4's own pattern, `"uvicorn hub.main:app"`,
       misses list-form launches (`["-m", "uvicorn", "hub.main:app"]`). The review checked the ten it
       missed (`d1_0909_shutdown.py`, the two `f295_*`, `t_d4_retry_by_hand.py`, the six
@@ -243,12 +247,21 @@ file under `hub/ui/src`, stop and leave it for the operator (day-window rule; th
       `.claude/loops/night-window.md:235-237`, `scripts/drive/d1_0905_restart_hub.sh:13`, and the
       finished record at `openspec/changes/a-first-turn-is-not-told-it-has-nothing/tasks.md:372`.
       User-facing prose that states the old guarantee is task 4.11.
-- [ ] 3.6 **(R3)** Know that **CI will not catch a regression of 3.1 or 3.5.** `grep -rn
+- [x] 3.6 **(R3)** Know that **CI will not catch a regression of 3.1 or 3.5.** `grep -rn
       "refresh_ui_bundle\|ui-check\|make ui" .github/workflows/` returns **nothing** — no workflow
       runs `make ui`, `make ui-check` or any drive script. Both fixes are guarded only by a developer
       running them by hand. Do not add a CI job for it in this change (out of scope), but say so in
       the commit message, and prefer `os.environ.setdefault` in 3.1/3.5 precisely because it cannot
       break a caller that *does* set `DATABASE_URL`.
+
+**Groups 1+3 landed 2026-09-22. Measured then, with `DATABASE_URL` unset:** `py -3.11 -m pytest
+hub/tests/test_config.py -v` → `6 passed`. `py -3.11 -m pytest tests/ -q` → `1 failed, 546 passed, 3
+skipped` — the one failure is exactly `tests/test_hub_commands.py::
+test_first_start_migrations_leave_a_database_that_can_hold_a_conversation`'s bare `import
+hub.config` (task 4.9's own scope, group 4, not built yet). No `test_skill_sync.py` failures were
+present at this measurement — task 4.9's 2026-09-20 note of two pre-existing failures there no
+longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
+`n10_route_reachability.py` all ran clean with `DATABASE_URL` unset.
 
 ## Group 4 — (d) and the prose that carried the guarantee
 

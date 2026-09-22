@@ -8,20 +8,20 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  1,
+    "iteration":  2,
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "hub-refuses-groups1and3-impl",
-    "next_action":  "Implement groups 1 and 3 of openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md (F388, A) in ONE commit -- the approval note requires this, since group 1 lands and breaks make ui / scripts/drive/*.py until group 3 lands too. Use openspec-apply-change. Mutation-check each new test. Do not touch hub/ui/src.",
+    "current":  "hub-refuses-group2-impl",
+    "next_action":  "Implement group 2 of openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md (2.1-2.8): the Hub names its database before it opens it, in main.py's lifespan(). Read the group 2 tasks in full -- 2.7 is a real-subprocess test, not a unit test, and its own R4-review implementation notes (thread with deadline for stderr, stdout=DEVNULL, kill in try/finally) matter. Mutation-check per 2.7's own two listed mutations. Groups 1+3 already landed (2026-09-22 iteration 2) -- do not redo them.",
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
-                      "status":  "open",
+                      "status":  "done",
                       "model":  "sonnet",
                       "effort":  "high",
                       "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: groups 1+3, one commit",
-                      "detail":  "APPROVED spec-queue/APPROVALS.md 2026-09-22 (F388, A). Groups 1 and 3 in the same commit or neither -- group 3 is the callers (make ui, scripts/drive/*.py) that break the moment group 1 lands. No hub/ui/src, no migration."
+                      "detail":  "Built 2026-09-22 iteration 2. hub/tests/test_config.py 6 passed, mutation-checked. tests/ CLI suite: 1 failed (expected, deferred to group 4/task 4.9), 546 passed, 3 skipped. ruff/black over CI's exact paths passed."
                   },
                   {
                       "id":  "hub-refuses-group2-impl",

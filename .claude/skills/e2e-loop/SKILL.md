@@ -141,9 +141,11 @@ why — a stray test project is indistinguishable from a real one a week later.
 
 - **Restart the Hub so it survives session teardown:**
   ```
-  Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c "cd /d C:\Users\huida\Documents\projects\AgentWeave\hub && C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\agentweave-hub.log 2>&1"'}
+  Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c "cd /d C:\Users\huida\Documents\projects\AgentWeave\hub && set "DATABASE_URL=sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/trial/agentweave.db" && C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\agentweave-hub.log 2>&1"'}
   ```
-  Find the live PID with `Get-NetTCPConnection -LocalPort 8010 -State Listen`.
+  Find the live PID with `Get-NetTCPConnection -LocalPort 8010 -State Listen`. The Hub now refuses to
+  start without `DATABASE_URL` named (a); this names the trial profile explicitly instead of relying
+  on a gitignored `hub/.env`.
 - **Interpreter:** `C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe`.
 - **`pytest hub/tests/ tests/` together fails collection** — run them separately.
 - **Auth:** `Authorization: Bearer <AW_BOOTSTRAP_API_KEY from hub/.env>`; the harness reads it.

@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import filecmp
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -107,6 +108,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # This script needs a build stamp, not a database — the Hub now refuses to guess one.
+    os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
     from hub.main import UI_BUILD_STAMP, ui_source_fingerprint  # noqa: E402
 
     fingerprint = ui_source_fingerprint(UI_SRC)

@@ -21,6 +21,9 @@ install:
 	cd ui && npm install
 
 dev:
+	# No DATABASE_URL set here: a checkout with hub/.env (from .env.example) resolves
+	# to hub/data/, which is what this target means; one without now refuses at the
+	# alembic step with a named path instead of silently guessing.
 	alembic -c hub/alembic.ini upgrade head
 	uvicorn hub.main:app --host 0.0.0.0 --port 8000 --reload
 

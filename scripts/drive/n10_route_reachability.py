@@ -50,6 +50,7 @@ subtree needs a reachability walk from `App.tsx`, which this does not attempt.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -117,7 +118,13 @@ def declared_routes():
         "print(json.dumps(sorted(set(map(tuple,rs)))))"
     )
     out = subprocess.run(
-        [sys.executable, "-c", code], cwd=REPO / "hub", capture_output=True, text=True
+        [sys.executable, "-c", code],
+        cwd=REPO / "hub",
+        capture_output=True,
+        text=True,
+        # This wants the route table, not a database -- :memory: skips the alembic
+        # upgrade (engine.py:199) and the Hub now refuses to guess one on its own.
+        env={**os.environ, "DATABASE_URL": "sqlite+aiosqlite:///:memory:"},
     )
     if out.returncode != 0:
         raise SystemExit(f"could not import the Hub app:\n{out.stderr}")

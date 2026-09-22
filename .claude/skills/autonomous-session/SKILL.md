@@ -262,9 +262,11 @@ evidence, and the user needs to know which is which.
 - Test projects live **outside** the repository.
 - Start the Hub detached so it outlives the session:
   ```
-  Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c "cd /d C:\Users\huida\Documents\projects\AgentWeave\hub && C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\agentweave-hub.log 2>&1"'}
+  Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c "cd /d C:\Users\huida\Documents\projects\AgentWeave\hub && set "DATABASE_URL=sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/profiles/trial/agentweave.db" && C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8010 > %TEMP%\agentweave-hub.log 2>&1"'}
   ```
-  This worked: the Hub was the one thing that survived the night.
+  This worked: the Hub was the one thing that survived the night. The Hub now refuses to start
+  without `DATABASE_URL` named (a); this names the trial profile explicitly instead of relying on a
+  gitignored `hub/.env`.
 - `pytest hub/tests/` takes about seven minutes and exceeds the 600s command cap — run it in file
   chunks, or in the background.
 - Interpreter: `C:\Users\huida\AppData\Local\Programs\Python\Python311\python.exe`.
