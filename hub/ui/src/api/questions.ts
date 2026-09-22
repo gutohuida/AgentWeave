@@ -33,6 +33,10 @@ export interface Question {
    *  they responded with nothing, this says they chose not to respond. */
   declined?: boolean
   declined_at?: string | null
+  /** The run that asked. `null` means no run did — an operator-posted question, or the Hub's own
+   *  question of record for a refused capability — so no agent's tray or composer owns it. Absent
+   *  means a Hub too old to say, and is read as "asked by a run", as before. */
+  created_by_run_id?: string | null
   /** Whether anyone is still waiting on this. False once the asking run has ended — its `ask_user`
    *  call is gone, so nothing receives an answer as a result any more. Absent means "assume yes",
    *  which matches the Hub's own presumption for a question with no recorded asker. */

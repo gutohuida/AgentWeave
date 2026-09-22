@@ -29,7 +29,13 @@ export function isWaitedOn(question: Question): boolean {
  */
 export function activeQuestionFor(questions: Question[], agent: string): ActiveQuestion {
   const pending = questions
-    .filter((q) => q.from_agent === agent && !q.answered && !q.declined)
+    // Only a question a run asked belongs to this agent's tray. One no run asked (`null`; absent
+    // means a Hub too old to say) would own the composer, and take every message the operator types
+    // to this agent as its answer: the Hub's record of a refused capability is exactly that, and it
+    // is answered from the Questions destination (`a-refused-capability-reaches-the-operator`).
+    .filter(
+      (q) => q.from_agent === agent && !q.answered && !q.declined && q.created_by_run_id !== null,
+    )
     .sort((a, b) => {
       // Questions someone is actually waiting on come first.
       //

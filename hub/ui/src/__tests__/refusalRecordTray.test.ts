@@ -20,3 +20,25 @@ describe('refused agent tray', () => {
     expect(activeQuestionFor(rows, 'lead').question?.id).toBe('q-live')
   })
 })
+
+describe('a question no run asked stays out of the agent tray', () => {
+  it('leaves the refusal record out, so it cannot own the composer', () => {
+    // The record alone: the tray used to show it and route every typed message to it as an answer.
+    const rows = [q({ id: 'q-record', blocking: false, asker_waiting: true, created_by_run_id: null })]
+    expect(activeQuestionFor(rows, 'lead').question).toBeNull()
+  })
+
+  it('keeps a question a run asked, blocking or not', () => {
+    const rows = [
+      q({ id: 'q-record', blocking: false, created_by_run_id: null }),
+      q({ id: 'q-note', blocking: false, asker_waiting: true, created_by_run_id: 'run-1' }),
+    ]
+    expect(activeQuestionFor(rows, 'lead').question?.id).toBe('q-note')
+  })
+
+  it('reads an absent field as asked by a run, so an older Hub keeps its tray', () => {
+    // A bundle reaches the operator's app on reload, before their Hub restarts onto the field.
+    const rows = [q({ id: 'q-live' })]
+    expect(activeQuestionFor(rows, 'lead').question?.id).toBe('q-live')
+  })
+})

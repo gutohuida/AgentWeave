@@ -356,3 +356,26 @@ first.
   turn had the original request in context (inferred from the transcript, which ends with the
   agent reporting the flow it created). A refusal inside a `session_mode="new"` job firing has no
   such context, and R4's limit still stands for it; that case was not driven.
+- **Adversarial Opus review (2026-09-22, after `229a708`) — SHIP WITH FIXES, applied.**
+  - **H1:** the record took over the refused agent's tray and composer. D14 accepted the tray
+    showing it but never named the composer: with no run, `asker_waiting` is always `true`, so the
+    record ranked with the live questions, and every message the operator typed to that agent
+    became an answer to it, using up a D17 slot. It also took the answer meant for a live
+    `ask_user`.
+    - Fixed in two parts. `24f3655` ranks by `isWaitedOn` (`blocking` and `asker_waiting`). Then,
+      by the operator's decision, the tray carries only questions a run asked:
+      `QuestionResponse.created_by_run_id` is now on the wire, and `activeQuestionFor` drops rows
+      where it is `null`.
+    - An *absent* field means a Hub too old to send it, and keeps the old behaviour. The committed
+      bundle reaches `:8000` before its process restarts, and hiding every question there would
+      have been worse.
+    - **This supersedes D14's "the tray can show it."**
+  - **M1:** the Overview card now puts a waited-on question first.
+  - **M2:** an event-log failure after the record's commit no longer makes the refusal deny the
+    record.
+  - **M3:** the newest-first order is now pinned by a test.
+  - **L1** (a third record through a race window of milliseconds that needs an operator click
+    inside it) and **L2** (a legacy skills template saying "operator allowance") are noted and not
+    fixed.
+  - **Mutations:** removing the tray filter, and reading an absent field as `null`, each fail 2 of
+    `refusalRecordTray.test.ts`'s 4 tests.

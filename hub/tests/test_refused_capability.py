@@ -259,6 +259,8 @@ async def test_the_record_reports_asker_waiting_true_by_the_shipped_presumption(
     row = next(q for q in listed.json() if q["id"] == detail["question_id"])
     assert row["asker_waiting"] is True
     assert row["blocking"] is False
+    # What keeps it out of the refused agent's tray and composer: no run asked it.
+    assert row["created_by_run_id"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -497,3 +499,38 @@ async def test_a_refusal_while_the_second_record_is_open_names_it(app, auth_head
     assert third.get("question_id") == second["question_id"], third["message"]
     assert "has not answered yet" in third["message"]
     assert len(await records()) == 2
+
+
+async def test_a_question_a_run_asked_reports_that_run(app, auth_headers):
+    """The contrast the tray reads: a run's own `ask_user` carries its run id on the wire."""
+    token = "aw_run_run-asker-secret"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-asker",
+                project_id=PROJECT,
+                agent="lead",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+    asked = await app.post(
+        "/api/v1/agent-actions/questions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "blocking": False,
+            "question": "Which colour?",
+            "header": "Colour",
+            "options": [{"label": "blue"}, {"label": "green"}],
+            "multi_select": False,
+        },
+    )
+    assert asked.status_code in (200, 201), asked.text
+
+    listed = await app.get(
+        f"/api/v1/projects/{PROJECT}/questions?answered=false", headers=auth_headers
+    )
+    row = next(q for q in listed.json() if q["id"] == asked.json()["id"])
+    assert row["created_by_run_id"] == "run-asker"

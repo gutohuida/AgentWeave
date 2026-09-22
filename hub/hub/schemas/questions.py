@@ -72,6 +72,11 @@ class QuestionResponse(BaseModel):
     # (`2026-08-11-declining-a-question`, D1).
     declined: bool = False
     declined_at: Optional[datetime] = None
+    # The run that asked, or `None` when no run did: a question posted through the operator route,
+    # or the Hub's own question of record for a refused capability
+    # (`a-refused-capability-reaches-the-operator`). An agent's conversation tray and composer
+    # carry only questions a run asked; the rest are answered from the Questions destination.
+    created_by_run_id: Optional[str] = Field(default=None, max_length=128)
     # When the wait this question started runs out, stamped by the Hub from its own inputs at
     # `api/v1/agent_actions.py::_record_the_wait_and_park` and never told to the Hub by anybody.
     #
