@@ -1589,6 +1589,15 @@ a day proposes, while this verdict governs *what from*.
 > lands harder under the first reading: **35 of the 75 read on 2026-09-09 are named nowhere outside
 > `FINDINGS.md`**, so "unscheduled" is very close to "forgotten".
 
+> **FOOTNOTE — DECIDED 2026-09-22 by the operator, in session:** *"the draining of the others is
+> manual execution guided by me."* The C and D findings are no longer only recorded history: they
+> are drained, but **only by interactive sessions the operator directs**, following
+> `spec-queue/ROUNDS.md`. **For the unattended windows nothing changes.** The FILL window still
+> proposes from A and B alone, and the FIX window builds only what `APPROVALS.md` names. A C or D
+> finding reaches a window only if the operator puts it into an ORDER by name. This also answers the
+> OPEN note above in practice: what stops the C/D population being forgotten is the operator-guided
+> rounds, not a ratchet.
+
 ### The day window's two, 2026-09-09 evening — and one it asked that was already answered
 
 **DECIDED 2026-09-09 ~17:45, by the operator, in session**, from

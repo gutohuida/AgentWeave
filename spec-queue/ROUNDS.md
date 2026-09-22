@@ -11,13 +11,14 @@ re-verifies its finding before touching code, as today's sweep did.
 This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPROVALS.md` and
 `DECISIONS.md` stay the only authority.
 
-## Read this first: two things this plan cannot settle itself
+## Read this first: scope and timing
 
-1. **Scope.** `DECISIONS.md` *"The scope of the drain"* (2026-09-10) says **drain A and B; C and D
-   are not proposed against**. The operator's request above covers C and D. Adopting this plan for
-   C/D amends that verdict, and the amendment belongs in `DECISIONS.md` as the operator's words,
-   not in this file. Until it is recorded, Rounds 0–5 are still safe: they are no-spec repairs, and
-   the verdict only governs *proposing*. The spec tracks (§ Spec tracks) take C/D only after it is.
+1. **Scope.** `DECISIONS.md` *"The scope of the drain"* (2026-09-10) drains A and B and did not
+   propose against C and D. **Footnoted 2026-09-22 by the operator:** *"the draining of the others
+   is manual execution guided by me."* So C and D are in this plan, but they are worked **only in
+   interactive sessions the operator directs**. The unattended FILL window still proposes from A and
+   B alone, and FIX builds only what `APPROVALS.md` names. A C/D spec track starts when the operator
+   says so, not when a window finds room.
 2. **This week.** The Merge Week scorecard's O5 opens no new `openspec/changes/` directory before
    2026-09-28. So the no-spec rounds run this week, and the spec tracks start on 2026-09-28.
 
@@ -54,7 +55,7 @@ B before C before D.
 | UI-1 | One bundle: controls that lie or do nothing | 21 | ~2 days | ui-bundle, browser check |
 | 5 | Scheduler residuals, after F352 lands | 5 | ~1 day | tonight's F352 build verified |
 | D | Operator decisions (13 questions) | ~60 | ~2 DECIDE sessions | operator |
-| S1–S12 | Spec tracks, from 2026-09-28 | ~30 + those D releases | ~1 change / 2–3 days | scope amendment for C/D |
+| S1–S12 | Spec tracks, from 2026-09-28 | ~30 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
 
 ---
 
