@@ -31,5 +31,5 @@
 
 ## 4. Close
 
-- [ ] 4.1 Update F375's Status line in `scripts/drive/FINDINGS.md` to `fixed <sha>`, and regenerate the backlog with `py -3.11 scripts/backlog_page.py`
-- [ ] 4.2 `openspec validate a-word-without-a-separator-can-still-leave --strict` passes; then archive with `openspec-archive-change`
+- [x] 4.1 Update F375's Status line in `scripts/drive/FINDINGS.md` to `fixed <sha>`, and regenerate the backlog with `py -3.11 scripts/backlog_page.py` — done: Status line reads `fixed a5e5a49`; backlog regenerated, F375 no longer open (open findings 217→215, fixed 166→167)
+- [x] 4.2 `openspec validate a-word-without-a-separator-can-still-leave --strict` passes; then archive with `openspec-archive-change` — done: valid, archived this commit

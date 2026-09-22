@@ -29170,9 +29170,12 @@ F352 (the rung-3 sentence names nobody), F316 (the re-staff's exclusion set).
 
 ## F375 (A) — a bare `..` argument has no separator, so rule 4 calls it "not a path" and never checks it
 
-**Status:** open. Filed 2026-09-15, found by an adversarial verification round measuring
+**Status:** fixed a5e5a49. Filed 2026-09-15, found by an adversarial verification round measuring
 `a-quote-can-spell-a-slash`'s candidate correction against real Git Bash — unrelated to that
-change's own ANSI-C question, and not fixed by it.
+change's own ANSI-C question, and not fixed by it. Fixed by
+`a-word-without-a-separator-can-still-leave`: rule 4 now checks a bare `..`, a colon-joined value,
+a glued short-option value, and a leading `~`, verified against real Git Bash and PowerShell
+(tasks 3.1-3.2).
 
 **The mechanism.** `_judge_word` (`hub/hub/mcp_server.py:1129-1155`) checks six rules in order
 against each word of a shell command, and rule 4 reads:
