@@ -74,6 +74,9 @@ Implement tasks from an OpenSpec change.
    - Make the code changes required
    - Keep changes minimal and focused
    - Mark task complete in the tasks file: `- [ ]` → `- [x]`
+     - A full-suite task is ticked only with its result written on the task line
+       (`N passed, M skipped at <sha>`), never "see the log". `tests/test_openspec_task_evidence.py`
+       fails CI otherwise (F392).
    - Continue to next task
 
    **Pause if:**

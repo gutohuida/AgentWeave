@@ -57,6 +57,13 @@ rules:
       closes a task.
     - Open each phase with the test task for the behaviour it adds. Several defects have survived
       "complete" phases because no test asserted the scenario.
+    - A "what must not move" regression task runs the FULL suite (`pytest hub/tests/ -q`,
+      `pytest tests/ -q`), not a list of files this change names. A change cannot list its
+      sibling changes' guard files, or tests parametrised over source files it adds (F392).
+    - A full-suite task is ticked only with its count on the task line, for example
+      "4474 passed, 86 skipped at 8508377". Never "recorded in the log", because the log can go
+      unwritten, and then the tick rests on nothing (F392). `tests/test_openspec_task_evidence.py`
+      fails on a ticked full-suite task in an in-flight change that has no count.
   specs:
     - Requirements use `### Requirement:` with `#### Scenario:` blocks and MUST/SHALL language.
     - Every requirement must be falsifiable — rewrite anything that cannot become a passing or
