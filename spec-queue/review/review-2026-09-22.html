@@ -120,6 +120,31 @@
   the window runs out first, it is tomorrow's first item instead of the usual compose step.</p>
 </div>
 
+<div class="card">
+  <p><strong>Round 9, done (iteration 6, Opus).</strong> Written as <code>## Round 9</code> in the
+  change's <code>design.md</code>. <strong>R8-1 to R8-5 hold against today's tree</strong>: nothing
+  since <code>7e2f663</code> touches the ladder, <code>own_review_remedy</code>, divergence or the
+  dispatch refusal; every cited line still reads as cited; R8's character budget re-measured from
+  scratch matches. Regression guard 57 passed before and after; <code>openspec validate --strict</code>
+  valid before and after. No product code changed.</p>
+  <ul>
+    <li><strong>Fixed, all LOW:</strong> R8's own empty-roster join started a sentence in lowercase and
+      had no test (new task 2.18, exact <code>==</code>); 2.15 still asked for the held agent "by
+      clause 4", which under R8's renumbering is the <em>booked</em> clause; 2.1's grep count is 25, not
+      24 (an unrelated <code>main.py:245</code> hit), so its "a different count means the tree moved"
+      would false-alarm.</li>
+    <li><strong>Filed:</strong> F407 (D) — the shipped review-dispatch 409 reads
+      <em>"… finish. decide it yourself: …"</em>; R8-3 noted it and never filed it.</li>
+    <li><strong>Left for you (R9-5, LOW, not blocking):</strong> past 500 characters, the
+      "Rejecting booked tasks …" sentence can appear when every booked agent was counted into the
+      tail, so nothing in the sentence is <em>booked</em>. Not false. Options: drop the sentence then
+      (hides a true remedy), or one tail rule naming the grounds actually counted (recommended, ~10
+      characters), or accept it. Not fixed here: every earlier fix-round's change to the fit shipped
+      a regression a later round found.</li>
+  </ul>
+  <p>No <code>APPROVED</code> row written — that is the DECIDE session's.</p>
+</div>
+
 <h2>5 · What tonight's night window will do if the operator approves nothing</h2>
 <div class="card">
   <p>The default queue falls to open findings, severity A first. The two open severity-A findings with
@@ -136,7 +161,7 @@
   write into <code>APPROVALS.md</code>'s <code>## 2026-09-22</code> section, not this window's.</p>
   <p><code>a-refused-capability-reaches-the-operator</code> and
   <code>an-unstaffed-review-names-its-holders</code> both remain on the operator's desk from yesterday,
-  the latter pending the Round 9 check named above before its remaining task groups (2, 5, 6) build.</p>
+  the latter now with its Round 9 check done (above) before its remaining task groups (2, 5, 6) build.</p>
 </div>
 
 <h2>6 · Research, briefly</h2>

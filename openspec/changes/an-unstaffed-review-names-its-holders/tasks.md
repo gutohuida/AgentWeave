@@ -165,6 +165,9 @@ mutation and the observed failure beside the task when ticking it.
           and `run_divergence.py:441-447`** (the latter held).
         - R8 count, `grep -rn "exclude=" hub/ --include=*.py`: **21 `resolve_reviewer` call sites**
           — 13 + 2 + 3 + 1 in tests, 2 at runtime (plus three docstring/comment hits: `scheduler.py:1826`, `test_a_flow_names_what_it_cannot_staff.py:459, 546`). A different count means the tree moved.
+          **R9: that grep returns 25 lines, not 24, at `7e2f663` and today** — the fourth non-call
+          hit is `main.py:245`, `_git_last_commit_iso(ui_src, exclude=("__tests__",))`, unrelated
+          (dated 2026-08-14). 21 `resolve_reviewer` call sites is still right; the tree has not moved.
       - **R6: re-verify every line above before editing.** This list has been wrong at three
         consecutive rounds. Grep for `exclude=` and count; do not trust the numbers.
 - [ ] 2.2 `run_divergence` (`:430-446`) builds the mapping in three layers, each overwriting the
@@ -216,8 +219,10 @@ mutation and the observed failure beside the task when ticking it.
       >     running or unbound, or a one-agent project — rejecting a task frees nobody, and the
       >     delta's *"that way SHALL have the stated effect for every agent the reason named"*
       >     forbids offering it.
-      >   - The empty roster: `PREFIX + "the project has no agent on its roster. " +
-      >     capitalize_first(remedy)`, no REJECT.
+      >   - The empty roster: `PREFIX + "The project has no agent on its roster. " +
+      >     capitalize_first(remedy)`, no REJECT. **(R9: capital `T` — R8 wrote `"the project…"`
+      >     after the prefix's `". "`, R8-3's lowercase-after-a-period on the one join R8 itself
+      >     added. Tested exactly by 2.18.)**
       > - **Why `booked` and not `holds` (R8-2).** D2's R5 paragraph decided that the sentence and the
       >   roster disagree on purpose (the roster counts every live task, the reason names only
       >   reachable ones) and that *"the remedy sentence says the list is what something will still
@@ -501,8 +506,9 @@ mutation and the observed failure beside the task when ticking it.
       **R6: this task runs BEFORE 2.3** — see the ordering note at the top of this group. Its
       citation has drifted: the `blocked` screen is at `run_divergence.py:753-754`, not `:746`.
 - [ ] 2.15 (R6) Test: an agent whose queue is held, running no turn and holding nothing, is named
-      by clause 4 and **not** by clause 5. **(R8: the delta now numbers the hold clause 3 and the
-      holdings clause 4 — the names, not the numbers, are what 2.3's R8 block fixes.)**
+      by the **held** clause and **not** by the **running** clause. **(R9: this line said "clause
+      4 … not clause 5", R6's numbering; under the delta's R8 numbering clause 4 is *booked*, so
+      read literally it asked for the wrong clause. The delta numbers held 3, booked 4, running 5.)**
       **R8: a second case — a held agent that is also booked** (one task in a second live loop) is
       named by the hold, and its task id does **not** appear. *Mutation:* R6's order (booked
       before held). The test must fail. This is the shipped behaviour `roster_held`
@@ -532,6 +538,13 @@ mutation and the observed failure beside the task when ticking it.
       **R8:** also assert that with **no** booked agent (the only other agent held), the reason does
       not contain `"Rejecting"`. *Mutation:* append REJECT unconditionally. The test must fail
       (R8-4).
+- [ ] 2.18 (R9) Test: the empty roster, through `resolve_reviewer` on a project whose every agent
+      is archived, for a `completed` task. Assert the whole reason with `==` against
+      `"could not staff this step: no reviewer is free. The project has no agent on its roster.
+      Land it, on the task, to review it yourself."` (one line, one space after each period). The
+      delta's scenario *"An empty roster is stated"* had no task behind it at any round.
+      *Mutation:* lowercase the `T`. The test must fail; a substring check on `"no agent on its
+      roster"` would not.
 
 ## 3. ~~Once per task (design D4)~~ MOVED 2026-09-15
 

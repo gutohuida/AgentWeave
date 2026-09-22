@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d5b-r9-verify",
-    "next_action": "d5b-r9-verify: spec-queue/DIRECTION.md's ## 2026-09-22 section item 1 (missed by iteration 1's compose step, found writing d5). Scoped Round 9 re-derivation of an-unstaffed-review-names-its-holders: read design.md's Round 8 (R8-1..R8-5) and the tasks.md/delta text those fixes changed; check git log since 7e2f663 for scheduler.py/jobs.py commits from last night; re-derive against today's tree, do not re-read R8's conclusions. Run test_a_held_agent_is_busy.py and test_a_task_nothing_will_move_holds_nobody.py before and after. Write the result as '## Round 9' in design.md: fix what it finds, or say 'clean'. No APPROVED row (DECIDE session's job). Note the result in the day log for the operator's evening review.",
+    "current": "d6-repair-impl",
+    "next_action": "d6-repair-impl: spare no-spec repair slot, same conditions as d3-repair-impl (a D-6-qualifying open finding: no new requirement, no touched openspec requirement, no migration/new column, fits one turn with a mutation-checked test and a live drive through the real surface). Check stop_at first; if under ~90 min remain or nothing qualifies, skip with a one-line reason in the log and move to d7-gate. F407 (lowercase 'decide it yourself' after a full stop in agent_trigger.py:503/511/521/848) is a candidate: check the agent-flows specs for any requirement quoting that exact sentence before choosing it.",
     "queue": [
         {
             "id": "compose",
@@ -49,9 +49,9 @@
         },
         {
             "id": "d5b-r9-verify",
-            "status": "open",
+            "status": "done",
             "title": "Corrected: Round 9 verification named by today's DIRECTION.md, missed at compose time",
-            "detail": "spec-queue/DIRECTION.md ## 2026-09-22 item 1: scoped Round 9 re-derivation of an-unstaffed-review-names-its-holders against design.md Round 8 (R8-1..R8-5) and the tasks.md/delta text those fixes changed. git log since 7e2f663 for scheduler.py/jobs.py first. Regression guard before and after. Write '## Round 9' in design.md. No APPROVED row.",
+            "detail": "Round 9 written in design.md: R8-1..R8-5 hold against today's tree (nothing since 7e2f663 touches them; guard 57/57 before and after; validate --strict valid). Fixed R9-1 (empty-roster lowercase + new task 2.18), R9-2 (2.15 clause number), R9-3 (grep count 25 not 24). Filed F407. R9-5 (REJECT with no booked clause named after the fit) left for DECIDE with a recommendation. Review page updated. No APPROVED row.",
             "model": "opus",
             "effort": "high"
         },

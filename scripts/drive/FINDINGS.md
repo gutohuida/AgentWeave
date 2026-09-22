@@ -31147,3 +31147,22 @@ this correction.
 functions."* The only importer of `validator.py` is `tests/test_validator.py`. The rule loads into
 every session that reads a file under `src/agentweave/`, so it steered agents toward a dead module.
 Filed 2026-09-21 by operator decision.
+
+## F407 (D) -- a review-dispatch refusal on an `under_review` task starts a sentence in lowercase
+
+**Status:** open
+**Source:** review
+**Theme:** Flows & loops
+**Related:** `an-unstaffed-review-names-its-holders` design.md R8-3 (which noted it as "worth a
+finding" and did not file it) and R9; the archived sibling that shipped `review_dispatch_refusal`.
+
+**What happens.** `own_review_remedy` (`hub/hub/scheduler.py:1991-2020`) returns
+`"decide it yourself: approve, reject, or send it back with revision_needed."` for an
+`under_review` task -- lowercase, because it was written to follow a colon or semicolon. The shipped
+callers place it after a full stop: `review_dispatch_refusal` (`hub/hub/api/v1/agent_trigger.py:503,
+511, 521`) and `trigger_agent_directly`'s in-flight refusal (`:848`). The operator's 409 for a task
+already under review therefore reads *"… Let the review in flight finish. decide it yourself: …"*.
+Read from source 2026-09-22 (day window, R9); not yet observed on a live Hub. The rung-3 reason in
+the unbuilt change capitalises at its own join (task 2.3, `capitalize_first`) and does not change
+the helper; the same treatment at these four sites, or a helper that returns a capitalised
+sentence and a lowercase caller where one exists (none today), would close it.

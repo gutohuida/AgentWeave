@@ -1340,3 +1340,98 @@ least one agent is always named. The fit fires one roster size earlier than R6-m
 - Did not audit D1's R2 paragraph citations (`:298`, `:1298`, `:1137`) — stale, but group 1 is built
   and tasks 1.2's R7 note already records the correct callers.
 - Did not drive anything. No Hub was started or called; `:8000` and `:8010` were not touched.
+
+## Round 9 — a scoped verification of R8-1 to R8-5, 2026-09-22
+
+Named by `spec-queue/DIRECTION.md` `## 2026-09-22` item 1: R8-1..R8-5 and the `tasks.md` / delta text
+they changed, against today's tree, re-derived. R8-6 onward, `is booked for` (settled) and group 5's
+bundle rule (settled) were out of scope and not reopened. Run by the day window (Opus); no
+`APPROVED` row is written here.
+
+**What moved since `7e2f663`.** `git log 7e2f663..HEAD -- hub/ src/`: `d5d605c` (F223, `get_job`'s
+`source` key, `api/v1/jobs.py` only), `a5e5a49` (`mcp_server.py`), `45d769f`, `b630252` (tests and
+`conftest.py`), `542418e` (`templates/__init__.py`). None touches `scheduler.py`'s ladder,
+`own_review_remedy`, `run_divergence.py` or `agent_trigger.py`. Every line R8 cites for these five
+fixes still reads as cited: `roster_held` at `scheduler.py:1394-1396`, the helper's lowercase
+return at `:2020`, its callers at `agent_trigger.py:503, 511, 521, 848`, the shipped SHALL at
+`openspec/specs/agent-flows/spec.md:874`, the three hold tests at `test_a_held_agent_is_busy.py:370-404`.
+
+**Checks run.** Regression guard `py -3.11 -m pytest hub/tests/test_a_held_agent_is_busy.py
+hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q`: **57 passed** before any edit (37.5 s)
+and 57 passed after. `openspec validate … --strict`: valid before and after. R8-13's strings
+re-measured from scratch: prefix 48, `". "` + remedy 46 / 76 (capitalised), REJECT 72, tails 51 / 77
+(N=12) / 78 (N=999), held clause at a 32-character name 83, widest one-task booked clause 143 — all
+equal to R8's. No product code changed.
+
+### What was re-derived and holds
+
+- **R8-1, the precedence.** Excluded, no runner, held, booked, running mirrors `roster_held`'s own
+  three conditions exactly (`held and has_runner and name not in exclude`): an excluded or unbound
+  held agent takes the earlier clause and was never counted as a hold today either, so the order
+  reproduces today's hold-naming rather than approximating it. At rung 3 every record takes some
+  clause — a free record that is not excluded would have returned `available`, or `deferred` if
+  taken — so the five clauses partition the roster. Checked the analogous case R8's argument
+  suggests, a *running* agent that is also booked (booked precedes running): not a defect.
+  `is booked for` stays true, rejecting the booked tasks does free it once its turn ends, which
+  *"can free"* claims, and no shipped SHALL requires the running ground to be named.
+- **R8-3.** The lowercase return and all four shipped callers confirmed; `capitalize_first` at rung
+  3's join is the right place, as the helper is shared.
+- **R8-4.** REJECT conditional on a booked clause: consistent with the delta both ways — an
+  excluded, unbound or held agent that also holds reachable tasks takes the earlier clause, and
+  rejecting its tasks would not free it, so the delta's *"that way SHALL have the stated effect for
+  every agent the reason named"* is what the condition implements. 2.17's mutation fails as stated.
+- **R8-5.** The hold-aware tail's condition (*"any agent left to the tail took the held clause"*)
+  uses the same precedence, so an excluded held author does not trigger it, matching today. The
+  fit must compute the tail for the specific remainder at each step, which *"reserve the tail's
+  actual length"* says; the first clause still fits at 226.
+
+### R9-1 — LOW — R8's empty-roster join starts a sentence in lowercase, and has no test
+
+2.3's R8 block wrote the empty roster as `PREFIX + "the project has no agent on its roster. " + …`.
+The prefix ends in `". "`, so this is R8-3's defect on the one join R8 itself added — and the delta
+scenario *"An empty roster is stated"* has had no task at any round. **Fixed:** capital `T` in 2.3;
+new task **2.18** asserts the whole string with `==`, with the lowercase as its mutation.
+
+### R9-2 — LOW — 2.15 asked for the wrong clause by number
+
+2.15 still said the held agent is *"named by clause 4 and not by clause 5"* — R6's numbering. R8
+renumbered the delta (held 3, booked 4, running 5) and added a parenthetical saying the names
+matter, but left the sentence, which read literally now asks for the *booked* clause. **Fixed:**
+reworded by name.
+
+### R9-3 — LOW — 2.1's grep count is 25, not 24, and was at `7e2f663` too
+
+R8 wrote *"21 call sites … plus three docstring/comment hits … A different count means the tree
+moved."* The grep also returns `main.py:245` (`_git_last_commit_iso(…, exclude=("__tests__",))`,
+2026-08-14), so an implementer following it would conclude the tree moved when it has not. The 21
+`resolve_reviewer` call sites are correct. **Fixed:** noted in 2.1.
+
+### R9-4 — FILED — R8-3's shipped half was never filed
+
+R8-3 called the lowercase `"… finish. decide it yourself: …"` in `review_dispatch_refusal` *"worth a
+finding"*; no finding existed. **Filed as F407** (D, source-read, not yet seen live).
+
+### R9-5 — LOW, NOT FIXED — REJECT can refer to booked tasks the fitted sentence never names
+
+R8-4 decides REJECT *before* fitting, which is what lets 2.4 reserve its 72 characters. With the fit
+in name order, a roster whose early names are held, excluded or unbound can fill the clause budget
+before any booked agent is reached — e.g. `under_review`, four held agents with five-character names
+(56 each) ahead of three booked ones: three held clauses fit in 226, and the sentence ends
+*"; and 4 more agents are excluded, busy, waiting for a usage limit or unbound. Decide it yourself: …
+Rejecting booked tasks that are no longer wanted can free their agents."* Nothing in it is
+*booked*. It is not false — the remedy has the stated effect, and the delta's SHALLs are met — but
+it points at tasks the reader cannot see in the sentence. Only reachable past 500 characters.
+
+Two cures, neither applied, because each changes the fit's arithmetic, and R5, R6 and R6-measured
+each shipped a fix that a later round found had broken something: (a) drop REJECT when no booked
+clause survives the fit (the reservation stays, so the sentence only shortens — but it hides a true
+remedy); (b) one tail rule naming the grounds actually present among the counted agents, in clause
+order, which would subsume R3's tail and R8-5's hold-aware one (costs ~10 characters at the
+longest; the 143-character first clause still fits). **Recommendation: (b), or accept as is — the
+DECIDE session's call.** Not blocking groups 2, 5 or 6.
+
+### Result
+
+R8-1 to R8-5 hold against today's tree: the five fixes are correct and nothing since `7e2f663`
+touches them. Three LOW text defects fixed (R9-1..R9-3), one shipped-code finding filed (F407), one
+LOW design question left open for the DECIDE session (R9-5).
