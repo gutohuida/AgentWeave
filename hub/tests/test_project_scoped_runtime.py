@@ -21,6 +21,8 @@ from hub import worktrees
 from hub.db.engine import async_session_factory
 from hub.project_lifecycle import ProjectLifecycleService
 
+from ._background_runs import await_background_runs
+
 # Captured at collection time, before conftest.py's `_no_real_worktree_provision`
 # autouse fixture (per-test) monkeypatches the module attribute — mirrors
 # test_agent_trigger.py's identical `_REAL_RESOLVE_AGENT_WORKSPACE` pattern.
@@ -95,8 +97,6 @@ async def test_direct_trigger_materializes_context_in_its_own_project_directory(
     await bind_project_workspace(dir_a)
     project_b = await _second_project(dir_b)
 
-    from hub.api.v1 import agent_trigger
-
     for project_id in ("proj-test", project_b):
         sync = await app.post(
             f"/api/v1/projects/{project_id}/session/sync",
@@ -118,9 +118,7 @@ async def test_direct_trigger_materializes_context_in_its_own_project_directory(
                     headers=auth_headers,
                 )
                 assert resp.status_code == 200
-                while agent_trigger._background_runs:
-                    for task in list(agent_trigger._background_runs):
-                        await task
+                await await_background_runs()
 
     context_a = dir_a / ".agentweave" / "context" / "reader.md"
     context_b = dir_b / ".agentweave" / "context" / "reader.md"
@@ -146,8 +144,6 @@ async def test_concurrent_writing_agents_get_isolated_worktrees_per_project(
 
     monkeypatch.setattr(worktrees, "resolve_agent_workspace", _REAL_RESOLVE_AGENT_WORKSPACE)
 
-    from hub.api.v1 import agent_trigger
-
     for project_id in ("proj-test", project_b):
         sync = await app.post(
             f"/api/v1/projects/{project_id}/session/sync",
@@ -168,9 +164,7 @@ async def test_concurrent_writing_agents_get_isolated_worktrees_per_project(
                     headers=auth_headers,
                 )
                 assert resp.status_code == 200
-                while agent_trigger._background_runs:
-                    for task in list(agent_trigger._background_runs):
-                        await task
+                await await_background_runs()
 
     worktree_a = worktrees.worktree_path(dir_a, "writer")
     worktree_b = worktrees.worktree_path(dir_b, "writer")
@@ -262,7 +256,6 @@ async def test_work_dir_accepts_a_contained_relative_path(
     await _bind_runner(app, auth_headers, "proj-test", "reader")
 
     fake_spawn = _fake_pty(['{"type":"result","subtype":"success","is_error":false}\n'])
-    from hub.api.v1 import agent_trigger
 
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", fake_spawn):  # noqa: SIM117
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
@@ -272,9 +265,7 @@ async def test_work_dir_accepts_a_contained_relative_path(
                 headers=auth_headers,
             )
             assert resp.status_code == 200
-            while agent_trigger._background_runs:
-                for task in list(agent_trigger._background_runs):
-                    await task
+            await await_background_runs()
 
     assert Path(fake_spawn.call_args.kwargs["cwd"]) == dir_a / "sub"
 

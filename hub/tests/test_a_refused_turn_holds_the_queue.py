@@ -21,13 +21,9 @@ from hub import provider_allowance
 from hub.db.engine import async_session_factory
 from hub.db.models import AIJob, EventLog, InboundQueueEntry, JobRun, Run
 
+from ._background_runs import await_background_runs as _await_background_run
+
 pytestmark = pytest.mark.asyncio
-
-
-async def _await_background_run():
-    while agent_trigger._background_runs:
-        for task in list(agent_trigger._background_runs):
-            await task
 
 
 def _reading(resets_at_epoch):

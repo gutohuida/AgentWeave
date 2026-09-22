@@ -17,6 +17,8 @@ from hub.inbound_queue import (
 )
 from hub.turn_scheduler import schedule_agent
 
+from ._background_runs import await_background_runs
+
 
 @pytest.mark.asyncio
 async def test_operator_and_agent_entries_share_ordered_typed_queue(app):
@@ -365,9 +367,7 @@ async def test_delivery_cap_defers_entries_to_following_turns(app, auth_headers,
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
             result = await schedule_agent("proj-test", "cap-target")
             assert result.response is not None
-            while agent_trigger._background_runs:
-                for task in list(agent_trigger._background_runs):
-                    await task
+            await await_background_runs()
 
     async with async_session_factory() as db:
         rows = (

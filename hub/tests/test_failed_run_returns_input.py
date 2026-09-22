@@ -32,11 +32,7 @@ from hub.db.models import Conversation, InboundQueueEntry, Run
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT
 from hub.sse import sse_manager
 
-
-async def _await_background_run():
-    while agent_trigger._background_runs:
-        for task in list(agent_trigger._background_runs):
-            await task
+from ._background_runs import await_background_runs as _await_background_run
 
 
 def _drain(queue):

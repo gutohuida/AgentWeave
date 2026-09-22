@@ -4,13 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import hub.api.v1.agent_trigger as agent_trigger
-
-
-async def _await_background_runs() -> None:
-    while agent_trigger._background_runs:
-        for task in list(agent_trigger._background_runs):
-            await task
+from ._background_runs import await_background_runs as _await_background_runs
 
 
 def _fake_pty(lines, exit_code=0):

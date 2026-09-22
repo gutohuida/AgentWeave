@@ -26,12 +26,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy import select
 
-import hub.api.v1.agent_trigger as agent_trigger
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, InboundQueueEntry, Project, Task
 from hub.inbound_queue import new_entry
 from hub.review_turn import ReviewContext
 from hub.turn_scheduler import schedule_agent
+
+from ._background_runs import await_background_runs as _drain
 
 
 def _completed_session(pid, session_id):
@@ -71,12 +72,6 @@ async def _seed(agent, conversation_id, entries, tasks=()):
             db.add(Task(id=task_id, project_id="proj-test", title=task_id, status=status))
         db.add_all(entries)
         await db.commit()
-
-
-async def _drain():
-    while agent_trigger._background_runs:
-        for task in list(agent_trigger._background_runs):
-            await task
 
 
 async def _entries(agent):

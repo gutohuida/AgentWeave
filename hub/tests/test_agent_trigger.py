@@ -20,6 +20,8 @@ from hub import run_liveness, worktrees
 from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT
 from hub.sse import sse_manager
 
+from ._background_runs import await_background_runs as _await_background_run
+
 _REAL_RESOLVE_AGENT_WORKSPACE = worktrees.resolve_agent_workspace
 
 
@@ -37,14 +39,6 @@ def _init_repo(path: Path) -> Path:
     _git(path, "add", "README.md")
     _git(path, "commit", "-q", "-m", "base")
     return path
-
-
-async def _await_background_run():
-    """Wait for whatever background run task(s) the last trigger call started."""
-    while agent_trigger._background_runs:
-        tasks = list(agent_trigger._background_runs)
-        for task in tasks:
-            await task
 
 
 async def _wait_for_active_pty(run_id, timeout=2.0):
