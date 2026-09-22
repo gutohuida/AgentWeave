@@ -242,6 +242,22 @@ class ProjectLifecycleService:
                 "project marker was copied while the registered directory is still available"
             )
 
+        # `Project.path_key` is unique, so without this the commit below raised `IntegrityError`
+        # and the route answered a bare 500 (F172). The ordinary way here is folder work: another
+        # project was moved away and still claims this path, and this one was moved into its place.
+        claimant = await self.session.scalar(
+            select(Project).where(
+                Project.path_key == destination.path_key, Project.id != project.id
+            )
+        )
+        if claimant is not None:
+            raise ProjectIdentityConflict(
+                f"{destination.path} is still registered to project {claimant.id} "
+                f"({claimant.name}, {claimant.directory_state}). Relocate that project to where "
+                "it now lives, or delete it, then relocate this one.",
+                code="project_path_claimed",
+            )
+
         active_runs = await self.session.scalar(
             select(func.count())
             .select_from(Run)
