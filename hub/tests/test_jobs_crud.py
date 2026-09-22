@@ -221,6 +221,30 @@ async def test_get_job_includes_history(app, auth_headers):
     assert data["run_count"] == 0
 
 
+@pytest.mark.asyncio
+async def test_get_job_reports_the_source_it_was_created_with(app, auth_headers):
+    """GET /jobs/{id} must not fall back to JobResponse.source's own default (F223):
+    the list route serialises the stored value, and the detail route hand-builds its
+    dict rather than serialising the ORM row, so a dropped key here silently substitutes
+    a plausible but wrong value instead of the one actually stored."""
+    create = await app.post(
+        "/api/v1/projects/proj-test/jobs",
+        json={
+            "name": "Local Source Job",
+            "agent": "kimi",
+            "message": "x",
+            "cron": "0 9 * * *",
+            "source": "local",
+        },
+        headers=auth_headers,
+    )
+    assert create.json()["source"] == "local"
+    job_id = create.json()["id"]
+    resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert resp.json()["source"] == "local"
+
+
 # ---------------------------------------------------------------------------
 # Update
 # ---------------------------------------------------------------------------

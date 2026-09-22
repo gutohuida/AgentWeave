@@ -815,6 +815,7 @@ async def get_job(
         "next_run": job.next_run,
         "run_count": job.run_count,
         "last_session_id": job.last_session_id,
+        "source": job.source,
         "archived_at": job.archived_at,
         "loop": loop_summaries.get(job_id),
         "history": [
