@@ -13,7 +13,7 @@
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "d7-gate",
-    "next_action": "d7-gate: day-window.md 'The merge gate' section, in full. Commit everything else first (tree should already be clean from d6), find CI's run for the exact final sha, wait up to 25 min polling ~90s. success + other 3 conditions -> ff-only merge to master, push, then next_action null. Still running at budget -> do not open, name the run id, next_action null; tomorrow's step 1 lands it.",
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -63,9 +63,9 @@
         },
         {
             "id": "d7-gate",
-            "status": "open",
+            "status": "done",
             "title": "Merge gate, window close",
-            "detail": "day-window.md 'The merge gate' section, in full. Commit everything else first, find CI's run for the exact final sha, wait up to 25 min polling ~90s. success + other 3 conditions -> ff-only merge to master, push, then next_action null. Still running at budget -> do not open, name the run id, next_action null; tomorrow's step 1 lands it."
+            "detail": "CI run 35708793360 for sha 6c0a467 concluded success after ~11 min (polled every 90s, well inside the 25-min budget). All four conditions held: tree clean, HEAD == @{u}, master..HEAD == 0 (genuine ff), no HOLD MERGE in DIRECTION.md. Fast-forwarded master 72cfb99->6c0a467 (42 files) and pushed. Branch autonomous/2026-09-21-daily left as-is; tomorrow's compose step starts a fresh branch from the new master."
         }
     ],
     "decisions_for_user": [],
