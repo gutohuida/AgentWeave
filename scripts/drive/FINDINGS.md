@@ -17361,7 +17361,7 @@ hurt.
 
 ## F222 (B) — an archived job can be switched back on, and an archived loop then works a real task
 
-**Status:** open, and confirmed open by the same random sample as F215
+**Status:** fixed 051209c (2026-09-22; see the foot). Was: open, and confirmed open by the same random sample as F215
 (`spec-queue/ROADMAP.md`) -- an archived job switched back on with one PATCH, which this entry's own
 docstring calls *"the exact governance failure loops exist to make impossible"*. [classified 2026-09-09, D-2]
 
@@ -17420,6 +17420,8 @@ The invariant is not enforced where the write happens, only where the write is c
 
 **Reproduction:** `scripts/drive/t_sweep_row10_jobs_loops.py`, leg 6. Three of the nine reds are
 this finding.
+
+**Fixed 2026-09-22, `051209c`.** `update_job` refuses `enabled: true` on an archived job: 409 with `code: job_archived`, naming the archive time and the remedy (a new job; there is no unarchive). `run_job` refuses an archived job with the same code *before* its `Job is disabled` 400, which named a remedy the new guard refuses. `JobScheduler.start` loads only `archived_at IS NULL` rows, so a row a pre-fix Hub left enabled and archived is not registered again on restart. The MCP `toggle_job` and the agent-actions PATCH both delegate to `update_job`, so one guard covers all three doors. `test_an_archived_job_stays_retired.py`: 5 tests. Without the fix, the 3 route guards and the restart test fail; the paused-not-archived control passes either way. Not driven live, and rows already enabled+archived on a real database are not rewritten, only kept from firing.
 
 ---
 
