@@ -13,15 +13,20 @@ interface QuestionInterruptCardProps {
 
 export function QuestionInterruptCard({ questions, compact = false, onNavigateToQuestions }: QuestionInterruptCardProps) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
-  const visible = questions.filter((question) => !dismissed.has(question.id))
+  // `?answered=false` still returns declined rows: `declined` is its own column, so the operator
+  // closing a question does not make it answered (F386).
+  const visible = questions.filter((question) => !question.declined && !dismissed.has(question.id))
   if (visible.length === 0) return null
   const first = visible[0]
+  // Only a blocking question whose asking run is still live has anyone waiting on it. The Questions
+  // panel partitions on the same two facts; absent `asker_waiting` means "assume yes", as the Hub does.
+  const waiting = first.blocking && first.asker_waiting !== false
 
   return (
     <div
       className="conversation-interject !w-full"
       role="region"
-      aria-label={`${first.from_agent} is waiting for an answer`}
+      aria-label={waiting ? `${first.from_agent} is waiting for an answer` : `${first.from_agent} is asking a question`}
       style={{
         background: 'color-mix(in srgb, var(--amber) 6%, var(--surface-2))',
         borderColor: 'color-mix(in srgb, var(--amber) 25%, var(--border))',
@@ -32,7 +37,7 @@ export function QuestionInterruptCard({ questions, compact = false, onNavigateTo
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5" style={{ fontSize: compact ? 11 : 12, fontWeight: 600, color: 'var(--amber)', marginBottom: 4 }}>
-            <Icon name="warning" size={14} /> {first.from_agent} is waiting
+            <Icon name={waiting ? 'warning' : 'help'} size={14} /> {first.from_agent} {waiting ? 'is waiting' : 'is asking'}
           </p>
           <p style={{ fontSize: compact ? 11 : 13, color: 'var(--text)', lineHeight: 1.4, ...(compact ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}) }}>
             {first.question}

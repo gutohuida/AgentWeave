@@ -30023,7 +30023,7 @@ key and not the cause here.
 
 ## F386 (B) — the Overview question card tells the operator an agent "is waiting" for questions nobody is waiting on, and keeps showing declined ones
 
-**Status:** open. Filed 2026-09-19 by the adversarial Opus review of
+**Status:** fixed (the commit that follows this line, 2026-09-22, interactive with the operator). It was fixed at the card, not at `list_questions`: the card drops `declined` rows, and says `is waiting` only when `blocking` holds and `asker_waiting !== false`, the rule the Questions panel already uses. Otherwise it says `<agent> is asking`, the phrasing `AgentQuestionCard` uses. `GET /questions?answered=false` is unchanged for every other reader. `hub/ui/src/__tests__/questionInterruptCard.test.tsx` has 6 tests: 4 failed on the old card and all 6 pass now. The full vitest run is 150 files, 1552 passed, and lint is clean. The bundle was refreshed and the only new behaviour it carries is this fix. No browser drive: none is available on this machine. The unfiltered route order it relies on (`created_at` ascending, declined included) was read from `questions.py:322-325`, and the test fixture uses that order. Filed 2026-09-19 by the adversarial Opus review of
 `a-refused-capability-reaches-the-operator` (the review the operator commissioned before approving
 it); confirmed against the code by the session that commissioned it.
 **Source:** review
