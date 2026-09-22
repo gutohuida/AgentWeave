@@ -167,6 +167,7 @@ times across 4 wordings. What follows is the deduped set, with the canonical phr
 ## git
 
 - **`git worktree add` into the scratchpad fails** with "Filename too long".
+  To test or collect an old tree, export only what you need instead: `git archive <sha> hub | tar -x -C <scratch>/h`, then run from there with `PYTHONPATH=<scratch>/h/hub` (used for F382, 2026-09-22).
 - **Stage explicit paths.** `git add -A` sweeps in scratch files.
 - **CI triggers only on push to `master` and PRs to it.** ~~A feature branch push runs
   nothing.~~ **RESOLVED 2026-09-06 — false as of the merge-gate work.** `ci.yml` now builds
@@ -1425,6 +1426,7 @@ $//'` after. *(2026-09-21)*
 - **F167 has no `## F167 ` heading in `FINDINGS.md`.** Its text sits under F154's write-up (`### F167`)
   and under a `## F167's bound is now measured` section, so any grep for `^## F167 ` misses it.
   Round 0 of `spec-queue/ROUNDS.md` gives it a heading. *(2026-09-22)*
+- **`backlog_page.classify` reads only a Status line's first words, and one word is enough to close an entry.** `retired` anywhere in the first 80 characters makes it `retired`, and so does `not a defect` or `does not reproduce`. An open entry annotated "F399 is a duplicate, retired into this entry" read as closed, and the backlog count dropped by one it should not have (F234, fixed within minutes). When annotating an **open** entry, keep those words out of the first 80 characters, and check the regenerated page's "no longer open" list against what you actually closed. *(2026-09-22)*
 
 ## RESOLVED
 
