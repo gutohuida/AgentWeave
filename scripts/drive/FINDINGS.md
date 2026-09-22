@@ -30690,8 +30690,8 @@ displayed.
 
 ## F392 (B) -- a change's "what must not move" group ticked a full-suite run whose evidence was never written down, and the regression it would have caught was real
 
-**Status:** open. The red tests this was found through are repaired (2026-09-20, see below), but
-the finding is the **process defect**, and that stands: nothing stops the next change repeating it.
+**Status:** fixed (this commit) [Round 1, 2026-09-22]. Both halves are now a rule with a check;
+see FIXED at the end of this entry. The red tests this was found through were repaired 2026-09-20.
 
 **Found** 2026-09-20 afternoon, by an operator-requested live check of the 2026-09-19 night
 window's claims, not by any window's own verification. **Reproducible at `14f8dae`:**
@@ -30777,6 +30777,28 @@ failures and zero errors. `4474 + 86 = 4560` closes the arithmetic: the generate
 *passing* set, not skipped past. Written into
 `openspec/changes/a-loop-staffs-the-agent-it-names/tasks.md` task 6.2-REDO in the same commit, which
 is where F392 says a count belongs.
+
+
+**FIXED 2026-09-22 (interactive session, Round 1).** Both halves reduce to one rule: *a "what must
+not move" task runs the full suite, and is ticked only with its count on the task line.* Only the
+full suite reaches a sibling's guard file or a test parametrised over a file this change adds, and
+only a count on the tick survives a log that never gets written. Where it lives, so that it does
+not depend on anyone reading prose:
+
+- **The check.** `tests/test_openspec_task_evidence.py` fails CI on any `- [x]` task in an
+  in-flight change (`openspec/changes/*/tasks.md`, not the archive) that runs a suite (a `pytest`
+  over `hub/tests/` or `tests/`, or the words "full suite") and has no `N passed` on the task.
+  `test_the_check_reads_what_f392_ticked` pins the detector on this entry's own tick (flagged), on
+  its 6.2-REDO repair (clean), on a single-file run (clean) and on an unticked task (clean). The
+  two in-flight changes pass today. Over the archive the same detector flags 63 ticks, which is how
+  common this was. The archive is deliberately not checked.
+- **The authoring rule.** `openspec/config.yaml` `rules.tasks` gains both halves. That is the text
+  openspec shows whoever writes a `tasks.md`.
+- **The tick step.** `.claude/skills/openspec-apply-change/SKILL.md` step 6 says it where the
+  checkbox is ticked. The skill mirrors were re-synced.
+- **Not done: computing the union of every open change's guard files.** That was the harder half
+  this entry named. The full-suite rule makes it unnecessary rather than solving it, because it
+  reaches every guard file without knowing which files they are.
 
 ## F393 (B) -- three runner registries disagree, the two that lie are the ones a reader finds first, and nothing marks them legacy
 
