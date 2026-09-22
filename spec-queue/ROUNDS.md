@@ -87,6 +87,15 @@ Cheap, and it makes the open count honest before any real work starts.
 
 Every later round's "green" means only what these let it mean.
 
+**Status:** done 2026-09-22 (commits `329c911`..HEAD, Opus-reviewed and the review applied). All 5
+closed, none handed on. **F383** was not a defect of its own: symptom B is F292's failure under a
+second number, and `b630252` fixed it (0 lock errors in the 59 hub-test runs that completed after
+it, against 28 before). **F408** was found while closing it — a Windows CI flake in
+`tests/test_locking.py` — and is fixed. **F396** re-keyed the MISREPORT table on (file, hook,
+occurrence); the count is 55, and decay now fails a test. **F392** became one rule with a check.
+**F308** was put to the operator, who chose the weekly unpinned CI job; it arms when `master` takes
+it. **Next: Round 2.**
+
 | Finding | Sev | Fix |
 |---|---|---|
 | F383 | C | **Symptom B**: a leaked write transaction in `hub/tests/conftest.py` teardown fails the next test's `BEGIN IMMEDIATE`. Symptom A (the lock) was fixed 09-18. This is the costliest open flake. Consider raising it to B. |

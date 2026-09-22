@@ -25466,7 +25466,7 @@ fail that file loudly, which is the right moment to revisit it.
 
 ## F308 (B) — pinning CI to the resolution buys agreement by spending the drift alarm, and nothing replaced it
 
-**Status:** open — filed 2026-09-10 (night window, iteration 13), by the iteration that *created* it.
+**Status:** fixed (this commit) [Round 1, 2026-09-22] — the operator chose a weekly unpinned job; see FIXED at the end of this entry. Filed 2026-09-10 (night window, iteration 13), by the iteration that *created* it.
 Not a defect in `constraints-dev.txt`, which does exactly what the `DAY-1` verdict asked for. It is
 the cost side of that verdict, measured, so that it is a known trade rather than a surprise later.
 
@@ -25522,6 +25522,31 @@ The first reports `starlette<2.0 … (0.52.1)` already satisfied; the second wou
 the alarm it silences was worth something.
 
 ---
+
+
+**FIXED 2026-09-22 (interactive session, Round 1).** Put to the operator with the three shapes this
+entry costed. They chose the scheduled unconstrained job: *"Weekly unpinned job — catches behaviour
+breaks, never gates merges."*
+
+`.github/workflows/upstream-drift.yml`: weekly (Mondays 07:00 UTC) plus `workflow_dispatch`,
+installs `-e "./hub[dev]"` and `-e ".[dev]"` with **no** `-c`, then runs the Hub suite and the CLI
+suite. It writes the resolved versions and the current pins into the run summary, so a green run
+still reports how far the pins are behind.
+
+- **It cannot block a merge.** The gate requires a `success` for the workflow named `CI` at HEAD's
+  sha (`.claude/loops/day-window.md`, the gate's conditions). This workflow is named
+  `Upstream drift`, and `tests/test_dev_constraints.py` asserts it is not named `CI`.
+- **It runs the suites, not an import.** An install-only check is what `hub-image.yml` already
+  gives, and this entry measured that as catching nothing in the starlette class.
+- **The missing `-c` is guarded**, because the obvious tidy-up is to add one.
+  `TestTheDriftAlarmTheConstraintsSilenced` in `tests/test_dev_constraints.py` fails if the file
+  disappears, loses its schedule, constrains its installs, or stops running the suites.
+- **It starts when `master` has it.** GitHub reads `schedule` and `workflow_dispatch` from the
+  default branch only, so on the cycle branch it neither fires nor can be dispatched. Until then
+  the alarm is written but not armed, and the operator's merge arms it.
+- **Measured today**, `py -3.11 -m pip install --dry-run --ignore-installed -e ./hub`: starlette
+  1.6.0, fastapi 0.141.1, SQLAlchemy 2.0.54, pydantic 2.13.5, uvicorn 0.53.0. The first two are
+  exactly the pins, so the job would pass today and says nothing until upstream moves.
 
 ## F309 (A) — the blocking-reason input never gets focus, so the operator's reason is typed into the status menu and each space re-opens it
 
@@ -30800,6 +30825,27 @@ not depend on anyone reading prose:
   this entry named. The full-suite rule makes it unnecessary rather than solving it, because it
   reaches every guard file without knowing which files they are.
 
+
+**Opus review, applied the same session.** The reviewer probed the detector directly and found it
+full of holes; every case below is now in `UNCOUNTED` or `CLEAN` in the test:
+
+- **Missed:** a flag with a value (`pytest -n 8 hub/tests/`), `./hub/tests/` and `hub	ests\`,
+  "Full test suite green" and "the whole suite passes", `- [X]`, `* [x]`, and indented subtasks —
+  the corpus has 37 of those, and one under an unticked parent was folded into the parent's block
+  and never checked.
+- **Wrongly accepted:** any `N passed` in the block, including a baseline quoted from before the
+  change, a run with failures, and a one-file run's count sitting next to a full-suite claim.
+
+The detector now reads each `pytest` command rather than the block as one string, attributes a
+count to the command written before it, rejects baselines and non-zero failures, and treats a
+narrowed run (`-k`, a node id) as not the suite. Over the archive it flags 73 ticks where the first
+version flagged 63; both in-flight changes stay clean. **One deliberate false positive:** a ticked
+task that merely quotes a suite command in prose is flagged, because nothing tells that apart from
+a claim to have run it.
+
+**Known gap, not closed:** CI only ever sees the pushed HEAD, so a tick and the change's archive
+move landing in the same push are never checked in flight.
+
 ## F393 (B) -- three runner registries disagree, the two that lie are the ones a reader finds first, and nothing marks them legacy
 
 **Status:** fixed f228962 (2026-09-22; the first half was 4bd966e): `launchability.py`'s two registries are marked DEAD; `RUNNER_CONFIGS` is not (see the foot). **Found 2026-09-20** in an interactive session, by being taken in by it: the
@@ -31166,6 +31212,23 @@ test failure:
   can only come from a row deleted with its repair, and that is the case the warning was written
   for.
 
+
+**Opus review, applied the same session.** The reviewer re-derived the re-key independently — all
+101 old keys resolve at `894b48e`, the mapping reproduces the new table exactly, and 55 is right —
+and found one hole left open:
+
+- **A new *unhandled* call of a hook, inserted above a classified call of the same hook, takes over
+  that row's `occurrence`.** The row still matches a site, so neither the count nor the stale check
+  moves; the real misreporting site becomes `UNCLASSIFIED`, which nothing asserted on. Only
+  `UNHANDLED_SITE_CEILING` caught it, and only because it sits at exactly 100/100.
+  `n11.unclassified_sites()` now exists, and `test_no_new_misreporting_surface` refuses to read
+  the count while any site is unclassified.
+  `test_a_new_call_above_a_classified_one_is_refused_not_absorbed` performs that exact insert on a
+  copy of `hub/ui/src` and requires the refusal.
+- **The line-shift test proved nothing.** It only edited `line` in the site dicts, and `site_key`
+  never reads `line`, so it could fail only if the key went back to lines. It now writes 40 blank
+  lines into every file of a copied `hub/ui/src`, re-scans from disk, and requires the same count.
+
 ## F397 (D) -- archiving an already-archived agent is a 200 that re-stamps `archived_at` and writes a second `agent_archived` event
 
 **Source:** drive
@@ -31441,3 +31504,18 @@ A hung thread now fails as "did not return within 30s", not as a wrong result. T
 injected stall: a 4 s sleep in the first caller of `acquire_lock`, run through the real test
 function. It fails at HEAD with CI's exact message (`got [True]`) and passes with the fix
 (4.34 s). The full CLI suite gives 538 passed and 3 skipped, the same as before.
+
+**Opus review, applied the same session.** The reviewer confirmed the slow-thread diagnosis (the
+failing test ran 3.05 s and the log carries no warnings summary, so a thread that had raised would
+have ended it in under 0.5 s) and raised two gaps, both now closed:
+
+- **A thread that raises still printed as a wrong result.** `_run_concurrently` replaces
+  `_join_all`: it captures each thread's exception and re-raises it on the test's thread. This is a
+  live path on Windows, where `acquire_lock` catches only `FileExistsError` while a delete-pending
+  file makes `open(..., "x")` raise `PermissionError` (`locking.py:36-41`).
+- **The sibling test had the same race.** `test_lock_held_blocks_other_thread_with_short_timeout`
+  had T1 hold for a fixed 0.5 s; a T2 descheduled longer than that would acquire the lock and fail
+  the assertion. T1 now holds until T2 has finished trying.
+
+Each is pinned by an injected fault run against both trees: a 4 s stall, a `PermissionError` in one
+thread, and a T2 delayed 1 s. All three fail at `4824150` and pass here.
