@@ -25872,7 +25872,7 @@ guard and a narrowness pin, both mutation-checked in both directions.
 
 ## F314 (B) — `test_flow_holds_the_loop_requirements.py` fails about one run in eight under random ordering, on an unmodified tree
 
-**Status:** open — filed 2026-09-10, **measured, on an unmodified tree**, and separate from F292.
+**Status:** fixed 416f6e8 (closed 2026-09-22 by measurement: 0 failures in 40 random-order runs; see the foot) — filed 2026-09-10, **measured, on an unmodified tree**, and separate from F292.
 Found while establishing whether F292's `BEGIN IMMEDIATE` mitigation caused a regression; it did
 not, and this is what the control measurement found instead.
 
@@ -25933,6 +25933,8 @@ machine. Two events is too few to call the CI/local difference real.
 pair of order-dependent failures, also undiagnosed — *"the two 'a stopped run' tests fail about half
 the time, on an unmodified tree"*). **F279 and this are the same species and neither has been
 bisected**; whoever takes one should take both.
+
+**Closed 2026-09-22 (interactive session), by measurement.** F314's CI signature, `RuntimeError: <asyncio.locks.Lock …> is bound to a different event loop`, is exactly F383 symptom A, fixed on 2026-09-18 in `416f6e8` (conftest's `_module_level_async_primitives_are_per_test` clears `turn_scheduler._agent_locks` around every test; its docstring even names `test_one_turn_finishing_answers_for_itself_and_not_for_its_siblings`). Nothing had linked the two. Re-measured on `279a126` with this entry's own five-file reproduction (63 tests) under `pytest-randomly` 5.0.0: **0 failures in 40 runs**. 16 runs did not record their seeds (`-q` hid them); the other 24 did (3104368094, 218346123, 860016805, 1346691169, 656298806, 1549053170, 146412733, 3425891771, 274946881, 1447479909, 1920463807, 2108882614, 39772209, 1324716365, 2473063116, 449141113, 2445017193, 1382697312, 2645146391, 2086654349, 3778274435, 2690323790, 2693405714, 1204260887). At the filed ~1-in-8 rate, 40 clean runs happen by chance with p ≈ 0.005. **Environment note:** `pytest-randomly` is no longer installed for `py -3.11`, and CI has never used it. It was installed with `pip --target` into a scratch directory and put on `PYTHONPATH` for these runs only, so no other run on this machine had its order randomised. **F279** ("same species") was not re-measured.
 
 ---
 
