@@ -248,7 +248,8 @@ function RunHistory({ runs, isLoading }: { runs?: JobRun[]; isLoading?: boolean 
  */
 function LoopBlock({ job, onOpenTasks }: { job: Job; onOpenTasks?: (taskIds: string[]) => void }) {
   const loop = job.loop
-  const { data: loopTasks } = useTasks(loop ? { loopId: loop.id } : undefined)
+  const { data: loopTaskPage } = useTasks(loop ? { loopId: loop.id } : undefined)
+  const loopTasks = loopTaskPage?.tasks
 
   if (!loop) return null
 

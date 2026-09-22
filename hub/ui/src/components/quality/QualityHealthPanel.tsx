@@ -23,7 +23,8 @@ function minutesAgo(isoTs: string): number {
 
 export function QualityHealthPanel() {
   const { data: sessionSync, isLoading: syncLoading } = useSessionSync()
-  const { data: tasks } = useTasks()
+  const { data: taskPage } = useTasks()
+  const tasks = taskPage?.tasks
 
   const quality: QualityConfig | undefined = sessionSync?.data?.quality
 

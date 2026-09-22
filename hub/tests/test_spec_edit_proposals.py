@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run, SpecDocumentEvent
+from hub.db.models import Run, SpecDocumentEvent, SpecEditProposal
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -288,3 +288,76 @@ async def test_the_accepted_event_names_both_proposer_and_accepter(app, auth_hea
         assert latest.actor == "operator"  # the accepter
         assert latest.detail["proposal_id"] == proposal_id
         assert latest.detail["proposer_actor_name"] == "claude-1"  # the proposer, one hop away
+
+
+@pytest.mark.asyncio
+async def test_an_accept_keeps_the_reason_it_was_given_exactly_as_a_reject_does(
+    app, auth_headers, run_headers
+):
+    """F209: the route declared a 2000-character `reason`, answered 200, and stored nothing.
+
+    The record of *why* a spec change was let in is the half of the pair an auditor actually
+    wants, and it was the half that was dropped. Asserted against a reject of a sibling proposal
+    in the same document, because "the accept keeps it too" is the whole claim.
+    """
+    await _gate_document(app, auth_headers, run_headers)
+    changed = _document()
+    changed["requirements"][0]["statement"] = "It responds within 100ms"
+    changed["summary"] = "Revised summary"
+    await app.post(AGENT, json={"path": PATH, "document": changed}, headers=run_headers)
+
+    listing = await app.get(f"{BASE}/documents/{PATH}/proposals", headers=auth_headers)
+    proposals = listing.json()["proposals"]
+    accepted = next(p for p in proposals if p["unit_kind"] == "requirement")
+    rejected = next(p for p in proposals if p["unit_kind"] == "metadata")
+
+    accept = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{accepted['id']}/accept",
+        json={"reason": "looks right, and the gate agrees"},
+        headers=auth_headers,
+    )
+    assert accept.status_code == 200, accept.text
+    reject = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{rejected['id']}/reject",
+        json={"reason": "not now"},
+        headers=auth_headers,
+    )
+    assert reject.status_code == 200, reject.text
+
+    async with async_session_factory() as session:
+        rows = {
+            row.id: row
+            for row in (
+                await session.execute(
+                    select(SpecEditProposal).where(
+                        SpecEditProposal.id.in_([accepted["id"], rejected["id"]])
+                    )
+                )
+            ).scalars()
+        }
+    assert rows[accepted["id"]].status == "accepted"
+    assert rows[accepted["id"]].resolution_reason == "looks right, and the gate agrees"
+    assert rows[rejected["id"]].resolution_reason == "not now"
+
+
+@pytest.mark.asyncio
+async def test_an_accept_with_no_reason_stores_an_empty_one_rather_than_failing(
+    app, auth_headers, run_headers
+):
+    """The field defaults to `""`, and the UI sends no reason at all (`useAcceptSpecProposal`)."""
+    await _gate_document(app, auth_headers, run_headers)
+    changed = _document()
+    changed["requirements"][0]["statement"] = "It responds within 100ms"
+    await app.post(AGENT, json={"path": PATH, "document": changed}, headers=run_headers)
+
+    listing = await app.get(f"{BASE}/documents/{PATH}/proposals", headers=auth_headers)
+    proposal_id = listing.json()["proposals"][0]["id"]
+    accept = await app.post(
+        f"{BASE}/documents/{PATH}/proposals/{proposal_id}/accept", json={}, headers=auth_headers
+    )
+
+    assert accept.status_code == 200, accept.text
+    async with async_session_factory() as session:
+        row = await session.get(SpecEditProposal, proposal_id)
+    assert row.status == "accepted"
+    assert row.resolution_reason == ""

@@ -25,8 +25,9 @@ async def test_create_and_list_task(app, auth_headers):
 
     resp2 = await app.get("/api/v1/projects/proj-test/tasks?agent=kimi", headers=auth_headers)
     assert resp2.status_code == 200
-    tasks = resp2.json()
-    assert any(t["id"] == data["id"] for t in tasks)
+    body = resp2.json()
+    assert any(t["id"] == data["id"] for t in body["tasks"])
+    assert body["total"] == len(body["tasks"]) and body["has_more"] is False
 
 
 @pytest.mark.asyncio
@@ -88,7 +89,7 @@ async def test_task_responses_include_assignee_runtime_status(app, auth_headers)
 
     resp3 = await app.get("/api/v1/projects/proj-test/tasks?agent=kimi", headers=auth_headers)
     assert resp3.status_code == 200
-    task = next(t for t in resp3.json() if t["id"] == task_id)
+    task = next(t for t in resp3.json()["tasks"] if t["id"] == task_id)
     assert task["assignee_status"] == "running"
 
 
@@ -251,7 +252,7 @@ async def test_spec_document_id_scopes_to_exactly_that_document_hiding_nothing(a
         "/api/v1/projects/proj-test/tasks?spec_document_id=spdoc-scale-a", headers=auth_headers
     )
     assert resp.status_code == 200
-    ids = {t["id"] for t in resp.json()}
+    ids = {t["id"] for t in resp.json()["tasks"]}
     assert ids == {"task-scale-1", "task-scale-2"}
 
 
@@ -276,7 +277,7 @@ async def test_exclude_archived_completed_hides_only_terminal_tasks_from_archive
         "/api/v1/projects/proj-test/tasks?exclude_archived_completed=true", headers=auth_headers
     )
     assert resp.status_code == 200
-    ids = {t["id"] for t in resp.json()}
+    ids = {t["id"] for t in resp.json()["tasks"]}
     assert "task-exc-1" not in ids
     assert "task-exc-2" not in ids
     assert {"task-exc-3", "task-exc-4", "task-exc-5", "task-exc-6"} <= ids
@@ -293,7 +294,7 @@ async def test_scoping_wins_over_the_exclusion_when_both_are_given(app, auth_hea
         headers=auth_headers,
     )
     assert resp.status_code == 200
-    ids = {t["id"] for t in resp.json()}
+    ids = {t["id"] for t in resp.json()["tasks"]}
     assert "task-both-1" in ids
 
 
@@ -304,7 +305,7 @@ async def test_neither_parameter_returns_the_unfiltered_default(app, auth_header
 
     resp = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)
     assert resp.status_code == 200
-    ids = {t["id"] for t in resp.json()}
+    ids = {t["id"] for t in resp.json()["tasks"]}
     assert "task-default-1" in ids
 
 
@@ -319,7 +320,7 @@ async def test_loop_id_scopes_to_exactly_that_loops_tasks_regardless_of_status(a
         "/api/v1/projects/proj-test/tasks?loop_id=loop-scale-a", headers=auth_headers
     )
     assert resp.status_code == 200
-    ids = {t["id"] for t in resp.json()}
+    ids = {t["id"] for t in resp.json()["tasks"]}
     assert ids == {"task-loop-1", "task-loop-2"}
 
     # The agent-actions router's own list_tasks call site must still return 200 and must not
@@ -343,7 +344,7 @@ async def test_loop_id_scopes_to_exactly_that_loops_tasks_regardless_of_status(a
         "/api/v1/agent-actions/tasks", headers={"Authorization": f"Bearer {token}"}
     )
     assert shared_resp.status_code == 200
-    shared_ids = {t["id"] for t in shared_resp.json()}
+    shared_ids = {t["id"] for t in shared_resp.json()["tasks"]}
     assert "task-loop-3" in shared_ids
 
 
@@ -505,3 +506,81 @@ async def test_d15_an_archived_creators_run_no_longer_controls_its_loop(app):
             select(Task).where(Task.title == "Claimed via the reused name")
         )
         assert remaining.scalars().first() is None
+
+
+@pytest.mark.asyncio
+async def test_a_tasks_transition_history_is_readable_on_both_planes(app, auth_headers):
+    """F203: `task_transitions` was append-only, complete, and readable by nothing.
+
+    The table records who moved a task and under what policy; `history_for` existed to read it,
+    with no route and no tool on top. This repository's own drives opened the sqlite file to say
+    anything about attribution.
+    """
+    created = await app.post(
+        "/api/v1/projects/proj-test/tasks",
+        json={"title": "Has a history", "assignee": "kimi"},
+        headers=auth_headers,
+    )
+    task_id = created.json()["id"]
+    for target in ("assigned", "in_progress"):
+        moved = await app.patch(
+            f"/api/v1/projects/proj-test/tasks/{task_id}",
+            json={"status": target},
+            headers=auth_headers,
+        )
+        assert moved.status_code == 200, moved.text
+
+    read = await app.get(
+        f"/api/v1/projects/proj-test/tasks/{task_id}/transitions", headers=auth_headers
+    )
+    assert read.status_code == 200, read.text
+    rows = read.json()["transitions"]
+    assert [(r["from_status"], r["to_status"]) for r in rows] == [
+        ("pending", "assigned"),
+        ("assigned", "in_progress"),
+    ], "oldest first, in the order `sequence` records"
+    assert [r["sequence"] for r in rows] == sorted(r["sequence"] for r in rows)
+    assert {r["actor_kind"] for r in rows} == {"operator"}
+    assert all("policy_digest" in r and "origin" in r and r["created_at"] for r in rows)
+
+    # The agent plane answers the same thing: author/reviewer separation is decided from these
+    # rows, so a reviewer must be able to ask who completed the work.
+    token = "aw_run_history-reader"
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-history-reader",
+                project_id="proj-test",
+                agent="reviewer",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token(token),
+            )
+        )
+        await session.commit()
+    agent_read = await app.get(
+        f"/api/v1/agent-actions/tasks/{task_id}/transitions",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert agent_read.status_code == 200, agent_read.text
+    assert agent_read.json() == read.json()
+
+
+@pytest.mark.asyncio
+async def test_the_history_of_an_unknown_task_is_a_404_not_an_empty_list(app, auth_headers):
+    """ "No history" and "no such task" are different answers, and a task that predates the
+    table legitimately has the first."""
+    missing = await app.get(
+        "/api/v1/projects/proj-test/tasks/task-nope12345678/transitions", headers=auth_headers
+    )
+    assert missing.status_code == 404
+
+    created = await app.post(
+        "/api/v1/projects/proj-test/tasks", json={"title": "Never moved"}, headers=auth_headers
+    )
+    fresh = await app.get(
+        f"/api/v1/projects/proj-test/tasks/{created.json()['id']}/transitions",
+        headers=auth_headers,
+    )
+    assert fresh.status_code == 200
+    assert fresh.json() == {"transitions": []}

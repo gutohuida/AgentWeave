@@ -137,3 +137,24 @@ def test_no_drive_script_defaults_the_key_to_anything():
         "drive scripts substituting a value for an unset AW_KEY "
         f"(use `require_key()` or an empty default): {offenders}"
     )
+
+
+def test_task_rows_refuses_a_shape_it_does_not_recognise(monkeypatch):
+    """A harness that reads `GET /tasks` must not answer `[]` for an answer it misread.
+
+    The drives had written `body if isinstance(body, list) else []` around that call. When the
+    route started answering `{tasks, total, has_more}` (F202), that idiom turned every board read
+    into an empty list — and a drive whose verdict is "its queued work is untouched" would have
+    reported success against nothing. Raising is the only honest answer.
+    """
+    aw = _load_aw(monkeypatch, "aw_live_" + "0" * 32)
+
+    assert aw.task_rows({"tasks": [{"id": "task-1"}], "total": 1, "has_more": False}) == [
+        {"id": "task-1"}
+    ]
+    assert aw.task_rows({"tasks": [], "total": 0, "has_more": False}) == []
+
+    with pytest.raises(TypeError, match="older than the harness"):
+        aw.task_rows([{"id": "task-1"}])
+    with pytest.raises(TypeError, match="not a task-list answer"):
+        aw.task_rows({"detail": "Project not found"})

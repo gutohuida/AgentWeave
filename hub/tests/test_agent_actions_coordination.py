@@ -128,7 +128,7 @@ async def test_agent_task_crud_retains_create_and_latest_update_runs(app):
 
     listed = await app.get("/api/v1/agent-actions/tasks", headers=updater_headers)
     assert listed.status_code == 200
-    assert task_id in {item["id"] for item in listed.json()}
+    assert task_id in {item["id"] for item in listed.json()["tasks"]}
     fetched = await app.get(f"/api/v1/agent-actions/tasks/{task_id}", headers=updater_headers)
     assert fetched.status_code == 200
 
@@ -1074,3 +1074,43 @@ async def test_leaving_the_waiting_status_drops_what_it_was_waiting_for(app, aut
     )
     assert response.status_code == 200, response.text
     assert response.json()["blocked_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_illegal_block_is_refused_as_illegal_not_as_a_missing_field(app, auth_headers):
+    """F201: the refusal has to name what is reachable, not ask for more of a move that does not exist.
+
+    `task-lifecycle-governance` makes this a MUST — *"A refusal MUST name the task's current status
+    and the statuses reachable from it, so a caller can correct itself without guessing"* — and
+    carries the scenario by name ("Work not yet started cannot be waiting"). R5's own rule was asked
+    first, while FastAPI parsed the body, so the caller was told `blocked_reason is required`: a
+    sentence that reads as *supply this and the move will work*, for an edge the machine does not
+    have. Seven of the nine from-statuses have no `-> blocked` edge, and every one answered that way.
+    """
+    async with async_session_factory() as session:
+        session.add(
+            Task(
+                id="task-illegal-block",
+                project_id="proj-test",
+                title="Not started",
+                status="pending",
+            )
+        )
+        await session.commit()
+
+    for body in ({"status": "blocked"}, {"status": "blocked", "blocked_reason": "waiting on Sam"}):
+        response = await app.patch(
+            "/api/v1/projects/proj-test/tasks/task-illegal-block",
+            headers=auth_headers,
+            json=body,
+        )
+        assert response.status_code == 409, response.text
+        detail = str(response.json()["detail"])
+        assert "pending" in detail, detail
+        assert "assigned" in detail and "in_progress" in detail, detail
+        assert "blocked_reason" not in detail, "the missing field is not why this was refused"
+
+    async with async_session_factory() as session:
+        row = await session.get(Task, "task-illegal-block")
+    assert row.status == "pending"
+    assert row.blocked_reason is None

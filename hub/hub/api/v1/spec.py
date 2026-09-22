@@ -633,6 +633,7 @@ async def accept_proposal_route(
             proposal,
             actor=_operator(),
             expected_digest=body.expected_digest,
+            reason=body.reason,
         )
     except spec_service.ProposalRefusedError as exc:
         # `accept_proposal` may have marked the row `stale` before raising — that mutation must
@@ -710,7 +711,20 @@ async def coverage(
     unserved = await requirement_links.unserved(session, project_id, document_id=document_id)
     return {
         **report.to_dict(),
-        "unserved": [row.identifier for row in unserved],
+        # Objects, not bare identifiers (F212). Identifiers are minted per document
+        # (`spec_index.resolve`), so `FR-1` names one requirement only when one document declares
+        # it — a fixture project answered 34 entries all reading `FR-1`, and feeding the most
+        # repeated one back into `GET /spec/requirements/{identifier}` earned a 422 asking which
+        # document was meant. `requirement_id` is included because it is unambiguous everywhere,
+        # which the pair still is not across projects.
+        "unserved": [
+            {
+                "identifier": row.identifier,
+                "document_id": row.document_id,
+                "requirement_id": row.id,
+            }
+            for row in unserved
+        ],
     }
 
 

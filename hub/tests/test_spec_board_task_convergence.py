@@ -86,7 +86,11 @@ async def close_and_propose(app, auth_headers):
 async def board(app, auth_headers):
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text
-    return listed.json()
+    body = listed.json()
+    # The route answers `{tasks, total, has_more}` since F202; this helper's callers count and
+    # index the rows, so it keeps handing back the rows themselves.
+    assert body["total"] == len(body["tasks"]), "this fixture never pages"
+    return body["tasks"]
 
 
 @pytest.mark.asyncio

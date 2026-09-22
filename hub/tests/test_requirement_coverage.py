@@ -94,7 +94,11 @@ async def test_a_requirement_nothing_serves_is_unserved(app, auth_headers, build
     coverage = await _coverage(app, auth_headers)
 
     assert _entry(coverage, "FR-1")["state"] == "unserved"
-    assert coverage["unserved"] == ["FR-1", "FR-2"]
+    # Objects since F212: an identifier is minted per document, so a bare "FR-1" names one
+    # requirement only when one document declares it.
+    assert [row["identifier"] for row in coverage["unserved"]] == ["FR-1", "FR-2"]
+    assert all(row["document_id"] and row["requirement_id"] for row in coverage["unserved"])
+    assert len({row["document_id"] for row in coverage["unserved"]}) == 1
 
 
 @pytest.mark.asyncio
@@ -419,3 +423,55 @@ async def test_a_broken_requirement_is_a_diagnostic_not_unserved(
     assert [entry["identifier"] for entry in coverage["requirements"]] == ["FR-1"]
     assert coverage["diagnostics"][0]["identifier"] == "FR-2"
     assert "digest" in coverage["diagnostics"][0]["problem"]
+
+
+@pytest.mark.asyncio
+async def test_two_documents_declaring_the_same_identifier_are_told_apart_in_unserved(
+    app, auth_headers, builder, tmp_path
+):
+    """F212, the case the old shape could not express.
+
+    Identifiers are minted per document, so a project with two documents answers `FR-1` twice and
+    the bare-identifier list named two different requirements with the same string. Feeding it back
+    into `GET /spec/requirements/{identifier}` earned a 422 asking which document was meant, so
+    `unserved` — *"the question the end-to-end run needed and could not ask"* — was a dead end in
+    both directions.
+    """
+    await _document(app, auth_headers, builder)
+
+    second_path = "spec/changes/coverage-demo-two/spec.html"
+    created = await app.post(
+        f"{BASE}/documents",
+        json={"path": second_path, "title": "Coverage demo two"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    saved = await app.post(
+        SUBMIT,
+        json={
+            "path": second_path,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Coverage demo two",
+                "requirements": [ALPHA],
+            },
+        },
+        headers=builder,
+    )
+    assert saved.status_code == 200, saved.text
+
+    coverage = await _coverage(app, auth_headers)
+    same_identifier = [row for row in coverage["unserved"] if row["identifier"] == "FR-1"]
+
+    assert len(same_identifier) == 2, "both documents declare FR-1 and neither is served"
+    assert (
+        len({row["document_id"] for row in same_identifier}) == 2
+    ), "two FR-1s in one project are two different requirements, and the response has to say so"
+    assert len({row["requirement_id"] for row in same_identifier}) == 2
+
+    # And the pair can be looked up, which the bare identifier could not be: the document each
+    # belongs to is in the same response's `requirements` array, keyed by `requirement_id`.
+    by_requirement_id = {entry["requirement_id"]: entry for entry in coverage["requirements"]}
+    for row in same_identifier:
+        assert by_requirement_id[row["requirement_id"]]["document_id"] == row["document_id"]

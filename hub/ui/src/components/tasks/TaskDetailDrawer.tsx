@@ -15,6 +15,7 @@ import {
 } from '@/api/tasks'
 import { useAgents } from '@/api/agents'
 import { useSpecDocuments } from '@/api/spec'
+import { TaskTransitionHistory } from '@/components/tasks/TaskTransitionHistory'
 import { RowMenu } from '@/components/layout/RowMenu'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
 import { hubDate } from '@/lib/hubTime'
@@ -644,6 +645,11 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             </p>
           </div>
         )}
+
+        {/* Who moved it, when, and under what policy (F203). Below the task's own fields because
+            it answers a question asked after reading them, and above the neglect policy because
+            that is a setting rather than a record. */}
+        <TaskTransitionHistory taskId={task.id} open />
 
         {/* How this task's neglect is answered. Here, on the task, rather than in a settings
             screen, because it is a routing decision about this work — the cheap agent does it,

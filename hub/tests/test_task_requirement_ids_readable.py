@@ -127,7 +127,7 @@ async def test_the_list_route_carries_them_too(app, auth_headers, builder):
     )
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text
-    assert listed.json()[0]["requirement_ids"] == ["FR-1"]
+    assert listed.json()["tasks"][0]["requirement_ids"] == ["FR-1"]
 
 
 async def make_numbered_document(app, auth_headers, run_headers, count):

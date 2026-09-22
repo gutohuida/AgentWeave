@@ -17,7 +17,8 @@ vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
   return {
     ...actual,
-    useTasks: () => ({ data: tasks, isLoading: false }),
+    // The hook answers a page since F202; the board reads `.tasks` off it.
+    useTasks: () => ({ data: { tasks, total: tasks.length, has_more: false }, isLoading: false }),
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: {} } }),
     useUpdateTask: () => ({ mutate: vi.fn() }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),

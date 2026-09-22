@@ -6,7 +6,7 @@ from typing import Any, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +55,7 @@ from ...schemas.tasks import (
     TaskCreate,
     TaskDependencyRef,
     TaskIntegrationSummary,
+    TaskListResponse,
     TaskResponse,
     TaskUpdate,
 )
@@ -65,6 +66,7 @@ from ...task_transition_service import (
     TransitionRefusedError,
     apply_transition,
     guard_entry_status,
+    history_for,
     retry_integration,
 )
 from ...task_transitions import (
@@ -841,7 +843,7 @@ async def create_task(
     )
 
 
-@router.get("", response_model=List[TaskResponse])
+@router.get("", response_model=TaskListResponse)
 async def list_tasks(
     agent: Optional[str] = Query(None),
     task_status: Optional[str] = Query(None, alias="status"),
@@ -880,6 +882,11 @@ async def list_tasks(
                 & Task.status.in_(TERMINAL_FOR_BINDING)
             )
         )
+    # Counted from the same filtered query before it is paged, so `total` can never disagree with
+    # what a caller would get by asking for every page (F202). `order_by` is applied after this
+    # for the same reason a COUNT does not need one.
+    total = await session.scalar(select(func.count()).select_from(q.subquery())) or 0
+
     q = q.order_by(Task.created_at).offset(offset).limit(limit)
     result = await session.execute(q)
     tasks = result.scalars().all()
@@ -908,7 +915,8 @@ async def list_tasks(
     responses = await _attach_dependencies(session, responses, project_id=project_id)
     responses = await _attach_awaiting_answer(session, responses, project_id=project_id)
     responses = await _attach_proceeded_without_answer(session, responses, project_id=project_id)
-    return await _attach_assignee_liveness(session, responses, project_id=project_id)
+    rows = await _attach_assignee_liveness(session, responses, project_id=project_id)
+    return TaskListResponse(tasks=rows, total=total, has_more=offset + len(rows) < total)
 
 
 @router.get("/board")
@@ -1347,6 +1355,16 @@ async def update_task_for_actor(
         if body.status != STATUS_BLOCKED:
             release_reason(task)
         else:
+            # R5's rule, asked here rather than in `TaskUpdate` (F201). An unexplained block is the
+            # failure mode the status was introduced to fix, so it is still required — but it is
+            # required *of a move the machine has just agreed to*. Asked during body parsing, it
+            # answered "blocked_reason is required" to callers whose move did not exist, which
+            # reads as "supply this and it will work" and hides the refusal that matters.
+            if not (body.blocked_reason or "").strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail="blocked_reason is required when setting a task to blocked",
+                )
             task.blocked_reason = body.blocked_reason
         # There is no more working to do at these, so anything that stayed bound would keep
         # attributing turns to a task the operator has already decided about — and put stalled
@@ -1562,6 +1580,55 @@ async def land_task(
     return await _commit_and_render(
         session, task, project_id=project_id, approval_report=approval_report
     )
+
+
+def _transition_view(row) -> dict:  # noqa: ANN001 - a `TaskTransition` row
+    """One recorded move, in the words the table records it in.
+
+    `sequence` is included because it, not `created_at`, is what orders the history: several
+    transitions staged in one flush share a timestamp to the microsecond (`db/models.py`), and a
+    record whose whole meaning is "this happened, then this" cannot be ordered by a tie.
+    """
+    return {
+        "id": row.id,
+        "sequence": row.sequence,
+        "task_id": row.task_id,
+        "from_status": row.from_status,
+        "to_status": row.to_status,
+        "actor_kind": row.actor_kind,
+        "actor_agent": row.actor_agent,
+        "run_id": row.run_id,
+        "origin": row.origin,
+        # What governed the move: the rigor of each document the task serves and the coverage its
+        # requirements held. Written on every gated transition and, until this route, readable by
+        # nobody (F203).
+        "policy_digest": row.policy_digest,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+@router.get("/{task_id}/transitions")
+async def task_transitions(
+    task_id: str,
+    project: Tuple[str, str] = Depends(get_project),
+    session: AsyncSession = Depends(get_session),
+):
+    """Who moved this task, when, from what, and under which policy (F203).
+
+    `task_transitions` has been append-only and complete since the transition machine shipped, and
+    `history_for` existed to read it — with no route and no tool on top, so an operator who found a
+    task somewhere unexpected had no way to ask, and this repository's own drives opened the sqlite
+    file to answer it. Oldest first, which is the order the sequence records.
+
+    404 on an unknown task rather than an empty list: "no history" and "no such task" are different
+    answers, and a task that predates the table legitimately has the first.
+    """
+    project_id, _ = project
+    task = await session.get(Task, task_id)
+    if task is None or task.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    rows = await history_for(session, task_id)
+    return {"transitions": [_transition_view(row) for row in rows]}
 
 
 @router.get("/transitions/allowed")

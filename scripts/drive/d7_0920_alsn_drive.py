@@ -27,7 +27,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api, show  # noqa: E402
+from aw import api, show, task_rows# noqa: E402
 
 HUB = os.environ.get("AW_HUB", "")
 if HUB.endswith(":8000") or HUB.endswith(":8010"):
@@ -172,7 +172,7 @@ def main():
         )
 
         c, tasks = api("GET", "%s/tasks" % A)
-        mine = [t for t in (tasks if isinstance(tasks, list) else []) if t.get("loop_id") == doc_loop_id]
+        mine = [t for t in task_rows(tasks) if t.get("loop_id") == doc_loop_id]
         verdict(
             "the loop's task kept its status and gained no assignee",
             bool(mine) and mine[0].get("status") == "pending" and not mine[0].get("assignee"),
@@ -284,7 +284,7 @@ def main():
                 continue
             api("PATCH", "%s/jobs/%s" % (A, job_id), {"stop_reason": "drive teardown"})
             c, t = api("GET", "%s/tasks" % A)
-            for x in t if isinstance(t, list) else []:
+            for x in task_rows(t):
                 if x.get("loop_id") == loop_id and x.get("status") not in ("approved", "rejected"):
                     api("PATCH", "%s/tasks/%s" % (A, x["id"]), {"status": "rejected"})
             if loop_id:

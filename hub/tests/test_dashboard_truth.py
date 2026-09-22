@@ -299,7 +299,7 @@ async def test_the_board_list_carries_it_too(app, auth_headers):
 
     response = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)
     assert response.status_code == 200, response.text
-    task = next(t for t in response.json() if t["id"] == "task-1")
+    task = next(t for t in response.json()["tasks"] if t["id"] == "task-1")
     assert task["awaiting_answer_reason"].startswith("Waiting on your answer:")
 
 

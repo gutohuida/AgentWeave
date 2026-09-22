@@ -78,12 +78,17 @@ function AgentHealthCard({ agent, onClick }: { agent: AgentSummary; onClick: () 
 export function OverviewPage({ onNavigate }: OverviewPageProps) {
   const { data: agents = [], isLoading: agentsLoading } = useAgents()
   const { data: questions = [] } = useQuestions(false)
-  const { data: tasks = [] } = useTasks()
+  const { data: taskPage } = useTasks()
   const { data: status } = useStatus()
 
+  // Memoised because the `?? []` would otherwise mint a new array on every render and re-run the
+  // `useMemo`s below it (the board's own lint rule catches this).
+  const tasks = useMemo(() => taskPage?.tasks ?? [], [taskPage])
   const unanswered = questions.length
   const agentCount = agents.length
-  const taskCount = tasks.length
+  // The ledger's own count, not this page's length. `tasks.length` said "100 tasks" about a
+  // project with 241, and the number it printed could not grow past the page size (F202).
+  const taskCount = taskPage?.total ?? 0
   const taskCounts = useMemo(() => {
     const counts: Record<string, number> = {}
     tasks.forEach((task) => { counts[task.status] = (counts[task.status] || 0) + 1 })

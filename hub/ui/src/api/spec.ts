@@ -117,12 +117,21 @@ export interface CoverageDiagnostic {
   problem: string
 }
 
+/** A requirement with no work linked to it. An object rather than a bare identifier because
+ *  identifiers are minted per document, so `FR-1` names one requirement only when one document
+ *  in the project declares it (F212). */
+export interface UnservedRequirement {
+  identifier: string
+  document_id: string
+  requirement_id: string
+}
+
 export interface CoverageResponse {
   requirements: CoverageEntry[]
   diagnostics: CoverageDiagnostic[]
   totals: Record<string, number>
   integration: Record<string, number>
-  unserved: string[]
+  unserved: UnservedRequirement[]
 }
 
 export function useSpecCoverage(path: string | null) {

@@ -76,7 +76,7 @@ describe('coverage on the spec view', () => {
       diagnostics: [],
       totals: { verified: 1, unserved: 1 },
       integration: { integrated: 1, not_applicable: 1 },
-      unserved: ['FR-2'],
+      unserved: [{ identifier: 'FR-2', document_id: 'doc-1', requirement_id: 'spreq-2' }],
     })
 
     expect(await screen.findByTestId('coverage-count-verified')).toHaveTextContent('1 verified')

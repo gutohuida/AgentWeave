@@ -150,6 +150,38 @@ export function useTaskIntegrations(taskId: string, enabled: boolean) {
   })
 }
 
+/** One accepted move of a task, as `task_transitions` recorded it. */
+export interface TaskTransition {
+  id: string
+  sequence: number
+  task_id: string
+  from_status: string
+  to_status: string
+  actor_kind: string
+  actor_agent: string | null
+  run_id: string | null
+  origin: string
+  policy_digest: string | null
+  created_at: string | null
+}
+
+/** Who moved this task, when, and from what (F203).
+ *
+ *  The table has been append-only and complete since the transition machine shipped; until this
+ *  hook nothing could read it, so an operator who found a task somewhere unexpected had no way to
+ *  ask. Fetched only while the drawer holding it is open — it is history, not board data. */
+export function useTaskTransitions(taskId: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ transitions: TaskTransition[] }>({
+    queryKey: ['project', projectId, 'task', taskId, 'transitions'],
+    queryFn: () =>
+      getJson<{ transitions: TaskTransition[] }>(
+        `/api/v1/projects/${projectId}/tasks/${taskId}/transitions`,
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
 /**
  * What approving this task *would* write, before it is approved (F9).
  *
@@ -205,20 +237,32 @@ export function useRetryTaskIntegration(taskId: string) {
   })
 }
 
+/** One page of the ledger. `total` counts every task matching the filters, not this page (F202). */
+export type TaskPage = { tasks: Task[]; total: number; has_more: boolean }
+
+/** The largest page the Hub serves (`limit` is `le=1000` on the route). Asked for explicitly
+ *  because the default is 100, the order is oldest-first, and the rows a default page drops are
+ *  therefore the *newest* — which is how a board rendered 82 cards for a project with 241 tasks
+ *  and said "100 tasks" above them (F202). Past 1000 the answer says `has_more`, and the board
+ *  says so on the screen rather than silently rendering a prefix. */
+const PAGE_SIZE = 1000
+
 /** `loopId` and `excludeArchivedCompleted` both scope the same query on the Hub (an `elif` chain,
  *  `hub/hub/api/v1/tasks.py`), so passing both is not meaningful — callers pick one. */
 export function useTasks(options?: { excludeArchivedCompleted?: boolean; loopId?: string }) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   const excludeArchivedCompleted = options?.excludeArchivedCompleted ?? false
   const loopId = options?.loopId
-  return useQuery<Task[]>({
+  return useQuery<TaskPage>({
     queryKey: ['project', projectId, 'tasks', { excludeArchivedCompleted, loopId }],
     queryFn: () => {
       const params = new URLSearchParams()
       if (loopId) params.set('loop_id', loopId)
       else if (excludeArchivedCompleted) params.set('exclude_archived_completed', 'true')
-      const qs = params.toString()
-      return getJson<Task[]>(`/api/v1/projects/${projectId}/tasks${qs ? `?${qs}` : ''}`)
+      params.set('limit', String(PAGE_SIZE))
+      return getJson<TaskPage>(
+        `/api/v1/projects/${projectId}/tasks?${params.toString()}`,
+      )
     },
     enabled: isConfigured && !!projectId,
   })
@@ -232,10 +276,15 @@ export function useDocumentTasks(documentId: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<Task[]>({
     queryKey: ['project', projectId, 'tasks', { spec_document_id: documentId }],
-    queryFn: () =>
-      getJson<Task[]>(
-        `/api/v1/projects/${projectId}/tasks?spec_document_id=${encodeURIComponent(documentId ?? '')}`,
-      ),
+    // Unwrapped to `Task[]` here: one document's tasks are a list its callers render, and the
+    // page is the whole of it below `PAGE_SIZE`. The route answers `{tasks, total, has_more}`
+    // since F202, so the unwrap happens once, here, rather than at each call site.
+    queryFn: async () => {
+      const page = await getJson<TaskPage>(
+        `/api/v1/projects/${projectId}/tasks?spec_document_id=${encodeURIComponent(documentId ?? '')}&limit=${PAGE_SIZE}`,
+      )
+      return page.tasks
+    },
     enabled: isConfigured && !!projectId && !!documentId,
   })
 }

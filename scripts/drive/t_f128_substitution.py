@@ -29,7 +29,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows# noqa: E402
 
 P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
 AGENT = os.environ.get("AW_AGENT") or "gamma"
@@ -170,7 +170,7 @@ def main():
         verdict("the conversation's origin is the job", first.get("origin") == "job", str(first.get("origin")))
 
         c, tasks = api("GET", "/projects/%s/tasks" % P)
-        mine = [t for t in (tasks if isinstance(tasks, list) else []) if t.get("loop_id") == loop_id]
+        mine = [t for t in task_rows(tasks) if t.get("loop_id") == loop_id]
         claimed = [t for t in mine if t.get("assignee")]
         verdict(
             "the loop's task is assigned to the substitute, not to the agent the job names",
@@ -189,7 +189,7 @@ def main():
         head("E. Once is a race. Fire a SECOND time, with the named agent still busy.")
         def loop_tasks():
             c, rows = api("GET", "/projects/%s/tasks" % P)
-            return [t for t in (rows if isinstance(rows, list) else []) if t.get("loop_id") == loop_id]
+            return [t for t in task_rows(rows) if t.get("loop_id") == loop_id]
 
         # A loop delivers one task at a time: pressing Run again while the first errand is still in
         # flight is refused 409 by F48's re-derivation ("Every task on this loop's queue is already
@@ -254,7 +254,7 @@ def main():
             step("stop the loop", "PATCH", "/projects/%s/jobs/%s" % (P, job_id),
                  {"stop_reason": "drive teardown"})
         c, tasks = api("GET", "/projects/%s/tasks" % P)
-        for t in tasks if isinstance(tasks, list) else []:
+        for t in task_rows(tasks):
             if t.get("loop_id") == loop_id and t.get("status") not in ("approved", "rejected"):
                 step("reject %s" % t["id"][:16], "PATCH",
                      "/projects/%s/tasks/%s" % (P, t["id"]), {"status": "rejected"})

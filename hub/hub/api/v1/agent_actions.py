@@ -39,6 +39,7 @@ from ...schemas.tasks import (
     _PRIORITIES,
     _TASK_ID_RE,
     TaskCreate,
+    TaskListResponse,
     TaskResponse,
     TaskUpdate,
 )
@@ -56,6 +57,7 @@ from .tasks import (
     list_tasks,
     retry_task_integration,
     task_integrations,
+    task_transitions,
     update_task_for_actor,
 )
 
@@ -239,7 +241,7 @@ async def create_shared_task(
     )
 
 
-@router.get("/tasks", response_model=List[TaskResponse])
+@router.get("/tasks", response_model=TaskListResponse)
 async def list_shared_tasks(
     agent: Optional[str] = Query(None),
     task_status: Optional[str] = Query(None, alias="status"),
@@ -302,6 +304,25 @@ async def read_shared_task_integrations(
     the outcome is retrying blind, and would have no way to tell a merge from a fifth skip.
     """
     return await task_integrations(
+        task_id,
+        project=(actor.project_id, actor.project_id),
+        session=session,
+    )
+
+
+@router.get("/tasks/{task_id}/transitions")
+async def read_shared_task_transitions(
+    task_id: str,
+    actor: AgentActor = Depends(get_agent_actor),
+    session: AsyncSession = Depends(get_session),
+):
+    """Who moved this task, when, and from what (F203).
+
+    An agent picking up work someone else touched has the same question the operator does, and
+    author/reviewer separation is decided from these rows — so a reviewer asking "who completed
+    this?" reads the record rather than guessing from the task's single mutable `updated_by_run_id`.
+    """
+    return await task_transitions(
         task_id,
         project=(actor.project_id, actor.project_id),
         session=session,

@@ -194,8 +194,9 @@ async def test_operator_project_paths_isolate_task_resources(app, auth_headers) 
 
     assert created.status_code == 201
     assert first.status_code == 200
-    assert first.json() == []
-    assert [task["title"] for task in second.json()] == ["Second only"]
+    assert first.json()["tasks"] == []
+    assert first.json()["total"] == 0
+    assert [task["title"] for task in second.json()["tasks"]] == ["Second only"]
     async with async_session_factory() as session:
         task = await session.scalar(select(Task).where(Task.title == "Second only"))
         assert task is not None
@@ -392,7 +393,9 @@ async def test_setup_token_does_not_fall_back_to_a_project_api_key(app) -> None:
 @pytest.mark.parametrize(
     ("project_path", "response_type"),
     [
-        ("/api/v1/projects/proj-test/tasks", list),
+        # `tasks` answers an object since F202: a bare array could not say it had been cut at
+        # `limit`, and the cut takes the newest rows.
+        ("/api/v1/projects/proj-test/tasks", dict),
         ("/api/v1/projects/proj-test/agents", list),
         (
             "/api/v1/projects/proj-test/agent/missing/conversations",

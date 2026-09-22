@@ -16,7 +16,7 @@ import urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows# noqa: E402
 
 P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
 # The flow's agent was hard-wired to one night's fixture, so this file could only ever run there.
@@ -126,7 +126,7 @@ PAYLOAD = {
 
 def board():
     c, t = api("GET", f"/projects/{P}/tasks")
-    return t if isinstance(t, list) else t.get("tasks", [])
+    return task_rows(t)
 
 
 def agents():

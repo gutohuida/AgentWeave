@@ -38,6 +38,10 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // and cannot be given a provider without changing what it is testing. Behaviour of the button
     // itself belongs to `taskLandingAction.test.tsx`, which does wrap one.
     useLandTask: () => ({ mutate: vi.fn(), isPending: false }),
+    // F203's history section, for the same reason as the hooks above: it is a real query, and the
+    // click-outside test renders without a provider on purpose. What the section *shows* is
+    // `taskTransitionHistory.test.tsx`.
+    useTaskTransitions: () => ({ data: { transitions: [] }, isLoading: false, isError: false }),
   }
 })
 

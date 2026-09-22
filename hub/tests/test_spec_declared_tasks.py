@@ -98,7 +98,7 @@ async def approve(app, auth_headers):
 async def board(app, auth_headers):
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text
-    return listed.json()
+    return listed.json()["tasks"]
 
 
 @pytest.mark.asyncio
@@ -350,7 +350,7 @@ async def test_a_document_with_a_declaring_loop_stamps_its_tasks_with_the_loop(
 
     on_the_loop = await app.get(TASKS, params={"loop_id": loop_id}, headers=auth_headers)
     assert on_the_loop.status_code == 200, on_the_loop.text
-    assert len(on_the_loop.json()) == 2
+    assert len(on_the_loop.json()["tasks"]) == 2
 
 
 @pytest.mark.asyncio
@@ -408,7 +408,7 @@ async def test_create_loop_declares_a_document_that_later_materialises_into_its_
 
     on_the_loop = await app.get(TASKS, params={"loop_id": loop_id}, headers=auth_headers)
     assert on_the_loop.status_code == 200, on_the_loop.text
-    assert len(on_the_loop.json()) == 2
+    assert len(on_the_loop.json()["tasks"]) == 2
 
 
 @pytest.mark.asyncio

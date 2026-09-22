@@ -136,7 +136,7 @@ async def test_the_specs_tree_carries_the_document_id_the_panel_shell_keys_tabs_
 async def test_archiving_does_not_touch_tasks(app, auth_headers, run_headers, tmp_path):
     await _approved_document(app, auth_headers, run_headers)
     tasks_before = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)
-    before = {task["id"]: task["status"] for task in tasks_before.json()}
+    before = {task["id"]: task["status"] for task in tasks_before.json()["tasks"]}
     assert before, "approval should have materialised at least one task"
 
     await app.post(
@@ -147,7 +147,7 @@ async def test_archiving_does_not_touch_tasks(app, auth_headers, run_headers, tm
     )
 
     tasks_after = await app.get("/api/v1/projects/proj-test/tasks", headers=auth_headers)
-    after = {task["id"]: task["status"] for task in tasks_after.json()}
+    after = {task["id"]: task["status"] for task in tasks_after.json()["tasks"]}
     assert after == before
 
 

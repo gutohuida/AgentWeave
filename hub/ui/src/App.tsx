@@ -162,7 +162,8 @@ export default function App() {
   // Read by the command palette (D3) — the same queries `SpecPage`/`TasksBoard` already use, not
   // a fetch the palette introduces of its own.
   const { data: specDocuments } = useSpecDocuments()
-  const { data: allTasks } = useTasks()
+  const { data: taskPage } = useTasks()
+  const allTasks = taskPage?.tasks
   const resolvedConversationId = resolveConversationSelection(
     destination,
     projectConversations?.conversations ?? [],

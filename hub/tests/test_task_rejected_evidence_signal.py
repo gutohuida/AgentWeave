@@ -105,7 +105,7 @@ async def test_a_rejected_current_digest_evidence_is_named_on_the_task(app, auth
 
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text
-    [listed_task] = [t for t in listed.json() if t["id"] == task_id]
+    [listed_task] = [t for t in listed.json()["tasks"] if t["id"] == task_id]
     assert _link(listed_task)["has_rejected_evidence"] is True
 
 

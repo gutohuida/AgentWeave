@@ -150,21 +150,16 @@ class TaskUpdate(RequestModel):
     # enforced in code and not a DB constraint (SQLite cannot drop one later).
     loop_id: Optional[str] = Field(default=None, max_length=64)
 
-    @model_validator(mode="after")
-    def blocking_by_hand_must_say_what_for(self) -> "TaskUpdate":
-        """A hand-set block names what it is waiting for, or it is not accepted (R5).
-
-        Required rather than optional because an unexplained block is the failure mode the status
-        was introduced to fix. A card that says only "blocked" leaves the operator working out what
-        they are holding up — which is exactly the position they were in when the task said
-        `in_progress` and nothing was happening.
-
-        A runtime block is not affected: it fills the reason from the question text, and does not
-        come through this schema.
-        """
-        if self.status == "blocked" and not (self.blocked_reason or "").strip():
-            raise ValueError("blocked_reason is required when setting a task to blocked")
-        return self
+    # R5's rule — a hand-set block names what it is waiting for — **is not asserted here**, and
+    # that is the whole of F201. As a `model_validator(mode="after")` it ran while FastAPI parsed
+    # the body, which is before `apply_transition` can consult the transition map. So a move to
+    # `blocked` from a status where that edge does not exist at all (seven of the nine) was refused
+    # `422 blocked_reason is required` — a sentence that reads as *supply this and the move will
+    # work*, for a move that never existed. Only the second call, with a reason attached, produced
+    # the real 409 naming what is reachable, which `task-lifecycle-governance` requires of a
+    # refusal. The rule now lives in `update_task_for_actor`, after the machine has agreed the move
+    # is legal; its message is unchanged, and a legal block with no reason is refused exactly as
+    # before.
 
     @field_validator("blocked_reason")
     @classmethod
@@ -365,3 +360,25 @@ class TaskResponse(BaseModel):
     dependency_state: Optional[str] = Field(default=None, max_length=32)
 
     model_config = {"from_attributes": True}
+
+
+class TaskListResponse(BaseModel):
+    """A page of the task ledger, and enough to know it *is* a page (F202).
+
+    `GET /tasks` used to answer with a bare array under a default `limit=100`, so a caller past
+    that limit was cut with nothing in the response saying so — and the cut takes the newest rows,
+    because the query orders by `created_at` ascending. At 241 tasks the Overview read
+    `tasks.length` and told the operator the project had 100, and an agent calling `list_tasks`
+    received the oldest hundred and was told nothing.
+
+    An object rather than a header carrying `X-Total-Count`: direct HTTP is a first-class way for
+    an agent to reach the Hub, and an agent reading JSON does not read headers. `GET /tasks/board`
+    over the same table already answers with an object, so this is also the two routes agreeing
+    about shape rather than a third convention.
+    """
+
+    tasks: List[TaskResponse]
+    #: Rows matching the filters, ignoring `limit`/`offset` — what the Overview must count.
+    total: int
+    #: True when `offset + len(tasks) < total`, i.e. this answer is not the whole of it.
+    has_more: bool

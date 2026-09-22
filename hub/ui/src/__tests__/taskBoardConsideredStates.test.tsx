@@ -28,7 +28,11 @@ vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
   return {
     ...actual,
-    useTasks: () => ({ data: TASKS, isLoading: false, isError: false }),
+    useTasks: () => ({
+      data: { tasks: TASKS, total: TASKS.length, has_more: false },
+      isLoading: false,
+      isError: false,
+    }),
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: {} } }),
     useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),

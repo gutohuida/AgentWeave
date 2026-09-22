@@ -159,7 +159,7 @@ async def test_the_declared_task_link_still_holds(app, auth_headers, author):
         assert moved.status_code == 200, moved.text
 
     listed = await app.get(TASKS, headers=auth_headers)
-    task = listed.json()[0]
+    task = listed.json()["tasks"][0]
     assert task["spec_task_key"] == "build-listing"
     assert task["spec_document_id"] is not None
 

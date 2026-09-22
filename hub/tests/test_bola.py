@@ -239,10 +239,19 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
         resp = await app.get(path, headers=b)
         assert resp.status_code == 200, f"{path} returned {resp.status_code}"
         data = resp.json()
-        assert isinstance(data, list), f"{path} did not return a list"
+        # `/tasks` answers `{tasks, total, has_more}` since F202; every other route here still
+        # answers a bare array. Both are checked for the same thing, and the envelope is checked
+        # for one more: a `total` counted over the *other* project's rows would be a leak of its
+        # own, even with an empty page.
+        if isinstance(data, dict) and "tasks" in data:
+            assert data["total"] == 0, f"{path} counted another project's rows"
+            rows = data["tasks"]
+        else:
+            rows = data
+        assert isinstance(rows, list), f"{path} did not return a list"
         # No Project A ids should appear anywhere in the response.
         assert not any(
-            item.get("id") in a_ids for item in data if isinstance(item, dict)
+            item.get("id") in a_ids for item in rows if isinstance(item, dict)
         ), f"{path} leaked Project A resources"
 
     # The agent timeline returns a dict wrapper too (`a-turn-says-how-it-ended` task 1.5), and it

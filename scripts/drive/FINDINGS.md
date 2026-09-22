@@ -16004,7 +16004,9 @@ clean — see "What the machine survived" below, which is the more important hal
 
 ## F201 (C) — an illegal move to `blocked` is refused as **malformed** rather than as illegal, and the sentence tells the caller to send more
 
-**Status:** open, and sized. `spec-queue/DECISIONS.md:264` counts 9 `model_validator`s
+**Status:** fixed (this commit) [Round 2, 2026-09-22] — the rule moved behind the machine, and
+the sweep was done and came back smaller than the count this entry carries; see FIXED at the end.
+Filed and sized. `spec-queue/DECISIONS.md:264` counts 9 `model_validator`s
 under `hub/hub/schemas/` with the same ordering hazard, and `:545` decides the narrow repair and the
 sweep should be done together. Neither has been done. [classified 2026-09-09, D-3]
 
@@ -16075,9 +16077,35 @@ absence.
 
 **Reproduction:** `py -3.11 scripts/drive/t_sweep_row8_tasks.py`, LEG 3b.
 
+
+**FIXED 2026-09-22 (interactive session, Round 2).** The rule was right and was asked too early.
+`TaskUpdate.blocking_by_hand_must_say_what_for` was a `model_validator(mode="after")`, so FastAPI
+ran it while parsing the body — before `apply_transition` could consult the map. It is now asked in
+`update_task_for_actor`, immediately before the reason is written, which is after the machine has
+agreed the move exists. The message is unchanged.
+
+- **An illegal block is now refused as illegal**: `pending -> blocked` answers 409 naming `pending`
+  and the statuses reachable from it, which is what `task-lifecycle-governance` requires of a
+  refusal and what its "Work not yet started cannot be waiting" scenario names.
+- **A legal block with no reason is refused exactly as before** (422, same sentence). The existing
+  test for that (`test_a_hand_set_block_must_say_what_it_is_waiting_for`, from `in_progress`) passes
+  unchanged, which is what shows R5 was moved rather than weakened.
+- **The half this entry could not drive is covered by the move**: an agent asking for `blocked`
+  through `PATCH /agent-actions/tasks/{id}` now reaches the deliberate 403 ("a task is recorded as
+  waiting on a person because AgentWeave saw the run end with an unanswered blocking question"),
+  because nothing refuses the body first.
+- **The sweep, done here and smaller than the decision assumed.** `DECISIONS.md:264` counted nine
+  `model_validator`s under `hub/hub/schemas/` sharing the hazard. Today there are **five**, and
+  after this change **none** carries it: three are `mode="before"` normalisers (they rename fields,
+  they refuse nothing), `agents.py:288` checks one payload's internal consistency, and
+  `runners.py:50` annotates a response. The 21 `raise ValueError`s under `hub/hub/schemas/` are
+  vocabulary and format checks — "must be one of ..." — which is what parse-time validation is
+  for. The hazard is specifically a rule whose truth depends on **state the request cannot see**,
+  and F201's was the only one.
+
 ## F202 (B) — the Overview says "100 tasks" about a project with 241, and the board silently drops the newest work
 
-**Status:** open. Filed by the row-8 sweep (`7e45a27`). `spec-queue/DECISIONS.md:530` records
+**Status:** fixed (this commit) [Round 2, 2026-09-22] — the route answers an envelope, the MCP tool pages, and the Overview counts the ledger rather than the page; see FIXED at the end of this entry. Filed by the row-8 sweep (`7e45a27`). `spec-queue/DECISIONS.md:530` records
 the shape -- `GET /projects/{id}/tasks` defaults to `limit=100` with no `total`/`has_more`/`next` --
 as undecided work, not as a repair. [classified 2026-09-09, D-2]
 
@@ -16143,8 +16171,46 @@ what the Overview reads.
 **Reproduction:** `t_sweep_row8_tasks.py` LEG 7b and `t_sweep_row8_ui.py`. Both refuse to run their
 truncation legs on a project with 100 tasks or fewer, and say so.
 
+
+**FIXED 2026-09-22 (interactive session, Round 2).** `DECISIONS.md` called both halves *"additive"*.
+They are additive in content; the response **shape** changed, which is the point — a bare array has
+nowhere to say it was cut.
+
+- **`GET /tasks` answers `{tasks, total, has_more}`** (`TaskListResponse`, `schemas/tasks.py`).
+  `total` is a COUNT over the same filtered query *before* paging, so it cannot disagree with what
+  paging through would yield. `has_more` is `offset + len(rows) < total`. The agent HTTP plane
+  (`agent_actions.list_shared_tasks`, which calls the same handler) answers the same shape.
+  - **An object, not an `X-Total-Count` header.** Direct HTTP is a first-class way for an agent to
+    reach the Hub, and an agent reading JSON does not read headers. `GET /tasks/board` over the
+    same table already answers an object, so this is the two routes agreeing rather than a third
+    convention.
+- **`list_tasks` (MCP) takes `limit` and `offset`** and returns the envelope, so an agent that
+  passes nothing still learns it was cut — which paging parameters alone would not have told it.
+  The tool surface (`api/v1/agents.py`) and `docs/reference/mcp-tools.md` carry the new signature.
+- **The Overview counts `total`, not `tasks.length`**, and `useTasks` asks for the route's maximum
+  page (1000) rather than accepting the default 100. The board shows a banner
+  (`tasks-truncated-banner`) naming how many of how many it is showing when even that is cut,
+  because the rows a page drops are the *newest*.
+- **The drives were lying by construction.** 24 sites across 12 harnesses read the board through
+  `body if isinstance(body, list) else []`, which turns the new object into an empty list — a drive
+  whose verdict is *"its queued work is untouched"* would have passed against nothing. They now go
+  through `aw.task_rows()`, which raises on a shape it does not recognise.
+  `tests/test_drive_key_guard.py` pins that it raises rather than answering `[]`.
+- **Tests:** `hub/ui/src/__tests__/taskCountIsTheLedgersOwn.test.tsx` (4, all failing at `35a162c`)
+  asserts the Overview shows 241 rather than the page length, and that the board's banner appears
+  only when the page is cut. `test_tasks.py` gained the envelope assertions; 9 hub call sites and
+  4 vitest mocks were migrated.
+
+**One consequence for the operator's live `:8000`, stated because the rules make it real.**
+`mcp_server.py` is spawned fresh for every agent turn, while the *route* lives in the running Hub
+process. Between this commit landing and their next restart, their agents' `list_tasks` sends
+`limit`/`offset` (which the old route already accepts) and receives the old bare array, while the
+tool description promises an envelope. The tool is the half that reaches them immediately; the
+route is the half that waits for the restart they choose.
+
 ## F203 (C) — nothing can read a task's transition history
-**Status:** open
+**Status:** fixed (this commit) [Round 2, 2026-09-22] — a route on both planes, an MCP tool,
+and the operator's own screen; see FIXED at the end of this entry.
 
 `task_transitions` is append-only, written inside `apply_transition` for every accepted move, and
 carries `from_status`, `to_status`, `actor_kind`, `actor_agent`, `run_id`, `origin` and
@@ -16315,6 +16381,32 @@ second run over the state the first left — the one-assertion difference is the
 in leg 6, and the substantive reds are the same set both times) and
 `scripts/drive/t_sweep_row9_ui.py` (**2 failing, twice, the same two**). Screenshots in
 `%TEMP%\row9shots`.
+
+
+**FIXED 2026-09-22 (interactive session, Round 2).** The table was complete and unreadable;
+`history_for` existed and nothing called it outside tests.
+
+- **`GET /projects/{id}/tasks/{task_id}/transitions`** answers `{"transitions": [...]}`, oldest
+  first. Each row carries `sequence`, `from_status`, `to_status`, `actor_kind`, `actor_agent`,
+  `run_id`, `origin` and `policy_digest` — the digest that records what governed an approval, and
+  that nothing has ever been able to read. `sequence` is in the response because it, not
+  `created_at`, is what orders the history: moves staged in one flush share a timestamp.
+- **404 for an unknown task, `{"transitions": []}` for one that never moved.** "No history" and
+  "no such task" are different answers, and a task older than the table legitimately has the first.
+- **The agent plane has it too** (`/agent-actions/tasks/{id}/transitions`), because
+  author/reviewer separation is decided from these rows: a reviewer asking "who completed this?"
+  should read the record rather than infer it from `updated_by_run_id`, which holds only the latest
+  run to touch the task.
+- **`task_history(task_id)`** is the MCP read, with the tool surface and
+  `docs/reference/mcp-tools.md` carrying it.
+- **The operator's screen is the point of the finding**, so `TaskDetailDrawer` gained a History
+  section (`TaskTransitionHistory`). It distinguishes what the table distinguishes: the operator
+  from a run, and a move the runtime made on a run's behalf (`origin: "runtime"`) from one the run
+  chose — rendered "was moved for" rather than "moved". **This is also what keeps the route out of
+  `n10`'s clientless set**: the ceiling is 35 and exactly met, so an operator route with no screen
+  would have failed `test_no_new_route_without_a_client`. Measured after the change: still 35.
+- **Tests:** two in `test_tasks.py` (the history reads the same on both planes; an unknown task is
+  a 404 while a never-moved one is an empty list) and four vitest.
 
 ## F204 (C) — the phase route is the one door in the machine that refuses a call with no body, and it refuses it as *malformed*
 
@@ -16699,7 +16791,8 @@ navigation that only went one way"*. Neither half of that navigation is on a scr
 
 ## F212 (C) — coverage reports `unserved` as bare identifiers, which are not unique in a project
 
-**Status:** open, with the remedy decided. `spec-queue/DECISIONS.md:527` records the
+**Status:** fixed (this commit) [Round 2, 2026-09-22] — see FIXED at the end of this entry.
+Filed with the remedy decided. `spec-queue/DECISIONS.md:527` records the
 shape and `:40` notes the response already carries the `document_id` that would answer it. Verified
 2026-09-09: `hub/hub/api/v1/spec.py:713` still projects `[row.identifier for row in unserved]`. [classified 2026-09-09, D-3]
 
@@ -16731,6 +16824,20 @@ GET /spec/requirements/FR-1
 (`requirement_links.py:335`). In any project with two documents, its answer names things the reader
 cannot look up. The fix is small — return objects carrying `identifier` and `document_id`, as the
 sibling array already does — and it is a response-shape change, so it is the operator's call.
+
+
+**FIXED 2026-09-22 (interactive session, Round 2).** `GET /spec/coverage` projects `unserved` as
+objects: `identifier`, `document_id`, and `requirement_id`. The first two are what the decision
+asked for; `requirement_id` is included because it is what joins a row to the same response's
+`requirements` array without the reader re-deriving the pair.
+
+The regression test is the case the old shape could not express: two documents in one project, both
+declaring `FR-1`, neither served. It asserts two rows with the same identifier, two distinct
+`document_id`s, and that each row's document matches the one the `requirements` array gives for that
+`requirement_id`. It fails against the old projection, which could only produce `["FR-1", "FR-1"]`.
+
+The UI's `CoverageResponse.unserved` is typed `UnservedRequirement[]`; nothing in the UI rendered
+the array, and no drive read it (checked: the drives read the per-requirement `state`).
 
 ## F213 (D) — a resubmitted edit stacks a duplicate proposal, and the twin can never be resolved
 

@@ -24,7 +24,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows# noqa: E402
 
 P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
 AGENT = os.environ.get("AW_AGENT") or "gamma"
@@ -155,7 +155,7 @@ def main():
             "%s / %s / %s" % (lp.get("ending_state"), j.get("enabled"), j.get("next_run")),
         )
         c, t = api("GET", "/projects/%s/tasks" % P)
-        mine = [x for x in (t if isinstance(t, list) else []) if x.get("loop_id") == loop_id]
+        mine = [x for x in task_rows(t) if x.get("loop_id") == loop_id]
         verdict(
             "the queued work is untouched -- the refusal really was a refusal",
             [x["status"] for x in mine] == ["pending"],
@@ -168,7 +168,7 @@ def main():
             step("stop the loop", "PATCH", "/projects/%s/jobs/%s" % (P, job_id),
                  {"stop_reason": "drive teardown"})
         c, t = api("GET", "/projects/%s/tasks" % P)
-        for x in t if isinstance(t, list) else []:
+        for x in task_rows(t):
             if (x["id"] in parked or x.get("loop_id") == loop_id) and x["status"] not in (
                 "approved",
                 "rejected",

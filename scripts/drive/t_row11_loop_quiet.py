@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows# noqa: E402
 
 P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
 AGENT = os.environ.get("AW_AGENT") or "alpha"
@@ -114,7 +114,7 @@ def main():
         verdict("stopped_at is recorded", bool(lp.get("stopped_at")), str(lp.get("stopped_at")))
         verdict("job.enabled is false", j.get("enabled") is False, str(j.get("enabled")))
         c, t = api("GET", "/projects/%s/tasks" % P)
-        rows = [x for x in (t if isinstance(t, list) else []) if x.get("loop_id") == loop_id]
+        rows = [x for x in task_rows(t) if x.get("loop_id") == loop_id]
         verdict("no agent was spawned on the queued work: it is still `pending`",
                 bool(rows) and all(r["status"] == "pending" for r in rows),
                 str([r["status"] for r in rows]))
@@ -146,7 +146,7 @@ def main():
                len(hist) if isinstance(hist, list) else "?"),
         )
         c, t = api("GET", "/projects/%s/tasks" % P)
-        rows = [x for x in (t if isinstance(t, list) else []) if x.get("loop_id") == loop_id]
+        rows = [x for x in task_rows(t) if x.get("loop_id") == loop_id]
         verdict("the outstanding task was never picked up after the ending",
                 all(r["status"] == "pending" for r in rows),
                 str([r["status"] for r in rows]))
@@ -173,7 +173,7 @@ def main():
     finally:
         head("Z. Teardown -- leave nothing enabled")
         c, t = api("GET", "/projects/%s/tasks" % P)
-        for x in t if isinstance(t, list) else []:
+        for x in task_rows(t):
             if x.get("loop_id") == loop_id and x["status"] not in ("approved", "rejected"):
                 step("reject orphan %s" % x["id"][:16], "PATCH",
                      "/projects/%s/tasks/%s" % (P, x["id"]), {"status": "rejected"})

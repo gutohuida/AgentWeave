@@ -54,7 +54,8 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
   // Only the board's own default (unscoped) view retires an archived document's completed work —
   // an explicit scope (a coverage-bar or document-tasks-link click) must never hide anything it
   // named, so the exclusion switches off the instant a filter is active.
-  const { data: tasks, isLoading, isError } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
+  const { data: taskPage, isLoading, isError } = useTasks({ excludeArchivedCompleted: activeTaskIds === null })
+  const tasks = taskPage?.tasks
   const { data: agents = [] } = useAgents()
   const { data: allowed } = useAllowedTransitions()
   const updateTask = useUpdateTask()
@@ -180,6 +181,22 @@ export function TasksBoard({ onOpenRequirement }: TasksBoardProps = {}) {
           <button type="button" aria-label="Dismiss task move error" onClick={() => setMoveRefusal(null)}>
             <Icon name="close" size={14} />
           </button>
+        </div>
+      )}
+      {/* The board renders one page. Past it, say so: the rows a page drops are the *newest*,
+          because the ledger is ordered oldest-first, so a silent board is one that hides exactly
+          the work the operator came to look at (F202). */}
+      {taskPage?.has_more && (
+        <div
+          data-testid="tasks-truncated-banner"
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-xs"
+          style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-2)', background: 'var(--surface-2)' }}
+        >
+          <Icon name="info" size={14} />
+          <span>
+            Showing the oldest {tasks?.length ?? 0} of {taskPage.total} tasks. Filter by agent or
+            open a specification's board to see the rest.
+          </span>
         </div>
       )}
       {/* Set from outside the board — a coverage row's task-count link. Shown above the assignee

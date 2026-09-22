@@ -28,13 +28,16 @@ vi.mock('@/api/tasks', async (importOriginal) => {
     // applies (`design.md` D5) — `TasksBoard.tsx` itself has no client-side filter for it, so a
     // mock that always returns the same array could not exercise the "excluded by default, visible
     // once scoped" behaviour this file's own archived-document case needs.
-    useTasks: (options?: { excludeArchivedCompleted?: boolean }) => ({
-      data: options?.excludeArchivedCompleted
+    useTasks: (options?: { excludeArchivedCompleted?: boolean }) => {
+      const rows = options?.excludeArchivedCompleted
         ? TASKS.filter((t) => !(t.id === ARCHIVED_TERMINAL_TASK_ID))
-        : TASKS,
-      isLoading: false,
-      isError: tasksError,
-    }),
+        : TASKS
+      return {
+        data: { tasks: rows, total: rows.length, has_more: false },
+        isLoading: false,
+        isError: tasksError,
+      }
+    },
     useAllowedTransitions: () => ({ data: { actor_kind: 'operator', transitions: allowedTransitions } }),
     useUpdateTask: () => ({ mutate: updateTask, isPending: false }),
     useSetDivergenceHandling: () => ({ mutate: vi.fn() }),

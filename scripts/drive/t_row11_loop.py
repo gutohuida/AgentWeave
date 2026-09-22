@@ -18,7 +18,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows# noqa: E402
 
 P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
 AGENT = os.environ.get("AW_AGENT") or "alpha"
@@ -55,7 +55,7 @@ def step(label, method, path, body=None, expect=None, show=False, limit=900):
 
 def tasks_of(loop_id):
     c, t = api("GET", "/projects/%s/tasks" % P)
-    rows = t if isinstance(t, list) else t.get("tasks", [])
+    rows = task_rows(t)
     return [x for x in rows if x.get("loop_id") == loop_id]
 
 

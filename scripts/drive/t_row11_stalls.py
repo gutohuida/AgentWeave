@@ -31,7 +31,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from aw import api  # noqa: E402
+from aw import api, task_rows# noqa: E402
 
 P = os.environ.get("AW_PROJECT") or "proj-dc4d43543bea"
 AGENT = os.environ.get("AW_AGENT") or "beta"
@@ -90,7 +90,7 @@ def statuses(loop_id):
     c, t = api("GET", "/projects/%s/tasks" % P)
     return {
         x["id"]: x["status"]
-        for x in (t if isinstance(t, list) else [])
+        for x in task_rows(t)
         if x.get("loop_id") == loop_id
     }
 
@@ -130,7 +130,7 @@ def main():
                 if lp.get("job_id") == job_id:
                     loop_id = lp.get("id")
         c, t = api("GET", "/projects/%s/tasks" % P)
-        mine = [x for x in (t if isinstance(t, list) else []) if x.get("loop_id") == loop_id]
+        mine = [x for x in task_rows(t) if x.get("loop_id") == loop_id]
         for x in mine:
             if "prerequisite" in x["title"]:
                 a_id = x["id"]
@@ -152,8 +152,8 @@ def main():
             json.dumps(dep, default=str)[:160],
         )
         c, t = api("GET", "/projects/%s/tasks" % P)
-        brow = [x for x in (t if isinstance(t, list) else []) if x["id"] == b_id][0]
-        arow = [x for x in (t if isinstance(t, list) else []) if x["id"] == a_id][0]
+        brow = [x for x in task_rows(t) if x["id"] == b_id][0]
+        arow = [x for x in task_rows(t) if x["id"] == a_id][0]
         verdict(
             "B's response carries the prerequisite and A's carries the dependent -- the edge is "
             "visible from both ends",
@@ -404,7 +404,7 @@ def main():
     finally:
         head("Z. Teardown -- leave nothing enabled")
         c, t = api("GET", "/projects/%s/tasks" % P)
-        for x in t if isinstance(t, list) else []:
+        for x in task_rows(t):
             if x.get("loop_id") == loop_id and x["status"] not in ("approved", "rejected"):
                 step(
                     "reject leftover %s" % x["id"][:16],

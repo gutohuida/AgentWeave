@@ -490,6 +490,7 @@ async def accept_proposal(
     *,
     actor: spec_lifecycle.Actor,
     expected_digest: Optional[str] = None,
+    reason: str = "",
 ) -> SaveResult:
     """Apply one pending proposal's unit to the live document, or refuse and say why.
 
@@ -551,6 +552,10 @@ async def accept_proposal(
     proposal.status = "accepted"
     proposal.resolved_at = datetime.now(timezone.utc)
     proposal.resolved_by_actor_name = actor.name or ""
+    # Kept, as `reject_proposal` keeps its own (F209). The route declared and size-limited this
+    # field and then dropped it, so an accept answered 200 and stored nothing — leaving *why* a
+    # spec change was let in as the one half of the pair the corpus does not record.
+    proposal.resolution_reason = reason
     return result
 
 

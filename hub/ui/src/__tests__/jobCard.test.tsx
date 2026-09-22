@@ -28,7 +28,9 @@ vi.mock('@/api/tasks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/tasks')>()
   return {
     ...actual,
-    useTasks: () => ({ data: loopTasks }),
+    useTasks: () => ({
+      data: loopTasks && { tasks: loopTasks, total: loopTasks.length, has_more: false },
+    }),
   }
 })
 

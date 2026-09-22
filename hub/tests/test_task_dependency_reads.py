@@ -77,7 +77,7 @@ async def test_list_tasks_exposes_prerequisites_and_dependents(app, auth_headers
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
-    by_id = {row["id"]: row for row in resp.json()}
+    by_id = {row["id"]: row for row in resp.json()["tasks"]}
     assert [p["id"] for p in by_id["task-r71l-mid"]["prerequisites"]] == ["task-r71l-prereq"]
     assert [d["id"] for d in by_id["task-r71l-prereq"]["dependents"]] == ["task-r71l-mid"]
 

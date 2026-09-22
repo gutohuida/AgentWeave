@@ -21,8 +21,9 @@ you.
 | Tool | Purpose |
 |------|---------|
 | `create_task(title, description, assignee, priority=medium, requirements, ...)` | Create a task attributed to the bound agent |
-| `list_tasks(agent=None)` | Read the shared task ledger |
+| `list_tasks(agent=None, limit=None, offset=None)` | Read the shared task ledger, a page at a time — answers `{tasks, total, has_more}` |
 | `get_task(task_id)` | Read one ledger entry |
+| `task_history(task_id)` | Who moved a task, when, and from what — answers `{transitions}` |
 | `update_task(task_id, status, notes=None)` | Move a task through its lifecycle; `status` is required |
 
 ## Asking the operator

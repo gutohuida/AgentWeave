@@ -1032,12 +1032,16 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="list_tasks",
-            args="agent=None",
+            args="agent=None, limit=None, offset=None",
             method="GET",
             path="/tasks",
-            fields=("agent",),
+            fields=("agent", "limit", "offset"),
             required=(),
-            text="read the shared task ledger.",
+            text=(
+                "read the shared task ledger. Answers `{tasks, total, has_more}`, oldest first, "
+                "100 per page and 1000 at most; `has_more` true means the *newest* work is not "
+                "in front of you, so ask again with `offset`, or narrow with `agent`."
+            ),
         ),
         _Operation(
             tool="get_task",
@@ -1047,6 +1051,19 @@ def _operations() -> List[_Operation]:
             fields=(),
             required=(),
             text="read one ledger entry.",
+        ),
+        _Operation(
+            tool="task_history",
+            args="task_id",
+            method="GET",
+            path="/tasks/{task_id}/transitions",
+            fields=(),
+            required=(),
+            text=(
+                "read who moved a task, when, and from what. The task's own fields hold only the "
+                "latest run that touched it, so who completed it and who approved it is "
+                "unanswerable from them."
+            ),
         ),
         _Operation(
             tool="update_task",

@@ -292,15 +292,46 @@ def create_task(
 
 
 @mcp.tool()
-def list_tasks(agent: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Read the shared task ledger, optionally filtered by assignee."""
-    return _hub_request("GET", "/tasks", params={"agent": agent})
+def list_tasks(
+    agent: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Read the shared task ledger, optionally filtered by assignee.
+
+    Answers `{"tasks": [...], "total": N, "has_more": bool}`. The ledger is returned oldest
+    first, a page at a time — 100 by default, 1000 at most. **`has_more` true means the newest
+    work is not in front of you**: ask again with `offset` set to how many you have, or narrow
+    with `agent`.
+
+    Args:
+        agent: Only tasks assigned to this agent.
+        limit: How many to return, 1 to 1000. Default 100.
+        offset: How many to skip, for the next page. Default 0.
+    """
+    return _hub_request("GET", "/tasks", params={"agent": agent, "limit": limit, "offset": offset})
 
 
 @mcp.tool()
 def get_task(task_id: str) -> Dict[str, Any]:
     """Read one task-ledger entry by ID."""
     return _hub_request("GET", f"/tasks/{task_id}")
+
+
+@mcp.tool()
+def task_history(task_id: str) -> Dict[str, Any]:
+    """Who moved this task, when, and from what status to what.
+
+    Answers `{"transitions": [...]}`, oldest first. Each entry carries `from_status`, `to_status`,
+    whether the operator or a run asked (`actor_kind`), which agent's run it was (`actor_agent`),
+    whether the Hub moved it on that run's behalf (`origin: "runtime"`), and the digest of the
+    policy that governed it. The task's own fields cannot answer this: they hold only the latest
+    run that touched it, so "who completed this, and who approved it?" is unanswerable from them.
+
+    Args:
+        task_id: The task to read the history of.
+    """
+    return _hub_request("GET", f"/tasks/{task_id}/transitions")
 
 
 @mcp.tool()

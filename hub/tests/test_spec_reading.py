@@ -192,7 +192,7 @@ async def test_one_document_is_read_once_for_a_whole_board(app, auth_headers, au
 
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text
-    assert len(listed.json()) == 4
+    assert len(listed.json()["tasks"]) == 4
     assert reads.count(PATH) == 1, f"expected one read of the document, got {reads}"
 
 

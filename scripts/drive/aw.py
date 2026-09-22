@@ -83,6 +83,24 @@ def api(method, path, body=None, raw=False, timeout=60):
         return code, text
 
 
+def task_rows(body):
+    """The rows of a `GET /tasks` answer, which is `{tasks, total, has_more}` since F202.
+
+    A harness that reads the old bare array gets nothing useful from the object, and the shape the
+    drives had written for it — `body if isinstance(body, list) else []` — turns that into an empty
+    list. A drive then reports "no tasks" as a *verdict*, which is a harness telling a lie. So this
+    raises on a shape it does not recognise rather than answering `[]`.
+    """
+    if isinstance(body, dict) and "tasks" in body:
+        return body["tasks"]
+    if isinstance(body, list):
+        raise TypeError(
+            "GET /tasks answered a bare array. Since F202 it answers "
+            "{tasks, total, has_more} — this Hub is older than the harness."
+        )
+    raise TypeError(f"not a task-list answer: {body!r}")
+
+
 def show(label, code, body, limit=1200):
     s = body if isinstance(body, str) else json.dumps(body, indent=1, default=str)
     print(f"--- {label}  [{code}]")

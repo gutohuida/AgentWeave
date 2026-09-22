@@ -13,6 +13,9 @@ import { useConfigStore } from '@/store/configStore'
  * request each option produces.
  */
 
+/** The envelope `GET /tasks` answers with since F202. */
+const PAGE = { tasks: [], total: 0, has_more: false }
+
 function wrapper(client: QueryClient) {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
@@ -34,21 +37,21 @@ describe('useTasks', () => {
     const seen: string[] = []
     globalThis.fetch = ((url: string) => {
       seen.push(url)
-      return Promise.resolve({ ok: true, status: 200, json: async () => [] } as Response)
+      return Promise.resolve({ ok: true, status: 200, json: async () => PAGE } as Response)
     }) as typeof fetch
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const { result } = renderHook(() => useTasks(), { wrapper: wrapper(client) })
     await waitFor(() => expect(result.current.data).toBeDefined())
 
-    expect(seen).toEqual(['http://hub.test/api/v1/projects/proj-1/tasks'])
+    expect(seen).toEqual(['http://hub.test/api/v1/projects/proj-1/tasks?limit=1000'])
   })
 
   it('requests ?exclude_archived_completed=true when asked', async () => {
     const seen: string[] = []
     globalThis.fetch = ((url: string) => {
       seen.push(url)
-      return Promise.resolve({ ok: true, status: 200, json: async () => [] } as Response)
+      return Promise.resolve({ ok: true, status: 200, json: async () => PAGE } as Response)
     }) as typeof fetch
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -58,7 +61,7 @@ describe('useTasks', () => {
     await waitFor(() => expect(result.current.data).toBeDefined())
 
     expect(seen).toEqual([
-      'http://hub.test/api/v1/projects/proj-1/tasks?exclude_archived_completed=true',
+      'http://hub.test/api/v1/projects/proj-1/tasks?exclude_archived_completed=true&limit=1000',
     ])
   })
 
@@ -66,7 +69,7 @@ describe('useTasks', () => {
     const seen: string[] = []
     globalThis.fetch = ((url: string) => {
       seen.push(url)
-      return Promise.resolve({ ok: true, status: 200, json: async () => [] } as Response)
+      return Promise.resolve({ ok: true, status: 200, json: async () => PAGE } as Response)
     }) as typeof fetch
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -76,7 +79,9 @@ describe('useTasks', () => {
     )
     await waitFor(() => expect(result.current.data).toBeDefined())
 
-    expect(seen).toEqual(['http://hub.test/api/v1/projects/proj-1/tasks?loop_id=loop-1'])
+    expect(seen).toEqual([
+      'http://hub.test/api/v1/projects/proj-1/tasks?loop_id=loop-1&limit=1000',
+    ])
   })
 })
 
@@ -85,7 +90,7 @@ describe('useDocumentTasks', () => {
     const seen: string[] = []
     globalThis.fetch = ((url: string) => {
       seen.push(url)
-      return Promise.resolve({ ok: true, status: 200, json: async () => [] } as Response)
+      return Promise.resolve({ ok: true, status: 200, json: async () => PAGE } as Response)
     }) as typeof fetch
 
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -93,7 +98,7 @@ describe('useDocumentTasks', () => {
     await waitFor(() => expect(result.current.data).toBeDefined())
 
     expect(seen).toEqual([
-      'http://hub.test/api/v1/projects/proj-1/tasks?spec_document_id=spdoc-1',
+      'http://hub.test/api/v1/projects/proj-1/tasks?spec_document_id=spdoc-1&limit=1000',
     ])
   })
 

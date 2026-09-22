@@ -215,7 +215,7 @@ async def test_3_1_a_tasks_criteria_follow_its_requirements(app, auth_headers, a
 
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text
-    board = listed.json()
+    board = listed.json()["tasks"]
     assert len(board) == 1
     assert board[0]["acceptance_criteria"] == [RENDERED_ALPHA]
 
