@@ -164,6 +164,9 @@ _HEADING = re.compile(r"^(#{2,3})\s*(F\d+[a-z]?)\s*(?:\(([^)]*)\))?\s*.\s*(.+)$"
 # `## F165 addendum, …` do not match, and must not, or an addendum names the finding.
 _FILING = re.compile(r"^#{2,3}\s*F\d+[a-z]?\s*(?:\([^)]*\))?\s*[-–—:]\s")
 
+# A Status line recording that the entry is not a defect at all, or was withdrawn.
+_NOT_A_DEFECT = re.compile(r"\bnot a defect\b|\bno product defect\b|\bretracted\b", re.I)
+
 
 def classify_source(body: str, status: str) -> str:
     """Where an item came from. An explicit `**Source:**` line wins; otherwise infer.
@@ -681,7 +684,15 @@ def consistency_warnings(findings: list[dict], changes: list[dict]) -> list[str]
             f"whether they are done (they are counted as open): {', '.join(nostatus[:12])}"
             f"{' ...' if len(nostatus) > 12 else ''}"
         )
-    unrated = [f["id"] for f in findings if f["sev"] == "?"]
+    # A record that is not a defect (a clean drive, a negative result) or was retracted has no
+    # severity to declare: the scale grades wrong behaviour, and inventing a letter for these would
+    # be a false claim. Before this exclusion they were 8 of the 12 rows this warning listed
+    # (2026-09-22), so every sweep re-read the same closed records to find the real gaps.
+    unrated = [
+        f["id"]
+        for f in findings
+        if f["sev"] == "?" and not _NOT_A_DEFECT.search(re.sub(r"[*_`~]", "", f["status"])[:120])
+    ]
     if unrated:
         open_unrated = sum(1 for f in findings if f["sev"] == "?" and f["state"] in ("open", "no-status"))
         warn.append(
@@ -710,8 +721,15 @@ def consistency_warnings(findings: list[dict], changes: list[dict]) -> list[str]
         r"(?:\s+(?:by|in|with|at|as))?\s*\(?`?([0-9a-f]{7,40})`?",
         re.I,
     )
+    # A row that says in words that the fix was partial ("partially fixed", "the definition half is
+    # fixed") has already answered the question this warning asks, so it is not listed.
+    partial = re.compile(r"\bpartial(?:ly)?\b|\bhalf\b", re.I)
     suspicious = [
-        f["id"] for f in findings if f["state"] == "open" and fix_claim.search(f["status"] or "")
+        f["id"]
+        for f in findings
+        if f["state"] == "open"
+        and fix_claim.search(f["status"] or "")
+        and not partial.search(f["status"] or "")
     ]
     if suspicious:
         warn.append(

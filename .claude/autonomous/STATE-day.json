@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d4-ledger-sweep",
-    "next_action": "D-4: backlog --check flagged 12 findings with no severity anywhere (F66,F67,F69,F104,F106,F131,F145,F148,F150,F151,F153,F290) and 2 open findings whose Status line claims a commit already fixed something (F53,F352). Read each, assign a severity or confirm already closed, and resolve the two contradictions by checking the cited commits. Regenerate spec-queue/BACKLOG.html after.",
+    "current": "d5",
+    "next_action": "D-5: spec-queue/review/review-2026-09-22.html per day-window.md D-5's 6-point order: branch/gate status (report YESTERDAY's D-7, which fast-forwarded master to 68b40fd), what night built (F375, driven), today's drive findings, no specs today (drain=2, say why), the default night queue, research briefly. Append a row to spec-queue/APPROVALS.md only if a change was specced (none today). Also mention iteration 3's F223 no-spec repair (d5d605c) and iteration 4's ledger sweep (zero backlog warnings now).",
     "queue": [
         {
             "id": "compose",
@@ -37,9 +37,9 @@
         },
         {
             "id": "d4-ledger-sweep",
-            "status": "open",
+            "status": "done",
             "title": "FINDINGS.md status/severity sweep",
-            "detail": "Backlog --check flagged: 12 findings with no severity anywhere (F66,F67,F69,F104,F106,F131,F145,F148,F150,F151,F153,F290) and 2 open findings whose Status line claims a commit already fixed something (F53,F352). Read each, assign a severity or confirm already closed, and resolve the two contradictions by checking the cited commits. Regenerate spec-queue/BACKLOG.html after."
+            "detail": "All 12 unrated were already closed: F66 (B), F67 (A), F131 (A) rated retroactively with rationale; F151's 'Severity B.' reworded so the parser reads it; F69/F104/F106/F145/F148/F150/F153/F290 are not-a-defect or retracted and correctly carry no letter. F53 and F352 verified as genuine partial fixes against their commits and current code, dated notes added. backlog_page.py warnings narrowed to skip those shapes (checked on synthetic rows); BACKLOG.html regenerated with zero ledger warnings."
         },
         {
             "id": "d5",

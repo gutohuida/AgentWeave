@@ -3163,7 +3163,7 @@ as a finding because it was not driven deliberately or reproduced.
 
 ## F53 (B) — archiving a loop that never fired still permanently, irrevocably claims its spec document; the tasks it "adopted" have no recovery path
 
-**Status:** open — partially fixed 2239f38 (option (a) only — an archived loop's document claim no longer blocks a new loop); the `_adopt_document_tasks` orphaning half is open and queued as Q4-SPEC
+**Status:** open — partially fixed 2239f38 (option (a) only — an archived loop's document claim no longer blocks a new loop); the `_adopt_document_tasks` orphaning half is open and queued as Q4-SPEC [checked 2026-09-22, D-4: still a correct open row — `2239f38` is the claim-release half only; `_adopt_document_tasks` (`hub/hub/api/v1/jobs.py:205`) still adopts only `loop_id IS NULL` and nothing clears an archived loop's `loop_id`, so the orphaning half stands. No `Q4-SPEC` change exists under `openspec/changes/` today — that queue label is historical.]
 
 Found 2026-08-26 driving Q4, self-inflicted and then traced to the code rather than dismissed as
 operator error — the whole value of finding it is that a real operator could do the exact same
@@ -4288,7 +4288,7 @@ even before any agent was archived; archiving only made the misattribution easie
 reporting truthfully, not over-reporting. **Whether a roster of three should be unable to staff one
 review is a separate question about the ladder**, not about this fix, and is left for the operator.
 
-## F66 — A batched turn's workspace and its run binding are decided by two different rules, and they can name different tasks
+## F66 (B) — A batched turn's workspace and its run binding are decided by two different rules, and they can name different tasks
 
 **Status:** fixed by `f5b46e9` (`2026-08-27-every-run-knows-its-task`, archived). Verified
 2026-09-09 in code rather than from the paragraph below: `hub/hub/turn_scheduler.py:287-293` narrows
@@ -4296,6 +4296,8 @@ a batch to the controlling entry's kind before a turn starts, and `_review_task_
 (`agent_trigger.py:397`) still refuses a hand-assembled mixed batch. The operator question this
 entry ends on was answered, and the batch the two rules would disagree about can no longer be
 assembled. [classified 2026-09-09, D-3]
+
+**Severity B, rated retroactively 2026-09-22 (day window D-4 ledger sweep) from this entry's own account:** the observed consequence was a run checked against a task it was not looking at (`run-26f0c4702de0`, `run-d7e30a9c650d`) — a wrong divergence verdict on the timeline, i.e. a misleading surface, not yet a wrong state change; filed unrated because it ended on an operator question, since answered.
 
 **Status as filed:** **closed 2026-08-30 — the question was answered in code, and this line was stale for
 four days.** The operator question below ("should a turn ever batch a review and ordinary work?")
@@ -4357,9 +4359,11 @@ both sources, which is what stops it drifting further while the question is open
 review tasks says the product already thinks one review per turn is the limit. One review plus one
 piece of work is the case nothing refuses and nothing reconciles.
 
-## F67 — A divergence response is queued into a conversation that does not exist, so it can never be delivered
+## F67 (A) — A divergence response is queued into a conversation that does not exist, so it can never be delivered
 
 **Status:** fixed b7bb8f1
+
+**Severity A, rated retroactively 2026-09-22 (day window D-4 ledger sweep) from this entry's own account:** every divergence response the product ever queued was silently never delivered (0 of 25 `run_divergences` rows ever produced a run) — a capability the operator relies on doing nothing, with no error.
 
 **Found:** 2026-08-26, driving task 6.4 of `one-answer-to-what-is-happening` live. **The repository's
 dominant failure mode, caught in my own work**: a fix that passes its tests and cannot fire.
@@ -10070,12 +10074,14 @@ fixed that line goes red and says why.
 
 ---
 
-## F131 — Continue on one conversation starts a different conversation's work, and reports success against the one you pressed
+## F131 (A) — Continue on one conversation starts a different conversation's work, and reports success against the one you pressed
 
 **Status:** fixed `5958200` (2026-08-30, `continue-starts-what-it-names`). Verified
 2026-09-09: `hub/hub/api/v1/checkpoints.py:284-314` computes `started` by comparing the scheduler's
 `started_conversation_id` against the conversation in the path, returns that id, and gives the two
 waiting cases distinct reasons. The account below is the pre-fix record and is left as written. [classified 2026-09-09, D-3]
+
+**Severity A, rated retroactively 2026-09-22 (day window D-4 ledger sweep) from this entry's own account:** pressing Continue on one conversation started a different conversation's work and answered success against the one pressed — wrong behaviour the operator acts on directly.
 
 **FIXED 2026-08-30** — `openspec/changes/continue-starts-what-it-names`, three spec-loop rounds
 then implementation. Driven live afterwards: **17/17**,
@@ -12287,7 +12293,7 @@ and `drain_deferred_schedules`.
 ## F151 — running migrations at startup silences the Hub's logging, and uvicorn's, for the life of the process — FIXED
 **Status:** fixed 8e57949 (2026-08-30), verified by regression test and a live restart
 
-**Severity B. Found while trying to read a Hub log, which is the only way this shows up.**
+**Severity: B. Found while trying to read a Hub log, which is the only way this shows up.**
 
 `hub/hub/migrations/env.py:14` runs
 
@@ -28117,7 +28123,7 @@ on the operator, not this finding.
 **Status:** open for the visibility half; **the definition half is fixed `4b59ee0`**
 (`a-task-nothing-will-move-holds-nobody`, driven and archived 2026-09-15). The operator's flow was
 unblocked by hand. Reported by the operator 2026-09-13: *"The loop got stuck because of task
-assignment."*
+assignment."* [checked 2026-09-22, D-4: still a correct open row — `4b59ee0` fixed the definition half only; the visibility half (the reason names nobody) is the unbuilt `openspec/changes/an-unstaffed-review-names-its-holders`, awaiting the operator's approval.]
 
 **Measured on the operator's Hub (LoopEngine, `loop-103ecb8aeb89`).** Fourteen firings, 21:20 to
 22:30 UTC, each recorded `review_unstaffed` for the two finished tasks the rest of the flow waited on
