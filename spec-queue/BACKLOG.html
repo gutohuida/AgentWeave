@@ -230,8 +230,8 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <h1>Backlog</h1>
     </div>
     <div class="stamp">
-      generated <b>2026-09-22 03:50 GMT Summer Time</b><br>
-      branch <b>autonomous/2026-09-21-daily</b> @ <b>bda6130</b> · uncommitted changes present<br>
+      generated <b>2026-09-22 09:00 GMT Summer Time</b><br>
+      branch <b>autonomous/2026-09-21-daily</b> @ <b>58f773f</b> · clean<br>
       regenerate: <b>/backlog</b>
     </div>
   </div>
@@ -254,7 +254,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="fig" data-t="op"><b>8</b><span>you asked for</span></div>
     <div class="fig"><b>16</b><span>have a proposal, so the night can build them</span></div>
     <div class="fig" data-t="op"><b>3</b><span>changes waiting on <b style="display:inline;font-size:inherit">you</b> — tomorrow runs no spec loop</span></div>
-    <div class="fig"><b>4</b><span>unbuilt changes in total (the drain)</span></div>
+    <div class="fig"><b>3</b><span>unbuilt changes in total (the drain)</span></div>
   </div>
 
   <section class="block">
@@ -749,7 +749,7 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
       <div class="panel">
         <h3>Tomorrow · FILL proposes</h3>
         <p class="when">reads spec-queue/DIRECTION.md § 2026-09-22</p>
-        <p style="font-size:13px;margin:0 0 10px">Drain is <b>4</b>, so the day runs <b>no spec loop</b>. A dated section overrides that shape in either direction.</p>
+        <p style="font-size:13px;margin:0 0 10px">Drain is <b>3</b>, so the day runs <b>no spec loop</b>. A dated section overrides that shape in either direction.</p>
         <p class="empty">Read the section itself before composing — it is the only operator channel the day window has.</p>
       </div>
     </div>
@@ -1181,132 +1181,6 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
 <ul>
 <li>Blast radius shares no file with F379&#x27;s change (<code>hub/ui/src/components/</code>) or F377/F378&#x27;s.</li>
 </ul></div></details>
-        </div>
-<div class="chg">
-          <div class="chg-head">
-            <div class="chg-main">
-              <code class="chg-name">a-word-without-a-separator-can-still-leave</code>
-              <span class="chg-badge ok">approved — waiting on a night</span>
-              <p class="chg-facts">2 unticked of 21 · 1 delta spec</p>
-              
-            </div>
-            <div class="chg-links"><a href="../openspec/changes/a-word-without-a-separator-can-still-leave/proposal.md" target="_blank" rel="noopener">proposal.md</a> · <a href="../openspec/changes/a-word-without-a-separator-can-still-leave/design.md" target="_blank" rel="noopener">design.md</a> · <a href="../openspec/changes/a-word-without-a-separator-can-still-leave/tasks.md" target="_blank" rel="noopener">tasks.md</a> · <a href="../openspec/changes/a-word-without-a-separator-can-still-leave/test-guide.md" target="_blank" rel="noopener">test-guide.md</a></div>
-          </div>
-          
-          <details class="chg-read" open><summary>Read the proposal</summary><div class="md-body"><h4>Proposal — a word without a separator can still leave</h4>
-<p><strong>Round 1, 2026-09-21</strong> (interactive, operator-requested); <strong>corrected by R2, 2026-09-21</strong> (design round log, R2-1 to R2-11) <strong>and by R3, 2026-09-21</strong> (R3-1 to R3-9). Finding: <strong>F375 (A)</strong>. <strong>Nothing here is implemented yet.</strong> The three rounds are done; tasks 0.3 and 0.4 (operator answers, and a warning before the edit reaches <code>:8000</code>) remain before any task is built.</p>
-<h5>Why</h5>
-<p>The shell-command judge waves a bare <code>..</code> through as &quot;not a path&quot;, so <code>cp notes.md ..</code> is answered <strong>allow, &quot;inside your workspace&quot;</strong> and the file lands one directory above the workspace. That is the plainest traversal there is, and it needs no quoting, escaping or locale trick. It works on every platform, in both dialects, and for every tool that takes a directory argument.</p>
-<p>The cause is one line. <code>_judge_word</code> (<code>hub/hub/mcp_server.py:1141-1167</code>) applies rule 4 at <code>:1158</code>: a word containing no <code>/</code> (or, on Windows, <code>\</code>) returns <code>None</code> before <code>_where</code> is ever called. Rules 3, 5 and 6, the only ones that could catch a traversal or an expansion, are all gated behind <code>has_separator</code> (<code>:1155</code>). The premise &quot;no separator, so not a path&quot; holds for an ordinary name, because a name without a separator resolves to an entry of the shell&#x27;s current directory. It fails for the words that name <em>another directory by themselves</em>: <code>..</code> is the parent, and <code>~</code> (with <code>~user</code>, <code>~+</code>, <code>~-</code>) is a home or remembered directory. It also fails for a word that carries one of those as an option&#x27;s value in the same word: <code>cp -t..</code>, <code>tar -xvC..</code>, <code>dotnet publish -o:..</code>, and PowerShell&#x27;s <code>-Destination:..</code> and <code>-Destination:~</code> (R2-2, R3-2).</p>
-<p>This session measured today&#x27;s decisions by calling <code>_decide</code> directly, with the workspace a subdirectory of a scratch directory:</p>
-<div class="scroll"><table class="md"><thead><tr><th>Command</th><th>Dialect</th><th>Today</th><th>Where it really lands</th></tr></thead><tbody><tr><td><code>cp notes.md ..</code></td><td>Bash</td><td>allow</td><td>the parent (Git Bash 5.2.37: the file appears there)</td></tr><tr><td><code>Copy-Item notes.md ..</code></td><td>PowerShell</td><td>allow</td><td>the parent (PowerShell 5.1: the file appears there)</td></tr><tr><td><code>cp notes.md &#x27;..&#x27;</code>, <code>cp notes.md .&quot;&quot;.</code></td><td>Bash</td><td>allow</td><td>the parent (the quotes join to <code>..</code>; R2 measured <code>.&quot;&quot;.</code> in Git Bash)</td></tr><tr><td><code>cp --target-directory=.. notes.md</code></td><td>Bash</td><td>allow</td><td>the parent (<code>_words</code> splits at <code>=</code>)</td></tr><tr><td><code>cp -t.. notes.md</code></td><td>Bash</td><td>allow</td><td>the parent (R2, Git Bash 5.2.37: the file appears there)</td></tr><tr><td><code>cp -xt.. notes.md</code>, <code>tar -xvC.. -f a.tar</code></td><td>Bash</td><td>allow</td><td>the parent (R3, Git Bash 5.2.37, GNU tar 1.35: the file appears there)</td></tr><tr><td><code>Copy-Item notes.md -Destination:..</code></td><td>PowerShell</td><td>allow</td><td>the parent (R2, PowerShell 5.1.26100: the file appears there)</td></tr><tr><td><code>Copy-Item notes.md -Destination:~\x.md</code></td><td>PowerShell</td><td><strong>deny</strong>, <code>&#x27;\x.md&#x27;</code> outside (rule 6)</td><td>the home directory (R2: the file appeared in <code>$HOME</code>); <code>-Destination:~</code> alone is allowed</td></tr><tr><td><code>cp notes.md $&#x27;..\x00x&#x27;</code></td><td>Bash</td><td>allow</td><td>the parent (bash ends the argument at the NUL; measured this session: the copy appears in the parent)</td></tr><tr><td><code>ls ..</code>, <code>cd .. &amp;&amp; cat notes.md</code></td><td>Bash</td><td>allow</td><td>the parent</td></tr><tr><td><code>cp notes.md ~</code></td><td>Bash</td><td>allow</td><td>the home directory</td></tr><tr><td><code>Copy-Item notes.md ~</code></td><td>PowerShell</td><td>allow</td><td>the home directory (PowerShell 5.1: the file appears in <code>$HOME</code>)</td></tr><tr><td><code>cp notes.md ../</code></td><td>Bash</td><td><strong>deny</strong>, &quot;&#x27;../&#x27; is outside your workspace&quot;</td><td>the parent</td></tr></tbody></table></div>
-<p>The last row is the one that makes the first rows a defect rather than a design choice. <code>..</code> and <code>../</code> name the same directory, and the judge refuses one and allows the other.</p>
-<p>The archived change <code>a-quote-can-spell-a-slash</code> pinned its row P7 as <strong>allow</strong>, with a comment naming F375 as the owner of the underlying hole (<code>hub/tests/test_permission_approver.py:518-521</code>, archived <code>design.md:221</code>). It explicitly left the real repair to this change.</p>
-<h5>What Changes</h5>
-<ul>
-<li>Rule 4 of <code>_judge_word</code> stops exempting a separator-less word that names another directory by</li>
-</ul>
-<p>itself:</p>
-<ul>
-<ul>
-<li>A word that is exactly <code>..</code>, compared by what precedes its first NUL, is judged as a path, the way</li>
-</ul>
-</ul>
-<p>rule 5 already judges <code>../</code>. It is refused as outside the workspace, with the word quoted.</p>
-<ul>
-<ul>
-<li>A word that is <code>~</code> in a shape the shell substitutes (<code>~</code>, <code>~+</code>, <code>~-</code>, or <code>~</code> followed by a user</li>
-</ul>
-</ul>
-<p>name that begins with a letter or <code>_</code>) is refused as uncheckable, with the same reason rule 3 already gives <code>~/x</code>. It is not refused as &quot;outside&quot;: <code>~</code> can in principle name the workspace. <code>~13</code>, <code>~2x</code> and <code>~30%</code> stand (R3-1, design D3): they are the commonest separator-less <code>~</code> words, as approximate figures in commit messages. A shell substitutes none of them, except a directory-stack entry that a judged <code>pushd</code> put there, or an account whose name begins with a digit.</p>
-<ul>
-<ul>
-<li>The same two checks apply to the value an option carries in the same word (R2-2, R3-2). A</li>
-</ul>
-</ul>
-<p>value joined by a colon (<code>-Destination:..</code>, <code>-o:..</code>, <code>--output:..</code>) is checked for <code>..</code> in both dialects, because the program splits it, and for <code>~</code> in PowerShell only, whose parameters resolve it (<code>-Destination:~</code>). A value glued to a short option or a run of them (<code>-t..</code>, <code>-xvC..</code>) is checked for <code>..</code> only: bash does not expand a <code>~</code> there (measured: <code>cp -t~ notes.md</code> looked for a file literally named <code>~</code>), and PowerShell passes it to a native program unchanged. The existing requirement already demands this once <code>..</code> alone is refused: a word that joins a path to an option &quot;SHALL be judged at least as strictly as the path within it would be if it stood alone&quot; (<code>openspec/specs/agent-run-sandboxing/spec.md:630-632</code>).</p>
-<ul>
-<ul>
-<li>Every other separator-less word is still exempt, unchanged: <code>.</code>, <code>...</code>, <code>notes.md</code>, <code>-la</code>,</li>
-</ul>
-</ul>
-<p><code>git log -1</code>, <code>HEAD~1</code>, <code>a..b</code>, <code>-Destination:sub</code>, <code>~30%</code>, <code>-t~</code>.</p>
-<ul>
-<li>Test rows flip, and new rows pin each case above on both dialects. **Four existing rows change,</li>
-</ul>
-<p>not one** (R2-1, measured by running the judge&#x27;s eight test files with the proposed rule 4 patched in: 4 failed, 380 passed. R3 re-measured over ten files, 453 tests, from a patched copy of the whole package, which also reaches the tests that spawn <code>mcp_server.py</code> as a process: the same four, for R2&#x27;s rule and for R3&#x27;s):</p>
-<ul>
-<ul>
-<li><code>P7</code> (<code>cp notes.md $&#x27;..\x00x&#x27;</code>) flips from allow to deny, as R1 said.</li>
-<li><code>R8</code> (<code>cd .. &amp;&amp; echo hi &gt; stray.txt</code>) and <code>R9</code> (<code>git -C .. status</code>) flip from allow to deny.</li>
-</ul>
-</ul>
-<p>Both were pinned as allow on purpose, as &quot;residual, unchanged&quot; by the archived <code>a-url-is-not-a-path</code> (its <code>design.md:173-174</code> and D9, <code>:552-569</code>). This change supersedes that decision for these two rows, and for D9&#x27;s two PowerShell residuals, <code>Set-Content (Join-Path .. stray.txt) &quot;hi&quot;</code> and <code>[IO.Path]::Combine(&#x27;..&#x27;, &#x27;x&#x27;)</code>, which no row pins and which are now refused too (R3-6).</p>
-<ul>
-<ul>
-<li><code>H10</code> (<code>HUB_URL=.. ; cat $HUB_URL/x</code>) stays refused, but for a different reason: <code>_words</code></li>
-</ul>
-</ul>
-<p>splits the assignment at <code>=</code>, so the <code>..</code> word is refused as outside before the untrusted <code>$HUB_URL/x</code> is reached. H10 is the only row that pins the <code>trusted</code> guard of <code>_read_command</code>, so a companion row with a value that is not <code>..</code> takes over that job.</p>
-<ul>
-<li><strong>Behaviour change an operator will see:</strong> <code>cd ..</code>, <code>ls ..</code>, <code>git -C .. status</code>, <code>pushd ..</code> and</li>
-</ul>
-<p>an out-of-source <code>cd build &amp;&amp; cmake ..</code> are now refused, exactly as <code>cd ../</code> and <code>ls ../</code> already are. <code>cp x ~</code> and <code>ls ~</code> are now refused, exactly as <code>ls ~/</code> already is. A lone quoted <code>~</code> used as a pattern (<code>grep &#x27;~&#x27; notes.md</code>) is also refused, and so is a lone <code>..</code> or <code>~</code> in the prose of a commit message, as <code>../</code> there already is (design D3, Risks).</p>
-<h5>Capabilities</h5>
-<h6>New Capabilities</h6>
-<p>None.</p>
-<h6>Modified Capabilities</h6>
-<ul>
-<li><code>agent-run-sandboxing</code>: adds one requirement. A word with no path separator is still judged when it</li>
-</ul>
-<p>names a directory by itself, or carries one as an option&#x27;s value. The existing requirement &quot;A path in a shell command is judged by where it resolves&quot; (<code>openspec/specs/agent-run-sandboxing/spec.md:595-708</code>) is left unmodified. Nothing in it says a separator-less word is allowed, and its uncheckable clause is scoped to words &quot;that also contain a path separator&quot;, which the new requirement extends rather than contradicts. Its joined-word clause (<code>:630-632</code>) is what makes the option-joined forms part of this change: once <code>..</code> alone is refused, <code>-t..</code> must be judged at least as strictly (R2-2).</p>
-<h5>Non-Goals</h5>
-<p>Each of these is stated so that omission is not read as coverage.</p>
-<ul>
-<li><strong>A bare variable or command substitution</strong> (<code>cp notes.md $HOME</code>,</li>
-</ul>
-<p><code>cp notes.md $(dirname $PWD)</code>). Both measured as allowed today. It is the same shape of hole, but refusing every separator-less word that contains <code>$</code> would refuse <code>echo $x</code>, <code>for f in $list</code> and most ordinary shell, and <code>_decide</code>&#x27;s own docstring already states that &quot;a path built at run time never appears as a word, so this is a boundary, not a sandbox&quot; (<code>mcp_server.py:1448-1449</code>). The same holds for <code>..</code> glued to a variable: R2 measured <code>cp notes.md ..$x</code>, with <code>x</code> unset, landing in the parent, and it stays allowed. Proposed as a separate finding (see design, Open Questions).</p>
-<ul>
-<li><strong>Bash brace expansion</strong> (<code>cp notes.md .{,.}</code>, <code>cp notes.md {.,.}.</code>). R2 measured both landing in</li>
-</ul>
-<p>the parent in Git Bash 5.2.37, because the shell expands them to <code>. ..</code> and <code>.. ..</code>. They are still allowed after this change: <code>_lex</code> does not model brace expansion at all, and <code>_words</code> splits the word at the comma into <code>.</code> pieces. The fix belongs in the lexer, for every rule, not in rule 4. Proposed as a separate finding.</p>
-<ul>
-<li><strong>PowerShell drive-qualified words</strong> (<code>Copy-Item notes.md Z:</code>, <code>Temp:</code> on PowerShell 7). Measured:</li>
-</ul>
-<p>allowed today. The judge never sees <code>Z:</code>, because <code>_WORD_TRIM</code> strips the colon and leaves <code>Z</code> (<code>mcp_server.py:981</code>, <code>_words</code> at <code>:1385-1400</code>). A fix touches word trimming and needs its own dialect and platform rows. Git Bash, measured, writes a file literally named <code>C:</code>, so the fix is PowerShell-only. Proposed as a separate finding.</p>
-<ul>
-<li><strong>A glob that could expand to <code>..</code>.</strong> Measured: Git Bash 5.2.37 has <code>globskipdots</code> on, so <code>.?</code> and</li>
-</ul>
-<p><code>.*</code> never match <code>..</code>. There is no hole on this machine. It is not generalised to older bash.</p>
-<ul>
-<li><strong>The shell&#x27;s current directory.</strong> A <code>cd</code> into a subdirectory followed by <code>..</code> inside the same</li>
-</ul>
-<p>command is still judged against the workspace root, as every relative word already is (<code>_decide</code>&#x27;s docstring). This change does not start tracking <code>cd</code>. So a command that moves the shell out of the workspace without naming a directory still passes: <code>cd</code> with no argument goes home (R2 measured <code>cd; pwd</code> printing <code>/c/Users/huida</code>), and <code>cd -</code> and <code>popd</code> go back to a remembered directory. The change refuses <code>cd ..</code>; it does not close <code>cd</code>.</p>
-<ul>
-<li><strong>The Codex approval path</strong> (<code>codex_appserver.decide_approval</code>). It judges a command by its <code>cwd</code>,</li>
-</ul>
-<p>not by its words, and Codex is undrivable on this machine (memory, 2026-08-29).</p>
-<ul>
-<li><strong>File tools</strong> (<code>Write</code>, <code>Edit</code> and the rest, via <code>_PATH_KEYS</code>). They already call <code>_where</code></li>
-</ul>
-<p>directly, so a <code>file_path</code> of <code>..</code> is judged today.</p>
-<h5>Impact</h5>
-<ul>
-<li><strong>Code:</strong> <code>hub/hub/mcp_server.py</code>, rule 4 of <code>_judge_word</code> and one compiled pattern beside it. No</li>
-</ul>
-<p>change to <code>_lex</code>, <code>_words</code>, <code>_where</code> or <code>_judge_path</code>.</p>
-<ul>
-<li><strong>Tests:</strong> <code>hub/tests/test_permission_approver.py</code>: P7, R8 and R9 flip; H10&#x27;s expected reason</li>
-</ul>
-<p>changes and a companion row H10b is added; new parametrised rows are added.</p>
-<ul>
-<li><strong>Runtime:</strong> the approver runs inside the agent&#x27;s MCP server process. It needs no Hub restart, no</li>
-</ul>
-<p>migration and no UI bundle. <strong>It does reach the operator&#x27;s live <code>:8000</code> instance, and sooner than a commit</strong> (R2-7): the Hub starts each run&#x27;s MCP server as <code>[sys.executable, &lt;checkout&gt;/hub/hub/ mcp_server.py]</code> (<code>hub/hub/api/v1/agent_trigger.py:1094-1095</code>), and <code>:8000</code> runs this checkout. So the new rule governs every <code>:8000</code> run whose MCP server starts after the file changes on disk, committed or not.</p>
-<ul>
-<li><strong>Operator-visible:</strong> more refusals for commands that already leave the workspace (<code>cd ..</code>,</li>
-</ul>
-<p><code>git -C .. status</code>, <code>ls ~</code>, <code>Copy-Item x -Destination:..</code>), for <code>cd build &amp;&amp; cmake ..</code>, for a quoted <code>~</code> pattern, and for a lone <code>..</code> or <code>~</code> in commit-message prose. Each refusal names the word and why. A <code>cd ..</code> an agent used to get away with on <code>:8000</code> is refused from the first run that starts after implementation.</p></div></details>
         </div>
 <div class="chg">
           <div class="chg-head">
@@ -1967,29 +1841,29 @@ footer{margin-top:50px;padding-top:18px;border-top:1px solid var(--rule);font-fa
     <div class="two">
       <div class="panel">
         <h3>STATE-night.json</h3>
-        <p class="when">iteration 10</p>
+        <p class="when">iteration 11</p>
         <p style="font-size:13px;margin:0">branch <code>autonomous/2026-09-21-daily</code><br>stop_at <code>2026-09-22T07:00:00+01:00</code></p>
       </div>
       <div class="panel">
         <h3>STATE-day.json</h3>
-        <p class="when">iteration 8</p>
-        <p style="font-size:13px;margin:0">branch <code>autonomous/2026-09-17-daily</code><br>stop_at <code>2026-09-21T17:00:00+01:00</code></p>
+        <p class="when">iteration 0</p>
+        <p style="font-size:13px;margin:0">branch <code>autonomous/2026-09-21-daily</code><br>stop_at <code>2026-09-22T17:00:00+01:00</code></p>
       </div>
     </div>
   </section>
 
   <script type="application/json" id="backlog-data">
 {
- "generated": "2026-09-22T03:50:35+01:00",
+ "generated": "2026-09-22T09:00:16+01:00",
  "branch": "autonomous/2026-09-21-daily",
- "sha": "bda6130",
+ "sha": "58f773f",
  "open": 215,
  "items": 219,
  "requests": 4,
  "fixed": 167,
  "retired": 12,
  "filed": 406,
- "drain": 4,
+ "drain": 3,
  "awaiting": 3,
  "sev_A": 6,
  "sev_B": 99,
