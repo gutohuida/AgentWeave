@@ -8710,7 +8710,7 @@ and contained no task id.
 
 ## F119 (B) — F31's repair landed in one of three copies of the same regex
 
-**Status:** open on the CLI half. The Hub half landed -- `hub/hub/scheduler.py:57`
+**Status:** fixed (closed 2026-09-22: Hub half fixed as below; CLI half decided by the operator — `doctor` keeps its broad catch-all, DECISIONS `f119-doctor-redaction`). Was: open on the CLI half. The Hub half landed -- `hub/hub/scheduler.py:57`
 `_safe_error_summary` calls `redact_secrets` (verified 2026-09-09). `src/agentweave/diagnostics.py`
 keeps the broad pre-F31 third alternative deliberately, and the question this entry ends on --
 should the CLI's catch-all be narrowed -- has never been put to the operator or answered. [classified 2026-09-09, D-2]
@@ -8748,6 +8748,8 @@ in the first place. Its `sk-` anchor is fixed (F118 applies verbatim), its third
 what `doctor` prints is env and config values rather than the Hub's composed vocabulary, so F31's
 measurement does not transfer, and narrowing a *secret* filter on an unmeasured surface is the
 operator's call. **Open question for the operator: should the CLI's catch-all be narrowed too?**
+
+**Closed 2026-09-22 by operator decision.** Asked directly; the answer was to keep `doctor`'s catch-all broad (`spec-queue/DECISIONS.md` `f119-doctor-redaction`). The CLI's divergence from the Hub's rule is now a decision on the record, not an oversight. No code changed.
 
 ---
 

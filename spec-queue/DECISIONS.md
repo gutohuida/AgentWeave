@@ -700,6 +700,18 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-22 afternoon — F119: `doctor`'s secret filter stays broad; R9-5 reconfirmed
+
+**DECIDED 2026-09-22, by the operator, in an interactive session.**
+
+- DECIDED   f119-doctor-redaction  **The CLI's `doctor` keeps its broad catch-all** (`[A-Za-z0-9_=-]{32,}`,
+  `src/agentweave/diagnostics.py`); it is not narrowed to the Hub's post-F31 rule. `doctor` prints env and
+  config values, where a long unbroken string is far more likely a real key than an identifier. Over-redacting
+  there costs a few blanked words, while under-redacting leaks a credential into a pasted report. F31's
+  measurement was of transcripts and does not transfer. This closes F119, the only question it ended on.
+- DECIDED   unstaffed-r9-5-reconfirmed  **R9-5 "dropped" meant accepted as is**, as recorded above; the
+  operator confirmed it when asked, before tonight's arm. No APPROVALS change.
+
 ### 2026-09-22 — `an-unstaffed-review-names-its-holders` groups 2, 5, 6 approved; R9-5 dropped
 
 **DECIDED 2026-09-22, by the operator, in an interactive session** ("Great, approve.", then "yes
