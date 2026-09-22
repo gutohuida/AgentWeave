@@ -14,8 +14,8 @@ interface QuestionInterruptCardProps {
 
 export function QuestionInterruptCard({ questions, compact = false, onNavigateToQuestions }: QuestionInterruptCardProps) {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
-  // `?answered=false` still returns declined rows: `declined` is its own column, so the operator
-  // closing a question does not make it answered (F386).
+  // `?answered=false` leaves declined rows out since F228; kept for a Hub older than that, where
+  // `declined` being its own column meant closing a question did not make it answered (F386).
   const visible = questions.filter((question) => !question.declined && !dismissed.has(question.id))
   if (visible.length === 0) return null
   // A question someone is waiting on comes first. The route orders oldest first, and a question

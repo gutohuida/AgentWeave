@@ -188,6 +188,28 @@ async def test_a_decline_landing_mid_answer_is_not_overwritten(app, auth_headers
 
 
 @pytest.mark.asyncio
+async def test_a_declined_question_leaves_the_outstanding_list(app, auth_headers):
+    """F228: `?answered=false` is what the Questions page renders as *Unanswered*, with an answer
+    box under every row. A declined question stays on the record, just not on that list."""
+    async with async_session_factory() as session:
+        await _question(session, "q-decline-7", blocking=False)
+        await _question(session, "q-decline-8", blocking=False)
+        await session.commit()
+    declined = await app.post(f"{QUESTIONS}/q-decline-7/decline", headers=auth_headers)
+    assert declined.status_code == 200, declined.text
+
+    outstanding = await app.get(f"{QUESTIONS}?answered=false", headers=auth_headers)
+    answered = await app.get(f"{QUESTIONS}?answered=true", headers=auth_headers)
+    everything = await app.get(QUESTIONS, headers=auth_headers)
+
+    outstanding_ids = {q["id"] for q in outstanding.json()}
+    assert "q-decline-7" not in outstanding_ids
+    assert "q-decline-8" in outstanding_ids
+    assert "q-decline-7" not in {q["id"] for q in answered.json()}
+    assert "q-decline-7" in {q["id"] for q in everything.json()}
+
+
+@pytest.mark.asyncio
 async def test_a_question_in_another_project_is_not_found(app, auth_headers):
     async with async_session_factory() as session:
         session.add(

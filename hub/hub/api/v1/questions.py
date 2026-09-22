@@ -331,6 +331,12 @@ async def list_questions(
     q = select(Question).where(Question.project_id == project_id)
     if answered is not None:
         q = q.where(Question.answered == answered)
+    # `answered=false` is the outstanding list, and a declined question is no longer outstanding
+    # (agent-capability-plane, "An outstanding question can be closed unanswered"). `declined` is its
+    # own column, so filtering on `answered` alone kept it on the Questions page's *Unanswered* list
+    # with an answer box under it, forever (F228). The unfiltered list still returns it.
+    if answered is False:
+        q = q.where(Question.declined == False)  # noqa: E712
     q = q.order_by(Question.created_at).offset(offset).limit(limit)
     result = await session.execute(q)
     rows = list(result.scalars().all())
