@@ -427,6 +427,34 @@ async def pending_notes(db, conversation_id: str) -> Optional[CheckpointNote]:
     )
 
 
+async def consume_note(db, note: CheckpointNote, checkpoint_id: str) -> None:
+    """Mark *note* taken by *checkpoint_id*, and retire the older notes it was chosen over.
+
+    Only the newest unconsumed note feeds a checkpoint. The ones before it described moments this
+    checkpoint now covers, so they are marked with it too (F236): left unconsumed, each resurfaced
+    in a later checkpoint as though it had been written for that one. A note written after
+    *note* stays pending — it may have arrived while this checkpoint was being generated. Does not
+    commit.
+    """
+    note.consumed_by_checkpoint_id = checkpoint_id
+    passed_over = (
+        (
+            await db.execute(
+                select(CheckpointNote).where(
+                    CheckpointNote.conversation_id == note.conversation_id,
+                    CheckpointNote.consumed_by_checkpoint_id.is_(None),
+                    CheckpointNote.id != note.id,
+                    CheckpointNote.created_at <= note.created_at,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for older in passed_over:
+        older.consumed_by_checkpoint_id = checkpoint_id
+
+
 def format_notes(note: CheckpointNote) -> str:
     """The agent's notes as the generator sees them."""
     parts = [f"In flight: {note.intent}"]
@@ -567,7 +595,7 @@ async def generate_checkpoint(
     if note is not None:
         # Marked consumed even when generation failed. The notes described a moment that has now
         # passed; carrying them into a later checkpoint would present stale intent as current.
-        note.consumed_by_checkpoint_id = checkpoint.id
+        await consume_note(db, note, checkpoint.id)
     await db.commit()
 
     if probe and checkpoint.status == "ready":

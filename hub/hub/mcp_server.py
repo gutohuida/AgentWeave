@@ -561,7 +561,9 @@ def submit_checkpoint_notes(
       suspicions — what is believed but unverified, and what would confirm or refute it.
       warnings   — what the next agent should not repeat, assume, or waste time re-deriving.
 
-    Keep it brief; a few hundred words in total is right. These notes are one input among
+    Keep it brief; a few hundred words in total is right. The Hub refuses more than: intent,
+    1500 characters; suspicions and warnings, each a list of at most 8 strings of at most 400
+    characters. Pass the two lists as lists, even for one entry. These notes are one input among
     several, not the checkpoint — the checkpoint is produced whether or not you call this.
     """
     return _hub_request(

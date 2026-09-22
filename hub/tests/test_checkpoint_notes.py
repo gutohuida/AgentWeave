@@ -81,6 +81,36 @@ def test_the_tool_asks_only_for_what_the_transcript_cannot_hold():
     assert "whether or not you call this" in doc
 
 
+def test_the_tool_states_the_caps_the_hub_enforces():
+    """F364: the description said "a few hundred words" and no numbers, and agents learned the
+    caps by being refused. `mcp_server.py` may import nothing from the Hub, so it restates them."""
+    from hub.api.v1.agent_actions import (
+        NOTE_ENTRY_MAX_CHARS,
+        NOTE_INTENT_MAX_CHARS,
+        NOTE_LIST_MAX_ENTRIES,
+    )
+    from hub.mcp_server import submit_checkpoint_notes
+
+    doc = " ".join((submit_checkpoint_notes.__doc__ or "").split())
+    assert f"intent, {NOTE_INTENT_MAX_CHARS} characters" in doc
+    assert f"at most {NOTE_LIST_MAX_ENTRIES} strings" in doc
+    assert f"at most {NOTE_ENTRY_MAX_CHARS} characters" in doc
+
+
+def test_an_overlong_entry_is_refused_by_name_and_overshoot():
+    """F364: "each entry must be at most 400 characters" named neither the entry nor how far
+    over it was, and an agent took two to five calls per note to find out."""
+    from pydantic import ValidationError
+
+    from hub.api.v1.agent_actions import AgentCheckpointNotes
+
+    with pytest.raises(ValidationError) as excinfo:
+        AgentCheckpointNotes(intent="i", suspicions=["fine", "x" * 412])
+
+    message = str(excinfo.value)
+    assert "suspicions[1] is 412 characters, 12 over the 400" in message
+
+
 @pytest.mark.asyncio
 async def test_notes_are_recorded_against_the_runs_conversation(app, auth_headers, monkeypatch):
     async with async_session_factory() as db:
@@ -262,6 +292,52 @@ async def test_notes_are_consumed_once_and_not_reused_by_a_later_checkpoint(app,
     assert "About to run the migration" in captured[0]
     assert "About to run the migration" not in captured[1]
     assert second.id != first.id
+
+
+@pytest.mark.asyncio
+async def test_notes_passed_over_are_retired_with_the_one_taken(app, monkeypatch):
+    """F236: three notes in one span; the checkpoint takes the newest. The two older ones used to
+    stay unconsumed and resurface, one per later checkpoint, as though written for it."""
+    from datetime import datetime, timedelta, timezone
+
+    captured = []
+
+    def fake_run(cmd, **kwargs):
+        captured.append(cmd[-1])
+        return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
+
+    base = datetime.now(timezone.utc) - timedelta(minutes=10)
+    async with async_session_factory() as db:
+        await _conversation_with_run(db)
+        for minute, name in enumerate(["OLDEST", "MIDDLE", "NEWEST"]):
+            await _note(
+                db,
+                id=f"note-{name}",
+                intent=f"{name} intent",
+                created_at=base + timedelta(minutes=minute),
+            )
+        conversation = await get_conversation_by_id(db, "conv-1")
+
+        monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        first = await generate_checkpoint(
+            db, conversation, trigger="operator", cli="claude", probe=False
+        )
+        await _note(db, id="note-LATER", intent="LATER intent")
+        second = await generate_checkpoint(
+            db, conversation, trigger="operator", cli="claude", probe=False
+        )
+        taken = {
+            note.id: note.consumed_by_checkpoint_id
+            for note in (await db.execute(select(CheckpointNote))).scalars()
+        }
+
+    assert "NEWEST intent" in captured[0]
+    assert taken["note-NEWEST"] == taken["note-MIDDLE"] == taken["note-OLDEST"] == first.id
+    # The second checkpoint gets the note written after the first, and nothing stale.
+    assert "LATER intent" in captured[1]
+    assert "MIDDLE intent" not in captured[1] and "OLDEST intent" not in captured[1]
+    assert taken["note-LATER"] == second.id
 
 
 @pytest.mark.asyncio

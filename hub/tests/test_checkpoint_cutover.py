@@ -983,6 +983,70 @@ async def test_an_ordinary_warning_still_dismisses(app, auth_headers):
 
 
 @pytest.mark.asyncio
+async def test_a_warning_that_is_not_showing_cannot_be_dismissed(app, auth_headers):
+    """F398/F233: `dismissed` reads as "offered and declined", so writing it over a conversation
+    that was never warned silenced its first warning for good, in a state no screen shows."""
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        await _conversation(db)
+
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/dismiss-checkpoint-warning",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 409
+    assert "no checkpoint warning to dismiss" in response.json()["detail"]
+    async with async_session_factory() as db:
+        conversation = await get_conversation_by_id(db, "conv-1")
+    assert conversation.checkpoint_warning is None
+
+
+@pytest.mark.asyncio
+async def test_dismissing_twice_is_not_an_error(app, auth_headers):
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/dismiss-checkpoint-warning",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["checkpoint_warning"] == "dismissed"
+
+
+@pytest.mark.asyncio
+async def test_taking_the_checkpoint_answers_a_dismissal_too(app, auth_headers, monkeypatch):
+    """F234: a dismissal declines *this* checkpoint. Once the operator takes one anyway, the
+    conversation must be offered the next one; it used to stay `dismissed` and never be asked
+    again, while a never-dismissed conversation was cleared and offered."""
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout=_claude_stdout(GOOD_BODY), stderr="")
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        conversation = await _conversation(db)
+        conversation.checkpoint_warning = "dismissed"
+        await db.commit()
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    response = await app.post(
+        f"/api/v1/projects/{PROJECT}/conversations/conv-1/checkpoint", headers=auth_headers
+    )
+
+    assert response.status_code == 201, response.text
+    async with async_session_factory() as db:
+        conversation = await get_conversation_by_id(db, "conv-1")
+    assert conversation.checkpoint_warning is None
+
+
+@pytest.mark.asyncio
 async def test_the_backstop_does_not_depend_on_the_configured_threshold(app, monkeypatch):
     """The regression that live testing caught and the unit tests did not.
 

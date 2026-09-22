@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -347,6 +347,13 @@ async def retry_shared_task_integration(
     )
 
 
+# The caps on `submit_checkpoint_notes`. `mcp_server.py` restates them in the tool's description
+# (it may import nothing from the Hub), and `test_checkpoint_notes.py` checks the two agree.
+NOTE_INTENT_MAX_CHARS = 1500
+NOTE_LIST_MAX_ENTRIES = 8
+NOTE_ENTRY_MAX_CHARS = 400
+
+
 class AgentCheckpointNotes(RequestModel):
     """What the agent knows that the record does not.
 
@@ -356,16 +363,24 @@ class AgentCheckpointNotes(RequestModel):
     is exactly the arrangement this change replaces.
     """
 
-    intent: str = Field(max_length=1500)
-    suspicions: List[str] = Field(default_factory=list, max_length=8)
-    warnings: List[str] = Field(default_factory=list, max_length=8)
+    intent: str = Field(max_length=NOTE_INTENT_MAX_CHARS)
+    suspicions: List[str] = Field(default_factory=list, max_length=NOTE_LIST_MAX_ENTRIES)
+    warnings: List[str] = Field(default_factory=list, max_length=NOTE_LIST_MAX_ENTRIES)
 
     @field_validator("suspicions", "warnings")
     @classmethod
-    def cap_entries(cls, value: List[str]) -> List[str]:
-        for entry in value:
-            if len(entry) > 400:
-                raise ValueError("each entry must be at most 400 characters")
+    def cap_entries(cls, value: List[str], info: ValidationInfo) -> List[str]:
+        # Names the entry and how far over it is (F364): "each entry must be at most 400
+        # characters" sent an agent round two to five times per note, and one wrote a script to
+        # count characters before it could get a note through.
+        for index, entry in enumerate(value):
+            if len(entry) > NOTE_ENTRY_MAX_CHARS:
+                raise ValueError(
+                    f"{info.field_name}[{index}] is {len(entry)} characters, "
+                    f"{len(entry) - NOTE_ENTRY_MAX_CHARS} over the {NOTE_ENTRY_MAX_CHARS} each "
+                    f"entry may have; shorten that entry or split it in two (at most "
+                    f"{NOTE_LIST_MAX_ENTRIES} entries)"
+                )
         return value
 
 

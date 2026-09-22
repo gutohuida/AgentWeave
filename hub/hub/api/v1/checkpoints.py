@@ -20,7 +20,7 @@ from ...checkpoint_generation import generate_checkpoint, render_checkpoint
 from ...checkpoints import get_checkpoint_by_id
 from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
-from ...db.models import Checkpoint, Project, Runner, WorkerInvocation
+from ...db.models import Checkpoint, InboundQueueEntry, Project, Runner, WorkerInvocation
 from ...sse import sse_manager
 
 router = APIRouter(tags=["checkpoints"])
@@ -186,8 +186,10 @@ async def take_checkpoint(
             _checkpoint_claims.discard(claim)
     # The warning has been answered by doing the thing it asked about. Leaving it `due` would
     # keep offering a decision the operator has already made — and leaving it `final` would keep
-    # showing a warning that cannot be dismissed, about a checkpoint that now exists.
-    if conversation.checkpoint_warning in ("due", "final"):
+    # showing a warning that cannot be dismissed, about a checkpoint that now exists. `dismissed`
+    # too (F234): it means "declined this checkpoint", and there is now a checkpoint, so the next
+    # crossing must be offered again rather than read as already declined.
+    if conversation.checkpoint_warning in ("due", "final", "dismissed"):
         conversation.checkpoint_warning = None
         await session.commit()
     await sse_manager.broadcast(
@@ -241,6 +243,21 @@ async def dismiss_checkpoint_warning(
                 "the summary will be one nobody wrote."
             ),
         )
+    if conversation.checkpoint_warning == "dismissed":
+        # Already waved away: saying so again changes nothing, and is not an error.
+        return {"conversation_id": conversation_id, "checkpoint_warning": "dismissed"}
+    if conversation.checkpoint_warning != "due":
+        # F398/F233: `dismissed` is read as "already offered and declined", so writing it over a
+        # conversation that was never warned silenced its first warning for good — and nothing
+        # anywhere shows that a conversation is in that state.
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This conversation has no checkpoint warning to dismiss: it has not reached its "
+                "threshold. A dismissal answers a warning that is showing; it cannot be given in "
+                "advance."
+            ),
+        )
     conversation.checkpoint_warning = "dismissed"
     await session.commit()
     await sse_manager.broadcast(
@@ -249,6 +266,33 @@ async def dismiss_checkpoint_warning(
         {"conversation_id": conversation_id, "agent": conversation.agent},
     )
     return {"conversation_id": conversation_id, "checkpoint_warning": "dismissed"}
+
+
+async def _given_up_reason(session: AsyncSession, entry_ids: List[str]) -> str:
+    """What to say about a conversation whose queued input the pass took out of the queue.
+
+    Read fresh: the scheduler wrote those rows in its own session, so this session's copies are
+    the ones from before the pass. The refusal that gave the input up is quoted, since it is the
+    reason the operator needs — it used to be only in the timeline, one row above an answer that
+    said nothing had been queued.
+    """
+    entries = (
+        (
+            await session.execute(
+                select(InboundQueueEntry)
+                .where(InboundQueueEntry.id.in_(entry_ids))
+                .order_by(InboundQueueEntry.sequence)
+                .execution_options(populate_existing=True)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    reasons = [entry.abandoned_reason for entry in entries if entry.abandoned_reason]
+    if reasons:
+        # The screen appends its own full stop (`AgentOutputPanel`), so the quote ends without one.
+        return f"this conversation's input was given up: {reasons[-1].rstrip().rstrip('.')}"
+    return "this conversation's input was taken out of the queue before it could start"
 
 
 @router.post("/conversations/{conversation_id}/continue")
@@ -280,6 +324,13 @@ async def continue_conversation(
     from ...inbound_queue import queued_entries
     from ...turn_scheduler import schedule_agent
 
+    # Asked before the pass as well as after it (F333): the pass can give this conversation's
+    # input up — withdrawn at its attempt limit — and then start another conversation. Read only
+    # afterwards, that input looked like it had never been there.
+    queued_before = [
+        entry.id
+        for entry in await queued_entries(session, project_id, conversation.agent, conversation_id)
+    ]
     result = await schedule_agent(project_id, conversation.agent)
     started_conversation_id = (
         result.response.conversation_id if result.response is not None else None
@@ -301,11 +352,12 @@ async def continue_conversation(
         # let a later-arriving entry overtake an earlier one. Asking here is a question about the
         # answer, not about which turn runs.
         waiting = await queued_entries(session, project_id, conversation.agent, conversation_id)
-        waiting_reason = (
-            "this conversation's input is waiting behind other input"
-            if waiting
-            else "this conversation had nothing queued"
-        )
+        if waiting:
+            waiting_reason = "this conversation's input is waiting behind other input"
+        elif queued_before:
+            waiting_reason = await _given_up_reason(session, queued_before)
+        else:
+            waiting_reason = "this conversation had nothing queued"
     return {
         "agent": conversation.agent,
         "conversation_id": conversation_id,

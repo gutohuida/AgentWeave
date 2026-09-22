@@ -427,6 +427,55 @@ async def test_an_anchor_naming_a_run_that_is_gone_covers_everything_rather_than
     assert [run.id for run in covered] == ["run-1"]
 
 
+async def _checkpoint_after(db, conversation, body):
+    anchor = await latest_checkpoint(db, conversation.id)
+    return await create_checkpoint(
+        db,
+        conversation,
+        trigger="operator",
+        envelope=await compute_envelope(db, conversation, anchor=anchor),
+        body=body,
+        anchor=anchor,
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_checkpoint_over_an_empty_span_keeps_the_boundary_where_it_was(app):
+    """F130: Checkpoint pressed twice with no turn between. The second covers nothing, and the
+    third must still cover only the turn after the first. The empty one used to store NULL,
+    read as "cover everything", and the third re-summarised the conversation from turn one."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        await _run(db, "run-1")
+        first = await _checkpoint_after(db, conversation, "one")
+        empty = await _checkpoint_after(db, conversation, "nothing happened")
+        await _run(db, "run-2")
+        third_anchor = await latest_checkpoint(db, conversation.id)
+        covered = await runs_to_cover(db, conversation.id, third_anchor)
+
+    assert first.covers_through_run_id == "run-1"
+    assert (empty.covers_from_run_id, empty.covers_through_run_id) == (None, "run-1")
+    assert [run.id for run in covered] == ["run-2"]
+
+
+@pytest.mark.asyncio
+async def test_an_empty_checkpoint_written_before_the_fix_is_read_through_its_predecessor(app):
+    """Chains already hold empty checkpoints with a NULL boundary. Reading one must fall back to
+    the nearest predecessor that recorded a boundary, not to the whole conversation."""
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        await _run(db, "run-1")
+        await _checkpoint_after(db, conversation, "one")
+        legacy = await _checkpoint_after(db, conversation, "nothing happened")
+        legacy.covers_through_run_id = None
+        await db.commit()
+        await _run(db, "run-2")
+
+        covered = await runs_to_cover(db, conversation.id, legacy)
+
+    assert [run.id for run in covered] == ["run-2"]
+
+
 # --------------------------------------------------------------------------- generation failing
 
 

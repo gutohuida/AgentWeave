@@ -155,6 +155,27 @@ async def loop_for_conversation(db: AsyncSession, conversation_id: str) -> Optio
     return (await db.execute(select(Loop).where(Loop.job_id == job_id))).scalars().first()
 
 
+async def boundary_of(db, anchor: Optional[Checkpoint]) -> Optional[str]:
+    """The last run the chain ending at *anchor* has covered, or None if it has covered none.
+
+    A checkpoint over an empty span covers nothing new, so its boundary is its predecessor's
+    (F130). It used to store NULL there, which `runs_to_cover` reads as "unknown, cover
+    everything", so one Checkpoint pressed twice made every later checkpoint in that conversation
+    re-summarise it from turn one. New rows carry the boundary forward (`compute_envelope`); this
+    walk is what still reads the chains already written with the NULL.
+    """
+    seen: set = set()
+    current = anchor
+    while current is not None and current.id not in seen:
+        if current.covers_through_run_id is not None:
+            return current.covers_through_run_id
+        seen.add(current.id)
+        if current.previous_checkpoint_id is None:
+            return None
+        current = await get_checkpoint_by_id(db, current.previous_checkpoint_id)
+    return None
+
+
 async def runs_to_cover(db, conversation_id: str, anchor: Optional[Checkpoint]) -> List[Run]:
     """The turns a new checkpoint accounts for: those after the anchor, or all of them.
 
@@ -176,17 +197,18 @@ async def runs_to_cover(db, conversation_id: str, anchor: Optional[Checkpoint]) 
         .scalars()
         .all()
     )
-    if anchor is None or anchor.covers_through_run_id is None:
+    boundary = await boundary_of(db, anchor)
+    if anchor is None or boundary is None:
         return runs
 
     for index, run in enumerate(runs):
-        if run.id == anchor.covers_through_run_id:
+        if run.id == boundary:
             return runs[index + 1 :]
 
     logger.warning(
         "checkpoint %s anchors on run %s, which conversation %s no longer has; covering all turns",
         anchor.id,
-        anchor.covers_through_run_id,
+        boundary,
         conversation_id,
     )
     return runs
@@ -383,7 +405,9 @@ async def compute_envelope(
         # inherits whatever is in force, so a checkpoint that omits it hides the cause.
         runtime_overrides=dict(conversation.runtime_overrides or {}),
         covers_from_run_id=runs[0].id if runs else None,
-        covers_through_run_id=runs[-1].id if runs else None,
+        # An empty span covers nothing new, so the boundary stays where the anchor left it (F130).
+        # NULL here would read as "covered nothing yet" and send the next checkpoint back to turn 1.
+        covers_through_run_id=runs[-1].id if runs else await boundary_of(db, anchor),
     )
 
 

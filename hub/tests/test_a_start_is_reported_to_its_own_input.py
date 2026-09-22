@@ -230,6 +230,48 @@ async def test_nothing_started_names_no_conversation(app, auth_headers, bind_run
 
 
 @pytest.mark.asyncio
+async def test_input_the_pass_gave_up_is_reported_as_given_up_with_its_reason(
+    app, auth_headers, bind_runner
+):
+    """F333: the addressed conversation had input queued; the pass gave it up (withdrawn at its
+    attempt limit, as the author guard does to a refused review) and then started another
+    conversation. The answer read the queue after the pass and said this conversation "had
+    nothing queued", beneath the conversation's own NOT DELIVERED row saying the opposite."""
+    import hub.turn_scheduler as turn_scheduler
+
+    agent = "f333-given-up"
+    await _register(app, auth_headers, bind_runner, agent)
+    conv_h, conv_m = "conv-f333-review", "conv-f333-other"
+    await _open_conversation(agent, conv_h)
+    await _open_conversation(agent, conv_m)
+    entry_h = await _queue(agent, conv_h, "review this task")
+    entry_m = await _queue(agent, conv_m, "the next input")
+    guard = "you completed this task, so you cannot review it"
+    real_schedule_agent = turn_scheduler.schedule_agent
+
+    async def give_up_then_schedule(project_id, scheduled_agent):
+        async with async_session_factory() as db:
+            entry = (
+                await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_h))
+            ).scalar_one()
+            entry.state = "withdrawn"
+            entry.abandoned_reason = guard
+            await db.commit()
+        return await real_schedule_agent(project_id, scheduled_agent)
+
+    with (
+        patch(TRIGGER, _spawning_trigger()),
+        patch.object(turn_scheduler, "schedule_agent", give_up_then_schedule),
+    ):
+        body = await _continue(app, auth_headers, conv_h)
+
+    assert await _state_of(entry_m) == "delivered"
+    assert body["started"] is False
+    assert body["started_conversation_id"] == conv_m
+    assert body["waiting_reason"] == f"this conversation's input was given up: {guard}"
+
+
+@pytest.mark.asyncio
 async def test_a_conversation_that_queued_nothing_is_not_told_it_is_waiting(
     app, auth_headers, bind_runner
 ):

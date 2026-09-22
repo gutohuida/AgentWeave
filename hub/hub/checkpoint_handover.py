@@ -37,7 +37,7 @@ from typing import Optional
 
 from sqlalchemy import select
 
-from .checkpoint_generation import format_notes, generate_checkpoint
+from .checkpoint_generation import consume_note, format_notes, generate_checkpoint
 from .checkpoint_policy import resolve_policy
 from .checkpoints import loop_for_conversation
 from .conversations import get_conversation_by_id
@@ -272,7 +272,7 @@ async def consider_handover(run_id: str) -> Optional[str]:
         # And consumed here for the same reason: `generate_checkpoint` marks only the note its own
         # lookup found, so a note carried across from another conversation would otherwise be
         # delivered and then offered again to the next handover as though it were still pending.
-        note.consumed_by_checkpoint_id = checkpoint.id
+        await consume_note(db, note, checkpoint.id)
         await db.commit()
 
         await sse_manager.broadcast(
