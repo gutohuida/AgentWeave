@@ -692,7 +692,9 @@ class TestResetCommand:
         assert (profile_a_dir / "agentweave.db").exists()
 
 
-def test_first_start_migrations_leave_a_database_that_can_hold_a_conversation(tmp_path):
+def test_first_start_migrations_leave_a_database_that_can_hold_a_conversation(
+    tmp_path, monkeypatch
+):
     """F329, at the CLI's own boundary. Every other test here mocks `_hub_run_migrations`, which
     is how a first `agentweave` start shipped a database no conversation could be written to.
 
@@ -703,6 +705,15 @@ def test_first_start_migrations_leave_a_database_that_can_hold_a_conversation(tm
     import asyncio
 
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    # `hub.config` (imported below, transitively by every other `hub.*` import here) now refuses
+    # to construct `Settings()` with no DATABASE_URL reaching the process
+    # (a-hub-that-was-not-told-which-database-refuses-to-open-one). Set it before the import —
+    # `patch.object(settings, "database_url", ...)` below cannot save a raise that already
+    # happened at import time.
+    monkeypatch.setenv(
+        "DATABASE_URL", f"sqlite+aiosqlite:///{(tmp_path / 'first-start.db').as_posix()}"
+    )
 
     import hub.config
     from agentweave.cli import _hub_run_migrations

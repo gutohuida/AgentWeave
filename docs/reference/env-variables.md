@@ -11,10 +11,10 @@ Set these in the Hub's `.env` file:
 | `AW_BOOTSTRAP_PROJECT_NAME` | `Default Project` | Display name for the legacy bootstrap project |
 | `AW_WORKSPACE_ROOT` | *(empty — native mode)* | Container-visible workspace root. When set (explicit Docker mode), project open/create/relocate accept only directories beneath this root; anything else is refused with a typed `project_workspace_not_mounted` diagnostic. The Hub never guesses host/container path mappings |
 | `AW_WORKSPACE_HOST_ROOT` | `./workspaces` | Docker Compose only: host directory mounted at `AW_WORKSPACE_ROOT` (`/workspaces`) inside the container. Point it at the host directory that holds your projects |
-| `AW_HOST` | `127.0.0.1` | Interface the Hub binds to when started via the `agentweave-hub` console script (native/host mode). Docker always binds `0.0.0.0` inside the container regardless of this variable |
+| `AW_HOST` | `127.0.0.1` | Interface the Hub binds to when started via the `agentweave-hub` console script (native/host mode) — that script needs `DATABASE_URL` set; it does not choose a database and refuses to start without one. Docker always binds `0.0.0.0` inside the container regardless of this variable |
 | `AW_PORT` | `8000` | Port the Hub listens on |
 | `AW_CORS_ORIGINS` | *(empty)* | Comma-separated allowed origins for CORS. Leave empty in production if UI is served from same origin |
-| `DATABASE_URL` | `sqlite+aiosqlite:///data/agentweave.db` | Database URL. SQLite default; PostgreSQL supported |
+| `DATABASE_URL` | none. Bare `agentweave` sets it to `~/.agentweave/hub/data/agentweave.db`; a direct `uvicorn hub.main:app` or the `agentweave-hub` console script refuses to start without it. | Database URL. SQLite default; PostgreSQL supported |
 
 ## CLI Variables
 

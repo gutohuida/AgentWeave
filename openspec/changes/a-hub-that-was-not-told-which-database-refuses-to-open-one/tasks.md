@@ -2,7 +2,7 @@
 
 **Round 1, 2026-09-20. Round 2, 2026-09-20. Round 3, 2026-09-20. Round 4, 2026-09-21. Approved
 2026-09-22 (`spec-queue/APPROVALS.md`, F388, A). Groups 1 and 3 built 2026-09-22 night, one commit
-per the approval note. Group 2 built 2026-09-22 night. Groups 4, 5, 6 remain unbuilt.**
+per the approval note. Groups 2 and 4 built 2026-09-22 night. Groups 5, 6 remain unbuilt.**
 
 **R4 (after the adversarial Opus pass returned DO NOT APPROVE on 2026-09-20) rewrote 2.7, 3.2 and
 4.1, extended 4.5, and added 2.8, 3.7, 4.10 and 4.11.** Existing numbers are unchanged. All four
@@ -265,7 +265,7 @@ longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
 
 ## Group 4 — (d) and the prose that carried the guarantee
 
-- [ ] 4.1 `hub/hub/config.py:10-15`: rewrite `_default_database_url()`'s docstring. The current text
+- [x] 4.1 `hub/hub/config.py:10-15`: rewrite `_default_database_url()`'s docstring. The current text
       says the default is *"Only consulted by callers that skip the CLI"* and *"this default never
       fires there"* — the second clause is false and the first describes the dangerous path as safe.
       Say instead what the function now is: quoted by the refusal, never used as a fallback, and the
@@ -275,7 +275,7 @@ longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
       `DATABASE_URL` through unchanged, and `--profile` computes a different path. An unqualified "the
       path bare `agentweave` resolves to" repeats the defect (d) exists to remove: a docstring stating
       a guarantee the code does not keep.
-- [ ] 4.2 **(R3 guard on every task in this group.)** Nothing rewritten here may assert the working
+- [x] 4.2 **(R3 guard on every task in this group.)** Nothing rewritten here may assert the working
       directory the 2026-09-19 start ran from. The finding does not establish one, and the two
       candidates give different databases (from `hub/`, `hub/.env` resolves to `hub/data/`; elsewhere
       the home default). Describe the *failure mode* — a `DATABASE_URL` that did not reach the
@@ -288,16 +288,16 @@ longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
       strengthen it:** because the Hub would have created the directory, a profile directory that does
       not exist afterwards proves the URL never reached the process at all. Add the date and the
       change name.
-- [ ] 4.3 Same entry: replace *"verify from the server's own startup log — a fresh throwaway file
+- [x] 4.3 Same entry: replace *"verify from the server's own startup log — a fresh throwaway file
       logs the whole `0065→0103` migration chain, an existing database logs only `Application startup
       complete`"* with group 2's line, which states the fact instead of requiring it to be inferred
       from an absence. **Keep the migration-chain tell as a fallback for Hubs older than this change**,
       labelled as such.
-- [ ] 4.4 Same entry: state the recovery as *kill the PID group 2's line printed; failing that,
+- [x] 4.4 Same entry: state the recovery as *kill the PID group 2's line printed; failing that,
       `netstat -ano` for the `LISTENING` PID on the port* — and keep the standing warning that
       `taskkill /IM python.exe` does not match `pythonw.exe`, so the operator's app can be killed by it
       while `Get-Process` shows no `python`.
-- [ ] 4.5 `.claude/reference/hubs.md`: the runbook currently hands an agent a `DATABASE_URL=… py -3.11
+- [x] 4.5 `.claude/reference/hubs.md`: the runbook currently hands an agent a `DATABASE_URL=… py -3.11
       -m uvicorn …` line (`:28`) and nothing that catches the case where the variable does not arrive.
       Add one sentence saying the Hub now refuses rather than falling back, and that the startup line
       names the file — so the procedure is "read the line", not "infer from what is missing".
@@ -320,11 +320,11 @@ longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
       and add what it implies for (b): the detached child's `stdout`/`stderr` are `DEVNULL`
       (`cli.py:1096-1097`), so on `:8000` group 2's line is emitted and **read by no one**. That is a
       known limit of this change, not a defect in it, since F388's launch was a direct one.
-- [ ] 4.6 `CLAUDE.md`, § *The Hubs on this machine*: the prose *"never `agentweave --port 8010`"* and
+- [x] 4.6 `CLAUDE.md`, § *The Hubs on this machine*: the prose *"never `agentweave --port 8010`"* and
       *"confirm which database a running instance serves before trusting it"* now has a mechanism
       behind it. Add at most **one sentence** — this file is re-read on every request of every session
       and its size is a standing constraint.
-- [ ] 4.7 **(rewritten by R2 — R1's version of this task would have broken Docker.)**
+- [x] 4.7 **(rewritten by R2 — R1's version of this task would have broken Docker.)**
       `hub/.env.example:5` ships `DATABASE_URL=sqlite+aiosqlite:///data/agentweave.db`. **Do not make
       it absolute.** That file is the *container's* template and the relative value is correct there:
       `hub/Dockerfile:11` sets `WORKDIR /app`, `hub/docker-compose.yml:23` mounts the `hub-data`
@@ -338,16 +338,16 @@ longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
       and that is the one way launch-directory dependence survives (a). **(R4 review)** This wording
       matches 3.7: a relative value is legitimate for `make dev`, which always runs from `hub/`, so
       the comment warns rather than forbids. Do **not** touch `hub/.env` itself; it is gitignored local state.
-- [ ] 4.8 Do **not** change `hub/docker-compose.yml:34`. Its relative `data/agentweave.db` is
+- [x] 4.8 Do **not** change `hub/docker-compose.yml:34`. Its relative `data/agentweave.db` is
       container-internal and paired with a named volume; it is a told path and it is correct.
-- [ ] 4.10 **(R4)** `hub/tests/test_config.py:1-7`, the **module** docstring. It restates the
+- [x] 4.10 **(R4)** `hub/tests/test_config.py:1-7`, the **module** docstring. It restates the
       guarantee (a) removes: *"a caller that skips the CLI (direct `uvicorn hub.main:app`, or any future
       embedder) lands on the same database regardless of its launch directory."* Task 1.9 fixes a
       different docstring in the same file (`:56-58`), and 4.1 fixes `config.py`, so without this task
       the change deletes the false sentence in one place and leaves a live copy beside the tests that
       now assert its opposite. Rewrite it to say what the file now guards: the refusal, the told
       paths, and the CLI/Hub path seam (1.7).
-- [ ] 4.11 **(R4)** `docs/getting-started/installation.md:52-62`, § *If you've been running the Hub
+- [x] 4.11 **(R4)** `docs/getting-started/installation.md:52-62`, § *If you've been running the Hub
       directly*. **This is user-facing and ships to GitHub Pages.** It tells a reader that for
       `uvicorn hub.main:app` run directly, the directory-relative resolution *"is fixed going
       forward"*, meaning a direct launch lands on the shared home database. After (a), a direct launch
@@ -362,7 +362,7 @@ longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
         with *"none. Bare `agentweave` sets it to `~/.agentweave/hub/data/agentweave.db`; a direct
         `uvicorn hub.main:app` or the `agentweave-hub` console script refuses to start without it."*
       - `:14` describes `agentweave-hub`. Note there that it needs `DATABASE_URL`.
-- [ ] 4.9 **(R2)** `tests/test_hub_commands.py`, the **CLI** suite — not `hub/tests/`. The test
+- [x] 4.9 **(R2)** `tests/test_hub_commands.py`, the **CLI** suite — not `hub/tests/`. The test
       `test_first_start_migrations_leave_a_database_that_can_hold_a_conversation` (`:700-735`) does a
       bare `import hub.config` at `:707` to find the package directory, with no `DATABASE_URL` set.
       Measured under R2's probe: it fails, and its own
@@ -374,6 +374,23 @@ longer applies. `make ui-check`, `agentweave --help`, `agentweave doctor` and
       count: under the probe it was `3 failed, 532 passed, 3 skipped`, of which **two failures are
       pre-existing `test_skill_sync.py` ones unrelated to this change** (confirmed on a clean tree
       2026-09-20). Expect them; do not fix them here, and do not let them hide a third.
+      **Measured 2026-09-22, on top of groups 1-3 (no `test_skill_sync.py` failures present):**
+      `py -3.11 -m pytest tests/test_hub_commands.py::test_first_start_migrations_leave_a_database_that_can_hold_a_conversation
+      -v` → `1 passed`. `py -3.11 -m pytest tests/ -q` → `547 passed, 3 skipped` — the one
+      deferred failure from groups 1-3 is gone and nothing new broke. Mutation-checked: with the
+      added `monkeypatch.setenv("DATABASE_URL", ...)` line stubbed out, the same test fails on
+      `HubNotToldWhichDatabase` raised from the module-level `import hub.config`; restored
+      afterward.
+
+**Group 4 landed 2026-09-22.** All prose/docstring tasks (4.1, 4.2-4.4, 4.5, 4.6, 4.7, 4.10, 4.11)
+and the CLI test fix (4.9) built together. `hub/hub/config.py`, `hub/tests/test_config.py`,
+`.claude/handoffs/DEAD-ENDS.md`, `.claude/reference/hubs.md`, `CLAUDE.md`, `hub/.env.example`,
+`docs/getting-started/installation.md`, `docs/reference/env-variables.md`,
+`tests/test_hub_commands.py`. No `hub/ui/src` file touched (per the change's own no-UI-bundle
+rule). `ruff check src/ hub/ tests/`, `ruff check scripts/ --select E9,F63,F7,F82,F401,F841`,
+`black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, and `mypy src/` all clean.
+`py -3.11 -m pytest hub/tests/test_config.py -v` → `6 passed` (unchanged from groups 1+3 — 4.1/4.10
+only touched docstrings).
 
 ## Group 5 — the spec, and what it costs
 

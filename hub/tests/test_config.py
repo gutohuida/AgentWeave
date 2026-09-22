@@ -4,7 +4,11 @@
 caller that skips the CLI (direct `uvicorn hub.main:app`, or any future embedder) and
 supplies no `DATABASE_URL` — neither in the process environment nor in a `.env` in its
 working directory — must not silently land on a guessed database. `Settings()` raises
-`HubNotToldWhichDatabase` instead.
+`HubNotToldWhichDatabase` instead; a told path (env var or env file) is returned
+unchanged, launch-directory dependence and all. This file no longer guarantees a
+launch-directory-independent database for an untold caller — it guards the refusal
+itself, and (`TestDatabaseUrlDriftAgainstCli`) that the CLI's own path computation and
+`_default_database_url()`, the one the refusal message quotes, cannot drift apart.
 """
 
 from pathlib import Path

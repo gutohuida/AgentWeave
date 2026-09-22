@@ -13,10 +13,13 @@ class HubNotToldWhichDatabase(RuntimeError):  # noqa: N818 - "refused" is the ou
 def _default_database_url() -> str:
     """Same absolute, home-relative path native mode (cli.py's HUB_DIR) already computes.
 
-    Quoted by `_refuse_to_guess_a_database`'s message — bare `agentweave` sets
-    DATABASE_URL to this path before the Hub ever imports this module, so this
-    function is never used as a fallback; it is the CLI's own computation, kept here
-    so the refusal message and `agentweave doctor` cannot drift apart (guarded by
+    Quoted by `_refuse_to_guess_a_database`'s message; never used as a fallback. It is
+    the path bare `agentweave` resolves to **on the default profile, when the
+    environment carries no DATABASE_URL of its own** — `_hub_resolve_database_source`
+    (`src/agentweave/cli.py`) hands a pre-existing DATABASE_URL through unchanged, and
+    `--profile` computes a different path, so this function is not "the" CLI database,
+    only the one CLI computation this module needs to quote. Kept here so the refusal
+    message and `agentweave doctor` cannot drift apart (guarded by
     TestDatabaseUrlDriftAgainstCli).
     """
     path = Path.home() / ".agentweave" / "hub" / "data" / "agentweave.db"

@@ -35,6 +35,8 @@ retired, deliberately: the Hub-owned spec flow shipped 2026-08-12/13 and has bee
   and never `agentweave` from the repo root (its `hub/` shadows the package). This repo is
   registered there as `proj-d85a82bf4216`. Full runbook, paths and traps:
   `.claude/reference/hubs.md` — confirm which database a running instance serves before trusting it.
+  A Hub with no `DATABASE_URL` reaching it now refuses to start rather than guessing, and names the
+  file it opened in its startup log.
 - **`:8000` is the operator's real instance, and it runs this checkout by intent.** Never restart
   it, migrate it, call it, or write to its database; read-only `mode=ro` SQLite reads are fine.
   Its restart runs this checkout's migrations on their real data, and **a committed UI bundle

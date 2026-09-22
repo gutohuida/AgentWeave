@@ -1054,15 +1054,24 @@ Added 2026-09-16 after one of these reached a committed specification.
 
 ## Starting a Hub from source can land on the operator's real database
 
-- **`hub/config.py:16` defaults `DATABASE_URL` to `Path.home() / ".agentweave" / "hub" / "data" /
-  "agentweave.db"` — the operator's live `:8000` database.** There is no guard. Any Hub started
-  from `hub/` whose `DATABASE_URL` fails to reach the process lands on it silently. The 2026-09-19
-  day window hit this: it set the variable, backgrounded `py -3.11 -m uvicorn` with `&`, and the
-  variable did not survive a `kill` + `rm` + restart sequence inside one Bash tool call. Export the
-  variable in the same command as the server, and **verify from the server's own startup log** —
-  a fresh throwaway file logs the whole `0065→0103` migration chain, an existing database logs only
-  `Application startup complete`. That missing migration chain is the first sign you are on the
-  wrong file. *(2026-09-19)*
+- **`hub/config.py:16` used to default `DATABASE_URL` to `Path.home() / ".agentweave" / "hub" /
+  "data" / "agentweave.db"` — the operator's live `:8000` database — with no guard.** Any Hub
+  started from `hub/` whose `DATABASE_URL` failed to reach the process landed on it silently. The
+  2026-09-19 day window hit this: it set the variable, backgrounded `py -3.11 -m uvicorn` with `&`,
+  and the variable did not survive a `kill` + `rm` + restart sequence inside one Bash tool call.
+  **This is what `a-hub-that-was-not-told-which-database-refuses-to-open-one` (2026-09-22) removed
+  — a Hub with no `DATABASE_URL` now refuses to start instead of landing here.** What follows is the
+  failure mode this fix removed, kept because a Hub older than that change (or a caller that does
+  supply a value) can still land in it: export the variable in the same command as the server, and
+  verify from the server's own startup log — since 2026-09-22 the log states the fact directly (the
+  Hub's own line, `hub/hub/main.py`'s `lifespan()`, printed before `init_db` runs: absolute path,
+  pid, whether the file existed before this process opened it). **On a Hub older than that change**,
+  fall back to the weaker tell: a fresh throwaway file logs the whole `0065→0103` migration chain, an
+  existing database logs only `Application startup complete`. Do not reconstruct which working
+  directory the 2026-09-19 start ran from — the finding never established one, and the two
+  candidates (`hub/`'s `.env`, or the home default) name different databases; describe the failure
+  as "a DATABASE_URL that did not reach the process", not a location. *(2026-09-19; corrected
+  2026-09-22, `a-hub-that-was-not-told-which-database-refuses-to-open-one`)*
 - **Verify a claimed corruption before believing it.** That same window reported the file had "only
   18 tables, an empty `alembic_version`, and a schema predating migration 0065". **It does not.**
   Read `mode=ro` the same day: **46 tables, `alembic_version` = `0103`, `integrity_check` = ok, 3
@@ -1080,12 +1089,19 @@ Added 2026-09-16 after one of these reached a committed specification.
   but for a database this session never located (most likely reclaimed or pointed at a location
   this session's tools could not see — not resolved). **The fix that worked:** set the env vars in
   PowerShell (`$env:DATABASE_URL = "..."`) before `Start-Process`, and pre-create the target
-  directory with `New-Item -ItemType Directory -Force` first — `sqlite3`/`aiosqlite` will not create
-  a missing parent directory, so a silent fallback to the default is also what a *correct* URL
-  against a missing directory would look like from a crashed start, making directory-existence the
-  cheap thing to check first. **Kill only the exact PID `netstat -ano` names as `LISTENING` on the
-  target port** — never a blanket `taskkill /IM python.exe`, which is what turned the first
-  occurrence into a real outage. *(2026-09-19, night window, `unrh-drive`)*
+  directory with `New-Item -ItemType Directory -Force` first. **Corrected 2026-09-22
+  (`a-hub-that-was-not-told-which-database-refuses-to-open-one`):** raw `sqlite3`/`aiosqlite` will
+  not create a missing parent directory (`OperationalError: unable to open database file`), but
+  **the Hub itself does** — `engine.py:346-350` calls `os.makedirs(..., exist_ok=True)` before
+  opening. So directory-existence is not just the cheap first check for a crashed start; it is
+  stronger than that, because the Hub would have created the directory itself: a profile directory
+  that does not exist afterward proves the `DATABASE_URL` never reached the process at all, not
+  merely that a launch failed against a missing directory. **To recover: kill the PID group 2's
+  line printed** (`hub/hub/main.py`'s `lifespan()`, since 2026-09-22); failing that (an older Hub,
+  or a launch that died before that line), **kill only the exact PID `netstat -ano` names as
+  `LISTENING` on the target port** — never a blanket `taskkill /IM python.exe`, which does not match
+  `pythonw.exe` and is what turned the first occurrence into a real outage; the operator's app can
+  be killed by it while `Get-Process` shows no `python`. *(2026-09-19, night window, `unrh-drive`)*
 
 ## Telling whether the operator's `:8000` app is running, without touching it
 
