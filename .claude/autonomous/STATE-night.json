@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  5,
+    "iteration":  6,
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "hub-refuses-group6-drive",
-    "next_action":  "Drive group 6 of openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md in the 8090s on a throwaway profile directory, never against :8000/:8010/~/.agentweave/hub/data/. 6.1: from a directory with no .env, DATABASE_URL unset, run `py -3.11 -m uvicorn hub.main:app --port 8093` and confirm it fails to start printing 1.4's refusal message, and that nothing was created at the default database path. 6.2: start the same command with DATABASE_URL naming a new throwaway profile file and confirm the startup line appears, names the absolute path, and says the file did not exist; stop and restart against the same file and confirm it now says it did exist. 6.3: kill it by the PID the line printed and confirm that stops it. 6.4 is the port/profile guardrail (already followed by design, not a separate action). 6.5: write a D-n narrative entry in scripts/drive/FINDINGS.md and set F388's Status to 'fixed <sha>' only after 6.1-6.3 are all observed. Delete the throwaway profile directory after.",
+    "current":  "unstaffed-group2-impl",
+    "next_action":  "Build group 2 of openspec/changes/an-unstaffed-review-names-its-holders/tasks.md (F352 visibility half). APPROVED spec-queue/APPROVALS.md 2026-09-22, groups 2/5/6; group 1 already built. R9-5 dropped -- build the fit as tasks say, apply neither cure (a) nor (b). Build order inside group 2: task 2.14 before task 2.3. Verify with the group's own tests plus ruff/black/mypy over CI's exact paths, mutation-check at least one behavioral assertion live and revert, record measured counts in tasks.md, then commit and push.",
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
@@ -49,11 +49,11 @@
                   },
                   {
                       "id":  "hub-refuses-group6-drive",
-                      "status":  "open",
+                      "status":  "done",
                       "model":  "sonnet",
                       "effort":  "medium",
                       "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: group 6, drive",
-                      "detail":  "Drive it in the 8090s on a throwaway profile, Haiku on every real turn, never :8000/:8010. Set F388 fixed in scripts/drive/FINDINGS.md only after 6.1-6.3 observed. Write both suite counts into tasks.md. Then task 6.4 archive: retire F388 in FINDINGS.md in the same commit."
+                      "detail":  "Driven 2026-09-23 iteration 6, no impl commit yet made (tasks.md + FINDINGS.md only, committed with the state advance). Port 8093, testbed/scratch/group6-drive/, deleted after. 6.1 refusal observed verbatim + default db mtime/size unchanged. 6.2 startup line observed both existed-before states (False then True) across a kill+restart. 6.3 PID kill confirmed via tasklist. F388 set to fixed 85b4b28 in FINDINGS.md as D-5."
                   },
                   {
                       "id":  "unstaffed-group2-impl",
