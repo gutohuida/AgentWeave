@@ -394,11 +394,11 @@ only touched docstrings).
 
 ## Group 5 — the spec, and what it costs
 
-- [ ] 5.1 Apply `specs/app-lifecycle/spec.md`'s `MODIFIED` requirement. **Note what it removes**: the
+- [x] 5.1 Apply `specs/app-lifecycle/spec.md`'s `MODIFIED` requirement. **Note what it removes**: the
       scenario *"The Hub's own database is launch-directory-independent"*, which normatively required
       a no-`DATABASE_URL` `uvicorn hub.main:app` to resolve to the home path. That scenario **is**
       F388. Removing it is the point; saying so out loud is the task.
-- [ ] 5.2 **(rewritten by R2.)** Check that the guarantee the removed scenario existed to protect is
+- [x] 5.2 **(rewritten by R2.)** Check that the guarantee the removed scenario existed to protect is
       still carried. It is, by the new scenario *"The database a launch path names does not depend on
       its working directory"* — the real requirement (no cwd-relative paths) separated from the
       fallback that was doing the work. **R2 narrowed two scenarios that the code falsifies as R1
@@ -428,14 +428,28 @@ only touched docstrings).
       tasks. The clause is now scoped to a file that is *a template intended to be copied*, which is
       `hub/.env.example` (task 4.7) and not the compose file. Check this pairing survives IMPL: if
       4.8 is ever reopened, the scenario moves with it.
-- [ ] 5.3 `openspec validate a-hub-that-was-not-told-which-database-refuses-to-open-one --strict`
+- [x] 5.3 `openspec validate a-hub-that-was-not-told-which-database-refuses-to-open-one --strict`
       passes. **Not evidence of anything but the file's shape** — record it, do not lean on it.
-- [ ] 5.4 Run `py -3.11 -m pytest hub/tests/ -q` in full and **write the count into this file.** Not
+      **Measured 2026-09-23:** `Change 'a-hub-that-was-not-told-which-database-refuses-to-open-one'
+      is valid`.
+- [x] 5.4 Run `py -3.11 -m pytest hub/tests/ -q` in full and **write the count into this file.** Not
       `test_config.py` alone: this change edits `main.py`'s `lifespan()`, which every API test starts.
       F392 was filed on 2026-09-20 for a task ticked on the strength of a run nobody recorded — do not
-      add to it.
-- [ ] 5.5 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/
-      hub/tests/ tests/` over exactly CI's paths.
+      add to it. **Measured 2026-09-23:** `4640 passed, 86 skipped, 267 warnings in 1749.85s (0:29:09)`
+      — exit code 0, no failures. The 267 warnings are pre-existing
+      `PytestUnhandledThreadExceptionWarning`s from `aiosqlite`'s worker thread racing event-loop
+      teardown at interpreter shutdown (the exact failure mode the separate "driver worker is gone"
+      requirement in this same spec file addresses) — unrelated to this change's own diff, present on
+      teardown of unrelated tests, not a new regression.
+- [x] 5.5 `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/
+      hub/tests/ tests/` over exactly CI's paths. **Measured 2026-09-23:** both clean. Also ran
+      `ruff check scripts/ --select E9,F63,F7,F82,F401,F841` and `mypy src/` — both clean.
+
+**Group 5 landed 2026-09-23.** `openspec/specs/app-lifecycle/spec.md`'s `Bare invocation is the only
+entry point` requirement now carries the refusal, the told-database-naming, and the narrowed
+(R2/R3) scenarios in place of the removed `The Hub's own database is launch-directory-independent`
+scenario. `openspec validate --strict` passes. `hub/tests/` full suite: `4640 passed, 86 skipped` —
+no failures. CI's exact lint/format/type commands all clean.
 
 ## Group 6 — drive it, because a passing suite is not proof
 

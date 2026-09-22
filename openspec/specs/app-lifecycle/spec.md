@@ -13,11 +13,36 @@ Running `agentweave` with no subcommand SHALL launch or reuse the one local Agen
 open or register the invocation directory as a project through that runtime, and open the app at
 that project's overview. This SHALL be the only supported way to begin using AgentWeave.
 
-The one local AgentWeave runtime SHALL resolve to the same database and instance state regardless
-of which directory it was launched from, whether started through bare `agentweave` (with or without
-`--docker`/`--local`), a direct `uvicorn hub.main:app` invocation, or `docker compose up` against the
-Hub's compose file. Only the directory-scoped *project* registered against that runtime SHALL vary by
-launch directory.
+Every launch path that chooses a database for itself SHALL resolve to the same database and
+instance state regardless of which directory it was launched from: bare `agentweave` (with or without
+`--docker`/`--local`) and `agentweave --profile <name>` whenever the environment does not already
+name a `DATABASE_URL` (one that does is passed through unchanged and is then the operator's
+instruction), and `docker compose up` against the Hub's compose file. Only the directory-scoped
+*project* registered against that runtime SHALL vary by launch directory.
+
+A direct `uvicorn hub.main:app` invocation, and the `agentweave-hub` console script, choose no
+database of their own. Each SHALL open exactly the
+database it was told to open, by environment variable or by an environment file, and a relative
+value it was told SHALL be resolved against its working directory as written, because that value is
+the operator's instruction and not the runtime's guess.
+
+The runtime SHALL NOT discharge the directory-independence guarantee by guessing on behalf of a
+launch that did not say which database it wants. **A runtime that was not told which database
+to open SHALL refuse to open one**, rather than falling back to the path bare `agentweave` would have
+used. A missing instruction and a deliberate choice of the default path are different states and MUST
+NOT produce the same outcome, because the default path is where an operator's real work lives and a
+process that reaches it by accident migrates and writes to it exactly as one that reached it on
+purpose.
+
+The refusal SHALL name the path it declined to open and SHALL name both supported ways to say what to
+open. It SHALL occur before the runtime opens, creates, or migrates any database file.
+
+A runtime that *was* told which database to open SHALL state the absolute path it resolved and
+whether that file already existed. When the runtime's server process is itself the first thing to
+touch that database, it SHALL state this **before** opening it. That statement SHALL be emitted at a
+level the runtime's default logging configuration actually shows, and SHALL be intelligible on its
+own, so that an unintended attachment is readable at the moment it happens rather than inferred
+afterwards from output that is missing.
 
 #### Scenario: First run
 
@@ -44,12 +69,54 @@ launch directory.
 - **THEN** there is no `init`, `activate`, `quick`, or `start` subcommand distinct from bare
   invocation
 
-#### Scenario: The Hub's own database is launch-directory-independent
+#### Scenario: A runtime that was not told which database to open refuses to open one
 
-- **WHEN** the Hub is started via a direct `uvicorn hub.main:app` invocation with no
-  `DATABASE_URL` set, from two different working directories, on two separate occasions
-- **THEN** both invocations resolve to the same absolute database path under the user's home
-  directory, not a path relative to the working directory either was launched from
+- **WHEN** the Hub is started via a direct `uvicorn hub.main:app` invocation or the `agentweave-hub`
+  console script, from any working directory, with no `DATABASE_URL` in the environment and none supplied by an environment file
+- **THEN** the runtime fails to start, without opening, creating or migrating any database file
+- **AND** the failure names the absolute path it declined to open, names `DATABASE_URL` as the way to
+  say which database to open, and names bare `agentweave` as the way to get that default deliberately
+
+#### Scenario: A told database is named before it is opened
+
+- **WHEN** the Hub is started by a direct `uvicorn hub.main:app` invocation with a database it was
+  told to open, by environment variable or by an environment file
+- **THEN** it states the resolved absolute path and whether that file already existed, before it
+  creates a directory, creates a file, or applies a migration to it
+- **AND** that statement appears in the runtime's output under its own default logging configuration,
+  with no additional flag or configuration required, and names what it is without depending on a
+  logger-name or level prefix being present
+
+#### Scenario: A told database is named on every other launch path too
+
+- **WHEN** the Hub is started through bare `agentweave` or `docker compose up`, both of which apply
+  migrations in a separate step before the server process starts
+- **THEN** the server process still states the resolved absolute path and whether that file already
+  existed
+- **AND** it is not required to do so before that separate migration step, which has already run
+
+#### Scenario: An explicitly named database is opened whatever path it names
+
+- **WHEN** the Hub is started with `DATABASE_URL` naming the same path bare `agentweave` would have
+  resolved to
+- **THEN** it opens that database and does not refuse, because the instruction was given rather than
+  guessed
+
+#### Scenario: The database a launch path names does not depend on its working directory
+
+- **WHEN** a launch path supplies a database path of its own that is resolved on the host — bare
+  `agentweave`, or `agentweave --profile <name>`
+- **THEN** that path is absolute, and two invocations from two different working directories resolve
+  to the same file
+
+#### Scenario: A container's own relative database path is not a host path
+
+- **WHEN** the Hub ships an environment file or compose file whose `DATABASE_URL` is relative, for
+  resolution against a fixed working directory inside a container image
+- **THEN** that value is left relative, because it names a mount point rather than a host location
+- **AND** where that file is a *template intended to be copied* into a working configuration, it
+  states that the value is a container path, so that copying it into a source checkout is
+  recognisably a change that must supply an absolute path instead
 
 #### Scenario: Docker Compose produces the same instance regardless of launch directory
 
