@@ -8649,6 +8649,8 @@ a fix.
 
 **Fixed 2026-09-22, `b8b636d`, without a model, as this entry advised.** `patch_agent` refuses any key outside `_PATCH_AGENT_FIELDS` with a 400 naming it (and listing the valid ones) before touching anything. A half-right body saves nothing, and a configured agent now hears about the field instead of the 409 about its name. The handler's existing hand-raised 400s are unchanged, so the settings UI sees no 400 to 422 shift. `test_patch_agent_refuses_unknown_fields.py`: before the fix, 200, the half-right body partly applied, and 409; after, 400 in all three, plus one body carrying every key the UI sends answering 200. `patch_agent` stays in `NO_CONTRACT_BY_DESIGN`, with its reason rewritten to say the body is untyped but checked. Not driven live.
 
+**CI addendum 2026-09-22:** the test file's agent-creating helper assumed `claude` on PATH, so 3 of its 4 tests went red on CI (`6c96d75` through `5517556`) while passing locally. `2b60326` patches `hub.launchability.shutil.which` as the sibling tests do. Verified with `claude` stripped from PATH locally, and CI is green on `2b60326`. The fix itself was never wrong.
+
 ---
 
 ## F118 (B) — every task id in every recorded transcript reads `ta<redacted>`, because `task-` ends in `sk-`
