@@ -30706,7 +30706,7 @@ is where F392 says a count belongs.
 
 ## F393 (B) -- three runner registries disagree, the two that lie are the ones a reader finds first, and nothing marks them legacy
 
-**Status:** open, partially fixed 4bd966e (2026-09-22 sweep): `launchability.py`'s two registries are marked DEAD; `RUNNER_CONFIGS` is not (see the foot). **Found 2026-09-20** in an interactive session, by being taken in by it: the
+**Status:** fixed f228962 (2026-09-22; the first half was 4bd966e): `launchability.py`'s two registries are marked DEAD; `RUNNER_CONFIGS` is not (see the foot). **Found 2026-09-20** in an interactive session, by being taken in by it: the
 session read `RUNNER_CLI` in `hub/hub/launchability.py`, concluded that five of nine registered
 runners fall to the approver-less `cli` path by construction, and built an architectural argument
 on it — that `resolve_access_path`'s three-questions-one-boolean coupling was actively breaking
@@ -30759,6 +30759,8 @@ started the same afternoon.
 `grep -rn "RUNNER_CLIS" hub/hub/`, and note that only the second set reaches a validator.
 
 **Partially fixed, found by the 2026-09-22 stale-ledger sweep.** `4bd966e` (2026-09-20, the annotation pass this entry mentions) put `DEAD` blocks on `RUNNER_CLI` (`launchability.py:19-28`) and `MCP_INJECTABLE_RUNNERS` (`:220-227`). Each names `RUNNER_CLIS` (`db/models.py:311`) as "the only registry that binds", which answers this entry's "nothing marks them legacy" for those two. **Still open:** `RUNNER_CONFIGS` (`src/agentweave/constants.py:153`) carries no marker, and its comment still says "Used by watchdog" (deleted). It is not dead: the CLI's `doctor` reads it (`diagnostics.py:212, 808`). Its `copilot` entry with a live `mcp_add_cmd` is therefore still the trap this entry predicts for GitHub Copilot support. The cheap close is a comment on `RUNNER_CONFIGS` saying it governs CLI diagnostics only and that the Hub creates runners from `RUNNER_CLIS` alone.
+
+**Fixed 2026-09-22, `f228962`.** `RUNNER_CONFIGS` now opens with a block saying it is not the Hub's runner registry: the Hub never imports `agentweave.constants`, only `RUNNER_CLIS` binds, the CLI's `doctor` is its reader, and the `copilot` entry describes no runner the Hub can make. The false "Used by watchdog" line is gone. All three registries now say which one is authoritative. Deleting or restructuring the extra entries stays with GitHub Copilot support, as this entry decided.
 
 ---
 
