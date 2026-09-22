@@ -21,6 +21,7 @@ from any earlier note: the route total had already moved 187 -> 188 and the MISR
 from __future__ import annotations
 
 import importlib.util
+import shutil
 import warnings
 from pathlib import Path
 from types import ModuleType
@@ -84,9 +85,9 @@ def test_no_new_route_without_a_client() -> None:
 def test_no_new_query_call_site_ignores_its_error() -> None:
     """No call site may join the set that never binds and uses its query's error.
 
-    This is the assertion that catches a *new* offender. The MISREPORT ceiling below cannot:
-    `n11` classifies by hand, so a site added today lands in UNCLASSIFIED and leaves MISREPORT
-    untouched. This count reads no classification at all.
+    This is the count of new offenders. The MISREPORT test below refuses to read its count while
+    any site is unclassified, so a new offender also has to be classified there. This count
+    reads no classification at all.
     """
     n11 = _load("n11_query_error_surface")
     if not (REPO_ROOT / "hub" / "ui" / "src").is_dir():
@@ -105,32 +106,95 @@ def test_no_new_misreporting_surface() -> None:
     if not (REPO_ROOT / "hub" / "ui" / "src").is_dir():
         pytest.skip("hub/ui/src is absent; nothing to measure")
     unhandled = n11.unhandled_sites()
-    stale = n11.stale_classifications(unhandled)
-    assert not stale, (
-        f"{len(stale)} row(s) in n11's CLASSIFIED name no unhandled call site: {stale}. A row "
-        f"whose site was repaired must be deleted. Otherwise the count below falls with nothing "
-        f"reviewed (F396). A row whose hook was renamed must be re-keyed."
-    )
+    _assert_every_row_and_site_is_matched(n11, unhandled)
     live = n11.operator_reachable_misreports(unhandled)
     _ratchet(len(live), MISREPORT_CEILING, "operator-reachable MISREPORT surfaces")
 
 
-def test_the_misreport_count_does_not_move_when_lines_do() -> None:
+def _assert_every_row_and_site_is_matched(n11: ModuleType, unhandled: list[dict]) -> None:
+    """The count below is only a count while every row names a site and every site has a row.
+
+    A stale row is a site repaired or renamed: its row must go, or the count falls with nothing
+    reviewed (F396). An unclassified site is new, or was displaced by a new call of the same hook
+    above it, which takes over its row. Classify it in n11's CLASSIFIED before the count is read.
+    """
+    stale = n11.stale_classifications(unhandled)
+    assert not stale, (
+        f"{len(stale)} row(s) in n11's CLASSIFIED name no unhandled call site: {stale}. A row "
+        f"whose site was repaired must be deleted. A row whose hook was renamed must be re-keyed."
+    )
+    unclassified = [
+        f"{s['file']}:{s['line']} {s['hook']} #{s['occurrence']}"
+        for s in n11.unclassified_sites(unhandled)
+    ]
+    assert not unclassified, (
+        f"{len(unclassified)} unhandled call site(s) have no row in n11's CLASSIFIED: "
+        f"{unclassified}. Classify each one (MISREPORT, SUPPRESSED, BLANK or NAMED). If a new "
+        f"call of the same hook went in above a classified one, the classified site is now the "
+        f"higher occurrence: move its row."
+    )
+
+
+def _n11_over_a_copy(tmp_path: Path, edit) -> ModuleType:  # noqa: ANN001
+    """`n11`, pointed at an edited copy of `hub/ui/src` rather than the tree itself."""
+    n11 = _load("n11_query_error_surface")
+    source = REPO_ROOT / "hub" / "ui" / "src"
+    if not source.is_dir():
+        pytest.skip("hub/ui/src is absent; nothing to measure")
+    copy = tmp_path / "hub" / "ui" / "src"
+    shutil.copytree(source, copy)
+    edit(copy)
+    n11.REPO, n11.UI_SRC, n11.API_DIR = tmp_path, copy, copy / "api"
+    return n11
+
+
+def test_the_misreport_count_does_not_move_when_lines_do(tmp_path: Path) -> None:
     """F396: an edit above a classified site must not change what the ratchet counts.
 
     Keyed by line, every row named a number that any edit higher in the file shifted. The row
     then matched nothing, and the site dropped out of the count while still misreporting. This
-    shifts every site's line and requires the same count.
+    inserts 40 lines at the top of every UI source file, re-scans, and requires the same result.
+    Under the old line keys the same edit took the count from 49 to 0.
     """
-    n11 = _load("n11_query_error_surface")
-    if not (REPO_ROOT / "hub" / "ui" / "src").is_dir():
-        pytest.skip("hub/ui/src is absent; nothing to measure")
+
+    def shift(copy: Path) -> None:
+        for path in copy.rglob("*.ts*"):
+            path.write_bytes(b"\n" * 40 + path.read_bytes())
+
+    n11 = _n11_over_a_copy(tmp_path, shift)
     unhandled = n11.unhandled_sites()
-    shifted = [{**site, "line": site["line"] + 40} for site in unhandled]
-    assert len(n11.operator_reachable_misreports(shifted)) == len(
-        n11.operator_reachable_misreports(unhandled)
+    _assert_every_row_and_site_is_matched(n11, unhandled)
+    here = _load("n11_query_error_surface")
+    assert len(n11.operator_reachable_misreports(unhandled)) == len(
+        here.operator_reachable_misreports(here.unhandled_sites())
     )
-    assert n11.stale_classifications(shifted) == n11.stale_classifications(unhandled)
+
+
+def test_a_new_call_above_a_classified_one_is_refused_not_absorbed(tmp_path: Path) -> None:
+    """A new unhandled `useAgents()` above App.tsx's own takes over that site's row.
+
+    The MISREPORT count and the stale check cannot see it: the row still matches a site, just the
+    wrong one. The displaced site is unclassified, and that is what the ratchet refuses.
+    """
+    anchor = "  const { data: agents = [] } = useAgents()\n"
+
+    def insert_above(copy: Path) -> None:
+        app = copy / "App.tsx"
+        text = app.read_text(encoding="utf-8")
+        assert text.count(anchor) == 1, "App.tsx no longer has the call this test displaces"
+        app.write_text(
+            text.replace(anchor, "  const { data: extra = [] } = useAgents()\n" + anchor),
+            encoding="utf-8",
+            newline="",
+        )
+
+    n11 = _n11_over_a_copy(tmp_path, insert_above)
+    unhandled = n11.unhandled_sites()
+    assert [(s["file"], s["hook"], s["occurrence"]) for s in n11.unclassified_sites(unhandled)] == [
+        ("hub/ui/src/App.tsx", "useAgents", 2)
+    ]
+    with pytest.raises(AssertionError, match="have no row"):
+        _assert_every_row_and_site_is_matched(n11, unhandled)
 
 
 def test_a_repaired_site_leaves_its_row_stale_rather_than_uncounted() -> None:

@@ -436,6 +436,16 @@ def stale_classifications(unhandled: list[dict]) -> list[tuple[str, str, int]]:
     return sorted(key for key in RENDERS if key not in live)
 
 
+def unclassified_sites(unhandled: list[dict]) -> list[dict]:
+    """Unhandled sites no row names. That is a new site, or one displaced by a new call above it.
+
+    The second case is why this is checked and not only printed. A new unhandled call of a hook,
+    inserted above a classified call of the same hook in the same file, takes over the old site's
+    `occurrence` and so its row. The old site then shows up here, not as a stale row.
+    """
+    return [s for s in unhandled if site_key(s) not in RENDERS]
+
+
 def main() -> int:
     decls = declarations()
     bodies = hook_bodies()
