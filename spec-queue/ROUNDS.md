@@ -106,6 +106,16 @@ it. **Next: Round 2.**
 
 ## Round 2 — decided, unbuilt (~1 day)
 
+**Status:** done 2026-09-22 (commits `cd2157a`..HEAD, Opus-reviewed). Six of seven built; **F349**
+was never this round's to build — its remainder is a design question in D13, and it is listed here
+only so the round is complete. **F347** refuses an unborn `HEAD` with the repair rather than git's
+plumbing error, on both the agent and the task checkout. **F202** made `GET /tasks` answer
+`{tasks, total, has_more}`, gave `list_tasks` paging, and stopped the Overview counting the page
+instead of the ledger. **F203** put a task's transition history on both planes, in an MCP tool, and
+on the operator's own screen. **F209** keeps an accept's reason as a reject already did. **F212**
+projects `unserved` as objects carrying `document_id`. **F201** moved R5's block rule behind the
+transition machine, so an illegal block is refused as illegal. **Next: Round 3.**
+
 The operator has already answered these, so none needs a question or a spec.
 
 | Finding | Sev | Verdict | Fix |
