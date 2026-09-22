@@ -45,17 +45,21 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
 depends on a CI that tells the truth. Round 5 waits for tonight's F352 build. Within a round, work
 B before C before D.
 
+Counts place each finding in the **first** round that names it (later mentions are
+cross-references). They are the same numbers `ROUNDS.html` shows. **Track progress there:**
+`py -3.11 scripts/rounds_page.py` regenerates it from this file and `FINDINGS.md`.
+
 | Round | What | Findings | Size | Needs |
 |---|---|---|---|---|
 | 0 | Ledger hygiene and harness one-liners | 11 | ~1 h | nothing |
 | 1 | Make CI tell the truth | 4 | ~1 day | nothing |
 | 2 | Decided, unbuilt | 7 | ~1 day | nothing (verdicts exist) |
-| 3 | Hub routes that act wrongly (B-led) | 30 | ~2–3 days | nothing |
-| 4 | Hub routes that answer wrongly (C/D sweep) | 27 | ~2 days | nothing |
-| UI-1 | One bundle: controls that lie or do nothing | 21 | ~2 days | ui-bundle, browser check |
-| 5 | Scheduler residuals, after F352 lands | 5 | ~1 day | tonight's F352 build verified |
-| D | Operator decisions (13 questions) | ~60 | ~2 DECIDE sessions | operator |
-| S1–S12 | Spec tracks, from 2026-09-28 | ~30 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
+| 3 | Hub routes that act wrongly (B-led) | 28 | ~2–3 days | nothing |
+| 4 | Hub routes that answer wrongly (C/D sweep) | 28 | ~2 days | nothing |
+| UI-1 | One bundle: controls that lie or do nothing | 20 | ~2 days | ui-bundle, browser check |
+| 5 | Scheduler residuals, after F352 lands | 4 | ~1 day | tonight's F352 build verified |
+| D | Operator decisions (13 questions) | 56 | ~2 DECIDE sessions | operator |
+| S1–S12 | Spec tracks, from 2026-09-28 | 33 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
 
 ---
 
