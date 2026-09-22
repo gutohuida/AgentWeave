@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T17:00:00+01:00",
-    "iteration": 0,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d1-drive",
-    "next_action": "D-1: scoped drive of the F375 fix (archived a-word-without-a-separator-can-still-leave). Use the e2e-loop skill against a fresh drive Hub (profiles/drive0922/, free port, Haiku for every real agent turn). Confirm the new refusal rules (bare .., colon-joined, glued short-option, leading ~) actually fire in a live agent turn and that ordinary paths are not blocked. Append findings to scripts/drive/FINDINGS.md with Status: open and a repro.",
+    "current": "d3-repair-impl",
+    "next_action": "D-3: pick one open FINDINGS.md item meeting day-window.md D-6's three conditions (no openspec requirement touched, no migration/API/schema change, existing finding+repro with a fix smaller than the argument for it). Fix it, drive it before closing, run CI's lint set, mutation-check any added test, set Status: fixed <sha>. If it turns out to need a spec, stop and queue it for tomorrow's spec loop instead.",
     "queue": [
         {
             "id": "compose",
@@ -23,7 +23,7 @@
         },
         {
             "id": "d1-drive",
-            "status": "open",
+            "status": "done",
             "title": "Scoped drive of last night's F375 fix",
             "detail": "e2e-loop skill, scoped to the archived change a-word-without-a-separator-can-still-leave. Fresh profiles/drive0922/ Hub, free port via netstat check, Haiku for every real agent turn, never proj-5e960453/proj-18e5d4e0. Drive the new refusal rules end to end; findings to scripts/drive/FINDINGS.md with Status: open."
         },

@@ -29198,6 +29198,29 @@ root — outside, on every platform, with no escape, no quoting, and no locale d
 `cat >>`, and any other tool that takes a bare `..` as a path argument have the identical hole,
 since they all route through the same `_judge_word`.
 
+**Confirmed live 2026-09-22**, through the real `approve_tool_call` pipeline rather than the
+unit suite or a standalone shell probe: fresh Hub on port 8011, database
+`~/.agentweave/hub/profiles/drive0922/agentweave.db`, project `proj-7a2c8bbaaa50`, agent
+`F375Agent` bound to `claude/claude-haiku-4-5-20251001`, `permission_mode: workspace` (the
+posture that routes through `_decide`, not the operator). Two real turns
+(`run-1c656060c523`, `run-bff134d520df`) issued the Bash tool with the four attack shapes and two
+false-positive controls; the transcript shows each `tool_result` and the agent's own read of it:
+
+- `cp notes.md ..` (bare `..`) → `tool failed`, *"Denied: '..' is outside your workspace."*
+- `cp notes.md ~` (leading `~`) → `tool failed`, *"Denied: '~' contains a variable, '~' or a
+  command substitution ... cannot be checked ..."*
+- `cp -t.. notes.md` (glued short-option) → `tool failed`, *"Denied: '-t..' is outside your
+  workspace."*
+- `dotnet publish -o:..` (colon-joined option value) → `tool failed`, *"Denied: '-o:..' is
+  outside your workspace."*
+- False-positive controls, all `tool completed` with no denial: `mkdir -p sub && cp notes.md
+  sub/copy.md`, `cp notes.md ./local-copy.md`, `cp -t sub notes.md`.
+
+All seven land exactly as `a-word-without-a-separator-can-still-leave`'s tasks.md claims. Project
+cleaned via `e2e.py clean`; the drive Hub process was stopped afterward (no job left enabled, no
+credential left minted). This closes the "driven, not merely unit-tested, through the live agent
+tool-call path" gap the fix's own record noted it hadn't covered.
+
 **Why this was not caught by four rounds of `a-quote-can-spell-a-slash` review.** That change's
 whole argument is about what an *escape sequence* can decode to; a literal, unescaped `..` with
 no separator character was never a form any of its test rows constructed, because the change's
