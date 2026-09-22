@@ -12,8 +12,8 @@
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "unstaffed-group2-impl",
-    "next_action":  "Build group 2 of openspec/changes/an-unstaffed-review-names-its-holders/tasks.md (F352 visibility half). APPROVED spec-queue/APPROVALS.md 2026-09-22, groups 2/5/6; group 1 already built. R9-5 dropped -- build the fit as tasks say, apply neither cure (a) nor (b). Build order inside group 2: task 2.14 before task 2.3. Verify with the group's own tests plus ruff/black/mypy over CI's exact paths, mutation-check at least one behavioral assertion live and revert, record measured counts in tasks.md, then commit and push.",
+    "current":  "unstaffed-group2-task2.1to2.4",
+    "next_action":  "Build tasks 2.1-2.4 of openspec/changes/an-unstaffed-review-names-its-holders/tasks.md -- the rung-3 rebuild (design D2/D3), building FROM the R8 block inside each task (2.1's exclude:Mapping, 2.2's three-layer mapping in run_divergence.py, 2.3's exact clause precedence/wording/join per the R8 block, 2.4's 500-char bound). Update every resolve_reviewer call site the R8/R9 grep counts name (test_reviewer_ladder.py 13, test_a_flow_names_what_it_cannot_staff.py 2, test_a_held_agent_is_busy.py 3, test_a_task_nothing_will_move_holds_nobody.py 1, scheduler.py decide_firing, run_divergence.py's _answer_failed_review) -- re-verify the count by grep first, per R6's own warning that this list has been wrong at every round. Write at least one test asserting the joined rung-3 string with == against a literal, for both completed and under_review. Run hub/tests/test_a_task_nothing_will_move_holds_nobody.py before and after (6.0's own guard). Verify with the group's own tests plus ruff/black/mypy over CI's exact paths, mutation-check at least one behavioral assertion live and revert, record measured results in tasks.md, then commit and push.",
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
@@ -56,12 +56,36 @@
                       "detail":  "Driven 2026-09-23 iteration 6, no impl commit yet made (tasks.md + FINDINGS.md only, committed with the state advance). Port 8093, testbed/scratch/group6-drive/, deleted after. 6.1 refusal observed verbatim + default db mtime/size unchanged. 6.2 startup line observed both existed-before states (False then True) across a kill+restart. 6.3 PID kill confirmed via tasklist. F388 set to fixed 85b4b28 in FINDINGS.md as D-5."
                   },
                   {
-                      "id":  "unstaffed-group2-impl",
+                      "id":  "unstaffed-group2-task2.14",
+                      "status":  "done",
+                      "model":  "sonnet",
+                      "effort":  "medium",
+                      "title":  "an-unstaffed-review-names-its-holders: group 2, task 2.14 (must build before 2.3)",
+                      "detail":  "Built 2026-09-23 iteration 7. `evaluate_run_end` (run_divergence.py) now returns None for a review run whose task moved off completed/under_review before the run ended, screened inside the review branch before _answer_failed_review. Test test_a_review_run_ending_after_its_task_left_review_restaffs_nobody added to test_review_divergence.py (case 1 only -- case 2, the AssertionError from own_review_remedy, needs 2.3's rung-3 rewrite to exist first and is noted in tasks.md as deferred to that task). Mutation-checked live and reverted. Full relevant suite (test_review_divergence/test_run_divergence/test_a_task_nothing_will_move_holds_nobody/test_reviewer_ladder): 77 passed. ruff/black/mypy over CI's exact paths clean. NOTE: group 2's single queue item from the compose iteration was split here into 2.14 / 2.1-2.4 / 2.6-2.11 / 2.15-2.18+6.0 -- the original item was sized for one compose pass, not one build pass; each split piece matches the size other groups in this same queue have taken."
+                  },
+                  {
+                      "id":  "unstaffed-group2-task2.1to2.4",
                       "status":  "open",
                       "model":  "sonnet",
                       "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2 (F352 visibility half)",
-                      "detail":  "APPROVED spec-queue/APPROVALS.md 2026-09-22, groups 2/5/6; group 1 already built. R9-5 dropped -- build the fit as tasks say, apply neither cure (a) nor (b). Build order inside group 2: 2.14 before 2.3."
+                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.1-2.4 (rung-3 rebuild)",
+                      "detail":  "The exclude:Mapping signature, the three-layer mapping in run_divergence.py, the R8 clause precedence/wording/join for rung 3, and the 500-char bound with its tail. Build from each task's own R8 block; the bullets below each block are superseded reasoning, not the spec. Update every resolve_reviewer call site (R8/R9 grep count, re-verified at build time)."
+                  },
+                  {
+                      "id":  "unstaffed-group2-task2.6to2.11",
+                      "status":  "open",
+                      "model":  "sonnet",
+                      "effort":  "high",
+                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.6-2.11 (rung-3 test coverage)",
+                      "detail":  "Depends on 2.1-2.4 landing first. Build each from its own R8 (or, where none, R6/R3) block: 2.6 LoopEngine-shaped firing test, 2.7 divergence restaff both branches, 2.8 under_review remedy, 2.9/2.9b the 500-char fit and its fallback, 2.10 the rewritten _stall_run_to_increment test, 2.11 F367 route-level regression cover."
+                  },
+                  {
+                      "id":  "unstaffed-group2-task2.15to2.18-and-6.0",
+                      "status":  "open",
+                      "model":  "sonnet",
+                      "effort":  "high",
+                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.15-2.18 plus the 6.0 regression guard",
+                      "detail":  "2.15 held-vs-booked clause precedence, 2.16 rebase the three shipped test_a_held_agent_is_busy.py assertions (exact equality, not substrings), 2.17 no 'pause'/archive-frees-an-agent claim plus the conditional REJECT sentence, 2.18 the empty-roster literal. Then run 6.0's regression guard (test_a_task_nothing_will_move_holds_nobody.py) once more to confirm group 2 as a whole did not revert group 1's projection. This closes group 2; group 5 (UI) and group 6 (verify+drive) remain queued after it."
                   },
                   {
                       "id":  "unstaffed-group5-impl",
