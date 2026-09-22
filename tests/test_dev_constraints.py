@@ -28,6 +28,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CONSTRAINTS = REPO_ROOT / "constraints-dev.txt"
 CI = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+DRIFT = REPO_ROOT / ".github" / "workflows" / "upstream-drift.yml"
 MAKEFILE = REPO_ROOT / "Makefile"
 CLAUDE_MD = REPO_ROOT / "CLAUDE.md"
 
@@ -131,3 +132,41 @@ class TestEverythingThatBuildsATestEnvironmentInstallsThroughIt:
         assert installs, "Development Setup documents no editable install"
         for line in installs:
             assert "-c constraints-dev.txt" in line, line
+
+
+class TestTheDriftAlarmTheConstraintsSilenced:
+    """F308: pinning CI's resolution bought agreement by spending the drift alarm.
+
+    Every job above installs through the constraints file, so no test job resolves the loose
+    range `pyproject.toml` still advertises. The 2026-09-09 starlette break surfaced *because*
+    CI resolved fresh. `upstream-drift.yml` is what resolves fresh now -- weekly, and named
+    something other than `CI` so the merge gate (`.claude/loops/day-window.md`) never waits on
+    it. These assertions exist because the obvious "fix" to that workflow is to add `-c`, which
+    would delete the alarm again and leave a green file behind looking like protection.
+    """
+
+    def test_it_exists_and_runs_on_a_schedule(self):
+        assert DRIFT.exists(), f"{DRIFT.name} is the replacement F308 asked for; it is missing"
+        text = DRIFT.read_text(encoding="utf-8")
+        assert "schedule:" in text and "cron:" in text, "an alarm nobody triggers is not an alarm"
+
+    def test_it_installs_without_the_constraints_file(self):
+        installs = _editable_installs(DRIFT.read_text(encoding="utf-8"))
+        assert installs, "it must install this checkout, or it measures nothing"
+        for line in installs:
+            assert "constraints-dev.txt" not in line, (
+                f"{line.strip()!r} constrains the one job that exists to resolve fresh. "
+                f"That is F308's alarm, not a missing `-c`."
+            )
+
+    def test_it_runs_the_suites_rather_than_only_importing(self):
+        # An install/import check is what `hub-image.yml` already gives, and F308 measured that
+        # as catching nothing in the class the starlette defect belongs to.
+        text = DRIFT.read_text(encoding="utf-8")
+        assert "pytest tests/ -q --timeout" in text and text.count("pytest tests/") >= 2
+
+    def test_it_is_not_named_ci_so_the_merge_gate_ignores_it(self):
+        # The gate requires a success for the workflow named `CI` at HEAD's sha. A second
+        # workflow called `CI` would make a weekly upstream break block every merge.
+        name = re.search(r"^name:\s*(.+)$", DRIFT.read_text(encoding="utf-8"), re.M)
+        assert name and name.group(1).strip().lower() != "ci", name
