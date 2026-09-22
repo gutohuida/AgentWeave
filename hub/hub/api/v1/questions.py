@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace
@@ -24,6 +24,15 @@ from ...sse import sse_manager
 from ...utils import persist_event, short_id
 
 router = APIRouter(prefix="/questions", tags=["questions"])
+
+_ANSWERED_DETAIL = (
+    "This question has already been answered. Declining it would discard a decision "
+    "that was already made."
+)
+_DECLINED_DETAIL = (
+    "This question was declined, so its agent was told no answer is coming and to decide for "
+    "itself. An answer now would contradict that. Send the agent a message instead."
+)
 
 
 async def _asking_run_has_ended(session: AsyncSession, question: Question) -> bool:
@@ -401,6 +410,12 @@ async def answer_question(
     if question is None or question.project_id != project_id:
         raise HTTPException(status_code=404, detail="Question not found")
 
+    # F227: the mirror of `decline_question`'s refusal of an answered question. Answering a declined
+    # one used to succeed, leaving a row both answered and declined, and then queued the answer and
+    # spent a turn on it — for an agent `ask_user` had already told to decide for itself.
+    if question.declined:
+        raise HTTPException(status_code=409, detail=_DECLINED_DETAIL)
+
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -408,10 +423,23 @@ async def answer_question(
 
     from_agent = question.from_agent
 
-    question.answer = body.answer
-    question.answer_labels = list(body.labels or [])
-    question.answered = True
-    question.answered_at = datetime.now(timezone.utc)
+    # Claimed with a conditional UPDATE rather than set on the loaded row: the resolve above awaits,
+    # and a decline committed in that gap would otherwise be overwritten into answered-and-declined.
+    claimed = await session.execute(
+        update(Question)
+        .where(Question.id == question_id, Question.declined == False)  # noqa: E712
+        .values(
+            answer=body.answer,
+            answer_labels=list(body.labels or []),
+            answered=True,
+            answered_at=datetime.now(timezone.utc),
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount == 0:
+        await session.rollback()
+        raise HTTPException(status_code=409, detail=_DECLINED_DETAIL)
+    await session.refresh(question)
 
     # Operator answers are typed depth-zero queue entries, not magic "user"
     # messages or inbox-poll triggers. They resume autonomous chains in the same
@@ -505,18 +533,22 @@ async def decline_question(
         raise HTTPException(status_code=404, detail="Question not found")
 
     if question.answered:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "This question has already been answered. Declining it would discard a decision "
-                "that was already made."
-            ),
-        )
+        raise HTTPException(status_code=409, detail=_ANSWERED_DETAIL)
 
-    # Idempotent: declining twice is the state the caller asked for, not a conflict.
+    # Idempotent: declining twice is the state the caller asked for, not a conflict. Claimed
+    # conditionally, like `answer_question`, so an answer committed since the check above is not
+    # joined by a decline (F227).
     if not question.declined:
-        question.declined = True
-        question.declined_at = datetime.now(timezone.utc)
+        claimed = await session.execute(
+            update(Question)
+            .where(Question.id == question_id, Question.answered == False)  # noqa: E712
+            .values(declined=True, declined_at=datetime.now(timezone.utc))
+            .execution_options(synchronize_session=False)
+        )
+        await session.refresh(question)
+        if claimed.rowcount == 0 and question.answered:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail=_ANSWERED_DETAIL)
 
     # Same function the answer path uses (design D3): the operator has said no answer is coming, so
     # a task held waiting on this question is no longer waiting on anyone.

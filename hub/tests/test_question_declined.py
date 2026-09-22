@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import select
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Question, Run, RunDivergence, Task
+from hub.db.models import InboundQueueEntry, Question, Run, RunDivergence, Task
 from hub.run_divergence import evaluate_run_end
 from hub.run_task_binding import bind_run_to_task
 from hub.task_transitions import STATUS_BLOCKED
@@ -124,6 +124,67 @@ async def test_declining_twice_is_the_state_the_caller_asked_for(app, auth_heade
     assert first.status_code == 200
     assert second.status_code == 200, second.text
     assert second.json()["declined"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_declined_question_cannot_be_answered(app, auth_headers):
+    """F227: the mirror of the refusal above. Answering after a decline used to answer 200, leave the
+    row answered *and* declined, and queue the answer for a turn the agent had been told would not
+    come."""
+    async with async_session_factory() as session:
+        await _question(session, "q-decline-5", blocking=False)
+        await session.commit()
+
+    declined = await app.post(f"{QUESTIONS}/q-decline-5/decline", headers=auth_headers)
+    assert declined.status_code == 200, declined.text
+    answered = await app.patch(
+        f"{QUESTIONS}/q-decline-5", json={"answer": "right"}, headers=auth_headers
+    )
+    assert answered.status_code == 409, answered.text
+    assert "declined" in answered.json()["detail"]
+
+    async with async_session_factory() as session:
+        row = await session.get(Question, "q-decline-5")
+        assert row.declined is True
+        assert row.answered is False
+        assert row.answer is None
+        queued = await session.execute(
+            select(InboundQueueEntry).where(
+                InboundQueueEntry.project_id == "proj-test", InboundQueueEntry.agent == "worker"
+            )
+        )
+        assert queued.scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_a_decline_landing_mid_answer_is_not_overwritten(app, auth_headers, monkeypatch):
+    """F227's second door: the answer route awaits the workspace between reading the question and
+    writing it, so a decline committed in that gap must still win."""
+    from hub import project_workspace
+
+    async with async_session_factory() as session:
+        await _question(session, "q-decline-6", blocking=False)
+        await session.commit()
+
+    real_resolve = project_workspace.resolve_project_workspace
+
+    async def decline_meanwhile(session, project_id):
+        async with async_session_factory() as other:
+            row = await other.get(Question, "q-decline-6")
+            row.declined = True
+            await other.commit()
+        return await real_resolve(session, project_id)
+
+    monkeypatch.setattr(project_workspace, "resolve_project_workspace", decline_meanwhile)
+    answered = await app.patch(
+        f"{QUESTIONS}/q-decline-6", json={"answer": "right"}, headers=auth_headers
+    )
+    assert answered.status_code == 409, answered.text
+
+    async with async_session_factory() as session:
+        row = await session.get(Question, "q-decline-6")
+        assert row.declined is True
+        assert row.answered is False
 
 
 @pytest.mark.asyncio
