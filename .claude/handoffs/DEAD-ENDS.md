@@ -1378,6 +1378,34 @@ $//'` after. *(2026-09-21)*
   appeared 3 times, so `s.count(old) == 1` failed. Anchor on the `## Fnnn` heading and edit the
   line after it. *(2026-09-22)*
 
+- **`await task` on an already-finished task returns without yielding to the event loop.** A
+  `while some_set: for t in list(some_set): await t` loop spins forever when a finished task is
+  still in the set because its `set.discard` done-callback is queued behind the waiter. That was F394's
+  six-hour CI hangs (fixed `f9e6dee`, shared helper `hub/tests/_background_runs.py`). **Tell a spin from
+  a wait by the thread-dump shape:** a waiting coroutine leaves the main thread in the selector with no
+  test frames; a spinning one shows `_run_once -> handle._run -> <test frame> -> await task`. Use
+  `asyncio.gather` and remove what you awaited from the set yourself. *(2026-09-22)*
+- **The hub suite fakes `project_workspace.resolve_project_workspace` in every test** (autouse
+  `_default_project_workspace` in `hub/tests/conftest.py`). No test sees what the real resolver does to
+  the session: F349's per-call `UPDATE projects SET last_seen_at` went unseen for weeks. Restore the
+  real one with the `bind_project_workspace` fixture. *(2026-09-22)*
+- **`pytest-randomly` is not installed for `py -3.11`, and CI has never used it.** Flake rates in
+  FINDINGS measured "under random ordering" (F314's 1-in-8) came from an environment this machine no
+  longer has; the same tests run in a fixed order today. To re-measure without randomising anyone else's
+  runs (tonight's windows included): `py -3.11 -m pip install --no-deps --target <scratch>/rnd
+  pytest-randomly`, then set `PYTHONPATH=<scratch>/rnd` for your runs only. **`-q` hides the
+  `Using --randomly-seed=` line**, so drop `-q` if you need the seed. *(2026-09-22)*
+- **Run black *after* writing a new file, not before.** `black` over the tree, followed by creating
+  a test file, left that file unformatted and turned CI red (`bab861a`). Run CLAUDE.md's full lint
+  block as the last step before each push. *(2026-09-22)*
+- **`pathlib.Path.write_text` on Windows writes CRLF** into files this checkout keeps as LF in the
+  working tree. Git normalises it on add, so it is only noise ("CRLF will be replaced by LF"), but
+  edit scripts should use `read_bytes`/`write_bytes` and keep the file's own newline. *(2026-09-22)*
+- **A finding whose cited call no longer exists is often already fixed under another finding's
+  number.** F279's failing `db.refresh` was deleted by F287's repair; F314's lock error was cured by
+  F383's. Check `git log -S'<cited snippet>'` before investigating. A sweep of 90 open B findings found
+  only 3 more like that, so the ledger is mostly accurate. *(2026-09-22)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
