@@ -12,6 +12,12 @@ Where a remedy claims something happens next -- "the next turn runs `git worktre
 provisions the checkout itself" -- the test performs the operator's half and then calls the real
 function again. A remedy is a promise about the product, so an assertion that only reads the
 sentence would leave the promise unmeasured.
+
+A fourth obstruction was added 2026-09-22 (F347): a repository with no commit yet, where nothing
+is in the way and there is simply nothing to cut a checkout from. Its remedy is a first commit,
+and unlike the three above it is the *same* sentence for an agent's workspace and a task's
+checkout, because the obstruction and the repair are identical -- the caller's prefix is what
+names which one failed.
 """
 
 import shutil
@@ -209,3 +215,92 @@ def _commit_on_new_branch(repo: Path, branch: str, content: str) -> str:
     sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
     _git(repo, "checkout", "-q", "main")
     return sha
+
+
+# --- A repository with no commit yet (F347) ----------------------------------------------------
+
+
+@pytest.fixture
+def unborn(tmp_path) -> Path:
+    """A repository `git init` has made and nobody has committed to. `HEAD` names nothing."""
+    path = tmp_path / "unborn"
+    path.mkdir(parents=True, exist_ok=True)
+    _git(path, "init", "-q", "-b", "main")
+    _git(path, "config", "user.email", "test@example.com")
+    _git(path, "config", "user.name", "test")
+    (path / "f.txt").write_text("written, never committed\n")
+    return path
+
+
+def _first_commit(repo: Path) -> None:
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "first")
+
+
+def test_an_unborn_head_asks_for_a_first_commit_rather_than_naming_git_plumbing(unborn):
+    """F347, decided option (a). The operator saw `fatal: invalid reference: HEAD` and had to
+    leave the product to work out what it meant. The sentence names the repair instead, and the
+    remedy is then performed here: after one commit the same call provisions the checkout.
+    """
+    with pytest.raises(worktrees.IsolationUnavailableError) as caught:
+        worktrees.ensure_worktree(unborn, AGENT)
+
+    message = str(caught.value)
+    assert message == (
+        f"{unborn.name} is a git repository with no commit yet. "
+        f"Make a first commit in {unborn}, and the turn will start."
+    )
+    # What it must NOT say: git's own words, which is what F347 was filed about.
+    assert "invalid reference" not in message
+    assert "worktree add" not in message
+    # Nor the agent, unlike the refusals above: `agent_trigger` wraps this in "Could not prepare
+    # {agent}'s own workspace: ...", so naming it here would say it twice.
+    assert AGENT not in message
+
+    _first_commit(unborn)
+    path = worktrees.ensure_worktree(unborn, AGENT)
+    assert path.is_dir()
+    assert worktrees._registered_worktree_branch(unborn, path) == (
+        f"refs/heads/{worktrees.branch_name(AGENT)}"
+    )
+
+
+def test_a_task_checkout_in_an_unborn_repository_refuses_the_same_way(unborn):
+    """The task path reaches the identical git failure, and F347 recorded only the agent path."""
+    with pytest.raises(worktrees.IsolationUnavailableError) as caught:
+        ensure_task_worktree(unborn, TASK, base="main")
+
+    message = str(caught.value)
+    assert "no commit yet" in message
+    assert f"Make a first commit in {unborn}" in message
+    assert "invalid reference" not in message
+    # Same sentence as the agent path's: same obstruction, same repair, and the caller's prefix
+    # ("Could not prepare the checkout for task ...") is what distinguishes them.
+    assert TASK not in message
+
+    _first_commit(unborn)
+    assert ensure_task_worktree(unborn, TASK, base="main").is_dir()
+
+
+def test_the_refusal_creates_no_commit_and_no_branch(unborn):
+    """Option (b) -- an orphan branch -- was rejected, and (a) says the Hub writes nothing."""
+    with pytest.raises(worktrees.IsolationUnavailableError):
+        worktrees.ensure_worktree(unborn, AGENT)
+
+    assert (
+        subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", "HEAD"], cwd=unborn, capture_output=True
+        ).returncode
+        != 0
+    ), "the repository still has no commit"
+    branches = subprocess.run(
+        ["git", "branch", "--list", "--all"], cwd=unborn, capture_output=True, text=True
+    ).stdout
+    assert branches.strip() == "", f"the refusal left a branch behind: {branches!r}"
+    assert not (unborn / ".agentweave" / "worktrees").exists()
+
+
+def test_a_repository_with_a_commit_is_untouched_by_the_guard(repo):
+    """The guard must not refuse the ordinary case; `repo` has one commit."""
+    assert worktrees._has_a_commit(repo) is True
+    assert worktrees.ensure_worktree(repo, AGENT).is_dir()

@@ -337,6 +337,8 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
             )
         return path
 
+    _refuse_an_unborn_head(repo_root)
+
     # A worktree directory can be gone (manually deleted, or removed by something
     # other than `release_worktree`) while git's own `.git/worktrees/<name>` metadata
     # still references it — prune first so `worktree add` doesn't refuse to proceed.
@@ -363,6 +365,47 @@ def ensure_worktree(repo_root: Path, agent: str) -> Path:
 
     _symlink_shared_dependencies(repo_root, path)
     return path
+
+
+def _has_a_commit(repo_root: Path) -> bool:
+    """False when the repository has no commit yet, so `HEAD` names nothing to branch from.
+
+    The ordinary first day of a project that becomes a repository: `git init` has run and nothing
+    has been committed. Every git command that resolves `HEAD` then fails, so this is asked
+    *before* provisioning rather than inferred from a failure — `git worktree add` reports
+    `fatal: invalid reference: HEAD`, which names git's plumbing rather than what the operator
+    would change (F347).
+    """
+    return (
+        _run_git(repo_root, "rev-parse", "--verify", "--quiet", "HEAD", check=False).returncode == 0
+    )
+
+
+def _refuse_an_unborn_head(repo_root: Path) -> None:
+    """Refuse a checkout that has nothing to be cut from, naming the repair (F347, option (a)).
+
+    Decided by the operator 2026-09-13 (`spec-queue/DECISIONS.md`, *"F347, decided 2026-09-13
+    evening"*): refuse and say what to do. **The Hub creates no commit and no orphan branch** —
+    rejected explicitly, because the Hub would then own a branch sharing no history with anything
+    the operator later commits, and nothing says how that work lands. Refusing also keeps
+    `repo_hygiene.py`'s stance that the Hub does not write commits into the operator's repository.
+
+    Still open, and deliberately not addressed here: the refusing pass holds the operator's own
+    message behind a condition only they can clear, without saying so. The decision left that half
+    to a later round.
+
+    **The sentence names no agent and no task**, unlike the refusals above it, because both callers
+    of this one are already wrapped by a prefix that names the scope — *"Could not prepare
+    {agent}'s own workspace: …"* and *"Could not prepare the checkout for task {id}: …"*
+    (`api/v1/agent_trigger.py:963-981`). The obstruction and its repair are identical either way,
+    so naming the scope again here would only stutter.
+    """
+    if _has_a_commit(repo_root):
+        return
+    raise IsolationUnavailableError(
+        f"{repo_root.name} is a git repository with no commit yet. Make a first commit in "
+        f"{repo_root}, and the turn will start."
+    )
 
 
 def _is_mid_merge(worktree: Path) -> bool:
@@ -504,6 +547,11 @@ def ensure_task_worktree(
                 "checkout for this task and carries its work."
             )
         return path
+
+    # The same refusal as `ensure_worktree`'s, and it belongs on this path too: `base` cannot
+    # resolve either when the repository holds no commit, so a task turn hit the identical
+    # `fatal: invalid reference` (measured 2026-09-22; F347 recorded only the agent path).
+    _refuse_an_unborn_head(repo_root)
 
     _run_git(repo_root, "worktree", "prune", check=False)
     path.parent.mkdir(parents=True, exist_ok=True)
