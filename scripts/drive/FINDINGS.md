@@ -29721,10 +29721,10 @@ as an unexplained one-time environmental stall, not as a suspected-still-broken 
 
 ## F383 (C) — the CI branch's own commits fail on a genuine flaky test, not only on the docs-only commits noted earlier
 
-**Status:** open. Filed 2026-09-18 by the day window, from CI history. Half repaired 2026-09-18:
-symptom A (the module-level `asyncio.Lock` surviving its event loop) is fixed and has a regression
-test; symptom B (the leaked write transaction that fails the next test's `BEGIN IMMEDIATE`) is
-diagnosed but open. See ROOT CAUSE at the end of this section.
+**Status:** fixed b630252 (symptom B, as F292) and 2026-09-18 (symptom A). Closed 2026-09-22 by
+the interactive session (Round 1): symptom B was F292's failure under a second number, and F292's
+fix covers it. See CLOSED at the end of this section. Filed 2026-09-18 by the day window, from CI
+history.
 **Source:** audit
 **Theme:** Harness & CI
 
@@ -29934,6 +29934,38 @@ Runs: `35333792012` (`6fbcf10`, symptom A + B), `35335492002` (`4dc2d72`), `3533
 **Severity is left at (C) deliberately** — by this file's own taxonomy it is test-harness friction,
 not product behaviour — but it has cost a full day's merge gate and ~$9 of retries, so raising it is
 worth the operator's call rather than mine.
+
+**CLOSED 2026-09-22 (interactive session, Round 1 of `spec-queue/ROUNDS.md`).** Symptom B is not a
+separate defect. It is F292 under a second number: the same tests
+(`test_reviewer_is_not_the_author.py`, `test_flow_fires_a_review_turn.py`), the same
+`database is locked` on the schema reset's `BEGIN IMMEDIATE` at setup, the same F292 diagnostic
+printed under it. F292 was fixed by `b630252` (2026-09-21 22:58Z), which gives every `app` test its
+own database file. A write transaction leaked on the previous test's file, whatever leaked it, now
+holds a file nobody opens again. So the mechanism described above no longer needs to be found to
+stop the failure.
+
+Measured, not argued:
+
+- **Before the fix.** Every failed `ci.yml` run since 2026-09-18 was read (`gh run view
+  --log-failed`). 28 carry `database is locked` or the wrong-loop `RuntimeError`, from `6fbcf10`
+  (09-18 10:15Z) to `1fd204d` (run `35660385419`, 09-21 22:00Z). That last one is 58 minutes
+  before `b630252`, and its F292 diagnostic shows the shared file.
+- **After the fix.** 61 `ci.yml` runs from `b630252` to `4824150`. `hub-test` ran to completion in
+  59 of them: 54 green, and 5 red only from the `claude`-not-on-PATH tests. The other 2 were F394
+  timeouts. **None of the 59 has a lock error.** At F292's pre-fix rate of 22.6%, that is
+  p ≈ 0.774^59 ≈ 3×10⁻⁷.
+
+**Residual, recorded rather than filed.** The leak itself still happens. The same two files on this
+machine still emit `PytestUnhandledThreadExceptionWarning` from `aiosqlite/core.py`
+(`call_soon_threadsafe` -> `Event loop is closed`), at the setup of exactly the tests CI used to
+fail: `test_a_review_that_cannot_be_prepared_does_not_become_an_ordinary_turn`,
+`test_a_flow_fired_reviewer_reads_a_file_that_is_not_on_main` and
+`test_a_plain_job_with_no_loop_still_fires`. It was reproduced 2026-09-22 with
+`-W error::pytest.PytestUnhandledThreadExceptionWarning`. An aiosqlite worker from the previous
+test finishes a call after that test's loop has closed, and its thread dies with the sqlite handle
+still open. Since `b630252` that costs one unclosed handle on a dead file, and on Windows a file
+`_move_to_a_fresh_database_file` cannot delete until `pytest_sessionfinish`. It no longer costs a
+test. Worth taking only if the warning count starts to matter.
 
 ## F384 (B) — `submit_spec_document`'s validator reports one missing field at a time, not all of them
 
@@ -31323,3 +31355,29 @@ scratch projects from this session deleted (`DELETE /projects/{id}`, including t
 attempts that hit different guards before the final script version), the job disabled and confirmed
 absent from `GET /jobs?include_archived=true`, the Hub's uvicorn process stopped and confirmed no
 `LISTENING` socket remained on 8013 afterward (only `TIME_WAIT`).
+
+## F408 (C) -- a CLI thread-race test reads a slow runner as a lock that lost its loser
+
+**Status:** fixed (this commit) [Round 1, 2026-09-22]
+**Source:** audit
+**Theme:** Harness & CI
+
+**What happened.** CI run `35753872487` (`77d39f9`) went red on one job,
+`test (windows-latest, 3.12)`:
+`tests/test_locking.py::test_concurrent_threads_exactly_one_wins` got `[True]` where it expected
+`[False, True]`. The run raised no exception and logged no `PytestUnhandledThreadExceptionWarning`,
+so the losing thread had not crashed. It was still running when both `join(timeout=3.0)` calls
+expired. `acquire_lock(..., timeout=0.3)` bounds how long a thread *tries* the lock. It does not
+bound when a shared runner schedules that thread. The assertion then reported a wrong answer from
+the lock when the lock had not answered yet.
+
+**How often.** Once in 311 failed `ci.yml` runs since 2026-03-13, all searched for
+`FAILED tests/test_locking.py`. That makes it rare, but a single occurrence is enough to fail a
+push. It is in Round 1 because that round makes CI's red mean something.
+
+**Fix.** The three thread-race tests in `tests/test_locking.py` join through `_join_all`, which
+waits up to `JOIN_TIMEOUT = 30.0` and asserts every thread finished before any result is read.
+A hung thread now fails as "did not return within 30s", not as a wrong result. The proof is an
+injected stall: a 4 s sleep in the first caller of `acquire_lock`, run through the real test
+function. It fails at HEAD with CI's exact message (`got [True]`) and passes with the fix
+(4.34 s). The full CLI suite gives 538 passed and 3 skipped, the same as before.

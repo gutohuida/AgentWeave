@@ -90,6 +90,7 @@ Every later round's "green" means only what these let it mean.
 | Finding | Sev | Fix |
 |---|---|---|
 | F383 | C | **Symptom B**: a leaked write transaction in `hub/tests/conftest.py` teardown fails the next test's `BEGIN IMMEDIATE`. Symptom A (the lock) was fixed 09-18. This is the costliest open flake. Consider raising it to B. |
+| F408 | C | Added 2026-09-22. `test_locking.py`'s thread-race tests joined for 3 s, so a slow Windows runner read as a wrong lock result (`77d39f9`). Joins now bounded at 30 s, with an `is_alive` check before any result is read. |
 | F396 | B | `test_surface_ceilings.py` keys MISREPORT sites by file:line, so line drift reads as improvement. Re-key on (file, hook), the pattern `UNHANDLED_SITE_CEILING` already uses. |
 | F392 | B | Process: a "full suite must not move" tick was taken without its evidence being written. Rule: the tick carries its inline count, and the regression set includes tests parametrised over files a sibling change adds. |
 | F308 | B | Pinning CI's resolution silenced the drift alarm. **Decision**, see D13; nothing is built here until then. |
