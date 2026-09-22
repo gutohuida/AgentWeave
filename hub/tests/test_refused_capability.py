@@ -440,3 +440,60 @@ async def test_the_refusal_survives_the_record_failing_to_open(app, auth_headers
     assert "has been asked" not in detail["message"]
     assert "do not poll, and do not repeat this call" in detail["message"]
     assert await records() == []
+
+
+# ---------------------------------------------------------------------------
+# From the adversarial review of 229a708 (2026-09-22)
+# ---------------------------------------------------------------------------
+
+
+async def test_an_event_log_failure_after_the_commit_does_not_deny_the_record(app, auth_headers):
+    """`ask_question_for_actor` commits the row, broadcasts, then `persist_event` commits again.
+
+    If that second commit fails (`database is locked` — the concurrency D16 names), the record
+    exists and the operator was broadcast to, yet the broad except turns the outcome into None and
+    the sentence says the operator "could not be asked". D16/spec: the sentence must not name a
+    record that does not exist — the converse (denying one that does) is the same class of error.
+    """
+    headers = await a_running_agent()
+
+    async def locked(*args, **kwargs):
+        raise OperationalError("INSERT INTO event_logs", {}, Exception("database is locked"))
+
+    with patch("hub.api.v1.questions.persist_event", locked):
+        detail = await refuse(app, auth_headers, headers)
+
+    opened = await records()
+    assert len(opened) == 1, "the record was committed before persist_event ran"
+    assert "question_id" in detail, detail["message"]
+
+
+async def test_a_second_agent_refused_meanwhile_is_not_woken_by_the_answer(
+    app, auth_headers, wakes
+):
+    first = await refuse(app, auth_headers, await a_running_agent())
+    await refuse(app, auth_headers, await a_running_agent("other", "run-other"))
+
+    await answer(app, auth_headers, first["question_id"], "Enabled it", None)
+
+    assert (PROJECT, "lead") in wakes
+    assert (PROJECT, "other") not in wakes
+
+
+async def test_a_refusal_while_the_second_record_is_open_names_it(app, auth_headers):
+    """The newest-first order is load-bearing: with two rows, the open one is the newer.
+
+    Mutating `_records` to oldest-first survives every other test in this file, and then this
+    refusal says the operator "was asked twice" and that nothing further will be opened while the
+    last record is sitting open and unanswered.
+    """
+    headers = await a_running_agent()
+    first = await refuse(app, auth_headers, headers)
+    await answer(app, auth_headers, first["question_id"], "Leave it off", ["Leave it off"])
+    second = await refuse(app, auth_headers, headers)
+
+    third = await refuse(app, auth_headers, headers)
+
+    assert third.get("question_id") == second["question_id"], third["message"]
+    assert "has not answered yet" in third["message"]
+    assert len(await records()) == 2

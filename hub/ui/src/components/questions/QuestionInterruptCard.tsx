@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/common/Icon'
 import { Question } from '@/api/questions'
 import { hubDate } from '@/lib/hubTime'
+import { isWaitedOn } from '@/lib/pendingQuestions'
 
 interface QuestionInterruptCardProps {
   questions: Question[]
@@ -17,10 +18,11 @@ export function QuestionInterruptCard({ questions, compact = false, onNavigateTo
   // closing a question does not make it answered (F386).
   const visible = questions.filter((question) => !question.declined && !dismissed.has(question.id))
   if (visible.length === 0) return null
-  const first = visible[0]
-  // Only a blocking question whose asking run is still live has anyone waiting on it. The Questions
-  // panel partitions on the same two facts; absent `asker_waiting` means "assume yes", as the Hub does.
-  const waiting = first.blocking && first.asker_waiting !== false
+  // A question someone is waiting on comes first. The route orders oldest first, and a question
+  // nobody waits on (the Hub's non-blocking record of a refused capability is never swept) would
+  // otherwise sit in front of every later one an agent is blocked on.
+  const first = visible.find(isWaitedOn) ?? visible[0]
+  const waiting = isWaitedOn(first)
 
   return (
     <div

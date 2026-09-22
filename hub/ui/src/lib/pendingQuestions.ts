@@ -11,6 +11,12 @@ export interface ActiveQuestion {
 
 const NONE: ActiveQuestion = { question: null, step: 0, total: 0 }
 
+/** Someone is holding a call open for this answer: it blocks, and its asking run has not ended.
+ *  Absent `asker_waiting` means "assume yes", matching the Hub's own presumption. */
+export function isWaitedOn(question: Question): boolean {
+  return question.blocking && question.asker_waiting !== false
+}
+
 /** Which of an agent's outstanding questions is being answered, and where it sits in its batch.
  *
  * One selector, used by both the card that displays the question and the panel that routes the
@@ -32,10 +38,18 @@ export function activeQuestionFor(questions: Question[], agent: string): ActiveQ
       // waiting for. Their answer then lands on the question they were shown — correctly, and
       // confusingly (`2026-08-11-declining-a-question`, D6).
       //
+      // "Waiting" needs `blocking` as well: a question with no asking run reports
+      // `asker_waiting: true` by presumption, including the Hub's own non-blocking question of
+      // record for a refused capability, which is never swept. Ranked on `asker_waiting` alone,
+      // that record sat ahead of a live `ask_user` and took the operator's answer for it
+      // (`a-refused-capability-reaches-the-operator`, review of 229a708). Same rule as the
+      // Questions panel and the Overview card.
+      //
       // Safe to put a whole-queue predicate ahead of the within-batch order because every question
       // in a batch is created by one `ask_user` call from one run, so a batch shares one
-      // `asker_waiting` and cannot be split by this. `pendingQuestions.test.ts` asserts that.
-      const byWaiting = Number(b.asker_waiting !== false) - Number(a.asker_waiting !== false)
+      // `blocking` and one `asker_waiting` and cannot be split by this. `pendingQuestions.test.ts`
+      // asserts that.
+      const byWaiting = Number(isWaitedOn(b)) - Number(isWaitedOn(a))
       if (byWaiting !== 0) return byWaiting
       const byIndex = (a.batch_index ?? 0) - (b.batch_index ?? 0)
       if (byIndex !== 0) return byIndex

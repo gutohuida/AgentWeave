@@ -322,9 +322,26 @@ async def refuse_for_project_state(
             project_id,
             gate.subject_key,
         )
-        try:
-            await session.rollback()
-        except Exception:  # pragma: no cover - the refusal matters more than the rollback
-            logger.exception("Rollback after a failed refusal record also failed")
-        outcome = None
+        outcome = await _record_after_failure(session, project_id, gate)
     raise HTTPException(status_code=403, detail=_refusal(gate, agent, outcome))
+
+
+async def _record_after_failure(
+    session: AsyncSession, project_id: str, gate: SettingGate
+) -> Optional[_Outcome]:
+    """What is actually on record after opening one failed partway, or None if nothing is.
+
+    `ask_question_for_actor` commits the row and broadcasts it *before* writing its event, so a
+    failure there (SQLite `database is locked`, the live case) leaves a record the operator can
+    already see. Saying "the operator could not be asked" then would deny a record that exists, the
+    mirror of naming one that does not. So re-read, and report an open record as the pending one.
+    """
+    try:
+        await session.rollback()
+        records = await _records(session, project_id, gate.subject_key)
+    except Exception:  # pragma: no cover - the refusal matters more than the re-read
+        logger.exception("Re-reading the refusal record after a failure also failed")
+        return None
+    if records and not _is_resolved(records[0]):
+        return _Outcome("pending", records[0])
+    return None

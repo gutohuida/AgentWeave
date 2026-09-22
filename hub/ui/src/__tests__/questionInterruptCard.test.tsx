@@ -65,3 +65,16 @@ describe('Overview question card', () => {
     expect(screen.getByText(/sonnet-2 is waiting/)).toBeInTheDocument()
   })
 })
+
+// From the adversarial review of 6ab4a4a + 229a708. F376's question of
+// record is non-blocking, carries no run, and is never swept, so it sits oldest in
+// `?answered=false` (ordered by created_at ascending) for as long as the operator leaves it.
+describe('Overview question card with a refusal record open', () => {
+  it('still surfaces a later blocking question someone is waiting on', () => {
+    renderCard([
+      question({ id: 'q-record', from_agent: 'lead', blocking: false, asker_waiting: true, question: 'May agents schedule work in this project?' }),
+      question({ id: 'q-live', from_agent: 'sonnet-2', blocking: true, asker_waiting: true, question: 'Ship it?' }),
+    ])
+    expect(screen.getByText(/sonnet-2 is waiting/)).toBeInTheDocument()
+  })
+})
