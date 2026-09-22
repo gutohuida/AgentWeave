@@ -74,7 +74,24 @@ def test_is_locked_nonexistent(tmp_path, monkeypatch):
 # Cross-platform: works on Windows (file open with "x" mode) and POSIX
 # (same O_EXCL-equivalent semantics). The DEFAULT_RETRY_DELAY is 0.1s,
 # so timeout=0.3s gives T2 ~3 chances to retry before giving up.
+#
+# The joins are bounded by JOIN_TIMEOUT, not by the lock timeouts. Those
+# bound how long a thread *tries*; they say nothing about when a shared CI
+# runner schedules it. A 3s join failed once on windows-latest (run
+# 35753872487): one thread had not returned yet, nothing raised, and the
+# assertion reported a wrong result instead of a slow thread (F408). Each
+# test asserts the threads finished before it reads their results.
 # ---------------------------------------------------------------------------
+
+JOIN_TIMEOUT = 30.0
+
+
+def _join_all(*threads):
+    for thread in threads:
+        thread.join(timeout=JOIN_TIMEOUT)
+    assert not any(
+        thread.is_alive() for thread in threads
+    ), f"a thread did not return within {JOIN_TIMEOUT}s"
 
 
 def test_two_threads_serial_acquire(tmp_path, monkeypatch):
@@ -109,9 +126,7 @@ def test_two_threads_serial_acquire(tmp_path, monkeypatch):
     t2 = threading.Thread(target=t2_acquire)
     t1.start()
     t2.start()
-    t1.join(timeout=5.0)
-    t2.join(timeout=5.0)
-    assert not t1.is_alive() and not t2.is_alive(), "threads deadlocked"
+    _join_all(t1, t2)
     assert t1_got == [True]
     assert t2_got == [True], "T2 must acquire the lock after T1 releases"
 
@@ -143,9 +158,8 @@ def test_lock_held_blocks_other_thread_with_short_timeout(tmp_path, monkeypatch)
     t2 = threading.Thread(target=t2_try_acquire)
     t1.start()
     t2.start()
-    # Wait for T2 to finish (it should time out within 200-400ms).
-    t2.join(timeout=3.0)
-    t1.join(timeout=3.0)
+    # T2 should time out within 200-400ms; the join bound is for the runner, not the lock.
+    _join_all(t2, t1)
     assert t1_in_critical.is_set(), "T1 must have entered the critical section"
     assert t2_result == [
         False
@@ -175,8 +189,7 @@ def test_concurrent_threads_exactly_one_wins(tmp_path, monkeypatch):
     t2 = threading.Thread(target=attempt)
     t1.start()
     t2.start()
-    t1.join(timeout=3.0)
-    t2.join(timeout=3.0)
+    _join_all(t1, t2)
     assert sorted(results) == [
         False,
         True,
