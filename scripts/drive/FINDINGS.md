@@ -30465,10 +30465,11 @@ it. **Do not read this finding as a decision that it should be built.**
 
 ## F388 (A) — a Hub started from source silently opens the operator's live database, and the code comment says it cannot
 
-**Status:** open — **specced 2026-09-20 (R1 + R2), no token, nothing built.** Change directory
-`openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one` carries the decided
-fix (a) + (b) + (d); `openspec validate --strict` passes. **R3 has not run**, and no line of
-`hub/hub/config.py` has changed.
+**Status:** fixed 85b4b28 — built across groups 1-5 (`hub/hub/config.py`'s
+`HubNotToldWhichDatabase` refusal, `hub/hub/main.py`'s pre-open database-naming line, the CLI-drift
+fix, and the spec delta applied into `openspec/specs/app-lifecycle/spec.md`) and driven live 2026-09-23 (D-5, below) — the refusal, the named-database startup line (both
+existed-before states), and the PID kill all observed against a real process on port 8093, never
+`:8000`/`:8010`. See D-5 for the drive narrative.
 
 **R2, 2026-09-20 — every R1 decision survived an independent re-derivation; five claims did not.**
 Driven, not reasoned: two throwaway Hubs from source (8093/8094, fresh profiles, killed by exact
@@ -31700,3 +31701,39 @@ have ended it in under 0.5 s) and raised two gaps, both now closed:
 
 Each is pinned by an injected fault run against both trees: a 4 s stall, a `PermissionError` in one
 thread, and a T2 delayed 1 s. All three fail at `4824150` and pass here.
+
+## D-5, 2026-09-23 — F388's fix driven live: the refusal, the named-database line, and the PID kill, all observed against a real process
+
+Group 6 of `a-hub-that-was-not-told-which-database-refuses-to-open-one`, run against `85b4b28`
+(groups 1-5 already landed and the full `hub/tests/` suite was green). This entry turns that green
+suite into an observed live process, per the change's own framing that a green suite is not proof.
+Port 8093, profile directory `testbed/scratch/group6-drive/` (deleted after), never `:8000`/`:8010`.
+
+**6.1 — the refusal, for real.** From `testbed/scratch/group6-drive/` (no `.env` there), with
+`DATABASE_URL` unset (`env -u DATABASE_URL`), `py -3.11 -m uvicorn hub.main:app --port 8093` failed
+at import time with `hub.config.HubNotToldWhichDatabase`, printing 1.4's message verbatim
+("The Hub was not told which database to open. Checked the process environment and a .env file in
+the current working directory for DATABASE_URL and found neither. It declined to open
+'sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/data/agentweave.db' without being asked to.").
+Recorded the real default database's mtime/size (`1790120400 59396096`) before and after: unchanged,
+and `~/.agentweave/hub/data/` gained no new file. The refusal is real, not just importable.
+
+**6.2 — the startup line, for real.** Started the same command with `DATABASE_URL` naming a new
+file (`.../group6-drive/throwaway.db`) that did not yet exist. The bare, level-less line (no logger
+name — `logging.lastResort`, per R2's finding) appeared ahead of the alembic migration chain:
+`Hub database: opening C:\Users\huida\...\throwaway.db (existed before this process opened it:
+False, pid 23132)`. Killed pid 23132 (6.3, see below), then started the identical command again
+against the same now-existing file: the line reappeared with `existed before this process opened
+it: True, pid 27296` — the only thing that changed between the two runs.
+
+**6.3 — the PID kill, for real.** `taskkill /F /PID 23132` (the exact pid the line printed)
+returned `SUCCESS: the process ... has been terminated`, and a follow-up `tasklist /FI "PID eq
+23132"` found nothing — the printed pid is the listening process, not the launching shell, so
+`DEAD-ENDS.md`'s "launching shell's pid is not the listening one" trap did not fire here (this is a
+direct `uvicorn` invocation, not `agentweave`'s spawn-a-child path). Repeated for the second
+instance (pid 27296) at cleanup.
+
+**Cleanup.** `testbed/scratch/group6-drive/` removed after both instances were confirmed dead.
+Final check of the real default database: mtime/size unchanged from the pre-drive baseline.
+
+F388 marked `fixed 85b4b28` below — only now, per 6.5, not when the suite went green.

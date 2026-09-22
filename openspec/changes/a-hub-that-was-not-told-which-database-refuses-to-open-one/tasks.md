@@ -453,20 +453,31 @@ no failures. CI's exact lint/format/type commands all clean.
 
 ## Group 6 — drive it, because a passing suite is not proof
 
-- [ ] 6.1 The refusal, for real: from a directory with no `.env`, `DATABASE_URL` unset, run
+- [x] 6.1 The refusal, for real: from a directory with no `.env`, `DATABASE_URL` unset, run
       `py -3.11 -m uvicorn hub.main:app --port 8093`. It must fail to start and print 1.4's message.
       **Then confirm nothing was created** — no new file, no new directory at the default path. This
-      is the one check that matters and no unit test can make it.
-- [ ] 6.2 The startup line, for real: start the same command with `DATABASE_URL` naming a **new**
+      is the one check that matters and no unit test can make it. **Measured 2026-09-23:** ran from
+      `testbed/scratch/group6-drive/` with `env -u DATABASE_URL`; failed at import time with
+      `hub.config.HubNotToldWhichDatabase`, message matched 1.4 verbatim including the absolute
+      default path. `~/.agentweave/hub/data/agentweave.db` mtime/size (`1790120400 59396096`)
+      identical before and after; no new file appeared in that directory.
+- [x] 6.2 The startup line, for real: start the same command with `DATABASE_URL` naming a **new**
       throwaway profile and read the output. The line must appear (D5's whole claim is that an `INFO`
       one would not), must name the absolute path, and must say the file did **not** exist. Then stop
-      it and start it again against the same file: the line must now say it **did**.
-- [ ] 6.3 Kill it by the PID the line printed. If that does not stop the server, group 2's line is
+      it and start it again against the same file: the line must now say it **did**. **Measured
+      2026-09-23:** first run printed `Hub database: opening ...\throwaway.db (existed before this
+      process opened it: False, pid 23132)` ahead of the alembic chain; second run against the same
+      file printed `... existed before this process opened it: True, pid 27296)`.
+- [x] 6.3 Kill it by the PID the line printed. If that does not stop the server, group 2's line is
       printing the wrong PID — which uvicorn's reload/spawn behaviour makes a live possibility, and
       `DEAD-ENDS.md` already records that the launching shell's PID is not the listening one.
-- [ ] 6.4 **Never against port 8000, 8010, `~/.agentweave/hub/data/`, `proj-5e960453` or
+      **Measured 2026-09-23:** `taskkill /F /PID 23132` reported success; `tasklist /FI "PID eq
+      23132"` found nothing afterward. Repeated for pid 27296 at cleanup. The printed pid is the
+      listening process for a direct `uvicorn` invocation — `DEAD-ENDS.md`'s trap did not fire here.
+- [x] 6.4 **Never against port 8000, 8010, `~/.agentweave/hub/data/`, `proj-5e960453` or
       `proj-18e5d4e0`.** Use a port in the 8090s and a profile directory created for this drive and
-      deleted after.
-- [ ] 6.5 Write the drive up in `scripts/drive/FINDINGS.md` as a `D-n` narrative entry, and set
+      deleted after. **Followed:** port 8093, `testbed/scratch/group6-drive/`, deleted after both
+      instances confirmed dead.
+- [x] 6.5 Write the drive up in `scripts/drive/FINDINGS.md` as a `D-n` narrative entry, and set
       `**Status:** fixed <sha>` on **F388** only once 6.1, 6.2 and 6.3 have all been observed — not
-      when the suite goes green.
+      when the suite goes green. **Done 2026-09-23:** filed as D-5; F388 set to `fixed 85b4b28`.
