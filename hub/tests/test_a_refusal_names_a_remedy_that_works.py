@@ -55,7 +55,7 @@ def test_completed_names_land_it():
 def test_under_review_names_the_three_exits_never_land_it():
     """*Mutation:* swap the two branches. The test must fail."""
     remedy = own_review_remedy(_task("under_review"))
-    assert remedy == "decide it yourself: approve, reject, or send it back with revision_needed."
+    assert remedy == "Decide it yourself: approve, reject, or send it back with revision_needed."
     assert "Land it" not in remedy
 
 
@@ -578,12 +578,12 @@ REVIEWER_B_49 = "reviewer-b-49"
 async def test_the_precheck_names_the_remedy_exactly_once(app, auth_headers, bind_runner):
     """4.9, site 1 (`review_dispatch_refusal`, the route's read-only precheck). Dispatching a
     second reviewer to a task already under review by another: 409, naming approve, reject and
-    revision_needed, containing "decide it yourself" exactly once — the D9 prefix's own wording
+    revision_needed, containing "Decide it yourself" exactly once — the D9 prefix's own wording
     must not repeat the phrase `own_review_remedy`'s `under_review` branch opens with — and never
     "Reassign".
 
     *Mutations:* (a) restore the old sentence at this site (no `own_review_remedy` appended) —
-    the "decide it yourself" assertion must fail; (b) restore the original, duplicated wording
+    the "Decide it yourself" assertion must fail; (b) restore the original, duplicated wording
     ("...or decide it yourself. decide it yourself: approve, ...") — the "exactly once" assertion
     must fail, which a looser assertion (the words present, "Reassign" absent) would miss.
     """
@@ -618,7 +618,7 @@ async def test_the_precheck_names_the_remedy_exactly_once(app, auth_headers, bin
     assert "approve" in detail
     assert "reject" in detail
     assert "revision_needed" in detail
-    assert detail.count("decide it yourself") == 1, detail
+    assert detail.count("Decide it yourself") == 1, detail
     assert "yourself decide" not in detail
     assert "Reassign" not in detail
 
@@ -670,7 +670,7 @@ async def test_the_dispatch_itself_names_the_remedy_exactly_once(app, auth_heade
     assert "approve" in detail
     assert "reject" in detail
     assert "revision_needed" in detail
-    assert detail.count("decide it yourself") == 1, detail
+    assert detail.count("Decide it yourself") == 1, detail
     assert "yourself decide" not in detail
     assert "Reassign" not in detail
 

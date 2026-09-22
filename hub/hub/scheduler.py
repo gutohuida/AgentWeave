@@ -2017,7 +2017,7 @@ def own_review_remedy(task: Task) -> str:
     )
     if task.status == "completed":
         return "Land it, on the task, to review it yourself."
-    return "decide it yourself: approve, reject, or send it back with revision_needed."
+    return "Decide it yourself: approve, reject, or send it back with revision_needed."
 
 
 def _wedged_review_reason(task: Task, reviewer: str) -> str:
