@@ -26,17 +26,26 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHANGES = REPO_ROOT / "openspec" / "changes"
 
-TASK = re.compile(r"^- \[(?:x| )\] ", re.M)
-# A suite run is a pytest over a test *directory* (`hub/tests/`, `tests/`), not a file or node id,
-# or a task that names the full suite in words.
-SUITE_RUN = re.compile(
-    r"pytest\s+(?:-\S+\s+)*(?:hub/)?tests/?(?=[\s`]|$)|\bfull[- ]suite\b", re.IGNORECASE
+# Indented subtasks are tasks, `*` is a list marker, and `[X]` is ticked.
+TASK = re.compile(r"^[ \t]*[-*] \[[xX ]\] ", re.M)
+TICKED = re.compile(r"^[ \t]*[-*] \[[xX]\] ")
+PYTEST = re.compile(r"\bpytest\b")
+# The argument that makes a pytest run a whole suite: a test *directory*, however it is spelled.
+SUITE_PATH = re.compile(r"(?<![\w./\\-])(?:\./)?(?:hub[/\\])?tests[/\\]?(?=[\s`]|$)")
+# A run narrowed to some tests is not the suite, whatever directory it names.
+NARROWED = re.compile(r"(?:^|\s)-k(?:\s|=)|::")
+SUITE_IN_WORDS = re.compile(
+    r"(?<!no )(?<!not )\b(?:full|whole|entire)[- ](?:test[- ])?suite\b", re.I
 )
 COUNT = re.compile(r"\b\d[\d,]*\s+passed\b")
+# A count of failures that is not zero, so "0 failed" still reads as evidence.
+FAILURES = re.compile(r"\b[1-9][\d,]*\s+(?:failed|error|errors)\b")
+# A number carried over from before the change is not this run's result.
+BASELINE = re.compile(r"\b(?:baseline|before this change|at this change's start)\b", re.I)
 
 
 def _task_blocks(text: str) -> list[tuple[int, str]]:
-    """`(line, text)` of each task: its checkbox line plus its indented continuation."""
+    """`(line, text)` of each task: its checkbox line plus its own continuation lines."""
     starts = [m.start() for m in TASK.finditer(text)]
     blocks = []
     for i, start in enumerate(starts):
@@ -46,11 +55,46 @@ def _task_blocks(text: str) -> list[tuple[int, str]]:
     return blocks
 
 
+def _runs_a_whole_suite(block: str) -> bool:
+    """Does this task run the suite? Read each `pytest` command, not the block as one string.
+
+    A flag with a value (`pytest -n 8 hub/tests/`) defeats a single regex that tries to skip
+    flags, and a `-k` selection defeats one that only looks for the directory.
+    """
+    for match in PYTEST.finditer(block):
+        command = re.split(r"[`\n]", block[match.start() :])[0]
+        if NARROWED.search(command):
+            continue
+        if SUITE_PATH.search(command):
+            return True
+    return bool(SUITE_IN_WORDS.search(block))
+
+
+def _carries_its_result(block: str) -> bool:
+    """A count of the suite run itself, not a number quoted from somewhere else.
+
+    A count belongs to the last `pytest` command written before it, so the 12 passed of a
+    one-file run does not stand in for the suite's own count. A count with no command before it
+    belongs to the task ("Full suite green -- 4474 passed").
+    """
+    for match in COUNT.finditer(block):
+        before = block[: match.start()]
+        if BASELINE.search(before[-60:]):
+            continue
+        commands = list(PYTEST.finditer(before))
+        if commands:
+            nearest = re.split(r"[`\n]", block[commands[-1].start() :])[0]
+            if NARROWED.search(nearest) or not SUITE_PATH.search(nearest):
+                continue
+        return not FAILURES.search(block)
+    return False
+
+
 def uncounted_suite_ticks(text: str) -> list[tuple[int, str]]:
     return [
         (line, block)
         for line, block in _task_blocks(text)
-        if block.startswith("- [x]") and SUITE_RUN.search(block) and not COUNT.search(block)
+        if TICKED.match(block) and _runs_a_whole_suite(block) and not _carries_its_result(block)
     ]
 
 
@@ -82,3 +126,53 @@ def test_the_check_reads_what_f392_ticked() -> None:
     assert uncounted_suite_ticks(counted) == []
     assert uncounted_suite_ticks(one_file) == []
     assert uncounted_suite_ticks(open_task) == []
+
+
+# Each of these is a full-suite tick carrying no result of its own, written the way this
+# corpus writes them. Every one was missed by the first version of this check.
+UNCOUNTED = [
+    "- [x] 7.1 `pytest -n 8 hub/tests/` green.\n",
+    "- [x] 7.1 `pytest -p no:cacheprovider --timeout 60 tests/` green.\n",
+    "- [x] 7.1 `py -3.11 -m pytest hub/tests -q` passes.\n",
+    "- [x] 7.1 `pytest ./hub/tests/ -q` passes.\n",
+    "- [X] 7.1 `pytest hub/tests/ -q` passes.\n",
+    "* [x] 7.1 `pytest hub/tests/ -q` passes.\n",
+    "  - [x] 7.1.2 `pytest hub/tests/ -q` passes.\n",
+    "- [x] 7.1 Full test suite green.\n",
+    "- [x] 7.1 The whole suite passes.\n",
+    "- [x] 7.1 `pytest hub/tests/ -q` -- green (baseline before this change: 4400 passed).\n",
+    "- [x] 7.1 `pytest hub/tests/ -q` -- 4470 passed, 3 failed (pre-existing).\n",
+    "- [x] 7.1 `pytest hub/tests/ -q` green.\n  `pytest hub/tests/test_x.py` -- 12 passed.\n",
+]
+
+# And these must not be flagged.
+CLEAN = [
+    "- [x] 7.1 `pytest hub/tests/test_x.py` (no full suite needed).\n",
+    "- [x] 7.1 `pytest hub/tests/ -k busy` -- 4 passed.\n",
+    "- [x] 7.1 `pytest hub/tests/ -q` -- **4474 passed, 86 skipped, 0 failed** at 8508377.\n",
+    "- [x] 7.1 `pytest hub/tests/ -q`\n      -- **4474 passed, 86 skipped** at 8508377.\n",
+    "- [x] 7.1 `cd hub && pytest tests/ -q` -- 4474 passed, 86 skipped.\n",
+    "- [ ] 7.1 `pytest hub/tests/ -q` -- full suite green.\n",
+]
+
+# Deliberately flagged, though no run happened: a ticked task that writes the suite command
+# reads as a claim that it ran it. The check cannot tell that apart from a run, and a loud
+# false positive is cheap -- reword the prose, or write the count.
+PROSE_MENTION = "- [x] 7.1 See `pytest tests/` conventions in CONTRIBUTING before ticking 7.2.\n"
+
+
+def test_the_check_reads_the_phrasings_this_corpus_uses() -> None:
+    for text in UNCOUNTED:
+        assert uncounted_suite_ticks(text), f"not flagged: {text!r}"
+    for text in CLEAN:
+        assert not uncounted_suite_ticks(text), f"wrongly flagged: {text!r}"
+    assert uncounted_suite_ticks(PROSE_MENTION)
+
+
+def test_a_ticked_subtask_under_an_unticked_parent_is_still_checked() -> None:
+    """The parent's own `- [ ]` must not shelter a ticked child (the first version folded them)."""
+    text = (
+        "- [ ] 7. Regression\n"
+        "  - [x] 7.1 `pytest hub/tests/ -q` -- full suite green, count in the log.\n"
+    )
+    assert [line for line, _ in uncounted_suite_ticks(text)] == [2]
