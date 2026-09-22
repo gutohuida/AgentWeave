@@ -7,7 +7,6 @@ import ntpath
 import os
 import posixpath
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn, Optional
 
@@ -229,8 +228,14 @@ async def resolve_project_workspace(
         raise ProjectIdentityConflict("project directory resolves to a different canonical path")
 
     _validate_marker(canonical.path, project.id)
+    # Unchanged on every call but the first after a repair, and an unchanged attribute flushes
+    # nothing. `last_seen_at` is deliberately not stamped here (F349): it changed on every call, so
+    # every route that resolves a workspace autoflushed an `UPDATE projects` at its next query and
+    # held SQLite's write lock from there to its commit -- a trigger route, through a `git`
+    # subprocess -- and a concurrent trigger answered 500 "database is locked". Opening and
+    # relocating a project stamp it (`project_lifecycle._observe`); nothing reads it but the
+    # projects API.
     project.directory_state = "available"
-    project.last_seen_at = datetime.now(timezone.utc)
     return ProjectWorkspace(project.id, canonical.path, canonical.path_key)
 
 

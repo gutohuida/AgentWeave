@@ -373,8 +373,8 @@ class _MergeSituation:
     anyway would block every task in such a project behind a remedy that changes nothing.
 
     Resolved once for a second reason found in round 2: `resolve_project_workspace` is not a pure
-    read — it writes `project.directory_state` and `project.last_seen_at` — so asking twice per
-    approval writes the same fields twice and runs the same two subprocess calls twice.
+    read — it can write `project.directory_state` (no longer `last_seen_at`, F349) — so asking twice
+    per approval runs the same resolution and the same two subprocess calls twice.
 
     `will_merge` is carried here because both checks need it and it is one resolution: the merge
     check tests each commit for conflicts, and the unaccepted check asks only whether the list is
