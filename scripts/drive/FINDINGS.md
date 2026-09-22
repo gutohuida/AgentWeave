@@ -21158,7 +21158,7 @@ finding is why that test exists rather than something it blocks.
 
 ## F279 (C) - the two "a stopped run" tests fail about half the time, on an unmodified tree
 
-**Status:** open, and undiagnosed. `spec-queue/ROADMAP.md:93-99` separates it from the
+**Status:** fixed 890cf40 (closed 2026-09-22: the call it failed in was removed by F287's repair, and 0 failures in 30 runs; see the foot). Was: open, and undiagnosed. `spec-queue/ROADMAP.md:93-99` separates it from the
 CI flake it had been conflated with -- different exception, different locus, different latency,
 different reproducibility -- and that separation is the only work it has had. Both tests still stand
 and the concurrent-session reproduction this entry names has never been pursued. [classified 2026-09-09, D-3]
@@ -21217,6 +21217,8 @@ which is a much cheaper starting point for the investigation than the stop path.
 The 4.4c test was rewritten to avoid the collision rather than to tolerate it: the fake process
 signals a `threading.Event` at the moment it blocks, so the test reads the row only when the run is
 quiescent. Twenty-two tests across the two files then passed 4/4 consecutive runs.
+
+**Closed 2026-09-22 (interactive session).** Every failure recorded above raised `Could not refresh instance` from `record_agent_output`'s `db.refresh(row)` (`output_recording.py:94` then). `890cf40` (2026-09-05, F287, the day after this was measured) deleted that refresh as redundant: `expire_on_commit=False` means the committed row needs no reload. So the call that failed no longer exists. Nothing linked the two until now. **Measured on `8b44bc7`:** the pair run alone, 30 times, gave **0 failures** (each run `2 passed`), against the filed 7 in 12. The "concurrent session against the run's in-flight transaction" hypothesis is therefore moot for these tests. Any `database is locked` a concurrent session still causes is F349's and F292's territory, not this one.
 
 ## F280 (C) - an agent's recording response reports no footprint, so the recorder is the one party who cannot see what their evidence was attached to
 
