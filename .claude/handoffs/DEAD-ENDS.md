@@ -1413,6 +1413,19 @@ $//'` after. *(2026-09-21)*
   `claude`'s dir stripped: `PATH=$(echo "$PATH" | tr ':' '
 ' | grep -vxF "$(dirname "$(which claude)")" | paste -sd:) py -3.11 -m pytest ...`. *(2026-09-22)*
 
+- **`gh run list --commit <sha>` needs the full 40-character sha.** With a short one it matches
+  nothing, the next `gh run watch` gets an empty id, and a background wait fails with "run or job
+  ID required". Take the run id from `gh run list --json databaseId,headSha` filtered on
+  `headSha|startswith(...)`. *(2026-09-22)*
+- **Do not write Python source through a Python-in-heredoc string replacement.** Escapes such as
+  `"
+"` inside the replacement text reached the file as real newlines, which broke four string
+  literals in `scripts/rounds_page.py`. Use the Write/Edit tools for code, and keep the heredoc
+  scripts for data files such as the ledger. *(2026-09-22)*
+- **F167 has no `## F167 ` heading in `FINDINGS.md`.** Its text sits under F154's write-up (`### F167`)
+  and under a `## F167's bound is now measured` section, so any grep for `^## F167 ` misses it.
+  Round 0 of `spec-queue/ROUNDS.md` gives it a heading. *(2026-09-22)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
