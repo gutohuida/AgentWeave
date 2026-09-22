@@ -31015,7 +31015,7 @@ suspension warning at all).
 
 **Source:** audit
 
-**Status:** open. **Found 2026-09-21** by the night window, while deciding whether to act on a
+**Status:** fixed (this commit) [Round 1, 2026-09-22]. Re-keyed on (file, hook, occurrence); see FIXED at the end of this entry. **Found 2026-09-21** by the night window, while deciding whether to act on a
 chore the same window's iteration 8 had noticed and not converted ("`MISREPORT_CEILING` reports the
 live count dropped to 49 from a ceiling of 52 -- the constant should be lowered to hold the new
 floor, but that is a separate, unscoped chore"). Acting on it would have been wrong.
@@ -31105,6 +31105,44 @@ theoretical: `hub/tests/test_surface_ceilings.py:103: UserWarning: operator-reac
 surfaces dropped to 49 from a ceiling of 52. Lower the constant in test_surface_ceilings.py so the
 ratchet holds the new floor.` A reader who does what that sentence says freezes eight dead keys as
 the floor. It is emitted on every green run, so it will keep asking.
+
+
+**FIXED 2026-09-22 (interactive session, Round 1).** Re-keyed, re-measured, and the decay made a
+test failure:
+
+- **Mechanically re-keyed, not by reading `why` strings.** All 101 rows were written in `894b48e`
+  (2026-09-02, `git log -S`). `n11`'s own `call_sites()` was run over that tree's `hub/ui/src`, and
+  **every one of the 101 line keys landed on a real call site there**, and every `why` describes
+  the hook on its line. So the table was right when it was written and drifted afterwards. The
+  "born decayed at `6484de4`" reading above is about the commit that froze the ceiling, not the
+  one that wrote the table. Each row now names `(path, hook, occurrence)`: the `occurrence`-th call
+  of that hook in that file, in source order. A line shift cannot move that.
+- **What the re-key found.**
+  - The finding's 6-row reconstruction was right, pair for pair.
+  - 19 rows were stale in all classes, not the 8 MISREPORT rows this entry counted. 17 of them
+    relocate to the 17 old sites among the 18 `UNCLASSIFIED`.
+  - **One row was worse than stale.** `TaskDetailDrawer.tsx:150` was written for `useAgents`
+    (`BLANK`), and at HEAD line 150 is `useAllowedTransitions`. The table was applying one hook's
+    classification to a different hook.
+  - Two rows were real repairs, and are removed. `AgentOutputPanel` no longer calls
+    `useAgentTimeline`. `InstructionsPage` now binds and uses `isError` from `useInstructions`
+    (`cd78e17`/`1492069`).
+  - One site is genuinely new: `InstructionsPage` `useProjects`. It is classified `BLANK`, because
+    the clear dialog's name falls back to "this project".
+- **Re-measured.** 100 unhandled sites: 0 unclassified, 0 stale. **55** operator-reachable
+  MISREPORT surfaces, which is 49 plus the six. `MISREPORT_CEILING` goes 52 -> 55, the one
+  deliberate raise, with the reason stated beside the constant. `UNHANDLED_SITE_CEILING` stays 100.
+- **Decay is now a failure, not a warning.**
+  - `n11.stale_classifications()` lists every row that names no unhandled site.
+    `test_no_new_misreporting_surface` refuses to read the count while any row is stale, so a
+    repaired site has to take its row with it before the drop can show.
+  - `test_the_misreport_count_does_not_move_when_lines_do` shifts every site by 40 lines and
+    requires the same count. On HEAD's line-keyed table it gives 49 -> 0, and it passes here.
+  - `test_a_repaired_site_leaves_its_row_stale_rather_than_uncounted` removes one live MISREPORT
+    site and requires exactly its key back.
+- **Not changed:** `_ratchet`'s "lower the constant" warning. With stale rows now forbidden, a drop
+  can only come from a row deleted with its repair, and that is the case the warning was written
+  for.
 
 ## F397 (D) -- archiving an already-archived agent is a 200 that re-stamps `archived_at` and writes a second `agent_archived` event
 
