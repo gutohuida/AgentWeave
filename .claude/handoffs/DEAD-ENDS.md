@@ -1366,6 +1366,21 @@ $//'` after. *(2026-09-21)*
 
 ## 2026-09-22
 
+- **A Linux-only test failure can be reproduced on this machine, in WSL.** `wsl.exe -d Ubuntu`
+  exists and has `uv` plus a real 3.11 at `~/.local/bin/python3.11` (3.12 is the system one). A
+  throwaway checkout takes about a minute and does not touch `~/projects/agentweave`:
+  `git archive --format=tar -o <scratch>/hub.tar HEAD hub constraints-dev.txt pyproject.toml`, then
+  in WSL `tar -xf $(wslpath -a <scratch>/hub.tar)`, `uv venv -p 3.11 .venv`,
+  `uv pip install -c constraints-dev.txt -e './hub[dev]'`. Used 2026-09-22 to chase F383's
+  `database is locked`, which only ever failed on CI (the Windows tree cannot unlink an open
+  database file, so the race differs). Quote the inner command carefully: `$i` and `$(...)` inside
+  `wsl.exe -- bash -lc '...'` are mangled, so write loops to a file rather than inlining them.
+  *(2026-09-22)*
+- **`json.load(open(path))` on Windows reads cp1252 and dies on pip's own report.** `pip install
+  --dry-run --report <file>` writes UTF-8, and a package description with a non-Latin-1 byte raises
+  `UnicodeDecodeError: 'charmap' codec can't decode byte 0x90`. Pass `encoding='utf-8'`. Piping
+  `--report -` does not help either: pip's progress lines land on stdout with the JSON. *(2026-09-22)*
+
 - **A local lint pass over `src/ hub/ tests/` is not CI's lint.** CI's ubuntu-3.11 job also runs
   `ruff check scripts/ --select E9,F63,F7,F82,F401,F841`, and an unused variable in a new
   `scripts/drive/` harness failed three pushes in a row (`229a708`, `24f3655`, `a4d0976`) while
