@@ -65,8 +65,10 @@ if HUB.endswith(":8000") or UI.endswith(":8000"):
     print("REFUSING TO RUN: 8000 is the operator's real usage.")
     sys.exit(1)
 
-DIR_A = os.path.join(os.path.expanduser("~"), "Documents", "drive-0902-d4a")
-DIR_B = os.path.join(os.path.expanduser("~"), "Documents", "drive-0902-d4b")
+# Created here: opening a project now refuses a directory that does not exist (409
+# `project_workspace_missing`), and these two used to be assumed present under ~/Documents.
+DIR_A = tempfile.mkdtemp(prefix="drive-d4a-")
+DIR_B = tempfile.mkdtemp(prefix="drive-d4b-")
 SHOTS = os.path.join(tempfile.gettempdir(), "d4-shots")
 os.makedirs(SHOTS, exist_ok=True)
 
@@ -317,7 +319,7 @@ def drive(pid_a, pid_b):
         s = observe(page, "05-c-on-a")
         check(s["value"] == ALPHA, "A's editor holds A's text")
 
-        switch = page.get_by_role("button", name="Switch project")
+        switch = page.get_by_role("combobox", name="Switch project")
         print(f"    'Switch project' controls on screen: {switch.count()}")
         if switch.count() == 0:
             print("    NOT DRIVEN: no in-page project switch is reachable from this page.")
@@ -335,15 +337,16 @@ def drive(pid_a, pid_b):
                     route.continue_()
 
             page.route("**/project/instructions", handler_b)
-            switch.first.click()
-            page.wait_for_timeout(800)
+            # A native <select> (F296): its options are chosen with select_option, not clicked.
+            options = switch.first.locator("option").all_inner_texts()
+            print(f"    switcher options: {options}")
             page.screenshot(path=os.path.join(SHOTS, "d4-06-switcher.png"))
-            target = page.get_by_text("d4-bravo", exact=False)
-            if target.count() == 0:
+            target = next((o for o in options if "d4-bravo" in o), None)
+            if target is None:
                 print("    NOT DRIVEN: the switcher does not list the other fixture.")
                 check(True, "C not driven — recorded, not asserted")
             else:
-                target.first.click()
+                switch.first.select_option(label=target)
                 page.wait_for_timeout(5000)
                 s = observe(page, "07-c-on-b")
                 on_instructions = s["textarea"]

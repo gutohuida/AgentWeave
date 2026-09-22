@@ -11,7 +11,9 @@ import ssl
 import urllib.error
 import urllib.request
 
-HUB = os.environ.get("AW_HUB", "http://127.0.0.1:8010")
+# No default either (F138). The old one was `:8010`, the trial Hub -- so a script run with no
+# environment at all drove the one instance a drive must not disturb. Name the Hub you started.
+HUB = os.environ.get("AW_HUB", "")
 # No default. This file is tracked in a public repository, so a key written here is a published
 # key -- and one was, from the first commit of this file until 2026-09-07. Set AW_KEY in the
 # environment instead; `require_key()` below refuses to build a request without one.
@@ -40,14 +42,25 @@ def require_key():
     return KEY
 
 
+def require_hub():
+    """Like `require_key()`: an unset AW_HUB stops the script here, loudly. Returns the URL."""
+    if not HUB:
+        raise SystemExit(
+            "AW_HUB is not set. Point it at the Hub this drive started, e.g.\n"
+            "  export AW_HUB=http://127.0.0.1:8031\n"
+            "Nothing is defaulted -- :8000 is the operator's and :8010 is the trial Hub."
+        )
+    return HUB
+
+
 def api(method, path, body=None, raw=False, timeout=60):
     """Call the Hub. Returns (status, parsed_or_text). Never raises on HTTP error.
 
-    An unset AW_KEY is not an HTTP error: `require_key()` stops the call before the request is
-    built, so it never reaches the network.
+    An unset AW_KEY or AW_HUB is not an HTTP error: `require_key()` and `require_hub()` stop the
+    call before the request is built, so it never reaches the network.
     """
     key = require_key()
-    url = HUB + ("/api/v1" + path if path.startswith("/") else path)
+    url = require_hub() + ("/api/v1" + path if path.startswith("/") else path)
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", "Bearer " + key)

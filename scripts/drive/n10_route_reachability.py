@@ -200,7 +200,10 @@ def segments(path):
 
 def segment_match(route_seg, url_seg):
     if route_seg.startswith("{"):
-        return "exact"
+        # A parameter is filled by an interpolation, whole (`*`) or glued (`~`). A bare literal is
+        # a sibling route's segment -- `runners/launchability` does not reach `runners/{runner_id}`,
+        # and counting it did hide one clientless route (F346).
+        return "exact" if url_seg == "*" or "~" in url_seg else None
     if url_seg == route_seg:
         return "exact"
     if url_seg == "*":
