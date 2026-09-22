@@ -23,7 +23,12 @@ fields they actually accept and require.
 import asyncio
 import re
 
-from hub.api.v1.agents import _AGENT_ACTIONS_PREFIX, UNDESCRIBED_TOOLS, _tool_surface_lines
+from hub.api.v1.agents import (
+    _AGENT_ACTIONS_PREFIX,
+    UNDESCRIBED_ARGUMENTS,
+    UNDESCRIBED_TOOLS,
+    _tool_surface_lines,
+)
 from hub.mcp_server import mcp
 
 # Anything that is not `"mcp"` selects the HTTP rendering. `"cli"` is the value
@@ -209,6 +214,35 @@ def test_every_required_argument_is_described():
         f"required arguments the surface never mentions: {missing}. "
         "An agent cannot supply an argument it was not told about."
     )
+
+
+def test_every_optional_argument_is_described_or_deliberately_excluded():
+    """F160: the two tests above are asymmetric. A described argument the tool does not take fails,
+    and so does an omitted required one, but an omitted *optional* one passed silently. That was
+    exactly how `create_loop(work_needs_evidence=...)` could have gone undescribed indefinitely,
+    and it left fourteen arguments unknown to an agent on the MCP path while the HTTP rendering
+    listed them all."""
+    schemas = _schemas()
+    missing = {}
+    for name, args in _described_signatures().items():
+        accepted = set(schemas.get(name, {}).get("properties", {}))
+        absent = sorted(
+            arg for arg in accepted - set(args) if (name, arg) not in UNDESCRIBED_ARGUMENTS
+        )
+        if absent:
+            missing[name] = absent
+    assert not missing, (
+        f"accepted arguments the surface never mentions: {missing}. Add them to the tool's `args` "
+        "in `_tool_surface_lines`, or to `UNDESCRIBED_ARGUMENTS` with the reason."
+    )
+
+
+def test_every_argument_exclusion_is_real_and_states_its_reason():
+    """The same two guards `UNDESCRIBED_TOOLS` has: no silent exclusion, and no stale one."""
+    schemas = _schemas()
+    for (name, arg), reason in UNDESCRIBED_ARGUMENTS.items():
+        assert arg in schemas.get(name, {}).get("properties", {}), f"{name}.{arg} is not accepted"
+        assert len(reason.split()) >= 8, f"{name}.{arg}'s reason is too short to be one: {reason!r}"
 
 
 def test_the_spec_tool_is_described():

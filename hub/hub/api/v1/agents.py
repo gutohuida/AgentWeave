@@ -953,6 +953,17 @@ UNDESCRIBED_TOOLS = {
     ),
 }
 
+# The same decision one level down (F160): an argument a described tool accepts and its `args`
+# deliberately leave out. Anything else the schema accepts has to be in `args`, or an agent on the
+# MCP path never learns the capability exists — while the HTTP rendering, whose `fields` list it,
+# already tells an agent without MCP.
+UNDESCRIBED_ARGUMENTS = {
+    ("submit_spec_document", "schema_version"): (
+        "The document format's version. The Hub speaks exactly one and the tool defaults to it; "
+        "any other value is refused (`spec_payload`), so setting it can only fail the call."
+    ),
+}
+
 
 def _operations() -> List[_Operation]:
     """The single description of the plane's operations, in the order an agent meets them.
@@ -975,7 +986,10 @@ def _operations() -> List[_Operation]:
     return [
         _Operation(
             tool="send_message",
-            args="to_agent, subject, content, message_type=message, task_id=None",
+            args=(
+                "to_agent, subject, content, message_type=message, task_id=None, "
+                "conversation_id=None, start_new_thread=False"
+            ),
             method="POST",
             path="/messages",
             fields=(
@@ -997,7 +1011,8 @@ def _operations() -> List[_Operation]:
         _Operation(
             tool="create_task",
             args=(
-                "title, description, assignee, priority=medium, requirements, acceptance_criteria"
+                "title, description, assignee, priority=medium, requirements, acceptance_criteria, "
+                "requirement_ids=None, spec_document=None, loop_id=None"
             ),
             method="POST",
             path="/tasks",
@@ -1035,7 +1050,7 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="update_task",
-            args="task_id, status",
+            args="task_id, status, notes=None",
             method="PATCH",
             path="/tasks/{task_id}",
             fields=("status", "notes"),
@@ -1044,7 +1059,7 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="ask_user",
-            args="questions",
+            args="questions, blocking=True",
             method="POST",
             path="/questions/batch",
             fields=("questions", "blocking"),
@@ -1163,7 +1178,7 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="read_spec_document",
-            args="path",
+            args="path, include=requirements",
             method="GET",
             path="/spec/documents",
             fields=("path", "include"),
@@ -1180,7 +1195,7 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="record_evidence",
-            args="identifier, summary",
+            args="identifier, summary, kind=test_result, locator, document, task_id",
             method="POST",
             path="/spec/evidence",
             fields=("identifier", "summary", "kind", "locator", "document", "task_id"),
@@ -1195,7 +1210,7 @@ def _operations() -> List[_Operation]:
         ),
         _Operation(
             tool="list_evidence",
-            args="identifier, review_state",
+            args="identifier, document, review_state",
             method="GET",
             path="/spec/evidence",
             fields=("identifier", "document", "review_state"),

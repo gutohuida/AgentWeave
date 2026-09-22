@@ -13,7 +13,7 @@ you.
 
 | Tool | Purpose |
 |------|---------|
-| `send_message(to_agent, subject, content, message_type=message, task_id=None)` | Queue an attributable peer message, under the hop budget |
+| `send_message(to_agent, subject, content, message_type=message, task_id=None, conversation_id=None, start_new_thread=False)` | Queue an attributable peer message, under the hop budget |
 | `request_agent(name, template, task)` | Create an agent from a pre-approved template, under the project agent budget |
 
 ## Tasks
@@ -23,13 +23,13 @@ you.
 | `create_task(title, description, assignee, priority=medium, requirements, ...)` | Create a task attributed to the bound agent |
 | `list_tasks(agent=None)` | Read the shared task ledger |
 | `get_task(task_id)` | Read one ledger entry |
-| `update_task(task_id, status)` | Move a task through its lifecycle; `status` is required |
+| `update_task(task_id, status, notes=None)` | Move a task through its lifecycle; `status` is required |
 
 ## Asking the operator
 
 | Tool | Purpose |
 |------|---------|
-| `ask_user(questions)` | Put 1–4 structured decisions to the operator and **block** until answered |
+| `ask_user(questions, blocking=True)` | Put 1–4 structured decisions to the operator and **block** until answered |
 | `get_answer(question_id)` | Check a question you asked non-blocking |
 
 ## Specifications and evidence
@@ -37,10 +37,10 @@ you.
 | Tool | Purpose |
 |------|---------|
 | `submit_spec_document(path, title, kind, summary, problem, design, lifecycle, scope, ...)` | Write a specification document. Never author specification markup by hand — the Hub renders it and mints requirement identifiers |
-| `read_spec_document(path)` | Read a document. Use before writing to one |
+| `read_spec_document(path, include=requirements)` | Read a document. Use before writing to one |
 | `rename_spec_document(path, subject)` | Rename a document once its subject is actually known |
-| `record_evidence(identifier, summary)` | Record what demonstrates a requirement is satisfied. Enters `awaiting` — what you record is a claim until somebody else decides on it |
-| `list_evidence(identifier, review_state)` | The evidence this project holds, with who produced each row |
+| `record_evidence(identifier, summary, kind=test_result, locator, document, task_id)` | Record what demonstrates a requirement is satisfied. Enters `awaiting` — what you record is a claim until somebody else decides on it |
+| `list_evidence(identifier, document, review_state)` | The evidence this project holds, with who produced each row |
 | `decide_evidence(evidence_id, decision, reason)` | Accept or reject **somebody else's** evidence, and only if the operator granted it |
 | `recall(observation_id)` | Read back one observation by its identifier |
 | `submit_checkpoint_notes(...)` | Hand off what the next turn needs when a conversation is checkpointed |

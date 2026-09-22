@@ -103,7 +103,7 @@ def test_ask_user_is_described_as_a_decision_tool():
     """Left alone, "there is no way to ask without options" reads as a fact about asking rather
     than about this tool — which is exactly how it was read."""
     text = "\n".join(_tool_surface_lines())
-    entry = text.split("`ask_user(questions)`", 1)[1].split("\n- `", 1)[0]
+    entry = text.split("`ask_user(questions, blocking=True)`", 1)[1].split("\n- `", 1)[0]
     assert "decision" in entry.lower()
     assert "blocks your turn" in entry
     assert "belongs in your reply" in entry
