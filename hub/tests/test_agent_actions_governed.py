@@ -90,8 +90,8 @@ async def test_agent_job_operations_require_allowance_and_retain_run(app, auth_h
     denied = await app.post("/api/v1/agent-actions/jobs", headers=headers, json=body)
     assert denied.status_code == 403
 
-    settings = await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    settings = await app.put(
+        "/api/v1/projects/proj-test/settings",
         headers=auth_headers,
         json={
             "hop_budget": 8,
@@ -173,8 +173,8 @@ async def test_agent_job_operations_require_allowance_and_retain_run(app, auth_h
 
 
 async def _allow_agent_jobs(app, auth_headers):
-    settings = await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    settings = await app.put(
+        "/api/v1/projects/proj-test/settings",
         headers=auth_headers,
         json={
             "hop_budget": 8,
@@ -477,8 +477,8 @@ async def test_no_card_is_opened_for_an_archive_that_could_not_have_happened(app
 
     # And a run whose allowance was withdrawn never reaches the gate either.
     plain_id = await _job_for_archiving(app, headers, name="ordering job")
-    await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    await app.put(
+        "/api/v1/projects/proj-test/settings",
         headers=auth_headers,
         json={
             "hop_budget": 8,

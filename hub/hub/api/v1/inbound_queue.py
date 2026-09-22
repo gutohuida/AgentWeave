@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +14,6 @@ from ...db.models import InboundQueueEntry, Project
 from ...inbound_queue import DELIVERY_ATTEMPT_LIMIT, release_entry, withdraw_entry
 from ...launchability import get_agent_config, probe_agent
 from ...provider_allowance import hold_sentence, operator_would_probe, provider_hold
-from ...schemas.common import RequestModel
 from ...sse import sse_manager
 from ...usage_accounting import project_budget_state
 from ...utils import persist_event
@@ -49,11 +48,18 @@ class QueueEntryResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class QueueSettings(RequestModel):
-    hop_budget: int = Field(ge=1)
-    turn_delivery_cap: int = Field(ge=1)
-    agent_budget: int = Field(default=8, ge=1)
-    allow_agent_jobs: bool = False
+class QueueSettings(BaseModel):
+    """The project's queue limits, read-only here.
+
+    `PUT /projects/{id}/settings` is their one writer (F196, F198): a second writer here once
+    accepted values that route's model refuses, leaving the settings page unable to read or repair
+    them.
+    """
+
+    hop_budget: int
+    turn_delivery_cap: int
+    agent_budget: int
+    allow_agent_jobs: bool
 
 
 class QueueStatus(BaseModel):
@@ -80,36 +86,6 @@ async def get_queue_settings(
         agent_budget=row.agent_budget,
         allow_agent_jobs=row.allow_agent_jobs,
     )
-
-
-@router.patch("/settings", response_model=QueueSettings)
-async def update_queue_settings(
-    body: QueueSettings,
-    project: Tuple[str, str] = Depends(get_project),
-    session: AsyncSession = Depends(get_session),
-) -> QueueSettings:
-    project_id, _ = project
-    row = await session.get(Project, project_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail="Project not found")
-    row.hop_budget = body.hop_budget
-    row.turn_delivery_cap = body.turn_delivery_cap
-    row.agent_budget = body.agent_budget
-    row.allow_agent_jobs = body.allow_agent_jobs
-    await session.commit()
-    queued_agents = await session.execute(
-        select(InboundQueueEntry.agent)
-        .where(
-            InboundQueueEntry.project_id == project_id,
-            InboundQueueEntry.state == "queued",
-        )
-        .distinct()
-    )
-    from ...turn_scheduler import schedule_agent
-
-    for agent in queued_agents.scalars().all():
-        await schedule_agent(project_id, agent)
-    return body
 
 
 @router.get("/{agent}/status", response_model=QueueStatus)

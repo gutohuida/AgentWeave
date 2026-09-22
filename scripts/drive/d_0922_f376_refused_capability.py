@@ -241,9 +241,7 @@ def main():
     print("=" * 78)
     print("5.2 -- the operator enables the setting and answers; record what the agent does")
     print("=" * 78)
-    code, settings = api("GET", f"/projects/{P}/queue/settings")
-    settings["allow_agent_jobs"] = True
-    code, saved = api("PATCH", f"/projects/{P}/queue/settings", settings)
+    code, saved = api("PUT", f"/projects/{P}/settings", {"allow_agent_jobs": True})
     check("the operator enabled allow_agent_jobs", code == 200 and saved.get("allow_agent_jobs") is True, str(saved)[:200])
     code, answered = api(
         "PATCH",

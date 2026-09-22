@@ -376,8 +376,8 @@ async def test_create_loop_declares_a_document_that_later_materialises_into_its_
         )
         document_id = document.id
 
-    settings = await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    settings = await app.put(
+        "/api/v1/projects/proj-test/settings",
         headers=auth_headers,
         json={
             "hop_budget": 8,

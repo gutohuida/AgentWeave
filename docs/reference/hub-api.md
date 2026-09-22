@@ -76,11 +76,11 @@ the following turn rather than rejected.
 | `GET` | `/queue/{agent}/status` | Inspect waiting count, running state, and waiting reason |
 | `DELETE` | `/queue/entries/{id}` | Withdraw an entry that has not been delivered |
 | `GET` | `/queue/settings` | Inspect the effective project queue limits |
-| `PATCH` | `/queue/settings` | Set the positive integer queue limits |
 
-The default `hop_budget` is **6** and the default `turn_delivery_cap` is **10**. Updating the
-settings requires no source change and immediately re-evaluates waiting queues. Entries beyond the
-delivery cap remain queued for following turns. Peer messages created by a Hub-owned run include
+The default `hop_budget` is **6** and the default `turn_delivery_cap` is **10**. They are set
+through `PUT /projects/{id}/settings` (each 1–1000); updating them requires no source change and
+immediately re-evaluates waiting queues. Entries beyond the delivery cap remain queued for
+following turns. Peer messages created by a Hub-owned run include
 that run's `run_id`; their hop depth is derived from the run rather than trusted from request data.
 
 ### Logs

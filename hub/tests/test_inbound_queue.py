@@ -173,31 +173,56 @@ async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_heade
         "allow_agent_jobs": False,
     }
 
-    updated = await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    # The project settings route is the one writer, and the queue view reads what it saved.
+    updated = await app.put(
+        "/api/v1/projects/proj-test/settings",
         json={"hop_budget": 4, "turn_delivery_cap": 2},
         headers=auth_headers,
     )
     assert updated.status_code == 200
-    assert updated.json() == {
+    read_back = await app.get("/api/v1/projects/proj-test/queue/settings", headers=auth_headers)
+    assert read_back.json() == {
         "hop_budget": 4,
         "turn_delivery_cap": 2,
         "agent_budget": 8,
         "allow_agent_jobs": False,
     }
 
-    invalid = await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    invalid = await app.put(
+        "/api/v1/projects/proj-test/settings",
         json={"hop_budget": 0, "turn_delivery_cap": "many"},
         headers=auth_headers,
     )
     assert invalid.status_code == 422
 
-    await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    await app.put(
+        "/api/v1/projects/proj-test/settings",
         json={"hop_budget": 6, "turn_delivery_cap": 10},
         headers=auth_headers,
     )
+
+
+@pytest.mark.asyncio
+async def test_the_queue_limits_have_one_writer(app, auth_headers):
+    """F196: `PATCH /queue/settings` took `hop_budget: 1001`, which `ProjectSettings` (le=1000)
+    cannot read, so `GET` and `PUT /settings` both answered 500 and the settings page could neither
+    show nor repair it. The route is gone (decided 2026-09-08, R-3), and with it F198's reset of the
+    two fields a body omitted."""
+    gone = await app.patch(
+        "/api/v1/projects/proj-test/queue/settings",
+        json={"hop_budget": 1001, "turn_delivery_cap": 10},
+        headers=auth_headers,
+    )
+    assert gone.status_code == 405
+
+    refused = await app.put(
+        "/api/v1/projects/proj-test/settings", json={"hop_budget": 1001}, headers=auth_headers
+    )
+    assert refused.status_code == 422
+
+    settings = await app.get("/api/v1/projects/proj-test/settings", headers=auth_headers)
+    assert settings.status_code == 200
+    assert settings.json()["hop_budget"] == 6
 
 
 @pytest.mark.asyncio

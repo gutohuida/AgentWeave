@@ -211,8 +211,8 @@ async def test_agent_job_mutation_requires_operator_allowance(app, auth_headers)
     assert detail["setting"] == "allow_agent_jobs"
     assert "approval" not in detail["message"].lower()
 
-    settings = await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    settings = await app.put(
+        "/api/v1/projects/proj-test/settings",
         headers=auth_headers,
         json={
             "hop_budget": 6,
@@ -224,8 +224,8 @@ async def test_agent_job_mutation_requires_operator_allowance(app, auth_headers)
     assert settings.status_code == 200
     allowed = await app.post("/api/v1/projects/proj-test/jobs", headers=denied_headers, json=body)
     assert allowed.status_code == 201, allowed.text
-    reset = await app.patch(
-        "/api/v1/projects/proj-test/queue/settings",
+    reset = await app.put(
+        "/api/v1/projects/proj-test/settings",
         headers=auth_headers,
         json={
             "hop_budget": 6,

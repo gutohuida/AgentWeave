@@ -418,8 +418,8 @@ async def test_raising_the_budget_releases_a_held_entry_without_an_explicit_acti
     spawn = MagicMock(return_value=_completed_session(7203, "raise-1"))
     with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
         with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
-            saved = await app.patch(
-                "/api/v1/projects/proj-test/queue/settings",
+            saved = await app.put(
+                "/api/v1/projects/proj-test/settings",
                 json={"hop_budget": 4, "turn_delivery_cap": 10},
                 headers=auth_headers,
             )
