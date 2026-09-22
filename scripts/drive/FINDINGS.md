@@ -4489,7 +4489,7 @@ and finding F5: *"nothing used to ask which entries may ride on it."* F66 is tha
 
 ## F68 (B) — two spellings of one severity, and the louder event is the one that renders as routine
 
-**Status:** open (no fix commit references it)
+**Status:** fixed 744ea5d (closed 2026-09-22 by the stale-ledger sweep; see the foot). Was: open (no fix commit references it)
 
 Found 2026-08-26 while measuring the severity distribution for `every-run-knows-its-task`'s D6.
 Nothing was looking for it; it fell out of a count.
@@ -4532,6 +4532,8 @@ introduced the same way tomorrow. The enumeration is what makes it a mechanism i
 
 Adjacent to `every-run-knows-its-task` D6, which derives divergence severity rather than hardcoding
 it; that change should not land a new severity string without this normalisation existing.
+
+**Closed 2026-09-22 (stale-ledger sweep, verified by hand).** `744ea5d` (2026-08-27, Q1-IMPL) changed `run_divergence.py`'s `severity="warning"` to `"warn"` and added `_KNOWN_SEVERITIES` with normalisation in `persist_event` (`hub/hub/utils.py:29,59`), so an unknown spelling is written as `warn`. Checked 2026-09-22: no `severity="warning"` literal remains anywhere in `hub/hub`.
 
 ## F69 — `every-run-knows-its-task` groups 1-5 driven live, all five behaviours held (not a defect — the record the group asked for)
 
@@ -9419,7 +9421,7 @@ rather than the `400 Job is disabled` a second press would get.)
 
 ## F124 (B) — a loop's work can never reach the main branch, and the card offers a retry that cannot succeed
 
-**Status:** open, filed not fixed. Found by driving row 11's second half, 2026-08-29.
+**Status:** fixed eeab0d3 (closed 2026-09-22 by the stale-ledger sweep; see the foot). Was: open, filed not fixed. Found by driving row 11's second half, 2026-08-29.
 
 Both loop tasks above were approved by the operator. `main` never moved:
 
@@ -9491,6 +9493,8 @@ pressed.
 
 Recommendation: **(3) now, (2) as its own change.** (1) trades a governance property for
 convenience and should not be taken quietly.
+
+**Closed 2026-09-22 (stale-ledger sweep, verified by hand).** `eeab0d3` (D-IMPL groups 4-5) added `task_integration.evidence_governs`: a documentless loop's task with no requirement link merges its branch tip instead of requiring evidence (step 5), and `Loop.work_needs_evidence` lets the operator decide either way. `5522597` (groups 6-7) added `is_retryable`, under which `NOTHING_TO_MERGE` is unretryable, and `TaskIntegrationNote.tsx:45` renders Try again only when a row is `retryable`. Checked on 2026-09-22 against today's code; not driven.
 
 ## F121, strengthened — the same word under-counts on a loop and over-counts on a flow
 
@@ -11619,7 +11623,7 @@ agent completes its own task, for comparison. Build the fixture with
 
 ## F143 (B) — the reviewer is told to build the thing it is reviewing, and said so itself
 
-**Status:** open, filed not fixed. Found in the same run as F142's third row — the one where
+**Status:** fixed 1b4c730 (closed 2026-09-22 by the stale-ledger sweep; see the foot). Was: open, filed not fixed. Found in the same run as F142's third row — the one where
 everything else worked.
 
 A flow's review firing composes the reviewer's queue entry through `_compose_loop_briefing`
@@ -11673,6 +11677,8 @@ sentence about somebody else reviewing, the second on the implementation task's 
 green checks for a briefing that says the opposite of what was being asserted. The file now asserts
 the implementation wording is present (F143's actual state) and that the review wording is not, so
 the day it is fixed the lines swap and say so.
+
+**Closed 2026-09-22 (stale-ledger sweep, verified by hand).** `1b4c730` ("the briefing names what finishing is, and stops telling a reviewer to build it (F140, F143)") made `is_review` a required keyword of `_compose_loop_briefing`. The review arm says "**This turn is a review.** Somebody else finished the task below; you are checking their work, not doing it" (`scheduler.py:2496`), and both call sites pass it (`:3179`, `:3533`). Checked on 2026-09-22 against today's code; not driven.
 
 ---
 
