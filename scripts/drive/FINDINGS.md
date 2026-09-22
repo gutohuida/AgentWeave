@@ -14087,7 +14087,7 @@ not assert a cause it cannot know"*.
 
 ## F172 (B) — relocating onto a path another project still claims answers a bare 500
 
-**Status:** open. Deterministically reproduced
+**Status:** fixed cb2275a (2026-09-22; see the foot). Deterministically reproduced
 (`t_f172_relocate_onto_a_claimed_path.py`), filed by the row-1 sweep (`3280f52`), never fixed and
 never specced. [classified 2026-09-09, D-2]
 
@@ -14189,6 +14189,8 @@ agent bound to it, one real turn (`run-86669729ee1d`, completed, exit 0, 7s). `t
 `claude-haiku-4-5-20251001` — the model Claude itself reported back, not the one the Hub sent. A
 Runner record reaches the provider process intact. Codex runners were created, listed and probed
 but never spawned, per the standing operator decision that Codex is undrivable.
+
+**Fixed 2026-09-22, `cb2275a`.** `_guard_relocation` now looks up any other project holding the destination `path_key` and raises `ProjectIdentityConflict(code="project_path_claimed")`. The route answers 409 with the claimant's id, name and `directory_state`, plus the remedy this entry asked for: relocate that project or delete it, then relocate this one. `test_relocate_onto_a_claimed_path.py` reproduces the scenario through the route: before the fix `IntegrityError`, after the 409, with the project left unmoved. **Not re-checked:** `create` and `open`, which this entry found refuse legibly already. The `t_f172_…` drive harness was not re-run, and the UI's rendering of the new code was not seen.
 
 ---
 
