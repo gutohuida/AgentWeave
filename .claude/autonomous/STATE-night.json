@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f375-g2-impl",
-    "next_action": "Do queue item f375-g2-impl: F375 group 2 (tasks 2.1-2.5) in hub/hub/mcp_server.py rule 4 per design D1 (R3 version). Group 1 tests are in (43 fail today by design). 2.3: only P7,R8,R9,H10 may change vs today; anything else is a defect: stop and log. Editing mcp_server.py reaches :8000 - restart nothing. F292 tally standing 0 of 2 (69f1531 run 35667056235 unchecked).",
+    "current": "f375-g3-drive",
+    "next_action": "Do queue item f375-g3-drive: F375 group 3 (tasks 3.1-3.2), real-shell rows in a scratch directory (never repo root, never testbed/ leftovers). Confirm in Git Bash and PowerShell that the group-2 refusal rows actually land outside (cp notes.md .., $'..\\x00x', ~, cp -t.. notes.md, cp -xt.. notes.md, Copy-Item notes.md -Destination:..), and that the negative controls (..., '.. ', C:, cp -t~ notes.md, echo ~30% ~2x ~13) do not; PowerShell Copy-Item notes.md -Destination:~5 writes a file named ~5 inside the workspace. Record shell versions. F292 tally standing 0 of 2 (69f1531 run 35667056235 still unchecked; check it and any newer run from this branch).",
     "queue": [
         {
             "id": "a-first-turn-archive",
@@ -60,7 +60,7 @@
         },
         {
             "id": "f375-g2-impl",
-            "status": "open",
+            "status": "done",
             "title": "F375 group 2: the rule + 2.3 exact-diff check",
             "detail": "Only P7,R8,R9,H10 may change; anything else is a defect: stop and log. mcp_server.py edit reaches :8000 - do not restart anything."
         },

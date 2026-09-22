@@ -976,6 +976,15 @@ _PLAIN_RELATIVE_RE = re.compile(
     rf"[^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}:]*"
     rf"(?:[{re.escape(_SEPARATORS)}][^{re.escape(_SEPARATORS)}{re.escape(_PLAIN_RELATIVE_EVERYWHERE)}]*)+$"
 )
+# A value an option carries in its own word (a-word-without-a-separator-can-still-leave, D7):
+# joined by a colon, `-Destination:..`, `-o:..`, `--output:..` (checked for `..` in both dialects,
+# and for `~` in PowerShell, whose provider cmdlets resolve it there), or a short option with its
+# value glued on, `cp -t..`, `tar -xvC..` (checked for `..` only: bash does not expand a `~` there).
+_COLON_OPTION_RE = re.compile(r"--?[A-Za-z_][A-Za-z0-9_-]*:")
+_GLUED_OPTION_RE = re.compile(r"-[A-Za-z0-9]+")
+# The home-directory shorthand in the shapes a shell substitutes for a word with no separator
+# (D3): alone, with a sign, or with a user name. `~30%` and `~2x` are left alone.
+_TILDE_PREFIX_RE = re.compile(r"~(?:[+-]|[A-Za-z_][A-Za-z0-9._-]*)?")
 _CMD_VARIABLE_RE = re.compile(r"%[A-Za-z_][A-Za-z0-9_]*%")
 _WORD_SPLIT_RE = re.compile(r"[\s=,]+")
 _WORD_TRIM = "\"'`{}[]()<>|;&:"
@@ -1155,7 +1164,21 @@ def _judge_word(
     has_separator = any(separator in word for separator in _SEPARATORS)
     if has_separator and _expands(word):  # 3: where it points is decided when the shell runs
         return _refuse(word, _UNCHECKED)
-    if not has_separator:  # 4: not a path
+    if not has_separator:  # 4: a name in the directory the shell runs in -- unless it names another
+        value = word
+        joined = _COLON_OPTION_RE.match(word)
+        if joined:
+            value = word[joined.end() :]
+            if dialect == "powershell" and _TILDE_PREFIX_RE.fullmatch(value):
+                return _refuse(word, _UNCHECKED)
+        else:
+            if _TILDE_PREFIX_RE.fullmatch(word):
+                return _refuse(word, _UNCHECKED)
+            glued = _GLUED_OPTION_RE.match(word)
+            if glued:
+                value = word[glued.end() :]
+        if value.partition("\x00")[0] == "..":
+            return _judge_path("..", root, word, argument, continues)
         return None
     if os.path.isabs(word) or _PLAIN_RELATIVE_RE.match(word):  # 5: a path, resolved
         return _judge_path(word, root, word, argument, continues)
