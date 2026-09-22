@@ -15664,7 +15664,7 @@ came through clean.
 
 ## F196 (B) — one route writes a value another route's response model cannot serialise, and the project settings page is then unreachable in both directions
 
-**Status:** open. `spec-queue/DECISIONS.md:825` carries the decided remedy -- *"F196 + F198 --
+**Status:** fixed c05be7f (2026-09-22; see the foot). The decided removal of the route. Was: open. `spec-queue/DECISIONS.md:825` carries the decided remedy -- *"F196 + F198 --
 remove `PATCH /queue/settings`"* -- as queue work. It has not been specced or implemented. [classified 2026-09-09, D-2]
 
 `PATCH /queue/settings` validates its four fields with `Field(ge=1)` and **no upper bound**
@@ -15697,6 +15697,8 @@ API has no way back from inside the product.
 
 **Not reachable by an agent.** No MCP tool writes queue settings, so this is operator/API surface
 only, which is why it is B and not higher.
+
+**Fixed 2026-09-22, `c05be7f`: `PATCH /queue/settings` is removed** (DECISIONS R-3, 2026-09-08). External callers were checked first, as that decision asked: nothing in `hub/ui/src`, `src/`, the MCP tools or the agent actions called it. Seven test call sites, one drive script (`d_0922_f376_refused_capability.py`) and `docs/reference/hub-api.md` moved to `PUT /projects/{id}/settings`, which owns the same four columns with `le=1000` and redrains queued agents as the PATCH did. `GET /queue/settings` stays, read-only (`QueueSettings` is now a plain response model). `test_inbound_queue.py::test_the_queue_limits_have_one_writer`: the PATCH answers 405, `hop_budget: 1001` through PUT answers 422, and `GET /settings` stays 200. It fails against the old route (200 != 405). Not driven live. A row already holding >1000 from before this change still wedges `GET`/`PUT /settings`; none is known to exist.
 
 ## F197 (B) — the settings page has no error state, so a failing settings query renders a loading skeleton forever
 
@@ -15829,7 +15831,7 @@ site in `CLASSIFIED`, argue with it there.
 
 ## F198 (C) — `PATCH /queue/settings` silently resets the two fields a body omits
 
-**Status:** open, with a decided remedy nobody has taken.
+**Status:** fixed c05be7f (2026-09-22; see the foot). The decided removal of the route. Was: open, with a decided remedy nobody has taken.
 `spec-queue/DECISIONS.md:825` chose to remove the route rather than repair it. Verified 2026-09-09:
 `update_queue_settings` still assigns all four columns unconditionally
 (`hub/hub/api/v1/inbound_queue.py:91-94`), so a partial PATCH still revokes a permission the operator
@@ -15857,6 +15859,8 @@ its request model field-by-field from `ProjectSettings` with every field made op
 `exclude_unset=True`, and carries a comment naming the live incident that forced it — *"Observed: a
 settings save clearing a project's entire checkpoint configuration"* (`projects.py:150-181`). The
 queue router writes four of the same columns and has none of it.
+
+**Fixed 2026-09-22, `c05be7f`,** with F196: the route that reset omitted fields no longer exists. Its callers use `PUT /settings`, whose merge is `exclude_unset`.
 
 ## F199 (C) — `GET /queue/{agent}` and `/queue/{agent}/status` answer 200 for an agent that does not exist
 
