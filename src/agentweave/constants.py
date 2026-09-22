@@ -149,7 +149,12 @@ RUNNER_TYPES = [
 ]
 
 # Runner configuration — CLI properties per runner type.
-# Used by watchdog and CLI to dispatch commands without hardcoding agent names.
+# NOT THE HUB'S RUNNER REGISTRY (F393). The Hub never imports this module; the only kinds a Hub
+#   runner can be created with are RUNNER_CLIS = ("claude", "codex") (hub/hub/db/models.py),
+#   enforced by hub/hub/schemas/runners.py. What reads this table is the CLI's `doctor`
+#   (diagnostics.py check_runner_clis and _runner_cli), to probe binaries. The other seven
+#   entries, including "copilot" and its mcp_add_cmd, describe no runner the Hub can make: do
+#   not read them as wired-up support. (The watchdog this once dispatched for is deleted.)
 RUNNER_CONFIGS: dict = {
     "claude": {
         "cli": "claude",  # explicit Claude Code CLI
