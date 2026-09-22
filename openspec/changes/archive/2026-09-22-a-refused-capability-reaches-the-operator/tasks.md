@@ -314,7 +314,7 @@ first.
   conversation as well and look at the question tray (design D14): record what it shows and whether
   a record nobody is waiting on sitting there is acceptable to look at. That observation, not this
   prediction, is what a later round should argue with.
-- [ ] 5.3 Set F376's `Status:` line to `fixed <sha>` only after 5.2. Never on the strength of 4.x.
+- [x] 5.3 Set F376's `Status:` line to `fixed <sha>` only after 5.2. Never on the strength of 4.x.
 
 ## Build record (2026-09-22, interactive with the operator)
 
@@ -379,3 +379,8 @@ first.
     fixed.
   - **Mutations:** removing the tray filter, and reading an absent field as `null`, each fail 2 of
     `refusalRecordTray.test.ts`'s 4 tests.
+- **5.3 / suite** — full `hub/tests/` on the final tree (`a4d0976` + `2bc2e7a`): **4568 passed, 86
+  skipped**, 0 failed. CI `ci.yml` green at `2bc2e7a`. The three earlier red runs were a lint miss
+  in the drive script (`scripts/` bug rules) and one F394 hang in an unrelated test. F376 Status
+  set to `fixed 229a708`. Archived 2026-09-22; spec synced into `agent-capability-plane` (+2
+  requirements).

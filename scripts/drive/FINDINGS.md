@@ -29270,7 +29270,7 @@ plainest possible traversal and the sandbox does not check it at all today.
 
 ## F376 (A) — `create_flow` is refused for a setting the operator was never asked about, and the refusal promises an approval that is never requested
 
-**Status:** open. Filed 2026-09-17 by an interactive session, from `LoopEngine_2`
+**Status:** fixed 229a708 (with the review fixes `24f3655` and `a4d0976`, and its prerequisite F386 in `6ab4a4a`), by `a-refused-capability-reaches-the-operator`, archived 2026-09-22 (interactive, with the operator). An agent refused scheduled work now gets an honest 403 naming `allow_agent_jobs`, and the operator gets a non-blocking question of record, at most two per project, kept out of agent trays. **Driven live** on a fresh `:8095` Hub with Haiku (`scripts/drive/d_0922_f376_refused_capability.py`, 16 ok / 0 bad). After the operator enabled the setting and answered, the woken agent re-created the flow itself. An adversarial Opus review returned SHIP WITH FIXES, and they were applied. Full hub suite on the final tree: 4568 passed, 86 skipped. CI green at `2bc2e7a`. **On `:8000` it takes effect only at the next restart.** Filed 2026-09-17 by an interactive session, from `LoopEngine_2`
 (`proj-f90d219dd68c`) on `:8000`, read-only.
 
 **Source:** drive — found by exercising the product and reading what it actually recorded.
