@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d6-repair-impl",
-    "next_action": "d6-repair-impl: spare no-spec repair slot, same conditions as d3-repair-impl (a D-6-qualifying open finding: no new requirement, no touched openspec requirement, no migration/new column, fits one turn with a mutation-checked test and a live drive through the real surface). Check stop_at first; if under ~90 min remain or nothing qualifies, skip with a one-line reason in the log and move to d7-gate. F407 (lowercase 'decide it yourself' after a full stop in agent_trigger.py:503/511/521/848) is a candidate: check the agent-flows specs for any requirement quoting that exact sentence before choosing it.",
+    "current": "d7-gate",
+    "next_action": "d7-gate: day-window.md 'The merge gate' section, in full. Commit everything else first (tree should already be clean from d6), find CI's run for the exact final sha, wait up to 25 min polling ~90s. success + other 3 conditions -> ff-only merge to master, push, then next_action null. Still running at budget -> do not open, name the run id, next_action null; tomorrow's step 1 lands it.",
     "queue": [
         {
             "id": "compose",
@@ -57,11 +57,9 @@
         },
         {
             "id": "d6-repair-impl",
-            "status": "open",
+            "status": "done",
             "title": "Spare repair slot if time remains",
-            "detail": "Only if stop_at allows: another D-6-qualifying no-spec repair, same conditions as d3-repair-impl. Skip with a one-line reason in the log if no time or no qualifying finding remains.",
-            "model": "sonnet",
-            "effort": "high"
+            "detail": "F407 fixed 6961cc4: own_review_remedy's under_review sentence capitalised ('Decide it yourself: ...'), the one line every real caller (agent_trigger.py:503,511,521,848) places after a full stop. Mutation-checked (3/18 tests red without the fix). Driven live: real Haiku turn produces recorded evidence, operator PATCH wedges under_review, a third agent's real POST /agent/trigger returns the real capitalised 409. Site 848 not independently reached live (scheduler's stall detector intercepts a cold fire first) -- recorded as a known gap, not a defect in the fix. FINDINGS.md and BACKLOG.html updated at b654cb2 (open 215 -> 214)."
         },
         {
             "id": "d7-gate",
