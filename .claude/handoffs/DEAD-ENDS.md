@@ -1427,6 +1427,8 @@ $//'` after. *(2026-09-21)*
   and under a `## F167's bound is now measured` section, so any grep for `^## F167 ` misses it.
   Round 0 of `spec-queue/ROUNDS.md` gives it a heading. *(2026-09-22)*
 - **`backlog_page.classify` reads only a Status line's first words, and one word is enough to close an entry.** `retired` anywhere in the first 80 characters makes it `retired`, and so does `not a defect` or `does not reproduce`. An open entry annotated "F399 is a duplicate, retired into this entry" read as closed, and the backlog count dropped by one it should not have (F234, fixed within minutes). When annotating an **open** entry, keep those words out of the first 80 characters, and check the regenerated page's "no longer open" list against what you actually closed. *(2026-09-22)*
+- **A change under `scripts/drive/` can break the CLI suite.** `tests/test_drive_key_guard.py` imports `scripts/drive/aw.py` and calls `api()`. Making `AW_HUB` required (`40e9efa`) turned all six CLI test jobs red, while only `hub/tests/` had been run locally. After touching `aw.py` or any drive helper, run `py -3.11 -m pytest tests/` too, with `AW_HUB`/`AW_KEY` unset (`env -u AW_HUB -u AW_KEY ...`), since CI has neither. *(2026-09-22)*
+- **Mapping a stalled pytest `-q` log to a test: number the list, do not eyeball a `sed -n` range.** N results written means test N finished (pytest writes `.` after the call report and flushes). The hang is in test **N+1**, which is `grep '::' collect.txt | sed -n '<N+1>p'`. Reading the second line of a `sed -n '668,672p'` window as #670 put F382 on the wrong test and closed it wrongly. The Opus review caught it, and F382 was reopened. *(2026-09-22)*
 
 ## RESOLVED
 

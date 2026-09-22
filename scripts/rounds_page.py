@@ -136,12 +136,16 @@ def parse_plan(text: str) -> list[dict]:
             if para and not para.startswith(("|", "**")):
                 blurb = " ".join(para.split())
                 break
+        # A round can be declared done while some of its findings stay open, because they were
+        # handed on to a later round or to D. `**Status:** done YYYY-MM-DD ...` in the plan says so.
+        done = re.search(r"^\*\*Status:\*\*\s*done\s+(\d{4}-\d{2}-\d{2})", body, re.M)
         rounds.append(
             {
                 "key": key,
                 "title": title,
                 "kind": kind,
                 "blurb": blurb,
+                "closed_on": done.group(1) if done else "",
                 "groups": _parse_groups(kind, body),
             }
         )
@@ -183,7 +187,12 @@ def build() -> tuple[str, dict]:
         own = {fid for g in r["groups"] for fid, _ in g["items"] if home[fid] == r["key"]}
         r["own"] = sorted(own, key=lambda x: int(x[1:]))
         r["done"] = [fid for fid in r["own"] if state(fid) in ("fixed", "retired")]
-        if not current_key and r["kind"] == "fix" and len(r["done"]) < len(r["own"]):
+        if (
+            not current_key
+            and r["kind"] == "fix"
+            and not r["closed_on"]
+            and len(r["done"]) < len(r["own"])
+        ):
             current_key = r["key"]
 
     recent = sorted(
@@ -237,7 +246,15 @@ def build() -> tuple[str, dict]:
             items = "".join(item_html(fid, note, r) for fid, note in g["items"])
             groups_html.append(f'<div class="grp">{label}{gnote}<ul>{items}</ul></div>')
         badge = '<span class="now">now</span>' if is_now else ""
-        complete = ' <span class="donechip">complete</span>' if total and got == total else ""
+        if total and got == total:
+            complete = ' <span class="donechip">complete</span>'
+        elif r["closed_on"]:
+            complete = (
+                f' <span class="donechip">done {esc(r["closed_on"])}, '
+                f"{total - got} handed on</span>"
+            )
+        else:
+            complete = ""
         sections.append(
             f'<details class="round kind-{r["kind"]}" id="{esc(r["key"])}"{" open" if is_now else ""}>'
             f'<summary><span class="rkey">{esc(r["key"])}</span>'

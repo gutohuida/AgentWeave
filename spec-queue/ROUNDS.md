@@ -67,6 +67,8 @@ cross-references). They are the same numbers `ROUNDS.html` shows. **Track progre
 
 Cheap, and it makes the open count honest before any real work starts.
 
+**Status:** done 2026-09-22 (commits `9e3f9cb`..`77d39f9`, Opus-reviewed). 8 of 11 closed: F399 (retired into F234), F381, F311, F296, F138, F346, F170, F160. Three handed on, all still open: **F395** closes with F258 in Round 3; **F167** has its heading and is fixed in Round 5; **F382** was narrowed to `test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped` but not diagnosed, and is back to watch-only in D13. The review's residuals are recorded on the entries (F381: Overview card and Questions panel, with F146; F170: projects in a repository subdirectory). **Next: Round 1.**
+
 | Finding | Action |
 |---|---|
 | F395 (B) | Same root cause as F258 (confirmed: `messages.py` `hop_depth = hop_budget + 1` without a run). Fix it under F258 in Round 3, then close both. Keep F395's `origin_type` detail. |
