@@ -17584,7 +17584,7 @@ reasons in it and no error — `??` is satisfied by the six-key rows.
 
 ## F227 (B) — the operator declines a question, then answers it, and a real turn is spent on it
 
-**Status:** open, and enlarged rather than repaired. The 2026-09-06 re-measurement appended
+**Status:** fixed 5eddc42 (2026-09-22; see the foot). Was: open, and enlarged rather than repaired. The 2026-09-06 re-measurement appended
 below reaches the same defect through a second door -- a race between decline and answer in
 `AgentQuestionCard.tsx`, where the decline button is held during an in-flight answer but nothing
 holds the answer path during an in-flight decline. Both doors close on the one fix this entry
@@ -17635,6 +17635,8 @@ The reachable path to it is F228: the Questions page still lists a declined ques
 *Unanswered*, with a live `AnswerForm` under it.
 
 **Reproduction:** `scripts/drive/t_sweep_row11_questions.py`, legs 6 and 7. Three of the five reds.
+
+**Fixed 2026-09-22, `5eddc42`.** `answer_question` refuses a declined question with a 409 that says the agent was told no answer is coming and to message it instead. This mirrors `decline_question`'s refusal of an answered one. **Both doors close.** Both routes claim the row with a conditional `UPDATE ... WHERE declined = 0` (or `answered = 0`) instead of setting attributes on the loaded row. The answer route awaits the workspace resolve between reading and writing, so a decline that commits in that gap was otherwise overwritten, which is the UI race in the 2026-09-06 re-measurement. `test_question_declined.py` has two new tests: decline-then-answer (409; row stays declined and unanswered; nothing queued) and a decline committed during the answer's resolve (409). Both fail without the fix, and 189 question-related tests pass with it. **Not fixed here:** F228, the Questions page listing a declined question as *Unanswered* with a live form. Its answer now gets a 409 instead of a spent turn, but the page still offers it. Not driven live.
 
 ---
 
