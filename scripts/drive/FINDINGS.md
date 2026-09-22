@@ -17401,7 +17401,14 @@ this finding.
 
 ## F223 (C) — `GET /jobs/{id}` reports a `source` the job does not have
 
-**Status:** open. Verified 2026-09-09: `get_job`'s hand-built `job_dict`
+**Status:** fixed d5d605c — `get_job`'s `job_dict` now includes `"source": job.source`, alongside
+every other key the list route already returns. Driven live against a scratch Hub (`proj-37fa9cba692d`,
+port 8012): a job created with `source: "local"` now reads `"local"` from both `GET /jobs` and
+`GET /jobs/{id}`, where the detail route previously always answered `"hub"`. Regression test
+`hub/tests/test_jobs_crud.py::test_get_job_reports_the_source_it_was_created_with`,
+mutation-checked (fails `assert 'hub' == 'local'` with the key removed).
+
+**Status as filed:** open. Verified 2026-09-09: `get_job`'s hand-built `job_dict`
 (`hub/hub/api/v1/jobs.py:788-812`) still omits `source`, so the schema default fills the hole and the
 detail route still reports a value that was never stored. [classified 2026-09-09, D-3]
 

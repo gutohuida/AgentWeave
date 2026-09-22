@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T17:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-22-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d3-repair-impl",
-    "next_action": "D-3: pick one open FINDINGS.md item meeting day-window.md D-6's three conditions (no openspec requirement touched, no migration/API/schema change, existing finding+repro with a fix smaller than the argument for it). Fix it, drive it before closing, run CI's lint set, mutation-check any added test, set Status: fixed <sha>. If it turns out to need a spec, stop and queue it for tomorrow's spec loop instead.",
+    "current": "d4-ledger-sweep",
+    "next_action": "D-4: backlog --check flagged 12 findings with no severity anywhere (F66,F67,F69,F104,F106,F131,F145,F148,F150,F151,F153,F290) and 2 open findings whose Status line claims a commit already fixed something (F53,F352). Read each, assign a severity or confirm already closed, and resolve the two contradictions by checking the cited commits. Regenerate spec-queue/BACKLOG.html after.",
     "queue": [
         {
             "id": "compose",
@@ -29,9 +29,9 @@
         },
         {
             "id": "d3-repair-impl",
-            "status": "open",
+            "status": "done",
             "title": "No-spec carve-out repair",
-            "detail": "Pick one open FINDINGS.md item meeting day-window.md D-6's three conditions (no openspec requirement touched, no migration/API/schema change, existing finding+repro with a fix smaller than the argument for it). Fix it, drive it before closing, run CI's lint set, mutation-check any added test, set Status: fixed <sha>. If it turns out to need a spec, stop and queue it for tomorrow's spec loop instead.",
+            "detail": "F223 fixed d5d605c: GET /jobs/{id} was omitting `source` from its hand-built dict, so JobResponse's own default (\"hub\") silently overrode the real stored value. F224 and F177 were screened and rejected (F224 touches an existing openspec/agent-loops requirement; F177's established fix needs a new DB column). Mutation-checked test added, CI lint set green, driven live against a scratch Hub on 8012 through the real HTTP surface.",
             "model": "sonnet",
             "effort": "high"
         },
