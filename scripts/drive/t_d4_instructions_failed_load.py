@@ -39,12 +39,13 @@ Four questions — D was added 2026-09-06 by the night window (task 4.1b):
 
 Run:  py -3.11 scripts/drive/t_d4_instructions_failed_load.py
 
-Creates two fixture projects and deletes them. Refuses :8000. No agent turn is triggered, so
+Creates two fixture projects and deletes them. Refuses :8000 and :8010. No agent turn is triggered, so
 nothing binds a model and nothing spends tokens.
 """
 
 import json
 import os
+import shutil
 import sys
 import tempfile
 import urllib.error
@@ -61,8 +62,8 @@ UI = os.environ.get("AW_UI", HUB)
 # convenience -- it turns an unset AW_KEY into a 401 with exit code 0. The literal removed here
 # was placeholder-shaped, which is why the 2026-09-07 sweep and its guard both walked past it.
 KEY = require_key()
-if HUB.endswith(":8000") or UI.endswith(":8000"):
-    print("REFUSING TO RUN: 8000 is the operator's real usage.")
+if any(u.endswith(p) for u in (HUB, UI) for p in (":8000", ":8010")):
+    print("REFUSING TO RUN: 8000 is the operator's real usage and 8010 is the trial Hub.")
     sys.exit(1)
 
 # Created here: opening a project now refuses a directory that does not exist (409
@@ -194,6 +195,9 @@ def main():
             ccode == 200 and not any(p["id"] in (pid_a, pid_b) for p in rest),
             "and neither is listed any more",
         )
+        # Deleting a project leaves its directory, marker included.
+        for d in (DIR_A, DIR_B):
+            shutil.rmtree(d, ignore_errors=True)
 
     print(f"\n{len(PASS)} passed / {len(FAIL)} failed")
     for f in FAIL:
@@ -349,7 +353,10 @@ def drive(pid_a, pid_b):
                 switch.first.select_option(label=target)
                 page.wait_for_timeout(5000)
                 s = observe(page, "07-c-on-b")
-                on_instructions = s["textarea"]
+                # Read off the URL, not the editor: B's load is made to fail, and a correct page
+                # for a failed load has no editor either -- that would read as "navigated away".
+                on_instructions = "section=instructions" in page.url
+                print(f"    url after the switch: {page.url}")
                 print(f"    still on the instructions page after the switch: {on_instructions}")
                 if not on_instructions:
                     print("    NOT DRIVEN: switching leaves the instructions page (state resets).")

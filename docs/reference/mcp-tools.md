@@ -53,7 +53,7 @@ acts, enforced in `spec_lifecycle.transition()` rather than only at the API edge
 | Tool | Purpose |
 |------|---------|
 | `create_job(name, agent, message, cron, session_mode=new)` | Create a scheduled job |
-| `create_loop(name, agent, message, cron, purpose, stop_at, stop_when_queue_empties, spec_document_id, initial_tasks)` | Create a **loop** — recurring work with a stated purpose, a stop condition, and a queue |
+| `create_loop(name, agent, message, cron, purpose, stop_at, stop_when_queue_empties, spec_document_id, initial_tasks, work_needs_evidence)` | Create a **loop** — recurring work with a stated purpose, a stop condition, and a queue |
 | `toggle_job(job_id, enabled)`, `run_job(job_id)` | Manage one |
 | `archive_job(job_id)` | Archive one — nothing is deleted. Refused if the job has a loop (operator-only) |
 

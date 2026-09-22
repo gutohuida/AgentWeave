@@ -367,7 +367,7 @@ def test_every_hub_excluded_path_is_a_checkout_or_the_hub_and_never_the_project(
 
     `seed_repo_excludes` writes `EXCLUDE_PATTERNS` into the repository's `info/exclude` on every
     turn -- `resolve_agent_workspace` calls it as its first statement -- so every `.agentweave/`
-    pattern below names a directory git has been *told to hide*. The requirement justifies
+    pattern below names a path git has been *told to hide*. The requirement justifies
     `project` as the mild destination on the grounds that a write there sits visibly in its
     owner's `git status`. That justification is exactly inverted here, so none of these may
     classify as `project`.
@@ -381,7 +381,11 @@ def test_every_hub_excluded_path_is_a_checkout_or_the_hub_and_never_the_project(
     assert len(hub_patterns) >= 6, hub_patterns
 
     for pattern in hub_patterns:
-        target = project.joinpath(*pattern.rstrip("/").split("/")) / "x" / "a.txt"
+        # A directory pattern is tested by a file inside it; a file pattern (the project marker,
+        # F170) by the file itself.
+        target = project.joinpath(*pattern.rstrip("/").split("/"))
+        if pattern.endswith("/"):
+            target = target / "x" / "a.txt"
         location = _in(project, workspace, target)
         assert location.kind in {"agent", "task", "review", "hub"}, (pattern, location)
         assert location.kind != "project", pattern

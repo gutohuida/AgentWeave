@@ -12988,6 +12988,8 @@ what this repository's guards exist to stop relying on.
 
 **Fixed 2026-09-22, `d8b1a71`.** New test `test_every_optional_argument_is_described_or_deliberately_excluded`. When added, it found 14 omissions across 8 tools. `ask_user.blocking`, `create_task.requirement_ids/spec_document/loop_id`, `update_task.notes`, `read_spec_document.include`, `record_evidence.kind/locator/document/task_id`, `list_evidence.document` and `send_message.conversation_id/start_new_thread` are now in each tool's `args`. The HTTP rendering's `fields` already listed every one, so the MCP agent was told less than the HTTP agent, the inequality design D3 was meant to remove. Only `submit_spec_document.schema_version` is excluded, in the new `UNDESCRIBED_ARGUMENTS` (`hub/hub/api/v1/agents.py`), because the Hub refuses any value but its one version. A second test holds that map to the same rules as `UNDESCRIBED_TOOLS`: each entry is really accepted and states a reason of at least 8 words. The new test fails on the old `args` lines. 498 passed and 1 skipped across the 15 files that render or read the tool surface. `docs/reference/mcp-tools.md` signatures were updated to match.
 
+**Follow-up 2026-09-22.** `docs/reference/mcp-tools.md`'s `create_loop` row now includes `work_needs_evidence`. The doc still has no rows for `create_flow`, `create_spec_document`, `list_checkpoints` or `read_checkpoint`, which predates this change. No test checks the doc against the surface.
+
 ## F161 (D) — a loop that declares its work needs no evidence still stalls asking for evidence
 **Status:** fixed, group 5 of approval-waits-for-the-turn-to-end (f468bf5, "a loop stops entering the review arm"); closed and driven, see line 13222 (`t_drive2_loop_lands.py`, 36/36)
 
@@ -13527,6 +13529,15 @@ runs in about thirty seconds, and — because it never spawns an agent — it pr
 structural rather than a consequence of the reviewer's tool loop. Any fix now has a live check that
 can be pressed before and after.
 
+### One thing this drive did not have to work around
+
+`POST /jobs` seeding a loop's queue with `initial_tasks` in the same call that creates the loop, and
+`PATCH /tasks/{id}` walking the whole `pending → assigned → in_progress → completed → under_review`
+ladder with an assignee change on the last edge, both did exactly what an operator would expect on
+the first attempt. The entire wedge is four PATCHes. That is worth recording alongside the defect:
+the surface that *builds* the broken state is in good order, which is why the state is so easy to
+reach.
+
 ## F167 (B) — the F70/F142 recovery cannot see an author whose history is entirely the operator's
 
 **Status:** open, and said so by the change that met it:
@@ -13562,16 +13573,6 @@ and a fix for F154 that leans on `wedged_review` to carry the author case would 
 **The bound on the measurement, stated because the drive cannot exceed it.** Every edge in LANE 5
 was walked by the operator. A history containing an *agent-walked* edge is not measured here, and
 F70's recovery may well fire for it. What is measured is that the all-operator history defeats it.
-
-### One thing this drive did not have to work around
-
-`POST /jobs` seeding a loop's queue with `initial_tasks` in the same call that creates the loop, and
-`PATCH /tasks/{id}` walking the whole `pending → assigned → in_progress → completed → under_review`
-ladder with an assignee change on the last edge, both did exactly what an operator would expect on
-the first attempt. The entire wedge is four PATCHes. That is worth recording alongside the defect:
-the surface that *builds* the broken state is in good order, which is why the state is so easy to
-reach.
-
 
 ## F156 reproduced deterministically — and the contrast lane is what turns it from a rough edge into a defect
 
@@ -14035,6 +14036,8 @@ now, with the second symptom it did not know about.
 marker is not offered as a workspace path"*.
 
 **Fixed 2026-09-22, `6e26065`.** `.agentweave/project.json` is now in `EXCLUDE_PATTERNS`, with a comment explaining why it is the one entry the module's "would the Hub's own commit sweep it in" rule does not cover. `seed_repo_excludes` rewrites an existing block in place, so already-registered projects get the pattern the next time they are seeded. New test `test_repo_hygiene.py::test_the_project_marker_stays_out_of_the_operators_history_and_the_path_picker` checks both consumers: `git status` is clean, and `git ls-files --cached --others --exclude-standard` lists only `README.md`. It fails without the pattern. 106 passed and 9 skipped across the seven files that touch hygiene or workspace paths. Not driven on a live Hub.
+
+**Residual, from the Opus review of 2026-09-22.** The pattern is root-anchored, and `seed_repo_excludes` returns early unless `root/.git` is a directory. So a project registered in a **subdirectory** of a repository gets no excludes at all, the marker included (`pkg/.agentweave/project.json` still shows `??`). That was already true of every pattern before this fix, and it is not new here. It is not filed separately yet.
 
 ---
 
@@ -24375,6 +24378,8 @@ the eighth is a baseline that must pass in both. Restored, the file is 8/8 green
 
 **Fixed 2026-09-22, `40e9efa`, and the column it gated has now been driven.** The locator is `get_by_role("combobox", name="Switch project")`. The branch it unlocked had never run: it clicked the `<select>` and then an `<option>`, which Playwright cannot do, so it now reads the options and calls `select_option`. Its fixture directories also no longer existed, and opening a project now refuses a missing directory (409 `project_workspace_missing`), so they are temp dirs. **Driven on a throwaway `:8031` Hub with a fresh database: 31 passed, 0 failed.** For column C the switcher lists `['d4-bravo', 'd4-alpha']`. Selecting bravo leaves the instructions page for bravo's Overview (screenshot `d4-07-c-on-b.png`), which unmounts the editor. F271 column C's cross-project leak therefore cannot be reached through the switcher. That is now measured, where before it was inferred from a locator that could only return 0.
 
+**Follow-up 2026-09-22.** Column C now reads navigation from the URL (`section=instructions`) instead of from whether an editor exists. B's load is made to fail, and a correct page for a failed load has no editor either. Re-driven on `:8031`: after the switch the URL is `/?project=<bravo>&tab=overview`, and 31 passed. The fixture directories are now removed at the end, and the script refuses `:8010` as well as `:8000`. Still true, and pre-existing: its two not-driven branches record `check(True, ...)`, so a pass count includes those no-op passes.
+
 ---
 
 ## F297 (B) — `agentweave stop` on Windows force-kills the Hub, so nothing the shutdown sequence does ever runs
@@ -25391,10 +25396,10 @@ neither branch fires, and press 1 falls through to the browser's native order. T
 after Save in DOM order is the instructions textarea, which is *behind the scrim*: the operator
 cannot see that it has focus and cannot click it.
 
-**Which dialogs this reaches.** Six components use the hook. *(The table below lists five — the
-sixth, `TaskDetailDrawer.tsx:167`, was missed, and it is the call site where the hook's Escape
-branch misbehaves. See `F311`, and `F309`/`F310` for what lives there. Enumerate from `grep`, not
-from this table.)* Three escape the defect by accident,
+**Which dialogs this reaches.** Six components use the hook. *(The table below originally listed five; the
+sixth, `TaskDetailDrawer` (`:183` as of 2026-09-22), was added for `F311`. It is also the call site where the hook's Escape
+branch misbehaved (`F309`/`F310`), which that row does not cover. Enumerate from `grep`, not
+from a table.)* Three escape the defect by accident,
 not by design — they `autoFocus` an input **inside** the panel, so focus is already `first` when the
 first Tab arrives:
 
@@ -27985,6 +27990,8 @@ matches a placeholder or `~`-glued URL segment, never a bare literal that a sibl
 
 **Fixed 2026-09-22, `40e9efa`.** `segment_match` fills a `{param}` route segment only from a whole (`*`) or glued (`~`) interpolation, never from a bare literal. Output diffed before and after: exactly one route moved, `GET /api/v1/projects/{project_id}/runners/{runner_id}`, into *no client anywhere*. **The figures are 34 → 35 today, not 35 → 36**, because routes have been removed since 2026-09-13 (today's `PATCH /queue/settings`, F196). The 35 quoted in `spec-queue/DECISIONS.md` R-1 was one short at the time; the true count then was 36.
 
+**Note (Opus review, 2026-09-22).** The rule is stricter than the sketch above: it refuses *any* bare literal, not only one a sibling route declares. Against today's clients that costs nothing, because every literal it stopped matching has a literal sibling route. A future client that hardcodes a real value for a parameter would read as clientless.
+
 ## F347 (B) — a project whose repository has no commit yet refuses every agent turn with git's plumbing error, including the message asking the agent to fix it
 
 **Status:** open. Filed 2026-09-13 by a DECIDE session, from the operator's own day-to-day use on
@@ -29611,7 +29618,7 @@ passed. Fixture project deleted, no job left enabled.
 
 ## F381 (C) — a question nobody is waiting on outranks one an agent is blocked on, in that agent's own tray
 
-**Status:** fixed 24f3655 + a4d0976 (2026-09-22; see the foot). Was: open. Filed 2026-09-18 by the day window's R3 round for
+**Status:** fixed a4d0976 for the agent tray (2026-09-22; see the foot, which also names the surfaces this does not cover). Was: open. Filed 2026-09-18 by the day window's R3 round for
 `a-refused-capability-reaches-the-operator`, from reading the code rather than from a drive.
 
 **Source:** code — found by reading, while re-deriving a proposal against the implementation.
@@ -29651,13 +29658,13 @@ to every run-less question and not to that record.
 **Related:** F376 (the change that surfaced it), F14 (attention state reported about a run that is
 not waiting).
 
-**Fixed 2026-09-22, by two F376 commits that did not name this entry.** `24f3655` made the tray's "waiting" rank require `blocking` as well as `asker_waiting` (`isWaitedOn`, `hub/ui/src/lib/pendingQuestions.ts`), which is the first repair shape above. `a4d0976` then keeps any question with `created_by_run_id === null` out of the agent tray entirely. Every question posted through the operator route has that null, so it cannot outrank a live one. Both are in the committed bundle (`index-LDdTO3ch.js`). New test `refusalRecordTray.test.ts` *"does not let an older question posted through the operator route outrank a live one (F381)"*: an older blocking question with no run and a newer live one, both `asker_waiting: true`. It passes on HEAD and fails on `24f3655^`. **Not done:** the Hub still presumes an unknown asker is waiting (`_with_asker_state`), so any other consumer of `asker_waiting` inherits that. Not driven live.
+**Fixed 2026-09-22 for the tray this entry is about, by `a4d0976`, an F376 commit that did not name it.** `activeQuestionFor` (`hub/ui/src/lib/pendingQuestions.ts`) keeps any question with `created_by_run_id === null` out of the agent tray. Every question posted through the operator route has that null, so none can outrank a live one there. That is the second, tray-local repair shape above. `24f3655` (`isWaitedOn` also requires `blocking`) is **not** enough by itself. The new test `refusalRecordTray.test.ts` *"does not let an older question posted through the operator route outrank a live one (F381)"* uses a **blocking**, runless, older question and a newer live one, both `asker_waiting: true`. It passes at HEAD and fails against `24f3655`'s own `pendingQuestions.ts` (`expected 'q-posted' to be 'q-live'`), as well as on `24f3655^`. **Not fixed, and the same defect: the other surfaces.** The Hub still presumes an unknown asker is waiting (`_with_asker_state`), and the operator route accepts `blocking: true` with no run. So a blocking operator-posted question still ranks as *waiting* on the Overview card (`QuestionInterruptCard.tsx`, "X is waiting") and under *Blocking - agents are waiting for your answer* in `QuestionsPanel.tsx`, with the urgency timer. This is reachable only through the API today. It belongs with F146 (operator-posted blocking questions, D13), and the first repair shape above (the Hub stops presuming) would fix all three. Found by the Opus review of this session.
 
 ---
 
 ## F382 (C) — `pytest hub/tests/ -q` stalled indefinitely overnight with no error, and a same-morning rerun could not reproduce the stall
 
-**Status:** fixed f9e6dee (2026-09-22; diagnosed as F394, see the foot). Was: open, undiagnosed; the rerun that motivated it concluded clean (addendum below).
+**Status:** open, narrowed to one test but not diagnosed (2026-09-22, see the foot); watch-only proposed in D13. Was: open, undiagnosed; the rerun that motivated it concluded clean (addendum below).
 Filed 2026-09-18 by the day window's D-6 unit, from reading a background run's own log rather than
 from a drive.
 
@@ -29710,7 +29717,7 @@ as an unexplained one-time environmental stall, not as a suspected-still-broken 
 
 **Related:** none yet — first time this shape has been filed.
 
-**Diagnosed 2026-09-22: this was F394, and `f9e6dee` fixed it.** The stalled log shows 669 results (72 `s` plus dots) before it froze at `[ 14%]`. Collecting `hub/tests/` as it stood at `f4ff939` (the last commit before the 2026-09-17 night run) puts test #670 at `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event`. That test patches `PtySession.spawn` to raise `FileNotFoundError` and then calls `_await_background_run()`. At that commit this was still `while _background_runs: for task in list(...): await task`, the loop F394's root cause shows spinning forever when a spawn-failure retry finishes behind the waiter. The test just before it, `test_an_unexpectedly_failed_run_still_gets_an_accounting_outcome`, is one of F394's two instrumented CI hangs. The same afternoon's CI hang (`35218523888`) also stopped at 13–14% in `test_agent_trigger.py`. The race is intermittent, which is why the morning rerun passed. Not explained: why the process was gone by morning instead of still spinning. The likeliest cause is the night window's process tree ending, but that is unverified. The plan had this as "watch-only, the operator confirms in D13"; it is now a diagnosis, so no decision is needed.
+**Narrowed 2026-09-22, and the first attempt at it was wrong.** The stalled log holds 669 results (74 `s`, the rest dots) before it froze at `[ 14%]`. In `hub/tests/` collected at `f4ff939` (the last commit before the 2026-09-17 night run), #669 is `test_agent_trigger.py::test_spawn_failure_broadcasts_run_failed_event`, and pytest writes its `.` only once the call has finished. So the run hung in **#670, `test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped`**. An earlier version of this foot mapped the stall to #669 by an off-by-one and closed this entry as F394. The Opus review of this session caught it, and the entry is reopened. #670 ends in `_await_background_run()` after a stop with an entry queued behind the run. Two candidate hangs are left, and neither is shown. (a) F394's spin: a stopped run's redrain starts a follow-on run as its last action, and the old `while set: for t in list(set): await t` loop spins. `f9e6dee`'s shared helper removes that. (b) The fake terminal session in `_stoppable_pty` blocks in `released.wait()` with **no timeout**, so a stop that never reached `terminate` waits forever. `f9e6dee` does not touch that. The morning rerun passed, so it is intermittent. Watch-only again, as `spec-queue/ROUNDS.md` D13 proposed.
 
 ## F383 (C) — the CI branch's own commits fail on a genuine flaky test, not only on the docs-only commits noted earlier
 
