@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  3,
+    "iteration":  4,
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "hub-refuses-group4-impl",
-    "next_action":  "Implement group 4 of openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md: (d) and the prose that carried the guarantee. Tasks 2.7/2.8 already built in group 2 (2026-09-22 iteration 3, commit 8a5b935) -- do not redo them. Follow group 4's own tasks (including 4.9's documented pre-existing test_hub_commands.py failure, which group 4 is expected to fix) and their implementation notes, with both mutation checks per the approval note.",
+    "current":  "hub-refuses-group5-impl",
+    "next_action":  "Implement group 5 of openspec/changes/a-hub-that-was-not-told-which-database-refuses-to-open-one/tasks.md: the spec, and what it costs (5.1-5.5). Apply the MODIFIED requirement in specs/app-lifecycle/spec.md per 5.1/5.2 as R2/R3 narrowed them (do not re-litigate the narrowing, apply it). Run `openspec validate a-hub-that-was-not-told-which-database-refuses-to-open-one --strict` (5.3). Run the FULL `py -3.11 -m pytest hub/tests/ -q` (not just test_config.py -- this change edited main.py's lifespan()) and write the count into tasks.md (5.4). Run `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` (5.5). For task 3.7 (already done in groups 1+3, commit 384254e) no action needed. Groups 4 and its 4.9 CLI fix landed in commit 8b7fed8 -- do not redo them.",
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
@@ -33,11 +33,11 @@
                   },
                   {
                       "id":  "hub-refuses-group4-impl",
-                      "status":  "open",
+                      "status":  "done",
                       "model":  "sonnet",
                       "effort":  "high",
                       "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: group 4",
-                      "detail":  "Group 4 -- (d) and the prose that carried the guarantee. Tasks 2.7/2.8 follow their implementation notes with both mutation checks per the approval note."
+                      "detail":  "Built 2026-09-22/23 iteration 4, commit 8b7fed8. Prose/docstring tasks 4.1-4.8, 4.10, 4.11 plus the real CLI fix 4.9 (test_first_start_migrations_leave_a_database_that_can_hold_a_conversation now sets DATABASE_URL via monkeypatch before the bare import hub.config). tests/ CLI suite: 547 passed, 3 skipped (deferred failure now fixed). hub/tests/test_config.py: 6 passed, unchanged. Mutation-checked live and reverted cleanly. ruff/black/mypy over CI's exact paths clean."
                   },
                   {
                       "id":  "hub-refuses-group5-impl",
