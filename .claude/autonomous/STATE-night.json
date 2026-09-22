@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "72cfb99",
     "stop_at": "2026-09-22T07:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-21-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f375-g3-drive",
-    "next_action": "Do queue item f375-g3-drive: F375 group 3 (tasks 3.1-3.2), real-shell rows in a scratch directory (never repo root, never testbed/ leftovers). Confirm in Git Bash and PowerShell that the group-2 refusal rows actually land outside (cp notes.md .., $'..\\x00x', ~, cp -t.. notes.md, cp -xt.. notes.md, Copy-Item notes.md -Destination:..), and that the negative controls (..., '.. ', C:, cp -t~ notes.md, echo ~30% ~2x ~13) do not; PowerShell Copy-Item notes.md -Destination:~5 writes a file named ~5 inside the workspace. Record shell versions. F292 tally standing 0 of 2 (69f1531 run 35667056235 still unchecked; check it and any newer run from this branch).",
+    "current": "f375-archive",
+    "next_action": "Do queue item f375-archive: F375 close (tasks 4.1-4.2). Update F375's Status line in scripts/drive/FINDINGS.md to 'fixed a5e5a49' (rule-4 fix landed 2.1, verified 2.2-2.5; real-shell evidence 3.1-3.2 done iteration 10), regenerate the backlog with 'py -3.11 scripts/backlog_page.py'. Then 'openspec validate a-word-without-a-separator-can-still-leave --strict' and archive with the openspec-archive-change skill. Every task in tasks.md must be ticked with counts before archiving (F392 rule). F292 tally standing 0 of 3 (3d9e2e4, 69f1531, 90ef2b1 all success; 45d769f's failure is the expected group-1 designed-failing-tests commit, excluded; a5e5a49 run 35680491133 was in_progress at last check, check it and any newer run from this branch).",
     "queue": [
         {
             "id": "a-first-turn-archive",
@@ -66,7 +66,7 @@
         },
         {
             "id": "f375-g3-drive",
-            "status": "open",
+            "status": "done",
             "title": "F375 group 3 real-shell rows",
             "detail": "Scratch directory, never repo root."
         },
