@@ -17887,7 +17887,7 @@ looks exactly like one that is simply below its threshold.
 
 ## F234 (D) — taking the checkpoint answers a `due` warning and a `final` one, but not a dismissal
 
-**Status:** open. Verified 2026-09-09: `take_checkpoint` still clears only
+**Status:** open. F399 (2026-09-21) is a duplicate, retired 2026-09-22 into this entry. Verified 2026-09-09: `take_checkpoint` still clears only
 `("due", "final")` (`hub/hub/api/v1/checkpoints.py:190`), so a dismissed conversation still keeps the
 state after the checkpoint that answers it. The control run recorded below is what makes this a
 divergence rather than a reading. [classified 2026-09-09, D-3]
@@ -18838,7 +18838,7 @@ them one import away.
 
 ## F258 (B) — every message the operator sends through `POST /messages` is born one hop past the budget, and waits there until somebody releases it by hand
 
-**Status:** open. Filed by the row-17 drive (`78461c9`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** open. F395 (2026-09-21) has the same root cause and closes with this one; it adds the `origin_type: "agent"` mislabel. Filed by the row-17 drive (`78461c9`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `create_message_for_actor` (`hub/hub/api/v1/messages.py:56`) opens with:
 
@@ -25397,6 +25397,7 @@ first Tab arrives:
 | `ProjectManagerModal` (`:140`) | yes, the path input | no |
 | `ArchiveConfirmDialog` | no — two buttons only | **yes** |
 | `ClearInstructionsDialog` | no — two buttons only | **yes** |
+| `TaskDetailDrawer` (`:183`) | no — it focuses the blocking-reason input only once that panel appears (`:180`) | **yes, by the same reading** (not measured; added 2026-09-22 for `F311`) |
 
 It is exactly the confirm-only dialogs, the ones whose whole content is a question and two buttons,
 that fail to hold focus. `ClearInstructionsDialog` was deliberately shaped after
@@ -25666,7 +25667,7 @@ rediscover the trap.
 
 ## F311 (C, bookkeeping) — `F307`'s table of affected dialogs is missing the call site where the hook actually misbehaves
 
-**Status:** open — filed 2026-09-10 (day window, `D-1`).
+**Status:** fixed 2026-09-22 (bookkeeping, see the foot). Was: open — filed 2026-09-10 (day window, `D-1`).
 
 `F307` says *"Six components use the hook"* and then tabulates **five**:
 `AgentCreateDialog`, `DeleteProjectDialog`, `ProjectManagerModal`, `ArchiveConfirmDialog`,
@@ -25682,6 +25683,8 @@ that excluded the counter-example.
 Not a defect in the product. Filed because `F307`'s table is what a fix proposal will enumerate from,
 and enumerating five call sites for a six-call-site hook is how the sixth gets a fix that was never
 checked against it.
+
+**Fixed 2026-09-22, bookkeeping only.** `F307`'s table now has a sixth row for `TaskDetailDrawer` (`:183` today, `useDialogFocus(open, panelRef, onClose)`). The drawer moves focus into its panel only when the blocking-reason input appears (`:180`), not on open, so by `F307`'s own reading it is affected. That row is a reading, not a measurement. `grep -rn 'useDialogFocus(' hub/ui/src --include=*.tsx` still gives exactly six call sites. `F307` itself stays open.
 
 ---
 
@@ -29598,7 +29601,7 @@ passed. Fixture project deleted, no job left enabled.
 
 ## F381 (C) — a question nobody is waiting on outranks one an agent is blocked on, in that agent's own tray
 
-**Status:** open. Filed 2026-09-18 by the day window's R3 round for
+**Status:** fixed 24f3655 + a4d0976 (2026-09-22; see the foot). Was: open. Filed 2026-09-18 by the day window's R3 round for
 `a-refused-capability-reaches-the-operator`, from reading the code rather than from a drive.
 
 **Source:** code — found by reading, while re-deriving a proposal against the implementation.
@@ -29637,6 +29640,8 @@ to every run-less question and not to that record.
 
 **Related:** F376 (the change that surfaced it), F14 (attention state reported about a run that is
 not waiting).
+
+**Fixed 2026-09-22, by two F376 commits that did not name this entry.** `24f3655` made the tray's "waiting" rank require `blocking` as well as `asker_waiting` (`isWaitedOn`, `hub/ui/src/lib/pendingQuestions.ts`), which is the first repair shape above. `a4d0976` then keeps any question with `created_by_run_id === null` out of the agent tray entirely. Every question posted through the operator route has that null, so it cannot outrank a live one. Both are in the committed bundle (`index-LDdTO3ch.js`). New test `refusalRecordTray.test.ts` *"does not let an older question posted through the operator route outrank a live one (F381)"*: an older blocking question with no run and a newer live one, both `asker_waiting: true`. It passes on HEAD and fails on `24f3655^`. **Not done:** the Hub still presumes an unknown asker is waiting (`_with_asker_state`), so any other consumer of `asker_waiting` inherits that. Not driven live.
 
 ---
 
@@ -30899,7 +30904,7 @@ F109's intermittent `test_spawn_failure_marks_run_failed` is plausibly the same 
 
 **Source: found by driving** (e2e-loop SWEEP, 2026-09-21, port 8030, `proj-05c8aa160921`).
 
-**Status:** open. No fix commit references it; filed 2026-09-21 by the night window's full-surface
+**Status:** open. Same root cause as F258 (`messages.py:58` `hop_depth = hop_budget + 1` without a `run_id`; re-checked 2026-09-22). Fix and close both together in Round 3 of `spec-queue/ROUNDS.md`; the `origin_type` half (`messages.py:257`, `:278`) is this entry's own and must be fixed with it. No fix commit references it; filed 2026-09-21 by the night window's full-surface
 sweep and reproduced there against a live Hub, not re-checked since. (Status line added 2026-09-21
 by the next iteration -- the sweep filed the finding without one, which
 `scripts/backlog_page.py` reports as "nothing says whether they are done".)
@@ -31099,7 +31104,7 @@ the current state is `due`.
 
 **Source:** drive
 
-**Status:** open. **Found 2026-09-21**, same drive as F398, legs 4 and 12.
+**Status:** retired 2026-09-22 as a duplicate of F234: same line (`checkpoints.py:190` clears only `due`/`final`), same defect, re-checked today. The fix is tracked under F234 (Round 4 of `spec-queue/ROUNDS.md`). Was: open. **Found 2026-09-21**, same drive as F398, legs 4 and 12.
 
 **Repro.** Warn -> dismiss -> operator takes the checkpoint. `checkpoint_warning` stays `'dismissed'`
 (`checkpoints.py:190` clears only `due` and `final`), and one turn later it is still `'dismissed'`. The

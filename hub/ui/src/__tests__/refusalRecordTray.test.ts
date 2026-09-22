@@ -36,6 +36,16 @@ describe('a question no run asked stays out of the agent tray', () => {
     expect(activeQuestionFor(rows, 'lead').question?.id).toBe('q-note')
   })
 
+  it('does not let an older question posted through the operator route outrank a live one (F381)', () => {
+    // The operator route stores `created_by_run_id: null`, and the Hub presumes an unknown asker
+    // is waiting — so this row reads `blocking` and `asker_waiting` both true, like the live ask.
+    const rows = [
+      q({ id: 'q-posted', blocking: true, asker_waiting: true, created_by_run_id: null, created_at: '2026-09-22T10:00:00Z' }),
+      q({ id: 'q-live', blocking: true, asker_waiting: true, created_by_run_id: 'run-1', created_at: '2026-09-22T10:05:00Z' }),
+    ]
+    expect(activeQuestionFor(rows, 'lead').question?.id).toBe('q-live')
+  })
+
   it('reads an absent field as asked by a run, so an older Hub keeps its tray', () => {
     // A bundle reaches the operator's app on reload, before their Hub restarts onto the field.
     const rows = [q({ id: 'q-live' })]
