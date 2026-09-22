@@ -1470,6 +1470,27 @@ $//'` after. *(2026-09-21)*
 - **A change under `scripts/drive/` can break the CLI suite.** `tests/test_drive_key_guard.py` imports `scripts/drive/aw.py` and calls `api()`. Making `AW_HUB` required (`40e9efa`) turned all six CLI test jobs red, while only `hub/tests/` had been run locally. After touching `aw.py` or any drive helper, run `py -3.11 -m pytest tests/` too, with `AW_HUB`/`AW_KEY` unset (`env -u AW_HUB -u AW_KEY ...`), since CI has neither. *(2026-09-22)*
 - **Mapping a stalled pytest `-q` log to a test: number the list, do not eyeball a `sed -n` range.** N results written means test N finished (pytest writes `.` after the call report and flushes). The hang is in test **N+1**, which is `grep '::' collect.txt | sed -n '<N+1>p'`. Reading the second line of a `sed -n '668,672p'` window as #670 put F382 on the wrong test and closed it wrongly. The Opus review caught it, and F382 was reopened. *(2026-09-22)*
 
+- **`Checkpoint`'s primary key is `sequence`, not `id`, so `db.get(Checkpoint, "ckpt-…")` returns
+  None silently.** No error: a walk back through `previous_checkpoint_id` just stopped at the first
+  hop and the code read "no predecessor". Use `checkpoints.get_checkpoint_by_id`. Its docstring and
+  migration `0088` both say so; the trap is that `db.get` is the natural thing to type and fails
+  quietly. Caught only because the legacy-chain test for F130 failed *with* the fix. *(2026-09-22)*
+- **A text replacement keyed on an indented line also matches the same line indented deeper.**
+  Replacing `'            "from": "sender",\n'` (12 spaces) and then the 16-space form: the
+  12-space pattern is a substring of the 16-space line, so the deeper sites got the insertion twice
+  (`"run_id"` repeated, caught by ruff F601). Count matches per pattern before and after, or anchor
+  on the start of the line. *(2026-09-22)*
+- **Some `hub/tests/test_scheduler.py` tests only pass after an earlier test has created the
+  schema.** Run alone with `-k`, `test_loop_queue_exhausted_event_names_an_unread_message_to_the_creator`
+  (pre-existing) fails with `no such table: runs`; in a batch it passes. To prove a new test there
+  fails on the old code, stash the fix and run a batch (`-k "pending or exhausted"`), not the test
+  alone. *(2026-09-22)*
+- **A full suite started before an edit does not cover it.** Modules are imported at collection, so
+  a suite launched for group A and still running when group B's code lands reports on A only, green
+  or not. Stashing a product file for a few seconds mid-run is harmless for the same reason. Stop
+  it and start one run over the final tree rather than waiting for a result that answers the wrong
+  question. *(2026-09-22)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
