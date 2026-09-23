@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  8,
+    "iteration":  9,
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "unstaffed-group2-task2.6to2.11",
-    "next_action":  "Build tasks 2.6-2.11 of openspec/changes/an-unstaffed-review-names-its-holders/tasks.md -- group 2's rung-3 test coverage, now that 2.1-2.4 (the rung-3 rebuild, commit 755c5b6) have landed. Build each from its own R8 (or, where none, R6/R3) block: 2.6 the LoopEngine-shaped firing test through a real POST .../jobs/{id}/run (second live loop fixture per R8, assert the whole reason with == and the 409/detail three-surface match), 2.7 divergence restaff on both branches (agent-completed and operator-completed), 2.8 an under_review row reaching rung 3 (assert capitalize_first fired, not a substring), 2.9 the twelve-agent 500-char fit plus its four R8 sub-mutations, 2.9b the fallback fixture with 64-character ids, 2.10 the rewritten _stall_run_to_increment test (R8's replacement, not the original vacuous one), 2.11 F367 route-level regression cover. This is the largest remaining piece of group 2 -- if it does not fit in one firing, split it the way iteration 7 split the original unstaffed-group2-impl item (recorded reasoning in the queue entry, not just the log), rather than rushing all six sub-tasks unverified. Run hub/tests/test_a_task_nothing_will_move_holds_nobody.py before and after (6.0's own guard). Verify with ruff/black/mypy over CI's exact paths, mutation-check at least one behavioral assertion live and revert, record measured results in tasks.md, then commit and push.",
+    "current":  "unstaffed-group2-task2.6to2.9b",
+    "next_action":  "Build tasks 2.6, 2.7, 2.9, 2.9b of openspec/changes/an-unstaffed-review-names-its-holders/tasks.md -- the remaining rung-3 test coverage from the split item unstaffed-group2-task2.6to2.11 (iteration 9 built 2.10/2.11 there, and reasoned out 2.8 as already subsumed by 2.3's own exact-string test -- see the split note above task 2.6 and 2.8's own strike-through for the checked reasoning; read both before re-deriving either). All four remaining tasks share one open fixture decision from R8's block above 2.6: every non-author holding, and the author's own extra task, must live in a SECOND live loop this firing never fires (so each holding is reachable without being walked/claimed by the firing under test) -- decide that fixture once, from _loop/_holding in test_a_task_nothing_will_move_holds_nobody.py, and reuse it across all four rather than re-deriving it per task. Build each from its own R8 (or, where none, R6/R3) block: 2.6 the LoopEngine-shaped firing test through a real POST .../jobs/{id}/run (assert the whole reason with == and the 409/detail/event three-surface match), 2.7 divergence restaff on both branches (agent-completed and operator-completed, read on run_diverged's reason, not review_unstaffed), 2.9 the twelve-agent 500-char fit plus its four R8 sub-mutations, 2.9b the fallback fixture with 64-character ids. This is still a large piece -- if it does not fit in one firing, split it again the same way (recorded reasoning in the queue entry, not just the log) rather than rushing unverified. Run hub/tests/test_a_task_nothing_will_move_holds_nobody.py before and after (6.0's own guard). Verify with ruff/black/mypy over CI's exact paths, mutation-check at least one behavioral assertion live and revert, record measured results in tasks.md, then commit and push.",
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
@@ -73,11 +73,19 @@
                   },
                   {
                       "id":  "unstaffed-group2-task2.6to2.11",
-                      "status":  "open",
+                      "status":  "done",
                       "model":  "sonnet",
                       "effort":  "high",
                       "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.6-2.11 (rung-3 test coverage)",
-                      "detail":  "Depends on 2.1-2.4 landing first. Build each from its own R8 (or, where none, R6/R3) block: 2.6 LoopEngine-shaped firing test, 2.7 divergence restaff both branches, 2.8 under_review remedy, 2.9/2.9b the 500-char fit and its fallback, 2.10 the rewritten _stall_run_to_increment test, 2.11 F367 route-level regression cover."
+                      "detail":  "Iteration 9, 2026-09-23: built 2.10 and 2.11 only (both regression cover for the sibling's already-shipped code, no open fixture question). 2.8 reasoned out as subsumed by 2.3's own exact-string test -- checked live: 2.8's own R8 mutation (drop capitalize_first) does not make 2.3's tests fail on this tree, because own_review_remedy already returns a capitalized sentence for both statuses, so the mutation is a genuine no-op and 2.8 as specified is unfalsifiable (F190 shape). Split reasoning recorded in tasks.md above task 2.6, and in 2.8's own strike-through. 2.6, 2.7, 2.9, 2.9b split off to unstaffed-group2-task2.6to2.9b -- they share one open fixture decision (the second-live-loop holdings shape from R8) none of them has built yet, and 2.6 alone is a real-firing/three-surface test sized like a whole item on its own. 68 passed (test_reviewer_ladder.py + test_a_review_nobody_is_doing.py + the 6.0 guard), both mutations (the stall-row dedup comparison, and the wedged-review title fit plus the @validates) checked live and reverted cleanly. ruff/black/mypy over CI's exact paths clean."
+                  },
+                  {
+                      "id":  "unstaffed-group2-task2.6to2.9b",
+                      "status":  "open",
+                      "model":  "sonnet",
+                      "effort":  "high",
+                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.6, 2.7, 2.9, 2.9b (the fixture-heavy rung-3 tests)",
+                      "detail":  "Split from unstaffed-group2-task2.6to2.11 at iteration 9. All four share R8's one open fixture decision (every non-author holding, and the author's own extra task, in a second live loop this firing never fires) -- decide it once, reuse across all four. 2.6 LoopEngine-shaped firing test through a real POST .../jobs/{id}/run, three-surface assert; 2.7 divergence restaff both branches; 2.9/2.9b the twelve-agent 500-char fit and its 64-character-id fallback."
                   },
                   {
                       "id":  "unstaffed-group2-task2.15to2.18-and-6.0",
