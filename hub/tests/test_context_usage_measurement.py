@@ -95,7 +95,7 @@ def test_a_complete_codex_sample_is_untouched():
         "context_tokens": 68_000,
         "limit_tokens": 272_000,
         "percent": 25.0,
-        "model": "gpt-5.4-mini",
+        "model": "gpt-5.6-luna",
     }
     assert resolve_usage_limit(dict(payload)) == payload
 

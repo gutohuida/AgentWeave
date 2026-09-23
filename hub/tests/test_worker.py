@@ -55,7 +55,7 @@ CODEX_STDOUT = r"""{"type":"thread.started","thread_id":"019fe277-4166-7351-b25b
 CODEX_STDERR = """OpenAI Codex v0.146.0
 --------
 workdir: C:\\Users\\huida\\Documents\\projects\\AgentWeave\\testbed
-model: gpt-5.6-sol
+model: gpt-5.6-terra
 --------
 2026-08-08T17:34:00.750985Z ERROR codex_api::endpoint::responses_websocket: \
 failed to connect to websocket: HTTP error: 503 Service Unavailable
@@ -81,7 +81,7 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
 def test_the_codex_command_asks_for_jsonl_and_passes_the_prompt_positionally():
     cmd = build_worker_command(
         cli="codex",
-        model="gpt-5.6-sol",
+        model="gpt-5.6-terra",
         prompt="hi",
         output_schema_path="C:/tmp/checkpoint-schema.json",
     )
@@ -109,9 +109,9 @@ def test_an_unsupported_cli_gets_no_guessed_invocation():
 
 def test_a_model_is_checked_against_the_catalog_before_anything_is_spawned():
     assert model_is_declared("claude", "claude-haiku-4-5-20251001")
-    assert model_is_declared("codex", "gpt-5.6-sol")
+    assert model_is_declared("codex", "gpt-5.6-terra")
     assert model_is_declared("claude", None)  # the CLI's own default
-    assert not model_is_declared("claude", "gpt-5.6-sol")  # a codex model on the claude CLI
+    assert not model_is_declared("claude", "gpt-5.6-terra")  # a codex model on the claude CLI
     assert not model_is_declared("claude", "a-model-nobody-declares")
     # Exact ids only, matching `runners._reject_undeclared_model`. The alias resolution
     # `context_window_for_model` performs is for samples reporting whatever the provider called
@@ -310,7 +310,7 @@ async def test_codex_worker_enforces_the_output_schema_outside_the_project(app, 
 
     monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
     monkeypatch.setattr(subprocess, "run", fake_run)
-    result = await _run(cli="codex", model="gpt-5.6-sol")
+    result = await _run(cli="codex", model="gpt-5.6-terra")
 
     assert result.ok
     assert "agentweave-worker-" in seen["cwd"]
@@ -408,7 +408,7 @@ async def test_an_undeclared_model_is_refused_before_it_is_billed(app, monkeypat
         raise AssertionError("a worker must not spawn an undeclared model")
 
     monkeypatch.setattr(subprocess, "run", explode)
-    result = await _run(model="gpt-5.6-sol")  # a codex model, on the claude CLI
+    result = await _run(model="gpt-5.6-terra")  # a codex model, on the claude CLI
     assert result.outcome == "unknown_model"
     assert (await _invocations())[0].outcome == "unknown_model"
 

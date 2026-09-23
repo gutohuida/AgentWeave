@@ -438,10 +438,10 @@ class TestParseCodexLine:
     def test_turn_completed_usage_is_attributed_to_the_model_that_ran_the_turn(self):
         # A conversation whose model changed between turns must not have one turn's
         # usage silently attributed to a different model's window.
-        sol = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.6-sol")
-        mini = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.4-mini")
-        assert sol.usage.model == "gpt-5.6-sol"
-        assert mini.usage.model == "gpt-5.4-mini"
+        sol = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.6-terra")
+        mini = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.6-luna")
+        assert sol.usage.model == "gpt-5.6-terra"
+        assert mini.usage.model == "gpt-5.6-luna"
 
     def test_turn_completed_usage_never_exceeds_its_own_catalog_window(self):
         parsed = parse_codex_line(CODEX_TURN_COMPLETED_LINE, model="gpt-5.5")

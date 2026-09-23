@@ -321,7 +321,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                         "agent": "model-switch",
                         "message": "hi",
                         "session_mode": "new",
-                        "overrides": {"model": "gpt-5.6-sol"},
+                        "overrides": {"model": "gpt-5.6-terra"},
                     },
                     headers=auth_headers,
                 )
@@ -351,7 +351,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                         "agent": "model-switch",
                         "message": "hi again",
                         "conversation_id": conversation_id,
-                        "overrides": {"model": "gpt-5.4-mini"},
+                        "overrides": {"model": "gpt-5.6-luna"},
                     },
                     headers=auth_headers,
                 )
@@ -360,7 +360,7 @@ async def test_a_conversation_whose_model_changed_attributes_usage_per_turn(
                 await _await_background_run()
 
         models_seen.append(await await_model())
-        assert models_seen == ["gpt-5.6-sol", "gpt-5.4-mini"]
+        assert models_seen == ["gpt-5.6-terra", "gpt-5.6-luna"]
     finally:
         sse_manager.unsubscribe(project_id, queue)
 

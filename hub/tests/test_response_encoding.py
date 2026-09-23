@@ -41,7 +41,7 @@ async def test_non_ascii_runner_name_round_trips_through_the_api(app, auth_heade
     )
     created = await app.post(
         "/api/v1/projects/proj-test/agents",
-        json={"name": "em-dash-agent", "provider": "codex", "model": "gpt-5.4-mini"},
+        json={"name": "em-dash-agent", "provider": "codex", "model": "gpt-5.6-luna"},
         headers=auth_headers,
     )
     assert created.status_code == 201, created.text

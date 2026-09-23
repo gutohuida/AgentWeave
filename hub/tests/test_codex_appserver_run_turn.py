@@ -158,7 +158,7 @@ class TestRunTurnHappyPath:
             cwd="/workspace",
             env=None,
             prompt="do the thing",
-            model="gpt-5.4-mini",
+            model="gpt-5.6-luna",
             resume_thread_id=None,
             yolo=False,
             mcp_command=None,

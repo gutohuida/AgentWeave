@@ -294,13 +294,13 @@ async def test_agent_summary_reports_the_bound_runner(app, auth_headers, bind_ru
         headers=auth_headers,
     )
     assert resp.status_code == 200
-    await bind_runner("bound-agent", cli="codex", model="gpt-5.4-mini")
+    await bind_runner("bound-agent", cli="codex", model="gpt-5.6-luna")
 
     resp = await app.get("/api/v1/projects/proj-test/agents", headers=auth_headers)
     assert resp.status_code == 200
     agent = next(a for a in resp.json() if a["name"] == "bound-agent")
     assert agent["runner"] == "codex"
-    assert agent["display_model"] == "gpt-5.4-mini"
+    assert agent["display_model"] == "gpt-5.6-luna"
 
 
 @pytest.mark.asyncio

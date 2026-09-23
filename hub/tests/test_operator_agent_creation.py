@@ -162,12 +162,12 @@ async def test_a_second_agent_on_the_same_provider_and_model_reuses_the_runner(
     )
     first = await app.post(
         "/api/v1/projects/proj-test/agents",
-        json={"name": "reuse-first", "provider": "codex", "model": "gpt-5.6-sol"},
+        json={"name": "reuse-first", "provider": "codex", "model": "gpt-5.6-terra"},
         headers=auth_headers,
     )
     second = await app.post(
         "/api/v1/projects/proj-test/agents",
-        json={"name": "reuse-second", "provider": "codex", "model": "gpt-5.6-sol"},
+        json={"name": "reuse-second", "provider": "codex", "model": "gpt-5.6-terra"},
         headers=auth_headers,
     )
     assert first.status_code == 201

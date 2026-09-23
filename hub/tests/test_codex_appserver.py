@@ -316,7 +316,7 @@ class TestMapTokenUsageNotification:
                 "modelContextWindow": 258400,
             }
         }
-        mapped = map_token_usage_notification(params, model="gpt-5.4-mini")
+        mapped = map_token_usage_notification(params, model="gpt-5.6-luna")
         usage = mapped["usage"]
         assert usage.status == "measured"
         assert usage.limit_tokens == 258400
@@ -335,7 +335,7 @@ class TestMapTokenUsageNotification:
                 "last": {"totalTokens": 15236, "inputTokens": 15231, "outputTokens": 5},
             }
         }
-        mapped = map_token_usage_notification(params, model="gpt-5.4-mini")
+        mapped = map_token_usage_notification(params, model="gpt-5.6-luna")
         assert mapped["accounting"].total_tokens == 15236
 
 

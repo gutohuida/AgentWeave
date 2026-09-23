@@ -46,6 +46,9 @@ class TestCatalogCoverage:
         """
         assert model_context_window("claude", "claude-opus-5") == 1_000_000
         assert model_context_window("claude", "claude-fable-5") == 1_000_000
+        # Live-verified 2026-09-23 via Claude's own result event.
+        assert model_context_window("claude", "claude-opus-5-5") == 1_000_000
+        assert model_context_window("claude", "claude-fable-5-1") == 1_000_000
         # Live-verified via Claude's own result event.
         assert model_context_window("claude", "claude-sonnet-5") == 1_000_000
         assert model_context_window("claude", "claude-haiku-4-5-20251001") == 200_000
@@ -81,17 +84,17 @@ class TestValidateOverrides:
         assert accepted == {"model": "claude-opus-5"}
 
     def test_a_model_not_in_the_provider_catalog_is_refused(self):
-        accepted, rejection = validate_overrides("claude", {"model": "gpt-5.6-sol"})
+        accepted, rejection = validate_overrides("claude", {"model": "gpt-5.6-terra"})
         assert accepted == {}
         assert rejection is not None
         assert rejection.control == "model"
 
     def test_model_and_control_overrides_validate_together(self):
         accepted, rejection = validate_overrides(
-            "codex", {"model": "gpt-5.6-sol", "effort": "high"}
+            "codex", {"model": "gpt-5.6-terra", "effort": "high"}
         )
         assert rejection is None
-        assert accepted == {"model": "gpt-5.6-sol", "effort": "high"}
+        assert accepted == {"model": "gpt-5.6-terra", "effort": "high"}
 
 
 class TestRenderControlArgs:
@@ -140,7 +143,7 @@ class TestRenderControlConfig:
         assert render_control_config("codex", {"permission_mode": "manual"}) == {}
 
     def test_model_and_unknown_controls_are_skipped(self):
-        assert render_control_config("codex", {"model": "gpt-5.6-sol", "verbosity": "high"}) == {}
+        assert render_control_config("codex", {"model": "gpt-5.6-terra", "verbosity": "high"}) == {}
 
     def test_an_unknown_provider_renders_nothing(self):
         assert render_control_config("gemini", {"effort": "high"}) == {}
