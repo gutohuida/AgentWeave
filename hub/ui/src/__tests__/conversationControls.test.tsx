@@ -664,6 +664,41 @@ describe('conversation controls — autoscroll follows scroll position', () => {
     }
   })
 
+  /**
+   * F348. While a turn runs, the working indicator renders below the newest turn but outside its
+   * `[data-turn-boundary]`. Sizing the spacer from the turn alone left the indicator's height
+   * below the viewport when the turn was pinned, which `handleScroll` read as the operator
+   * scrolling up — following switched itself off during every running turn.
+   */
+  it('leaves room for the working indicator below the newest turn, not only for the turn', () => {
+    recordedEntries = [timelineEntry('1')]
+    const { rerender } = render(<AgentOutputPanel agent={runningAgent} conversationId="conv-old" />)
+    const output = screen.getByTestId('conversation-output')
+    expect(screen.getByTestId('timeline-working-indicator')).toBeInTheDocument()
+
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        if (this.hasAttribute?.('data-turn-boundary')) return 120
+        if (this.getAttribute?.('data-testid') === 'timeline-working-indicator') return 16
+        return 0
+      },
+    })
+    try {
+      setScrollGeometry(output, { scrollTop: 0, scrollHeight: 1000, clientHeight: 600 })
+      recordedEntries = [timelineEntry('1'), timelineEntry('2')]
+      rerender(<AgentOutputPanel agent={runningAgent} conversationId="conv-old" />)
+
+      // 600 viewport - 120 turn - 16 indicator - 24 gap. (jsdom applies no stylesheet, so the
+      // column's 21px gap reads as 0 here; in the browser it is counted too.)
+      expect(screen.getByTestId('conversation-tail-spacer')).toHaveStyle({ height: '440px' })
+    } finally {
+      if (original) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', original)
+      else Reflect.deleteProperty(HTMLElement.prototype, 'offsetHeight')
+    }
+  })
+
   it('reserves nothing when the newest turn has not been laid out yet', () => {
     // offsetHeight 0 means "not measured", not "zero tall". Treating it as a real height would
     // reserve a viewport-sized void and pin a turn nobody can see, so this falls back to plain

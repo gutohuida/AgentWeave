@@ -74,7 +74,7 @@ describe('ProjectManagerModal — the identity-conflict remedy', () => {
   it('offers the remedy on a project_identity_conflict refusal, and resubmits with register_copy_as_new', () => {
     openError = refusal({
       code: 'project_identity_conflict',
-      message: 'This folder is already bound to a different AgentWeave database.',
+      message: 'project marker was copied while the registered directory is still available',
     })
     render(<ProjectManagerModal mode="open" onClose={vi.fn()} onComplete={vi.fn()} />, { wrapper })
     fireEvent.change(screen.getByLabelText('Directory path'), { target: { value: '/some/path' } })
@@ -86,5 +86,22 @@ describe('ProjectManagerModal — the identity-conflict remedy', () => {
     expect(openMutate).toHaveBeenCalledTimes(1)
     const [input] = openMutate.mock.calls[0]
     expect(input).toEqual({ path: '/some/path', register_copy_as_new: true })
+  })
+
+  // F171. The code covers four situations; the copied-folder one, driven, is a copy registered in
+  // *this* database. The fixed paragraph used to explain every one of them as a second Hub.
+  it('explains the conflict without asserting a cause the code does not carry', () => {
+    openError = refusal({
+      code: 'project_identity_conflict',
+      message: 'project marker was copied while the registered directory is still available',
+    })
+    render(<ProjectManagerModal mode="open" onClose={vi.fn()} onComplete={vi.fn()} />, { wrapper })
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent('project marker was copied while the registered directory is still available')
+    expect(dialog).toHaveTextContent('This folder carries the identity of another AgentWeave project')
+    expect(dialog).not.toHaveTextContent(/Hub instance/)
+    expect(dialog).not.toHaveTextContent(/different AgentWeave database/)
+    expect(dialog).not.toHaveTextContent(/can no longer open this folder/)
   })
 })

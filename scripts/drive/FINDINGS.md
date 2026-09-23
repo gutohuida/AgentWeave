@@ -14060,7 +14060,7 @@ marker is not offered as a workspace path"*.
 
 ## F171 (B) — the identity-conflict screen offers the right remedy under the wrong explanation
 
-**Status:** open. Filed by the row-1 sweep (`3280f52`), never fixed and never specced. The
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the fixed paragraph says only what holds in all four situations the code covers; see FIXED at the end of this entry. Was: open. Filed by the row-1 sweep (`3280f52`), never fixed and never specced. The
 regression assertion in `t_sweep_row1_ui.py` asserts the defect's shape for a future fix; it is not
 a fix. [classified 2026-09-09, D-2]
 
@@ -14112,6 +14112,8 @@ better still, but that requires the server to carry a discriminator the UI can s
 
 **Regression assertion:** `scripts/drive/t_sweep_row1_ui.py`, *"F171: the conflict explanation does
 not assert a cause it cannot know"*.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** The finding's cheapest correct fix, as it recommended: say less. `ProjectManagerModal` keeps matching on the code and offering the remedy, and its fixed paragraph now reads *This folder carries the identity of another AgentWeave project, so it was not opened. Registering it as new gives the folder a fresh identity here and rewrites its marker to match; the other project's records are not touched.* Each clause checked against `project_lifecycle.open`: `register_copy_as_new` mints a new project and writes its marker, and deletes nothing. The server's own sentence, above it, still says which situation this is. Naming the four situations in the UI would need a server discriminator and was not done. Test: `projectManagerIdentityConflict.test.tsx` `explains the conflict without asserting a cause the code does not carry`, with the server's real copy-conflict sentence (the fixture had been the old UI paragraph); the drive's F171 assertion in `t_sweep_row1_ui.py` passes against the new text unchanged.
 
 ---
 
@@ -28643,7 +28645,7 @@ no commit or branch is left behind. It also found the guard asking the wrong que
 
 ## F348 (B) — following switches itself off during every running turn, so the newest text drifts below the fold (and under the question tray)
 
-**Status:** open. Found 2026-09-13 by the independent test pass over F341–F345; it predates them.
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the tail spacer leaves room for everything below the newest turn, the working indicator included; see FIXED at the end of this entry. Was: open. Found 2026-09-13 by the independent test pass over F341–F345; it predates them.
 
 **Measured.** While a reply streams, the view settles 43–84px short of the bottom — over the 40px
 threshold in `handleScroll` (`AgentOutputPanel.tsx`, `atBottom = … < 40`) — so `autoscroll` turns
@@ -28657,6 +28659,8 @@ turn − gap) does not count it: pinning the newest turn's top leaves the indica
 content below the bottom, which reads as "the operator scrolled up". A repair would either measure
 the indicator into the turn, or count it in the spacer; it has to keep the 2026-08-20/21
 "bouncing scroll" regressions in `conversationControls.test.tsx` green.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** The suspected mechanism, confirmed by the arithmetic: with the newest turn pinned, the distance from the bottom was `8` (top padding) `+ 22` (the scroller's bottom padding) `- 24` (the spacer's gap) `+ 21 + 16` (the indicator and its column gap) `= 43px`, over `handleScroll`'s 40; without the indicator it is 6px. New `tailHeight(newest)` in `AgentOutputPanel.tsx` measures the newest turn plus every rendered sibling after it in the timeline column (indicator, queued entries, the waiting line), each with the column's `row-gap`; `measureTail` sizes the spacer from it. The ResizeObserver also watches the column, because the indicator appearing or going resizes the column and not the turn. The 2026-08-20/21 bouncing-scroll tests in `conversationControls.test.tsx` and `interjectTray.test.tsx` stay green. Test: `leaves room for the working indicator below the newest turn, not only for the turn` (spacer 440px; 456px on the old code). **Not yet confirmed in a browser**: that is UI-1's closing browser check.
 
 ## F349 (B) — two agent triggers at the same moment can answer 500 "database is locked" while the message is delivered anyway
 

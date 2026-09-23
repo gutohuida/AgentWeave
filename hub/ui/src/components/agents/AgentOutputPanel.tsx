@@ -120,6 +120,23 @@ const TAIL_TOP_PADDING_PX = 8
 /** Kept back from the tail spacer so the newest turn never sits flush against the composer. */
 const TAIL_BOTTOM_GAP_PX = 24
 
+/** The height the tail spacer has to leave room for: the newest turn, and everything the timeline
+ *  renders after it (F348). The working indicator, queued entries and the waiting line all sit
+ *  below the newest turn but outside `[data-turn-boundary]`, and sizing the spacer from the turn
+ *  alone left their height below the viewport when the turn was pinned — 43px with the indicator
+ *  alone, past `handleScroll`'s 40px, so following switched itself off during every running turn.
+ *  The timeline is a flex column, so each rendered sibling also brings the column's gap. */
+function tailHeight(newest: HTMLElement): number {
+  const column = newest.parentElement
+  const gap = column ? parseFloat(getComputedStyle(column).rowGap) || 0 : 0
+  let height = newest.offsetHeight
+  for (let next = newest.nextElementSibling; next; next = next.nextElementSibling) {
+    const rendered = (next as HTMLElement).offsetHeight
+    if (rendered > 0) height += gap + rendered
+  }
+  return height
+}
+
 /** The interjection tray's own bottom margin (`.conversation-interject-tray`), counted into the
  *  inset it covers. Kept equal to the CSS by hand; it is one number. */
 const TRAY_BOTTOM_GAP_PX = 8
@@ -431,7 +448,7 @@ export function AgentOutputPanel({
     // newest turn to the top is what is left of the viewport *above* the tray.
     const next = Math.max(
       0,
-      el.clientHeight - trayInsetRef.current - newest.offsetHeight - TAIL_BOTTOM_GAP_PX,
+      el.clientHeight - trayInsetRef.current - tailHeight(newest) - TAIL_BOTTOM_GAP_PX,
     )
     // Only commit a real change: this runs on every entry, and writing an equal value would
     // re-render forever.
@@ -469,6 +486,9 @@ export function AgentOutputPanel({
       }
     })
     observer.observe(newest)
+    // And the column holding it: the working indicator or a queued entry appearing below the
+    // newest turn changes the tail without resizing the turn (F348).
+    if (newest.parentElement) observer.observe(newest.parentElement)
     return () => observer.disconnect()
   }, [timelineEntries.length, isRunning, trayInset, measureTail])
 

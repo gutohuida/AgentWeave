@@ -217,10 +217,15 @@ export function ProjectManagerModal({
             {readableApiError(error, 'The project could not be registered.')}
             {isIdentityConflict && (
               <>
+                {/* F171: the code is raised from four situations (a copied folder, a marker naming
+                    a project this database does not have, a path that now resolves elsewhere, a
+                    relocation aimed at the wrong folder), and the sentence above is the server's
+                    account of which one this is. This paragraph says only what holds in all four;
+                    the old one described a second Hub instance, false in three of them. */}
                 <p className="mt-2" style={{ color: 'var(--text-2)' }}>
-                  This folder is already bound to a different AgentWeave database — usually another
-                  Hub instance on this machine. Registering it as new gives it a fresh identity
-                  here; the other database keeps its records but can no longer open this folder.
+                  This folder carries the identity of another AgentWeave project, so it was not
+                  opened. Registering it as new gives the folder a fresh identity here and rewrites
+                  its marker to match; the other project&apos;s records are not touched.
                 </p>
                 <div className="mt-2">
                   <Button
