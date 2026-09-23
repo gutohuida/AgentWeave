@@ -179,8 +179,48 @@ nothing. R1 checked this against the code, not against a live run. **Task 1.2 is
 if SQLite answers `database is locked` instead of waiting, the test fails with an
 `OperationalError`, and IMPL must stop and report rather than widen the catch.
 
+**Measured in R2 (2026-09-24), in both journal modes.** The suite does not run the journal mode
+production runs. `hub/tests/conftest.py:112-115` sets `journal_mode=WAL` and `busy_timeout=30000`
+on every test connection, "production keeps SQLite's defaults". The operator's database reads
+`journal_mode = delete` (read with `mode=ro`), and a connection built with `engine.py:36-40`'s
+arguments reads `busy_timeout = 5000`. So task 1.2 alone measures WAL, not production. R2 ran the
+real `cut_over` through a session proxy. The proxy's `commit` did step 2's flush, a raw
+compare-and-set against a column and partial index added by DDL, and then steps 3–5. Each scenario
+ran five times, under the suite's WAL/30 s and on a separate engine with SQLite's defaults
+(rollback journal, 5 s):
+
+| Scenario | WAL / 30 s | rollback journal / 5 s |
+|---|---|---|
+| Same checkpoint, barrier (task 1.2) | 5/5: one success, one compare-and-set miss; 1 successor, 1 entry | 5/5, same |
+| Two checkpoints, barrier (task 1.4) | 5/5: one success, one `IntegrityError` → refusal; 1 successor, 1 entry | 5/5, same |
+| Any `OperationalError` | none | none |
+
+The loser waited 15–46 ms, which is the busy handler working and not failing. The argument holds
+in both modes. Task 1.11 keeps the production-mode run as a test.
+
+**What R2 found that R1 did not: a rollback expires every instance in the session.** In all 20
+refusals, reading `checkpoint.id` on the caller's instance after the rollback raised
+`MissingGreenlet`. That is an async lazy load of an expired attribute. Two places read ids after
+step 3's or step 4's rollback:
+
+- `cut_over`'s own refusal text and re-read (`checkpoint.id`, `predecessor.id`). If these are
+  read after the rollback, the route answers **500, not 409**. Tasks 1.2, 1.4 and 1.10 would catch
+  that.
+- The trigger's `return checkpoint.id` at `checkpoint_trigger.py:332`, in its
+  `except CutoverRefusedError` branch. It runs *after* the `checkpoint_ready` broadcast, so the
+  operator still sees the event. `consider` then raises instead of returning, and `_run`
+  (`:376-377`) logs *"checkpoint consideration failed"*, a false alarm on every such refusal. Only
+  task 1.8 reaches it, and only if the test asserts the return value.
+
+So step 0 below captures the ids before any write. `refused_capability.py:216-230` does the same
+thing: its re-read after the rollback uses `project_id` and `gate.subject_key`, which are plain
+values, never an ORM instance.
+
 Order inside `cut_over`, after the pre-checks:
 
+0. Capture `checkpoint_id = checkpoint.id`, `predecessor_id = predecessor.id` and
+   `conversation_id = checkpoint.conversation_id` as plain strings. After a rollback, use only
+   these.
 1. `db.add(successor)`, `db.add(entry)`, `archive(predecessor)` (as today).
 2. `await db.execute(update(Checkpoint)…compare-and-set…)`. The ORM autoflushes 1 first, so the
    `INSERT`s take the lock before the claim is evaluated.
@@ -192,7 +232,9 @@ Order inside `cut_over`, after the pre-checks:
 
 Rolling back is safe for both callers because neither has anything pending (see *Context*). IMPL
 adds a comment at the rollback saying so. A future caller that stages changes before `cut_over` would
-otherwise lose them silently.
+otherwise lose them silently. The comment also says that the caller's instances come back
+**expired**. The trigger's `except CutoverRefusedError` branch therefore returns an id captured
+before the call, not `checkpoint.id` (task 2.6).
 
 ### D4 — The hand-archived refusal stays, and becomes honest
 
@@ -221,8 +263,10 @@ Refusal texts (IMPL may polish them; the tests assert the ids and key phrases on
 For each `inbound_queue_entries` row with `origin_type = 'checkpoint'` whose `content` starts with
 `This conversation continues earlier work.`, parse `^# Checkpoint (ckpt-\S+)$` (multiline), in
 `sequence` order. Set that checkpoint's `cut_over_to_conversation_id` to the entry's
-`conversation_id`, but only where it is still NULL **and** no other checkpoint of the same
-`conversation_id` has been set yet. The first handover wins. Later duplicates from the F126/F293/F294
+`conversation_id` (the successor), but only where it is still NULL **and** no other checkpoint
+whose own `checkpoints.conversation_id` (the predecessor) equals this checkpoint's has been set
+yet. That is the index's key. The entry's `conversation_id` is the successor, so keying on it would
+never find a collision. The first handover wins. Later duplicates from the F126/F293/F294
 era stay NULL, so the unique index can be created on a database that already holds a fork. The
 migration logs how many it set and how many it skipped. The preamble's opening line is unchanged
 since it was introduced (`git log -S "This conversation continues earlier work" -- hub/hub` → only
@@ -247,10 +291,12 @@ databases today.
    "0105"`. Guard for a missing `checkpoints` table (return early, like `0104`'s `_columns`). Then
    add the column if absent, backfill (D5; skip it if `inbound_queue_entries` is absent), and
    create the index if absent. **Downgrade**: drop the index, then the column, both guarded.
-   **Renumber at IMPL** to the next free number. A concurrent bundle's change,
-   `agents-no-longer-register-themselves` (B3), also names `0106` as *"next free number at IMPL
-   time"* (its `proposal.md:73`). Whichever change is built second takes `0107`. That includes the
-   `HEAD_REVISION` bumps.
+   **Renumber at IMPL** to the next free number. **Two** other unarchived changes also name
+   `0106` (R2, `grep -rn 0106 openspec/changes`). `agents-no-longer-register-themselves` (B3)
+   gives it as *"next free number at IMPL time"* (`proposal.md:73`), and
+   `worker-spend-counts-against-the-budget` gives it at `proposal.md:42,79`. The number in this
+   document is not renumbered now. Whichever change is built second takes `0107`, and the third
+   takes `0108`. That includes the `HEAD_REVISION` bumps and every test name here that says `0106`.
 3. **Heads** — `HEAD_REVISION = "0106"` (`hub/tests/test_migrations.py:40`) and
    `hub/tests/test_project_persistence.py:227`.
 4. **Schema** — `CheckpointSummary.cut_over_to_conversation_id: Optional[str] = None`
@@ -271,6 +317,9 @@ nullable column and one partial index, and backfills zero rows (measured, see ab
 - `checkpoint_trigger.consider` → a refusal becomes `cutover_refused` on `checkpoint_ready`
   (unchanged). The checkpoint row the trigger generated is already committed (`generate_checkpoint`,
   `checkpoint_generation.py:664`), so `cut_over`'s rollback cannot remove it. Task 1.8 pins that.
+  The rollback does expire the trigger's `checkpoint` instance, though. Unless task 2.6 is done,
+  `return checkpoint.id` (`:332`) raises `MissingGreenlet` after the broadcast has gone out, and
+  `_run` logs a false *"checkpoint consideration failed"* (R2, measured; see D3).
 - `GET …/conversations/{id}/checkpoints`, `POST …/checkpoint`, `GET …/checkpoints/{id}` → only
   `CheckpointSummary.of` changes, and it reads a column. Nothing new can raise.
 
@@ -285,3 +334,9 @@ nullable column and one partial index, and backfills zero rows (measured, see ab
 ## Round log
 
 - **R1 (2026-09-24)**: this document. F293 and F294 re-measured as still open on `404c7d5`.
+- **R2 (2026-09-24)**: re-derived against the code at `aaa8757`. F293 and F294 were reproduced
+  again: two successors each. D3's locking argument was measured in both journal modes and holds
+  (20 of 20 races clean). Three things were added. The suite runs WAL, not production's rollback
+  journal (task 1.11). A rollback expires the caller's instances (D3 step 0, task 2.6, and task
+  1.8's return-value assertion). And D5's first-wins key is the predecessor. A third change also
+  names `0106`. No decision was reversed.

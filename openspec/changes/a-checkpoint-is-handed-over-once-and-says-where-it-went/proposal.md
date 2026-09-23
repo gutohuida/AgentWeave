@@ -1,6 +1,6 @@
 # Proposal — a checkpoint is handed over once, and says where it went
 
-**Round 1, 2026-09-24** (bundle B8, spec track S2). Findings: **F293 (B)** and **F294 (B)**, both
+**Round 1, 2026-09-24** (bundle B8, spec track S2); **verified by R2 the same day**. Findings: **F293 (B)** and **F294 (B)**, both
 filed 2026-09-06 (day D-2) by an independent drive of F126's guard (`3142a91`). Both were
 **re-measured on HEAD `404c7d5`** against `cut_over` itself (design *Measured in R1*). One change
 answers both, because the column F293 needs is the thing F294's claim has to be written into.
@@ -51,7 +51,7 @@ alone races just as the lifecycle guard does. Design *History* says why none of 
 - **Refusals name where the work went.** A spent checkpoint, or a conversation already handed over,
   is refused with the successor's id. The *"unarchive it first"* advice is kept only for a
   conversation that was archived by hand and never handed over, where it is now true.
-- **Migration `0106`**: add the column, backfill it from delivered checkpoint entries, and create
+- **Migration `0106`** (the number is provisional: two other changes also name `0106`, so it is renumbered at IMPL): add the column, backfill it from delivered checkpoint entries, and create
   the index. Guarded for a missing table. The backfill is exact (design D5). The operator's real
   database holds zero cutovers (read-only, 2026-09-24), so on that database it writes nothing.
 - **`CheckpointSummary` gains `cut_over_to_conversation_id`**, so the operator routes that list and

@@ -6,7 +6,9 @@
    after it. The row counts are the evidence: one `handoff` successor and one checkpoint entry.
 2. **Two simultaneous presses give one successor (F294).** Task 1.2 fails before the fix and passes
    after it. Exactly one success and one `CutoverRefusedError`. Any other exception type means the
-   locking argument in design D3 is wrong. Stop and report; do not widen the catch.
+   locking argument in design D3 is wrong. Stop and report; do not widen the catch. The suite runs
+   SQLite in WAL mode, but production uses the rollback journal. Task 1.11 runs the same two races
+   on an engine with production's defaults and must give the same outcome.
 3. **A different checkpoint cannot fork the line (D2).** Tasks 1.3 and 1.4 fail before and pass
    after.
 4. **Each guard is load-bearing.** The mutation pair in 1.4 shows which guard catches which race.
@@ -16,7 +18,9 @@
 6. **Nothing legitimate is refused.** Controls 1.6 (a two-hop chain) and 1.7 (archived by hand,
    reopened, handed over) pass before and after.
 7. **The automatic path keeps its checkpoint.** Task 1.8: after the rollback, the generated
-   checkpoint row still exists and `cutover_refused` names the successor.
+   checkpoint row still exists and `cutover_refused` names the successor. `consider` must also
+   return that checkpoint's id rather than raise. The rollback expires the instances in the session,
+   so reading `checkpoint.id` afterwards raises `MissingGreenlet`.
 8. **The migration is safe on real data.** Tasks 3.4–3.7. A database that already holds a fork
    still upgrades, and the F329 parity test passes.
 9. **Live, on a trial Hub.** Task 4.4 re-drives `t_d2_cutover_guard.py`. Record the verdict counts.
