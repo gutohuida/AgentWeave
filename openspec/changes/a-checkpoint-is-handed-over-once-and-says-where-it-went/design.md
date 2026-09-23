@@ -1,0 +1,287 @@
+# Design — a checkpoint is handed over once, and says where it went
+
+**Built on the recommended answers to B8's design questions D1–D5 below.** The bundle carries no
+`DECISIONS.md` question; these are choices R1 made and the operator may overturn. If the operator
+answers otherwise:
+
+- **D2 answered "per checkpoint only":** drop the partial unique index and task 2.3, and drop
+  scenario *"A second checkpoint cannot hand the same conversation over again"*. F293 and F294 stay
+  closed; the cross-checkpoint race stays open.
+- **D3 answered "in-process claim":** replace the compare-and-set with an `asyncio.Lock`-guarded set
+  like `_checkpoint_claims`. Drop the index. Rewrite the requirement's *"enforced by the database"*
+  sentence.
+- **D5 answered "no backfill":** delete task 3.2 and its tests. Record that legacy cutovers stay
+  re-armable by unarchive.
+
+**Round 1, 2026-09-24. Nothing here is implemented yet.**
+
+## Context — the code at `404c7d5`
+
+`cut_over(db, predecessor, checkpoint, *, hop_depth, auto_continue)`
+(`hub/hub/checkpoint_cutover.py:63`):
+
+| Line | What it does |
+|---|---|
+| `:83-87` | Refuses unless `checkpoint.status == "ready"`. A cutover does not change the status, so a spent checkpoint passes |
+| `:97-103` | **F126's guard.** Refuses when `predecessor.lifecycle == "archived"`, with the text *"…if it was archived by hand, unarchive it first."* |
+| `:105-107` | `archivable(db, predecessor)`: a run in progress or undelivered entries refuse |
+| `:109-131` | Builds the successor (`origin="handoff"`, derived title, inherited overrides, bindings, `lineage_id`) and `db.add`s it |
+| `:133-142` | Builds the `InboundQueueEntry` (`origin_type="checkpoint"`, `content=delivery_content(checkpoint)`, addressed to the successor) |
+| `:144-145` | `archive(predecessor)`; `await db.commit()` |
+| `:149-198` | `auto_continue`: `schedule_agent` after the commit |
+
+Callers (the only two, `grep -rn "cut_over(" hub/hub`):
+
+- **The route** `POST /projects/{p}/checkpoints/{id}/cutover` (`hub/hub/api/v1/checkpoints.py:370-404`).
+  It turns `CutoverRefusedError` into **409** (`:391-394`). Any other exception propagates as 500.
+  Nothing is pending on its session before the call: it only reads (`:378-384`).
+- **The automatic trigger** (`hub/hub/checkpoint_trigger.py:319-336`). It turns `CutoverRefusedError`
+  into `payload["cutover_refused"]` on a `checkpoint_ready` broadcast. Any other exception reaches
+  `_run`'s `except Exception` (`:376-377`), which logs a warning. Nothing is pending on its session
+  before the call either: `generate_checkpoint` commits (`checkpoint_generation.py:664`), and
+  `:291-317` only builds a dict.
+
+`unarchive` (`hub/hub/conversations.py:479-482`) sets `lifecycle = "open"` and `archived_at = None`.
+Its route (`hub/hub/api/v1/agent_chat.py:623-635`) is never refused.
+
+`Checkpoint` (`hub/hub/db/models.py:1668-1804`) has no column recording a handover.
+`InboundQueueEntry` has no checkpoint id either. The only durable link today is inside the entry's
+`content`. `delivery_content` = `_DELIVERY_PREAMBLE` (`checkpoint_cutover.py:28-36`, which opens
+*"This conversation continues earlier work."*) + `render_checkpoint`, whose first line is
+`# Checkpoint {checkpoint.id}` (`checkpoint_generation.py:285`). Checkpoint notes requests share
+`origin_type="checkpoint"` (`checkpoint_trigger.py:237-246`), but their content is `_NOTES_REQUEST`,
+which does not open with the preamble. Nothing in `hub/hub` deletes an `InboundQueueEntry`, a
+`Checkpoint` or a `Conversation` (`grep` for `delete(` over all three: no hits).
+
+## Measured in R1 (HEAD `404c7d5`)
+
+A throwaway test (created under `hub/tests/`, run with `-s`, then deleted) used the suite's own
+fixtures (`_conversation`, `_ready_checkpoint` from `test_checkpoint_cutover.py`) on the suite's
+file-backed SQLite:
+
+- **F293:** `cut_over` → `unarchive` + commit → `cut_over` with the same checkpoint. Result:
+  **two** `handoff` successors (`conv-2997cf6e3357`, `conv-2ecad0277068`). Still open.
+- **F294:** two sessions, each loads the conversation and checkpoint, then an `asyncio.Barrier(2)`,
+  then `cut_over` concurrently. Result: **both** returned successors
+  (`conv-9433b9e6954f`, `conv-e632a122f613`). Still open. Without the barrier the second press read
+  after the first commit and was refused. The barrier is what makes the test deterministic, so
+  task 1.2 keeps it.
+- Read-only (`mode=ro`) on the operator's `:8000` database (`~/.agentweave/hub/data/agentweave.db`,
+  head `0105`): 16 checkpoints, 8 ready, **0** `origin_type='checkpoint'` entries, **0** `handoff`
+  conversations. The trial database: 0 checkpoints. The backfill writes nothing on either.
+
+## History — the three asks, and why none landed
+
+1. **F126, 2026-08-30** (`b039d47`, row 15's cutover drive). Shape (2) was recommended: *"Give
+   `Checkpoint` a `cut_over_to_conversation_id` … One migration."* The night of 2026-09-06 shipped
+   shape (1) in `3142a91` instead, the lifecycle guard. Its fix note gives two reasons. A migration
+   *"fails the day-window carve-out's second condition"*, so an unattended window may not make it.
+   And shape (1) as worded (*"a queue entry that names this checkpoint"*) needed the very link
+   shape (2) adds. The shipped guard is a proxy, and the note flags it as *"wider than the finding
+   asked for"*.
+2. **F293, 2026-09-06 D-2** (`6f58c27`). Recommendation (1) was *"Shape (2) from F126, now with a
+   second reason."* F294 in the same drive showed the column alone races too. The night's closing
+   log (`523e66d`) carried *"F293 + F294 want one change between them … Neither is specced."*
+   Nothing specced it: `git log --all --grep "F293\|F294"` finds no proposal commit. The recorded
+   reasons are these. The drain (`DECISIONS.md:1519`) does cover B, but the night playbook works
+   severity A first, and five A's were unproposed that night (`523e66d`). A finding with no
+   proposal needs a day window first, and the drain's FILL proposed As ahead of it. From 2026-09-22
+   the Merge Week O5 froze new change directories until 2026-09-28 (`ROUNDS.md` §"Read this first"
+   2). R1 found no record of a window that considered F293/F294 and declined them. The finding was
+   simply never reached.
+3. **`ROUNDS.md` S2, 2026-09-22** (`eeadf70`) scheduled it as a spec track from 2026-09-28. This
+   bundle is that track.
+
+The pattern: every time, the migration was the reason a window could not act. This change is the
+migration, done in an interactive session under the round discipline.
+
+## Decisions
+
+### D1 — Where the handover identity lives: on the checkpoint
+
+Options:
+
+- **(a) `Checkpoint.cut_over_to_conversation_id`** (recommended). The row the operator already
+  reads (`CheckpointSummary`) answers *"where did this checkpoint go"*. It is the column the ledger
+  asked for three times.
+- **(b) `Conversation.handed_over_by_checkpoint_id`** on the successor. The successor→predecessor
+  direction is already answerable through `lineage_id` and `origin="handoff"`. Only the checkpoint
+  is missing, and putting it on the conversation leaves the checkpoint listing unable to say it is
+  spent. It would also widen `ConversationResponse`, which the whole navigation tree consumes.
+
+Column: `String(64)`, nullable, **no `ForeignKey`**. SQLite does not enforce foreign keys here (no
+`PRAGMA foreign_keys` in `hub/hub/db/engine.py`). Adding a constraint to `checkpoints` on SQLite
+means a batch rebuild of a table whose constraint names `0088` pinned deliberately
+(`models.py:1686-1693`). The value is written only by `cut_over`, from a successor it created in
+the same transaction.
+
+### D2 — "At most once" is per conversation, not only per checkpoint
+
+Options:
+
+- **(a) Per checkpoint only.** A second cutover of the *same* checkpoint is refused. A *different*
+  checkpoint of the same conversation can still mint a second successor.
+- **(b) Per conversation** (recommended): a partial unique index
+  `ix_checkpoints_one_handover_per_conversation` on `checkpoints(conversation_id) WHERE
+  cut_over_to_conversation_id IS NOT NULL`.
+
+(a) leaves two real routes open. The first is **sequential**: cut over with C1, unarchive, keep
+working, take C2, cut over again. That gives two open successors on one `lineage_id`, the fork
+`conversation-checkpoint`'s *"Lineage is recorded and participation is derived"* rules out
+(*"Lineage is linear"*). The second is **concurrent**, and it reaches the product with no unarchive
+at all. When the automatic trigger's cutover is refused (a run in progress), it broadcasts
+`checkpoint_ready` with `cutover_refused` (`checkpoint_trigger.py:327-333`). The UI then offers C1
+to the operator. The next context reading can generate C2 and cut over automatically, while the
+operator presses C1. Both read the predecessor as `open`. A claim on the checkpoint row cannot see
+the other row.
+
+**The app's own Handoff button always takes route one.** `writeCheckpoint`
+(`hub/ui/src/store/checkpointOperationStore.ts:37-75`) calls `takeCheckpoint` and then cuts over
+*that new* checkpoint. So an operator who unarchives a handed-over conversation and presses Handoff
+again never re-presses the spent checkpoint. They press a fresh one. Under (a), F293's outcome (a
+second successor on one line) stays reachable from the UI with one click. Only the API re-press
+and the `context_pressure` banner would be closed. That alone decides (a) against.
+
+(b) releases one thing (a) would allow: after an unarchive, a conversation cannot be handed over
+again by a new checkpoint. The operator keeps working in the reopened predecessor or in its
+successor. The refusal names the successor. That matches the lineage requirement, so R1
+recommends it.
+
+A cutover of the *successor* is unaffected: its checkpoints carry its own `conversation_id`.
+Driven chains (F294's *"What held"*: a two-hop chain) keep working, and task 1.6 pins that.
+
+### D3 — Serialisation is done by the database, not by a process-local claim
+
+Options:
+
+- **(a) An in-process claim** like `_checkpoint_claims` (F294's own recommendation). It needs no
+  migration, but it guarantees nothing across processes, and it keys on the checkpoint or on the
+  conversation, not on both.
+- **(b) Compare-and-set plus the D2 index** (recommended). `UPDATE checkpoints SET
+  cut_over_to_conversation_id = :successor WHERE id = :id AND cut_over_to_conversation_id IS NULL`,
+  with rowcount 1 required. This is the "row claim" `ROUNDS.md` S2 names. The D2 index is the
+  backstop for the cross-checkpoint race. Migration `0104` already follows this pattern
+  (`ix_questions_open_subject_key`: *"the database refuses the second insert instead of a `SELECT`
+  racing it"*), and so does its handler (`hub/hub/refused_capability.py:216-230`: catch
+  `IntegrityError`, roll back, re-read, answer).
+
+The migration is needed for the column anyway, and the column is where a claim can be recorded
+durably, so (b) costs nothing (a) saves. The claim is the column written conditionally, not an
+extra field that another request can read and race on. That is the gap F294 named in *"the column
+alone races identically"*.
+
+**Why this serialises on the Hub's SQLite.** `engine.py:36-40` sets no pragmas and no isolation
+level, so pysqlite runs in legacy transaction mode. It emits `BEGIN` implicitly before the first
+DML, not before a `SELECT`, and the reads in `cut_over` hold no snapshot. The first flushed `INSERT`
+takes the write lock. A concurrent second request's `INSERT` waits on the busy handler (5 s default)
+until the first commits. Its compare-and-set then evaluates against the committed row and matches
+nothing. R1 checked this against the code, not against a live run. **Task 1.2 is the measurement**:
+if SQLite answers `database is locked` instead of waiting, the test fails with an
+`OperationalError`, and IMPL must stop and report rather than widen the catch.
+
+Order inside `cut_over`, after the pre-checks:
+
+1. `db.add(successor)`, `db.add(entry)`, `archive(predecessor)` (as today).
+2. `await db.execute(update(Checkpoint)…compare-and-set…)`. The ORM autoflushes 1 first, so the
+   `INSERT`s take the lock before the claim is evaluated.
+3. rowcount 0 → `await db.rollback()`, re-read the checkpoint, and raise `CutoverRefusedError`
+   naming its `cut_over_to_conversation_id`.
+4. `IntegrityError` from 2 or from the commit → `await db.rollback()`, re-read the conversation's
+   handed-over checkpoint, and raise `CutoverRefusedError` naming its successor and its checkpoint.
+5. `await db.commit()`.
+
+Rolling back is safe for both callers because neither has anything pending (see *Context*). IMPL
+adds a comment at the rollback saying so. A future caller that stages changes before `cut_over` would
+otherwise lose them silently.
+
+### D4 — The hand-archived refusal stays, and becomes honest
+
+F126's guard also refuses a conversation archived by hand. Its fix note flagged this as a widening
+that *"if the operator wants the narrower rule … needs shape (2)'s column"*. With the column, the
+narrower rule is possible. R1 recommends keeping the refusal anyway. Allowing it would skip
+`archivable`, whose first line returns `None` for an archived conversation
+(`conversations.py:395-396`). A cutover would then run with no check
+for an in-progress run or stranded entries. The remedy is also one press.
+
+What changes is the order and the wording. The spent-checkpoint and handed-over checks run
+**first**, so *"unarchive it first"* is said only to a conversation that was never handed over,
+where following it is correct.
+
+Refusal texts (IMPL may polish them; the tests assert the ids and key phrases only):
+
+- Spent checkpoint: *"Checkpoint {id} was already cut over to {successor}; that conversation holds
+  the work."*
+- Conversation already handed over by another checkpoint: *"Conversation {pred} was already handed
+  over to {successor} (checkpoint {other}); continue there, or keep working in this one."*
+- Archived by hand, never handed over: today's text with the *"if this one was cut over already…"*
+  clause dropped, since that case is now named precisely above.
+
+### D5 — Backfill the column from delivered entries
+
+For each `inbound_queue_entries` row with `origin_type = 'checkpoint'` whose `content` starts with
+`This conversation continues earlier work.`, parse `^# Checkpoint (ckpt-\S+)$` (multiline), in
+`sequence` order. Set that checkpoint's `cut_over_to_conversation_id` to the entry's
+`conversation_id`, but only where it is still NULL **and** no other checkpoint of the same
+`conversation_id` has been set yet. The first handover wins. Later duplicates from the F126/F293/F294
+era stay NULL, so the unique index can be created on a database that already holds a fork. The
+migration logs how many it set and how many it skipped. The preamble's opening line is unchanged
+since it was introduced (`git log -S "This conversation continues earlier work" -- hub/hub` → only
+`5706285`).
+
+Without the backfill, a legacy cutover stays protected only by the lifecycle guard, and unarchiving
+it re-arms F293 for that row. The link is exact, not heuristic, because the checkpoint id is in the
+delivered text. R1 therefore recommends the backfill, even though it writes zero rows on both local
+databases today.
+
+## Migration `0106` — the checklist (`.claude/rules/db-migrations.md`)
+
+1. **Model** — `Checkpoint.cut_over_to_conversation_id: Mapped[Optional[str]] =
+   mapped_column(String(64), nullable=True)`. Add
+   `Index("ix_checkpoints_one_handover_per_conversation", "conversation_id", unique=True,
+   sqlite_where=text("cut_over_to_conversation_id IS NOT NULL"))` to `__table_args__`. Use the same
+   name and predicate text as the migration: the F329 parity test
+   (`test_an_empty_database_migrated_alone_gets_the_schema_init_db_builds`,
+   `test_migrations.py:3669`) compares `create_all`+alembic against alembic+`create_all` DDL clause
+   for clause.
+2. **Migration** `hub/hub/migrations/versions/0106_checkpoint_cut_over_to.py`, `down_revision =
+   "0105"`. Guard for a missing `checkpoints` table (return early, like `0104`'s `_columns`). Then
+   add the column if absent, backfill (D5; skip it if `inbound_queue_entries` is absent), and
+   create the index if absent. **Downgrade**: drop the index, then the column, both guarded.
+   **Renumber at IMPL** to the next free number. A concurrent bundle's change,
+   `agents-no-longer-register-themselves` (B3), also names `0106` as *"next free number at IMPL
+   time"* (its `proposal.md:73`). Whichever change is built second takes `0107`. That includes the
+   `HEAD_REVISION` bumps.
+3. **Heads** — `HEAD_REVISION = "0106"` (`hub/tests/test_migrations.py:40`) and
+   `hub/tests/test_project_persistence.py:227`.
+4. **Schema** — `CheckpointSummary.cut_over_to_conversation_id: Optional[str] = None`
+   (`api/v1/checkpoints.py:31-71`), set in `.of`. The UI does not need it for this change. It is
+   exposed because *"where did this checkpoint go"* is the question the column exists to answer.
+   No UI bundle.
+
+**This migration reaches the operator's live database on their next `:8000` restart.** It adds one
+nullable column and one partial index, and backfills zero rows (measured, see above).
+
+## What each route returns when the function it calls raises
+
+- `POST …/checkpoints/{id}/cutover` → `cut_over` raises `CutoverRefusedError` for every refusal,
+  old and new. The compare-and-set miss and the `IntegrityError` are converted **inside**
+  `cut_over`, after a rollback. The route answers **409** with the text, unchanged at `:391-394`.
+  An `OperationalError` (lock timeout) is not converted and stays a 500. That is unchanged, and R1
+  does not widen it: a 500 there is a real fault, not a refusal.
+- `checkpoint_trigger.consider` → a refusal becomes `cutover_refused` on `checkpoint_ready`
+  (unchanged). The checkpoint row the trigger generated is already committed (`generate_checkpoint`,
+  `checkpoint_generation.py:664`), so `cut_over`'s rollback cannot remove it. Task 1.8 pins that.
+- `GET …/conversations/{id}/checkpoints`, `POST …/checkpoint`, `GET …/checkpoints/{id}` → only
+  `CheckpointSummary.of` changes, and it reads a column. Nothing new can raise.
+
+## Open questions
+
+1. D2 (b) refuses re-handover of a reopened conversation by a new checkpoint. If the operator
+   considers *"reopen and hand over again"* a workflow they use, the answer is D2 (a) plus a
+   separate decision about forks. R1 found no drive or finding that exercises it.
+2. The route's 409 `detail` stays a string. A structured `{successor_conversation_id}` field would
+   let a client link to the successor. No client needs it today, so R1 leaves it out.
+
+## Round log
+
+- **R1 (2026-09-24)**: this document. F293 and F294 re-measured as still open on `404c7d5`.
