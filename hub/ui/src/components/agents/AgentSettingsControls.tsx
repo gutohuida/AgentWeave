@@ -225,7 +225,7 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
 export function RunnerPicker({ agent }: { agent: AgentSummary }) {
   const { data: runners = [], isLoading } = useRunners()
   const bindRunner = useBindAgentRunner()
-  const { data: launchability } = useAgentLaunchability()
+  const { data: launchability, error: launchabilityError } = useAgentLaunchability()
   const verdict = launchability?.agents[agent.name]
   const cannotRun = verdict?.runnable === false
 
@@ -257,6 +257,12 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
       {cannotRun && (
         <p role="status" className="text-xs mt-2" style={{ color: 'var(--amber)' }}>
           This agent cannot run: {verdict.reason ?? 'the Hub reports it as not runnable.'}
+        </p>
+      )}
+      {/* A failed check is not a clean one: say so rather than going quiet. */}
+      {!verdict && launchabilityError && (
+        <p role="status" className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
+          Could not check whether this agent can run.
         </p>
       )}
       {bindRunner.isError && (

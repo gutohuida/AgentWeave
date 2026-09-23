@@ -3963,7 +3963,7 @@ own eventual fix, not bolted on separately.
 
 ## F61 (B) — every flow conversation has the same title, and no API says which turn is a review
 
-**Status:** open — the operator chose the fix (title a flow conversation by its agent and role) and it is not implemented
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — a loop's task turn is titled by its agent, its role and the task; see FIXED at the end of this entry. Was: open — the operator chose the fix (title a flow conversation by its agent and role) and it is not implemented
 
 Found 2026-08-26 by the **operator**, judging group 11's check 11.2 ("the handover is legible")
 against the live trial Hub. This is the first finding in this series produced by a human judgement
@@ -4004,6 +4004,8 @@ written on 2026-08-25. It is not true now — thirteen messages on this project 
 `builder` <-> `critic`, from 2026-08-25 23:43 onward, produced by the overnight drive. Both handover
 shapes now exist here: silent routing by the scheduler, and agents messaging each other about
 tasks. Judge against the live rows, not the runbook's snapshot of them.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** The operator's chosen fix, made where the title is made: the server. New `scheduler.job_conversation_title(job_name, agent, task, is_review)` names both firing sites' conversations (`_do_fire_job`'s primary selection and `_fire_additional_selection`'s others): a loop's task turn reads `critic · review: Balance the ledger` or `builder · work: Balance the ledger`; a plain job, or a loop firing with no task, is still named after the job. The job's name is deliberately not in it: every row of a loop's conversation already carries the loop marker labelled with the job's name (`ConversationLoop.label`), and a firing group names the loop once for all its rows, so repeating it would spend the width the title needs for what differs. The task title goes last so `title_from_message`'s 120-character cut falls on it. The role cannot go stale, since a loop never resumes a conversation (design D4 refuses `resume` on a loop). ROUNDS had also listed `review_task_id` on the queue response; the operator offered that and did not select it ("the title is the fix"), so it was not added. Existing conversations keep their old titles (`name_conversation` never renames). Tests: `test_flow_conversation_names_the_turn.py` (six, firing the real scheduler; the review, work, wide-firing and truncation ones fail with the helper reduced to the old behaviour).
 
 ## F62 (C) — a mixed-CLI flow reports its tokens in full and its money in part
 
@@ -14669,7 +14671,7 @@ POST  /projects/<p>/agent/trigger   {"agent":"q1","message":"held"}  -> 200  sta
 open  /?project=<p>&agent=q1&settings=execution
 ```
 
-**FIXED 2026-09-23 (interactive session, UI-1).** `RunnerPicker` reads `useAgentLaunchability()` and, when the agent's verdict is `runnable: false`, renders `This agent cannot run: <reason>` under the control as a `role="status"` line: the Hub's own sentence from `probe_agent`, so an unbound agent reads `No runner is bound to this agent. Bind one in the Hub UI before it can run.`, and a missing CLI or credential reads too. The empty option is now labelled `No runner (cannot run)`. Rebinding invalidates `['project', pid, 'agents']`, which prefixes the launchability key, so the line clears on bind. Eight test files that spread the real `@/api/agents` module gained a `useAgentLaunchability` stub. Tests: `runnerPickerCannotRun.test.tsx` (4).
+**FIXED 2026-09-23 (interactive session, UI-1).** `RunnerPicker` reads `useAgentLaunchability()` and, when the agent's verdict is `runnable: false`, renders `This agent cannot run: <reason>` under the control as a `role="status"` line: the Hub's own sentence from `probe_agent`, so an unbound agent reads `No runner is bound to this agent. Bind one in the Hub UI before it can run.`, and a missing CLI or credential reads too. The empty option is now labelled `No runner (cannot run)`. Rebinding invalidates `['project', pid, 'agents']`, which prefixes the launchability key, so the line clears on bind. Eight test files that spread the real `@/api/agents` module gained a `useAgentLaunchability` stub. A failed launchability read says `Could not check whether this agent can run.` rather than going quiet; the first version bound only `data`, and `test_surface_ceilings.py`'s unhandled-error ratchet (ceiling 100) caught it at 101. Tests: `runnerPickerCannotRun.test.tsx` (5).
 
 ---
 

@@ -9,10 +9,11 @@ import { RunnerPicker } from '@/components/agents/AgentSettingsControls'
 const NO_RUNNER = 'No runner is bound to this agent. Bind one in the Hub UI before it can run.'
 
 let launchability: AgentLaunchabilityResponse | undefined
+let launchabilityError: unknown = null
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
-  return { ...actual, useAgentLaunchability: () => ({ data: launchability }) }
+  return { ...actual, useAgentLaunchability: () => ({ data: launchability, error: launchabilityError }) }
 })
 
 vi.mock('@/api/runners', () => ({
@@ -68,5 +69,14 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
     render(<RunnerPicker agent={unbound as never} />)
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('says when the check itself failed', () => {
+    launchability = undefined
+    launchabilityError = new Error('boom')
+    render(<RunnerPicker agent={unbound as never} />)
+
+    expect(screen.getByRole('status')).toHaveTextContent('Could not check whether this agent can run.')
+    launchabilityError = null
   })
 })

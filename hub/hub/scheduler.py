@@ -59,6 +59,29 @@ from .utils import persist_event, short_id
 logger = logging.getLogger(__name__)
 
 
+def job_conversation_title(job_name: str, agent: str, task: Optional[Task], is_review: bool) -> str:
+    """The name a job's firing gives its conversation.
+
+    A plain job, or a loop firing with no task (the never-filled queue), is named after the job:
+    it fires the same message repeatedly, and the job's name is what the operator recognises it by.
+
+    A loop firing on a task is named for whose turn it is and which kind (F61, the operator's
+    chosen fix): every flow conversation used to read "Ledger flow", eleven of them across three
+    agents and two roles on one project, so a review could not be told from the work it reviewed.
+    The job's name is left out of it: every row of a loop's conversation already carries the loop's
+    marker, labelled with the job's name (`agent_chat` `ConversationLoop.label`), and a firing group
+    names it once for all its rows, so repeating it would spend the width the title needs for what
+    differs between them. The task's title goes last, where `title_from_message`'s truncation falls
+    on it rather than on the agent or the role. A loop never resumes a conversation (design D4
+    refuses `resume` on a loop), so each firing has its own and the role in its name cannot go
+    stale.
+    """
+    if task is None:
+        return job_name
+    role = "review" if is_review else "work"
+    return f"{agent} · {role}: {task.title}"
+
+
 def _safe_error_summary(exc: Exception) -> str:
     """Redact by `runner_events`' rule, not a private copy of it (F119).
 
@@ -3325,8 +3348,18 @@ class JobScheduler:
                 session.add(conversation)
                 await inherit_runtime_overrides(session, conversation)
             # Named from the job, not its message: a schedule fires the same message repeatedly,
-            # and the job's name is what the operator recognises the thread by.
-            name_conversation(conversation, job.name)
+            # and the job's name is what the operator recognises the thread by. A loop's task
+            # turn also says whose turn and which kind (F61).
+            name_conversation(
+                conversation,
+                # From `selection`, not `claimed_task`: `selection` is bound for a plain job too.
+                job_conversation_title(
+                    job.name,
+                    acting_agent,
+                    selection.task if selection is not None else None,
+                    bool(selection is not None and selection.is_review),
+                ),
+            )
             run.conversation_id = conversation.id
 
             entry = new_entry(
@@ -3639,7 +3672,7 @@ class JobScheduler:
         conversation = new_conversation(project_id=job.project_id, agent=agent, origin="job")
         session.add(conversation)
         await inherit_runtime_overrides(session, conversation)
-        name_conversation(conversation, job.name)
+        name_conversation(conversation, job_conversation_title(job.name, agent, task, is_review))
 
         run_id = f"run-{short_id()}"
         run = JobRun(
