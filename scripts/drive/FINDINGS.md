@@ -31856,7 +31856,7 @@ mostly re-spend real agent-turn cost to re-confirm what already matches. Instead
 
 ## F409 (A) -- another agent's text can make a Claude turn read any file, before any tool call, past every posture
 
-**Status:** open (proposed: `openspec/changes/an-at-mention-an-agent-wrote-reads-no-file`, R1 2026-09-23)
+**Status:** open (proposed: `openspec/changes/an-at-mention-an-agent-wrote-reads-no-file`, R1 and R2 2026-09-23)
 **Source:** drive
 **Theme:** Workspace & permissions
 
@@ -31887,3 +31887,33 @@ the 27 `mcp__agentweave__*` tools.
 
 **Not yet driven through a live Hub.** The measured link is the CLI's behaviour on the exact prompt
 shape. The Hub's path to that prompt was read, not driven. The change's task 4.1 drives it end to end.
+
+**R2 widened it (2026-09-23): the Hub's one-shot workers expand too.** The checkpoint worker
+(`worker.py:139`) and the conversation titler (`conversation_titles.py:71`) put recorded text on
+`claude -p`. That text is the conversation transcript, the agent's notes and the opening exchange,
+and neither worker has any permission posture. Measured with argv built by the Hub's own
+`build_generation_prompt`, `build_worker_command` and `build_title_command`
+(`scripts/drive/d3_0923_worker_at_mention.py`), run twice on fresh markers: both attach an agent's
+`@<outside path>`. **The checkpoint worker's JSON reply carried the file's contents**, so they reach
+the stored checkpoint, which the operator reads and the successor agent is given. The agent turn's
+`--append-system-prompt-file` context was measured as a control and does **not** expand. The change's
+design D7 covers the workers.
+
+---
+
+## F410 (C) -- a checkpoint or divergence delivery reaches the agent labelled `Agent "None"`
+
+**Status:** open
+**Source:** review
+**Theme:** Agents & runners
+**Related:** F409's R2, which read `format_turn_prompt` line by line and found this.
+
+**What happens.** `format_turn_prompt` (`hub/hub/inbound_queue.py:101-130`) labels a block
+`Operator` for `operator`, `Scheduled job` for `job`, and `f'Agent "{entry.origin_agent}"'` for
+anything else. `new_entry` forbids `origin_agent` on every origin except `agent` (`:45-46`), so the
+`checkpoint` entries (`checkpoint_cutover.py:133-141`, `checkpoint_trigger.py:240-248`) and the
+`divergence` entry (`run_divergence.py:259-268`) are always stored with `origin_agent=None`. The
+agent reads `Agent "None" (hop 0):` above a checkpoint handed to a successor, above the Hub's
+request for checkpoint notes, and above a divergence response. That credits Hub text to an agent
+named "None". **Read, not driven.** No test asserts the label for these two origins (`grep` of
+`hub/tests` for `format_turn_prompt` finds only `operator`, `agent` and `job` rows).

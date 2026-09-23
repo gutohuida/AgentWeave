@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6c0a467",
     "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d3-r2",
-    "next_action": "Do D-3/spec loop A, R2 on openspec/changes/an-at-mention-an-agent-wrote-reads-no-file: an independent re-derivation against the code (format_turn_prompt, turn_scheduler.py:408-411, agent_trigger.py:1074-1115 notices, questions.py _batch_delivery_text, scheduler.py briefing + both job firing sites, run_divergence.py:262, checkpoint_cutover.py:136), not a re-read of R1. Close R1's open items (tasks 0.1). Fix the proposal in place, record R2-n in design.md's Round log, openspec validate --strict.",
+    "current": "d4-r3",
+    "next_action": "Do D-4/spec loop A, R3 on openspec/changes/an-at-mention-an-agent-wrote-reads-no-file: a second independent re-derivation against the code that must not start from R2's notes -- re-derive from grep which paths put recorded text on a CLI's argv or stdin, and judge D7 (whole-prompt neutralisation at the worker builders, the checkpoint/2 template rule, grade_probe's \\@ undo and its Windows-separator residual) and D6's revised trigger against checkpoint_generation.py, worker.py, conversation_titles.py, inbound_queue.py and questions.py. Fix in place, record R3 in design.md's Round log, tick tasks 0.2, openspec validate --strict.",
     "queue": [
         {
             "id": "compose",
@@ -35,9 +35,9 @@
         },
         {
             "id": "d3-r2",
-            "status": "open",
+            "status": "done",
             "title": "Spec loop A, R2 - independent re-derivation",
-            "detail": "Fresh comparison of an-at-mention-an-agent-wrote-reads-no-file against the actual code, not a re-read of R1. Must check what R1 left open (design Risks bullet 3, tasks 0.1): Hub notices (agent_trigger.py:1074-1091, launchability.py spec_turn_notice) and run_divergence.py:262 for interpolated agent text; whether an agent-chosen spec document path can carry an at-sign; the D6 sentence; whether any existing test asserts an at-sign in non-operator content. Record in design.md Round log; tick tasks 0.1."
+            "detail": "Done iteration 4: R2 widened scope -- the checkpoint worker and conversation titler also put agent text on claude -p and were measured to expand (checkpoint reply carried the file's contents); added D7 (neutralise whole worker prompt at build_worker_command/build_title_command, generation-template rule + checkpoint/2, grade_probe undoes \\@ before _normalise). D6 trigger moved to 'blocks contain \\@' (catches the question echo). Notices, divergence, spec paths, context file (measured: no expansion) closed. F410 filed (checkpoint/divergence labelled Agent \"None\"). Probe: scripts/drive/d3_0923_worker_at_mention.py."
         },
         {
             "id": "d4-r3",

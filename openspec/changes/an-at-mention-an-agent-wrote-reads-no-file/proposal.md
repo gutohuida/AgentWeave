@@ -2,7 +2,9 @@
 
 **Round 1, 2026-09-23** (day window, D-2). Finding: **F409 (A)**. Source: research candidate #1 of
 `spec-queue/research/2026-09-23.md`, re-measured independently in this round.
-**Nothing here is implemented yet.** R2 and R3 have not run.
+**Round 2, 2026-09-23:** re-derived against the code. It widened the scope to the Hub's two
+one-shot workers (measured to expand) and moved the D6 trigger. See design.md's Round log.
+**Nothing here is implemented yet.** R3 has not run.
 
 ## Why
 
@@ -23,7 +25,15 @@ The prompt is mostly text the operator did not write. `format_turn_prompt`
 - a delegation's task text.
 
 An agent can therefore make another agent's turn read any file the Hub's user can read, and the
-Hub records nothing. An agent can also do this to its own next turn, through an `ask_user` question
+Hub records nothing.
+
+The agent's turn is not the only `claude -p` the Hub runs **(R2)**. The **checkpoint worker**
+(`worker.py:139`) gets the conversation transcript, the agent's notes and the previous
+checkpoint. The **conversation titler** (`conversation_titles.py:71`) gets the opening exchange.
+Neither worker has any permission posture. Measured in R2 with the Hub's own builders: both
+expand an agent's `@<outside path>`, and the checkpoint worker's reply carried the file's
+contents. Those contents land in a stored checkpoint, which the operator reads and the successor
+agent is given. An agent can also do this to its own next turn, through an `ask_user` question
 that is echoed back with the answer.
 
 **Measured in this round**, on `claude` 2.1.280, with the probe now at
@@ -64,9 +74,14 @@ would cut every agent off from the Hub.
 - **`_batch_delivery_text` (`hub/hub/api/v1/questions.py:215-241`) neutralises the agent's own
   question text** inside the operator-origin entry that delivers an answer. The operator's answer is
   left as it is.
-- **The turn says so, once.** When any block in a turn was neutralised, the preamble line gains one
-  sentence saying that an `@` in text not written by the operator is shown as `\@`, and why (design
-  D6). A turn that holds only operator text is byte-identical to today.
+- **The turn says so, once.** When the turn's blocks contain `\@`, the preamble line gains one
+  sentence. It says that an `@` in text the operator did not write is shown as `\@`, and why (design
+  D6). The question echo is covered. A turn whose blocks contain no `\@` is byte-identical to today.
+- **The one-shot workers neutralise their whole prompt (R2, design D7).** `build_worker_command`
+  and `build_title_command` escape every `@` in the prompt, for both CLIs. The checkpoint generation
+  template gains one rule that tells the model to write at-signs without the backslash
+  (`checkpoint/2`). `grade_probe` undoes the escape in the probe's answers before comparing paths,
+  so a changed file under `@scope/` is not graded missing.
 - **What is stored does not change.** Queue entries, messages, questions and jobs keep their text as
   written. Only the prompt handed to the runner differs, so the conversation view shows what was
   sent.
@@ -92,12 +107,18 @@ would cut every agent off from the Hub.
 
 ## Impact
 
-- `hub/hub/inbound_queue.py`: a `neutralise_file_mentions` helper, plus one line in
-  `format_turn_prompt`.
+- `hub/hub/file_mentions.py` (new): `neutralise_file_mentions` and the D6 sentence.
+- `hub/hub/inbound_queue.py`: `format_turn_prompt` neutralises non-operator blocks and adds the
+  sentence.
+- `hub/hub/worker.py` (`build_worker_command`), `hub/hub/conversation_titles.py`
+  (`build_title_command`) and `hub/hub/checkpoint_generation.py` (one template rule, the prompt
+  version, and `grade_probe`'s undo).
 - `hub/hub/api/v1/questions.py`: `_batch_delivery_text` escapes `row.question`.
-- `hub/tests/test_inbound_queue.py` and the questions tests: new rows. Existing exact-string
+- `hub/tests/test_inbound_queue.py`, the questions tests, `test_checkpoint_generation.py` and
+  `test_title_generation.py`: new rows. Existing exact-string
   assertions whose content has no `@` do not move.
-- `scripts/drive/d2_0923_at_mention_tokeniser.py` (already written in R1, as evidence).
+- `scripts/drive/d2_0923_at_mention_tokeniser.py` (written in R1) and
+  `scripts/drive/d3_0923_worker_at_mention.py` (written in R2), both as evidence.
 - `openspec/specs/agent-run-sandboxing/spec.md`: one ADDED requirement.
 - **Behaviour an operator can notice:** an agent sees `\@` where a peer, a job or a task wrote `@`.
   That includes email addresses and Python decorators in a pasted snippet (design Risks). An
