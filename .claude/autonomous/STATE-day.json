@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6c0a467",
     "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d2b-r1",
-    "next_action": "Do D-2b/spec loop B, R1: pick the next item in DIRECTION.md's / the playbook's priority order (an open ledger finding with no proposal, else research candidate #2) whose blast radius shares NO file with loop A's change (an-at-mention-an-agent-wrote-reads-no-file now touches file_mentions.py, inbound_queue.py, questions.py, worker.py, conversation_titles.py, checkpoint_generation.py, hub/ui/src/api/tasks.ts + bundle). Explore, file the finding if needed, propose into openspec/changes/<name>/ (proposal, design with Round log, tasks, test-guide, spec delta), openspec validate --strict. If gpt-6-sol turns out to be a no-spec repair, leave it for d6 and take the next finding.",
+    "current": "d3b-r2",
+    "next_action": "Do D-3b/spec loop B, R2 on openspec/changes/pressing-run-names-the-reason-that-held (F400+F373): an independent re-derivation against hub/hub/api/v1/jobs.py (run_job's not-success branch, the board's :357 re-ask) and hub/hub/scheduler.py (_loop_flow_busy_reason, _agents_a_loop_may_staff, _stall_run_to_increment, every return False in _fire_job_internal). Rebuild the decline-path table from grep BEFORE reading design's; check whether agent-loops :793 must join the delta; re-run scripts/drive/d2b_0923_run_answer_probe.py (copy under hub/tests as test_zz_probe_*.py, -s, delete). Fix what it finds, write Round 2 in design.md's Round log, tick task 0.1, openspec validate --strict.",
     "queue": [
         {
             "id": "compose",
@@ -47,15 +47,15 @@
         },
         {
             "id": "d2b-r1",
-            "status": "open",
+            "status": "done",
             "title": "Spec loop B, R1 - explore and propose",
-            "detail": "Drain count was 0: second independent loop today (2026-09-12 decision). Next item in the same priority order as D-2, with no file overlap against loop A's blast radius -- e.g. research candidate #2 (catalog missing gpt-6-sol; opus-5.5/gpt-6-luna already closed by this iteration's b661766) if it turns out to need more than a D-6 repair, or the next unproposed ledger finding."
+            "detail": "Done iteration 6: F400+F373 proposed as pressing-run-names-the-reason-that-held (validate --strict valid); both re-measured on dcdf723 (probe scripts/drive/d2b_0923_run_answer_probe.py); identity-map trap in F373's sketch found; F411 filed (Run button shows no error). F325 skipped (Codex-only)."
         },
         {
             "id": "d3b-r2",
             "status": "open",
             "title": "Spec loop B, R2 - independent re-derivation",
-            "detail": "Fresh comparison of D-2b's proposal against the actual code."
+            "detail": "Fresh comparison of pressing-run-names-the-reason-that-held against the actual code; must not start from R1's tables."
         },
         {
             "id": "d4b-r3",

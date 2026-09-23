@@ -29529,6 +29529,8 @@ plainest possible traversal and the sandbox does not check it at all today.
 **Related:** F332 (the ANSI-C decode question this was found alongside, and does not fix this).
 
 
+
+**Note, 2026-09-23 (day window, D-2b R1).** Proposed as `openspec/changes/pressing-run-names-the-reason-that-held` (design D3), with F400. Re-measured on `dcdf723`: still reproduces. **The repair sketch above has a trap, measured.** `run_job` passes its own session to `_fire_job_internal`, the factory is `expire_on_commit=False`, and `_stall_run_to_increment` returns the very object the route read before firing (`same_object=True`, `tick_count` 1→2 in place). So `tick_count` must be copied to an `int` before the firing, or the comparison is always "unchanged".
 ---
 
 ## F376 (A) — `create_flow` is refused for a setting the operator was never asked about, and the refusal promises an approval that is never requested
@@ -31509,6 +31511,8 @@ told it runs only the agent its job names; drop *"for another agent to take"* fo
 not only the presence of the true one. Read `_stall_reason_from_walk`'s current sentence before
 asserting what `jobs.py:355` replaces on the board (5.4). **Needs its own proposal and rounds.**
 
+
+**Note, 2026-09-23 (day window, D-2b R1).** Proposed as `openspec/changes/pressing-run-names-the-reason-that-held`, together with F373 (same branch of `run_job`, same requirement). Re-measured on `dcdf723` through the real route (`scripts/drive/d2b_0923_run_answer_probe.py`). The archived change's Open Question 2 is answered by measurement: the board already reads the busy sentence (`jobs.py:357`), so only the route is wrong. R1 also found two existing assertions (`test_board_agent_role.py:385`, `:420`) that pin *"no other agent is free"* on documentless loops. The change moves them on purpose.
 ---
 
 ## F401 (B) -- a bare variable or command substitution names a directory the shell judge never checks
@@ -31924,3 +31928,36 @@ agent reads `Agent "None" (hop 0):` above a checkpoint handed to a successor, ab
 request for checkpoint notes, and above a divergence response. That credits Hub text to an agent
 named "None". **Read, not driven.** No test asserts the label for these two origins (`grep` of
 `hub/tests` for `format_turn_prompt` finds only `operator`, `agent` and `job` rows).
+
+---
+
+## F411 (B) -- the Jobs page's Run button discards the Hub's answer, so a declined Run shows the operator nothing
+
+**Status:** open
+**Source:** review
+**Theme:** Operator surfaces
+**Related:** F400, F373, F127, F48. Found by D-2b's R1 on 2026-09-23 (day window), while reading
+who consumes the sentences F400 and F373 are about.
+
+**What happens.** `JobCard`'s Run button (`hub/ui/src/components/jobs/JobCard.tsx:482`) calls
+`onRun(job.id)`. `JobsPage` passes `onRun={runJob.mutate}` (`hub/ui/src/components/jobs/JobsPage.tsx:157`)
+with no `onError`. `useRunJob` (`hub/ui/src/api/jobs.ts:247-257`) has no `onError` either, and the
+`QueryClient` (`hub/ui/src/main.tsx:8-15`) has no `MutationCache` handler. So every non-2xx answer
+from `POST /jobs/{id}/run` is dropped: the 409 that names the busy agent, the empty queue, the hold,
+or the in-flight work, and the 500 as well. The operator presses Run and nothing visible happens.
+Archive, on the same page, does surface its refusal (`errorDetail`, `JobsPage.tsx:18-25, 50`), so the
+pattern exists one handler away.
+
+`agent-loops`' *"Pressing Run on a loop that declines names why it declined"* requires the Hub to
+**answer** with the reason, and the route does. But the only reader of that sentence today is an
+agent calling MCP `run_job` (`hub/hub/mcp_server.py:929-937`) or a raw API client. Every round spent
+making the 409 true (F48, F127, F369, F373, F400) has been spent on text the operator's own button
+never displays.
+
+**Read, not driven.** No UI test covers a failed Run (`grep` of `hub/ui/src/__tests__` for
+`useRunJob` finds only `jobSchedulePresentation.test.tsx:32`, which stubs it idle).
+
+**Why it is not in F400's change.** That change (`pressing-run-names-the-reason-that-held`) is
+route-only. This fix needs a UI bundle refresh, and today's first spec loop
+(`an-at-mention-an-agent-wrote-reads-no-file`) already rebuilds the bundle. The day playbook forbids
+two same-day proposals sharing a file. That change's Open Question 1 offers folding this in.
