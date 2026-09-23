@@ -1507,6 +1507,49 @@ $//'` after. *(2026-09-21)*
   it and start one run over the final tree rather than waiting for a result that answers the wrong
   question. *(2026-09-22)*
 
+## 2026-09-23 — interactive work beside a running day window, and in a worktree
+
+- **The day window commits whatever is dirty in the shared checkout.** At its 09:00 firing it found an
+  in-progress, uncommitted `hub/hub/model_catalog.py` edit and committed it under its own message
+  (`b661766`) without the matching test fixes, so that commit was red on its own. While
+  `AgentWeaveDayLoop` is running (every 5 min, ~2 min between iterations), do interactive work in a
+  git worktree (`git worktree add .claude/worktrees/<name> -b <branch> origin/<daily branch>`, then
+  `EnterWorktree` with `path`) and merge back only between windows, or pause the task for the merge:
+  `schtasks /change /tn AgentWeaveDayLoop /disable`, merge, then `/enable`. *(2026-09-23)*
+- **From a worktree, `hub` imports from the worktree, but `agentweave` from the main checkout.** The
+  editable CLI install points at the main checkout's `src/`, so run CLI tests there as
+  `PYTHONPATH=src py -3.11 -m pytest tests/`. `hub.hub` resolves from the cwd and is fine. The
+  worktree has no `hub/ui/node_modules`, so `npx vitest` fails to load its config there. *(2026-09-23)*
+- **A worktree-isolated session refuses shell commands it cannot prove leave git alone:** heredocs,
+  `$(...)`, `sed` with a computed range, `git -C <main>`, piped `powershell`. Write the script to a file
+  in the job's tmp and run that, or use the Edit tool. *(2026-09-23)*
+- **Stripping `claude` from `PATH` by matching the string "claude" also strips `.claude/...` paths**
+  (and left `py` unfindable). Drop only directories that contain a `claude`/`claude.exe`/`claude.cmd`
+  executable, and check `command -v claude` is empty afterwards. *(2026-09-23)*
+- **Python's `Path.write_text` on Windows writes CRLF.** Git stores LF (`autocrlf`), so commits stay
+  clean, but the working copy churns. Use `write_bytes(s.encode())`, or re-checkout the file after
+  committing. *(2026-09-23)*
+- **Importing `hub` now needs `DATABASE_URL`** (F388, by design): any throwaway script that imports
+  `hub.*` must set it, e.g. `DATABASE_URL=sqlite+aiosqlite:///<tmp>/x.db`. *(2026-09-23)*
+- **A multi-line `-p` prompt to `claude` via `subprocess` is mangled on Windows** (the `.cmd` shim goes
+  through `cmd.exe`; every read came back unparseable). Use `hub.pty_runner.resolve_executable([...])`,
+  which unwraps the shim, as the Hub does. *(2026-09-23)*
+- **A full Hub suite run beside other process-spawning work gives 12 false failures** in
+  `test_pty_runner.py` (11) and `test_lifespan_shutdown.py` (1), `WinptyError: The system cannot find
+  the file specified`. Seen twice on 2026-09-23 (the night drive, and a day run beside a live Haiku probe
+  and a second pytest). Both files pass alone (32/32). Run the full suite alone. *(2026-09-23)*
+- **Codex's model catalog depends on the client version.** `codex debug models` refreshes
+  `~/.codex/models_cache.json` for the installed CLI (0.146.0: terra, luna, 5.5);
+  `npx -y @openai/codex@<ver> debug models` reads a newer client's catalog without upgrading the
+  installed one (0.156.1 added `gpt-6-luna` only, for this account — no `gpt-6-sol`). *(2026-09-23)*
+- **`claude --tools ""` keeps the project's `CLAUDE.md`; `--restricted` and `--setting-sources ""` both
+  drop it** (measured with a ZEBRA-prefix control on Haiku). For a tool-less call that must still honour
+  the project's memory, use `--tools ""` alone. *(2026-09-23)*
+- **Check a merge before doing it:** `git merge-tree --write-tree --name-only <a> <b>` lists conflicted
+  paths without touching any checkout. And check finding numbers across branches before filing: the
+  day window filed F411–F413 while this session filed its own F411/F412 (renumbered F414/F415 in
+  `6f5d845`). *(2026-09-23)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly
