@@ -109,3 +109,35 @@ export function useWorktrees() {
     enabled: isConfigured && !!projectId,
   })
 }
+
+/** One side of a conflict: `kind` is `'agent'`, `'task'` or `'main'` (the project's main branch,
+ *  checked since F245), and `name` is the agent's name, the task's id, or the branch. */
+export interface ConflictWorkspace {
+  kind: string
+  name: string
+  branch: string
+}
+
+/** Two workspaces whose branches would not merge cleanly, and the files they collide on. */
+export interface WorktreeConflict {
+  workspaces: [ConflictWorkspace, ConflictWorkspace]
+  paths: string[]
+}
+
+/**
+ * `GET /worktrees/conflicts` — every pair of Hub-owned branches that `git merge-tree` says would
+ * conflict, each also checked against the main branch (F241: computed, correct, and read by
+ * nothing until this).
+ *
+ * Keyed apart from `['project', id, 'worktrees', …]` on purpose: `useAgentWorkspace` keys one
+ * agent's checkout as `['worktrees', <agent>]`, and an agent may be named `conflicts` (F248).
+ * Every pair is a merge-tree, so this is not polled.
+ */
+export function useWorktreeConflicts() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<WorktreeConflict[]>({
+    queryKey: ['project', projectId, 'worktree-conflicts'],
+    queryFn: () => getJson<WorktreeConflict[]>(`/api/v1/projects/${projectId}/worktrees/conflicts`),
+    enabled: isConfigured && !!projectId,
+  })
+}

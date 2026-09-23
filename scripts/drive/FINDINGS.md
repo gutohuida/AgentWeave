@@ -18349,7 +18349,7 @@ ones consumed-and-discarded so they cannot resurface.
 
 ## F237 (B) — two controls set the project's token budget; the one in Settings leaves every surface that displays it stale
 
-**Status:** open, and confirmed open by the same random sample as F215
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — `project_settings_updated` also invalidates the accounting keys; see FIXED at the end of this entry. Was: open, and confirmed open by the same random sample as F215
 (`spec-queue/ROADMAP.md`) -- two controls write `Project.token_budget` through different routes and
 emit different events, and the one in Settings leaves every surface displaying it stale. [classified 2026-09-09, D-2]
 
@@ -18388,6 +18388,8 @@ on `project_settings_updated`. The first is narrower; the second also covers the
 accounting-relevant setting.
 
 **Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, leg 3.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** The finding's second repair: `useSSE` answers `project_settings_updated` by invalidating `['project', pid, 'accounting']` as well as `['projects']`, so `OverviewBudgetSummary`, `AccountingPanel` and the status bar's `BudgetExhaustionNotice` refetch when the budget is set from Settings. Chosen over broadcasting `accounting_budget_updated` from `PUT /settings` because it also covers the next accounting-relevant setting, and because the broadcast payload is the merged settings, which does not say which fields changed. Test: `useSSE.test.tsx` `refetches the budget displays when the settings route changes the project (F237)`, which fails on the old handler.
 
 ## F238 (C) — half of all budget changes are missing from the project's own activity history
 
@@ -18591,7 +18593,7 @@ following passed twice:
 
 ## F241 (B) — the conflict report is computed, correct, and read by nothing
 
-**Status:** open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. Its
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the Worktrees panel reads `GET /worktrees/conflicts` and names each conflicting pair and its files; see FIXED at the end of this entry. Was: open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. Its
 only external mention is the 2026-09-01 review page. [classified 2026-09-09, D-2]
 
 `hub/hub/worktrees.py:1014` `detect_conflicts` pairwise-merges every provisioned Hub-owned branch
@@ -18614,6 +18616,8 @@ are *"surface as a conflict"*.
 bundle), and worth queueing with it: both are "the endpoint exists, the UI never asks".
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 5.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** New `useWorktreeConflicts()` (`hub/ui/src/api/workspace.ts`), keyed `['project', id, 'worktree-conflicts']` rather than under `'worktrees'`, because `useAgentWorkspace` keys an agent's checkout as `['worktrees', <agent>]` and an agent may be named `conflicts` (F248). `WorktreesPanel` renders what it returns under the list: `N conflicts`, each as `agent codex-1 and task task-…` (a main-branch side reads `the main branch (main)`, Round 3e's F245 check), both branch names, and the files. An empty answer reads `No conflicts: git finds nothing here that would stop a merge.` only when checkouts are listed; a failed check is an alert, never a clean result; a conflict on a retained task branch with no checkout (F246) still shows with an empty list. Not polled (every pair is a `git merge-tree`); refetch on events is F250's, in this round. Tests: `worktreesPanel.test.tsx` (six new, fixture in the route's order: main pairs first).
 
 ---
 

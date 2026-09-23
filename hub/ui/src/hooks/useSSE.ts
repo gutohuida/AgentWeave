@@ -548,8 +548,14 @@ export function useSSE(onEvent?: SSEListener) {
         case 'project_created':
         case 'project_opened':
         case 'project_relocated':
-        case 'project_settings_updated':
           queryClient.invalidateQueries({ queryKey: ['projects'] })
+          break
+        case 'project_settings_updated':
+          // `PUT /settings` also writes `token_budget`, the field the accounting routes read, and
+          // tells listeners only this event (F237). Without the second key every budget display —
+          // the status bar's exhaustion notice among them — kept the old allowance.
+          queryClient.invalidateQueries({ queryKey: ['projects'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
           break
       }
       onEventRef.current?.(event)

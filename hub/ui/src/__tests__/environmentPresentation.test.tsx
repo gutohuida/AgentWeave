@@ -12,7 +12,11 @@ const writeText = vi.fn()
 // matching how this file already stands in for `@/api/status`.
 vi.mock('@/api/workspace', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/workspace')>()
-  return { ...actual, useWorktrees: () => ({ data: undefined, isLoading: false, error: null }) }
+  return {
+    ...actual,
+    useWorktrees: () => ({ data: undefined, isLoading: false, error: null }),
+    useWorktreeConflicts: () => ({ data: undefined, error: null }),
+  }
 })
 
 vi.mock('@/api/status', () => ({

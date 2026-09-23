@@ -1,6 +1,12 @@
 import { SettingsSection } from '@/components/environment/SettingsSection'
 import { EmptyState } from '@/components/common/EmptyState'
-import { useWorktrees, type WorkspaceInfo } from '@/api/workspace'
+import {
+  useWorktreeConflicts,
+  useWorktrees,
+  type ConflictWorkspace,
+  type WorkspaceInfo,
+  type WorktreeConflict,
+} from '@/api/workspace'
 
 /**
  * Every Hub-owned checkout in this project, agent and task alike.
@@ -16,9 +22,15 @@ import { useWorktrees, type WorkspaceInfo } from '@/api/workspace'
  * checkout is where an agent works between tasks, and a task checkout is where one piece of work
  * happens no matter who picks it up. Reading this provisions nothing, so an empty list now means
  * the project genuinely has no checkouts.
+ *
+ * **Conflicts (F241).** Under the list, what `GET /worktrees/conflicts` computes: which pairs of
+ * these branches, and which branch against the main one, `git merge-tree` says would not merge,
+ * and on which files. The route existed and nothing read it, so a conflict the Hub had found was on
+ * no screen at all.
  */
 export function WorktreesPanel() {
   const { data, isLoading, error } = useWorktrees()
+  const conflicts = useWorktreeConflicts()
 
   return (
     <SettingsSection
@@ -26,6 +38,9 @@ export function WorktreesPanel() {
       description="The isolated checkouts this project is using — one per writing agent, and one per task being worked."
     >
       <PanelBody data={data} isLoading={isLoading} error={error} />
+      {data && (
+        <Conflicts data={conflicts.data} error={conflicts.error} hasCheckouts={data.length > 0} />
+      )}
     </SettingsSection>
   )
 }
@@ -132,6 +147,80 @@ function WorkspaceGroup({
             <p className="mt-1 text-[11px]" style={{ color: 'var(--text-3)' }}>{workspace.branch}</p>
           </li>
         ))}
+      </ul>
+    </div>
+  )
+}
+
+function describeWorkspace(workspace: ConflictWorkspace): string {
+  if (workspace.kind === 'agent') return `agent ${workspace.name}`
+  if (workspace.kind === 'task') return `task ${workspace.name}`
+  if (workspace.kind === 'main') return `the main branch (${workspace.branch})`
+  return `${workspace.kind} ${workspace.name}`
+}
+
+/** Rendered even when the list is empty: the check also covers a finished task's branch that
+ *  outlived its checkout (F246), so a conflict can exist with no checkout listed above. */
+function Conflicts({
+  data,
+  error,
+  hasCheckouts,
+}: {
+  data: WorktreeConflict[] | undefined
+  error: unknown
+  hasCheckouts: boolean
+}) {
+  // As with the list: a failed check is not a clean one.
+  if (error) {
+    return (
+      <div className="pb-4 text-xs" style={{ color: 'var(--amber)' }} role="alert">
+        Could not check these checkouts for conflicts.
+      </div>
+    )
+  }
+  if (!data) return null
+
+  if (data.length === 0) {
+    if (!hasCheckouts) return null
+    return (
+      <p className="pb-4 text-[11px]" style={{ color: 'var(--text-3)' }} data-testid="worktree-conflicts-none">
+        No conflicts: git finds nothing here that would stop a merge.
+      </p>
+    )
+  }
+
+  return (
+    <div className="pb-4" data-testid="worktree-conflicts">
+      <h4 className="text-xs font-medium" style={{ color: 'var(--amber)' }}>
+        {data.length === 1 ? '1 conflict' : `${data.length} conflicts`}
+      </h4>
+      <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-3)' }}>
+        Each pair below would not merge cleanly: integrating one after the other stops on these
+        files until the conflict is resolved.
+      </p>
+      <ul className="mt-2 space-y-2">
+        {data.map((conflict) => {
+          const [a, b] = conflict.workspaces
+          return (
+            <li key={`${a.branch}|${b.branch}`}>
+              <div className="text-sm" style={{ color: 'var(--text)' }}>
+                {describeWorkspace(a)} and {describeWorkspace(b)}
+              </div>
+              <p className="mt-0.5 text-[11px]" style={{ color: 'var(--text-3)' }}>
+                {a.branch} · {b.branch}
+              </p>
+              <ul className="mt-1">
+                {conflict.paths.map((path) => (
+                  <li key={path}>
+                    <code className="text-[11px]" style={{ color: 'var(--text-2)', fontFamily: "'JetBrains Mono', monospace" }}>
+                      {path}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

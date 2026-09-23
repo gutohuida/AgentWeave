@@ -227,6 +227,32 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'loops'] })
   })
 
+  it('refetches the budget displays when the settings route changes the project (F237)', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    // `PUT /settings` broadcasts the merged settings; the stream stamps the project id.
+    fetchSpy.mockResolvedValue(makeSSEResponse([
+      'event: project_settings_updated\ndata: {"project_id":"proj-1","token_budget":5000}\n\n',
+    ]))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'accounting'] })
+    )
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] })
+  })
+
   it('dispatches permission_denied, so a refused agent is visible rather than silent', async () => {
     // Not in SSE_EVENT_TYPES means dropped client-side before any handler runs, and the
     // operator never learns the agent hit a wall.
