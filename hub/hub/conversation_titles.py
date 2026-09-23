@@ -65,13 +65,19 @@ def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optio
     JSON, an MCP server, a permission posture, a context file. None of it applies to a process
     that reads one prompt and prints one line.
     """
+    # No tools, on either CLI (F195's review). Since F195 the titler runs in the project's own
+    # directory on an excerpt of the transcript, which is untrusted text -- a prompt injection in it
+    # must find nothing to act with. `--tools ""` removes every built-in tool and still reads the
+    # project's `CLAUDE.md`, which is the point of running there; measured 2026-09-23 with F195's
+    # ZEBRA control, `--restricted` and `--setting-sources ""` both drop that memory as well, so
+    # neither is used. The project's own settings hooks still run, as they do in its sessions.
     if cli == "claude":
-        cmd = [cli]
+        cmd = [cli, "--tools", ""]
         if model:
             cmd += ["--model", model]
         return cmd + ["-p", prompt]
     if cli == "codex":
-        cmd = [cli, "exec", "--skip-git-repo-check"]
+        cmd = [cli, "exec", "--skip-git-repo-check", "--sandbox", "read-only"]
         if model:
             cmd += ["--model", model]
         return cmd + [prompt]

@@ -1119,7 +1119,7 @@ async def task_integration_preview(
         # for a task the gate then refused twice over that exact commit.
         count = "one commit" if len(targets) == 1 else f"{len(targets)} commits"
         reason = (
-            f"approval will cherry-pick {count} into {main_branch}; whether it applies cleanly "
+            f"approval will merge {count} into {main_branch}; whether it merges cleanly "
             f"is checked at approval, which refuses if it does not"
         )
 

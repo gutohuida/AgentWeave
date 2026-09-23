@@ -536,8 +536,9 @@ def _hub_pid_running(port: Optional[int] = None, profile: str = "default") -> Op
 
 
 # Run in a child process by `_hub_break_windows`: leave this console, attach to the Hub's hidden
-# one, ignore the event here, and raise CTRL_BREAK for the Hub's process group, whose id is the
-# Hub's own pid because `cmd_start` spawns it with CREATE_NEW_PROCESS_GROUP.
+# one, and raise CTRL_BREAK for the Hub's process group, whose id is the Hub's own pid because
+# `cmd_start` spawns it with CREATE_NEW_PROCESS_GROUP. The helper is not in that group, so the
+# event does not reach it; `SetConsoleCtrlHandler(None, True)` only additionally ignores Ctrl+C.
 _CTRL_BREAK_HELPER = """
 import ctypes, sys
 pid = int(sys.argv[1])
@@ -579,10 +580,14 @@ def _hub_break_windows(pid: int) -> bool:
         return False
     if sent.returncode != 0:
         return False
+    ERROR_INVALID_PARAMETER = 87  # noqa: N806 - what OpenProcess reports for a pid that has exited
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
     handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
     if not handle:
-        return True  # already gone
+        # Gone only if the pid no longer names a process. Anything else -- access denied above
+        # all -- means it may still be running, and saying "stopped" would leave it serving
+        # while the pid file is deleted; the forced fallback decides instead.
+        return bool(ctypes.get_last_error() == ERROR_INVALID_PARAMETER)  # type: ignore[attr-defined]
     try:
         waited = kernel32.WaitForSingleObject(handle, _HUB_GRACEFUL_STOP_SECONDS * 1000)
         return bool(waited == WAIT_OBJECT_0)

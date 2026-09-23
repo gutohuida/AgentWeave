@@ -12,6 +12,7 @@ to a task, and two of one agent's tasks can diverge from each other. It names wo
 
 from __future__ import annotations
 
+import asyncio
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -158,12 +159,21 @@ async def get_worktree_conflicts(
     main_branch = project_row.main_branch if project_row is not None else None
     # F246: a finished task's branch outlives its checkout, and stays in the check while its work
     # has not landed. Not a rejected task's: that work was refused and is not meant to land.
-    open_task_ids = (
-        await session.execute(
-            select(Task.id).where(Task.project_id == project_id, Task.status != "rejected")
-        )
-    ).scalars()
-    retained = worktrees.retained_task_branches(repo_root, open_task_ids, main_branch)
+    open_task_ids = list(
+        (
+            await session.execute(
+                select(Task.id).where(Task.project_id == project_id, Task.status != "rejected")
+            )
+        ).scalars()
+    )
+
+    def _check() -> List[worktrees.ConflictReport]:
+        retained = worktrees.retained_task_branches(repo_root, open_task_ids, main_branch)
+        return worktrees.detect_conflicts(repo_root, main_branch, retained)
+
+    # Every pair is a `git merge-tree`, and the count grows with the square of the branches: in a
+    # thread, not on the event loop every other request is waiting on (the round's review).
+    reports = await asyncio.to_thread(_check)
     return [
         ConflictInfo(
             workspaces=(
@@ -172,7 +182,7 @@ async def get_worktree_conflicts(
             ),
             paths=report.paths,
         )
-        for report in worktrees.detect_conflicts(repo_root, main_branch, retained)
+        for report in reports
     ]
 
 

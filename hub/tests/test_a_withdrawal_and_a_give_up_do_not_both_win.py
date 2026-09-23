@@ -20,7 +20,12 @@ from sqlalchemy import select
 from hub.api.v1.agent_trigger import TriggerAgentError
 from hub.db.engine import async_session_factory
 from hub.db.models import InboundQueueEntry, Run, Task
-from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, deliver_entries_with_run, withdraw_entry
+from hub.inbound_queue import (
+    DELIVERY_ATTEMPT_LIMIT,
+    QueueChangedError,
+    deliver_entries_with_run,
+    withdraw_entry,
+)
 from hub.turn_scheduler import schedule_agent
 
 from .test_a_refused_review_leaves_nothing_behind import (
@@ -206,6 +211,39 @@ async def test_a_withdrawal_that_lands_between_delivery_read_and_write_is_not_ov
                 )
 
     assert withdrew == [True], "the operator's withdrawal was refused, so the window was missed"
+    assert issubclass(QueueChangedError, RuntimeError)
     row = await _row(entry_id)
     assert (row.state, row.delivered_in_run_id) == ("withdrawn", None)
     assert "run-wg-deliver" not in await _runs()
+
+
+async def test_a_delivery_that_loses_its_claim_is_a_transient_refusal_to_the_scheduler(
+    app, auth_headers, bind_runner
+):
+    """F338, from the round's review: the lost claim surfaced as a bare `RuntimeError`, which
+    `_attempt_turn` does not catch -- a 500 from `POST /messages` after the message had committed,
+    and a re-drain that stopped at the first agent raising. It is timing, not a fault: nothing
+    delivered, nothing counted, no run, and the scheduler returns normally."""
+    agent = "wg-lost-claim"
+    await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    await bind_runner(agent, cli="claude")
+    entry_id = await _entry(agent, await _conversation(agent), content="lost the claim")
+    runs_before = set(await _runs())
+
+    async def lose_the_claim(*args, **kwargs):
+        raise QueueChangedError("queue changed before atomic delivery")
+
+    with (
+        patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"),
+        patch("hub.api.v1.agent_trigger.deliver_entries_with_run", lose_the_claim),
+    ):
+        await schedule_agent("proj-test", agent)
+
+    row = await _row(entry_id)
+    assert (row.state, row.delivery_attempts) == ("queued", 0)
+    assert not row.abandoned_reason
+    assert set(await _runs()) == runs_before

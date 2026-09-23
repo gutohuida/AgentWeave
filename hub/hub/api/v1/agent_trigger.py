@@ -66,6 +66,7 @@ from ...conversations import (
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
 from ...inbound_queue import (
+    QueueChangedError,
     abandoned_for_run,
     deliver_entries_with_run,
     new_entry,
@@ -1281,13 +1282,26 @@ async def _trigger_agent_directly(
 
     delivered = []
     if queue_entry_ids:
-        delivered = await deliver_entries_with_run(
-            session,
-            project_id=project_id,
-            agent=agent,
-            entry_ids=queue_entry_ids,
-            run=run,
-        )
+        try:
+            delivered = await deliver_entries_with_run(
+                session,
+                project_id=project_id,
+                agent=agent,
+                entry_ids=queue_entry_ids,
+                run=run,
+            )
+        except QueueChangedError as exc:
+            # F338's review: a bare `RuntimeError` here escaped `turn_scheduler._attempt_turn`,
+            # which catches only this type -- `POST /messages` answered 500 after committing the
+            # message, and a re-drain stopped at the first agent that raised. Losing the claim to
+            # a withdrawal means nothing is left to do *now*: transient, so the scheduler re-reads
+            # what is still queued and counts nothing against it.
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                "This turn's input changed while it was being started (withdrawn or delivered "
+                "elsewhere); nothing was delivered.",
+                transient=True,
+            ) from exc
     else:
         session.add(run)
         await session.commit()
@@ -1889,7 +1903,7 @@ async def _broadcast_run_lifecycle(
 OBSERVATION_RETRY_DELAYS: Tuple[float, ...] = (0.5, 2.0)
 
 
-async def _record_observation(write, *, run_id: str, what: str) -> None:
+async def _record_observation(write, *, run_id: str, what: str, drop: bool = True) -> None:
     """Run *write* (`async (db) -> None`) on a fresh session, surviving SQLite's write lock.
 
     F359: a streamed output row or usage reading is the run's bookkeeping about the agent, not the
@@ -1900,6 +1914,9 @@ async def _record_observation(write, *, run_id: str, what: str) -> None:
     the next run two minutes later). Losing one timeline row is the smaller harm, so a lock is
     retried and then dropped with a warning. Anything else still propagates: an unexpected error is
     a defect, and swallowing it would hide every output of every run.
+
+    `drop=False` retries the same way but re-raises a lock that outlasts the retries, for a write
+    the run cannot go on without (the provider session binding).
     """
     for delay in (*OBSERVATION_RETRY_DELAYS, None):
         try:
@@ -1910,6 +1927,8 @@ async def _record_observation(write, *, run_id: str, what: str) -> None:
             if "database is locked" not in str(exc):
                 raise
             if delay is None:
+                if not drop:
+                    raise
                 logger.warning(
                     "Dropped %s for run %s: the database stayed locked through %d attempts",
                     what,
@@ -2239,7 +2258,13 @@ async def _execute_run(
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows.
             if parsed.session_id:
-                async with async_session_factory() as db:
+                prior_conflict, prior_session_id = binding_conflict, session_id
+
+                async def _bind(db) -> None:
+                    nonlocal binding_conflict, session_id
+                    # Every attempt starts from the same state, so one that met the lock and was
+                    # retried leaves nothing half-applied behind it.
+                    binding_conflict, session_id = prior_conflict, prior_session_id
                     run = await db.get(Run, run_id)
                     conversation = await get_conversation_by_id(db, conversation_id)
                     if conversation is None:
@@ -2273,7 +2298,18 @@ async def _execute_run(
                             agent=agent,
                             severity="warn",
                         )
-                        return
+
+                # F359, from the round's review: this is the first write of every run -- its most
+                # contended moment -- and it was the one left unguarded, so a lock here still failed
+                # the run and now also terminated it mid-work. Retried like every streamed row, but
+                # never dropped: the binding decides which provider session is resumed, so if the
+                # lock outlasts the retries the run still fails, loudly, rather than going on
+                # unbound.
+                await _record_observation(
+                    _bind, run_id=run_id, what="the provider session binding", drop=False
+                )
+                if binding_conflict is not None:
+                    return
             for event in parsed.events:
                 sequence += 1
                 await _record_observation(

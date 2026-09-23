@@ -495,7 +495,7 @@ async def test_the_preview_names_the_commit_and_both_branches(app, auth_headers)
     # F156: no conflict probe runs here, so the answer is an attempt, and says so -- it was an
     # empty reason beside `will_merge: true` for a task the gate then refused over that commit.
     assert body["reason"] == (
-        "approval will cherry-pick one commit into master; whether it applies cleanly is "
+        "approval will merge one commit into master; whether it merges cleanly is "
         "checked at approval, which refuses if it does not"
     )
 

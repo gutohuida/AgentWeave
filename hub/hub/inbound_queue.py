@@ -131,6 +131,13 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
     return "\n\n".join(blocks)
 
 
+class QueueChangedError(RuntimeError):
+    """The entries a turn was about to deliver are no longer all queued -- withdrawn, or delivered
+    elsewhere, between being selected and being claimed. Nothing was delivered. A fact about
+    timing, not a fault: `agent_trigger` turns it into a transient refusal, so the scheduler
+    re-reads what is still queued and counts nothing (F338)."""
+
+
 async def deliver_entries_with_run(
     db: AsyncSession,
     *,
@@ -152,7 +159,7 @@ async def deliver_entries_with_run(
     )
     entries = list(result.scalars().all())
     if [entry.id for entry in entries] != entry_ids:
-        raise RuntimeError("queue changed before atomic delivery")
+        raise QueueChangedError("queue changed before atomic delivery")
     if run.conversation_id is not None and any(
         entry.conversation_id != run.conversation_id for entry in entries
     ):
@@ -189,7 +196,7 @@ async def deliver_entries_with_run(
         # Nothing of this delivery may land: not the rows it did claim, not the run, not anything
         # the caller staged for it (the task binding is staged before delivery for this reason).
         await db.rollback()
-        raise RuntimeError("queue changed before atomic delivery")
+        raise QueueChangedError("queue changed before atomic delivery")
     for entry in entries:
         set_committed_value(entry, "state", "delivered")
         set_committed_value(entry, "delivered_in_run_id", run.id)

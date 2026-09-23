@@ -485,6 +485,11 @@ def test_a_released_branch_whose_work_landed_or_was_not_asked_for_is_left_out(re
     # Not one of the tasks the caller still expects to land (the route leaves out rejected ones).
     assert worktrees.retained_task_branches(repo, [OTHER], "main") == []
 
+    # No main branch accepted, or one that does not resolve: nothing can be called landed, so
+    # nothing is retained rather than every approved branch forever.
+    assert worktrees.retained_task_branches(repo, [TASK, OTHER], None) == []
+    assert worktrees.retained_task_branches(repo, [TASK, OTHER], "no-such-branch") == []
+
     # Its work is in main: nothing left to conflict.
     _git(repo, "merge", "-q", "--no-edit", worktrees.task_branch_name(TASK))
     assert worktrees.retained_task_branches(repo, [TASK, OTHER], "main") == []
@@ -495,10 +500,11 @@ async def test_the_conflicts_route_keeps_an_approved_tasks_branch_and_drops_a_re
     app, auth_headers, repo, bind_project_workspace
 ):
     from hub.db.engine import async_session_factory
-    from hub.db.models import Task
+    from hub.db.models import Project, Task
 
     await bind_project_workspace(repo)
     async with async_session_factory() as session:
+        (await session.get(Project, "proj-test")).main_branch = "main"
         session.add(Task(id=TASK, project_id="proj-test", title="first", status="approved"))
         session.add(Task(id=OTHER, project_id="proj-test", title="second", status="in_progress"))
         await session.commit()

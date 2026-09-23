@@ -12804,7 +12804,11 @@ describes an attempt, so nothing the operator reads today is false. Tests:
 preview test in `test_loop_lands_its_work.py`, both of which pinned the empty reason -- the defect
 itself -- now pin the sentence and the new field.
 
-
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** The reason said "cherry-pick"; integration runs
+`git merge --no-ff` (`task_integration.integrate`). Now *"approval will merge one commit into master;
+whether it merges cleanly is checked at approval, which refuses if it does not"*. The committed
+drawer's own copy ("Approving writes to your repository: it cherry-picks ...", `TaskDetailDrawer.tsx`)
+has the same wrong verb -- a UI-round item alongside retiring `will_merge`.
 
 ## F157 (C) — a loop field on `POST /jobs` is silently dropped; the same field on `PATCH` is refused
 
@@ -15708,6 +15712,14 @@ Harnesses kept: `t_sweep_row7_queue.py` (52 API assertions, run twice), `t_sweep
 (13 screen assertions), and `t_row6_hop_chain.py` re-run on this fixture for the hop leg. Five
 findings, four of them about what a refusal or a write *says*; the queue's mechanics themselves
 came through clean.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** Running in the project's primary checkout on an excerpt of the
+transcript -- untrusted text -- the titler inherited every built-in tool. It now runs `claude --tools ""`
+and `codex exec --sandbox read-only`. Measured with F195's ZEBRA control (Haiku, a directory whose
+`CLAUDE.md` demands the prefix): `--tools ""` keeps the project's memory (`ZEBRA B-tree Indexes in
+Databases`), while `--restricted` and `--setting-sources ""` both drop it, so neither is used. The
+project's own settings hooks still run on a titling call, as in its sessions -- the price of reading its
+memory, recorded rather than hidden.
 
 ## F196 (B) — one route writes a value another route's response model cannot serialise, and the project settings page is then unreachable in both directions
 
@@ -18652,6 +18664,13 @@ branch, stay visible -- the case the entry measured. Tests (`test_task_worktrees
 `test_a_released_branch_whose_work_landed_or_was_not_asked_for_is_left_out`,
 `test_the_conflicts_route_keeps_an_approved_tasks_branch_and_drops_a_rejected_one` -- the route test
 fails on the old code with `[]`, the entry's "silent". Not re-driven with leg 7.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** With no main branch accepted, nothing could be called landed, so
+every approved branch stayed in the check forever and reported its successors as conflicts, and
+`detect_conflicts` ran a `merge-tree` per pair synchronously inside the async route. Now
+`retained_task_branches` retains nothing without a resolvable main branch (F245's "no guessed base"
+rule), and the route runs both git passes in `asyncio.to_thread`. The route test now accepts `main`
+first; the unit test pins the no-main case.
 
 ---
 
@@ -24716,6 +24735,15 @@ processes, through `_hub_kill_pid`) -- on the old code it fails with "stopped wi
 lifespan shutdown". Not driven against a real Hub with a turn in flight; 2026-09-09's
 `f295_shutdown_drive.py` measured that case at 0.42 s with the same signal.
 
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** `OpenProcess` failing was read as "already gone"; only
+`ERROR_INVALID_PARAMETER` means that now -- access denied falls through to the forced kill instead of
+printing "stopped" over a live Hub. The helper's comment was corrected (`SetConsoleCtrlHandler(None,
+True)` ignores Ctrl+C only; the helper is outside the target group anyway). **Open, not measured:**
+uvicorn runs lifespan teardown only after in-flight requests finish, so a request held longer than
+`_HUB_GRACEFUL_STOP_SECONDS` (10 s) still ends in `taskkill /F` -- the probe had no client connected.
+The review also could not confirm `uvicorn>=0.27` (the declared floor) handles SIGBREAK; 0.41 does, and
+without it CTRL_BREAK is no worse than the old hard kill.
+
 ---
 
 ## F298 (C) — stopping the Hub normally reports the operator's own stop as an `ERROR ... Unhandled error in run`, with a traceback
@@ -27159,6 +27187,11 @@ the wrapper, so `turn_scheduler` and every test patch are unchanged, and
 R1's measurement as a test, with the real `ensure_review_checkout`; on the old code the checkout is
 still registered.
 
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** Two residuals, not changed: the release is awaited inside
+`except BaseException`, so a second cancellation during it skips it; and anything raising after
+delivery commits but before the run's task is created would release the checkout under a `running`
+Run with no process -- a strand that predates this round.
+
 ---
 
 ## F327 (B) — a review a flow staffed and whose dispatch is then refused leaves the flow's reviewer holding the task, reported as in flight until the input is given up
@@ -27851,6 +27884,14 @@ with `set_committed_value`, so nothing is written back by primary key. Test:
 `test_a_withdrawal_that_lands_between_delivery_read_and_write_is_not_overwritten`
 (`test_a_withdrawal_and_a_give_up_do_not_both_win.py`, beside F328's two sides) -- on the old code
 it fails with `DID NOT RAISE`. Not driven through the route.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** The lost claim surfaced as a bare `RuntimeError`, which
+`turn_scheduler._attempt_turn` does not catch: `POST /messages` answered 500 after committing the
+message, and `redrain_queued_agents`/reconciliation stopped at the first agent raising. Now
+`inbound_queue.QueueChangedError` (both mismatch sites) and the trigger's one delivery call turns it
+into a **transient** `TriggerAgentError`, so the scheduler re-reads what is still queued and counts
+nothing. Test: `test_a_delivery_that_loses_its_claim_is_a_transient_refusal_to_the_scheduler` --
+on the pre-follow-up code the error escapes `schedule_agent`.
 
 ---
 
@@ -29120,6 +29161,16 @@ attempted three times, run `completed`), `test_a_lock_that_clears_on_retry_still
 `test_a_run_failed_by_its_read_loop_does_not_leave_its_process_running`. All three fail on the old
 code for the stated reason (run `failed` on "database is locked"; `terminate` never called). Not
 driven live: reproducing the lock needs a second writer holding SQLite past `busy_timeout`.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** The provider session binding in `_flush_line` -- the first write
+of every run, its most contended moment -- was left unguarded, so a lock there still failed the run
+and the new terminate killed it mid-work. It now goes through `_record_observation(..., drop=False)`:
+retried like every streamed row, each attempt starting from the same state, and re-raised (never
+dropped) if the lock outlasts the retries, since the binding decides which provider session is
+resumed. Test: `test_a_lock_on_the_session_binding_is_retried_not_fatal` -- on the
+pre-follow-up code the run fails on "database is locked". The Codex app-server path still has no
+process terminate on failure (its `run_turn` closes the subprocess); not pursued while Codex is
+undrivable.
 
 ## F360 (B) — the checkpoint probe asks for the tasks "assigned to this agent" while a loop checkpoint lists the loop's whole queue, so half of a flow's checkpoints are marked failed
 
@@ -32037,3 +32088,26 @@ mostly re-spend real agent-turn cost to re-confirm what already matches. Instead
   real and intentional, not an oversight.
 - **Not driven again live today; no new defect found. Status: n/a (verification only, not a
   finding).**
+
+## F411 (B) — `create_loop` with `initial_tasks` still commits the loop and job before a task can be refused
+
+**Status:** open. Filed 2026-09-23 by the adversarial review of Round 3 (read from the source, not
+driven). F265's repair (Round 3b) refuses the *authorisation* failure before any row is written, but
+`hub/hub/api/v1/jobs.py:700-755` still commits the job and loop, enabled, and then creates each
+initial task through `create_task_for_actor`, which can refuse per task: `guard_entry_status` on the
+body's status and `resolve_identifiers` (422 for an unknown requirement id, `tasks.py:~731-748`).
+Tasks are committed one at a time, so a refusal on the second leaves the first. The comment there
+("the F265 check above already refused every caller it would refuse") holds only for the
+authorisation gate, and D2's "validated up front" covers only the schema. The same half-created loop
+F265 described, through a different refusal. Repair shape: validate every initial task (status,
+identifiers) before the first commit, or create the job, loop and tasks in one transaction.
+
+## F412 (C) — `operator` is not a reserved agent name, and Round 3a gave it a meaning
+
+**Status:** open. Filed 2026-09-23 by the adversarial review of Round 3. F261's repair (Round 3a) made
+`"operator"` the runless sender of `POST /messages` and skips it in `GET /agents`' activity fallback and
+`GET /status`'s `agents_active`. `validate_agent_name` (`worktrees.py`) reserves only `user`, so an agent
+can be named `operator`: it would be hidden from the roster fallback and the active count, and its
+messages would collide with `OPERATOR_SENDER`. Repair shape: reserve `operator` beside `user` in
+`validate_agent_name` and `AGENT_NAME_RE`'s callers (CLAUDE.md: the CLI and Hub restatements change
+together), with a refusal naming why.

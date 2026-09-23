@@ -3143,6 +3143,38 @@ async def test_a_run_failed_by_its_read_loop_does_not_leave_its_process_running(
 
 
 @pytest.mark.asyncio
+async def test_a_lock_on_the_session_binding_is_retried_not_fatal(app, auth_headers, bind_runner):
+    """F359, from the round's review: the binding write on a run's first line was the one write
+    left unguarded, so a lock there still failed the run. It is retried now (never dropped)."""
+    import sys
+
+    real = agent_trigger.get_conversation_by_id
+    locked_once = []
+
+    async def _locked_inside_the_binding_once(*args, **kwargs):
+        # `_flush_line` is where the binding lived before it was retried, so this also shows the
+        # old code failing the run on the same lock.
+        if sys._getframe(1).f_code.co_name in ("_bind", "_flush_line") and not locked_once:
+            locked_once.append(True)
+            raise _locked()
+        return await real(*args, **kwargs)
+
+    with patch.object(agent_trigger, "get_conversation_by_id", _locked_inside_the_binding_once):
+        run = await _f359_trigger(
+            app,
+            auth_headers,
+            bind_runner,
+            "f359-binding",
+            _fake_pty(_F359_LINES),
+            agent_trigger.record_agent_output,
+        )
+
+    assert locked_once == [True], "the binding was never reached, so nothing was tested"
+    assert run.status == "completed", run.error
+    assert run.session_id == "s"
+
+
+@pytest.mark.asyncio
 async def test_a_provider_session_reports_the_directory_its_turns_ran_in(app, auth_headers):
     """F189: every session reported `.agentweave/agents/<agent>-session.json`, a file nothing
     writes, and the Workspace section rendered it as where the agent's work happened."""

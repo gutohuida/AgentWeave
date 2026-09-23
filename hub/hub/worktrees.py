@@ -1146,11 +1146,13 @@ def retained_task_branches(
 
     Only *task_ids* are considered: the caller decides which tasks' work is still meant to land
     (the route excludes rejected ones). A branch whose commits are all in *main_branch* has landed
-    and is left out; with no resolvable main branch nothing can be called merged, so every
-    candidate is kept. `path` is where the checkout would be, since there is none.
+    and is left out. With no resolvable main branch nothing is retained: nothing could be called
+    landed, so every approved branch would stay in the check forever and report its successors as
+    conflicts -- the same reason F245 checks nothing against a main branch it was not given (the
+    round's review). `path` is where the checkout would be, since there is none.
     """
     wanted = set(task_ids)
-    if not wanted:
+    if not wanted or not _resolves(repo_root, main_branch):
         return []
     listed = _run_git(
         repo_root,
@@ -1160,18 +1162,14 @@ def retained_task_branches(
         check=False,
     )
     checked_out = {workspace.branch for workspace in list_workspace_branches(repo_root)}
-    has_main = _resolves(repo_root, main_branch)
     retained: List[WorkspaceBranch] = []
     for branch in sorted(listed.stdout.split()):
         task_id = branch[len(TASK_BRANCH_PREFIX) :]
         if task_id not in wanted or branch in checked_out:
             continue
-        if has_main:
-            ahead = _run_git(
-                repo_root, "rev-list", "--count", f"{main_branch}..{branch}", check=False
-            )
-            if ahead.returncode != 0 or ahead.stdout.strip() == "0":
-                continue
+        ahead = _run_git(repo_root, "rev-list", "--count", f"{main_branch}..{branch}", check=False)
+        if ahead.returncode != 0 or ahead.stdout.strip() == "0":
+            continue
         retained.append(
             WorkspaceBranch(
                 kind="task",
