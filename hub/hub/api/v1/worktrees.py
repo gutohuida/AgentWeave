@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ... import project_workspace, worktrees
 from ...auth import get_project
 from ...db.engine import get_session
-from ...db.models import Task
+from ...db.models import Project, Task
 from ...launchability import get_agent_config
 from ...task_transition_service import TERMINAL_STATUSES
 from ...task_workspace import TASK_SCHEME
@@ -146,12 +146,24 @@ async def get_worktree_conflicts(
 ) -> List[ConflictInfo]:
     """Pairwise-check every provisioned Hub-owned branch against every other's with
     `git merge-tree` and report which workspaces diverge, and on which files. Task checkouts
-    are included alongside agent checkouts.
+    are included alongside agent checkouts, and each is also checked against the project's
+    main branch, reported as a workspace of kind `"main"` (F245).
     """
     project_id, _ = project
     repo_root = await _resolve_repo_root(project_id, session)
     if not worktrees.is_git_repo(repo_root):
         return []
+    # The branch integration merges into: the operator-accepted one, never a guess.
+    project_row = await session.get(Project, project_id)
+    main_branch = project_row.main_branch if project_row is not None else None
+    # F246: a finished task's branch outlives its checkout, and stays in the check while its work
+    # has not landed. Not a rejected task's: that work was refused and is not meant to land.
+    open_task_ids = (
+        await session.execute(
+            select(Task.id).where(Task.project_id == project_id, Task.status != "rejected")
+        )
+    ).scalars()
+    retained = worktrees.retained_task_branches(repo_root, open_task_ids, main_branch)
     return [
         ConflictInfo(
             workspaces=(
@@ -160,7 +172,7 @@ async def get_worktree_conflicts(
             ),
             paths=report.paths,
         )
-        for report in worktrees.detect_conflicts(repo_root)
+        for report in worktrees.detect_conflicts(repo_root, main_branch, retained)
     ]
 
 

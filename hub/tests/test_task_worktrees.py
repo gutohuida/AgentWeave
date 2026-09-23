@@ -452,6 +452,71 @@ def test_two_tasks_held_by_one_agent_conflict_as_two_workspaces(repo):
     assert {w.kind for w in reports[0].workspaces} == {"task"}
 
 
+def _two_conflicting_tasks_one_released(repo):
+    base = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    first = ensure_task_worktree(repo, TASK, base, ())
+    second = ensure_task_worktree(repo, OTHER, base, ())
+    (first / "f.txt").write_text("first task\n")
+    worktrees.snapshot_worktree(first, "builder")
+    (second / "f.txt").write_text("second task\n")
+    worktrees.snapshot_worktree(second, "builder")
+    worktrees.release_task_worktree(repo, TASK)
+
+
+def test_a_released_task_branch_with_unmerged_work_stays_in_the_conflict_check(repo):
+    """F246. Releasing the checkout keeps the branch -- the record of the work, and what a reopened
+    task resumes from -- and the check listed checkouts, so it went silent while the branches still
+    conflicted and the release event itself warned of unmerged commits."""
+    _two_conflicting_tasks_one_released(repo)
+    assert worktrees.detect_conflicts(repo) == [], "the precondition: released means unlisted"
+
+    retained = worktrees.retained_task_branches(repo, [TASK, OTHER], "main")
+    reports = worktrees.detect_conflicts(repo, "main", retained)
+
+    assert [(w.kind, w.name) for w in retained] == [("task", TASK)]
+    assert len(reports) == 1
+    assert {w.name for w in reports[0].workspaces} == {TASK, OTHER}
+    assert reports[0].paths == ["f.txt"]
+
+
+def test_a_released_branch_whose_work_landed_or_was_not_asked_for_is_left_out(repo):
+    _two_conflicting_tasks_one_released(repo)
+
+    # Not one of the tasks the caller still expects to land (the route leaves out rejected ones).
+    assert worktrees.retained_task_branches(repo, [OTHER], "main") == []
+
+    # Its work is in main: nothing left to conflict.
+    _git(repo, "merge", "-q", "--no-edit", worktrees.task_branch_name(TASK))
+    assert worktrees.retained_task_branches(repo, [TASK, OTHER], "main") == []
+
+
+@pytest.mark.asyncio
+async def test_the_conflicts_route_keeps_an_approved_tasks_branch_and_drops_a_rejected_one(
+    app, auth_headers, repo, bind_project_workspace
+):
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Task
+
+    await bind_project_workspace(repo)
+    async with async_session_factory() as session:
+        session.add(Task(id=TASK, project_id="proj-test", title="first", status="approved"))
+        session.add(Task(id=OTHER, project_id="proj-test", title="second", status="in_progress"))
+        await session.commit()
+    _two_conflicting_tasks_one_released(repo)
+
+    approved = await app.get("/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers)
+    assert approved.status_code == 200
+    assert [{w["name"] for w in report["workspaces"]} for report in approved.json()] == [
+        {TASK, OTHER}
+    ]
+
+    async with async_session_factory() as session:
+        (await session.get(Task, TASK)).status = "rejected"
+        await session.commit()
+    rejected = await app.get("/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers)
+    assert rejected.json() == []
+
+
 def test_a_snapshot_in_a_task_checkout_names_the_task(repo):
     """Task 6.7. A task branch collects one snapshot per turn, and every one of them read
     `Auto-snapshot: builder's turn` — identical subjects on the only per-commit record of what a

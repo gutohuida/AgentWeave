@@ -486,12 +486,18 @@ async def test_the_preview_names_the_commit_and_both_branches(app, auth_headers)
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["will_merge"] is True
+    assert body["will_attempt_merge"] is True
+    assert body["will_merge"] is True  # the old name, kept for the bundled drawer
     assert body["main_branch"] == "master"
     assert body["targets"] == [
         {"commit_sha": "cecbc88751ea", "source_branch": "agentweave/builder"}
     ]
-    assert body["reason"] == ""
+    # F156: no conflict probe runs here, so the answer is an attempt, and says so -- it was an
+    # empty reason beside `will_merge: true` for a task the gate then refused over that commit.
+    assert body["reason"] == (
+        "approval will cherry-pick one commit into master; whether it applies cleanly is "
+        "checked at approval, which refuses if it does not"
+    )
 
 
 @pytest.mark.asyncio

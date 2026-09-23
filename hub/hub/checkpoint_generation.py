@@ -55,7 +55,12 @@ logger = logging.getLogger(__name__)
 # Bumped whenever the prompt changes. Recorded on every `WorkerInvocation`, so a change in output
 # quality is attributable to the prompt that produced it rather than guessed at.
 CHECKPOINT_PROMPT_VERSION = "checkpoint/1"
-PROBE_PROMPT_VERSION = "checkpoint-probe/1"
+# /2 (F360): the task rule asked for "every task the checkpoint says is assigned to this agent",
+# while a loop checkpoint lists the loop's whole queue under a note saying so. A reader following
+# the rule found no assignment stated and answered nothing, and `grade_probe` -- which compares
+# against every listed item -- failed it: half of a flow's checkpoints marked failed for a question
+# the Hub's own list does not answer. The rule now asks for what the grader checks.
+PROBE_PROMPT_VERSION = "checkpoint-probe/2"
 
 # How much transcript the generator sees. Anchoring already bounds this to the turns since the
 # last checkpoint; the cap is for the first checkpoint on a long conversation, where there is no
@@ -154,7 +159,7 @@ Reply with a single JSON object and nothing else, matching exactly:
 
 Rules:
 - List every file path the checkpoint says was changed. Use the paths exactly as written.
-- List the id of every task the checkpoint says is assigned to this agent.
+- List the id of every task listed under the checkpoint's Tasks heading, whatever its status.
 - List the id of every question the checkpoint says is still unanswered.
 - If the checkpoint does not say, return an empty list. Do not guess and do not infer.
 

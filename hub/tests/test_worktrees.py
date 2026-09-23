@@ -309,6 +309,36 @@ def test_detect_conflicts_ignores_agents_with_no_commits_yet(repo):
     assert worktrees.detect_conflicts(repo) == []
 
 
+def _diverge_from_main(repo: Path, agent: str) -> None:
+    """One agent edits `f.txt`, and the operator commits a different edit to it on `main`."""
+    checkout = worktrees.ensure_worktree(repo, agent)
+    (checkout / "f.txt").write_text(f"{agent}'s version\n")
+    worktrees.snapshot_worktree(checkout, agent)
+    (repo / "f.txt").write_text("the operator's version on main\n")
+    _git(repo, "commit", "-q", "-am", "operator edit on main")
+
+
+def test_a_workspace_that_will_not_merge_into_main_is_reported(repo):
+    """F245: the base branch is not a Hub-owned checkout, so no pair ever included it, and
+    *this work will not merge* -- the conflict an operator most needs -- was unreportable."""
+    _diverge_from_main(repo, "wren")
+
+    reports = worktrees.detect_conflicts(repo, "main")
+
+    assert len(reports) == 1
+    base, workspace = reports[0].workspaces
+    assert (base.kind, base.name, base.branch) == (worktrees.MAIN_BRANCH_KIND, "main", "main")
+    assert (workspace.kind, workspace.name) == ("agent", "wren")
+    assert reports[0].paths == ["f.txt"]
+
+
+def test_no_main_branch_or_an_unresolvable_one_checks_nothing_against_it(repo):
+    _diverge_from_main(repo, "xander")
+
+    assert worktrees.detect_conflicts(repo) == []
+    assert worktrees.detect_conflicts(repo, "no-such-branch") == []
+
+
 @pytest.mark.asyncio
 async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
     app, auth_headers, repo, bind_project_workspace
@@ -338,6 +368,36 @@ async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
             "workspaces": [
                 {"kind": "agent", "name": "taylor", "branch": "agentweave/taylor"},
                 {"kind": "agent", "name": "uma", "branch": "agentweave/uma"},
+            ],
+            "paths": ["f.txt"],
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_the_conflicts_route_checks_against_the_projects_main_branch(
+    app, auth_headers, repo, bind_project_workspace
+):
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Project
+
+    await bind_project_workspace(repo)
+    async with async_session_factory() as session:
+        project = await session.get(Project, "proj-test")
+        project.main_branch = "main"
+        await session.commit()
+    _diverge_from_main(repo, "yara")
+
+    conflicts = await app.get(
+        "/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers
+    )
+
+    assert conflicts.status_code == 200
+    assert conflicts.json() == [
+        {
+            "workspaces": [
+                {"kind": "main", "name": "main", "branch": "main"},
+                {"kind": "agent", "name": "yara", "branch": "agentweave/yara"},
             ],
             "paths": ["f.txt"],
         }

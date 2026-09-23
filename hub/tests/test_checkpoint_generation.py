@@ -10,6 +10,7 @@ settled deterministically.
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -92,6 +93,27 @@ def test_the_prompt_never_asks_for_a_field_the_hub_computes():
     schema_part = prompt.split("Rules:")[0]
     for computed in ("files_changed", "tasks", "open_questions", "timestamp", "runner"):
         assert computed not in schema_part
+
+
+def test_the_probe_asks_for_the_tasks_the_grader_checks_not_an_assignment():
+    """F360. `grade_probe` compares against every item in the checkpoint's task list, and a loop
+    checkpoint's list is the loop's whole queue under a note saying so. A rule asking for tasks
+    "assigned to this agent" had a literal reader find no assignment stated and answer nothing --
+    all 32 missing on 7 of 14 real checkpoints, the other dimensions never failing. The rule has
+    to name the section `render_checkpoint` writes, and must not ask about assignment at all."""
+    import hub.checkpoint_generation as checkpoint_generation
+
+    rule = next(
+        line
+        for line in checkpoint_generation._PROBE_PROMPT.splitlines()
+        if line.startswith("- List the id of every task")
+    )
+    assert "assigned" not in rule
+    assert "Tasks heading" in rule
+    assert "whatever its status" in rule
+    source = Path(checkpoint_generation.__file__).read_text(encoding="utf-8")
+    assert 'lines.append("## Tasks")' in source  # the heading the rule names
+    assert PROBE_PROMPT_VERSION == "checkpoint-probe/2"
 
 
 def test_an_anchor_is_offered_for_carry_forward_not_restatement():

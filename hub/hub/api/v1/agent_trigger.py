@@ -584,7 +584,51 @@ def effective_question_wait(agent_row: Optional[Agent]) -> int:
     return _parse_question_wait(raw)
 
 
-async def trigger_agent_directly(
+class _ReviewCheckoutClaim:
+    """A review checkout this call provisioned, until a run takes it over (F326).
+
+    `task-lifecycle-governance`: *"A refused review leaves no checkout behind"*, for any reason.
+    `prepare_review_turn` provisions `.agentweave/reviews/<reviewer>` part-way through the trigger,
+    and every refusal after it -- the context write, the runner, the Hub's own address, delivery
+    itself -- left that checkout registered. Held by the wrapper rather than released at each
+    refusal, so a refusal added later is covered without anyone remembering to. Only a checkout
+    *this call* provisioned is ever released: a refusal ahead of provisioning ("already running a
+    turn") may be looking at a checkout a live review is standing in.
+    """
+
+    def __init__(self) -> None:
+        self.repo_root: Optional[Path] = None
+        self.reviewer: Optional[str] = None
+        self.handed_off = False
+
+
+async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
+    """Validate and spawn *agent* directly, returning its run identifier.
+
+    The core of what `POST /agent/trigger` does (see that route below), factored out so a
+    scheduled job (`scheduler.py`, task 3.10) goes through the exact same direct-execution
+    path a manual trigger does — no synthetic `Message` for the watchdog to later detect and
+    re-trigger, which is the same class of indirection Decision 2 already removed from the
+    manual-trigger path in task 3.5. Raises `TriggerAgentError` on any rejection.
+
+    Takes `_trigger_agent_directly`'s keyword arguments. The wrapper exists for one thing: a
+    review checkout this call provisioned is released if the call does not end in a started run.
+    """
+    claim = _ReviewCheckoutClaim()
+    try:
+        return await _trigger_agent_directly(**kwargs, review_claim=claim)
+    except BaseException:
+        if claim.repo_root is not None and claim.reviewer is not None and not claim.handed_off:
+            try:
+                await asyncio.to_thread(
+                    worktrees.release_review_checkout, claim.repo_root, claim.reviewer
+                )
+            except Exception:  # noqa: BLE001 — the refusal is what the caller needs to see
+                logger.exception("Could not release %s's refused review checkout", claim.reviewer)
+        raise
+
+
+async def _trigger_agent_directly(
     *,
     project_id: str,
     agent: str,
@@ -599,15 +643,8 @@ async def trigger_agent_directly(
     task_id: Optional[str] = None,
     divergence_source_run_id: Optional[str] = None,
     review_task_id: Optional[str] = None,
+    review_claim: _ReviewCheckoutClaim,
 ) -> TriggerAgentResponse:
-    """Validate and spawn *agent* directly, returning its run identifier.
-
-    The core of what `POST /agent/trigger` does (see that route below), factored out so a
-    scheduled job (`scheduler.py`, task 3.10) goes through the exact same direct-execution
-    path a manual trigger does — no synthetic `Message` for the watchdog to later detect and
-    re-trigger, which is the same class of indirection Decision 2 already removed from the
-    manual-trigger path in task 3.5. Raises `TriggerAgentError` on any rejection.
-    """
     from sqlalchemy import select
 
     try:
@@ -874,6 +911,9 @@ async def trigger_agent_directly(
             # Task 3.4. The reason comes from the resolver unchanged, so the operator reads why
             # there is nothing to review rather than that something failed.
             raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc), request_level=True) from exc
+        # Provisioned now; from here until a run takes it over, a refusal releases it (F326).
+        review_claim.repo_root = repo_root
+        review_claim.reviewer = agent
 
     if work_dir and worktrees.is_writing_agent(config) and project_is_repo:
         raise TriggerAgentError(
@@ -1297,6 +1337,8 @@ async def trigger_agent_directly(
     )
     _background_runs.add(task)
     task.add_done_callback(_background_runs.discard)
+    # The run owns the review checkout now; nothing after this is a refusal of it (F326).
+    review_claim.handed_off = True
 
     try:
         await persist_event(
@@ -3193,11 +3235,33 @@ async def get_agent_sessions(
     result = await session.execute(q)
     rows = result.all()
 
+    # F189: the directory each session's turns actually ran in -- `Run.workspace_dir`, the value
+    # handed to the process as its cwd (design D7) -- newest run first, so a session that moved
+    # reports where it is now. This was a hardcoded `.agentweave/agents/<agent>-session.json`, the
+    # shape of the deleted CLI session subsystem, which nothing writes; the Workspace section
+    # rendered it as "where the agent's work actually happened". `None` for a session none of
+    # whose runs recorded one (rows older than the column), which the UI already leaves blank.
+    directories: Dict[str, str] = {}
+    session_ids = [row.session_id for row in rows if row.session_id]
+    if session_ids:
+        run_rows = await session.execute(
+            select(Run.session_id, Run.workspace_dir)
+            .where(
+                Run.project_id == project_id,
+                Run.agent == agent,
+                Run.session_id.in_(session_ids),
+                Run.workspace_dir.isnot(None),
+            )
+            .order_by(Run.started_at.desc())
+        )
+        for session_id, workspace_dir in run_rows.all():
+            directories.setdefault(session_id, workspace_dir)
+
     sessions = [
         {
             "id": row.session_id,
             "type": "agent",
-            "path": f".agentweave/agents/{agent}-session.json",
+            "path": directories.get(row.session_id),
             "last_active": row.last_active.isoformat() if row.last_active else None,
             "started_at": row.started_at.isoformat() if row.started_at else None,
         }

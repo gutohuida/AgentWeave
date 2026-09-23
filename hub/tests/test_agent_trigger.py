@@ -3140,3 +3140,53 @@ async def test_a_run_failed_by_its_read_loop_does_not_leave_its_process_running(
     assert run.status == "failed"
     assert "not a lock" in (run.error or "")
     sessions[0].terminate.assert_called_once_with(force=True)
+
+
+@pytest.mark.asyncio
+async def test_a_provider_session_reports_the_directory_its_turns_ran_in(app, auth_headers):
+    """F189: every session reported `.agentweave/agents/<agent>-session.json`, a file nothing
+    writes, and the Workspace section rendered it as where the agent's work happened."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import AgentOutput, Run
+
+    async with async_session_factory() as db:
+        db.add(
+            Run(
+                id="run-f189",
+                project_id="proj-test",
+                agent="f189",
+                status="completed",
+                session_id="sess-f189",
+                workspace_dir="/work/proj/.agentweave/worktrees/f189",
+            )
+        )
+        db.add(
+            Run(
+                id="run-f189-legacy",
+                project_id="proj-test",
+                agent="f189",
+                status="completed",
+                session_id="sess-f189-legacy",
+            )
+        )
+        for sid in ("sess-f189", "sess-f189-legacy"):
+            db.add(
+                AgentOutput(
+                    id=f"out-{sid}",
+                    project_id="proj-test",
+                    agent="f189",
+                    session_id=sid,
+                    content="hi",
+                )
+            )
+        await db.commit()
+
+    response = await app.get("/api/v1/projects/proj-test/agent/sessions/f189", headers=auth_headers)
+
+    assert response.status_code == 200
+    paths = {s["id"]: s["path"] for s in response.json()["sessions"]}
+    assert paths == {
+        "sess-f189": "/work/proj/.agentweave/worktrees/f189",
+        # No recorded directory: blank, never an invented one.
+        "sess-f189-legacy": None,
+    }

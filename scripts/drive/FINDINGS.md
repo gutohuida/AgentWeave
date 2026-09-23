@@ -12756,7 +12756,7 @@ it.
 
 ## F156 (B) — `integration-preview` says `will_merge: true` for a task approval refuses outright
 
-**Status:** open, and twice declared out of scope by the changes nearest to it:
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- the preview says approval will *attempt* the merge, in a new field and in its reason; see FIXED at the end of this entry. Was: open, and twice declared out of scope by the changes nearest to it:
 `2026-09-01-a-conflict-refusal-names-what-clears-it/proposal.md:116` (*"F156 is not in scope"*) and
 `2026-09-01-a-loop-declares-whether-it-needs-evidence/design.md:403` (*"adjacent and is not fixed
 here"*). `integration-preview` still answers `will_merge: true` for a task approval refuses. [classified 2026-09-09, D-2]
@@ -12789,6 +12789,20 @@ The cheap repair is vocabulary, not a probe: `will_attempt_merge`, or a `reason`
 commit will be attempted; whether it merges cleanly is checked at approval"*. C severity for the
 concept, B because this is the one surface whose entire purpose is to be right about what approval
 will do.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3f).** The vocabulary repair, as the entry
+and `ROUNDS.md` both put it; still no probe, since the docstring's reasoning holds. Both of the
+entry's options, because the rename alone needs a bundle: `integration-preview` now answers
+`will_attempt_merge` (what the route can actually know) and, when there are targets, a `reason` --
+*"approval will cherry-pick one commit into master; whether it applies cleanly is checked at
+approval, which refuses if it does not"* -- where it answered `""`. `will_merge` stays, same value,
+documented as the old name, because the committed drawer (`TaskDetailDrawer.tsx:42`) switches on it
+and no bundle can ship until `:8000` restarts past `c18a87b`; retiring it is a UI-round item. The
+drawer's own sentence ("Approving writes to your repository: it cherry-picks ... into ...") already
+describes an attempt, so nothing the operator reads today is false. Tests:
+`test_the_preview_names_the_commit_and_both_branches` (`test_dashboard_truth.py`) and the loop
+preview test in `test_loop_lands_its_work.py`, both of which pinned the empty reason -- the defect
+itself -- now pin the sentence and the new field.
 
 
 
@@ -15227,7 +15241,7 @@ and pruning is the whole repair, and the operator has to know that from outside 
 
 ## F189 (B) — the Workspace section shows a path that does not exist, and calls it where the work happened
 
-**Status:** open, and explicitly excluded by the nearest change:
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- each session reports its runs' recorded `workspace_dir`; see FIXED at the end of this entry. Was: open, and explicitly excluded by the nearest change:
 `2026-09-04-a-blocked-agent-workspace-holds-its-input/design.md:44` -- *"not a fix for F189 (the
 Workspace section's invented session path), which is adjacent in the ledger"*. [classified 2026-09-09, D-2]
 
@@ -15261,6 +15275,15 @@ disk  : C:\...\row5fixB\.agentweave\agents  -> does not exist (the .agentweave/ 
 A correct answer was available and was measured present in the same assertion:
 `.agentweave/worktrees/r5runnerr5b` **exists** and is where that turn actually ran. So the field is
 not merely unimplementable — the workspace resolution the run already performed knows the answer.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** `GET /agent/sessions/{agent}` now
+reports, per session, the newest `Run.workspace_dir` among that session's runs -- the value handed to
+the process as its cwd (design D7), which is exactly "the workspace resolution the run already
+performed". A session none of whose runs recorded one (rows older than the column) reports `null`,
+never an invented path; `SessionRow` already renders the path only when present, so no bundle.
+Absolute, as the column stores it. Test: `test_a_provider_session_reports_the_directory_its_turns_ran_in`
+(`test_agent_trigger.py`) -- on the old code it reads back the `...-session.json` string. Not
+re-driven with the screenshot.
 
 ## F190 (A) — RETIRED 2026-09-03 — no turn can ever say it was stopped, failed or interrupted, because the status map is built backwards from a payload sorted the other way
 
@@ -18551,7 +18574,7 @@ indistinguishable from every other one on the roster.
 
 ## F245 (B) — the conflict check never compares a task branch against the branch it will merge into
 
-**Status:** open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- each workspace is also checked against the project's main branch; see FIXED at the end of this entry. Was: open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `detect_conflicts` (`worktrees.py:1014`) walks `list_workspace_branches` and pairs each
 *provisioned Hub-owned checkout* with each other. The base branch is not a Hub-owned checkout, so
@@ -18572,11 +18595,23 @@ territory of F155's conflict remedy).
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 6.
 
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** `detect_conflicts(repo_root,
+main_branch=None)` now runs one `merge-tree` per workspace against *main_branch* before the pairwise
+pass, reporting each hit with the base as its first workspace (`kind: "main"`,
+`worktrees.MAIN_BRANCH_KIND`, `name` and `branch` the branch itself). `GET /worktrees/conflicts`
+passes `Project.main_branch` -- the operator-accepted branch integration merges into, not
+`detect_main_branch`'s suggestion; with none set, or one that does not resolve, nothing is checked
+against it, because a conflict against a guessed base is not a fact. No UI reads this route today,
+so no bundle. Tests (`test_worktrees.py`): `test_a_workspace_that_will_not_merge_into_main_is_reported`,
+`test_no_main_branch_or_an_unresolvable_one_checks_nothing_against_it`,
+`test_the_conflicts_route_checks_against_the_projects_main_branch` -- the route test fails on the old
+code with `[]`, the finding's own measurement. Not re-driven with leg 6.
+
 ---
 
 ## F246 (C) — finishing a task takes its conflict off the report while the divergence remains
 
-**Status:** open. Releasing the checkout still takes the branch out of
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- a released task branch with unmerged work stays in the conflict check unless the task was rejected; see FIXED at the end of this entry. Was: open. Releasing the checkout still takes the branch out of
 `list_workspace_branches`, so a finished task's branch still stops being conflict-checked while the
 Hub's own release event records unmerged commits on it. Named in no change. [classified 2026-09-09, D-3]
 
@@ -18603,6 +18638,20 @@ and `approved -> revision_needed` is a legal edge, so a reopened task resumes fr
 has been outside the conflict check for as long as it was closed.
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 7.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** New
+`worktrees.retained_task_branches(repo_root, task_ids, main_branch)`: one `for-each-ref` over
+`refs/heads/agentweave/task/`, kept where the task is one the caller names, the branch has no
+checkout, and (when the main branch resolves) `rev-list main..branch` is non-empty -- work that has
+not landed. `detect_conflicts` takes them as `retained`, so they meet every check, the main-branch
+one included (F245). The route names every task in the project **except `rejected`**: the entry
+calls a rejected branch going quiet "arguable", and keeping refused work in the report forever would
+be noise the operator cannot clear; `approved` work waiting on integration, and a reopened task's
+branch, stay visible -- the case the entry measured. Tests (`test_task_worktrees.py`):
+`test_a_released_task_branch_with_unmerged_work_stays_in_the_conflict_check`,
+`test_a_released_branch_whose_work_landed_or_was_not_asked_for_is_left_out`,
+`test_the_conflicts_route_keeps_an_approved_tasks_branch_and_drops_a_rejected_one` -- the route test
+fails on the old code with `[]`, the entry's "silent". Not re-driven with leg 7.
 
 ---
 
@@ -21218,7 +21267,7 @@ measurement inline so the next reader does not re-derive it.
 
 ## F277 (C) - `restrict_spec_writes` omits `MultiEdit`, the one write tool that edits a file the same way the three it names do
 
-**Status:** open. Filed 2026-09-04 (night window, task 2.2c of
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- `MultiEdit` added to the disallow list; the wider question stays open; see FIXED at the end of this entry. Was: open. Filed 2026-09-04 (night window, task 2.2c of
 `a-write-outside-the-workspace-is-recorded`). **Filed, deliberately not fixed** - see the last
 section.
 
@@ -21279,6 +21328,16 @@ spec-authoring turn runs, it is `authoring-rigor-and-scope`'s scenario rather th
 and the honest version of it asks the wider question this finding raises - whether a nudge that
 `Bash` walks straight through should be enumerating tools at all, or whether that posture wants the
 approver rather than a disallow list.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3f).** The one word, as `ROUNDS.md` placed
+it: `--disallowedTools Edit,MultiEdit,Write,NotebookEdit` (`runner_commands.py`), with the reason
+beside it. `test_spec_authoring_restriction.py`'s two literal assertions follow it, and
+`test_restrict_spec_writes_is_not_the_definition_of_a_write_tool` keeps its point -- the Claude
+disallow list is still not the definition of a write tool, since it can never name Codex's
+`apply_patch` -- with its F277 line flipped to `"MultiEdit" in disallowed`, as its own message
+asked. **The wider question is not answered here and stays open:** whether a restriction `Bash`
+walks straight through should enumerate tools at all, or hand this posture to the approver. That is
+`authoring-rigor-and-scope`'s question and a decision, not a repair.
 
 ---
 
@@ -27046,7 +27105,7 @@ reviews; on Codex app-server that agent does not get the review block).
 
 ## F326 (D) — a review turn refused after its checkout is provisioned leaves the checkout registered
 
-**Status:** open. Filed 2026-09-12 by R1 of `a-refused-review-leaves-nothing-behind`, and measured at unit level on `87dfbf4`. It is outside that change's verdict, which is about the task and not the checkout, and nothing proposes a fix.
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- a review checkout this call provisioned is released when the call ends without a started run; see FIXED at the end of this entry. Was: open. Filed 2026-09-12 by R1 of `a-refused-review-leaves-nothing-behind`, and measured at unit level on `87dfbf4`. It is outside that change's verdict, which is about the task and not the checkout, and nothing proposes a fix.
 
 **The claim.** Where a review turn is refused *after* `prepare_review_turn` has provisioned
 `.agentweave/reviews/<reviewer>`, the refusal leaves that checkout on disk and registered with git.
@@ -27082,6 +27141,23 @@ any reason"*, and the ledger should record where that is not true.
 **A possible repair, not proposed.** Move the address check and `build_command` above the review
 block, since neither depends on the review checkout (inferred). Or release the review checkout on
 a non-transient refusal raised after provisioning.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** Neither of the entry's two repairs:
+moving the address check and `build_command` above the review block covers two of the three sites
+and none added later, and releasing only on a *non-transient* refusal leaves the transient one --
+the site R1 measured -- still breaching "for any reason". Instead `trigger_agent_directly` is now a
+thin wrapper over `_trigger_agent_directly` holding a `_ReviewCheckoutClaim`: the inner function
+marks it right after `prepare_review_turn` succeeds and marks it handed off right after the run's
+task is registered, and the wrapper releases the checkout (`worktrees.release_review_checkout`) if
+the call raises anything in between. Every refusal after provisioning is covered, including ones not
+yet written. Only a checkout *this call* provisioned is released -- a refusal ahead of provisioning
+("already running a turn") may be looking at one a live review stands in. The transient case now
+costs a re-provision on retry, which is what the spec's "for any reason" asks. The name stays on
+the wrapper, so `turn_scheduler` and every test patch are unchanged, and
+`test_trigger_agent_directly_has_one_caller` still passes. Test:
+`test_leg_t_leaves_no_review_checkout_behind` (`test_a_refused_review_leaves_nothing_behind.py`) --
+R1's measurement as a test, with the real `ensure_review_checkout`; on the old code the checkout is
+still registered.
 
 ---
 
@@ -29047,7 +29123,7 @@ driven live: reproducing the lock needs a second writer holding SQLite past `bus
 
 ## F360 (B) — the checkpoint probe asks for the tasks "assigned to this agent" while a loop checkpoint lists the loop's whole queue, so half of a flow's checkpoints are marked failed
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- the probe asks for the tasks the grader checks; reproduced and verified live on Haiku; see FIXED at the end of this entry. Was: open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 
 **Measured.** All 14 of the project's checkpoints were loop-scoped, and each envelope carried 32
 tasks. 7 passed and 7 failed. **Every failure was the `task_ids` dimension, with all 32 missing and
@@ -29066,6 +29142,21 @@ Hub's own list does not answer.
 
 **Why B.** It is a coin toss on every loop checkpoint. It reports half of a flow's checkpoints as
 failed, and it tells their successors to distrust a summary that has nothing wrong with it.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3f).** The probe's task rule now asks for
+what `grade_probe` compares against: *"List the id of every task listed under the checkpoint's Tasks
+heading, whatever its status."* Scope-neutral, so it is right for the agent-scoped list and the
+loop-scoped one alike, and it names the heading `render_checkpoint` writes. `PROBE_PROMPT_VERSION`
+is `checkpoint-probe/2`, so every `WorkerInvocation` says which rule produced it. **Reproduced and
+verified live, not only reasoned:** `scripts/drive/t_f360_probe_task_rule.py` has Haiku (the probe's
+model) read a 32-task loop checkpoint whose written summary is in the agent's voice -- the old rule
+recovered **0/32 on three reads of three**, the finding's exact signature, and the new rule **32/32
+on three of three**. (A five-task version with a neutral summary recovered 5/5 under both rules: the
+failure needs the loop note plus a summary that names the agent's own work, which is what real loop
+checkpoints have.) Test: `test_the_probe_asks_for_the_tasks_the_grader_checks_not_an_assignment`
+(`test_checkpoint_generation.py`) -- the wording and the version, since a unit test cannot run the
+model; the drive script is the behavioural check. Checkpoints already marked `failed` by the old
+rule keep their status.
 
 ## F361 (B) — a peer message past the hop budget is suspended with no reason on its entry, and its sender is told it was sent
 

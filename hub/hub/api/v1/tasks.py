@@ -1114,15 +1114,28 @@ async def task_integration_preview(
     elif not targets:
         reason = empty_reason
     else:
-        reason = ""
+        # F156: this route runs no conflict probe, by design, so it cannot say the work *will*
+        # merge -- only that approval will try. It answered `will_merge: true` and an empty reason
+        # for a task the gate then refused twice over that exact commit.
+        count = "one commit" if len(targets) == 1 else f"{len(targets)} commits"
+        reason = (
+            f"approval will cherry-pick {count} into {main_branch}; whether it applies cleanly "
+            f"is checked at approval, which refuses if it does not"
+        )
 
+    attempts = bool(main_branch and targets)
     return {
         "task_id": task.id,
         "main_branch": main_branch,
         "targets": [
             {"commit_sha": target.commit_sha, "source_branch": target.branch} for target in targets
         ],
-        "will_merge": bool(main_branch and targets),
+        # What this route can know: whether approval will *attempt* a merge (F156).
+        "will_attempt_merge": attempts,
+        # The same value under its old name, which overstated it. Kept because the committed UI
+        # bundle reads it (`TaskDetailDrawer.tsx`); retire it when the drawer moves to the field
+        # above, in a UI round.
+        "will_merge": attempts,
         "reason": reason,
     }
 

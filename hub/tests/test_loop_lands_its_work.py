@@ -594,7 +594,8 @@ async def test_the_preview_names_the_branch_tip_for_an_evidence_free_loop_task(
 
     answer = await preview(app, auth_headers, task)
     assert answer["will_merge"] is True
-    assert answer["reason"] == ""
+    assert answer["will_attempt_merge"] is True
+    assert answer["reason"].startswith("approval will cherry-pick one commit into main")  # F156
     assert answer["targets"] == [
         {"commit_sha": tip, "source_branch": worktrees.task_branch_name(task)}
     ]
