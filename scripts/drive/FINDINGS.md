@@ -32089,7 +32089,7 @@ mostly re-spend real agent-turn cost to re-confirm what already matches. Instead
 - **Not driven again live today; no new defect found. Status: n/a (verification only, not a
   finding).**
 
-## F411 (B) — `create_loop` with `initial_tasks` still commits the loop and job before a task can be refused
+## F414 (B) — `create_loop` with `initial_tasks` still commits the loop and job before a task can be refused
 
 **Status:** open. Filed 2026-09-23 by the adversarial review of Round 3 (read from the source, not
 driven). F265's repair (Round 3b) refuses the *authorisation* failure before any row is written, but
@@ -32102,7 +32102,7 @@ authorisation gate, and D2's "validated up front" covers only the schema. The sa
 F265 described, through a different refusal. Repair shape: validate every initial task (status,
 identifiers) before the first commit, or create the job, loop and tasks in one transaction.
 
-## F412 (C) — `operator` is not a reserved agent name, and Round 3a gave it a meaning
+## F415 (C) — `operator` is not a reserved agent name, and Round 3a gave it a meaning
 
 **Status:** open. Filed 2026-09-23 by the adversarial review of Round 3. F261's repair (Round 3a) made
 `"operator"` the runless sender of `POST /messages` and skips it in `GET /agents`' activity fallback and
