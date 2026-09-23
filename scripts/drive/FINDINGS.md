@@ -31804,3 +31804,52 @@ change's to drive.
 `PATCH`ed to `enabled: false`; `GET /jobs` confirmed zero enabled agents afterward. The drive
 Hub process (port 8096) and its profile are left in place for the morning; nothing was written to
 `:8000` or `:8010` at any point.
+
+## D-1, 2026-09-23 (day window) — last night's two closed changes re-driven independently, fresh port/profile
+
+Scoped drive per `day-window.md` D-1: what the night built, checked from outside its own drive
+records. Port 8011 (free per `netstat`), profile `profiles/drive0923d1/`, never `:8000`/`:8010`,
+never `proj-5e960453`/`proj-18e5d4e0`. No job left enabled; the one throwaway project
+(`proj-7baa80e5c56c`, four `claude-haiku-4-5` agents, no jobs created) and its `testbed/scratch/`
+fixture were removed at teardown.
+
+**`a-hub-that-was-not-told-which-database-refuses-to-open-one` — both paths re-observed live,
+independently of last night's group-6 drive.**
+- Started `py -3.11 -m uvicorn hub.main:app --port 8011` from `hub/` with `DATABASE_URL` unset but
+  `hub/.env` present (this machine's normal state): no refusal — `Settings()` took the value from
+  `.env`'s relative path, resolved against `hub/` as cwd, and opened
+  `hub/data/agentweave.db` (a repo-local scratch path, confirmed gitignored, not the operator's
+  `~/.agentweave/hub/data/agentweave.db`). The startup line fired exactly as designed:
+  `Hub database: opening C:\...\hub\data\agentweave.db (existed before this process opened it:
+  False, pid 21376)`, at `WARNING`, ahead of the alembic chain. Correct behaviour — `.env` is a
+  legitimate source and the refusal is only for *no* source — but worth recording as a distinct
+  observation from group 6's, which ran from a directory with no `.env` at all.
+- Moved `hub/.env` aside and repeated with `DATABASE_URL` still unset: import-time
+  `hub.config.HubNotToldWhichDatabase`, message verbatim: *"The Hub was not told which database to
+  open. Checked the process environment and a .env file in the current working directory for
+  DATABASE_URL and found neither. It declined to open
+  'sqlite+aiosqlite:///C:/Users/huida/.agentweave/hub/data/agentweave.db' without being asked to.
+  Set DATABASE_URL explicitly, or run bare `agentweave` to use that default."* — propagates
+  unwrapped before uvicorn binds a socket, matches D2's design exactly. `.env` restored
+  immediately after.
+- Both processes killed by exact PID (`taskkill /F /PID <n>`), never the blanket `/IM python.exe`
+  this finding exists to retire.
+- **Not a new defect. Status: disproves nothing, confirms 6.1/6.2 from a second angle (a `.env`
+  present vs. absent) on the same day's code.**
+
+**`an-unstaffed-review-names-its-holders` — lighter touch, real but not a full re-drive.** Group 6
+drove this exhaustively the same night (D-6 above: two real Haiku turns, three-surface byte
+agreement, both R8 claims watched working). Re-running the identical live scenario tonight would
+mostly re-spend real agent-turn cost to re-confirm what already matches. Instead:
+- `hub/tests/test_a_held_agent_is_busy.py` + `hub/tests/test_a_task_nothing_will_move_holds_nobody.py`
+  run fresh on today's `HEAD`, in isolation: **65 passed** (up from D-6's 55 — the added group-6
+  tests are in this count), no drift since last night.
+- Checked the UI bundle-deferral decision recorded in `e6d1c96` is still exactly what `git log`
+  shows: `hub/ui/src` last touched by `e6d1c96` (2026-09-23T03:04), `hub/hub/static/ui`'s last
+  commit is still `c18a87b` — the bundle is deliberately uncommitted pending `:8000`'s restart past
+  `c18a87b`, matching the commit message and today's `decisions_for_user` carry-forward. Confirmed
+  from the drive Hub's own startup warning (`hub/hub/static/ui asserts it was built from
+  hub/ui/src as of 2026-09-22T18:07:55+00:00, but the source has changed since`) — the staleness is
+  real and intentional, not an oversight.
+- **Not driven again live today; no new defect found. Status: n/a (verification only, not a
+  finding).**

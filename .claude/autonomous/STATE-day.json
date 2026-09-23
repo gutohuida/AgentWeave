@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T17:00:00+01:00",
-    "iteration":  1,
+    "iteration":  2,
     "log_file":  ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "d1-drive",
-    "next_action":  "Do D-1: drive what last night built, scoped and live, per day-window.md D-1. Last night closed a-hub-that-was-not-told-which-database-refuses-to-open-one and an-unstaffed-review-names-its-holders (F352). Fresh project, fresh drive Hub on a free port from profiles/drive0923/, started from hub/ with uvicorn from source. Every real agent turn binds claude-haiku-4-5. Never against proj-5e960453 or proj-18e5d4e0, never :8000/:8010. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction, Status: open. Never leave a job enabled.",
+    "current":  "d2-r1",
+    "next_action":  "Do D-2/spec loop A, R1: explore and propose. Priority order: a finding d1-drive just produced (none this iteration); else an open ledger finding with no proposal; else the research file's ranked list (spec-queue/research/2026-09-23.md candidate #1: an agent message can smuggle @/abs/path into a claude -p argv past every disallowed tool, zero tool calls, measured on CLI 2.1.280; claude-agent-sdk-python#1269, SDK v0.2.158, client_composed opt-out also measured). Write proposal.md/design.md/tasks.md/specs deltas under openspec/changes/. openspec new change refuses a name starting with a digit.",
     "queue":  [
                   {
                       "id":  "compose",
@@ -23,9 +23,9 @@
                   },
                   {
                       "id":  "d1-drive",
-                      "status":  "open",
+                      "status":  "done",
                       "title":  "Drive last night's build",
-                      "detail":  "Scoped to a-hub-that-was-not-told-which-database-refuses-to-open-one and the unstaffed-review remedy. Fresh project/Hub, Haiku turns only. File findings in FINDINGS.md with Status: open."
+                      "detail":  "Done iteration 2: re-observed the database-refusal fix live from a second angle (.env present vs absent, port 8011/profiles/drive0923d1) -- no new defect, confirms group 6. Lighter but real check of the unstaffed-review change: regression suite fresh on HEAD (65 passed), UI bundle-deferral decision re-confirmed still deliberate. No new findings. Full account: FINDINGS.md 'D-1, 2026-09-23 (day window)'."
                   },
                   {
                       "id":  "d2-r1",
