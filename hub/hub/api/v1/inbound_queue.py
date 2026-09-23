@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agent_roster import require_known_agent
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
@@ -97,6 +98,9 @@ async def get_queue_status(
     from ...db.models import Run
 
     project_id, _ = project
+    # F199: a typo'd name read as "idle, nothing waiting" — a sentence about an agent that is not
+    # on any roster.
+    await require_known_agent(session, project_id, agent)
     entries_result = await session.execute(
         select(InboundQueueEntry).where(
             InboundQueueEntry.project_id == project_id,
@@ -195,12 +199,17 @@ async def list_queue_entries(
     session: AsyncSession = Depends(get_session),
 ) -> List[InboundQueueEntry]:
     project_id, _ = project
+    states = ("queued", "delivered", "withdrawn")
+    if state_filter is not None and state_filter not in states:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid queue entry state {state_filter!r}; expected one of {', '.join(states)}",
+        )
+    await require_known_agent(session, project_id, agent)  # F199
     query = select(InboundQueueEntry).where(
         InboundQueueEntry.project_id == project_id, InboundQueueEntry.agent == agent
     )
     if state_filter is not None:
-        if state_filter not in ("queued", "delivered", "withdrawn"):
-            raise HTTPException(status_code=400, detail="Invalid queue entry state")
         query = query.where(InboundQueueEntry.state == state_filter)
     result = await session.execute(query.order_by(InboundQueueEntry.sequence))
     return list(result.scalars().all())

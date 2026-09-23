@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...auth import get_project
+from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
 from ...schemas.common import RequestModel
@@ -37,6 +38,11 @@ async def get_conversation_accounting(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    # F239: an aggregate over no rows is a valid zero, so a typo, another project's conversation
+    # and an unmeasured one all read "this cost nothing". The sibling conversation routes 404.
+    conversation = await get_conversation_by_id(session, conversation_id)
+    if conversation is None or conversation.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
     return await conversation_usage(session, project_id, conversation_id)
 
 

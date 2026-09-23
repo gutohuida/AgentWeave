@@ -15390,7 +15390,7 @@ naming a task."* This one is the outlier on a route whose other refusals are exe
 
 ## F192 (C) — stop reports an agent that does not exist as merely idle
 
-**Status:** open. Verified 2026-09-09: the stop route still answers
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — stop refuses a name nothing is recorded under; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: the stop route still answers
 `"{agent} has no run in progress."` at `hub/hub/api/v1/agent_trigger.py:1597` without consulting the
 roster, while the trigger route in the same file distinguishes the case precisely. [classified 2026-09-09, D-3]
 
@@ -15404,6 +15404,12 @@ POST /projects/{p}/agent/r5ghostr5b/stop   ->  404  "r5ghostr5b has no run in pr
 There is no such agent. The trigger route in the same file distinguishes this precisely — *"is not
 an agent in this project, so there is nothing to trigger"* — so the information exists and this
 route declines to look. Small, but it is the shape that hides a typo in a script or a job.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4a).** The stop route keeps its run lookup first, so a removed agent's still-running turn can be
+stopped. Only when no run is in progress does it ask `hub/hub/agent_roster.py` `require_known_agent` (new, Round 4a): 404 `"{agent} is not an agent in this project: it is not on the roster and nothing is recorded under that name. Correct the name, or create the agent in the Hub UI."` *Known* is the roster **or** any conversation, queue entry or run under that name, because session sync deletes a removed agent's roster row and keeps its history (a roster-only check would 404 that history; guarded by `test_a_removed_agent_s_history_stays_readable`). An idle agent on the roster still gets
+`"{agent} has no run in progress."`. Measured by `hub/tests/test_an_unknown_name_is_not_an_empty_answer.py`
+`test_stop_tells_a_typo_from_an_idle_agent`, which fails on the old code with the typo answered as
+idle.
 
 ## What HELD — and the biggest of them was measured against the OS, not the record
 
@@ -15525,7 +15531,7 @@ preference, not a filter.
 
 ## F194 (C) — the conversation and chat routes answer 200 for an agent that does not exist
 
-**Status:** open. Both routes still take `{agent}` as a path parameter and never ask
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — both agent routes refuse an unknown name; see FIXED at the end of this entry. Was: open. Both routes still take `{agent}` as a path parameter and never ask
 whether it names an agent; the same shape was met one router over during row 7 and filed separately
 there. Named in no change. [classified 2026-09-09, D-3]
 
@@ -15545,6 +15551,11 @@ file consults the roster.
 
 Small on its own; it is the mechanism by which F193 stays quiet, and it is the shape that hides a
 typo in a script or a scheduled job.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4a).** `list_conversations` and `get_recent_chat` (`agent_chat.py`) call `hub/hub/agent_roster.py` `require_known_agent` (new, Round 4a): 404 `"{agent} is not an agent in this project: it is not on the roster and nothing is recorded under that name. Correct the name, or create the agent in the Hub UI."` *Known* is the roster **or** any conversation, queue entry or run under that name, because session sync deletes a removed agent's roster row and keeps its history (a roster-only check would 404 that history; guarded by `test_a_removed_agent_s_history_stays_readable`).
+`get_chat_history` already 404'd a conversation that is not the agent's. Measured by `hub/tests/test_an_unknown_name_is_not_an_empty_answer.py`: on the
+old code both legs answered 200 (`[]`, and `{"entries": [], ...}`), and a rostered agent still
+answers 200 on the new code.
 
 ## F195 (C) — the conversation titler does not run in the project's directory, and the parameter that would make it is dead
 
@@ -15923,7 +15934,7 @@ queue router writes four of the same columns and has none of it.
 
 ## F199 (C) — `GET /queue/{agent}` and `/queue/{agent}/status` answer 200 for an agent that does not exist
 
-**Status:** open. Neither route consults the roster, and the status route still answers
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — both queue routes refuse an unknown name; the state refusal names the valid states; see FIXED at the end of this entry. Was: open. Neither route consults the roster, and the status route still answers
 a healthy-looking zero for a name that is on no roster. The invalid-`state` refusal that still does
 not enumerate the three legal values is part of the same entry. [classified 2026-09-09, D-3]
 
@@ -15945,6 +15956,11 @@ this needs is one call away and already written.
 **Also in this leg, smaller:** `GET /queue/{agent}?state=<anything else>` answers
 `400 {"detail": "Invalid queue entry state"}` and does not name the three that *are* valid, though
 the route holds them in a literal tuple on the line that raises (`inbound_queue.py:212-214`).
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4a).** `get_queue_status` and `list_queue_entries` (`api/v1/inbound_queue.py`) call `hub/hub/agent_roster.py` `require_known_agent` (new, Round 4a): 404 `"{agent} is not an agent in this project: it is not on the roster and nothing is recorded under that name. Correct the name, or create the agent in the Hub UI."` *Known* is the roster **or** any conversation, queue entry or run under that name, because session sync deletes a removed agent's roster row and keeps its history (a roster-only check would 404 that history; guarded by `test_a_removed_agent_s_history_stays_readable`). The
+invalid-`state` refusal now reads `Invalid queue entry state 'pending'; expected one of queued,
+delivered, withdrawn` and is checked before the agent. Measured by `hub/tests/test_an_unknown_name_is_not_an_empty_answer.py`: on the old code the status
+leg answered the healthy-looking zero and the list leg `[]`.
 
 ## F200 (C) — one refusal string for four distinguishable states, and it asserts a delivery that never happened
 
@@ -18306,7 +18322,7 @@ persisted nothing. The timestamp is what makes the two distinguishable.
 
 ## F239 (C) — the per-conversation usage rollup answers "0 tokens" for a conversation that does not exist
 
-**Status:** open. Verified 2026-09-09: the route still passes the id straight to
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — an unknown or another project's conversation is a 404; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: the route still passes the id straight to
 `conversation_usage` (`hub/hub/api/v1/accounting.py:40`) with no existence check, so a typo, a
 cross-project id and an unmeasured conversation are still one honest-looking zero. [classified 2026-09-09, D-3]
 
@@ -18335,6 +18351,16 @@ conversation-scoped route in the Hub (`/checkpoints`, `/checkpoint`, `/continue`
 no such conversation" are not the same claim and are indistinguishable here.
 
 **Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, leg 5.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4a).** `get_conversation_accounting` (`api/v1/accounting.py`) looks the conversation up with
+`get_conversation_by_id` (not `session.get`, whose key is `sequence`) and answers `404 Conversation
+not found` unless it is this project's, like the sibling conversation routes. A real conversation
+with no measured turns still answers the zero. Measured by `hub/tests/test_an_unknown_name_is_not_an_empty_answer.py`: on the old code
+`conv-does-not-exist` answered the zeroed body. `test_accounting_api.py`'s
+`..._unknown_conversation_is_zero_not_404` asserted the old behaviour; it is reversed and renamed
+`..._is_404_not_zero`. Its sibling now creates the `conv-many` row its runs point at. Shipped UI:
+`useConversationAccounting` reads only `data`, so a 404 renders no usage line where it used to
+render a zero. It is only ever asked about the open conversation's id.
 
 ## F240 (B) — with the budget exhausted and "spending is paused" on screen, the Hub spent $0.042 that reaches no total and no budget
 
@@ -18676,7 +18702,7 @@ first; the unit test pins the no-main case.
 
 ## F247 (C) — `GET /worktrees/{agent}` invents a workspace for an agent that does not exist
 
-**Status:** open. The route still validates the name and never asks whether it belongs
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — the route refuses a name nothing is recorded under; see FIXED at the end of this entry. Was: open. The route still validates the name and never asks whether it belongs
 to anything, so it still answers about a roster entry that was never created -- the third instance of
 that shape in three days, and the others are unrepaired too. [classified 2026-09-09, D-3]
 
@@ -18699,6 +18725,11 @@ does not exist) are the same defect on different routes. Every sibling route on 
 an unknown entity.
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 2.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4a).** `get_agent_workspace` (`api/v1/worktrees.py`) calls `hub/hub/agent_roster.py` `require_known_agent` (new, Round 4a): 404 `"{agent} is not an agent in this project: it is not on the roster and nothing is recorded under that name. Correct the name, or create the agent in the Hub UI."` *Known* is the roster **or** any conversation, queue entry or run under that name, because session sync deletes a removed agent's roster row and keeps its history (a roster-only check would 404 that history; guarded by `test_a_removed_agent_s_history_stays_readable`). It runs after
+`validate_agent_name`, so `user` and `bad.name` are still 400. Measured by `hub/tests/test_an_unknown_name_is_not_an_empty_answer.py`: on the old code
+it answered the invented workspace. Seven older tests asked about agents they never created
+(`vera`, `xan`, and `builder` in `test_task_worktrees.py`), and they now register them first.
 
 ---
 
@@ -18937,7 +18968,7 @@ been backgrounded, throttled, or is on a slow link.
 
 ## F254 (C) — an SSE ticket outlives the project it names, and opens a stream for a project that no longer exists
 
-**Status:** open. Verified 2026-09-09: `get_project_for_sse` still tolerates an empty
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — the ticket path refuses a missing project, as the header path does; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `get_project_for_sse` still tolerates an empty
 lookup (`hub/hub/auth.py:204`), so a minted ticket still opens a stream for a project the header path
 refuses, for up to the ticket's TTL. [classified 2026-09-09, D-3]
 
@@ -18970,6 +19001,13 @@ F239 (per-conversation usage answers for a conversation that does not exist), F2
 the harder half of the same rule.
 
 **Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 9.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4a).** `get_project_for_sse` (`hub/hub/auth.py`) now answers `404 Project not found` when the project
+a valid ticket names is gone, the same answer the header path gives, and no longer returns
+`(project_id, project_id)`. Measured by `hub/tests/test_an_unknown_name_is_not_an_empty_answer.py` `test_a_ticket_for_a_deleted_project_opens_no_stream`
+with a ticket minted for a project that does not exist. On the old code the stream opened and the
+test timed out at 10 s. On the new code it answers 404 at once. The ticket itself is unchanged: an
+HMAC and an expiry, with no database in it.
 
 ---
 

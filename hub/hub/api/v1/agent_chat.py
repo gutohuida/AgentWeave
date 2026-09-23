@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agent_roster import require_known_agent
 from ...auth import get_project
 from ...context_readings import usable_context_reading
 from ...conversations import (
@@ -474,6 +475,8 @@ async def list_conversations(
     so a surface offering "Show archived" gets both the rows and their count from one request.
     """
     project_id, _ = project
+    # F194: without this a typo'd name answered `[]`, the same as an agent with nothing to show.
+    await require_known_agent(session, project_id, agent)
     predicates = [Conversation.project_id == project_id, Conversation.agent == agent]
     if lifecycle != "all":
         predicates.append(Conversation.lifecycle == lifecycle)
@@ -712,6 +715,7 @@ async def get_recent_chat(
 ):
     """Recent merged timeline across all sessions, plus this agent's current queue."""
     project_id, _ = project
+    await require_known_agent(session, project_id, agent)  # F194
 
     output_q = (
         select(AgentOutput)

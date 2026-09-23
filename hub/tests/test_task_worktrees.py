@@ -666,6 +666,17 @@ async def test_reading_the_worktrees_listing_provisions_nothing(
 # --- an agent's own workspace, and the task checkouts beside it (task 6.4) ---------------------
 
 
+async def _rostered(name):
+    """The route refuses a name nothing is recorded under (F247), and a task's assignee is not
+    a roster entry."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent
+
+    async with async_session_factory() as db:
+        db.add(Agent(id=f"agt-{name}", project_id="proj-test", name=name))
+        await db.commit()
+
+
 async def _task_row(project_id, task_id, *, assignee, status="in_progress", scheme="task"):
     """A task row, written directly. `workspace_scheme` is set by migration 0095 and by nothing
     else, so a test that wanted a grandfathered task could not produce one through the API."""
@@ -704,6 +715,7 @@ async def test_an_agents_workspace_lists_the_checkouts_of_its_tasks(
     await _task_row("proj-test", second, assignee="builder")
     provisioned = ensure_task_worktree(repo, first, base, ())
 
+    await _rostered("builder")
     resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
 
     assert resp.status_code == 200
@@ -735,6 +747,7 @@ async def test_a_grandfathered_task_is_shown_as_worked_in_the_agents_own_checkou
     task_id = "task-aa11bb22cc33"
     await _task_row("proj-test", task_id, assignee="builder", scheme="agent")
 
+    await _rostered("builder")
     resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
 
     assert resp.status_code == 200
@@ -757,6 +770,7 @@ async def test_a_finished_tasks_checkout_is_not_listed(
     await _task_row("proj-test", "task-dd44ee55ff66", assignee="builder", status="rejected")
     await _task_row("proj-test", "task-771188229933", assignee="builder", status="in_progress")
 
+    await _rostered("builder")
     resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
 
     assert resp.status_code == 200
@@ -771,6 +785,7 @@ async def test_another_agents_tasks_are_not_listed_under_this_agent(
     await _task_row("proj-test", "task-aa11bb22cc33", assignee="builder")
     await _task_row("proj-test", "task-dd44ee55ff66", assignee="reviewer")
 
+    await _rostered("builder")
     resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
 
     assert [row["task_id"] for row in resp.json()["task_checkouts"]] == ["task-aa11bb22cc33"]
@@ -785,6 +800,7 @@ async def test_listing_an_agents_task_checkouts_provisions_none_of_them(
     await bind_project_workspace(repo)
     await _task_row("proj-test", "task-aa11bb22cc33", assignee="builder")
 
+    await _rostered("builder")
     resp = await app.get("/api/v1/projects/proj-test/worktrees/builder", headers=auth_headers)
 
     assert resp.status_code == 200

@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace, worktrees
+from ...agent_roster import require_known_agent
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Project, Task
@@ -268,6 +269,9 @@ async def get_agent_workspace(
         worktrees.validate_agent_name(agent)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # F247: `get_agent_config` answers a usable dict for any name, so without this the route
+    # described a workspace for an agent that was never created.
+    await require_known_agent(session, project_id, agent)
 
     repo_root = await _resolve_repo_root(project_id, session)
     config = await get_agent_config(project_id, agent, session)

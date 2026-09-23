@@ -43,6 +43,7 @@ from ... import (
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
+from ...agent_roster import require_known_agent
 from ...auth import get_project
 from ...checkpoint_handover import consider_handover_from_run_end
 from ...codex_appserver import (
@@ -1688,6 +1689,9 @@ async def stop_agent_run(
     )
     run = result.scalar_one_or_none()
     if run is None:
+        # F192: after the run lookup, so a removed agent's still-running turn can be stopped; a
+        # name nothing is recorded under is a typo, not an idle agent.
+        await require_known_agent(session, project_id, agent)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{agent} has no run in progress.",
