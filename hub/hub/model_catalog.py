@@ -13,7 +13,9 @@ Model IDs and context windows below are live-verified, not authored from memory:
   five values (`low, medium, high, xhigh, max`) come directly from that same `--help` output.
   Every context window below was live-verified from Claude's own
   `result.modelUsage.<model>.contextWindow` (see `runner_parsing.py`'s docstring), on 2026-08-09:
-  Opus 5, Sonnet 5 and Fable 5 at 1,000,000, Haiku 4.5 at 200,000.
+  Opus 5, Sonnet 5 and Fable 5 at 1,000,000, Haiku 4.5 at 200,000. Re-verified 2026-09-23 (CLI
+  2.1.280): the `opus` alias now resolves to `claude-opus-5-5` and `fable` to `claude-fable-5-1`,
+  both 1,000,000, and `claude-opus-5`/`claude-fable-5` still resolve by full name.
 
   *(This paragraph previously said Opus 5 and Fable 5 declared `context_window=None` because no
   window had been verified for them, while the code declared 1,000,000 for both. The measurement
@@ -37,10 +39,17 @@ Model IDs and context windows below are live-verified, not authored from memory:
   `"hide"`, is an internal review model, not one an operator selects). Context windows are that
   file's own `context_window` field per model.
 
+  **The catalog the server sends depends on the client's version.** Re-read 2026-09-23 with
+  `codex debug models`: CLI 0.146.0 is sent GPT-5.6-Terra, GPT-5.6-Luna and GPT-5.5 (GPT-5.6-Sol,
+  GPT-5.4 and GPT-5.4-Mini are gone, and were removed here); CLI 0.156.1 is additionally sent
+  GPT-6-Luna, first in its priority order. GPT-6-Luna is declared, but it is not the default:
+  the default stays on a model every current client is offered, so an agent created against an
+  older installed `codex` does not start on a model its CLI has never been told about.
+
   The effort control's values are the INTERSECTION of every listed model's
   `supported_reasoning_levels` (`low, medium, high, xhigh`) — not the union. The cache shows
-  `"minimal"` is not declared by any current model and `"ultra"` only by three of six; a shared
-  provider-level control offering either would let the Hub accept a value that a specific model
+  `"minimal"` is not declared by any current model and `"ultra"` only by one of four
+  (2026-09-23); a shared provider-level control offering either would let the Hub accept a value that a specific model
   would actually reject or (per the CLI's own asymmetric validation — see proposal.md) silently
   discard, which is exactly the failure mode this catalog exists to prevent. Precise per-model
   control values would be the more accurate fix but requires extending the schema to scope a
@@ -151,7 +160,10 @@ CATALOG: Dict[str, ProviderDescriptor] = {
         label="Claude Code",
         models=(
             ModelDescriptor(
-                id="claude-opus-5", label="Opus 5", aliases=("opus",), context_window=1_000_000
+                id="claude-opus-5-5",
+                label="Opus 5.5",
+                aliases=("opus",),
+                context_window=1_000_000,
             ),
             ModelDescriptor(
                 id="claude-sonnet-5",
@@ -167,8 +179,15 @@ CATALOG: Dict[str, ProviderDescriptor] = {
                 context_window=200_000,
             ),
             ModelDescriptor(
-                id="claude-fable-5", label="Fable 5", aliases=("fable",), context_window=1_000_000
+                id="claude-fable-5-1",
+                label="Fable 5.1",
+                aliases=("fable",),
+                context_window=1_000_000,
             ),
+            # The previous generation, kept because the CLI still resolves both (verified
+            # 2026-09-23) and runner records name `claude-opus-5`; the aliases moved on with it.
+            ModelDescriptor(id="claude-opus-5", label="Opus 5", context_window=1_000_000),
+            ModelDescriptor(id="claude-fable-5", label="Fable 5", context_window=1_000_000),
         ),
         controls=(
             ControlDescriptor(
@@ -212,14 +231,12 @@ CATALOG: Dict[str, ProviderDescriptor] = {
         provider="codex",
         label="Codex CLI",
         models=(
+            ModelDescriptor(id="gpt-6-luna", label="GPT-6-Luna", context_window=272_000),
             ModelDescriptor(
-                id="gpt-5.6-sol", label="GPT-5.6-Sol", context_window=272_000, default=True
+                id="gpt-5.6-terra", label="GPT-5.6-Terra", context_window=272_000, default=True
             ),
-            ModelDescriptor(id="gpt-5.6-terra", label="GPT-5.6-Terra", context_window=272_000),
             ModelDescriptor(id="gpt-5.6-luna", label="GPT-5.6-Luna", context_window=272_000),
             ModelDescriptor(id="gpt-5.5", label="GPT-5.5", context_window=272_000),
-            ModelDescriptor(id="gpt-5.4", label="GPT-5.4", context_window=272_000),
-            ModelDescriptor(id="gpt-5.4-mini", label="GPT-5.4-Mini", context_window=272_000),
         ),
         controls=(
             ControlDescriptor(
