@@ -15,6 +15,9 @@ database, as a claim on the checkpoint and a uniqueness constraint over handed-o
 conversation, and not by reading state and then writing it. A refused request SHALL leave no
 successor conversation and no queued entry behind.
 
+The automatic checkpoint trigger SHALL NOT request notes, warn, or generate a checkpoint for an open
+conversation that has already been handed over, since no cutover of it can succeed.
+
 A refusal SHALL name the successor that holds the work. A conversation that was archived by hand
 and was never handed over MAY still be refused until it is reopened, and only that refusal SHALL
 advise reopening it.
@@ -44,6 +47,13 @@ advise reopening it.
 - **WHEN** a conversation has been cut over using one checkpoint
 - **AND** it is reopened and a cutover is requested using a different checkpoint of the same conversation
 - **THEN** the cutover is refused, naming the existing successor
+- **AND** no second successor exists
+
+#### Scenario: The trigger spends nothing on a conversation already handed over
+
+- **WHEN** a conversation has been cut over and then reopened
+- **AND** work in it crosses the checkpoint threshold under automatic checkpointing
+- **THEN** no checkpoint is generated and no model is called
 - **AND** no second successor exists
 
 #### Scenario: A conversation archived by hand is told to reopen first

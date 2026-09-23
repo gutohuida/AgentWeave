@@ -17,10 +17,15 @@
    picking the row by id.
 6. **Nothing legitimate is refused.** Controls 1.6 (a two-hop chain) and 1.7 (archived by hand,
    reopened, handed over) pass before and after.
-7. **The automatic path keeps its checkpoint.** Task 1.8: after the rollback, the generated
-   checkpoint row still exists and `cutover_refused` names the successor. `consider` must also
-   return that checkpoint's id rather than raise. The rollback expires the instances in the session,
-   so reading `checkpoint.id` afterwards raises `MissingGreenlet`.
+7. **The automatic path keeps its checkpoint.** Task 1.12 makes the trigger lose a race to an
+   operator's cutover of another checkpoint. Afterwards the generated checkpoint row still exists,
+   `cutover_refused` names the successor, and `consider` returns that checkpoint's id rather than
+   raising. The rollback expires the session's instances, so reading `checkpoint.id` afterwards
+   raises `MissingGreenlet`. Reverting task 2.6 must fail 1.12. A sequential refusal cannot show
+   this, because it happens before any write.
+7a. **The trigger does not pay for a handover it cannot make (D6).** Task 1.8: a reopened,
+   handed-over conversation past its threshold spawns no CLI, writes no checkpoint and sends no
+   warning.
 8. **The migration is safe on real data.** Tasks 3.4–3.7. A database that already holds a fork
    still upgrades, and the F329 parity test passes.
 9. **Live, on a trial Hub.** Task 4.4 re-drives `t_d2_cutover_guard.py`. Record the verdict counts.
@@ -30,7 +35,8 @@
 1. **In the app, after the operator's next `:8000` restart** (which applies `0106`): open an
    agent's conversation, use **Handoff**, and confirm that a successor opens as before. Then, in the
    navigation tree, unarchive the old conversation and try the handoff again from it. No second
-   *"Continued: …"* conversation may open. The UI's handoff (`checkpointOperationStore.writeCheckpoint`)
+   *"Continued: …"* conversation may open. Handoff still takes a new checkpoint before it is refused
+   (design D6's note); one wasted generation per press is expected. The UI's handoff (`checkpointOperationStore.writeCheckpoint`)
    takes a **new** checkpoint and then cuts over, so this is design D2's case. Note what the app
    shows for the 409. This change does not alter how the UI renders the refusal. If the app shows
    nothing, file that as a finding; it does not fail this change.

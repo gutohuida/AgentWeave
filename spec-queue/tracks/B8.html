@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B8 -- Checkpoint cutover identity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B8.md, tracked</p>
+  <h1>B8 &mdash; Checkpoint cutover identity</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F293, F294</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">none in <code>DECISIONS.md</code> terms. R1 made five design choices and R3 a sixth (D1–D6 in the change&#x27;s <code>design.md</code>), each a recommendation the operator may overturn</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/a-checkpoint-is-handed-over-once-and-says-where-it-went/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R3 done — parked for operator</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><a class="toc-item" href="#R2">R2</a><a class="toc-item" href="#R3">R3</a><a class="toc-item toc-final" href="#Final">Final</a></nav>
+  </div>
+  <section class="sec-final" id="Final"><h2>Final -- what the bundle reached, and why</h2><div class="md-body"><p>The bundle is <strong>parked awaiting the operator&#x27;s approval</strong>. IMPL has not started, and nothing in the product has changed.</p>
+<h5>Decisions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Recommended answer</th><th>Why</th></tr></thead><tbody><tr><td>D1</td><td>Where is &quot;this checkpoint was handed over to X&quot; recorded?</td><td>On the checkpoint: a new nullable column <code>Checkpoint.cut_over_to_conversation_id</code>, with no foreign key</td><td>The checkpoint listing can then say where each checkpoint went. The other direction is already answerable through <code>lineage_id</code>. A foreign key would force a table rebuild of <code>checkpoints</code> (constraint names pinned by <code>0088</code>), and SQLite does not enforce it here</td></tr><tr><td>D2</td><td>Is &quot;at most once&quot; per checkpoint, or per conversation?</td><td><strong>Per conversation</strong>: a partial unique index on <code>checkpoints(conversation_id)</code> where the column is set</td><td>The app&#x27;s own Handoff always takes a <strong>new</strong> checkpoint (<code>checkpointOperationStore.ts:37-75</code>). A per-checkpoint rule alone would still let one click after an unarchive fork the line. The lineage requirement says a line is linear. Chains are unaffected</td></tr><tr><td>D3</td><td>How are two simultaneous presses serialised?</td><td>In the database: a compare-and-set <code>UPDATE … WHERE cut_over_to_conversation_id IS NULL</code> plus D2&#x27;s index, with the ids captured before any write and an explicit flush first</td><td>This works across processes. R2 measured it: 20 of 20 races were clean, in both WAL (the suite) and rollback journal (production). The rollback expires instances, hence the captured ids</td></tr><tr><td>D4</td><td>Keep refusing a conversation that was archived by hand?</td><td>Yes. The spent-checkpoint and handed-over checks now come first, so <em>&quot;unarchive it first&quot;</em> is said only where it is true</td><td><code>archivable</code> returns None for an archived conversation, so allowing it would skip the run and queue checks</td></tr><tr><td>D5</td><td>Backfill the column for past cutovers?</td><td>Yes, exactly, from delivered entries (<code># Checkpoint &lt;id&gt;</code>). The first handover per predecessor wins</td><td>Legacy handovers stay protected, and a database that already holds a fork still gets its index. It writes 0 rows on both local databases</td></tr><tr><td>D6</td><td>Should the automatic trigger keep checkpointing a reopened conversation that was already handed over?</td><td><strong>No.</strong> Decline in <code>consider</code> before the notes, warning and generation branches</td><td>Otherwise D2 turns each turn past the threshold into a billed generation followed by a refusal (R3)</td></tr></tbody></table></div>
+<h5>Changes</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>openspec/changes/a-checkpoint-is-handed-over-once-and-says-where-it-went/</code></td><td>F293, F294</td><td>New column and partial unique index, a compare-and-set claim, and refusals that name the successor. Also a migration with an exact backfill, the trigger&#x27;s D6 decline and a fix to its refusal return value, and <code>CheckpointSummary</code> exposing the field. 12 tests first; migration tests include a pre-existing fork and F329 parity. No UI change</td><td>M: 1 migration, ~4 Hub files, ~16 tests</td></tr></tbody></table></div>
+<h5>Open for the operator</h5>
+<ol>
+<li><strong>Approve D2, per conversation</strong> (recommended). A reopened, handed-over conversation cannot be</li>
+</ol>
+<p>handed over again by a new checkpoint. You keep working in it or in its successor. <em>If &quot;per checkpoint only&quot;:</em> F293 and F294 close, but Handoff after an unarchive, or the trigger racing your press, can still fork a line. The index, tasks 1.3, 1.4 and 1.12&#x27;s index half, and D6 are dropped.</p>
+<ol>
+<li><strong>Approve D6, the trigger declines</strong> (recommended). <em>If &quot;generate anyway&quot;:</em> each turn past the</li>
+</ol>
+<p>threshold in such a conversation bills a checkpoint and a probe, then sends a <code>cutover_refused</code> event. <em>If &quot;decline only automatic generation&quot;:</em> the warnings return, and their Handoff bills a checkpoint and then gets a 409.</p>
+<ol>
+<li><strong>Migration number (ordering note, not renumbered):</strong> four unarchived changes name <code>0106</code>. They</li>
+</ol>
+<p>are this one, B3&#x27;s <code>agents-no-longer-register-themselves</code>, B7&#x27;s <code>worker-spend-counts-against-the-budget</code>, and <code>a-footprint-names-the-line-of-work-its-commit-is-on</code>. Whichever is built first keeps <code>0106</code>. The others take <code>0107</code>, <code>0108</code> and <code>0109</code> in build order, including their <code>HEAD_REVISION</code> bumps and their test names. The migration reaches your <code>:8000</code> database on its next restart: one nullable column, one partial index, and 0 rows backfilled (measured read-only).</p>
+<ol>
+<li>Should D3, D4 or D5 be overturned, <code>design.md</code>&#x27;s header lists what each other answer drops.</li>
+</ol>
+<p>A known leftover that is <strong>not</strong> in this change: the app&#x27;s Handoff on a handed-over conversation still takes a billed checkpoint before it receives the 409. The UI could read the new field and not offer Handoff there. That is a UI follow-up, as F126&#x27;s banner filter is.</p>
+<h5>Findings that did not need a change</h5>
+<p>None. F293 and F294 were both reproduced as still open by R1 and R2 (two successors each) and are carried by the one change above. F235 (checkpoint visibility) belongs to B2, and F126&#x27;s banner remainder is UI work, not carried here.</p></div></section><section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><h5>What the code showed (HEAD <code>404c7d5</code>)</h5>
+<p><code>cut_over</code> (<code>hub/hub/checkpoint_cutover.py:63-200</code>) has one guard against a second handover. It refuses when <code>predecessor.lifecycle == &quot;archived&quot;</code> (<code>:97-103</code>), and its refusal ends <em>&quot;unarchive it first&quot;</em>. The guard reads the lifecycle at <code>:97</code> and writes it at <code>:144</code> (<code>archive</code>), then commits at <code>:145</code>. Between the two it awaits <code>archivable</code> (<code>:105</code>). Nothing records that a checkpoint was handed over. <code>Checkpoint</code> (<code>hub/hub/db/models.py:1668-1804</code>) has no such column, and <code>InboundQueueEntry</code> has no checkpoint id. <code>unarchive</code> (<code>hub/hub/conversations.py:479-482</code>; route <code>hub/hub/api/v1/agent_chat.py:623-635</code>) is never refused and resets <code>lifecycle</code> to <code>open</code>. Two callers exist: the route (<code>api/v1/checkpoints.py:370-404</code>, refusal → 409 at <code>:391-394</code>) and the automatic trigger (<code>checkpoint_trigger.py:319-336</code>, refusal → <code>cutover_refused</code> on <code>checkpoint_ready</code>). <code>take_checkpoint</code> holds an in-process claim (<code>_checkpoint_claims</code>, <code>checkpoints.py:27-28, 167-186</code>), and nothing guards the cutover.</p>
+<h5>Each finding re-verified</h5>
+<ul>
+<li><strong>F293 — still open.</strong> A throwaway test used the suite&#x27;s own fixtures on its file-backed SQLite:</li>
+</ul>
+<p><code>cut_over</code>, then <code>unarchive</code> + commit, then <code>cut_over</code> again with the same checkpoint. It produced <strong>two</strong> <code>handoff</code> successors (<code>conv-2997cf6e3357</code>, <code>conv-2ecad0277068</code>). The shape is unchanged since filing. The only line drift: the guard is still at <code>:97</code>.</p>
+<ul>
+<li><strong>F294 — still open.</strong> Two sessions loaded the conversation and checkpoint, then waited on an</li>
+</ul>
+<p><code>asyncio.Barrier(2)</code>, then ran <code>cut_over</code> concurrently. Both returned successors (<code>conv-9433b9e6954f</code>, <code>conv-e632a122f613</code>). Without the barrier the second read came after the first commit and was refused. So the barrier is the deterministic test, and task 1.2 keeps it.</p>
+<ul>
+<li><strong>A shape R1 adds to F293, not a new finding.</strong> The app&#x27;s own Handoff (<code>writeCheckpoint</code>,</li>
+</ul>
+<p><code>hub/ui/src/store/checkpointOperationStore.ts:37-75</code>) always takes a <strong>new</strong> checkpoint and then cuts it over. An operator who unarchives and presses Handoff therefore forks the line with a <em>different</em> checkpoint. A per-checkpoint column alone would not close that. This drives D2.</p>
+<ul>
+<li><code>git log -S &quot;cut_over_to_conversation_id&quot;</code> finds nothing, so the column has never existed.</li>
+</ul>
+<p>Operator&#x27;s <code>:8000</code> database, read with <code>mode=ro</code>: head <code>0105</code>, 16 checkpoints, <strong>0</strong> cutover deliveries, <strong>0</strong> <code>handoff</code> conversations. The trial database has 0 checkpoints.</p>
+<h5>Why this is the third ask, and why the first two did not land</h5>
+<ol>
+<li><strong>F126</strong> (filed 2026-08-30, <code>b039d47</code>) recommended shape (2), the column. Night N-3 shipped</li>
+</ol>
+<p>shape (1), the lifecycle guard (<code>3142a91</code>), because <em>&quot;a migration fails the day-window carve-out&#x27;s second condition&quot;</em>. It also noted that shape (1) as worded needed the very link the column adds.</p>
+<ol>
+<li><strong>F293</strong> (2026-09-06 D-2, <code>6f58c27</code>) re-recommended the column. F294, from the same drive, showed</li>
+</ol>
+<p>the column alone races. The night log (<code>523e66d</code>) and <code>APPROVALS.md:1598-1605</code> carried the note <em>&quot;one change answers both … Neither is specced.&quot;</em> No window ever proposed it: <code>git log --all --grep</code> finds no proposal commit. The night works severity A first (five A&#x27;s were unproposed), and Merge Week O5 froze new change directories from 2026-09-22 to 2026-09-28.</p>
+<ol>
+<li><strong><code>ROUNDS.md</code> S2</strong> (<code>eeadf70</code>, 2026-09-22) scheduled it. This bundle is that track. The common</li>
+</ol>
+<p>cause each time was the migration, which unattended windows may not make.</p>
+<h5>Design choices, with the recommendation</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Options</th><th>Recommended</th><th>Why</th></tr></thead><tbody><tr><td>D1</td><td>Where does the handover identity live?</td><td>(a) <code>Checkpoint.cut_over_to_conversation_id</code>; (b) <code>Conversation.handed_over_by_checkpoint_id</code></td><td><strong>(a)</strong>, <code>String(64)</code>, nullable, no FK</td><td>The checkpoint listing can then answer &quot;where did it go&quot;. The successor side is already answerable via <code>lineage_id</code>. An FK would need a batch rebuild of <code>checkpoints</code> (constraint names pinned by <code>0088</code>), and SQLite does not enforce FKs here</td></tr><tr><td>D2</td><td>&quot;At most once&quot; per checkpoint, or per conversation?</td><td>(a) per checkpoint; (b) partial unique index <code>checkpoints(conversation_id) WHERE cut_over_to_conversation_id IS NOT NULL</code></td><td><strong>(b)</strong></td><td>(a) leaves the UI&#x27;s own Handoff after an unarchive able to fork the line, and leaves the trigger-vs-banner race (<code>checkpoint_trigger.py:327-333</code> offers C1 while the trigger cuts over C2). The lineage requirement says a line is linear. Chains are unaffected, because the index keys on the predecessor&#x27;s id</td></tr><tr><td>D3</td><td>How are concurrent presses serialised?</td><td>(a) in-process claim like <code>_checkpoint_claims</code> (F294&#x27;s own rec.); (b) compare-and-set <code>UPDATE … WHERE cut_over_to_conversation_id IS NULL</code> + D2&#x27;s index</td><td><strong>(b)</strong></td><td>The migration exists anyway. The claim is the column written conditionally, not an extra field to read and race on. Migration <code>0104</code> and <code>refused_capability.py:216-230</code> are the precedent. The locking argument (pysqlite legacy mode, <code>engine.py:36-40</code>, sets no pragmas) comes from reading only; task 1.2 is its measurement</td></tr><tr><td>D4</td><td>Keep refusing a conversation archived by hand?</td><td>(a) keep; (b) allow now that the column exists</td><td><strong>(a)</strong>, reordered</td><td><code>archivable</code> returns None for an archived conversation (<code>conversations.py:395-396</code>), so allowing it skips the run/queue checks. The spent and handed-over checks now run first, so <em>&quot;unarchive it first&quot;</em> is said only where it is true</td></tr><tr><td>D5</td><td>Backfill legacy rows?</td><td>(a) yes, from delivered entries; (b) no</td><td><strong>(a)</strong></td><td>Exact, not heuristic: the delivered content is <code>_DELIVERY_PREAMBLE</code> + <code># Checkpoint {id}</code> (<code>checkpoint_generation.py:285</code>). The first handover per conversation wins, so a database holding an F126-era fork still gets its index. It writes 0 rows on both local databases</td></tr></tbody></table></div>
+<h5>What each route returns when what it calls raises</h5>
+<p>The compare-and-set miss and the <code>IntegrityError</code> are converted to <code>CutoverRefusedError</code> <strong>inside</strong> <code>cut_over</code>, after a rollback. So the route still answers <strong>409</strong>, and the trigger still reports <code>cutover_refused</code>. The rollback is safe because neither caller has anything pending (route <code>:378-384</code> only reads; trigger <code>generate_checkpoint</code> commits at <code>checkpoint_generation.py:664</code>). Task 1.8 pins that the trigger&#x27;s checkpoint survives the rollback. A lock-timeout <code>OperationalError</code> stays a 500, as today; R1 does not widen it.</p>
+<h5>What was written</h5>
+<p><code>openspec/changes/a-checkpoint-is-handed-over-once-and-says-where-it-went/</code>: <code>proposal.md</code>, <code>design.md</code> (context table, the three asks, D1–D5, the migration checklist per <code>.claude/rules/db-migrations.md</code>, route-raise analysis), <code>tasks.md</code> (10 tests first, 1.1–1.5, 1.8 and 1.10 fail today; 1.6/1.7 controls; 1.9 moves one assertion deliberately; a mutation pair in 1.4 showing which guard catches which race; migration tests incl. a pre-existing-fork database and F329 parity), <code>test-guide.md</code>, and one ADDED requirement in <code>specs/agent-conversation-handoff/spec.md</code>. <code>openspec validate … --strict</code> passes.</p>
+<h5>Cross-references and collisions</h5>
+<ul>
+<li><strong>B2 (F235)</strong> is about checkpoint <em>visibility</em>, the read grant. It is not carried here. B2 may</li>
+</ul>
+<p>touch <code>CheckpointSummary</code> too, and that is a textual merge only. F126&#x27;s own remainder (the cutover banner filters on <code>trigger === &#x27;context_pressure&#x27;</code>) is also left out. It is UI behaviour, and the new field is what such a banner would read.</p>
+<ul>
+<li><strong>Migration number:</strong> B3&#x27;s <code>agents-no-longer-register-themselves</code> also names <code>0106</code> (its</li>
+</ul>
+<p><code>proposal.md:73</code>). Whichever is built second takes <code>0107</code>.</p>
+<ul>
+<li><code>scripts/drive/t_d2_cutover_guard.py</code> probe 1 asserts the old <em>&quot;unarchive it first&quot;</em> text on a</li>
+</ul>
+<p>spent checkpoint. Task 4.4 adapts it in the re-drive.</p>
+<h5>For R2 to attack</h5>
+<ul>
+<li>The D3 locking argument. It rests on pysqlite&#x27;s implicit-<code>BEGIN</code> behaviour and on SQLite&#x27;s busy</li>
+</ul>
+<p>handler releasing the shared lock between retries, and nothing in R1 measured it.</p>
+<ul>
+<li>Whether D2 (b) over-refuses a workflow the operator uses (design Open Question 1).</li>
+<li>Whether any caller of <code>cut_over</code> other than the two found stages writes before calling it.</li>
+</ul></div></section><section class="sec-round" id="R2"><h2>R2 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Re-derived against the code at <code>aaa8757</code>. R2 checked 22 load-bearing claims and ran one throwaway probe (<code>hub/tests/test_zz_b8_r2_probe.py</code>, run with <code>-s</code> and then deleted). The probe drove the real <code>cut_over</code> through a session proxy. The proxy&#x27;s <code>commit</code> did a flush, then a raw compare-and-set against a column and partial index that R2 added by DDL, then the rollback or the commit.</p>
+<h5>Claims that disagreed with the code, or that R1 missed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Claim</th><th>What the code shows</th><th>What R2 changed</th></tr></thead><tbody><tr><td>D3: task 1.2 is the measurement of the locking argument</td><td>The suite runs SQLite in <code>journal_mode=WAL</code> with <code>busy_timeout=30000</code> (<code>hub/tests/conftest.py:112-115</code>). Production keeps SQLite&#x27;s defaults: the operator&#x27;s database reads <code>delete</code> (<code>mode=ro</code>), and <code>engine.py:36-40</code>&#x27;s arguments give <code>busy_timeout=5000</code>. So 1.2 measures WAL, not production</td><td>Added R2&#x27;s measurement to D3, covering both modes. Added <strong>task 1.11</strong>, the same two races on a separate engine with production&#x27;s defaults</td></tr><tr><td>D3: after a rollback, &quot;re-read the checkpoint&quot; and name its ids</td><td>A rollback <strong>expires every instance</strong> in the session. All 20 of R2&#x27;s refusals raised <code>MissingGreenlet</code> when <code>checkpoint.id</code> was read afterwards. In <code>cut_over</code> that would turn the 409 into a <strong>500</strong>. In the trigger, <code>return checkpoint.id</code> (<code>checkpoint_trigger.py:332</code>) runs <em>after</em> the <code>checkpoint_ready</code> broadcast, so <code>consider</code> raises and <code>_run</code> (<code>:376-377</code>) logs a false <em>&quot;checkpoint consideration failed&quot;</em></td><td>Added D3 <strong>step 0</strong>, which captures the ids as strings before any write; task 2.3 does it. Added <strong>task 2.6</strong>, which makes the trigger return a captured id. Task 1.8 now asserts <code>consider</code>&#x27;s return value. <code>refused_capability.py:216-230</code> is the precedent: it re-reads from plain values</td></tr><tr><td>D5: first handover wins &quot;per same <code>conversation_id</code>&quot;</td><td>The entry&#x27;s <code>conversation_id</code> is the <em>successor</em>, and the index keys on <code>checkpoints.conversation_id</code>, the <em>predecessor</em>. Read literally, the rule would never find a collision, and the index creation would fail on a forked database</td><td>D5 now names the predecessor key explicitly</td></tr><tr><td>Migration <code>0106</code> collides with B3</td><td><strong>Two</strong> other unarchived changes name <code>0106</code>: <code>agents-no-longer-register-themselves</code> (<code>proposal.md:73</code>) and <code>worker-spend-counts-against-the-budget</code> (<code>proposal.md:42,79</code>)</td><td>Noted in design, tasks 3.1 and the proposal. Not renumbered. The second change built takes <code>0107</code>, and the third takes <code>0108</code></td></tr></tbody></table></div>
+<h5>The locking argument, measured (the point left open by R1)</h5>
+<p>Each scenario ran 5 times per mode:</p>
+<div class="scroll"><table class="md"><thead><tr><th>Race</th><th>WAL / 30 s (suite)</th><th>rollback journal / 5 s (production)</th></tr></thead><tbody><tr><td>Same checkpoint (1.2)</td><td>5/5: one success and one compare-and-set miss; 1 successor, 1 entry</td><td>5/5, same</td></tr><tr><td>Two checkpoints of one conversation (1.4)</td><td>5/5: one success and one <code>IntegrityError</code> → refusal; 1 successor, 1 entry</td><td>5/5, same</td></tr><tr><td><code>OperationalError</code> / <code>database is locked</code></td><td>0</td><td>0</td></tr></tbody></table></div>
+<p>The loser waited 15–46 ms, which is the busy handler working. In legacy transaction mode the pre-write <code>SELECT</code>s open no transaction, so the loser holds no shared lock that could deadlock the winner&#x27;s commit. <strong>R1&#x27;s argument stands, and it is now measured.</strong> Reproductions on today&#x27;s code: F293 gave 2 successors, and F294 (barrier) gave 2 successors and 2 entries.</p>
+<h5>What stands (checked against the code)</h5>
+<ul>
+<li><code>cut_over</code> line map: guard at <code>:97-103</code>, <code>archivable</code> at <code>:105</code>, <code>archive</code> + commit at</li>
+</ul>
+<p><code>:144-145</code>, docstring at <code>:71-82</code>. <code>archivable</code> returns None when archived (<code>conversations.py:395-396</code>). <code>unarchive</code> is never refused (<code>:479-482</code>; route <code>agent_chat.py:623-635</code>).</p>
+<ul>
+<li>There are only two callers, the route at <code>checkpoints.py:385</code> and the trigger at</li>
+</ul>
+<p><code>checkpoint_trigger.py:321</code>. <code>checkpoint_handover.py</code> generates flow checkpoints and never cuts over. Neither caller stages writes before the call: the route only reads (<code>:377-383</code>), and the trigger&#x27;s <code>generate_checkpoint</code> commits (<code>checkpoint_generation.py:664</code>).</p>
+<ul>
+<li>The route turns <code>CutoverRefusedError</code> into a 409 (<code>:391-394</code>). <code>_checkpoint_claims</code> guards only</li>
+</ul>
+<p>the operator&#x27;s take (<code>checkpoints.py:26-27, 167-186</code>). The trigger does not use it, so the concurrent C1/C2 route in D2 is real.</p>
+<ul>
+<li><code>writeCheckpoint</code> always takes a new checkpoint and then cuts it over</li>
+</ul>
+<p>(<code>checkpointOperationStore.ts:37-75</code>). That is what decides D2 against (a).</p>
+<ul>
+<li><code>render_checkpoint</code> line 1 is <code># Checkpoint {id}</code> (<code>checkpoint_generation.py:285</code>), and the ids</li>
+</ul>
+<p>are <code>ckpt-</code> (<code>checkpoints.py:442</code>). The primary key is <code>sequence</code> and the named constraints are pinned by <code>0088</code> (<code>models.py:1686-1696</code>), which is D1&#x27;s reason for no FK. <code>0104</code>&#x27;s <code>_columns</code> guard exists.</p>
+<ul>
+<li>Test anchors: <code>HEAD_REVISION</code> <code>test_migrations.py:40</code>, <code>test_project_persistence.py:227</code>,</li>
+</ul>
+<p><code>:3619</code>, <code>:3669</code>, <code>test_checkpoint_cutover.py:355, 400, 517</code>. Task 1.9&#x27;s assertion moves as planned, because the spent check now runs first.</p>
+<ul>
+<li>Every change that touches <code>CheckpointSummary</code> or <code>cut_over</code>: none besides this one.</li>
+</ul>
+<p><code>every-event-the-hub-sends-reaches-the-app</code> only lists the <code>checkpoint_ready</code> and <code>conversation_cut_over</code> events. It does not change their payloads.</p>
+<p>No decision recommendation was reversed. D1–D5 stand. <code>openspec validate … --strict</code> passes.</p>
+<h5>For R3 to attack</h5>
+<ul>
+<li>Whether an explicit <code>await db.flush()</code> before the compare-and-set is needed. The ORM <code>update()</code></li>
+</ul>
+<p>autoflushes, but R2&#x27;s probe used a raw <code>text()</code> UPDATE, which does not.</p>
+<ul>
+<li>Whether 1.11&#x27;s separate engine should share the helpers that <code>test_migrations.py</code> uses for</li>
+</ul>
+<p><code>tmp_path</code> databases.</p></div></section><section class="sec-round" id="R3"><h2>R3 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Re-derived against the code at <code>0607355</code>, starting from the code rather than from R2&#x27;s notes. R3 checked 19 claims. It ran no probe; SQLAlchemy&#x27;s autoflush was read from the installed 2.0.50 source.</p>
+<h5>Every path to <code>cut_over</code>, and what each returns</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Path</th><th>Refusal (after the fix)</th><th>Unexpected exception</th></tr></thead><tbody><tr><td>App <strong>Handoff</strong> (<code>writeCheckpoint</code> → <code>takeCheckpoint</code> → <code>api/checkpoints.ts:86</code>) and the cutover banner → route <code>checkpoints.py:370-404</code></td><td>409 with the text (<code>:391-394</code>). A sequential refusal comes from 2.2&#x27;s pre-check before any write, with no rollback. A race refusal comes after a rollback, and the text is built from step 0&#x27;s strings. The route reads no instance on the refusal path</td><td>500. <code>get_session</code>&#x27;s exit rolls back (<code>engine.py:166-169</code>). Unchanged</td></tr><tr><td><strong>Automatic trigger</strong> <code>consider</code> → <code>checkpoint_trigger.py:319-336</code></td><td><code>checkpoint_ready</code> + <code>cutover_refused</code> (the payload is built from plain values at <code>:309-315</code>). Then <code>return checkpoint.id</code> at <code>:332</code>, which raises <code>MissingGreenlet</code> <strong>only after a race rollback</strong>. Task 2.6 fixes it</td><td><code>_run</code> logs a warning (<code>:376-377</code>). No <code>checkpoint_ready</code> event. Unchanged</td></tr><tr><td>MCP / agent</td><td><strong>None exists.</strong> <code>mcp_server.py</code> has no cutover, <code>checkpoint_handover.py</code> never cuts over, and the route&#x27;s <code>get_project</code> accepts only <code>aw_live_</code> operator keys (<code>auth.py:88-105</code>)</td><td>—</td></tr></tbody></table></div>
+<h5>Claims that disagreed with the code, or that earlier rounds missed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Claim</th><th>What the code shows</th><th>What R3 changed</th></tr></thead><tbody><tr><td>Task 1.8 catches a missing task 2.6 (R2)</td><td>1.8 is <strong>sequential</strong>, so task 2.2&#x27;s pre-check refuses it before any write. There is no rollback and no expiry, and <code>checkpoint.id</code> stays readable. 1.8 would pass with or without 2.6. Only a race reaches the rollback</td><td>1.8 now pins D6. The new <strong>task 1.12</strong> makes the trigger lose a deterministic race: a patched <code>archivable</code> cuts over C1 in another session, which forces the index <code>IntegrityError</code> → rollback. It includes a mutation check that reverting 2.6 fails it. Design D3 now says which refusals roll back</td></tr><tr><td>D2 (b) has no cost besides the refused workflow (R1, R2)</td><td>Under <code>automatic</code>, a reopened, handed-over conversation is <code>open</code> (<code>:187-190</code> passes). Each new run beats <code>_nothing_new_since_last_checkpoint</code> (<code>:111-136</code>), so each turn past the threshold runs <code>generate_checkpoint</code>: a billed worker plus a billed probe (<code>checkpoint_generation.py:552, 641</code>). Then <code>cut_over</code> refuses. That is <strong>one wasted generation per turn</strong></td><td>Added <strong>D6</strong> (decline in <code>consider</code>, before the notes, warning and generation branches), task 2.7, a spec sentence and scenario, and Open Question 0</td></tr><tr><td>Autoflush makes an explicit flush unnecessary (R2&#x27;s open point)</td><td>True today: <code>BulkUDCompileState</code> <code>_autoflush = True</code>. But the lock order D3 relies on would then rest on the statement staying ORM-enabled</td><td>Explicit <code>await db.flush()</code> before the compare-and-set (2.3)</td></tr><tr><td>Step 4: <code>IntegrityError</code> → refusal</td><td>Another constraint could raise it, and then the re-read finds no handed-over row</td><td>Re-raise the original when the re-read finds nothing (2.3, D3)</td></tr><tr><td>The trigger commits at <code>:664</code> before the call</td><td>Without a probe, the last commit is <code>:604</code>. With one, it is <code>:639</code> and then either a return with nothing pending or <code>:664</code>. The conclusion (nothing pending) stands</td><td>Citation corrected</td></tr><tr><td>Header: a &quot;per checkpoint&quot; answer drops task 2.3</td><td>2.3 is the compare-and-set, which stays. The index is in 2.1 and the migration</td><td>Line corrected</td></tr><tr><td>Three changes name <code>0106</code></td><td><strong>Four</strong> do. R3 found <code>a-footprint-names-the-line-of-work-its-commit-is-on</code> (<code>design.md:49</code>, <code>tasks.md:29</code>)</td><td>Noted in design and task 3.1. Not renumbered</td></tr><tr><td>1.11 should share <code>test_migrations.py</code>&#x27;s helpers (R2&#x27;s open point)</td><td>Not load-bearing. What matters is that the suite&#x27;s <code>conftest.py</code> connect listeners do not apply, and 1.11 asserts that through <code>PRAGMA journal_mode = delete</code></td><td>Left to IMPL</td></tr></tbody></table></div>
+<h5>What stands</h5>
+<p><code>cut_over</code>&#x27;s line map (<code>:83-87</code>, <code>:97-103</code>, <code>:105</code>, <code>:109-145</code>); <code>unarchive</code> is never refused; <code>archive</code> touches only the row; <code>expire_on_commit=False</code> (<code>engine.py:163</code>), so the success paths&#x27; post-commit reads are safe and only a rollback expires; the route&#x27;s session holds only reads; <code>writeCheckpoint</code> takes a new checkpoint every time (this is what decides D2); D1, D3, D4 and D5 as argued; R2&#x27;s two-journal-mode measurement. <code>openspec validate … --strict</code> passes. No recommendation was reversed; one was added (D6).</p></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B8.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

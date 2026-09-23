@@ -381,6 +381,23 @@ In priority order. Tracks marked *(after Dn)* start only once that decision is r
 | S13 | **A flow stages its review in the dispatch** (option (b) of `DECISIONS.md` `F327-scope`). The flow stops staging `under_review` before the dispatch; the dispatch stages it, and the reviewable pool excludes the task by its pending entry. Modifies `agent-flows`; the divergence restaff's D9 collision needs its own answer. | F327 | Decided by the operator 2026-09-23. After S1, which rewrites the "attending" helper this reads. |
 | — | **Remaining single-finding specs** | F65 (queued as Q4-SPEC), F130 (if Round 3c finds no contract), F330 (orphan document on a refused send), F363 (after F354, D13), F278 (redaction false positives), F213 (a pending proposal can be withdrawn) | One each, in severity order. |
 
+## Bundles — R1 / R2 / R3 reached, parked for the operator
+
+Opened 2026-09-23 night: every spec track and operator decision above was grouped into twelve
+bundles (`spec-queue/tracks/README.md`) and taken through R1, R2 and R3 by separate rounds. Each
+bundle's full record and its **Final** section are in `spec-queue/tracks/Bn.md` (page:
+`tracks/Bn.html`). **Every answer below is a recommendation** until it is recorded in
+`DECISIONS.md`; nothing is built until `APPROVALS.md` names it.
+
+| Bundle | Status | Recommended decisions (the Final section has the why) | Changes |
+|---|---|---|---|
+| B8 Checkpoint cutover (S2: F293, F294) | R3 done, parked | Handed over at most once **per conversation** (partial unique index), recorded as `Checkpoint.cut_over_to_conversation_id`; a DB compare-and-set serialises two presses (measured, WAL and rollback journal); exact backfill (0 rows on `:8000`); the automatic trigger declines a reopened, handed-over conversation (D6) | `a-checkpoint-is-handed-over-once-and-says-where-it-went` (M) |
+
+**Migration numbering:** four unarchived changes name `0106` (B8's, B3's
+`agents-no-longer-register-themselves`, B7's `worker-spend-counts-against-the-budget`, B5's
+`a-footprint-names-the-line-of-work-its-commit-is-on`). The first built keeps it; the rest renumber
+in build order.
+
 ## Honest arithmetic
 
 - **No-spec (Rounds 0–5 + UI-1): ~100 findings** if every re-verification agrees. By
