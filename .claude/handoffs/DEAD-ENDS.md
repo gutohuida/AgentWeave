@@ -1586,8 +1586,7 @@ $//'` after. *(2026-09-21)*
   *(2026-09-23)*
 - **A Python heredoc that writes `'\n'` into a TS/JS string literal writes a real newline.**
   Tests passed under vitest (esbuild tolerated the multi-line string), while `tsc` and eslint
-  rejected them. Use the Edit tool for any replacement that contains `
-`. *(2026-09-23)*
+  rejected them. Use the Edit tool for any replacement that contains a backslash-n. *(2026-09-23)*
 - **Changing a response shape the committed bundle reads breaks `:8000` in both directions.** The
   old bundle with new routes, or the new bundle with the old backend, both render wrong screens. A
   round that changes a route the UI reads lands as one merge **plus** a `:8000` restart, and the
