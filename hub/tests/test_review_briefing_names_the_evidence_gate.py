@@ -148,7 +148,11 @@ async def test_an_ungranted_reviewer_is_told_the_approval_can_be_refused_and_wha
         assert GATE in rendered
         assert "`FR-1`" in rendered
         assert "Deciding evidence is the operator's, not yours" in rendered
-        assert "do not tell anyone the task is approved" in rendered
+        # The remedy reaches the operator: `send_message` reaches only agents (review, F357).
+        assert "ask the operator with `ask_user`" in rendered
+        assert "Do not tell anyone the task is approved" in rendered
+        # `decide_evidence` takes the evidence id, so the sentence names it.
+        assert "`ev-" in rendered
         assert "You can decide evidence: if the work is right" not in rendered
 
 
@@ -181,6 +185,24 @@ async def test_both_channels_carry_the_same_sentence(app, auth_headers, builder,
     assert sentence is not None
     assert sentence in await _review_briefing(task, "checker")
     assert sentence in await _review_context(task, "checker", tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_nothing_is_said_where_evidence_does_not_govern_the_merge(
+    app, auth_headers, builder, tmp_path
+):
+    """A loop declaring `work_needs_evidence` false merges the branch tip; awaiting evidence is
+    only advisory there and the gate never refuses, so the sentence would be false."""
+    task, _evidence = await _gated_task(app, auth_headers, builder, tmp_path)
+    await _reviewer("checker", granted=False)
+    async with async_session_factory() as session:
+        loop = await session.get(Loop, "loop-f357")
+        loop.work_needs_evidence = False
+        (await session.get(Task, task)).loop_id = "loop-f357"
+        await session.commit()
+
+    assert GATE not in await _review_briefing(task, "checker")
+    assert GATE not in await _review_context(task, "checker", tmp_path)
 
 
 @pytest.mark.asyncio

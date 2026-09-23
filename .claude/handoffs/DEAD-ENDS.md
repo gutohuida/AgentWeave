@@ -1606,3 +1606,16 @@ disappears is indistinguishable from one that was forgotten.
   erroring. See the Python section — still use `py -3.11`.
 - **`npx openspec …` is required** *(believed 2026-08)*. **RESOLVED:** `openspec` is on PATH
   directly (verified 2026-09-04).
+
+## 2026-09-23 (late evening) — Round 5
+
+- **`pytest … || pytest …` as a "retry" turns a kill into a second full run.** Killing the first
+  suite (to re-run on edited code) made the `||` fallback start another full suite, writing to the
+  same log with `>`, and it overlapped the intended run for ~20 minutes — two full suites at once,
+  and a log whose final summary belonged to the wrong run. Run one suite per command, one log per
+  run, and read the task's own output file for the summary. *(2026-09-23)*
+- **Python writing files with `Path.write_text` on this machine produces CRLF.** Git normalises it,
+  so `git diff` looks small, but the working copy is CRLF until re-written. Use
+  `write_bytes(s.encode())` (or `newline=""`). The heredoc `\n`-becomes-a-real-newline trap
+  (UI-1 entry above) also still bites in `.py` test files: use Edit for any string holding `\n`.
+  *(2026-09-23)*

@@ -1783,6 +1783,14 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                         await agents_that_worked(session, task.id)
                         | await agents_that_recorded_evidence_for(session, task.id)
                     )
+                # **Never while a turn is on the task.** A wedge is a row nobody is working; one with
+                # a turn running or queued on it is attended, whoever holds it, and restaffing it
+                # would put a second review beside a live one. The evidence term above makes that
+                # reachable -- an author's turn recording as it finishes, or a staffed reviewer
+                # recording evidence mid-review -- so the recovery waits for the turn to end, and
+                # the next firing decides.
+                if wedged_review and task.id in on_it:
+                    wedged_review = False
                 if not wedged_review:
                     in_flight.append((task.id, task.assignee))
                     if task.id not in on_it:

@@ -148,6 +148,51 @@ async def test_a_flow_staffing_a_completed_task_queues_a_review(
     assert await _queued_entry_for(AUTHOR) is None
 
 
+async def test_a_flow_review_briefing_reads_the_reviewers_own_grant(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """F357, through a real firing. The evidence-gate sentence is keyed on the **reviewer's**
+    `can_accept_evidence` grant, so the briefing must be composed for the agent the ladder
+    staffed, not the job's own agent. Here they differ: the job is `builder`'s (ungranted) and the
+    reviewer `critic` holds the grant, so passing the job's agent would tell `critic` that deciding
+    is the operator's."""
+    from hub.db.models import Agent, TaskRequirementLink
+
+    repo = _init_repo(tmp_path / "repo")
+    sha = _author_commit(repo, filename="ledger.py", body="x = 1\n")
+    await bind_project_workspace(repo)
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    await _reviewable_task(commit=sha)
+
+    async with async_session_factory() as db:
+        db.add(
+            TaskRequirementLink(
+                id="trl-f357", project_id="proj-test", task_id="task-1", requirement_id="req-1"
+            )
+        )
+        critic = (
+            await db.execute(
+                select(Agent).where(Agent.project_id == "proj-test", Agent.name == REVIEWER)
+            )
+        ).scalar_one()
+        critic.can_accept_evidence = True
+        await db.commit()
+        await _attribute_completion(db, "task-1", AUTHOR)
+        job, _loop = await _flow(db, suffix="grant", task_id="task-1")
+
+    scheduler = JobScheduler()
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        async with async_session_factory() as db:
+            fresh_job = await db.get(AIJob, job.id)
+            await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    entry = await _queued_entry_for(REVIEWER)
+    assert entry is not None and entry.review_task_id == "task-1"
+    assert "This task's evidence is still waiting for a decision" in entry.content
+    assert "`decide_evidence` first" in entry.content
+    assert "Deciding evidence is the operator's, not yours" not in entry.content
+
+
 # ---------------------------------------------------------------------------
 # 4b.2 — the property that matters: the reviewer can see the author's work
 # ---------------------------------------------------------------------------

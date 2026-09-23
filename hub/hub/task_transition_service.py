@@ -277,14 +277,14 @@ async def agents_that_recorded_evidence_for(session: AsyncSession, task_id: str)
       exactly the evidence a reviewer is being staffed to judge — would exclude nobody, and the
       exclusion would depend on the outcome of the review it is staffing.
 
-    **Four consumers, and three of them use this term without the union.** The union
+    **Five consumers, and four of them use this term without the union.** The union
     `agents_that_may_have_authored` folds it in with the other three sources, for the *offer*. The
     transition guards (`_guard_author_is_not_reviewer`, `_guard_reviewer_is_not_the_author`) and
     the dispatch refusal (`api/v1/agent_trigger.review_dispatch_refusal`) fall back to it **alone**
     where no agent completed the task, for the *refusal* — because by the time a reviewer records
     its verdict it is the task's assignee and its run is bound to it, so the union names the
     reviewer itself and would refuse the flow's every staffed review of an operator-completed task.
-    The fourth is the wedged-review predicate in `scheduler.py` (F167), which joins it to
+    The fifth is the wedged-review predicate in `scheduler.py` (F167), which joins it to
     `agents_that_worked` -- the two records that name an author and never a staffed reviewer. Of
     the four sources, only an evidence row is an authorship claim that reviewing does not
     manufacture. That is why this is a function and not an expression inlined in the union: do not

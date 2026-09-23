@@ -73,7 +73,7 @@ cross-references). They are the same numbers `ROUNDS.html` shows. **Track progre
 | 3 | Hub routes that act wrongly (B-led) | 28 | ~2–3 days | nothing |
 | 4 | Hub routes that answer wrongly (C/D sweep) | 28 (+2 in 4e, counted in Round 3) | ~2 days | nothing |
 | UI-1 | One bundle: controls that lie or do nothing | 20 (+2 carried from Round 3) | ~2 days | ui-bundle, browser check, `:8000` restarted past `c18a87b` |
-| 5 | Scheduler residuals | 4 (F373 and F400 moved to a change; 3 to build: F357, F167, F327) | ~1 day | nothing (F352 landed 2026-09-23) |
+| 5 | Scheduler residuals | **done 2026-09-23**: F357, F167 closed; F327 moved to spec track S13 (operator, 2026-09-23); F373 and F400 moved to a change | ~1 day | nothing (F352 landed 2026-09-23) |
 | D | Operator decisions (13 questions) | 56 | ~2 DECIDE sessions | operator |
 | S1–S12 | Spec tracks, from 2026-09-28 | 33 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
 
@@ -304,6 +304,12 @@ that commit's `{tasks, total, has_more}` envelope (F202), and `:8000`'s backend,
 
 ## Round 5 — scheduler residuals (~1 day)
 
+**Status:** done 2026-09-23 (interactive session, worktree `round/5`, Opus-reviewed). **F357** and
+**F167** closed (see their FIXED paragraphs and the review follow-ups). **F327 left the round**, by
+the operator's answer of 2026-09-23 evening: `DECISIONS.md` `F327-scope` (2026-09-12) had already
+said it waits for its own spec loop, since every repair changes a main spec, and this table's
+"no-spec, F319/F328 pattern" row disagreed with it. It is spec track **S13**, option (b).
+
 **Status:** unblocked 2026-09-23. F352's build (`an-unstaffed-review-names-its-holders`) landed and
 was driven on the 2026-09-23 night window and is archived, so `decide_firing` / `run_job` are no
 longer being rewritten underneath this round. **F373 and F400 have left it:** the day window's
@@ -321,7 +327,7 @@ is that failure.*)*
 | ~~F400~~ | B | **Moved to `pressing-run-names-the-reason-that-held`.** "No other agent is free" while one is. |
 | F357 | B | The review briefing names the evidence gate. This is copy, so no design is needed. |
 | F167 | B | `agents_that_worked` cannot see an author whose history is all the operator's, so F70/F142 recovery never fires. |
-| F327 | B | A flow-staffed review whose dispatch is refused leaves the reviewer holding the task. Uses the F319/F328 pattern. |
+| ~~F327~~ | B | **Moved to spec track S13** (operator, 2026-09-23). A flow-staffed review whose dispatch is refused leaves the reviewer holding the task. Every repair modifies a main spec (`DECISIONS.md` `F327-scope`), so it is not a no-spec row. |
 
 ---
 
@@ -368,6 +374,7 @@ In priority order. Tracks marked *(after Dn)* start only once that decision is r
 | — | **Query errors are shown, not skeletoned** | F197 (57 hooks, 101 sites) | L. Best done as a ratchet (R-1 model) rather than one change. Schedule after S5, because S5 adds hooks. |
 | — | **Settings that gate collaboration are distinct** | F379 | UI redesign. After UI-1's F237. |
 | — | **Flows get an operator surface** | F377, F336 | After S5, since flow creation names a spec document. |
+| S13 | **A flow stages its review in the dispatch** (option (b) of `DECISIONS.md` `F327-scope`). The flow stops staging `under_review` before the dispatch; the dispatch stages it, and the reviewable pool excludes the task by its pending entry. Modifies `agent-flows`; the divergence restaff's D9 collision needs its own answer. | F327 | Decided by the operator 2026-09-23. After S1, which rewrites the "attending" helper this reads. |
 | — | **Remaining single-finding specs** | F65 (queued as Q4-SPEC), F130 (if Round 3c finds no contract), F330 (orphan document on a refused send), F363 (after F354, D13), F278 (redaction false positives), F213 (a pending proposal can be withdrawn) | One each, in severity order. |
 
 ## Honest arithmetic

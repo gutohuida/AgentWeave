@@ -881,6 +881,39 @@ async def test_an_all_operator_history_wedged_on_its_evidence_author_is_restaffe
     ]
 
 
+async def test_an_evidence_author_with_a_turn_on_the_task_is_not_restaffed(
+    app, auth_headers, bind_runner
+):
+    """The F167 recovery waits for a live turn to end (Opus review of Round 5). The evidence term
+    makes a running author -- or a staffed reviewer recording evidence mid-review -- look wedged;
+    restaffing then would put a second review beside a live turn. Attended rows stay in flight."""
+    await _roster(app, auth_headers, bind_runner, WORKER, REVIEWER)
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="allop3")
+        d = await _fixture_d(db, loop, suffix="allop3")
+        fresh = await db.get(Task, d.id)
+        await apply_transition(db, fresh, "under_review", operator())
+        await db.commit()
+        await _evidence(db, d.id, suffix="allop3")
+        db.add(
+            Run(
+                id="run-allop3-live",
+                project_id="proj-test",
+                agent=WORKER,
+                status="running",
+                task_id=d.id,
+                turn_depth=0,
+            )
+        )
+        await db.commit()
+
+    async with async_session_factory() as db:
+        decision = await decide_firing(db, await db.get(Loop, loop.id), default_agent=REVIEWER)
+
+    assert decision.selections == ()
+    assert decision._cannot_staff == ((d.id, WORKER),)
+
+
 async def test_an_all_operator_history_with_no_authorship_record_is_still_named(
     app, auth_headers, bind_runner
 ):

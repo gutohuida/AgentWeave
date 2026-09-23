@@ -13619,6 +13619,19 @@ three remedies. Tests: `test_a_flow_names_what_it_cannot_staff.py`
 `test_an_all_operator_history_wedged_on_its_evidence_author_is_restaffed` (fails before),
 `test_an_all_operator_history_with_no_authorship_record_is_still_named` (the bound).
 
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 5).** The evidence term made a new
+case look wedged: a live turn on the task. That covers an author's turn that records evidence as it
+finishes, and a staffed reviewer that records evidence mid-review. `record_evidence` fills
+`task_id` from the run's binding, so "a legitimately staffed reviewer records no evidence" was
+assumed, not enforced. Restaffing in either case would put a second review beside a live turn. So
+the recovery now also requires `task.id not in on_it`, the attendance set F154 already uses, and an
+attended row stays in flight until its turn ends. Test:
+`test_an_evidence_author_with_a_turn_on_the_task_is_not_restaffed`, which fails without the gate.
+**Pre-existing, not changed:** the predicate's `agents_that_worked` term has no counterpart in the
+guards or in `review_dispatch_refusal`. An operator who hand-dispatches a reviewer that holds a
+transition from an earlier cycle is permitted by the guards and then restaffed by the next firing.
+The on-it gate now protects that turn while it runs.
+
 ## F156 reproduced deterministically — and the contrast lane is what turns it from a rough edge into a defect
 
 Driven 2026-08-31 (iteration 12), against the trial Hub on 8011 running this branch. New harness:
@@ -27476,7 +27489,7 @@ Run with no process -- a strand that predates this round.
 
 ## F327 (B) — a review a flow staffed and whose dispatch is then refused leaves the flow's reviewer holding the task, reported as in flight until the input is given up
 
-**Status:** open. Filed 2026-09-12 by R2 of `a-refused-review-leaves-nothing-behind`, measured at unit level on the unmodified tree at `75b11ac`. That change does not fix it: covering it needs a decision its verdict does not make, raised as the operator question at the top of its `proposal.md`.
+**Status:** open -- spec track S13 in `spec-queue/ROUNDS.md` (option (b), operator 2026-09-23; left Round 5 because every repair changes a main spec). Filed 2026-09-12 by R2 of `a-refused-review-leaves-nothing-behind`, measured at unit level on the unmodified tree at `75b11ac`. That change does not fix it: covering it needs a decision its verdict does not make, raised as the operator question at the top of its `proposal.md`.
 
 **The claim.** F319 is the dispatch's own staging committed by the scheduler. This is the same end
 state reached by a different door. A flow firing stages its review **before** the dispatch, in the
@@ -29381,6 +29394,23 @@ default, like `is_review`) so the briefing can read the reviewer's grant. `resol
 does not prefer a granted agent; that is staffing, not copy, and is left to S1/D9.
 Test: `hub/tests/test_review_briefing_names_the_evidence_gate.py` (4), built on the gate's own
 awaiting-evidence fixture; three fail with the sentence disabled.
+
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 5).** Five changes. (1) The
+ungranted remedy was "send the verdict as a message", but `send_message` reaches only agents, and
+none of them can decide evidence. It is now `ask_user`, the one channel from an agent to the
+operator, followed by approving once the evidence is accepted. Not claimed: that an unanswered
+question parks the task, since `under_review` has no edge to `blocked`. (2) The sentence is
+suppressed where evidence does not govern the merge (`evidence_governs`). A loop with
+`work_needs_evidence` false merges the branch tip, and its awaiting rows are only advisory there.
+(3) Each piece names its evidence id, which `decide_evidence` takes, and names the recording task
+where that is another task on a shared requirement, as the gate's own detail does. (4) A test now
+goes through a real firing (`test_flow_fires_a_review_turn.py`
+`test_a_flow_review_briefing_reads_the_reviewers_own_grant`). There the reviewer is granted and the
+job's agent is not, and passing `job.agent` at the call sites fails it. (5) Two new tests: nothing
+is said where evidence does not govern, and nothing once the evidence is decided. **Residual:** once
+an unanswered question times out, the row falls to F154's sentence ("Ask X again"). That sentence
+does not name the awaiting evidence as the real blocker. It is filed nowhere new, because it is
+F374/D9's divergence-reason question.
 
 ## F358 (B) — evidence can be decided while the run that recorded it is still live, so the reviewer judges a commit the Hub is about to replace
 
