@@ -48,6 +48,22 @@ async def _runner_cli_for_agent(db, project_id: str, agent: str) -> Optional[str
     return row.scalars().first()
 
 
+async def _queued_agents_in(db, project_ids: set[str]) -> set[tuple[str, str]]:
+    """Every `(project_id, agent)` holding queued input in *project_ids* — the set
+    `turn_scheduler.redrain_queued_agents` re-evaluates, for several projects at once."""
+    if not project_ids:
+        return set()
+    rows = await db.execute(
+        select(InboundQueueEntry.project_id, InboundQueueEntry.agent)
+        .where(
+            InboundQueueEntry.project_id.in_(project_ids),
+            InboundQueueEntry.state == "queued",
+        )
+        .distinct()
+    )
+    return {(project_id, agent) for project_id, agent in rows.all()}
+
+
 async def reconcile_interrupted_runs() -> int:
     """Mark every `Run` row still `"running"` whose process is no longer alive as
     `"interrupted"`, persisting and broadcasting a `run_interrupted` event for each.
@@ -119,6 +135,14 @@ async def reconcile_interrupted_runs() -> int:
 
         if reconciled:
             await db.commit()
+            # `agent-conversation-workspace`, *A run that has ended releases the queue behind it*:
+            # every agent holding queued input in a project is re-evaluated when a run there ends,
+            # not only the ended run's own. An agent parked on this run's task checkout is released
+            # by nothing else once the interrupted agent's own entry has been withdrawn (F288).
+            # Read after the commit, so the entries `return_run_entries` put back are counted.
+            agents_to_schedule |= await _queued_agents_in(
+                db, {project_id for project_id, _ in agents_to_schedule}
+            )
 
     for diverged_run_id in divergences_to_evaluate:
         from .run_divergence import evaluate_run_end

@@ -22049,7 +22049,7 @@ once it ended.
 
 ## F288 (B) - a Hub restart ends a run without releasing anything but that run's own agent, so an agent parked on the crashed run's task checkout is stranded
 
-**Status:** open. Filed 2026-09-05 by the day window's D-1 drive, driving F286's seam independently
+**Status:** fixed (this commit) [Round 3, 2026-09-23] — reconciliation re-evaluates every agent with queued input in each project a run was interrupted in; see FIXED at the end of this entry. Was: open. Filed 2026-09-05 by the day window's D-1 drive, driving F286's seam independently
 of the night window's own A/B harness. No change in `openspec/changes/` covers it.
 
 **This is a breach of a requirement that shipped last night, not an unspecified gap.**
@@ -22141,6 +22141,20 @@ that the change touches no requirement in `openspec/specs/`. This one is a breac
 requirement. Whether the existing requirement already covers it and only the code is wrong, or the
 requirement needs a scenario naming reconciliation so a test can be written against it, is the spec
 loop's question rather than this finding's.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** A repair, not a spec track: the
+requirement is quantified over every run that reaches a terminal status, `interrupted` is one, and
+nothing in it exempts reconciliation — so the code was wrong and the requirement already right.
+`reconcile_interrupted_runs` now adds, after its commit, every `(project_id, agent)` with `queued`
+entries in each project it interrupted a run in (`_queued_agents_in`, the multi-project form of
+`redrain_queued_agents`' query), and hands the union to `schedule_or_defer` as before — so the
+pre-address deferral still applies and the parked agent is covered on the deferred path too, which a
+direct `redrain_queued_agents` call would have bypassed. Read after the commit, so entries
+`return_run_entries` put back count. Scoped to the affected projects, as the requirement is. Tests
+(`test_run_reconciliation.py`): `test_reconciliation_redrains_every_queued_agent_in_the_interrupted_runs_project`
+and `test_a_deferred_reconciliation_redrain_still_covers_the_parked_agent` — both fail on the old
+code (the parked agent is never scheduled). Not driven live: `t_d1_0905_reconcile_strand.py` is the
+harness that would show the 6m15s strand closing.
 
 ---
 
