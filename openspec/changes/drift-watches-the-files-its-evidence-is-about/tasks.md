@@ -1,0 +1,34 @@
+## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
+
+- [ ] 0.1 R2: an independent re-derivation of this proposal against `hub/hub/requirement_evidence.py` (`read_footprint`, `_take_footprint`, `restamp_run_footprints`, `refresh_reachability`, `detect_drift`, `_changed`, `resolve_drift`), `hub/hub/api/v1/spec.py` (`detect_drift`, `list_drift`, `footprint_view`, `record_evidence`), `hub/hub/api/v1/agent_actions.py:1230-1245`, `hub/hub/api/v1/agent_trigger.py:1775-1800`, and both specs. Check in particular the three reasons design gives for the basis flip being safe, and whether any reader of `entries` other than `detect_drift` exists
+- [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate drift-watches-the-files-its-evidence-is-about --strict` passes
+- [ ] 0.3 The operator answers F217's basis decision (recommended C) and Open Question 1 (legacy footprints: recommended not scanned, listed); record in `spec-queue/DECISIONS.md`
+
+## 1. Tests first — each must fail on today's code unless marked as a control
+
+Extend `hub/tests/test_requirement_drift.py` (its `_git`, `_document`, `_detect`, `builder` fixtures).
+
+- [ ] 1.1 (D1) A repo with `ledger.py` and `other.py` on `main`; operator evidence with `locator: "ledger.py"`; commit a change to `other.py` only; detect → `raised == []`. FAILS today (R1 measured one candidate naming `other.py`)
+- [ ] 1.2 (D1) Same staging, commit a change to `ledger.py` → exactly one candidate, `observed` keys == `{"ledger.py"}`. Control: PASSES today and must keep passing
+- [ ] 1.3 (D1, rule 3) An agent branch cut from `main` that adds `ledger.py`; record agent evidence through the agent plane (run credential, `Run.workspace_dir` = the repo) at the branch tip; the footprint's `entries` keys == `{"ledger.py"}` and `watched_from == ["branch"]`. FAILS today (`entries` holds `README.md` too; no column)
+- [ ] 1.4 (D1, rule 2) Operator evidence whose locator is the sha of a commit that changed `a.py` only, on a tree that also holds `b.py` → `entries` keys == `{"a.py"}`, `watched_from == ["commit"]`. FAILS today
+- [ ] 1.5 (D2) Operator evidence with `locator: ""` on `main` → `entries == {}`, `watched_from == []`; `POST /spec/evidence`'s 201 body has `footprint.watched_from == []` and `footprint.watched_count == 0`; a later commit changing any file raises nothing; `GET /spec/drift` → `unwatched` has one entry with `reason == "names_no_file"`, `requirement.identifier == "FR-1"`. FAILS today
+- [ ] 1.6 (D3, F217) Agent evidence footprinted on `agentweave/builder` (as 1.3), accepted; merge the branch into `main` with `--no-ff`; detect once (refreshes reachability, raises nothing); then commit a change to `ledger.py` on `main`; detect → one candidate. FAILS today (0 candidates: compared against the agent branch). Also assert the footprint's `reachable_from_main` is `True` before the second detect, so the test cannot pass for a different reason
+- [ ] 1.7 (D3) Resolve a candidate raised on the branch (change `ledger.py` on `agentweave/builder`, detect, resolve `no_change_required`), then merge into `main` with no further change; detect → `raised == []`. Control on the resolution rule; FAILS today only if 1.6's basis is needed to reach it — record which
+- [ ] 1.8 (D4) A footprint row with `watched_from = NULL` and whole-tree `entries` (insert directly, as a pre-migration row); change a file in its tree; detect → nothing raised; `GET /spec/drift` → `unwatched` entry with `reason == "recorded_before_watching"`. FAILS today (it raises)
+- [ ] 1.9 **Rewrite on purpose, and say so in a comment naming this change:** `test_a_project_without_a_repository_still_records_a_footprint`, `test_a_changed_file_raises_a_candidate`, `test_an_unchanged_tree_raises_nothing`, `test_a_candidate_is_not_raised_twice`, `test_a_resolved_candidate_does_not_return`, `test_a_reworded_requirement_is_not_also_drift`, `test_drift_never_writes_the_document`, `test_only_the_operator_resolves_a_candidate`, `test_a_git_footprint_names_its_commit_and_says_whether_it_landed`, `test_a_changed_blob_in_a_repository_raises_a_candidate` record evidence with no locator and rely on the whole tree. Give `_record` a `locator` parameter and pass the file each test changes (`"ledger.py"`). Every other assertion stays. List any further test in `hub/tests/` that the full run shows depending on the whole tree (`grep -rln "spec/drift\|EvidenceFootprint" hub/tests`), and treat each the same way
+- [ ] 1.10 `hub/tests/test_evidence_footprint_root.py` — run before group 2 and record the count; it pins which *root* is read, which this change does not move
+
+## 2. The fix
+
+- [ ] 2.1 Model + migration: `EvidenceFootprint.watched_from` (JSON, nullable), next free revision, guarded for a missing table; bump the head assertions in `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`
+- [ ] 2.2 (D1) `watched_files(root, commit, tree, *, locator, actor_kind, main_branch)`; `Footprint` gains `watched_from`; `read_footprint` takes `locator`, `actor_kind`, `main_branch` and uses it for git; the paths kind hashes only rule 1's paths. `_take_footprint` and `capture_footprint` pass them through; `record` takes `main_branch` (the route reads `Project.main_branch`, as `detect` does at `spec.py:965`). `_apply_footprint` writes `watched_from`
+- [ ] 2.3 (D1) `restamp_run_footprints` builds `taken` through `watched_files` with the run's evidence locators. Rows of one run can have different locators, so compute the branch-diff set once per run and the locator set per row
+- [ ] 2.4 (D3) `detect_drift`: skip `watched_from` NULL or `[]`; git basis = main branch when `reachable_from_main is True`, else `footprint.branch` as today; paths kind observes only baseline paths. Rewrite the docstring's "Accepted consequence" paragraph to name this change; delete `read_footprint`'s "whole tree … separate change" paragraph
+- [ ] 2.5 (D4) `footprint_view` adds `watched_from`, `watched_count`; `list_drift` adds `unwatched` (ordered `produced_at, id`)
+- [ ] 2.6 Run group 1 and record counts; run `py -3.11 -m pytest hub/tests/ -q` and record the full count inline, naming every moved assertion (only 1.9's are expected)
+- [ ] 2.7 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, clean
+
+## 3. Drive it
+
+- [ ] 3.1 Re-run `scripts/drive/t_row10_drift.py` and `scripts/drive/t_sweep_row9c_agent_plane.py` leg 3 against a trial Hub from source (fresh port and profile, never `:8000`; `.claude/reference/hubs.md`). Row 10's "add an unrelated file raises nothing" still holds; record the leg-3 table from F217 again — the agent row now raises. Update the harness assertions that were written in the defect's direction, with a comment
