@@ -883,3 +883,73 @@ async def test_twelve_booked_agents_still_fit_the_500_character_bound(
     )
     for name in names[2:]:
         assert name not in reason
+
+
+# ---------------------------------------------------------------------------
+# 2.9b (`an-unstaffed-review-names-its-holders`) -- one 32-character name, three
+# 64-character ids, the smaller `under_review` budget
+# ---------------------------------------------------------------------------
+
+D29B = "aa-2-9b-" + "0" * 24
+
+
+async def test_a_thirty_two_character_name_still_fits_sixty_four_character_ids(
+    app, auth_headers, bind_runner
+):
+    """2.9b. The first agent in name order holds three tasks with 64-character caller-chosen
+    ids, and its own name is 32 characters -- the fallback fixture 2.9's twelve-agent fit never
+    exercises: one agent alone, forced by 2.4's per-clause (3, 2, 1) retry from three named tasks
+    down to fewer rather than being dropped to the tail. Read against an `under_review` row, the
+    smaller of the two clause budgets (task 2.3, R8).
+    """
+    assert len(D29B) == 32
+    await _roster(app, auth_headers, bind_runner, AUTHOR, D29B)
+
+    task_ids = []
+    async with async_session_factory() as db:
+        # R8's fixture, as 2.6 and 2.9 established: every booked holding lives in a second live
+        # loop this test never fires, so each is reachable without being walked.
+        _elsewhere_job, elsewhere = await _loop(db, suffix="2.9b-elsewhere")
+        for j in (1, 2, 3):
+            prefix = f"t-2-9b-{j:02d}-"
+            task_id = prefix + "x" * (64 - len(prefix))
+            assert len(task_id) == 64
+            task_ids.append(task_id)
+            await _holding(
+                db, task_id=task_id, assignee=D29B, status="pending", loop_id=elsewhere.id
+            )
+
+        task = Task(id="task-2-9b", project_id=PROJECT, title="under review", status="under_review")
+        db.add(task)
+        await db.commit()
+
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id=PROJECT,
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
+
+    assert choice.rung == "unstaffed"
+    reason = choice.reason
+    assert len(reason) <= 500, f"expected <= 500 chars, got {len(reason)}"
+
+    expected = (
+        "could not staff this step: no reviewer is free. "
+        f"{D29B} is booked for {task_ids[0]} (pending), "
+        f"{task_ids[1]} (pending) and 1 more; "
+        f"{AUTHOR} is the one that completed this task. "
+        "Decide it yourself: approve, reject, or send it back with revision_needed. "
+        "Rejecting booked tasks that are no longer wanted can free their agents."
+    )
+    assert reason == expected
+    assert len(reason) == 453
+    assert D29B in reason
+    for task_id in task_ids[:2]:
+        assert task_id in reason
+    assert task_ids[2] not in reason
+    assert "and 1 more" in reason
+    assert reason.endswith(
+        "Decide it yourself: approve, reject, or send it back with revision_needed. "
+        "Rejecting booked tasks that are no longer wanted can free their agents."
+    )

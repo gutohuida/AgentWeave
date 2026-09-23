@@ -624,7 +624,7 @@ mutation and the observed failure beside the task when ticking it.
       **2.9b split off** to its own queue item — 2.9 alone, with its own literal derivation and four
       live-checked mutations, took the room this firing had; 2.9b's 64-character-id fallback
       fixture needs its own build, the same call iterations 7, 9, 10 and 11 made on this same group.
-- [ ] 2.9b Test (R3): the first agent in name order holds three tasks with 64-character
+- [x] 2.9b Test (R3): the first agent in name order holds three tasks with 64-character
       caller-chosen ids (created through `POST …/tasks` with `id`), and its name is 32 characters.
       Assert:
       - the reason is at most 500 characters, as an `under_review` row, which has the smaller
@@ -640,6 +640,48 @@ mutation and the observed failure beside the task when ticking it.
       With `loop_id` NULL they are unreachable, the agent is free, and the test never reaches
       rung 3. R8 measured the widest clause as **143** at one task under the `booked` verb, inside
       the **226** `under_review` clause budget (2.4).
+
+      **Built 2026-09-23, night iteration 13.** Added
+      `test_a_thirty_two_character_name_still_fits_sixty_four_character_ids` to
+      `test_a_task_nothing_will_move_holds_nobody.py`. One 32-character agent name (`aa-2-9b-` +
+      24 zeros, sorting before `f161-author` so it is the first in name order) holds three tasks
+      with 64-character ids (`t-2-9b-0N-` + `x` padding), each through `_holding(db, task_id=…,
+      loop_id=…)` against a second live loop (2.6's R8 fixture, `_loop`) — the route is not the
+      point, per R8's own note, so `_holding` was used directly rather than `POST …/tasks`. Reached
+      rung 3 through `resolve_reviewer` directly against a plain `status="under_review"` task
+      (test_reviewer_ladder.py's own exact-string pattern), not a real firing — 2.9b's own spec
+      names no route or event surface, unlike 2.6/2.9. Derived the exact literal the same way: hand
+      -built `AgentAvailability`/`Holding` objects in a `%TEMP%` scratchpad, called the real
+      `_rung_3_reason`, and only then learned the roster orders the 'a'-named holder *before* the
+      'f'-named author (the scratchpad's own object order does not reflect `_roster_availability`'s
+      real DB-derived name order) — caught by running the test once and comparing, not assumed.
+      Corrected the literal's clause order accordingly rather than reordering the fixture. Result:
+      453 characters, the holder named with 2 of its 3 tasks ("… and 1 more"), then the author's
+      exclusion clause, then the `under_review` remedy and the REJECT sentence.
+
+      **Mutation applied live and reverted** (`git diff --stat scheduler.py` clean after): changed
+      `limits = (3, 2, 1) if kind == "booked" else (3,)` to `limits = (3,)` at
+      `scheduler.py:1381`. The holder's booked clause (311 characters at three named 64-character
+      ids) no longer fits the 226-character `under_review` budget at any retry, so it drops out of
+      the clause list entirely and falls to the tail — the reason became `"… no reviewer is free.
+      ; and 2 more agents are excluded, busy or unbound. Decide it yourself: …"`, missing the agent
+      by name exactly as the task predicts. Failed on the literal `==`, as expected.
+
+      **Verification:**
+      - `pytest hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q` → **34 passed** (33 +
+        this task's 1).
+      - `pytest hub/tests/test_reviewer_ladder.py hub/tests/test_a_held_agent_is_busy.py
+        hub/tests/test_a_flow_names_what_it_cannot_staff.py
+        hub/tests/test_a_task_nothing_will_move_holds_nobody.py hub/tests/test_review_divergence.py
+        hub/tests/test_run_divergence.py hub/tests/test_the_evidence_names_the_author.py -q` →
+        **149 passed** (148 + this task's 1).
+      - `ruff check src/ hub/ tests/`, `mypy src/` — clean. `black --check --target-version py311
+        src/ hub/hub/ hub/tests/ tests/` needed one reformat (whitespace only, this task's new
+        lines) — applied, re-checked clean; `git diff --stat` on the test file shows additions
+        only.
+
+      **Group 2's fixture-heavy split chain (2.6, 2.7, 2.9, 2.9b) is now complete.** The group's
+      remaining queue item is 2.15-2.18 plus the 6.0 regression guard.
 - [x] 2.10 Test: two consecutive stalled firings with an unchanged reason over 500 characters leave
       **one** stall row with `tick_count == 2`.
       *Mutation:* compare the raw `stall_reason` at `:923`. The test must fail.
