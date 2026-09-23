@@ -58,3 +58,74 @@ describe('useDialogFocus — Escape', () => {
     expect(event.defaultPrevented).toBe(true)
   })
 })
+
+// F307: measured in a real browser, the first Tab in a confirm-only dialog left the panel for the
+// control behind the scrim, because focus was still on the trigger and the hook only wrapped Tab at
+// the panel's own first and last controls.
+describe('useDialogFocus — the first Tab (F307)', () => {
+  function mountDialog() {
+    const trigger = document.createElement('button')
+    trigger.textContent = 'Save'
+    const behind = document.createElement('textarea')
+    const panel = document.createElement('div')
+    const cancel = document.createElement('button')
+    cancel.textContent = 'Cancel'
+    const confirm = document.createElement('button')
+    confirm.textContent = 'Confirm'
+    panel.append(cancel, confirm)
+    document.body.append(trigger, behind, panel)
+    mounted.push(trigger, behind, panel)
+    const panelRef = createRef<HTMLElement>()
+    ;(panelRef as { current: HTMLElement | null }).current = panel
+    return { trigger, panel, cancel, confirm, panelRef }
+  }
+
+  function tab(shiftKey = false) {
+    const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey, bubbles: true, cancelable: true })
+    ;(document.activeElement ?? document.body).dispatchEvent(event)
+    return event
+  }
+
+  it('moves a Tab from outside the panel to its first control', () => {
+    const { trigger, cancel, panelRef } = mountDialog()
+    trigger.focus()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+
+    const event = tab()
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(document.activeElement).toBe(cancel)
+  })
+
+  it('moves a Shift+Tab from outside the panel to its last control', () => {
+    const { trigger, confirm, panelRef } = mountDialog()
+    trigger.focus()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+
+    tab(true)
+
+    expect(document.activeElement).toBe(confirm)
+  })
+
+  it('leaves a Tab between controls inside the panel to the browser', () => {
+    const { cancel, panelRef } = mountDialog()
+    cancel.focus()
+    renderHook(() => useDialogFocus(true, panelRef, vi.fn()))
+
+    expect(tab().defaultPrevented).toBe(false)
+  })
+
+  it('leaves Tab to the newer of two open dialogs', () => {
+    const outer = mountDialog()
+    const inner = mountDialog()
+    outer.cancel.focus()
+    renderHook(() => useDialogFocus(true, outer.panelRef, vi.fn()))
+    renderHook(() => useDialogFocus(true, inner.panelRef, vi.fn()))
+    inner.cancel.focus()
+
+    // A Tab between the newer dialog's own controls is the browser's to move. The older dialog,
+    // which sees focus outside its panel, must not claim it.
+    expect(tab().defaultPrevented).toBe(false)
+    expect(document.activeElement).toBe(inner.cancel)
+  })
+})

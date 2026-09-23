@@ -9,6 +9,11 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
+/** The dialogs currently holding the keyboard, oldest first. Only the newest wraps Tab: with two
+ *  open, the older one's listener would otherwise see focus "outside" its panel — inside the newer
+ *  dialog — and pull it back behind that dialog (F307's fix makes that reachable). */
+const openDialogs: object[] = []
+
 export function useDialogFocus(
   active: boolean,
   panelRef: RefObject<HTMLElement | null>,
@@ -20,6 +25,8 @@ export function useDialogFocus(
   useEffect(() => {
     if (!active) return
     const returnFocusTo = document.activeElement as HTMLElement | null
+    const token = {}
+    openDialogs.push(token)
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         // Something nearer the key has already answered it — a nested picker, a menu, an input
@@ -39,10 +46,22 @@ export function useDialogFocus(
         return
       }
       if (event.key !== 'Tab') return
+      if (openDialogs[openDialogs.length - 1] !== token) return
       const focusable = [...(panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])]
       if (!focusable.length) return
       const first = focusable[0]
       const last = focusable[focusable.length - 1]
+      // F307: focus can still be outside the panel — on the control that opened it, which this hook
+      // does not move focus away from. The branches below act only on `first` and `last`, so the
+      // first Tab used to fall through to the browser's order and land behind the scrim. A Tab
+      // from outside enters the panel instead. (Where focus starts when a dialog opens is a
+      // separate question, D13's; this only keeps the cycle closed from the first press.)
+      const active = document.activeElement
+      if (!panelRef.current?.contains(active)) {
+        event.preventDefault()
+        ;(event.shiftKey ? last : first).focus()
+        return
+      }
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault()
         last.focus()
@@ -54,6 +73,7 @@ export function useDialogFocus(
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
+      openDialogs.splice(openDialogs.indexOf(token), 1)
       returnFocusTo?.focus()
     }
   }, [active, panelRef])

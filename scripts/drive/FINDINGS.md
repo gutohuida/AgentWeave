@@ -25840,7 +25840,7 @@ iterations 7 and 8.
 ---
 ## F307 (B) — a confirmation dialog's first Tab leaves the panel, into the editor behind the scrim
 
-**Status:** open — filed 2026-09-10 (night window, iteration 8), **measured in a real browser**
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — a Tab arriving from outside the panel enters it; the cycle is closed from the first press; see FIXED at the end of this entry. Was: open — filed 2026-09-10 (night window, iteration 8), **measured in a real browser**
 against the served bundle, not fixed. **Pre-existing and shared**, not introduced by the change that
 found it: `useDialogFocus` is the common hook, and the blind spot is in the hook.
 
@@ -25938,6 +25938,8 @@ writes code for it.
 cycle within the panel, and that press 1 escapes to `aria-label="Project instructions"` — so the
 drive exits 0 meaning *"the change's own contract holds and F307 is unchanged"*. Fixing F307 will
 fail that file loudly, which is the right moment to revisit it.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `useDialogFocus`'s Tab branch now checks whether focus is inside the panel at all: when it is not (still on the trigger, as measured), a Tab moves it to the panel's first control and a Shift+Tab to its last, with `preventDefault`. Initial focus is untouched; which control gets it on open is D13's separate question. Because that makes an older dialog's listener act whenever focus sits in a newer one, the hook now keeps a module-level stack of open dialogs and only the newest wraps Tab. All seven call sites are modal and none is mounted inside another today. Tests: `useDialogFocus.test.tsx` (four new; the two first-Tab cases fail on the old hook, and the nested case fails with the stack check removed). Not yet re-driven in a browser (UI-1's closing check).
 
 ---
 
