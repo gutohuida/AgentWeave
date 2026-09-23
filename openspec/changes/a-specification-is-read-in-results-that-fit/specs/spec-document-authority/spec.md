@@ -10,7 +10,8 @@ falls back to a paraphrase, which is the failure the read exists to prevent.
 
 The bound SHALL be enforced by the Hub, not chosen by the agent. Where the requested content does not
 fit, the Hub SHALL return the requirements in identifier order up to the bound and SHALL list the
-identifiers of those it did not return. It SHALL name the sections it did not return, and say in the
+identifiers of those it did not return, naming a requirement the index has not given an identifier
+by its key, so that every requirement can be asked for again. It SHALL name the sections it did not return, and say in the
 result how to read the rest. The first requirement or requested section SHALL always be returned,
 cut if it alone exceeds the bound, so that every read makes progress.
 

@@ -1,6 +1,6 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: re-derive the proposal independently against `hub/hub/runner_events.py:28-81`, its
+- [x] 0.1 R2 (2026-09-24, recorded in design.md's round log and `spec-queue/tracks/B12.md`): re-derive the proposal independently against `hub/hub/runner_events.py:28-81`, its
   three callers (`runner_events.py:177`, `:206`, `scheduler.py:94`), and
   `openspec/specs/agent-stream-events/spec.md:101-124`. Re-run D2's measurement, including the
   random-base64 residual, and do not trust R1's numbers. Grep `hub/hub` and `hub/ui/src` for
@@ -44,8 +44,8 @@ In `hub/tests/test_operator_is_told_the_truth.py`, beside the F31 and F118 cases
 
 ## 2. The fix
 
-- [ ] 2.1 In `hub/hub/runner_events.py`, give each alternative of `_SECRET_VALUE_RE` its own group,
-  or check the prefixes, as D1 item 1 describes. Add `_PATH_SEGMENT_RE` and a replacement function
+- [ ] 2.1 In `hub/hub/runner_events.py`, name `_SECRET_VALUE_RE`'s catch-all alternative
+  `entropy` and drop the outer group, as D1 item 1 describes. Add `_PATH_SEGMENT_RE` and a replacement function
   `_redaction_for(match)` that implements D1. Call `_SECRET_VALUE_RE.sub(_redaction_for, value)` in
   `redact_secrets`. Extend the comment block above the pattern with an F278 paragraph, in the style
   of the F31 and F118 ones, that cites the measurements in D2.

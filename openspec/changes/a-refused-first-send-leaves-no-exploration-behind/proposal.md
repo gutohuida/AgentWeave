@@ -29,8 +29,9 @@ Step 2 can be refused in three ways:
 Deleting a document is not something the product otherwise does. *A document that produced nothing
 can be archived* (`openspec/specs/spec-document-authority/spec.md:1891`) routes retirement through
 the phase machine on purpose. But a document created for a send that was refused never had a
-subject, a reader or a turn. The cleanest fix is for that document never to outlive the request that
-created it.
+subject, a reader or a turn. The cleanest fix is for that document never to be committed by a request
+that is refused before committing, and to be archived through its phase, not deleted, by one refused
+after (R2; design D3).
 
 ## What Changes
 
@@ -39,13 +40,15 @@ created it.
   document only after every route-level refusal has passed, in the **same transaction** as the
   conversation and the queue entry. The entry carries the new path as its `spec_document`. The
   response returns that path as `spec_document`.
-- **A refusal after that point takes the document with it.** If the commit fails, the file the
+- **A refusal after that point leaves nothing new in the current view, and deletes nothing that
+  was recorded** (R2's answer to D-B12-1). If the commit fails, the rows roll back and the file the
   request wrote is removed before the error propagates. If the dispatch refusal names this entry
-  and the route withdraws it (the F108 path), the route also discards the document it created in
-  this request: the file, the row, its events and its index rows. It then broadcasts
-  `spec_updated`. The discard is conditional: the document must still be `exploring`, must carry no
-  content event other than the ones this request wrote, and must have no tasks. Otherwise it is
-  left alone.
+  (the F108 path), the route **archives** the document it created in this request, through the
+  phase machine, as the operator's act with the refusal as its reason, and broadcasts
+  `spec_updated`. It does so only while the document is still `exploring` with no event besides
+  the ones this request wrote. The archived document leaves the spec tree's current view; its file
+  stays under `spec/`. R1 proposed deleting the row, its events and its file instead; that removes
+  append-only history, which the main spec forbids (design D3).
 - **If the document cannot be created, the send is refused** (recommended answer to D-B12-2), with
   the reason, such as `naming_exhausted`. The composer already puts the operator's text back on a
   refusal (`hub/ui/src/components/agents/Composer.tsx:216-217`), so nothing typed is lost. Today
@@ -74,9 +77,10 @@ None.
 
 - `hub/hub/api/v1/agent_trigger.py`: `TriggerAgentRequest`, `TriggerAgentResponse` (a new optional
   `spec_document`), and `trigger_agent`.
-- `hub/hub/spec_service.py`: a new `discard_unused_exploration(session, workspace, document)`. It
-  is the only code path that deletes a document, it is reachable only from `trigger_agent`, and it
-  is conditioned as described above.
+- `hub/hub/spec_service.py`: `start_exploration(...)` (the mint, create and save sequence, moved
+  out of `POST /project/documents` and shared) and `retire_refused_exploration(session, document,
+  *, reason)`, which archives through `spec_lifecycle.transition`. No code path deletes a document
+  row or event.
 - `hub/ui/src/components/agents/NewConversationSurface.tsx` and its test. This is a UI bundle, so
   `make ui` is needed and `hub/ui/src` and `hub/hub/static/ui` are committed together. **A
   committed bundle reaches `:8000` on its next reload.** The composer change must not ship before

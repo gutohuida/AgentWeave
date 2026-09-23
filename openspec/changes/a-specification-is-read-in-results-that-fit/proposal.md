@@ -17,8 +17,10 @@ cannot deliver one:
   Measured on this repository's own corpus at `ce086b6`: the default `include="requirements"` view
   of `spec/capabilities/agent-conversation-workspace/spec.html` carries 47 requirements, whose
   statements serialise to 30,708 characters and whose acceptance criteria serialise to 41,875.
-  That is over 72,000 characters before `problem`, `scope` and the envelope. `full` adds the
-  design, tasks, algorithms, evidence and lifecycle.
+  R2 measured the whole default view's content at 66,559 characters (64,450 in the compact form
+  fastmcp sends). Claude Code 2.1.280 spills any MCP result over **50,000 characters** to a file
+  (design D1), so three of this repository's own capability documents cannot be read today. `full`
+  adds the design, tasks, algorithms, evidence and lifecycle.
 - **Addressing.** `read_spec_document` refuses a document id: `spdoc-97d90a3506f5` gets *"path must
   begin with 'spec/'"* from `validate_spec_path` (`hub/hub/spec_manifest.py:72`, called at
   `hub/hub/api/v1/agent_actions.py:1401-1404`). But ids are what tasks carry

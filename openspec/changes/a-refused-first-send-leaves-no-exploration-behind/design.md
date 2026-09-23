@@ -1,12 +1,23 @@
 # Design — a refused first send leaves no exploration behind
 
-**Built on the recommended answers to D-B12-1 (discard, not archive) and D-B12-2 (refuse the send
-when the document cannot be created).** If the operator answers D-B12-1 with "archive", D3 below
-becomes a phase move to `archived` through `spec_lifecycle` instead of a delete. The file then stays
-in `spec/` and the spec list keeps the row, so F330 would be only half fixed (see D-B12-1). If the
-operator answers D-B12-2 with "send anyway", D2's creation failure is turned into a
-`waiting_reason`-style notice on a `200`, and the vitest case *"still starts the conversation when
-the document cannot be created"* stays as it is.
+**Built on R2's recommended answers to D-B12-1 and D-B12-2** (R2 reversed R1's D-B12-1; see D3 and
+`spec-queue/tracks/B12.md`).
+
+- **D-B12-1 (R2): nothing that was committed is ever deleted.** The document is created after every
+  refusal the route can answer itself, and in the same transaction as the conversation and the
+  queue entry, so a route-level refusal or a failed commit leaves no row, and the route removes the
+  one file it wrote before the commit. The only refusal that arrives *after* the commit, a
+  dispatch refusal naming this entry (F108), archives the document through the phase machine, as
+  the operator's own act, with the refusal as its reason. R1 recommended deleting the row, its
+  events and its file in that case. That contradicts two requirements of the main
+  `spec-document-authority` spec, not one: *Every change to a document is recorded as an attributed
+  event* (`openspec/specs/spec-document-authority/spec.md:208-230`: "A recorded event MUST NOT be
+  edited or removed", scenario *History cannot be rewritten*) and *A document that produced nothing
+  can be archived* (`:1891-1902`: "rather than a separate deletion path"). If the operator prefers
+  deletion anyway, this change must carry MODIFIED deltas to both requirements; it does not today.
+- **D-B12-2: refuse the send when the document cannot be created.** If the operator answers "send
+  anyway", D2's creation failure becomes a notice on a `200`, and the vitest case *"still starts the
+  conversation when the document cannot be created"* stays as it is.
 
 ## Context
 
@@ -20,7 +31,7 @@ the document cannot be created"* stays as it is.
   row today.
 - A file under `spec/` with no row is not inert. Discovery and adoption find it
   (`spec-document-authority` *Document discovery covers every safe document*, `:315`;
-  `spec-document-adoption`). So a discard must remove the file as well as the row.
+  `spec-document-adoption`). So the commit-failure branch must remove the file the request wrote, since the rows roll back and the file does not.
 - `POST /agent/trigger` (`agent_trigger.py:1405-1671`) commits the conversation and the entry at
   `:1586`, then calls `schedule_agent`. Where the scheduler's refusal names this entry,
   `withdraw_refused_entry` runs and the route raises the refusal's status (`:1613-1641`).
@@ -31,7 +42,18 @@ the document cannot be created"* stays as it is.
 ### D1 — The trigger route creates the document, after its own refusals
 
 `TriggerAgentRequest` gains `start_exploration: bool = False`. It is refused with 400 when combined
-with `spec_document` or `conversation_id`, because an exploration belongs to a new conversation.
+with `spec_document`, `conversation_id`, `session_mode="resume"` or `review_task_id`: an exploration
+belongs to a new conversation (a resume can land on an existing one, `agent_trigger.py:1478-1491`),
+and a review turn's subject is a commit, not a document being explored.
+
+**Every refusal the route raises before the creation point (R2, `agent_trigger.py:1415-1565`):**
+invalid agent name (400), bad `session_mode` or missing `session_id` (400), archived agent (409),
+workspace unavailable (`raise_workspace_http_error`), `work_dir` against a writing agent or invalid
+(400), a closed or unknown conversation (409), `task_id` unresolvable (`TaskBindingError`) or
+already decided (409), `review_task_id` with no commit or refused by `review_dispatch_refusal`, and
+overrides with no runner, a vanished runner or invalid values (409/400). All of them are before
+`new_entry` (`:1567`), so none can leave anything behind. The only failures after it are the
+commit (`:1586`) and `schedule_agent`'s refusals.
 
 The document is created immediately before `new_entry` (`:1570`). That is after every route-level
 refusal, so none of those can leave a document behind. It is created in the route's own session,
@@ -42,7 +64,7 @@ both. `trigger_agent` passes `title=body.message.strip()[:120]`, which is exactl
 sends today (`NewConversationSurface.tsx:87`). The entry's `spec_document` is the new path.
 
 **Rejected: the composer archives the document on refusal.** The row and the file would remain.
-The spec list, whose default view R2 should check, and `spec/changes/` would still hold one entry
+The spec tree's current view hides archived documents (R2: `specNavigation.ts:53`), but the browser lists them under *Archived*, and `spec/changes/` would still hold one entry
 per retry. A network failure or a closed tab would still leave the orphan, because nothing would run
 the cleanup.
 
@@ -61,37 +83,62 @@ would need the same compensation D3 describes, one layer further down.
 | `PhaseError` | `create_document` | 409 `{"code": exc.code}` | nothing |
 | `OSError` from `write_document` | `save_document` | 500. The session is rolled back, and any partial file at that path is removed if one exists (D3) | nothing, if the removal succeeds |
 | anything | the commit at `:1586` | the error propagates as today (F329 answered 500). The file is removed before re-raising | nothing, if the removal succeeds |
-| a refusal naming this entry | `schedule_agent` | the refusal's own status and detail, as F108 does today | the document is discarded (D3) |
+| a refusal naming this entry | `schedule_agent` | the refusal's own status and detail, as F108 does today | the document, **archived** as the operator's act with the refusal as its reason (D3) |
+| an environment-level refusal (no runner, runner busy) | `schedule_agent` | 200 `queued` with `waiting_reason`; it produces no `refusal` (`:1654-1658`) | the document, correctly: the input is still queued and will run with it |
+| anything unexpected | `schedule_agent`, `persist_event` or the broadcast, all after the commit | 500, as today | the document and the still-queued entry, correctly: the input will be delivered. The composer's thrown error is the only wrong signal, as it is for every send today |
 | none; the turn starts or waits | | 200 with `spec_document` set | the document, which is correct |
 
 If removing the file itself fails (`OSError`), the route still answers with the original error and
 logs the path. It does not replace a refusal with a cleanup error. What remains is a file with no
 row, which adoption can take in. That is the same outcome as today, and no worse.
 
-### D3 — The discard is the request undoing itself, not a deletion route
+### D3 — After the commit, a refused send archives its document; nothing is deleted (R2)
 
-`spec_service.discard_unused_exploration(session, workspace, document_id)` deletes the file first,
-then the document's `spec_document_events`, `spec_requirements` and `spec_requirement_revisions`
-rows (there should be none of the last two for an empty payload, but they are deleted by
-`document_id` all the same), then the row. It commits and broadcasts `spec_updated` with the path.
-It refuses, and returns `False` without touching anything, unless **all** of these hold:
+R1's D3 deleted the file, the events, the index rows and the row. R2 reverses that, for three
+reasons found in the code and the main spec:
 
-- `phase == "exploring"`;
-- every `spec_document_events` row for the document is one the request wrote: `created`, plus the
-  content event `save_document` recorded, and no later one;
-- no `tasks.spec_document_id` and no `loops.spec_document_id` names it (`db/models.py:713`,
-  `:1502`).
+1. **It deletes append-only history.** `spec_document_events` is append-only by contract
+   (`spec-document-authority` *Every change to a document is recorded as an attributed event*, and
+   the model's own docstring, `db/models.py:2085-2092`). The `created` and content events R1's D3
+   deleted are recorded events. R1 argued only against `:1891`'s "separate deletion path" and did
+   not weigh this requirement.
+2. **Most of the benefit does not need it.** Every route-level refusal is before creation (D1), and
+   a failed commit rolls the rows back. F330's recorded case (F329's 500 at the commit, eight
+   orphans) and its reproduction (an archived agent) both fall there. What remains after the commit
+   is a dispatch refusal naming this entry, which for a new operator conversation means cases such
+   as an agent with no row (`agent_trigger.py:676-687`), a runner with no execution adapter
+   (`:731-738`, `:1170-1174`) or an argument refusal (`:650-656`).
+3. **The archive path already exists and fits.** `spec_lifecycle.transition(..., to_phase=ARCHIVED,
+   actor=operator)` permits `exploring -> archived` for a document with no requirements and no
+   tasks (`spec_lifecycle.py:320-341`), and archiving is the operator's act, which this is, since
+   the operator's own request is being answered. An archived document is left out of the spec
+   tree's current view (`specNavigation.ts:53`, `:103-104`) and shown under *Archived* in the
+   browser (`SpecDocumentBrowser.tsx:136-149`).
 
-It is called in exactly two places: the commit-failure branch, where only the file is removed
-because the rows were rolled back, and the F108 branch after `withdraw_refused_entry` returns
-`True`. There is **no route** that reaches it. That is why it does not contradict
-`spec-document-authority`'s *A document that produced nothing can be archived*, which governs a
-document someone has seen. R2 should check that sentence's "rather than a separate deletion path"
-against this argument and either agree or push back.
+So `spec_service.retire_refused_exploration(session, document, *, reason)` calls `transition` to
+`archived` with `_operator()` and the refusal's detail as the reason, commits, and broadcasts
+`spec_updated`. It does nothing, and returns `False`, unless the document is still `exploring`
+and its only events are the `created` and content events this request wrote. `transition`'s own
+guard already refuses a document with requirements or tasks. It is called in the F108 branch
+**whether or not** `withdraw_refused_entry` returns `True`: `False` means the scheduler withdrew the
+entry first (`inbound_queue.py:443-447`), and the route raises the refusal either way, so the
+composer never learns the path in either case. If the transition itself raises, the route still
+answers with the original refusal and logs the path.
 
-The file is removed first because a row without its file is reported as "registered but its file is
-missing" (`agent_actions.py:1418-1422`), while a file without its row is merely adoptable. So if
-the delete is interrupted part-way, the leftover state is the milder of the two.
+The commit-failure branch removes only the file (the rows were never committed). That is not a
+deletion of anything the Hub recorded.
+
+**The residual, stated:** after a post-commit dispatch refusal the file stays under `spec/changes/`
+and the row stays, archived. The operator is not shown it in the current tree. This is what
+`:1891` already prescribes for a document created by mistake.
+
+**Rejected: delete (R1's D3).** It needs MODIFIED deltas to two main-spec requirements, for a case
+that is rare once D1 holds. It stays available if the operator wants the file gone too (D-B12-1,
+option a).
+
+**Rejected: pre-check every dispatch refusal in the route.** The route already mirrors three of
+`trigger_agent_directly`'s guards; mirroring all of them is a second authority that drifts, and a
+request-level refusal added later would silently reopen the gap.
 
 ### D4 — The composer sends one request
 
@@ -116,3 +163,7 @@ precondition, `:8000` restarted past `c18a87b`).
 
 - **R1 (2026-09-24):** proposed. Decisions D-B12-1 and D-B12-2 are recorded in
   `spec-queue/tracks/B12.md`.
+- **R2 (2026-09-24):** D-B12-1 reversed to archive-after-commit (D3), because R1's delete removes
+  append-only events. D1 gains the full refusal list and two more 400 conflicts. D2 gains the
+  environment-level and unexpected-raise rows. The F108 branch retires the document whether or
+  not this call withdrew the entry.

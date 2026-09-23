@@ -1,6 +1,6 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: re-derive the proposal against `hub/ui/src/components/agents/NewConversationSurface.tsx:62-121`,
+- [x] 0.1 R2 (2026-09-24, recorded in design.md's round log and `spec-queue/tracks/B12.md`): re-derive the proposal against `hub/ui/src/components/agents/NewConversationSurface.tsx:62-121`,
   `hub/hub/api/v1/spec.py:1419-1467`, `hub/hub/spec_service.py:115-280`,
   `hub/hub/spec_lifecycle.py:170-222`, and `hub/hub/api/v1/agent_trigger.py:180-250,1405-1671`.
   In particular:
@@ -31,11 +31,16 @@ workspace under `tmp_path` so the `spec/` files can be listed.
   /agent/trigger` to an archived agent. Assert that exactly one orphan row and one file exist. This
   is a characterisation test. Keep it, inverted, as the regression in 1.1 once the composer no
   longer sends the first request.
-- [ ] 1.2 A dispatch refusal naming the entry (F108). Stage a review request that
-  `trigger_agent_directly` refuses with `request_level=True` **after** the route's own checks pass;
-  `test_a_refusal_names_a_remedy_that_works.py` has one. Send it with `start_exploration`. The
-  answer is that refusal's status. The entry is `withdrawn`. No document row, event row or file
-  remains, and a `spec_updated` event was broadcast. Record that it FAILS before group 2.
+- [ ] 1.2 A dispatch refusal naming the entry (F108), sent with `start_exploration`. R2: a new operator conversation carries no
+  review, and D1 now refuses `start_exploration` with `review_task_id`, so stage a refusal that
+  needs neither: an agent name with no `Agent` row (`agent_trigger.py:676-687`, which the route
+  does not check) or a runner with no execution adapter (`:731-738`). The answer is that
+  refusal's status. The entry is `withdrawn`. The document is `archived`, its `created` event is
+  still present, its last event is a `phase` event whose reason is the refusal's detail, and a
+  `spec_updated` event was broadcast. Record that it FAILS before group 2.
+- [ ] 1.2b The same, with `withdraw_refused_entry` patched to return `False` (the scheduler got
+  there first). The document is still archived. Fails if the retire call is nested under the
+  withdraw's `True` branch.
 - [ ] 1.3 An accepted send: 200. `spec_document` in the response names a row in `exploring` and a
   file that exists. The queue entry's `spec_document` is that path, and the dispatched turn's
   context carries the spec notice (`spec_turn_notice`). Record that it FAILS before group 2.
@@ -46,16 +51,17 @@ workspace under `tmp_path` so the `spec/` files can be listed.
   row and no entry exist.
 - [ ] 1.6 Commit failure: patch the session's commit at the route's commit point to raise once.
   The request errors, and no file remains under `spec/`.
-- [ ] 1.7 D3's guard, unit-level on `discard_unused_exploration`:
-  - (a) a document with an extra content event after creation is kept, and the function returns
-    `False`;
-  - (b) a document moved to `proposed` is kept;
-  - (c) a document named by a task's `spec_document_id` is kept;
-  - (d) a fresh one is removed: file, events and row.
-  Each of (a), (b) and (c) must fail if its condition is deleted from the function (mutation-check
-  it once).
-- [ ] 1.8 `start_exploration` with `spec_document` gives 400. With `conversation_id` it also gives
-  400.
+- [ ] 1.7 D3's guard, unit-level on `retire_refused_exploration`:
+  - (a) a document with an extra content event after creation is left in `exploring`, and the
+    function returns `False`;
+  - (b) a document moved to `proposed` is left in `proposed`;
+  - (c) a document named by a task's `spec_document_id` is left alone (`transition`'s own
+    `archive_would_orphan_work` guard; the function returns `False` rather than raising);
+  - (d) a fresh one is archived, and its row, its events and its file all still exist.
+  Each of (a) and (b) must fail if its condition is deleted from the function (mutation-check it
+  once). No test may observe a deleted `spec_document_events` row.
+- [ ] 1.8 `start_exploration` with `spec_document` gives 400, and so do `conversation_id`,
+  `session_mode="resume"` and `review_task_id` (D1).
 - [ ] 1.9 vitest, `hub/ui/src/__tests__/newConversationSurface.test.tsx`: armed send makes **one**
   fetch, to `/agent/trigger`, with `start_exploration: true` and no `/project/documents` call.
   `onStarted` gets the response's `spec_document`. Replace *"still starts the conversation when the
@@ -68,10 +74,11 @@ workspace under `tmp_path` so the `spec/` files can be listed.
 - [ ] 2.1 `spec_service.start_exploration(...)`: move `spec.py:1429-1462`'s mint, create and save
   sequence into it, and call it from `POST /project/documents`. Behaviour is unchanged there. The
   existing document-creation tests are the control.
-- [ ] 2.2 `spec_service.discard_unused_exploration(...)`, per design D3.
+- [ ] 2.2 `spec_service.retire_refused_exploration(...)`, per design D3: archive through
+  `spec_lifecycle.transition`, never delete.
 - [ ] 2.3 `TriggerAgentRequest.start_exploration` and `TriggerAgentResponse.spec_document`. In
   `trigger_agent`, implement the 400 conflicts, the creation immediately before `new_entry`, the
-  compensated commit, and the discard after `withdraw_refused_entry` returns `True`. Also set
+  compensated commit, and the retire call in the F108 branch whatever `withdraw_refused_entry` returns. Also set
   `spec_document` on every 200 response, including the one built from `scheduled.response`.
 - [ ] 2.4 Run group 1's Python tests, with `claude` stripped from PATH, then the lint block.
   Commit and push.
@@ -86,7 +93,7 @@ workspace under `tmp_path` so the `spec/` files can be listed.
 ## 4. Verify
 
 - [ ] 4.1 Trial Hub `:8010`: archive an agent, arm explore, send three times, and list `spec/` and
-  `GET /project/documents`. There are no new documents. Unarchive and send once, and exactly one
+  `GET /project/documents`. There are no new documents in the current tree or under `spec/`. Unarchive and send once, and exactly one
   document exists and opens in the side panel. Record the output in design.md's round log.
 - [ ] 4.2 Close F330 in `FINDINGS.md` and regenerate the backlog. Note that the eight existing
   LoopEngine orphans are not removed by this change; the operator can archive them.

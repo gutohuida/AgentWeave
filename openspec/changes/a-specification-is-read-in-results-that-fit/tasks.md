@@ -1,6 +1,6 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: re-derive the proposal against `hub/hub/api/v1/agent_actions.py:1374-1481`,
+- [x] 0.1 R2 (2026-09-24, recorded in design.md's round log and `spec-queue/tracks/B12.md`): re-derive the proposal against `hub/hub/api/v1/agent_actions.py:1374-1481`,
   `hub/hub/spec_reading.py:121-190`, `hub/hub/mcp_server.py:1908-1935`,
   `hub/hub/api/v1/agents.py:1236-1250`, `hub/hub/run_task_binding.py:464-477` and
   `hub/tests/test_read_spec_document.py`. In particular:
@@ -30,9 +30,12 @@ copy of a real spec.
   reads is all N requirements, with no duplicates. If the second read is truncated too, repeat
   until every requirement has been returned, and assert the loop terminates in at most
   `ceil(total / budget) + 1` reads.
-- [ ] 1.3 Order: build the document with requirements declared out of identifier order. The
-  truncated prefix is still `FR-1..FR-k`. This test fails if `fit_view` appends in payload order
-  rather than in `requirement_view`'s order (F190: use the order the route really returns).
+- [ ] 1.3 Order: identifiers are minted in declaration order on first submission, so a document
+  cannot simply be *declared* out of identifier order (R2). Use at least 12 requirements, so that a
+  string sort (`FR-1, FR-10, FR-11, FR-12, FR-2`) differs from `requirement_view`'s numeric order,
+  and submit a second revision that lists them in reverse, so payload order differs too. The
+  truncated prefix is still `FR-1..FR-k` numerically. This test fails if `fit_view` re-sorts by
+  string or appends in payload order (F190: use the order the route really returns).
 - [ ] 1.4 `identifiers=FR-2,FR-99`: returns `FR-2` only, with `unknown_identifiers == ["FR-99"]` and
   status 200.
 - [ ] 1.5 `include=outline`: every requirement has exactly the keys
@@ -50,14 +53,23 @@ copy of a real spec.
   cut and marked; the fixed fields are never dropped.
 - [ ] 1.11 In `hub/tests/test_mcp_tool_schemas.py`: the tool's `include` Literal equals the route's
   accepted values, and the tool's default is still `"requirements"` (D5: a new tool must not send
-  a value an old Hub refuses by default).
+  a value an old Hub refuses by default). The route's values must first become an importable
+  constant (e.g. `READ_INCLUDE_VALUES` in `agent_actions.py`, with the `pattern=` built from it);
+  today they exist only inside a regex string, and no agreement test covers `include` (R2).
+- [ ] 1.12 A requirement with no identifier (D3, R2): write a document file whose payload declares
+  a requirement the index has not seen and whose identity block gives it none, large enough to be
+  truncated before it. `remaining_identifiers` names it by `key`, and reading with that key returns
+  it. Fails if continuation matches `identifier` only.
+- [ ] 1.13 D6 (R2): with `read_document` patched to raise `OSError`, then `UnicodeDecodeError`,
+  then `ProjectPathError`, the route answers 409 with *"the document's file could not be read"*.
+  Record that each is a 500 today.
 
 ## 2. The fix
 
 - [ ] 2.1 `spec_reading.fit_view` and `READ_BUDGET_CHARS`, per D2.
 - [ ] 2.2 In the route: the id branch (D4), the `identifiers` query parameter and filter (D3),
   widen `include`'s pattern to `requirements|outline|full|design|tasks|algorithms|evidence|lifecycle`,
-  build the outline, and call `fit_view` last. Add `id` to the view. Handle D6 as R2 decides.
+  build the outline, and call `fit_view` last. Add `id` to the view. Handle D6: `OSError`, `UnicodeDecodeError` and `ProjectPathError` from `read_document` answer 409.
 - [ ] 2.3 `mcp_server.py`: add the `identifiers: str = ""` argument (sent only when non-empty),
   widen the `include` Literal, and rewrite the docstring to explain truncation, `continue_with` and
   the id. Stdlib and fastmcp imports only.

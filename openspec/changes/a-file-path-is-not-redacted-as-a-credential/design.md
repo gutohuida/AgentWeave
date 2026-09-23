@@ -25,7 +25,10 @@ match only when all of these hold:
 1. The match came from the **catch-all**. A match that starts with `aw_live_` or `sk-` came from a
    prefix alternative and is always redacted. The function can tell which alternative matched
    through `m.lastindex` once each alternative is its own group. Checking the prefix string would
-   also work. R2 should choose one, and the test in 1.3 covers both.
+   also work. **R2 chose named groups**: drop today's single outer group (nothing reads
+   `group(1)`; `redact_secrets` is its only user, via `sub`) and name the catch-all
+   `(?P<entropy>[A-Za-z0-9+/=]{32,})`, so the test is `m.lastgroup == "entropy"`. It states which
+   rule matched instead of re-deriving it from the text. Task 1.3 covers the prefix case either way.
 2. Split on `/`, it has **at least three non-empty segments**.
 3. Every segment fully matches `[a-z0-9]+|[A-Z]?[a-z]+(?:[A-Z][a-z]+)*`. That is a lowercase or
    digit word (`src`, `v1`, `python3`), or a capitalised or camel-case word (`Users`,
@@ -65,12 +68,20 @@ already lets through every credential shorter than 32 characters and every one c
 or `-`. The finding records "zero recorded true positives that the two prefixes would have
 missed". R2 should re-run the measurement, not trust this number.
 
+**R2 re-ran it independently** (own implementation of D1, over the module's pattern at `ce086b6`):
+0 survivors in 685,660 random base64 strings of 32–128 characters containing `/`, and every row of
+the table above reproduced. One narrowing R1 did not state: an all-capitals segment (`README`,
+`API`) is not an "ordinary word", so `/usr/lib/python3/dist/packages/foo/README/x` is still
+redacted whole. Accepted: widening the segment rule to capitals admits more of base64's alphabet.
+
 ### D3 — Why nothing else in the product depends on the defect
 
 `write_paths` is read before redaction and does not change. What the operator sees is the recorded
 `payload["input"]` and `payload["output"]`, which will now show the paths. Nothing parses
 `<redacted>` back out. `grep -rn "<redacted>" hub/hub hub/ui/src` finds only the producer and tests.
-R2 should confirm that with the grep.
+R2 ran the grep: the only other `"<redacted>"` in `hub/hub` is `jobs.py:61`, the job-failure
+summary's own redactor (`_safe_error_summary`). It is a producer, not a reader, and its class
+`[A-Za-z0-9_=-]` has no `/`, so like the CLI twin it never had F278. It is not changed here.
 
 ## What each caller returns when this raises
 
@@ -80,3 +91,6 @@ raise on a `str` input. None of the three callers catches around it today, and n
 ## Round log
 
 - **R1 (2026-09-24):** proposed. Measured D2 on `ce086b6`.
+- **R2 (2026-09-24):** every code claim re-derived and the residual re-measured (0 of 685,660).
+  D1 item 1 decided (named group). Two notes added: all-capitals segments stay redacted, and
+  `jobs.py`'s separate redactor is untouched.
