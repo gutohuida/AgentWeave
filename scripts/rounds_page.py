@@ -12,14 +12,24 @@ round it left, marked *moved -> <where it lives now>*, and is counted only there
 nowhere unstruck has left the plan (moved to a proposed change, say); it is listed, and counted in
 no total. Unstruck later mentions are cross-references and say "also in".
 
+**Bundle pages.** The page also links to one page per spec bundle (`spec-queue/tracks/Bn.md`,
+rendered to `Bn.html` next to it). Each bundle's own "Bundles -- R1/R2/R3 (parked for the operator)"
+row is read from `spec-queue/tracks/README.md`'s table plus the record file's header fields and
+which of `## R1`/`## R2`/`## R3`/`## Final` it has written so far; a bundle with no record file yet
+shows "not started". `--tracks-dir` (hidden; default `spec-queue/tracks`) points the bundle-page
+step at a different directory, for testing against sample records outside the repo.
+
     py -3.11 scripts/rounds_page.py          write the page and print the progress report
     py -3.11 scripts/rounds_page.py --quiet  write the page and print only its path
+
+    py -3.11 scripts/rounds_page.py --tracks-dir <dir>   read/write bundle records in <dir> instead
 """
 
 from __future__ import annotations
 
 import html
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -30,6 +40,8 @@ import backlog_page as bp  # noqa: E402
 
 PLAN = bp.QUEUE / "ROUNDS.md"
 OUT = bp.QUEUE / "ROUNDS.html"
+TRACKS_DIR = bp.QUEUE / "tracks"
+TRACKS_README = TRACKS_DIR / "README.md"
 
 _FID = re.compile(r"\bF\d+\b")
 _DATE = re.compile(r"(20\d\d-\d\d-\d\d)")
@@ -171,7 +183,202 @@ def fixed_on(status: str) -> str:
     return m.group(1) if m else ""
 
 
-def build() -> tuple[str, dict]:
+# --------------------------------------------------------------------------- bundle pages
+#
+# Bundles run the same findings this file already tracks through R1 -> R2 -> R3 and park at a
+# **Final** recommendation for the operator (see `spec-queue/tracks/README.md`). Each bundle's
+# record file (`spec-queue/tracks/Bn.md`) is rendered to `Bn.html` next to it, and the "Bundles"
+# section on this page links to it.
+
+_HEAD_FIELD = re.compile(r"^\*\*(Findings|Decisions|Changes|Status):\*\*\s*(.*)$", re.M)
+_ROUND_KEYS = ("R1", "R2", "R3", "Final")
+
+
+def parse_bundle_table(text: str) -> list[dict]:
+    """Bundle rows from `spec-queue/tracks/README.md`'s table: id, title, absorbs, finding ids."""
+    bundles: list[dict] = []
+    started = False
+    for line in text.split("\n"):
+        if not started:
+            if line.strip().startswith("| Bundle "):
+                started = True
+            continue
+        if not line.strip().startswith("|"):
+            break
+        row = cells(line)
+        if not row or not re.match(r"^B\d+$", row[0]):
+            continue
+        bundles.append(
+            {
+                "id": row[0],
+                "title": row[1] if len(row) > 1 else "",
+                "absorbs": row[2] if len(row) > 2 else "",
+                "finding_ids": _FID.findall(row[3]) if len(row) > 3 else [],
+            }
+        )
+    return bundles
+
+
+def parse_bundle_record(text: str) -> dict:
+    """A `spec-queue/tracks/Bn.md` record: its title, header fields, and each round's body.
+
+    Sections are split on top-level `## ` headings, per the record-file contract in
+    `spec-queue/tracks/README.md`: `## R1 -- ...`, `## R2 -- ...`, `## R3 -- ...`, `## Final -- ...`.
+    """
+    h1 = re.match(r"^#\s+B\d+\s*[-–—]\s*(.+)$", text.strip().split("\n", 1)[0])
+    fields = {k.lower(): v.strip() for k, v in _HEAD_FIELD.findall(text)}
+    sections: dict[str, dict] = {}
+    for sec in re.split(r"\n(?=## )", text):
+        head, _, body = sec.partition("\n")
+        m = re.match(r"^##\s*(R1|R2|R3|Final)\b\s*(.*)$", head.strip())
+        if m:
+            sections[m.group(1)] = {"heading": m.group(2).strip(" -–—"), "body": body}
+    return {"title": h1.group(1).strip() if h1 else "", "fields": fields, "sections": sections}
+
+
+def bundle_progress(status: str, sections: dict) -> dict:
+    """Pip state per round key.
+
+    `done`: the heading is written and the Status line says that round is done. `started`: the
+    heading is written but Status hasn't said so yet. `pending`: no heading at all. `Final` carries
+    no "done" wording in the Status line by contract (`R1 done | R2 done | R3 done -- parked for
+    operator`), so it is `done` once the heading exists.
+    """
+    status_l = (status or "").lower()
+    pips: dict[str, str] = {}
+    for r in ("R1", "R2", "R3"):
+        if r not in sections:
+            pips[r] = "pending"
+        elif re.search(rf"\b{r.lower()}\s+done\b", status_l):
+            pips[r] = "done"
+        else:
+            pips[r] = "started"
+    pips["Final"] = "done" if "Final" in sections else "pending"
+    return pips
+
+
+def relhref(target: Path, from_dir: Path) -> str:
+    return os.path.relpath(target, from_dir).replace("\\", "/")
+
+
+def pip_html(label: str, state: str) -> str:
+    return f'<span class="pip pip-{esc(state)}">{esc(label)}</span>'
+
+
+def render_bundle_page(
+    bundle_id: str, fallback_title: str, record_path: Path, out_rounds: Path
+) -> tuple[str, dict]:
+    """Render one `spec-queue/tracks/Bn.md` to the page written at `Bn.html`, next to the record.
+
+    Returns (page_html, pips) so the caller doesn't have to re-parse the record to build its row
+    in the "Bundles" section.
+    """
+    text = record_path.read_text(encoding="utf-8", errors="replace")
+    rec = parse_bundle_record(text)
+    title = rec["title"] or fallback_title or bundle_id
+    fields = rec["fields"]
+    pips = bundle_progress(fields.get("status", ""), rec["sections"])
+
+    toc_items = []
+    for k in _ROUND_KEYS:
+        cls = " toc-final" if k == "Final" else ""
+        if k in rec["sections"]:
+            toc_items.append(f'<a class="toc-item{cls}" href="#{k}">{esc(k)}</a>')
+        else:
+            toc_items.append(f'<span class="toc-item toc-missing{cls}">{esc(k)}</span>')
+
+    summary_rows = "".join(
+        f'<div class="sfig"><div class="sl">{esc(label)}</div>'
+        f'<div class="sv">{inline(fields.get(key, "") or "not given")}</div></div>'
+        for key, label in (
+            ("findings", "Findings"),
+            ("decisions", "Decisions"),
+            ("changes", "Changes"),
+            ("status", "Status"),
+        )
+    )
+
+    order = [k for k in ("Final", "R1", "R2", "R3") if k in rec["sections"]]
+    if order:
+        pieces = []
+        for k in order:
+            sec = rec["sections"][k]
+            extra = f" -- {inline(sec['heading'])}" if sec["heading"] else ""
+            body_html = bp.md(sec["body"], demote=2)
+            cls = "sec-final" if k == "Final" else "sec-round"
+            pieces.append(
+                f'<section class="{cls}" id="{esc(k)}"><h2>{esc(k)}{extra}</h2>'
+                f'<div class="md-body">{body_html}</div></section>'
+            )
+        sections_html = "".join(pieces)
+    else:
+        sections_html = '<p class="empty">No R1/R2/R3/Final section found in this record yet.</p>'
+
+    back_href = relhref(out_rounds, record_path.parent)
+    page = BUNDLE_TEMPLATE.format(
+        page_title=esc(f"{bundle_id} -- {title}"),
+        back_href=esc(back_href),
+        bundle_id=esc(bundle_id),
+        bundle_title=esc(title),
+        summary_rows=summary_rows,
+        toc="".join(toc_items),
+        sections=sections_html,
+    )
+    return page, pips
+
+
+def render_bundles_section(tracks_dir: Path, out_rounds: Path) -> str:
+    """The "Bundles -- R1/R2/R3 (parked for the operator)" section for ROUNDS.html.
+
+    Writes each bundle's `Bn.html` into `tracks_dir` as a side effect. The bundle table itself
+    always comes from the real `spec-queue/tracks/README.md` -- it names the bundles that exist,
+    not whatever a caller points `tracks_dir` at -- but each bundle's record and rendered page are
+    read from and written into `tracks_dir`, so a test run can point that elsewhere without
+    touching the repo's own records.
+    """
+    if not TRACKS_README.exists():
+        return ""
+    bundles = parse_bundle_table(TRACKS_README.read_text(encoding="utf-8", errors="replace"))
+    if not bundles:
+        return ""
+    rows = []
+    for b in bundles:
+        record_path = tracks_dir / f"{b['id']}.md"
+        n = len(b["finding_ids"])
+        if record_path.exists():
+            page_path = tracks_dir / f"{b['id']}.html"
+            page_html, pips = render_bundle_page(b["id"], b["title"], record_path, out_rounds)
+            page_path.write_text(page_html, encoding="utf-8", newline="\n")
+            progress = "".join(pip_html(k, pips[k]) for k in _ROUND_KEYS)
+            href = relhref(page_path, out_rounds.parent)
+            name_html = (
+                f'<a href="{esc(href)}"><span class="fid">{esc(b["id"])}</span> '
+                f'{esc(b["title"])}</a>'
+            )
+        else:
+            progress = '<span class="notstarted">not started</span>'
+            name_html = f'<span class="fid">{esc(b["id"])}</span> {esc(b["title"])}'
+        rows.append(
+            f"<tr><td>{name_html}</td><td>{esc(b['absorbs'])}</td>"
+            f'<td class="num">{n}</td><td>{progress}</td></tr>'
+        )
+    table = (
+        '<table class="bundles"><thead><tr><th>Bundle</th><th>Absorbs (ROUNDS.md)</th>'
+        "<th>Findings</th><th>Progress</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table>"
+    )
+    return (
+        '<section class="bundlesec"><h2 class="sec-h">'
+        "Bundles &mdash; R1/R2/R3 (parked for the operator)</h2>"
+        '<p class="blurb">Every bundle from <code>spec-queue/tracks/README.md</code>, run by '
+        "separate subagents through R1 &rarr; R2 &rarr; R3 and parked at a Final recommendation "
+        "until the operator decides in <code>DECISIONS.md</code>. A bundle with no record file "
+        f"yet has not started.</p>{table}</section>"
+    )
+
+
+def build(tracks_dir: Path = TRACKS_DIR) -> tuple[str, dict]:
     findings = {f["id"]: f for f in bp.parse_findings()}
     rounds = parse_plan(PLAN.read_text(encoding="utf-8"))
     # The plan covers B, C and D. A severity-A finding it names (a parked F325, tonight's F352) is a
@@ -313,6 +520,8 @@ def build() -> tuple[str, dict]:
         or '<li class="muted">Nothing placed in the plan is fixed yet.</li>'
     )
 
+    bundles_section = render_bundles_section(tracks_dir, OUT)
+
     total, got = len(placed), len(done)
     snapshot = {
         "generated": now,
@@ -333,6 +542,7 @@ def build() -> tuple[str, dict]:
         open_left=total - got,
         current=esc(current_key or "—"),
         sections="".join(sections),
+        bundles_section=bundles_section,
         recent=recent_html,
         out_of_plan=(
             "".join(
@@ -458,6 +668,21 @@ aside li .when{{display:block}}
 .muted{{color:var(--ink-3)}}
 .foot{{font-size:12px;color:var(--ink-3);margin-top:22px}}
 .hidden{{display:none}}
+.bundlesec{{margin-top:28px}}
+.sec-h{{font-size:20px;font-weight:700;letter-spacing:-.015em;margin:0 0 6px}}
+.bundlesec .blurb{{margin:0 0 14px}}
+table.bundles{{width:100%;border-collapse:collapse;font-size:13px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;overflow:hidden}}
+table.bundles th{{text-align:left;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500;padding:9px 12px;background:var(--surface-2);border-bottom:1px solid var(--rule)}}
+table.bundles td{{padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}}
+table.bundles tr:last-child td{{border-bottom:0}}
+table.bundles td.num{{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}}
+table.bundles a{{text-decoration:none}}
+table.bundles a:hover{{text-decoration:underline}}
+.notstarted{{font-family:var(--mono);font-size:11px;color:var(--ink-3);font-style:italic}}
+.pip{{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:4px;margin-right:3px;display:inline-block}}
+.pip-pending{{background:var(--surface-2);color:var(--ink-3)}}
+.pip-started{{background:var(--sevB-soft);color:var(--sevB)}}
+.pip-done{{background:var(--ok-soft);color:var(--ok)}}
 </style>
 </head>
 <body>
@@ -487,6 +712,7 @@ aside li .when{{display:block}}
     <div class="card"><h3>Moved out of the plan</h3><p class="muted">Handed on to a change this
     plan does not track; counted in no total.</p><ul>{out_of_plan}</ul></div></aside>
   </div>
+  {bundles_section}
   <p class="foot">Derived from <code>spec-queue/ROUNDS.md</code> (which round) and
   <code>scripts/drive/FINDINGS.md</code> (whether it is fixed). Never edit this file; mark the
   finding's <code>**Status:** fixed &lt;sha&gt;</code> and run <code>py -3.11 scripts/rounds_page.py</code>.
@@ -538,9 +764,121 @@ aside li .when{{display:block}}
 """
 
 
+BUNDLE_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{page_title}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {{
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}}
+@media (prefers-color-scheme: dark) {{
+  :root:not([data-theme="light"]) {{
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }}
+}}
+:root[data-theme="dark"] {{
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}}
+*{{box-sizing:border-box}}
+body{{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}}
+.wrap{{max-width:840px;margin:0 auto;padding:36px 16px 72px}}
+a{{color:var(--accent)}}
+code{{font-family:var(--mono);font-size:.86em}}
+:focus-visible{{outline:2px solid var(--accent);outline-offset:2px}}
+.back{{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}}
+.eyebrow{{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}}
+h1{{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}}
+.card{{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}}
+.summary{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}}
+.sfig .sl{{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}}
+.sfig .sv{{font-size:13.5px}}
+.sfig .sv code{{background:var(--surface-2);padding:1px 4px;border-radius:3px}}
+.toc{{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}}
+.toc-item{{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}}
+.toc-item:hover{{border-color:var(--accent);color:var(--accent)}}
+.toc-item.toc-missing{{opacity:.5;font-style:italic}}
+.toc-item.toc-final{{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}}
+.toc-item.toc-final.toc-missing{{background:var(--surface-2);color:var(--ink-3);opacity:.5}}
+section.sec-round,section.sec-final{{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}}
+section.sec-final{{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}}
+section h2{{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}}
+section.sec-final h2{{color:var(--accent)}}
+.empty{{color:var(--ink-3);font-style:italic;font-size:13.5px}}
+.md-body{{font-size:14px;line-height:1.62}}
+.md-body h1,.md-body h2,.md-body h3{{font-size:15px;margin:18px 0 7px}}
+.md-body h4,.md-body h5,.md-body h6{{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}}
+.md-body>*:first-child{{margin-top:0}}
+.md-body p{{margin:0 0 11px}}
+.md-body li{{margin:0 0 5px}}
+.md-body ul,.md-body ol{{margin:0 0 11px;padding-left:20px}}
+.md-body pre{{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}}
+.md-body code{{font-family:var(--mono);font-size:.92em}}
+.md-body pre code{{font-size:inherit}}
+.md-body blockquote{{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}}
+.md-body blockquote p:last-child{{margin-bottom:0}}
+.md-body .scroll{{overflow-x:auto}}
+.md-body table.md{{border-collapse:collapse;font-size:12.5px;width:100%}}
+.md-body table.md th,.md-body table.md td{{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}}
+.md-body table.md th{{background:var(--surface-2);font-weight:600}}
+.md-body hr{{border:0;border-top:1px solid var(--rule);margin:16px 0}}
+footer{{margin-top:30px;font-size:12px;color:var(--ink-3)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="{back_href}">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/{bundle_id}.md, tracked</p>
+  <h1>{bundle_id} &mdash; {bundle_title}</h1>
+  <div class="card">
+    <div class="summary">{summary_rows}</div>
+    <nav class="toc">{toc}</nav>
+  </div>
+  {sections}
+  <footer>Derived from <code>spec-queue/tracks/{bundle_id}.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>
+"""
+
+
 def main() -> int:
     quiet = "--quiet" in sys.argv[1:]
-    page, snap = build()
+    argv = sys.argv[1:]
+    tracks_dir = TRACKS_DIR
+    for i, arg in enumerate(argv):
+        if arg == "--tracks-dir" and i + 1 < len(argv):
+            tracks_dir = Path(argv[i + 1])
+        elif arg.startswith("--tracks-dir="):
+            tracks_dir = Path(arg.split("=", 1)[1])
+    page, snap = build(tracks_dir=tracks_dir)
     OUT.write_text(page, encoding="utf-8", newline="\n")
     print(f"wrote {OUT.relative_to(bp.ROOT)} ({len(page.encode()):,} bytes)")
     if quiet:
