@@ -91,6 +91,8 @@ export function RecencyView({
             }
             agentColor={colorFor(row.conversation.agent)}
             agentName={row.conversation.agent}
+            // F193: the tree lists these under "Archived agents"; here they are marked in place.
+            agentArchived={!agents.some((agent) => agent.name === row.conversation.agent)}
             testId={`recency-conversation-${row.conversation.id}`}
           />
         ),

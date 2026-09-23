@@ -243,3 +243,38 @@ describe('the recency view', () => {
     expect(screen.queryByTestId('recency-expander-proj-a')).toBeNull()
   })
 })
+
+// F193: an archived agent's open conversation vanished from the tree (which iterates the open
+// roster) while the recency view still listed it. The operator's decision (D10): shown in both,
+// marked, with Unarchive on opening. `ghost` is on no open roster here.
+describe("an archived agent's open conversation (F193)", () => {
+  beforeEach(() => {
+    cleanup()
+    localStorage.clear()
+    useConfigStore.setState({ selectedProjectId: 'proj-a' })
+    openPayload = {
+      conversations: [conversation({ id: 'conv-orphan', agent: 'ghost', title: 'Left behind' })],
+      archived_count: 0,
+    }
+    archivedPayload = { conversations: [], archived_count: 0 }
+  })
+
+  it('is listed in the tree, under Archived agents, marked', () => {
+    renderRail()
+    const group = screen.getByTestId('rail-archived-agents-proj-a')
+    expect(group).toHaveTextContent('Left behind')
+    expect(screen.getByTestId('agent-conversation-conv-orphan-agent-archived')).toBeInTheDocument()
+  })
+
+  it('is marked in the recency view too', () => {
+    renderRail()
+    toggle()
+    expect(screen.getByTestId('recency-conversation-conv-orphan-agent-archived')).toBeInTheDocument()
+  })
+
+  it('opens to the agent it belongs to', () => {
+    const { props } = renderRail()
+    fireEvent.click(screen.getByText('Left behind'))
+    expect(props.onOpenConversation).toHaveBeenCalledWith('proj-a', 'ghost', 'conv-orphan')
+  })
+})

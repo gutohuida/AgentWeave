@@ -82,3 +82,22 @@ export function useDismissPermissionRequest() {
     },
   })
 }
+
+/**
+ * The newest 100 permission requests, answered ones included (`pending_only=false`) — F231.
+ *
+ * `decide_permission_request` keeps every row on purpose, and the only query the app issued
+ * returned pending and expired ones, so an approval reached no screen: an operator who allowed a
+ * command yesterday had no way to see what they had allowed. Fetched only when asked for.
+ */
+export function usePermissionDecisions(enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<PermissionRequest[]>({
+    queryKey: ['project', projectId, 'permission-requests', 'decided'],
+    queryFn: () =>
+      getJson<PermissionRequest[]>(
+        `/api/v1/projects/${projectId}/permission-requests?pending_only=false`,
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+  })
+}

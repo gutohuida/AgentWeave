@@ -52,6 +52,7 @@ import {
   type EnvironmentSection,
 } from '@/lib/navigation'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
+import { ArchivedAgentNotice } from '@/components/agents/ArchivedAgentNotice'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
@@ -370,9 +371,13 @@ export default function App() {
         }
       />
     ) : (
-      <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-3)' }}>
-        Agent unavailable.
-      </div>
+      agentName ? (
+        <ArchivedAgentNotice agentName={agentName} />
+      ) : (
+        <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-3)' }}>
+          Agent unavailable.
+        </div>
+      )
     )
   } else if (destination.kind === 'agent-settings') {
     content = <AgentSettingsPage agent={destination.agent} section={destination.section} />

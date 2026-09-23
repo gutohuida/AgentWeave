@@ -42,6 +42,16 @@ vi.mock('@/api/questions', async (importOriginal) => ({
 
 vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: roster }) }))
 
+/** The decided permission requests (F231), and whether the panel asked for them. */
+let decisions: unknown[] = []
+const decisionsAsked = vi.fn()
+vi.mock('@/api/permissions', () => ({
+  usePermissionDecisions: (enabled: boolean) => {
+    decisionsAsked(enabled)
+    return { data: enabled ? decisions : undefined, error: null, isLoading: false }
+  },
+}))
+
 function agent(overrides: Partial<AgentSummary> = {}): AgentSummary {
   return {
     name: 'codex-1',
@@ -275,5 +285,28 @@ describe('declining from the Questions page (F229)', () => {
     render(<QuestionsPanel />)
     expect(screen.getByText('Answered or declined (1)')).toBeInTheDocument()
     expect(screen.getByText('declined')).toBeInTheDocument()
+  })
+})
+
+// F231: an approval reached no screen; the rows are kept and now listed.
+describe('permission decisions on the Questions page (F231)', () => {
+  it('does not fetch them until opened, then lists allowed and denied alike', () => {
+    decisions = [
+      { id: 'perm-1', agent: 'codex-1', tool_name: 'Bash', status: 'allowed', decided_by: 'operator', decided_at: new Date().toISOString() },
+      { id: 'perm-2', agent: 'codex-1', tool_name: 'Write', status: 'denied', decided_by: 'operator', decided_at: new Date().toISOString() },
+      { id: 'perm-3', agent: 'codex-1', tool_name: 'Read', status: 'pending', decided_by: null, decided_at: null },
+    ]
+    render(<QuestionsPanel />)
+    expect(decisionsAsked).toHaveBeenLastCalledWith(false)
+
+    const details = screen.getByTestId('permission-decisions') as HTMLDetailsElement
+    details.open = true
+    fireEvent(details, new Event('toggle'))
+
+    expect(decisionsAsked).toHaveBeenLastCalledWith(true)
+    expect(screen.getByTestId('permission-decision-perm-1')).toHaveTextContent('allowed')
+    expect(screen.getByTestId('permission-decision-perm-1')).toHaveTextContent('Bash')
+    expect(screen.getByTestId('permission-decision-perm-2')).toHaveTextContent('denied')
+    expect(screen.queryByTestId('permission-decision-perm-3')).toBeNull()
   })
 })

@@ -5,6 +5,7 @@ import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
 import { DEFAULT_QUESTION_TIMEOUT_SECONDS, useDeclineQuestion, useQuestions, type Question } from '@/api/questions'
 import { AnswerForm } from './AnswerForm'
+import { usePermissionDecisions } from '@/api/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/common/Badge'
 import { hubDate } from '@/lib/hubTime'
@@ -232,6 +233,8 @@ export function QuestionsPanel() {
 
       {unanswered?.length === 0 && <EmptyState icon="help" title="No pending questions" description="Agent questions will appear here." />}
 
+      <PermissionDecisions />
+
       {answered && answered.length > 0 && (
         <details className="answered-questions mt-2">
           <summary className="flex cursor-pointer select-none items-center text-[13px] font-medium transition-colors" style={{ color: 'var(--text-3)' }}>
@@ -255,5 +258,51 @@ export function QuestionsPanel() {
         </details>
       )}
     </div>
+  )
+}
+
+/**
+ * F231: what the operator allowed and refused, from the rows the Hub keeps. A refusal already
+ * reaches the activity feed; an approval reached nothing. Collapsed, and fetched only when opened.
+ */
+function PermissionDecisions() {
+  const [open, setOpen] = useState(false)
+  const { data, error, isLoading } = usePermissionDecisions(open)
+  const decided = data?.filter((request) => request.status !== 'pending') ?? []
+
+  return (
+    <details
+      className="answered-questions mt-2"
+      data-testid="permission-decisions"
+      onToggle={(event) => setOpen((event.target as HTMLDetailsElement).open)}
+    >
+      <summary className="flex cursor-pointer select-none items-center text-[13px] font-medium" style={{ color: 'var(--text-3)' }}>
+        <Icon name="expand_more" size={16} className="mr-1" /> Permission decisions
+      </summary>
+      <div className="mt-3 space-y-1.5 text-xs">
+        {isLoading && <p style={{ color: 'var(--text-3)' }}>Loading…</p>}
+        {error && !data && (
+          <p role="alert" style={{ color: 'var(--amber)' }}>
+            {readableApiError(error, 'Could not read the permission decisions.')}
+          </p>
+        )}
+        {data && decided.length === 0 && (
+          <p style={{ color: 'var(--text-3)' }}>No permission request has been decided yet.</p>
+        )}
+        {decided.map((request) => (
+          <p key={request.id} data-testid={`permission-decision-${request.id}`} style={{ color: 'var(--text-2)' }}>
+            <Badge variant={request.status === 'allowed' ? 'success' : request.status === 'denied' ? 'danger' : 'secondary'}>
+              {request.status}
+            </Badge>{' '}
+            <span style={{ color: 'var(--text)' }}>{request.agent}</span> · {request.tool_name}
+            {request.decided_at && (
+              <span style={{ color: 'var(--text-3)' }}>
+                {' '}· {request.decided_by ?? 'decided'} {formatDistanceToNow(hubDate(request.decided_at), { addSuffix: true })}
+              </span>
+            )}
+          </p>
+        ))}
+      </div>
+    </details>
   )
 }

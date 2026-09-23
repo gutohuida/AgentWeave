@@ -77,6 +77,9 @@ interface ConversationRowProps {
    *  firing beneath it. Repeating it per row would spend the width the title needs to say the one
    *  thing that differs between them. */
   showLoopMarker?: boolean
+  /** The owning agent is not on the open roster — archived (F193). The row stays, marked, and
+   *  opening it offers to unarchive the agent. */
+  agentArchived?: boolean
   testId: string
 }
 
@@ -88,6 +91,7 @@ export function ConversationRow({
   agentColor,
   agentName,
   showLoopMarker = true,
+  agentArchived = false,
   testId,
 }: ConversationRowProps) {
   const attention = ATTENTION[conversation.attention]
@@ -213,6 +217,16 @@ export function ConversationRow({
               />
             )}
             <span className="min-w-0 flex-1 truncate">{label}</span>
+            {agentArchived && (
+              <span
+                data-testid={`${testId}-agent-archived`}
+                className="shrink-0 text-[11px]"
+                style={{ color: 'var(--amber)' }}
+                title={agentName ? `${agentName} is archived; open this to unarchive it` : 'Its agent is archived'}
+              >
+                agent archived
+              </span>
+            )}
             {conversation.origin === 'peer' && (
               <span
                 data-testid={`${testId}-origin`}

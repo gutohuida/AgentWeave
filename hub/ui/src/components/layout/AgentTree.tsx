@@ -67,6 +67,17 @@ export function AgentTree({
     return grouped
   }, [data])
 
+  // F193: an archived agent's open conversations. The tree iterates the open roster, so their
+  // bucket was never read and they silently vanished here while the recency view still listed
+  // them. They get a group of their own, marked; opening one offers to unarchive the agent.
+  const orphans = useMemo(
+    () =>
+      [...byAgent.entries()]
+        .filter(([name]) => !agents.some((agent) => agent.name === name))
+        .sort(([a], [b]) => a.localeCompare(b)),
+    [byAgent, agents],
+  )
+
   const archivedByAgent = useMemo(() => {
     const grouped = new Map<string, AgentConversation[]>()
     for (const conversation of archived.data?.conversations ?? []) {
@@ -284,6 +295,27 @@ export function AgentTree({
           </div>
         )
       })}
+      {orphans.length > 0 && (
+        <div data-testid={`rail-archived-agents-${projectId}`} className="mt-1 flex flex-col gap-0.5">
+          <span className="px-2 text-[11px]" style={{ color: 'var(--text-3)' }}>
+            Archived agents
+          </span>
+          {orphans.map(([name, conversations]) =>
+            conversations.map((conversation) => (
+              <ConversationRow
+                key={conversation.id}
+                projectId={projectId}
+                conversation={conversation}
+                active={activeProject && activeConversation === conversation.id}
+                onOpen={() => onOpenConversation?.(projectId, name, conversation.id)}
+                agentName={name}
+                agentArchived
+                testId={`agent-conversation-${conversation.id}`}
+              />
+            )),
+          )}
+        </div>
+      )}
       <button
         type="button"
         className="row-item"

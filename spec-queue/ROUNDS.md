@@ -29,6 +29,9 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
    once the operator was shown that no screen can stop a loop (F225/D6), which would strand the app
    as `agent-loops` records for 2026-08-21. Revisit only if a stop control ships. Recorded in
    `archive_job`'s docstring.
+4. **Answered 2026-09-23 (D10, F193 only).** An archived agent's open conversation is *shown,
+   marked, with Unarchive*: both rail views list it, and opening it offers to unarchive the agent.
+   UI-only; archiving an agent still leaves its conversations open. Built in UI-1.
 
 ## How a round runs
 

@@ -15541,7 +15541,7 @@ survive the next turn's titler.** The three findings are at the seams around the
 
 ## F193 (B) — an open conversation whose agent is archived vanishes from one rail view, survives in the other, and opens on the words "Agent unavailable."
 
-**Status:** open. `spec-queue/DECISIONS.md:540` does not resolve it -- it says the product
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — an archived agent's open conversation is shown in both rail views, marked, and opens on a notice offering Unarchive; see FIXED at the end of this entry. Was: open. `spec-queue/DECISIONS.md:540` does not resolve it -- it says the product
 already made the analogous three-way choice for archiving a conversation with a live run, and that
 F193 should follow that precedent. That is guidance for a fix, not a fix. [classified 2026-09-09, D-2]
 
@@ -15587,6 +15587,8 @@ one frame: the row selected in the rail on the left, two grey words filling ever
 This is F187's shape (a sentence the product knows and the screen does not say) crossed with a
 consistency bug: the same conversation is present or absent depending on a rail toggle, which is a
 preference, not a filter.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** The operator's answer to D10 (2026-09-23): shown, marked, with Unarchive. `AgentTree` gathers conversations whose agent is not on the open roster into an *Archived agents* group (it iterated the roster, so they were dropped silently), and `RecencyView` keeps them in place. In both, `ConversationRow`'s new `agentArchived` prop draws an *agent archived* chip. Opening one no longer renders *Agent unavailable.*: new `ArchivedAgentNotice` reads the whole roster (`useAgents('all')`) and says *<name> is archived. Its conversations are kept. Unarchive it to read and continue this one.*, with an *Unarchive <name>* button (`useArchiveAgent`, `archived: false`) and its refusal. An agent on no roster at all is said to be so, and a failed roster read says it cannot tell. Once unarchived, the roster refetch resolves the agent and the conversation opens as before. The backend is unchanged: archiving an agent still leaves its conversations open, which is the chosen behaviour. Tests: `archivedAgentNotice.test.tsx` (3), `recencyView.test.tsx` (three F193 cases, both views).
 
 ## F194 (C) — the conversation and chat routes answer 200 for an agent that does not exist
 
@@ -18088,7 +18090,7 @@ finding is the *contrast* between them, not a red.
 
 ## F231 (C) — an approval leaves no record any screen can retrieve
 
-**Status:** open. Verified 2026-09-09: `pending_only` appears **0** times under
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the Questions page lists decided permission requests, allowed ones included; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `pending_only` appears **0** times under
 `hub/ui/src`, so the one parameter that would return an answered card is still unused, and an
 approval still reaches no timeline while a refusal does. [classified 2026-09-09, D-3]
 
@@ -18121,6 +18123,8 @@ argued: the read side already exists and is already reachable over HTTP.
 
 **Reproduction:** `scripts/drive/t_sweep_row12_permissions.py`, legs 5 and 7. Green assertions
 stating the absence.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** New `usePermissionDecisions(enabled)` (`api/permissions.ts`) asks `GET /permission-requests?pending_only=false`, the widening the entry names, which no screen had used. `QuestionsPanel` shows it as a collapsed *Permission decisions* disclosure, fetched only once opened: each decided request with its status badge (allowed, denied, expired), agent, tool, and who decided it and when. Its key sits under `['project', id, 'permission-requests']`, so the existing SSE invalidation on `permission_requested`/`permission_decided` refreshes it. F389's event half (a persisted event per allow) is D and not done. Test: `questionsPanel.test.tsx` (F231 case: not fetched until opened; allowed and denied listed; pending not).
 
 ---
 
@@ -19219,7 +19223,7 @@ and the test asserts the `Z` form is accepted.
 
 ## F256 (D) — the Logs screen's agent filter offers names that are on no roster
 
-**Status:** open. The union of roster names with every string ever logged is still
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the Logs agent filter separates roster agents from names that are only in the log; see FIXED at the end of this entry. Was: open. The union of roster names with every string ever logged is still
 deliberate and still undistinguished on screen, so the filter still offers names that are on no
 roster. [classified 2026-09-09, D-3]
 
@@ -19239,6 +19243,8 @@ history — and the credential is the operator's, so this is not an identity hol
 someone once logged", with nothing on screen distinguishing them.
 
 **Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 8.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `LogsView` reads the whole roster (`useAgents('all')`, archived included, since their history is theirs) beside `/logs/agents` and renders two option groups: *Agents* and *Only in the log (not on the roster)*. The route's union stays as designed. Without the roster the list is one group labelled as such, not a guessed split. A failed `/logs/agents` read now says *Could not read the agent list*. That site was classified MISREPORT (PICKER) in `n11`; its row is retired and the two `test_surface_ceilings` ceilings drop to 98 and 53. Test: `logsVolumeStrip.test.tsx` (F256 case).
 
 ---
 

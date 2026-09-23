@@ -11,10 +11,15 @@ const logsResult: { current: { data: EventLogEntry[]; isLoading: boolean; dataUp
   current: { data: [], isLoading: false, dataUpdatedAt: 0 },
 }
 
+let logAgentNames: string[] = []
+let roster: { name: string }[] | undefined = []
+
 vi.mock('@/api/logs', () => ({
   useLogs: () => logsResult.current,
-  useLogAgents: () => ({ data: [] }),
+  useLogAgents: () => ({ data: logAgentNames }),
 }))
+
+vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: roster, error: null }) }))
 
 import { LogsView } from '@/components/logs/LogsView'
 
@@ -145,5 +150,25 @@ describe('LogsView paging (F252)', () => {
 
     screen.getByTestId('logs-load-older').click()
     expect(loadOlder).toHaveBeenCalledTimes(1)
+  })
+})
+
+// F256: the filter's options are the roster *and* every string ever logged as an agent, and the
+// two were one undistinguished list.
+describe('LogsView agent filter (F256)', () => {
+  it('groups roster agents apart from names that are only in the log', () => {
+    logsResult.current = { data: [], isLoading: false, dataUpdatedAt: 0 }
+    logAgentNames = ['claude', 'ghost-133431', 'system']
+    roster = [{ name: 'claude' }]
+    render(withQueryClient(<LogsView />))
+
+    const agents = document.querySelector('optgroup[label="Agents"]')
+    const logOnly = document.querySelector('optgroup[label="Only in the log (not on the roster)"]')
+    expect([...(agents?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual(['claude'])
+    expect([...(logOnly?.querySelectorAll('option') ?? [])].map((o) => o.textContent)).toEqual([
+      'ghost-133431',
+      'system',
+    ])
+    logAgentNames = []
   })
 })

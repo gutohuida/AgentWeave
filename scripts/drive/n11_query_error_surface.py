@@ -162,7 +162,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/layout/StatusBar.tsx', 'useStatus', 1, 'MISREPORT', '', 'every count falls back to zero (:25-28): 0 pending messages, 0 active tasks, 0 unanswered questions, 0 agents'),
     ('components/layout/StatusBar.tsx', 'useAgents', 1, 'SUPPRESSED', '', '`contextWarningCount` (:21) drops to 0 and the context warning (:113) does not render'),
     ('components/layout/StatusBar.tsx', 'useAccounting', 1, 'SUPPRESSED', '', '`exhausted={accounting?.budget.exhausted ?? false}` (:122) — an exhausted budget renders no notice'),
-    ('components/logs/LogsView.tsx', 'useLogAgents', 1, 'MISREPORT', 'PICKER', "the agent filter's options (:251)"),
     ('components/messages/MessagesFeed.tsx', 'useMessages', 1, 'MISREPORT', 'DEAD', "EmptyState 'No messages' (:143-145) — in a component nothing imports (F260), so no operator reaches it"),
     ('components/messages/MessagesFeed.tsx', 'useMessageHistory', 1, 'MISREPORT', 'DEAD', "EmptyState 'No message history' (:143-145), same dead component"),
     ('components/messages/MessagesFeed.tsx', 'useMessageHistory', 2, 'MISREPORT', 'DEAD', 'the agent filter built from `allMessages` (:27), same dead component'),

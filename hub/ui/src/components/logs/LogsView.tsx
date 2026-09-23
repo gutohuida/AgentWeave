@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { hubDate } from '@/lib/hubTime'
 import { useLogAgents, useLogs } from '@/api/logs'
+import { useAgents } from '@/api/agents'
 import { Button } from '@/components/ui/button'
 import { LogLine } from './LogLine'
 import { useQueryClient } from '@tanstack/react-query'
@@ -125,7 +126,14 @@ export function LogsView() {
     severity: severity !== 'all' ? severity : undefined,
     live,
   })
-  const { data: logAgents = [] } = useLogAgents()
+  const { data: logAgents = [], error: logAgentsError } = useLogAgents()
+  // F256: `/logs/agents` is the roster *and* every string ever logged as an agent, deliberately
+  // (a deleted agent's history stays filterable), and the dropdown showed the two as one list.
+  // The roster — archived agents included, since their history is theirs — says which is which.
+  const { data: roster, error: rosterError } = useAgents('all')
+  const rosterNames = new Set((roster ?? []).map((agent) => agent.name))
+  const onRoster = logAgents.filter((name) => rosterNames.has(name))
+  const logOnly = logAgents.filter((name) => !rosterNames.has(name))
 
   const filtered = useMemo(() => {
     const byCategory = category === 'all'
@@ -248,9 +256,29 @@ export function LogsView() {
             }}
           >
             <option value="">All agents</option>
-            {logAgents.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
+            {logAgentsError && logAgents.length === 0 && (
+              <option disabled value="__unavailable">Could not read the agent list</option>
+            )}
+            {roster && !rosterError ? (
+              <>
+                {onRoster.length > 0 && (
+                  <optgroup label="Agents">
+                    {onRoster.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </optgroup>
+                )}
+                {logOnly.length > 0 && (
+                  <optgroup label="Only in the log (not on the roster)">
+                    {logOnly.map((a) => <option key={a} value={a}>{a}</option>)}
+                  </optgroup>
+                )}
+              </>
+            ) : (
+              // Without the roster there is nothing to tell them apart by, and saying so beats a
+              // grouping that would be a guess.
+              <optgroup label={rosterError ? 'Agents and log names (roster not read)' : 'Agents and log names'}>
+                {logAgents.map((a) => <option key={a} value={a}>{a}</option>)}
+              </optgroup>
+            )}
           </select>
 
           {/* Refresh */}
