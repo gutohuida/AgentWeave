@@ -1,0 +1,172 @@
+# Design — a task is attended only by a turn that will reach it
+
+**Built on no operator decision.** Every choice below follows from requirements that already exist
+(`agent-loops:1356`, `agent-flows:821`, `agent-flows:851`). The one judgement call is D3 (refused
+input is not attendance). If the operator rejects it, D3's alternative is stated there, and only
+the scenarios naming a refused delivery leave the delta.
+
+`a-flow-stages-its-review-in-the-dispatch` (S13, F327) is designed on top of D1 and must be built
+after this change.
+
+## Context, re-derived on HEAD `404c7d5`
+
+| Reader | Line | Question it means | What it asks today |
+|---|---|---|---|
+| `_roster_availability` | `scheduler.py:1162`, `:1179` | will a turn move this agent onto this task | pairs, queued, within the hop budget (`task_agent_pairs_with_a_turn_queued`, `run_task_binding.py:313-355`) — correct |
+| `decide_firing` F70 guard | `scheduler.py:1792` | is anyone on this task right now | `task.id in on_it`: any agent, any depth |
+| `decide_firing` F154 surfacing | `scheduler.py:1796` | is the named reviewer on it | `task.id not in on_it`: any agent, any depth (F371) |
+| `decide_firing` resume arm | `scheduler.py:1848` | is the assignee's turn on this task already coming | `agent in running or (agent in held_agents and on_it.get(task.id) == agent)`: first-row map (F370), and only for a held agent (F368) |
+
+`on_it` is `tasks_with_a_turn_pending_or_running` (`run_task_binding.py:268-310`): a map built with
+`setdefault` over an unordered select (`:299-306`), then overlaid with the running map (`:309`).
+
+Measured on this HEAD (throwaway test, deleted): F370's helper answer was
+`{'task-width-f370': 'aaa-peer'}` with the assignee's own `job` entry queued, and three firings left
+four `job` entries for the held assignee. F371 answered `in_flight` with `stall_reason None` for
+both the third-agent leg and the hop-99 leg. F368 left four `job` entries after three firings with
+`schedule_agent` answering `token budget exhausted`.
+
+## D1 — One helper, keyed by pair
+
+```python
+ATTENDING_RUNNING = "running"
+ATTENDING_QUEUED = "queued"
+ATTENDING_REFUSED = "refused"
+
+@dataclass(frozen=True)
+class Attending:
+    how: str                 # one of the three above
+    review: bool             # the input names the task as the one it reviews (review_task_id)
+    refusal: Optional[str]   # the stored refusal, only when how == ATTENDING_REFUSED
+
+@dataclass(frozen=True)
+class TaskAttendance:
+    pairs: Mapping[Tuple[str, str], Attending]      # (task_id, agent) -> strongest statement
+
+    def attends(self, task_id, agent) -> bool       # running or queued
+    def attended(self, task_id) -> bool             # attends(task_id, a) for some a
+    def has_turn(self, task_id, agent) -> bool      # any of the three: D5's question
+    def refusal(self, task_id, agent) -> Optional[str]
+
+async def task_attendance(session, project_id) -> TaskAttendance
+```
+
+- **Running pairs** from `Run.status == "running"` and `Run.task_id` (the query
+  `tasks_held_by_a_running_turn` makes, `run_task_binding.py:377-386`), as pairs rather than a map.
+- **Queued pairs** from `InboundQueueEntry.state == "queued"`, `agent IS NOT NULL`,
+  `hop_depth <= hop_budget` (budget from `inbound_queue.project_limits`, the reader
+  `turn_scheduler._attempt_turn` uses at `:337`, so the two cannot disagree), each entry contributing
+  a pair for `task_id` and for `review_task_id` (both columns, as today, `:302-306`).
+- **Strongest wins per pair**: running > queued > refused. One un-refused entry makes the pair
+  queued even if an older entry for the same pair was refused, because that entry is a turn that
+  will be tried.
+- **Refused** (D3): the entry's `delivery_attempts > 0` **and** `waiting_reason IS NOT NULL`. Both,
+  because each alone means something else: `return_run_entries` raises `delivery_attempts` for a
+  run that crashed and leaves `waiting_reason` cleared (`inbound_queue.py:225-297`; the delivery
+  that preceded it cleared it, `:191`, `:204`), and that input is redelivered by the run-end
+  re-drain; a transient refusal writes `waiting_reason` (`turn_scheduler.py:474-475`) and counts
+  nothing, and it clears on its own (`:660-667`).
+
+`tasks_held_by_a_running_turn` stays. Its caller in `agent_trigger.py:990` asks *may this turn
+start*, and its docstring (`:363-371`) warns against a third meaning on one query.
+`tasks_with_a_turn_pending_or_running` and `task_agent_pairs_with_a_turn_queued` are deleted; each
+had one production caller (`scheduler.py:1699`, `:1162`).
+
+*Rejected:* a parameter on the old map helper (F370's own sketch, "one parameter or a sibling
+function"). The map is the defect; any parameter keeps a shape that cannot say "two agents".
+*Rejected:* counting suspended input for the held arm (F370's sketch wanted the pairs "without the
+budget bound", because a suspended briefing is still a copy). A flow's own briefing is always queued
+at hop 0 (`scheduler.py:3409`, `:3741`), and so is a divergence response
+(`run_divergence.py:257-262`). So the only suspended input naming a task is a peer message, which is
+not a briefing. Excluding it costs at most one briefing, at hop 0, which then counts. It never
+repeats.
+
+## D2 — Which reader asks which question
+
+| Reader | After |
+|---|---|
+| F70 guard (`:1792`) | `attendance.attended(task.id)` — anyone running or queued, no suspended, no refused. A refused turn is not "a turn on the task" the recovery must wait for. |
+| F154 surfacing (`:1796`) | `not attendance.attends(task.id, task.assignee)` (F371). The reason is D4's refused sentence where `attendance.refusal(task.id, task.assignee)` is set, else `_wedged_review_reason`. |
+| Resume arm (`:1848`) | `agent in running or attendance.attends(task.id, agent)` (F370, F368). |
+| Availability (`:1162`, `:1179`) | `attendance.has_turn(task_id, assignee)` — D5. |
+
+**The held qualifier goes from the resume arm.** `agent in held_agents and` was there because the
+arm's only known reason for a queued-but-unstarted turn was the hold (D6 of
+`a-spent-allowance-holds-the-queue`). F368 names the others. The hold still matters where it is
+read elsewhere: the default-agent branch (`:1869-1870`) and the free list (`_roster_availability`,
+`:1148`). `held_agents` stays in `decide_firing` for the default-agent branch.
+
+**A running assignee still short-circuits** (`agent in running`), agent-wide, as today: a run
+carrying no `task_id` is still work being done (`decide_firing`'s own comment at `:2051-2054`).
+
+## D3 — Refused input is not attendance
+
+A turn whose last delivery was refused is not being taken. The next attempt is made only when a
+pass reaches that agent, and nothing schedules one on its own (`turn_scheduler.py:665`,
+`agent_trigger.py:2643`).
+
+- **Review arm:** counted as attended, a flow-staffed review whose dispatch was refused read
+  `in_flight` until the entry was given up — F327's middle row. With D3 it is surfaced on the next
+  firing with the refusal's words. (S13 then removes the staging that left the task `under_review`
+  at all; D3 is what makes S13's pool rule safe, see that change.)
+- **Resume arm:** a refused work entry is **not** in flight, so the firing briefs the assignee as it
+  does today. That is deliberate. Today's re-briefing is the only thing that drives a pass for that
+  agent, which counts the refused head and, at `DELIVERY_ATTEMPT_LIMIT`, gives up on it
+  (`turn_scheduler.py:594-630`). Treating it as in flight would leave the head counted once and then
+  never tried again, with the flow reporting in flight: F368's shape, silent instead of noisy.
+
+*Alternative, if the operator rejects D3:* count refused input as attendance. The review arm then
+keeps F327's `in_flight` window until the entry is given up, and the resume arm strands a refused
+head as described. The scenarios naming a refused delivery leave both deltas.
+
+## D4 — Sentences
+
+- `_wedged_review_reason` (`scheduler.py:2195-2225`) says *"no turn is running on that task and none
+  is queued"* (`:2216`). After D2 that can be false: a third agent's message, or suspended or
+  refused input, may be queued. It becomes *"no turn of theirs is running on that task and nothing
+  is waiting to be delivered to them"*. The title-shortening fit (`:2220-2224`) is unchanged.
+- A new `_refused_review_reason(task, reviewer, refusal)`: *"{reviewer} is named on {task.id}
+  ({title!r}) as its reviewer, and delivering the review to them was refused: {refusal} Fix what it
+  names, review it yourself, or send it back with revision_needed."* Fitted to
+  `JOB_RUN_ERROR_SUMMARY_CHARS` (500, `models.py:1367`) by shortening the refusal first and then
+  the title, so the remedy is never cut (the rule `_wedged_review_reason`'s docstring states for the
+  title, `:2207-2211`). It does not say "ask them again": the same dispatch meets the same refusal.
+
+## D5 — Availability is unchanged
+
+`_roster_availability` asks *will something move this agent onto this task*, and a refused entry is
+still input a pass will try. `agent-flows:910`'s rule ("a turn running or queued within the
+project's hop budget") is kept word for word. The resume arm and availability therefore differ on
+a refused entry on purpose: the assignee is not free (its input is still queued for that task), and
+the task is not in flight (nobody is working it), so the firing briefs it. Both are true.
+
+## D6 — Tests that move, deliberately
+
+- `test_a_review_nobody_is_doing.py:448-501` — five predicate tests call
+  `tasks_with_a_turn_pending_or_running` directly. Rewritten against `task_attendance`: running
+  turn, either column, withdrawn/delivered ignored, empty. The same assertions, expressed as pairs.
+- `test_a_task_nothing_will_move_holds_nobody.py:318-322` asserts the old helper's masking as a
+  premise. The premise goes; the test's real assertion (`DEV not in await _free()`) stays.
+
+## What each route returns when this raises
+
+`decide_firing` is read by the firing (`_do_fire_job`), by the board (`api/v1/jobs.py:380`)
+and by `run_job`'s in-flight answer (`jobs.py:1335`). `task_attendance` is two reads and a settings read; a
+failure is a database error, which each caller already meets from `tasks_with_a_turn_pending_or_running`
+at the same point. Nothing here adds a new raise, and no route's status changes.
+
+## Residuals, not fixed here
+
+- **Input in a closed conversation counts as queued.** `_attempt_turn` answers
+  *"conversation is unavailable"* for a controlling entry whose conversation is not open
+  (`turn_scheduler.py:344-350`), counts nothing and returns — so the agent's whole queue waits.
+  Under D2 such an entry makes its task in flight. Before, the firing re-briefed into a new
+  conversation that queued behind the same dead head. Neither moves the task. Candidate finding for
+  the orchestrator; not filed here.
+- **In flight does not say why the turn has not started.** A task in flight on a queued turn that
+  the token budget stops reads the same as one about to start. The queue status route answers why.
+
+## Round log
+
+- **R1, 2026-09-24** (bundle B1): wrote this change. Re-measured F370, F371 (both legs) and F368 at
+  `404c7d5`.

@@ -1,0 +1,33 @@
+## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
+
+- [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design, delta, tasks, test guide; F370, F371 (two legs) and F368 re-measured at `404c7d5`
+- [ ] 0.2 R2: an independent re-derivation against `hub/hub/run_task_binding.py:268-392`, `hub/hub/scheduler.py:1128-1200` and `:1617-2112`, `hub/hub/turn_scheduler.py:313-690`, `hub/hub/inbound_queue.py:141-297`, and the three requirements in the delta. Check in particular: D3's refused criterion (`delivery_attempts > 0 and waiting_reason is not null`) against every writer of both columns; that no reader of `on_it` was missed (`grep -n on_it hub/hub`); that D5's availability answer is byte-identical to `task_agent_pairs_with_a_turn_queued` for every staging in `test_a_task_nothing_will_move_holds_nobody.py`
+- [ ] 0.3 R3: a second independent re-derivation; `openspec validate a-task-is-attended-only-by-a-turn-that-will-reach-it --strict` passes
+- [ ] 0.4 The operator approves (APPROVALS.md), including D3
+
+## 1. Tests first — each fails on today's code unless marked as a control
+
+New file `hub/tests/test_a_task_is_attended_only_by_a_turn_that_will_reach_it.py`. Reuse `_held_flow`, `_queue`, `_fire`, `_entries_for`, `_hold` (`test_a_held_agent_is_busy.py`), `_flow`, `_task` (`test_flow_width.py`), and `_flow`, `_wedged`, `_running_turn`, `_queued_review` (`test_a_review_nobody_is_doing.py`).
+
+- [ ] 1.1 (F370) Held assignee `held-dev`, task `assigned` to it, a `job` entry naming the task for `held-dev`, and a peer entry naming it for `aaa-peer` (sorts first). Fire three times. Exactly one `job` entry for `held-dev` exists after. Run it with both insertion orders (parametrize). FAILS today: four entries (measured by R1)
+- [ ] 1.2 (F370) Control: the same with the peer agent named `zzz-peer` (sorts last). One entry, before and after
+- [ ] 1.3 (F368) Not held, not running: `dev` assigned, a `job` entry naming the task queued for it, `hub.turn_scheduler.schedule_agent` patched to answer `ScheduleResult(waiting_reason="token budget exhausted")`. Fire three times: one `job` entry. `decide_firing` answers `DECISION_IN_FLIGHT` with `(task, dev)` in `_cannot_staff`. FAILS today: four entries (measured)
+- [ ] 1.4 (F368, D3) The same, but the queued entry has `delivery_attempts=1` and `waiting_reason="<a refusal>"`. One firing queues one more `job` entry for `dev` (today's re-briefing kept). Control: PASSES today and must keep passing
+- [ ] 1.5 (F371) `_wedged` task under review, `beta` named, no run; a peer entry naming it for `gamma` at hop 0. `decide_firing` answers `DECISION_STALLED`, `unstaffed == [(task, <sentence naming beta>)]`. FAILS today (`in_flight`, measured)
+- [ ] 1.6 (F371) The same with the only entry for `beta` at `hop_depth` above the project's budget. `DECISION_STALLED`. FAILS today (measured)
+- [ ] 1.7 (D3, D4) The same with the only entry for `beta` a review entry at hop 0 with `delivery_attempts=1` and `waiting_reason="commit abc is not present in this repository"`. `DECISION_STALLED`; the reason contains the refusal's text and `beta`, does **not** contain `Ask beta again`, and fits `JOB_RUN_ERROR_SUMMARY_CHARS`. FAILS today (`in_flight`)
+- [ ] 1.8 Control, PASSES today and must keep passing: `beta`'s own review entry at hop 0 with no refusal → `DECISION_IN_FLIGHT`, no stall (`agent-loops` *A staffed review still waiting in the queue is still attended*)
+- [ ] 1.9 Control: a running run bound to the task by `beta` → `DECISION_IN_FLIGHT`
+- [ ] 1.10 (D4) `_wedged_review_reason`'s sentence no longer contains `none is queued`. FAILS today
+- [ ] 1.11 (D1) `task_attendance` unit cases: a crashed run's returned entry (`delivery_attempts=1`, `waiting_reason=None`) is `queued`, not `refused`; a pair with one refused and one fresh entry is `queued`; a running pair wins over a queued one; an entry with no agent contributes nothing; both `task_id` and `review_task_id` contribute
+- [ ] 1.12 (D5) Availability is unchanged: for each staging in `test_a_task_nothing_will_move_holds_nobody.py`, `_agents_that_are_free` answers the same before and after. Add one case the old helper never had: the assignee's only entry refused (`delivery_attempts=1`, reason set) still holds it (not free)
+- [ ] 1.13 (D6) Rewrite `test_a_review_nobody_is_doing.py:448-501` against `task_attendance` (same five facts as pairs) and drop the old-helper premise at `test_a_task_nothing_will_move_holds_nobody.py:318-322`, keeping its `DEV not in await _free()` assertion
+
+## 2. Implementation
+
+- [ ] 2.1 (D1) `hub/hub/run_task_binding.py`: add `Attending`, `TaskAttendance`, `task_attendance`; delete `tasks_with_a_turn_pending_or_running` and `task_agent_pairs_with_a_turn_queued`. Carry their docstrings' still-true paragraphs (why `withdrawn` stops counting; why the budget is read through `project_limits`) into the new docstring
+- [ ] 2.2 (D5) `scheduler._roster_availability`: `reachable = loop_id in live or attendance.has_turn(task_id, assignee)`
+- [ ] 2.3 (D2) `decide_firing`: `attendance = await task_attendance(...)` in place of `on_it`; the three readers as D2's table; drop `agent in held_agents and` from the resume arm; update the comments at `:1693-1699` and `:1784-1790` that describe `on_it`
+- [ ] 2.4 (D4) `_wedged_review_reason` wording; new `_refused_review_reason` with the fit
+- [ ] 2.5 Update the imports at `scheduler.py:43-45`
+- [ ] 2.6 Run the new file and every file under `hub/tests/` that mentions `decide_firing`, `_agents_that_are_free`, `on_it` or `wedged`, **with `claude` stripped from PATH** (DEAD-ENDS); then the full CLAUDE.md lint block; then the full `hub/tests/`

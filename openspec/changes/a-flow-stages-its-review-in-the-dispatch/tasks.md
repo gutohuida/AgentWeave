@@ -1,0 +1,37 @@
+## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
+
+- [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design, deltas, tasks, test guide on the operator's (b)
+- [ ] 0.2 R2: re-derive against `hub/hub/scheduler.py` (`enter_selected_task`, `_do_fire_job` `:2987-3540`, `_stage_selection`, `decide_firing`, `_roster_availability`, `_briefing_verdict_lines`), `hub/hub/api/v1/agent_trigger.py:409-520` and `:840-910`, `hub/hub/turn_scheduler.py:313-690`, `hub/hub/run_divergence.py:375-487`, `:561-580`, `:685-876`, and the four requirements in the deltas. In particular: (a) **prototype D1 alone and run the full `hub/tests/`**, and list every failure — that list is D8's real set; (b) re-run F327's two legs (`testbed/scratch/r2f319/test_zz_r2f319_flow.py` in the main checkout — `testbed/scratch` is not in this worktree — copied under `hub/tests/`, run, deleted) against the prototype of the whole change; (c) decide D5's exemption read placement (before the staging) and what a raise there returns; (d) confirm `land_task` releases a waiting review entry (design Residuals)
+- [ ] 0.3 R3: second independent re-derivation; `openspec validate a-flow-stages-its-review-in-the-dispatch --strict` passes
+- [ ] 0.4 Operator approval (APPROVALS.md), including D5's option (ii) and the author-holder replacement
+
+## 1. Tests first — each fails on today's code unless marked as a control
+
+New file `hub/tests/test_a_flow_stages_its_review_in_the_dispatch.py`. Reuse `_flow` from `test_flow_fires_a_review_turn.py` (F327's staging), the real `ensure_review_checkout`, and `JobScheduler._fire_job_internal`.
+
+- [ ] 1.1 (D1, F327 B1) A flow with one completed task by `builder`, evidence naming a commit the repository lacks. Fire once (real `schedule_agent`). Task is `('completed', 'builder')` with its transition count unchanged; the review entry for `critic` is `queued` with 1 attempt and the refusal as `waiting_reason`; the `JobRun` is `failed` with the refusal. FAILS today (`under_review`, `critic`, +1 transition — F327's measured row)
+- [ ] 1.2 (D1, F327 B2) Same with `.agentweave/reviews/critic` a plain directory. Same assertions. FAILS today
+- [ ] 1.3 (D2) After 1.1, `decide_firing`: `DECISION_STALLED`; `unstaffed[0]` names `critic`, contains the refusal, and says `withdraw that input`; no selection. FAILS today (`in_flight`)
+- [ ] 1.4 (F327's 409 row) After 1.1, the operator dispatches `other` for the task (`POST /agent/trigger` with the review target). Not refused as *"already under review"*; the task becomes `('under_review', 'other')` when its turn is dispatched. FAILS today (409)
+- [ ] 1.5 (D2) The review dispatch deferred (reviewer running; mock a running `Run` for `critic`): after the firing, the task is `completed`, the entry `queued` with no attempt counted; `decide_firing` → `DECISION_IN_FLIGHT` with `(task, critic)` in `_cannot_staff`; a second firing queues no second review entry. The first assertion FAILS today (`under_review`); the in-flight one passes today and must keep passing
+- [ ] 1.6 (D2) The refused entry withdrawn (`DELETE /queue/entries/{id}`) → the next firing selects the task for review again (the ladder runs). Control-ish: passes today only by a different route (today the task is `under_review` and is never re-offered — record what today does)
+- [ ] 1.7 (D4) With 1.5's waiting review for `critic`, `_agents_that_are_free` excludes `critic` although `critic` holds no `under_review` task and is not running. FAILS today only once D1 is in (write it against the prototype; record that it fails with D1 and without D4)
+- [ ] 1.8 (D5, restaff) A review by availability-picked `beta` ends with no verdict; `gamma` resolves. After `evaluate_run_end`: `task.assignee == "beta"` (not yet `gamma`); `gamma`'s divergence entry is queued. Then let the dispatch run: `task.assignee == "gamma"`, no new transition. FAILS today (assignee is `gamma` before the dispatch)
+- [ ] 1.9 (D5, restaff refused) As 1.8, with `gamma`'s dispatch refused (pruned commit): `task.assignee == "beta"`, and `decide_firing` surfaces `gamma`'s refusal (D3). FAILS today
+- [ ] 1.10 (D5, holder check) A plain operator request for `delta` on a task `under_review` held by `beta` (a silent reviewer, **no** restaff entry) is still refused *"already under review by 'beta'"*. Control: passes today and must keep passing — pins that (ii) is not (iii)
+- [ ] 1.11 (D5, author holder) A task `under_review` whose assignee is the agent recorded as completing it (F70's wedged row). The flow's F70 recovery selects `critic`; after the dispatch, `task.assignee == "critic"`, status unchanged, no transition. Also: the operator's request for `critic` on that task is not refused. The first FAILS without the author exemption once D1 is in (record against the prototype); the second FAILS today
+- [ ] 1.12 (D6) The review briefing for a review selection contains `The task is \`under_review\``, although the firing composed it while the task was `completed`. FAILS once D1 is in, without D6
+- [ ] 1.13 (D2) A documentless loop's completed task with an operator-requested review entry queued for a busy reviewer: `decide_firing` → `DECISION_IN_FLIGHT`, not the landing sentence. FAILS today
+- [ ] 1.14 (D2) A flow's completed task with an operator-requested review entry queued for a busy reviewer: the firing selects no second reviewer. FAILS today (found by reading in design D2 — record whether it does)
+- [ ] 1.15 (D8) Each existing assertion R2 lists, moved as D8 says; none deleted
+
+## 2. Implementation
+
+- [ ] 2.1 (D1) Skip `enter_selected_task` for a review selection in `_do_fire_job` and `_stage_selection`
+- [ ] 2.2 (D2, D3) `decide_firing`: the review-turn check before the documentless branch; the `WITH_REVIEWER` arm's order; the refused-review sentence
+- [ ] 2.3 (D4) `_roster_availability`: review pairs as holdings
+- [ ] 2.4 (D5) `_answer_failed_review`: drop the assignee write. `agent_trigger`: one function deciding whether a holder may be replaced (author by the guard's rule; recorded restaff at the dispatch only), used at `:497-507` and `:886-897`
+- [ ] 2.5 (D6) `_briefing_verdict_lines`: `under_review` for a review briefing
+- [ ] 2.6 (D7) The comments
+- [ ] 2.7 Run the new file, D8's list, and every file R2 names, **with `claude` stripped from PATH**; the CLAUDE.md lint block; the full `hub/tests/`
+- [ ] 2.8 A drive on a trial Hub: F327's B1 staging through the real app (test guide, human-only 1)
