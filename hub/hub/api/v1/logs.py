@@ -81,7 +81,7 @@ async def list_logs(
                 status_code=400,
                 detail=(
                     f"since {since!r} is not an ISO 8601 timestamp; send one like "
-                    "2026-09-23T10:00:00+00:00"
+                    "2026-09-23T10:00:00Z (a + must be sent as %2B)"
                 ),
             ) from exc
         q = q.where(EventLog.timestamp > since_dt)

@@ -770,11 +770,14 @@ async def create_job(
             ) from e
         # Seeds the new loop's queue in the same call that creates it (design D2's "definition
         # window"). `create_task_for_actor` is the single `Task(` construction site — reused here
-        # rather than duplicated. None of its refusals can fire here: its loop-authorship gate
-        # (`_authorize_loop_task_creation`) passes because the F265 check above already refused
-        # every caller it would refuse, and `job.run_count` is always 0 for a job this call just
-        # created; the entry status is `TaskCreate`'s own validator; and `_check_initial_tasks`
-        # asked the rest (F414). Only a race on a task id can still refuse here.
+        # rather than duplicated. Its refusals are asked before the first commit wherever they can
+        # be: the F265 check above refuses every creator the loop-authorship gate
+        # (`_authorize_loop_task_creation`) would, and `job.run_count` is always 0 for a job this
+        # call just created; the entry status is `TaskCreate`'s own validator; and
+        # `_check_initial_tasks` asked the body-only rest (F414). What remains is a race between
+        # those checks and this commit: a task id taken meanwhile, or the calling agent archived
+        # mid-call (which the gate also refuses, and which `agent_archivable` makes unlikely while
+        # its run is live).
         actor = (
             run_actor(run_identity, agent_identity)
             if agent_identity and run_identity

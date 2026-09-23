@@ -88,6 +88,44 @@ async def test_a_removed_agent_s_history_stays_readable(app, auth_headers, route
     assert len(resp.json()) == 1
 
 
+@pytest.mark.parametrize(
+    "route",
+    [
+        "/agent/{agent}/conversations",
+        "/agent/{agent}/chat",
+        "/queue/{agent}",
+        "/queue/{agent}/status",
+    ],
+)
+async def test_every_name_the_roster_lists_is_known(app, auth_headers, route):
+    """Round 4 review: `GET /agents` lists a task's assignee before the agent has any row, and
+    these routes 404'd that name while the rail showed it. Every name the roster lists answers."""
+    created = await app.post(
+        f"{P}/tasks", json={"title": "for later", "assignee": "planned"}, headers=auth_headers
+    )
+    assert created.status_code == 201, created.text
+    roster = await app.get(f"{P}/agents", headers=auth_headers)
+    names = {row["name"] for row in roster.json()}
+    assert "planned" in names
+
+    for name in names:
+        resp = await app.get(P + route.format(agent=name), headers=auth_headers)
+        assert resp.status_code == 200, (name, resp.text)
+
+
+async def test_the_operator_s_own_sender_name_is_not_an_agent(app, auth_headers):
+    """`operator` is recorded as a message sender (F261) and is reserved (F415): not an agent."""
+    await _rostered("someone")
+    sent = await app.post(
+        f"{P}/messages", json={"to": "someone", "content": "hi"}, headers=auth_headers
+    )
+    assert sent.status_code in (200, 201), sent.text
+
+    resp = await app.get(f"{P}/queue/operator/status", headers=auth_headers)
+
+    assert resp.status_code == 404, resp.text
+
+
 async def test_stop_tells_a_typo_from_an_idle_agent(app, auth_headers):
     await _rostered("idle-agent")
 

@@ -92,18 +92,34 @@ async def test_a_null_key_removes_that_key_only(app, auth_headers):
     assert await _config() == {"model": "x"}
 
 
-async def test_an_empty_config_is_refused_naming_what_would_clear_it(app, auth_headers):
-    await _agent_with_config({"read_only": True})
+async def test_config_is_a_recursive_merge_patch(app, auth_headers):
+    """RFC 7396: `{}` is a no-op, and a null removes the key it names at any depth — the review
+    found a nested null stored as a value, and the whole nested object replaced."""
+    await _agent_with_config({"read_only": True, "env_vars": {"A": "1", "B": "2"}})
 
-    refused = await app.patch(f"{P}/agents/beta", json={"config": {}}, headers=auth_headers)
+    unchanged = await app.patch(f"{P}/agents/beta", json={"config": {}}, headers=auth_headers)
+    assert unchanged.status_code == 200, unchanged.text
+    assert await _config() == {"read_only": True, "env_vars": {"A": "1", "B": "2"}}
 
-    assert refused.status_code == 400, refused.text
-    assert '"config": null' in refused.json()["detail"]
-    assert await _config() == {"read_only": True}
+    nested = await app.patch(
+        f"{P}/agents/beta",
+        json={"config": {"env_vars": {"A": None, "C": "3"}}},
+        headers=auth_headers,
+    )
+    assert nested.status_code == 200, nested.text
+    assert await _config() == {"read_only": True, "env_vars": {"B": "2", "C": "3"}}
 
 
 async def test_the_roster_carries_config_without_env_values(app, auth_headers):
-    await _agent_with_config({"read_only": True, "env_vars": {"API_TOKEN": "s3cret"}})
+    """An allow-list: a credential under any key nobody thought to deny stays off the roster."""
+    await _agent_with_config(
+        {
+            "read_only": True,
+            "env_vars": {"API_TOKEN": "s3cret"},
+            "api_key": "s3cret",
+            "mcp_servers": {"x": {"token": "s3cret"}},
+        }
+    )
 
     roster = await app.get(f"{P}/agents", headers=auth_headers)
 
@@ -140,6 +156,23 @@ async def test_archiving_an_archived_agent_changes_nothing(app, auth_headers):
             )
         ).all()
     assert len(events) == 1
+
+
+async def test_unarchiving_an_open_agent_changes_nothing(app, auth_headers):
+    """F397's mirror, from the review: a second `agent_unarchived` read like a real reopening."""
+    await _agent_with_config({})
+
+    resp = await app.post(f"{P}/agents/beta/unarchive", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert "was not archived" in resp.json()["message"]
+    async with async_session_factory() as session:
+        events = (
+            await session.execute(
+                select(EventLog.event_type).where(EventLog.event_type == "agent_unarchived")
+            )
+        ).all()
+    assert events == []
 
 
 # --- F204 + F210 ---------------------------------------------------------------------------------
@@ -203,8 +236,12 @@ async def test_a_malformed_since_is_refused(app, auth_headers):
     refused = await app.get(f"{P}/logs?since=not-a-timestamp", headers=auth_headers)
     valid = await app.get(f"{P}/logs?since=2099-01-01T00:00:00", headers=auth_headers)
 
+    zulu = await app.get(f"{P}/logs?since=2099-01-01T00:00:00Z", headers=auth_headers)
+
     assert refused.status_code == 400, refused.text
     assert "'not-a-timestamp' is not an ISO 8601 timestamp" in refused.json()["detail"]
+    # The example the refusal gives must itself be accepted.
+    assert zulu.status_code == 200, zulu.text
     assert valid.status_code == 200 and valid.json() == []
 
 

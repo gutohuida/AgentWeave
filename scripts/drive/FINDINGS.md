@@ -14424,6 +14424,9 @@ records canonical, the choice this entry called defensible. Measured by `hub/tes
 legs fail on the old code; the alias leg reads the alias off `GET /model-catalog` rather than
 assuming it.
 
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** `worker.py` (the one-shot worker's `unknown_model` result) still built the old sentence itself.
+It now uses `undeclared_model_reason` too, which makes it the fourth site.
+
 ---
 
 ## F176 (C) — the API creates a nameless runner the dialog refuses to create
@@ -15595,6 +15598,16 @@ typo in a script or a scheduled job.
 `get_chat_history` already 404'd a conversation that is not the agent's. Measured by `hub/tests/test_an_unknown_name_is_not_an_empty_answer.py`: on the
 old code both legs answered 200 (`[]`, and `{"entries": [], ...}`), and a rostered agent still
 answers 200 on the new code.
+
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** The first "known" rule (roster, conversation, queue entry, run) was narrower than `GET /agents`,
+which also lists task assignees, message senders and recipients, heartbeats and output. The review
+assigned a task to `ghost`: the rail listed `ghost`, and these routes 404'd it saying "not on the
+roster". `agent_roster.agent_is_known` is now a superset of every source `list_agents` reads, and a
+name that fails the agent-name rule is never known, so `operator`, recorded as a sender, stays
+refused. The 404 now says "nothing here is recorded under that name".
+`test_every_name_the_roster_lists_is_known` asks every name the roster returns on all four
+routes; it fails on the previous commit. This covers F192, F199 and F247, which share the
+helper.
 
 ## F195 (C) — the conversation titler does not run in the project's directory, and the parameter that would make it is dead
 
@@ -18683,6 +18696,13 @@ was still un-isolated — which is how F242's third consequence was found at all
 400 that names both working forms, instead of answering 200 over no change. A non-object is a
 400. Measured by `hub/tests/test_a_request_means_what_it_says.py` (three legs); fails on the old code.
 
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** The review showed the merge was flat: a nested null was stored as a value, and a nested object
+replaced its predecessor. It also argued, rightly, that the standard contract already makes both
+null rules this entry chose. `config` is now an RFC 7396 merge patch, applied recursively
+(`agents._merge_patch`): a null deletes at any depth, objects merge, and `{}` is the standard's
+no-op (200), no longer refused. `"config": null` still clears everything. Measured by
+`test_config_is_a_recursive_merge_patch`, which fails on the previous commit.
+
 ---
 
 ## F244 (C) — the roster listing carries no `config`, so the setting that decides where an agent works is invisible on it
@@ -18711,6 +18731,12 @@ indistinguishable from every other one on the roster.
 none), **without `env_vars`**, whose values can be credentials. `_runner_summary` prints only their
 names for the same reason. Measured by `hub/tests/test_a_request_means_what_it_says.py`, which also asserts a planted env value is absent from
 the whole roster body; fails on the old code.
+
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** The roster's config is now an **allow-list** (`agents.ROSTER_CONFIG_KEYS`: `read_only`, `yolo`,
+`runner`, `model`, `cli`, `hub_client`), no longer a deny-list of `env_vars`. `config` is an open
+object any PATCH can fill, so a credential under `api_key`, or a token inside `mcp_servers`,
+reached the roster. The test plants all three and asserts the value is nowhere in the roster body;
+it fails on the previous commit.
 
 ---
 
@@ -19153,6 +19179,10 @@ and a `since` in the future correctly returns none.
 2026-09-23T10:00:00+00:00` instead of dropping the filter. A valid `since` works as before. The
 UI's Logs view sends no `since`, and the one UI poller that does (agent output) is a different
 route. The newest-first paging half stays in UI-1 with F252. Measured by `hub/tests/test_a_request_means_what_it_says.py`; fails on the old code.
+
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** The example in the refusal was `...+00:00`, and an unencoded `+` in a query string arrives as
+a space and is itself refused. The example is now `2026-09-23T10:00:00Z (a + must be sent as %2B)`,
+and the test asserts the `Z` form is accepted.
 
 ---
 
@@ -31858,6 +31888,11 @@ a gate that held and says what to do.
 event and leaves `archived_at` unchanged. Measured by `hub/tests/test_a_request_means_what_it_says.py` (the second call leaves one
 `agent_archived` event and the first `archived_at`); fails on the old code.
 
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** The mirror case: `unarchive_agent` on an open agent wrote and broadcast a second
+`agent_unarchived`. It now returns early too (200, `"<name> was not archived; nothing
+changed."`, no event). `test_unarchiving_an_open_agent_changes_nothing` fails on the previous
+commit.
+
 ## F398 (C) -- `dismiss-checkpoint-warning` accepts a conversation that was never warned, and the pre-emptive dismissal silences its first warning for good
 
 **Source:** drive
@@ -32493,6 +32528,11 @@ the new code all six pass. Residual, not fixed: the job and loop are still two c
 for the spec document between `_check_spec_document_conflict` and the loop's commit still leaves the
 job. The pre-check makes this a race only, as it was before.
 
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** The `create_job` comment claimed none of `create_task_for_actor`'s refusals could fire after
+the commit. It now says what remains: a race between the checks and the commit (a task id taken
+meanwhile, or the calling agent archived mid-call, which `agent_archivable` makes unlikely while
+its run is live).
+
 ## F415 (C) — `operator` is not a reserved agent name, and Round 3a gave it a meaning
 
 **Status:** fixed (this commit) [Round 4, 2026-09-23] — `operator` is reserved beside `user` in the Hub and the CLI; see FIXED at the end of this entry. Was: open. Filed 2026-09-23 by the adversarial review of Round 3. F261's repair (Round 3a) made
@@ -32520,3 +32560,11 @@ the new code. `test_the_evidence_names_the_author.py`'s 4.5 test rostered an age
 through session sync to make the `actor_kind` filter observable. It now inserts that agent as a row
 created before this change, the only way one can exist now, and still fails with the filter dropped
 (checked: `{'operator'} == set()`). CLI `tests/test_config.py` refuses `operator` in `agentweave.yml`.
+
+**Review follow-up 2026-09-23 (adversarial Opus review of Round 4).** The first repair missed `POST /agents`, the Add-agent dialog's own route. It checked only the
+name pattern, and the review created `operator`, `Operator` and `user` through it (201 each), agents
+that could then never run a turn. `create_operator_agent` now calls `validate_agent_name` first
+and answers a 400 with the sentence. It is a 400 rather than a validator's 422 because the dialog
+renders `detail` as text. `test_the_create_dialog_route_refuses_a_reserved_name` fails on the
+previous commit (the agents were created) and passes now.
+

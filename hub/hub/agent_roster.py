@@ -5,25 +5,48 @@ conversations, nothing queued, an idle agent, a workspace "not provisioned yet" 
 F247). The trigger route has always refused the same mistake by name; this is that question, asked
 once, for every other route that takes an agent name.
 
-**Known** means on the roster *or* recorded under that name. Session sync deletes the roster row of
-an agent the session no longer declares and keeps its conversations, queue and runs, so a roster-only
-check would hide a removed agent's history behind a 404. A name with neither is a mistake.
+**Known** means anything in this project recorded under the name — and it must stay a superset of
+every source `GET /agents` lists a name from (`api/v1/agents.py` `list_agents`: the roster, message
+senders and recipients, heartbeats, output, task assignees). A name the roster shows and these
+routes refuse is the one thing worse than the empty answer this replaced (Round 4 review). The rows
+beyond the roster matter for a second reason: session sync deletes the roster row of an agent the
+session no longer declares and keeps its history. A name with none of these is a mistake.
 """
 
 from fastapi import HTTPException, status
-from sqlalchemy import exists, select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db.models import Agent, Conversation, InboundQueueEntry, Run
+from . import worktrees
+from .db.models import (
+    Agent,
+    AgentHeartbeat,
+    AgentOutput,
+    Conversation,
+    InboundQueueEntry,
+    Message,
+    Run,
+    Task,
+)
 
 
 async def agent_is_known(session: AsyncSession, project_id: str, agent: str) -> bool:
-    for model in (Agent, Conversation, InboundQueueEntry, Run):
-        column = model.name if model is Agent else model.agent
-        found = await session.scalar(
-            select(exists().where(model.project_id == project_id, column == agent))
-        )
-        if found:
+    try:
+        # `user` and `operator` are not agents whatever is recorded under them (F415).
+        worktrees.validate_agent_name(agent)
+    except ValueError:
+        return False
+    for model, predicate in (
+        (Agent, Agent.name == agent),
+        (Conversation, Conversation.agent == agent),
+        (InboundQueueEntry, InboundQueueEntry.agent == agent),
+        (Run, Run.agent == agent),
+        (Task, Task.assignee == agent),
+        (Message, or_(Message.sender == agent, Message.recipient == agent)),
+        (AgentHeartbeat, AgentHeartbeat.agent == agent),
+        (AgentOutput, AgentOutput.agent == agent),
+    ):
+        if await session.scalar(select(exists().where(model.project_id == project_id, predicate))):
             return True
     return False
 
@@ -34,7 +57,7 @@ async def require_known_agent(session: AsyncSession, project_id: str, agent: str
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
-                f"{agent} is not an agent in this project: it is not on the roster and nothing is "
-                "recorded under that name. Correct the name, or create the agent in the Hub UI."
+                f"{agent} is not an agent in this project: nothing here is recorded under that "
+                "name. Correct the name, or create the agent in the Hub UI."
             ),
         )

@@ -618,10 +618,8 @@ async def list_agents(
                 # its default no matter what the row says — and the operator sees a switch they
                 # set turn itself off.
                 can_accept_evidence=bool(agent_row.can_accept_evidence) if agent_row else False,
-                # Without `env_vars`, whose values can be credentials: the agent-context renderer
-                # prints only their names for the same reason (`_runner_summary` below).
                 config=(
-                    {k: v for k, v in (agent_row.config or {}).items() if k != "env_vars"}
+                    {k: v for k, v in (agent_row.config or {}).items() if k in ROSTER_CONFIG_KEYS}
                     if agent_row
                     else {}
                 ),
@@ -629,6 +627,28 @@ async def list_agents(
         )
 
     return summaries
+
+
+def _merge_patch(target: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    """RFC 7396 JSON merge patch: a null deletes, an object merges recursively, anything else
+    replaces."""
+    merged = dict(target)
+    for key, value in patch.items():
+        if value is None:
+            merged.pop(key, None)
+        elif isinstance(value, dict):
+            current = merged.get(key)
+            merged[key] = _merge_patch(current if isinstance(current, dict) else {}, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+#: The config keys the roster shows (F244): the ones that decide how and where an agent runs.
+#: An allow-list, because `config` is an open object any PATCH can fill, and a credential under a
+#: key nobody thought to deny (`env_vars` values, a token inside `mcp_servers`) must not reach a
+#: listing the UI polls.
+ROSTER_CONFIG_KEYS = ("read_only", "yolo", "runner", "model", "cli", "hub_client")
 
 
 @router.post("", response_model=OperatorAgentResponse, status_code=status.HTTP_201_CREATED)
@@ -639,6 +659,13 @@ async def create_operator_agent(
 ):
     """Create a Hub-owned agent identity from existing project resources."""
     project_id, _ = project
+    # F415 review: this route, the Add-agent dialog's, checked only the name pattern, so `operator`
+    # and `user` were created here while every route that runs an agent refused them. A 400 with a
+    # sentence, not a validator's 422, because the dialog renders `detail` as text.
+    try:
+        worktrees.validate_agent_name(body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -2607,27 +2634,18 @@ async def patch_agent(
         if field in body:
             setattr(agent_row, field, _validated_waiting_seconds(field, body[field]))
 
-    # Merge config if provided. F243: absent and empty used to be the same thing, so nothing could
-    # be unset — `{"config": {}}` and `{"config": null}` both answered 200 and changed nothing. An
-    # explicit null clears the whole config (F219's rule for a runner's model); a key given as null
-    # is removed; `{}` merges nothing, so it is refused rather than answered as though it had.
+    # `config` is a JSON merge patch (RFC 7396), applied recursively. F243: nothing could be unset —
+    # `{"config": null}` answered 200 and changed nothing. Now a null removes the key it names at
+    # any depth, `"config": null` clears the whole config (F219's rule for a runner's model), and
+    # `{}` is the standard's no-op.
     if "config" in body:
         new_config = body["config"]
         if new_config is None:
             agent_row.config = {}
         elif not isinstance(new_config, dict):
             raise HTTPException(status_code=400, detail="config must be an object or null")
-        elif not new_config:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "config {} changes nothing: config is merged key by key. Send "
-                    '"config": null to clear all of it, or {"<key>": null} to remove one key.'
-                ),
-            )
         else:
-            merged = {**(agent_row.config or {}), **new_config}
-            agent_row.config = {key: value for key, value in merged.items() if value is not None}
+            agent_row.config = _merge_patch(agent_row.config or {}, new_config)
 
     # After the config merge, deliberately: a body carrying both must end with the two agreeing,
     # and the posture is the newer spelling of the same choice, so it is the one that wins.
@@ -2844,6 +2862,15 @@ async def unarchive_agent(
     """Reopen an archived agent. Never refused — reopening obstructs nothing."""
     project_id, _ = project
     agent_row = await _owned_agent(session, project_id, name)
+    # F397's mirror: already open is already done, and a second `agent_unarchived` event would read
+    # in the log like a real reopening.
+    if agent_row.lifecycle != "archived":
+        return {
+            "name": agent_row.name,
+            "lifecycle": agent_row.lifecycle,
+            "charter_id": agent_row.charter_id,
+            "message": f"{agent_row.name} was not archived; nothing changed.",
+        }
 
     unarchive_agent_row(agent_row)
     await session.commit()
