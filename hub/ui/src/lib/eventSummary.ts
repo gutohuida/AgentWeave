@@ -111,7 +111,14 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
     }
     // Both of these carry the only detail worth reading in a field the default branch does not
     // look at, so without a case they render as their own event name twice over.
-    case 'permission_denied': return `${data.agent ?? ''} refused ${data.tool_name ?? 'an action'}${data.reason ? `: ${data.reason}` : ''}`
+    // F337: the agent is the one refused, not the one refusing, and a Codex refusal's path or
+    // command is in `detail` while its `reason` is often only "outside <agent>'s workspace". Bounded,
+    // because a command can be a page long and this is one line of an activity feed.
+    case 'permission_denied': {
+      const detail = typeof data.detail === 'string' ? data.detail.trim() : ''
+      const shown = detail.length > 120 ? `${detail.slice(0, 119)}…` : detail
+      return `${data.agent ?? 'an agent'} was refused ${data.tool_name ?? 'an action'}${data.reason ? `: ${data.reason}` : ''}${shown ? ` — ${shown}` : ''}`
+    }
     // Retired: nothing emits `question_not_asked` any more (the unasked-question backstop was
     // removed and its table dropped in 0082). Kept because `event_logs` rows written before then
     // still exist, and the alternative is an old timeline rendering its own event name twice.

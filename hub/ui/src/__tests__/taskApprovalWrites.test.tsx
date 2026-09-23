@@ -72,7 +72,7 @@ describe('the approve control states what approving writes (F9)', () => {
         task_id: 'task-1',
         main_branch: 'master',
         targets: [{ commit_sha: 'cecbc88751eaff', source_branch: 'agentweave/builder' }],
-        will_merge: true,
+        will_attempt_merge: true,
         reason: '',
       },
     }
@@ -84,6 +84,10 @@ describe('the approve control states what approving writes (F9)', () => {
     expect(note).toHaveTextContent('cecbc88751ea')
     expect(note).toHaveTextContent('from agentweave/builder')
     expect(note).toHaveTextContent('into master')
+    // F156: integration runs `merge --no-ff`, and only an attempt is known before approval.
+    expect(note).toHaveTextContent('it merges')
+    expect(note).not.toHaveTextContent('cherry-pick')
+    expect(note).toHaveTextContent('approval is refused and nothing is written')
   })
 
   it('says plainly when approving will merge nothing, and why', () => {
@@ -93,7 +97,7 @@ describe('the approve control states what approving writes (F9)', () => {
         task_id: 'task-1',
         main_branch: 'master',
         targets: [],
-        will_merge: false,
+        will_attempt_merge: false,
         reason: 'no accepted evidence names a commit, so there is nothing to merge',
       },
     }
@@ -113,7 +117,7 @@ describe('the approve control states what approving writes (F9)', () => {
         task_id: 'task-1',
         main_branch: 'master',
         targets: [{ commit_sha: 'cecbc88751ea', source_branch: 'agentweave/builder' }],
-        will_merge: true,
+        will_attempt_merge: true,
         reason: '',
       },
     }

@@ -1,9 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
-import { DEFAULT_QUESTION_TIMEOUT_SECONDS, useQuestions, type Question } from '@/api/questions'
+import { DEFAULT_QUESTION_TIMEOUT_SECONDS, useDeclineQuestion, useQuestions, type Question } from '@/api/questions'
 import { AnswerForm } from './AnswerForm'
 import { EmptyState } from '@/components/common/EmptyState'
 import { Badge } from '@/components/common/Badge'
@@ -77,14 +77,52 @@ function QuestionRow({
       </div>
       <p id={labelId} className="text-sm leading-6" style={{ color: 'var(--text)' }}>{question.question}</p>
       <AnswerForm question={question} labelledBy={labelId} />
+      <DeclineControl question={question} />
     </article>
+  )
+}
+
+/**
+ * F229: this page is the one the sidebar calls *Questions*, and it could only answer. Declining
+ * lived on the run card alone, so a question could be declined only while its run was on screen,
+ * and was then still listed here as unanswered. The same route, `POST /questions/{id}/decline`.
+ */
+function DeclineControl({ question }: { question: Question }) {
+  const decline = useDeclineQuestion()
+  const [refusal, setRefusal] = useState<string | null>(null)
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <button
+        type="button"
+        data-testid={`question-decline-${question.id}`}
+        disabled={decline.isPending}
+        onClick={() => {
+          setRefusal(null)
+          decline.mutate(
+            { id: question.id },
+            { onError: (error: unknown) => setRefusal(readableApiError(error, 'The Hub refused to decline this question.')) },
+          )
+        }}
+        className="text-[11px]"
+        style={{ color: 'var(--text-3)' }}
+        title="Close this question without answering it"
+      >
+        {decline.isPending ? 'Declining…' : 'Decline without answering'}
+      </button>
+      {refusal && (
+        <span role="alert" className="text-[11px]" style={{ color: 'var(--amber)' }}>{refusal}</span>
+      )}
+    </div>
   )
 }
 
 export function QuestionsPanel() {
   const pageRef = useRef<HTMLDivElement>(null)
   const { data: unanswered, isLoading, isError, error } = useQuestions(false)
-  const { data: answered } = useQuestions(true)
+  // Unfiltered, then narrowed to what is resolved: `answered=true` excludes a declined question and
+  // `answered=false` excludes it too (F228), so neither list alone could show one as declined.
+  const { data: everything } = useQuestions()
+  const answered = everything?.filter((question) => question.answered || question.declined)
   // The questions payload carries no timeout of its own — the window belongs to the agent that
   // asked, and the roster is the only place this surface can reach it. Joining here costs nothing:
   // every other screen already holds this query under the same key.
@@ -197,14 +235,17 @@ export function QuestionsPanel() {
       {answered && answered.length > 0 && (
         <details className="answered-questions mt-2">
           <summary className="flex cursor-pointer select-none items-center text-[13px] font-medium transition-colors" style={{ color: 'var(--text-3)' }}>
-            <Icon name="expand_more" size={16} className="mr-1" /> Answered ({answered.length})
+            <Icon name="expand_more" size={16} className="mr-1" /> Answered or declined ({answered.length})
           </summary>
           <div className="mt-3 space-y-2">
             {answered.map((question) => (
               <article key={question.id} className="question-row p-3 opacity-65">
                 <div className="mb-1 flex items-center gap-2">
                   <span className="text-[13px] font-medium" style={{ color: 'var(--text)' }}>{question.from_agent}</span>
-                  <Badge variant="success">answered</Badge>
+                  {/* A declined question closes without an answer; it used to read "answered". */}
+                  {question.declined
+                    ? <Badge variant="secondary">declined</Badge>
+                    : <Badge variant="success">answered</Badge>}
                 </div>
                 <p className="text-xs" style={{ color: 'var(--text)' }}>{question.question}</p>
                 {question.answer && <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>→ {question.answer}</p>}

@@ -152,7 +152,10 @@ export function AgentTimeline({
   // turns rendered here. (F190's fix took the map off the timeline route, which merely moved the
   // truncation: the map was then bounded by that route's fifty events rather than by these
   // entries. F274 is that residue, and the prop's source is the chat response now.)
-  const lastTurn = turns.length > 0 ? turns[turns.length - 1] : undefined
+  // The newest *run's* turn. An abandoned message sits among the turns at its own time (F275) and
+  // has no run, so it must not stand in for the newest run here.
+  const runTurns = turns.filter((turn) => !turn.abandoned)
+  const lastTurn = runTurns.length > 0 ? runTurns[runTurns.length - 1] : undefined
   const lastRunId = lastTurn?.runId ?? null
   const lastRunSettled =
     (lastTurn?.entries.some(isSuccessCompletionEntry) ?? false) ||
@@ -255,6 +258,20 @@ export function AgentTimeline({
   return (
     <div className="max-w-[960px] mx-auto flex flex-col gap-[21px] px-[30px]">
       {turns.map((turn, turnIndex) => {
+        if (turn.abandoned) {
+          // Rendered as the message it was, with its "not delivered" chip and the Hub's reason —
+          // outside `[data-turn-boundary]`, since it is not a turn anything ran.
+          const entry = turn.entries[0]
+          return (
+            <MessageEntry
+              key={`abandoned-${entry.id}`}
+              entry={entry}
+              agentName={agent.name}
+              colorByName={colorByName}
+              queued
+            />
+          )
+        }
         const key = turn.runId ?? `turn-${turnIndex}`
         const runStatus = turn.runId ? runs[turn.runId]?.status : undefined
         // Foldedness is the operator's choice, never a function of position. The default used

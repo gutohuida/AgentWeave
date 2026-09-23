@@ -292,6 +292,21 @@ async def _queued_entries_for(
     ]
 
 
+def _split_undelivered(
+    entries: List[TimelineEntry],
+) -> Tuple[List[TimelineEntry], List[TimelineEntry]]:
+    """(still waiting, abandoned), from `_queued_entries_for`'s answer (F275).
+
+    A waiting entry belongs to whichever turn drains it next, so it is appended after the sorted
+    history. An abandoned one is finished and happened when it arrived — before the failed runs
+    that gave up on it — so it is sorted in by its own timestamp (`arrived_at`). Appending it put
+    the operator's message after the three failures it caused.
+    """
+    waiting = [entry for entry in entries if entry.delivery_state != "abandoned"]
+    abandoned = [entry for entry in entries if entry.delivery_state == "abandoned"]
+    return waiting, abandoned
+
+
 async def _run_facts_for(
     session: AsyncSession,
     project_id: str,
@@ -689,11 +704,12 @@ async def get_chat_history(
         for entry in delivered_res.scalars().all()
     )
     entries.extend(_message_to_timeline(m) for m in outbound_res.scalars().all())
-    entries.sort(key=lambda e: e.timestamp)
-
-    entries.extend(
+    waiting, abandoned = _split_undelivered(
         await _queued_entries_for(session, project_id, agent, hop_budget, conversation_id)
     )
+    entries.extend(abandoned)
+    entries.sort(key=lambda e: e.timestamp)
+    entries.extend(waiting)
 
     return ChatHistoryResponse(
         conversation_id=conversation_id,
@@ -758,10 +774,13 @@ async def get_recent_chat(
         for entry in delivered_res.scalars().all()
     )
     entries.extend(_message_to_timeline(m) for m in outbound_res.scalars().all())
+    waiting, abandoned = _split_undelivered(
+        await _queued_entries_for(session, project_id, agent, hop_budget)
+    )
+    entries.extend(abandoned)
     entries.sort(key=lambda e: e.timestamp)
     entries = entries[-limit:]
-
-    entries.extend(await _queued_entries_for(session, project_id, agent, hop_budget))
+    entries.extend(waiting)
 
     return ChatHistoryResponse(
         conversation_id=None,

@@ -6,7 +6,7 @@ Three surfaces that were confidently wrong about work the Hub itself had done:
   heartbeat rows and only a self-registered agent writes one.
 * **F14** — a task whose run sits waiting on `ask_user` read `in_progress` with no reason, so the
   board claimed progress while the answer was on the operator's desk.
-* **F9** — approving a task cherry-picks into the operator's main branch, and nothing said so
+* **F9** — approving a task merges into the operator's main branch, and nothing said so
   before they clicked.
 """
 
@@ -487,7 +487,7 @@ async def test_the_preview_names_the_commit_and_both_branches(app, auth_headers)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["will_attempt_merge"] is True
-    assert body["will_merge"] is True  # the old name, kept for the bundled drawer
+    assert "will_merge" not in body  # the old name, retired in UI-1 with the drawer (F156)
     assert body["main_branch"] == "master"
     assert body["targets"] == [
         {"commit_sha": "cecbc88751ea", "source_branch": "agentweave/builder"}
@@ -509,7 +509,7 @@ async def test_no_main_branch_is_a_stated_reason_not_a_failure(app, auth_headers
         "/api/v1/projects/proj-test/tasks/task-1/integration-preview", headers=auth_headers
     )
     body = response.json()
-    assert body["will_merge"] is False
+    assert body["will_attempt_merge"] is False
     assert "no main branch" in body["reason"]
 
 
@@ -529,7 +529,7 @@ async def test_evidence_still_awaiting_review_merges_nothing(app, auth_headers):
         "/api/v1/projects/proj-test/tasks/task-1/integration-preview", headers=auth_headers
     )
     body = response.json()
-    assert body["will_merge"] is False
+    assert body["will_attempt_merge"] is False
     assert body["targets"] == []
     assert "no accepted evidence" in body["reason"]
 

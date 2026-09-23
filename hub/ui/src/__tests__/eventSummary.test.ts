@@ -33,12 +33,35 @@ describe('summaryForEvent', () => {
       reason: "outside reviewer's workspace",
       decided_by: 'runtime',
     })
-    expect(summary).toBe("reviewer refused Write: outside reviewer's workspace")
+    expect(summary).toBe("reviewer was refused Write: outside reviewer's workspace")
   })
 
   it('still names the action when the runtime gave no reason', () => {
     const summary = summaryForEvent('permission_denied', { agent: 'reviewer', tool_name: 'Bash' })
-    expect(summary).toBe('reviewer refused Bash')
+    expect(summary).toBe('reviewer was refused Bash')
+  })
+
+  // F337: the path or command a Codex refusal was aimed at is in `detail`, and it was recorded and
+  // never shown. Bounded so a long command does not become the whole feed.
+  it("shows what a refusal was aimed at, and says the agent was the one refused", () => {
+    const summary = summaryForEvent('permission_denied', {
+      agent: 'reviewer',
+      tool_name: 'Write',
+      reason: "outside reviewer's workspace",
+      detail: '/etc/hosts',
+      decided_by: 'runtime',
+    })
+    expect(summary).toBe("reviewer was refused Write: outside reviewer's workspace — /etc/hosts")
+  })
+
+  it('bounds a long detail', () => {
+    const summary = summaryForEvent('permission_denied', {
+      agent: 'reviewer',
+      tool_name: 'Bash',
+      detail: 'x'.repeat(300),
+    })
+    expect(summary.endsWith('…')).toBe(true)
+    expect(summary.length).toBeLessThan(160)
   })
 
   it('still summarises the event types that follow the clause that was removed', () => {

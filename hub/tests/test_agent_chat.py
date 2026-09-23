@@ -669,3 +669,55 @@ async def test_an_entry_the_operator_withdrew_does_not_come_back(app, auth_heade
     )
     ids = [entry["id"] for entry in resp.json()["entries"]]
     assert "entry-t22-withdrawn" not in ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scoped", [True, False])
+async def test_an_abandoned_entry_sits_where_it_happened(app, auth_headers, scoped):
+    """F275. An abandoned entry arrived before the failed runs that gave up on it, and was
+    appended after all of them, so the thread read as the agent failing before the operator had
+    said anything. It is sorted in by its own time now; a still-waiting entry is still appended."""
+    project_id = await _project_id(app, auth_headers)
+    agent = "agent_t22"
+    start = datetime.now(timezone.utc) - timedelta(minutes=5)
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t22-abandoned",
+        agent=agent,
+        origin_type="operator",
+        content="Say hello.",
+        conversation_id="sess-t22",
+        timestamp=start,
+    )
+    async with async_session_factory() as session:
+        entry = await _entry(session, "entry-t22-abandoned")
+        entry.state = "withdrawn"
+        entry.withdrawn_at = start + timedelta(seconds=30)
+        entry.abandoned_reason = "delivery failed 3 times; the Hub stopped retrying"
+        await session.commit()
+    for n in (1, 2):
+        await _add_output(
+            project_id,
+            out_id=f"o-t22-{n}",
+            agent=agent,
+            content=f"Run failed ({n}).",
+            session_id="sess-t22",
+            timestamp=start + timedelta(seconds=10 * n),
+        )
+    await _add_queue_entry(
+        project_id,
+        entry_id="entry-t22-waiting",
+        agent=agent,
+        origin_type="operator",
+        content="still waiting",
+        conversation_id="sess-t22",
+        timestamp=start - timedelta(minutes=1),
+    )
+
+    path = "chat/sess-t22" if scoped else "chat"
+    resp = await app.get(f"/api/v1/projects/proj-test/agent/{agent}/{path}", headers=auth_headers)
+    ids = [e["id"] for e in resp.json()["entries"]]
+    assert ids.index("entry-t22-abandoned") < ids.index("o-t22-1") < ids.index("o-t22-2")
+    # Waiting belongs to whichever turn drains it next, so it stays last even though it arrived
+    # earliest of all.
+    assert ids[-1] == "entry-t22-waiting"

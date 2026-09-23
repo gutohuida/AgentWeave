@@ -593,7 +593,7 @@ async def test_the_preview_names_the_branch_tip_for_an_evidence_free_loop_task(
     git(tmp_path, "checkout", "-q", "main")
 
     answer = await preview(app, auth_headers, task)
-    assert answer["will_merge"] is True
+    assert answer["will_attempt_merge"] is True
     assert answer["will_attempt_merge"] is True
     assert answer["reason"].startswith("approval will merge one commit into main")  # F156
     assert answer["targets"] == [
@@ -617,7 +617,7 @@ async def test_the_preview_is_unchanged_where_evidence_governs(
     git(tmp_path, "checkout", "-q", "main")
 
     answer = await preview(app, auth_headers, task)
-    assert answer["will_merge"] is False
+    assert answer["will_attempt_merge"] is False
     assert answer["reason"] == task_integration.NOTHING_TO_MERGE
     assert answer["targets"] == []
 
@@ -634,7 +634,7 @@ async def test_the_preview_says_no_branch_rather_than_no_evidence(
     task = await loop_task(app, auth_headers, loop)
 
     answer = await preview(app, auth_headers, task)
-    assert answer["will_merge"] is False
+    assert answer["will_attempt_merge"] is False
     assert answer["reason"] == task_integration.NO_TASK_BRANCH
 
 

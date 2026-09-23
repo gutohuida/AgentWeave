@@ -121,6 +121,25 @@ describe('groupIntoTurns', () => {
 })
 
 describe('findPairedResult', () => {
+  // F275: the chat routes sort an abandoned entry in by its own time (it arrived before the runs
+  // that gave up on it) and append only still-waiting ones. This is that order.
+  it('keeps an abandoned entry where it happened, as a turn of its own, not in pending', () => {
+    const entries = [
+      entry({ id: 'said', kind: 'operator_input', delivery_state: 'abandoned', abandoned_reason: 'delivery failed 3 times' }),
+      entry({ id: 'f1', run_id: 'run-1' }),
+      entry({ id: 'f2', run_id: 'run-2' }),
+      entry({ id: 'waiting', kind: 'operator_input', delivery_state: 'queued' }),
+    ]
+    const { turns, pending } = groupIntoTurns(entries)
+
+    expect(turns.map((t) => (t.abandoned ? `abandoned:${t.entries[0].id}` : t.runId))).toEqual([
+      'abandoned:said',
+      'run-1',
+      'run-2',
+    ])
+    expect(pending.map((e) => e.id)).toEqual(['waiting'])
+  })
+
   it('pairs a tool_use with its tool_result by call_id', () => {
     const use = entry({
       id: 'use-1',

@@ -2,6 +2,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 
+/**
+ * One thing the Hub decided to tell the operator at approval rather than refuse (F169):
+ * `requirement` is a `contract`-rigor requirement that was not verified (or is invalid), and
+ * `awaiting_evidence` is evidence nobody has judged yet, whose commit merges when it is accepted.
+ * Carried only on the response to the approving request; nothing persists it.
+ */
+export type ApprovalReportEntry =
+  | { kind: 'requirement'; identifier: string; requirement_id?: string; state: string; remedy: string }
+  | {
+      kind: 'awaiting_evidence'
+      evidence_id: string
+      identifier?: string
+      commit_sha?: string | null
+      target_branch?: string | null
+    }
+
 export interface Task {
   id: string
   project_id: string
@@ -22,6 +38,8 @@ export interface Task {
   updated: string
   /** What happens when a run bound to this task ends without the task moving. */
   divergence_policy: DivergencePolicy
+  /** Non-empty only on the response to the request that approved this task (F169). */
+  approval_report?: ApprovalReportEntry[]
   escalation_agent?: string | null
   /** A run dropped this task and nothing has moved it since. */
   has_open_divergence: boolean
@@ -198,8 +216,10 @@ export interface TaskIntegrationPreview {
   task_id: string
   main_branch: string | null
   targets: { commit_sha: string; source_branch: string | null }[]
-  will_merge: boolean
-  /** Why nothing will be merged. Empty when something will. */
+  /** Whether approval will *try* a merge. Not whether it will succeed: that is checked at approval,
+   *  which refuses a conflict (F156; the old name `will_merge` overstated it and is retired). */
+  will_attempt_merge: boolean
+  /** Why nothing will be merged, or, when something will be tried, the Hub's sentence saying so. */
   reason: string
 }
 

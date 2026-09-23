@@ -28,14 +28,18 @@ export function isSuccessCompletionEntry(entry: TimelineEntry): boolean {
 }
 
 export interface TimelineTurn {
-  /** null for a legacy row with no recorded run (pre-Phase-3 data). */
+  /** null for a legacy row with no recorded run (pre-Phase-3 data), and for an abandoned entry. */
   runId: string | null
   entries: TimelineEntry[]
+  /** One message the Hub gave up delivering, placed where it happened (F275). It is not a run,
+   *  so nothing that asks about "the newest turn's run" should count it. */
+  abandoned?: boolean
 }
 
 export interface GroupedTimeline {
   turns: TimelineTurn[]
-  /** Still-queued (undelivered) entries — no run yet, so no turn to belong to. */
+  /** Still-queued entries — no run yet, so no turn to belong to. An abandoned entry is not
+   *  here: it is finished, and sits among the turns at its own time (F275). */
   pending: TimelineEntry[]
 }
 
@@ -43,12 +47,20 @@ export interface GroupedTimeline {
  * One run_id is always one contiguous turn: delivered entries within a run
  * are inserted (and thus already ordered) together at delivery time. */
 export function groupIntoTurns(entries: TimelineEntry[]): GroupedTimeline {
-  const delivered = entries.filter((e) => e.delivery_state === 'delivered')
-  const pending = entries.filter((e) => e.delivery_state !== 'delivered')
+  const pending = entries.filter((e) => e.delivery_state === 'queued')
 
   const turns: TimelineTurn[] = []
   const indexByKey = new Map<string, number>()
-  for (const entry of delivered) {
+  for (const entry of entries) {
+    if (entry.delivery_state === 'queued') continue
+    // F275: an abandoned message is finished, and it happened when it arrived — before the failed
+    // runs that gave up on it. It used to join `pending` and render after every turn, so the
+    // thread read as the agent failing three times before the operator said anything. Both chat
+    // routes now sort it in by time; it becomes a one-entry turn of its own, in that place.
+    if (entry.delivery_state === 'abandoned') {
+      turns.push({ runId: null, entries: [entry], abandoned: true })
+      continue
+    }
     const key = entry.run_id ?? `no-run-${entry.id}`
     let index = indexByKey.get(key)
     if (index === undefined) {

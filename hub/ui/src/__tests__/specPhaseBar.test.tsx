@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SpecPhaseBar } from '@/components/spec/SpecPhaseBar'
+import { ApiError } from '@/api/client'
 
 /**
  * The controls an operator has and an agent does not.
@@ -145,10 +146,32 @@ describe('SpecPhaseBar', () => {
     expect(screen.queryByText('Reopen')).not.toBeInTheDocument()
   })
 
-  it('offers archiving only on an approved document', () => {
-    documents = [doc({ phase: 'approved' })]
+  // F205: `spec_lifecycle.TRANSITIONS` has archive edges from `exploring` and `proposed` as well,
+  // added for F37's empty mistaken document, and no screen offered them.
+  it.each(['approved', 'exploring', 'proposed'])('offers archiving a %s document', (phase) => {
+    documents = [doc({ phase })]
     renderBar()
     expect(screen.getByText('Archive')).toBeInTheDocument()
+  })
+
+  it("shows the Hub's refusal in the dialog when the document has produced work", async () => {
+    const refusal = new ApiError(409, JSON.stringify({
+      detail: {
+        code: 'archive_would_orphan_work',
+        message: 'this document has produced requirements or tasks, so archiving it from exploring would retire work that still exists. Approve it and archive that, or reopen it and decide about the work first.',
+      },
+    }))
+    setPhase.mockImplementation((_vars: unknown, options: { onError: (e: unknown) => void }) => {
+      options.onError(refusal)
+    })
+    documents = [doc({ phase: 'exploring' })]
+    renderBar()
+
+    await userEvent.click(screen.getByText('Archive'))
+    await userEvent.click(within(screen.getByRole('dialog')).getByText('Archive'))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('would retire work that still exists')
   })
 
   it('asks for confirmation before archiving, naming the document', async () => {
@@ -187,7 +210,7 @@ describe('SpecPhaseBar', () => {
     )
   })
 
-  it.each(['exploring', 'proposed', 'archived', 'current'])(
+  it.each(['archived', 'current'])(
     'does not offer archiving a %s document',
     (phase) => {
       documents = [doc({ phase })]

@@ -12812,6 +12812,11 @@ whether it merges cleanly is checked at approval, which refuses if it does not"*
 drawer's own copy ("Approving writes to your repository: it cherry-picks ...", `TaskDetailDrawer.tsx`)
 has the same wrong verb -- a UI-round item alongside retiring `will_merge`.
 
+**FIXED 2026-09-23 (interactive session, UI-1): the UI half.** The drawer reads `will_attempt_merge`, and `will_merge` is retired from `integration-preview` (the route, `TaskIntegrationPreview`, and the three test files that asserted it; `test_dashboard_truth` now asserts its absence). `ApprovalWritesNote` says *it merges*, not *cherry-picks*: integration runs `merge --no-ff` (`task_integration.py`), and the route's docstring said cherry-pick too, now corrected. The note adds that approval refuses and writes nothing if the merge would not apply cleanly. Test: `taskApprovalWrites.test.tsx` (fixtures moved to the new field; new assertions on the wording).
+
+
+---
+
 ## F157 (C) — a loop field on `POST /jobs` is silently dropped; the same field on `PATCH` is refused
 
 **Status:** open, and the product's own code says so. Verified 2026-09-09:
@@ -13925,7 +13930,7 @@ afterwards, and afterwards is now correct.
 
 ## F169 (C) — the approval advisory is produced for the operator and reaches no surface, then is unrecoverable
 
-**Status:** open. Verified 2026-09-09: `grep -rn "approval_report\|approvalReport"
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the approving drawer shows the approval advisory, once, since the Hub keeps no copy; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `grep -rn "approval_report\|approvalReport"
 hub/ui/src` still returns nothing, so the advisory the approving request carries still reaches no
 component, and nothing persists it. Counted by
 `2026-09-01-a-refusal-reaches-the-operator` as one of six instances of one shape; that exploration
@@ -13998,6 +14003,8 @@ such field — F4's adoption is real and observable through `GET /settings`), an
 empty listing, a walkable `parent`, and a `reason`, so the picker can keep navigating. Both were
 assertions about a product the drive had imagined. They are now assertions about the one that
 exists, with the reasoning written into the harness so the next run does not re-derive it.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `TaskDetailDrawer` keeps `approval_report` from the response to the approving request, from the status menu (`PATCH /tasks/{id}`, via `update_task_for_actor`) and from *Land it* (`POST /tasks/{id}/land`), and renders it as *Approved, with N things to know. This is shown once: the Hub does not keep it.*, one line per entry: a `requirement` entry as `<FR> is <state>: <remedy>.`, and an `awaiting_evidence` entry as the evidence, its requirement, and the commit that merges when it is accepted. New `ApprovalReportEntry` type in `api/tasks.ts`. Persisting the advisory was not done; the entry's severity argument (nothing lost from the audit trail) stands. Tests: `taskApprovalReportAndPending.test.tsx` (three F169 cases).
 
 ---
 
@@ -16613,7 +16620,7 @@ unknown path answers 404 instead of 422 `body: Field required`. Measured by `hub
 
 ## F205 (C) — the two phase edges added for F37 are offered by no screen, and the documents they were added for are exactly the ones the UI will not archive
 
-**Status:** open. Verified 2026-09-09: `SpecPhaseBar.tsx:136-145` still renders Archive
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the phase bar offers Archive on exploring and proposed documents too, and the dialog shows the Hub's refusal; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `SpecPhaseBar.tsx:136-145` still renders Archive
 only under `document.phase === 'approved'`, so neither of the two edges added for F37 is reachable
 from any screen, and the empty exploring document those edges exist for still has nothing on screen
 that retires it. [classified 2026-09-09, D-3]
@@ -16657,6 +16664,8 @@ edge can act on are ones that got to `proposed` around the completeness check.
 
 Severity C rather than B: the state is recoverable by any direct HTTP client, and the cost of not
 recovering it is a standing drift warning rather than lost work.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `SpecPhaseBar` offers Archive for `exploring` and `proposed` as well as `approved`, the two F37 edges `spec_lifecycle.TRANSITIONS` declares. Where the Hub refuses (`archive_would_orphan_work`, a document that produced requirements or tasks), the refusal now shows inside `ArchiveConfirmDialog` (new `error` prop). The dialog used to drop every archive refusal: `onConfirmArchive` passed only `onSuccess`, F187's shape again. `proposed -> archived` stays reachable only for documents that reached `proposed` around the completeness check, as the entry says; the UI does not pretend otherwise, it offers the edge and shows the answer. Tests: `specPhaseBar.test.tsx` (offered on three phases, refused-in-dialog case; the old 'not offered on exploring/proposed' rows removed).
 
 ## F206 (B) — five of the spec flow's operator-only routes have no operator surface
 
@@ -17998,7 +18007,7 @@ does.
 
 ## F229 (D) — the page named after questions is the one page that cannot decline one
 
-**Status:** open. The decline control still lives only on the in-run card, and the page
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the Questions page declines as well as answers, and lists a declined question as declined; see FIXED at the end of this entry. Was: open. The decline control still lives only on the in-run card, and the page
 the sidebar labels *Questions* still contains no decline control and no rendering of the flag. Named
 by the survey as covered by its row, never specced. [classified 2026-09-09, D-3]
 
@@ -18017,6 +18026,8 @@ sees the question still listed as unanswered on the Questions page (F228), with 
 it was declined and no way to have declined it there in the first place.
 
 **Reproduction:** `scripts/drive/t_sweep_row11_questions.py`, leg 10.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** Each question row on `QuestionsPanel` has *Decline without answering*, calling the same `POST /questions/{id}/decline` as the run card, with the Hub's refusal shown beside it. The resolved section now reads the unfiltered list narrowed to answered-or-declined: since F228, `answered=false` excludes a declined question and `answered=true` never included one, so neither filtered list could show it. Such a question carries a `declined` badge instead of `answered`, under *Answered or declined (N)*. Tests: `questionsPanel.test.tsx` (three new; the mock now serves the unfiltered call).
 
 ---
 
@@ -21378,7 +21389,7 @@ at any point.
 
 ## F275 (C) - an abandoned operator message renders after the failures it caused
 
-**Status:** open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it. **Round 3d, 2026-09-23: deferred to a UI round.** The server order is not what decides the screen: `agentTimelineModel.groupIntoTurns` puts every non-delivered entry, abandoned or waiting, into `pending`, rendered after every turn -- so the repair is the UI placing an abandoned entry among the turns by its timestamp (with the route sorting it in, not appending it). That needs a bundle, and no bundle can be committed until `:8000` is restarted past `c18a87b` (the night window's group 5.4 gate, 2026-09-23).
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — an abandoned message sits where it happened, among the turns; see FIXED at the end of this entry. Was: open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it. **Round 3d, 2026-09-23: deferred to a UI round.** The server order is not what decides the screen: `agentTimelineModel.groupIntoTurns` puts every non-delivered entry, abandoned or waiting, into `pending`, rendered after every turn -- so the repair is the UI placing an abandoned entry among the turns by its timestamp (with the route sorting it in, not appending it). That needs a bundle, and no bundle can be committed until `:8000` is restarted past `c18a87b` (the night window's group 5.4 gate, 2026-09-23).
 
 `_queued_entries_for` returns entries that are still `queued` **and** entries the Hub gave up on
 (`hub/hub/api/v1/agent_chat.py:249-280`), and both routes append its result **after** the timestamp
@@ -21407,6 +21418,8 @@ top-to-bottom sees the agent fail three times before they said anything.
 The `NOT DELIVERED` chip does rescue the meaning, which is why this is **C** and not B - the fact is
 present, only its position lies. Worth noting beside F188, which is about the same three-attempt
 abandonment reaching the operator at all.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** Both halves ROUNDS named. The route: new `agent_chat._split_undelivered` separates `_queued_entries_for`'s answer, and both chat routes sort abandoned entries in with the history by their own timestamp (`arrived_at`), appending only the still-waiting ones. The view: `groupIntoTurns` walks the entries in that order; an abandoned entry becomes a one-entry turn marked `abandoned`, in place, and `pending` holds only `queued` entries. `AgentTimeline` renders such a turn as the message with its *not delivered* chip and reason, outside `[data-turn-boundary]`, and computes the newest-run turn (`lastTurn`, which gates the working indicator) from run turns only. Tests: `test_an_abandoned_entry_sits_where_it_happened` (`test_agent_chat.py`, both routes; fails on the old route), and `agentTimelineModel.test.ts` (fixture in the route's new order).
 
 ## What held
 
@@ -26492,7 +26505,7 @@ bisected**; whoever takes one should take both.
 
 ## F315 (C) — the button that blocks a ticket says nothing for the two seconds it takes, and a second press writes the move again
 
-**Status:** open — filed 2026-09-11, measured on both the keyboard and the mouse path.
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — Mark waiting says it is working and refuses a second press until the write and refetch finish; see FIXED at the end of this entry. Was: open — filed 2026-09-11, measured on both the keyboard and the mouse path.
 **Pre-existing and outside `2026-09-10-the-control-that-asks-holds-the-keyboard`**, which is why it
 is filed rather than fixed: that change moves the keyboard into this panel and does not touch the
 mutation behind it. Found by §7.6's drive, when a fixed 1.5s wait turned out not to be long enough
@@ -26542,6 +26555,8 @@ whatever change owns optimistic feedback for task mutations.
 
 **Related:** `F309` (the focus defect in the same panel, fixed by the change whose drive found
 this), `F310`.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** The confirm button is disabled while `updateTask.isPending` (it used to consult only whether a reason was typed), carries `aria-busy`, and reads `Marking waiting…`. `useUpdateTask`'s `onSuccess` returns the invalidation promise, so `isPending` holds through the refetch that was the measured 1.5-3s of silence, not only through the PATCH. Test: `taskApprovalReportAndPending.test.tsx` (F315 case).
 
 ---
 
@@ -28027,7 +28042,7 @@ Screenshot: `%TEMP%\d1_0913\render\shots\d-094433-5-start-work-menu.png`.
 
 ## F337 (C) — a refusal's path or command is recorded and never shown, and its activity line says the agent did the refusing
 
-**Status:** open. Filed 2026-09-13 by the day window's `d3-r2` (F299's round 2). **Read from the
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — a refusal's line says the agent was refused, and shows the bounded detail it was aimed at; see FIXED at the end of this entry. Was: open. Filed 2026-09-13 by the day window's `d3-r2` (F299's round 2). **Read from the
 source. Not rendered in a browser.**
 
 **The claim.** Every `permission_denied` row reaches the activity through `EventRow`, which shows
@@ -28052,6 +28067,8 @@ wording has a test (`hub/ui/src/__tests__/eventSummary.test.ts:30-45`).
 
 **Reproduce:** read the two lines cited above. Or trigger any Codex refusal outside a workspace and
 compare the activity line with the row's copied JSON.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `summaryForEvent('permission_denied', …)` now reads `<agent> was refused <tool>: <reason> — <detail>`: the agent is the one refused, never the one refusing, and `detail` (Codex's path or command, `agent_trigger.py`) is shown, cut at 120 characters. The existing two sentences in `eventSummary.test.ts` moved to the new wording; two new cases cover the detail and its bound. Passive rather than naming a decider, because the three emitters (runtime, harness, operator) do not all carry `decided_by`.
 
 ---
 

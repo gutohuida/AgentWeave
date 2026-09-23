@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { QuestionsPanel } from '@/components/questions/QuestionsPanel'
 import type { Question } from '@/api/questions'
+import { ApiError } from '@/api/client'
 import type { AgentSummary } from '@/api/agents'
 
 const answer = vi.fn()
 const reset = vi.fn()
+const decline = vi.fn()
+/** Resolved questions: what the unfiltered list adds to `pending`. */
+const resolved: Question[] = []
 let loading = false
 /** The unanswered fetch's failure, so a test can put the panel in "the Hub did not answer". */
 const questionsState: Record<string, unknown> = {}
@@ -25,11 +29,15 @@ const pending: Question[] = [{
 
 vi.mock('@/api/questions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/questions')>()),
+  // `useQuestions()` with no filter is every question; `false` is the outstanding list.
   useQuestions: (answered?: boolean) =>
-    answered
-      ? { data: [], isLoading: false }
-      : { data: pending, isLoading: loading, ...questionsState },
+    answered === undefined
+      ? { data: [...pending, ...resolved], isLoading: false }
+      : answered
+        ? { data: resolved.filter((q) => q.answered), isLoading: false }
+        : { data: pending, isLoading: loading, ...questionsState },
   useAnswerQuestion: () => ({ mutate: answer, isPending: false, reset, ...answerState }),
+  useDeclineQuestion: () => ({ mutate: decline, isPending: false }),
 }))
 
 vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: roster }) }))
@@ -52,6 +60,8 @@ function secondsAgo(seconds: number): string {
 beforeEach(() => {
   answer.mockClear()
   reset.mockClear()
+  decline.mockReset()
+  resolved.length = 0
   loading = false
   roster = []
   pending.length = 0
@@ -231,5 +241,39 @@ describe('when the panel cannot be trusted', () => {
     render(<QuestionsPanel />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Answer codex-1' }), { target: { value: 'retry' } })
     expect(reset).toHaveBeenCalled()
+  })
+})
+
+// F229: the page the sidebar calls *Questions* could answer and never decline.
+describe('declining from the Questions page (F229)', () => {
+  it('declines through the same route the run card uses', () => {
+    render(<QuestionsPanel />)
+    fireEvent.click(screen.getByTestId('question-decline-question-1'))
+    expect(decline).toHaveBeenCalledWith({ id: 'question-1' }, expect.any(Object))
+  })
+
+  it("shows the Hub's refusal beside the control", () => {
+    decline.mockImplementation((_vars: unknown, options: { onError: (e: unknown) => void }) => {
+      options.onError(new ApiError(409, JSON.stringify({ detail: 'This question has already been answered.' })))
+    })
+    render(<QuestionsPanel />)
+    fireEvent.click(screen.getByTestId('question-decline-question-1'))
+    expect(screen.getByRole('alert')).toHaveTextContent('This question has already been answered.')
+  })
+
+  it('lists a declined question as declined, not answered', () => {
+    resolved.push({
+      id: 'question-2',
+      project_id: 'project-1',
+      from_agent: 'codex-1',
+      question: 'Ship it?',
+      blocking: false,
+      answered: false,
+      declined: true,
+      created_at: new Date().toISOString(),
+    })
+    render(<QuestionsPanel />)
+    expect(screen.getByText('Answered or declined (1)')).toBeInTheDocument()
+    expect(screen.getByText('declined')).toBeInTheDocument()
   })
 })

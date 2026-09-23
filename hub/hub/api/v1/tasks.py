@@ -1080,8 +1080,8 @@ async def task_integration_preview(
     """What approving this task *would* write, before the operator approves it (F9).
 
     Approving is the most consequential act in the product and the only one that changes the
-    operator's repository: it cherry-picks the commit named by each accepted piece of evidence into
-    the project's main branch. Driven end to end on 2026-08-23, that worked exactly as designed —
+    operator's repository: it merges (`merge --no-ff`) the commit named by each accepted piece of
+    evidence into the project's main branch. Driven end to end on 2026-08-23, that worked exactly as designed —
     and nothing on the successful path ever said it was about to happen. The refusal path was
     already legible ("no accepted evidence names a commit"); the *write* was not.
 
@@ -1103,7 +1103,7 @@ async def task_integration_preview(
     and a stated reason, never a 500 — the same posture `requirement_gate._merge_situation` takes
     for the same preconditions.
 
-    `will_merge` is false with a stated `reason` for the ordinary cases — a project with no main
+    `will_attempt_merge` is false with a stated `reason` for the ordinary cases — a project with no main
     branch configured, a task whose evidence names no commit, and a task of its own that has no
     branch — because all of them are supported project shapes and none is an error.
     """
@@ -1151,12 +1151,9 @@ async def task_integration_preview(
         "targets": [
             {"commit_sha": target.commit_sha, "source_branch": target.branch} for target in targets
         ],
-        # What this route can know: whether approval will *attempt* a merge (F156).
+        # What this route can know: whether approval will *attempt* a merge (F156). The old name,
+        # `will_merge`, overstated it; retired in UI-1 with the drawer that read it.
         "will_attempt_merge": attempts,
-        # The same value under its old name, which overstated it. Kept because the committed UI
-        # bundle reads it (`TaskDetailDrawer.tsx`); retire it when the drawer moves to the field
-        # above, in a UI round.
-        "will_merge": attempts,
         "reason": reason,
     }
 

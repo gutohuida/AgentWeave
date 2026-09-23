@@ -4,6 +4,7 @@ import { Icon } from '@/components/common/Icon'
 import { PriorityBadge, StatusBadge } from '@/components/common/Badge'
 import { readableApiError } from '@/api/client'
 import {
+  ApprovalReportEntry,
   DIVERGENCE_POLICY_LABELS,
   DivergencePolicy,
   Task,
@@ -25,8 +26,8 @@ import { hubDate } from '@/lib/hubTime'
  *
  * An inline note, deliberately not a dialog: approval is the correct, designed behaviour and a
  * confirmation step would teach the operator to dismiss it. What was missing is only the sentence —
- * approving cherry-picks the accepted evidence's commit into the project's main branch, and the
- * working tree on disk changes. That is the single most consequential act in the product and it
+ * approving merges the accepted evidence's commit into the project's main branch (`merge --no-ff`,
+ * `task_integration`), and the working tree on disk changes. That is the single most consequential act in the product and it
  * used to happen unannounced.
  *
  * Rendered only where approval is actually reachable from here, so a pending card carries no
@@ -39,7 +40,10 @@ function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove
   // The skipped case is not a warning — nothing will be written — but it is still the answer to
   // "where did my approved work go", and saying it *before* approval is cheaper than saying it
   // after. Neutral weight, since no repository changes.
-  if (!data.will_merge) {
+  // F156: the route cannot know the merge will succeed, only that approval will try it — the gate
+  // checks for conflicts at approval and refuses there. So the field is `will_attempt_merge`, and
+  // the Hub's own sentence saying exactly that is shown beside it.
+  if (!data.will_attempt_merge) {
     return (
       <p
         data-testid={`task-approval-writes-${taskId}`}
@@ -65,7 +69,7 @@ function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove
         border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
       }}
     >
-      <Icon name="alert_triangle" size={12} /> Approving writes to your repository: it cherry-picks{' '}
+      <Icon name="alert_triangle" size={12} /> Approving writes to your repository: it merges{' '}
       {data.targets.map((target, index) => (
         <span key={target.commit_sha}>
           {index > 0 ? ' and ' : ''}
@@ -73,8 +77,40 @@ function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove
           {target.source_branch ? ` from ${target.source_branch}` : ''}
         </span>
       ))}{' '}
-      into <strong>{data.main_branch}</strong>.
+      into <strong>{data.main_branch}</strong>. If that would not merge cleanly, approval is refused
+      and nothing is written.
     </p>
+  )
+}
+
+/** F169: the approval went through, and these are what it went through *despite*. Stated in the
+ *  drawer that approved it, because the response carrying them is the only record there is. */
+function ApprovalReport({ taskId, entries }: { taskId: string; entries: ApprovalReportEntry[] }) {
+  return (
+    <div
+      role="status"
+      data-testid={`task-approval-report-${taskId}`}
+      className="text-[11px] p-2 rounded"
+      style={{
+        color: 'var(--text-2)',
+        background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--amber) 25%, transparent)',
+      }}
+    >
+      <p className="font-medium" style={{ color: 'var(--amber)' }}>
+        Approved, with {entries.length === 1 ? 'one thing' : `${entries.length} things`} to know.
+        This is shown once: the Hub does not keep it.
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {entries.map((entry, index) => (
+          <li key={index}>
+            {entry.kind === 'requirement'
+              ? `${entry.identifier || 'A requirement'} is ${entry.state.replace(/_/g, ' ')}: ${entry.remedy}.`
+              : `Evidence ${entry.evidence_id}${entry.identifier ? ` for ${entry.identifier}` : ''} is still awaiting review; ${entry.commit_sha ? `its commit ${entry.commit_sha.slice(0, 12)} merges` : 'it merges'}${entry.target_branch ? ` into ${entry.target_branch}` : ''} when it is accepted.`}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 
@@ -139,6 +175,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   const panelRef = useRef<HTMLDivElement>(null)
   const open = task !== null
   const [refusal, setRefusal] = useState<string | null>(null)
+  // F169: what the Hub reported instead of refusing when this task was approved. It arrives on the
+  // approving response and nowhere else — a refetch answers `[]` — so it is held here for as long
+  // as the drawer is open, which is the only copy there will ever be.
+  const [approvalReport, setApprovalReport] = useState<ApprovalReportEntry[]>([])
   // Open while the operator is saying what a hand-set block is waiting for. The Hub requires the
   // reason, so a menu that sent the status on its own would offer a move that then fails — the one
   // thing the allowed-transitions endpoint exists to prevent.
@@ -322,6 +362,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   updateTask.mutate(
                     { id: task.id, status: next },
                     {
+                      onSuccess: (updated) => setApprovalReport(updated.approval_report ?? []),
                       // `ApiError.message` is the raw response body, so a 409 would render as
                       // JSON. `readableApiError` pulls out the sentence the Hub wrote for a
                       // human — which is the whole reason the refusal names the reachable set.
@@ -361,6 +402,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                     landTask.mutate(
                       { id: task.id },
                       {
+                        onSuccess: (landed) => setApprovalReport(landed.approval_report ?? []),
                         onError: (error: unknown) =>
                           setRefusal(readableApiError(error, 'The Hub refused this landing.')),
                       },
@@ -451,7 +493,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
             <div className="mt-1.5 flex items-center gap-2">
               <button
                 data-testid={`task-block-confirm-${task.id}`}
-                disabled={!blockingReason.trim()}
+                // F315: the write and the refetch behind it take a second or two, and a second
+                // press in that window wrote the same move again. Pending, it says so and refuses.
+                disabled={!blockingReason.trim() || updateTask.isPending}
+                aria-busy={updateTask.isPending}
                 onClick={() => {
                   const reason = blockingReason.trim()
                   if (!reason) return
@@ -472,7 +517,7 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
                   border: '1px solid var(--border)',
                 }}
               >
-                Mark waiting
+                {updateTask.isPending ? 'Marking waiting…' : 'Mark waiting'}
               </button>
               <button
                 onClick={() => setBlockingReason(null)}
@@ -500,6 +545,10 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
           >
             {refusal}
           </p>
+        )}
+
+        {approvalReport.length > 0 && (
+          <ApprovalReport taskId={task.id} entries={approvalReport} />
         )}
 
         {/* F60: the record that this work went ahead without an answer. Above the description

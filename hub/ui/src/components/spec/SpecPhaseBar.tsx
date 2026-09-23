@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
+import { readableApiError } from '@/api/client'
 import {
   useCloseExploration,
   useProposeSpecDocument,
@@ -28,6 +29,7 @@ export function SpecPhaseBar({ path }: { path: string }) {
   const [blocking, setBlocking] = useState<SpecBlockingFinding[]>([])
   const [rigorRefusal, setRigorRefusal] = useState<string[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
+  const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
 
   const document = data?.documents.find((entry) => entry.path === path)
   if (!document) return null
@@ -43,9 +45,17 @@ export function SpecPhaseBar({ path }: { path: string }) {
   }
 
   function onConfirmArchive() {
+    setArchiveRefusal(null)
     setPhase.mutate(
       { path, to: 'archived' },
-      { onSuccess: () => setConfirmingArchive(false) },
+      {
+        onSuccess: () => setConfirmingArchive(false),
+        // It used to drop this, and the dialog simply stayed open. Archiving from `exploring` or
+        // `proposed` is refused once the document has produced work, and the refusal says what to
+        // do instead.
+        onError: (error: unknown) =>
+          setArchiveRefusal(readableApiError(error, 'The Hub refused to archive this document.')),
+      },
     )
   }
 
@@ -133,11 +143,15 @@ export function SpecPhaseBar({ path }: { path: string }) {
           </button>
         )}
 
-        {document.phase === 'approved' && (
+        {/* F205: `spec_lifecycle` has archive edges from `exploring` and `proposed` too, added for
+            F37 (a mistaken, empty document nothing could retire) and offered by no screen. The Hub
+            refuses them once the document has produced requirements or tasks, and the dialog shows
+            that refusal. */}
+        {(document.phase === 'approved' || document.phase === 'exploring' || document.phase === 'proposed') && (
           <button
             type="button"
             disabled={busy}
-            onClick={() => setConfirmingArchive(true)}
+            onClick={() => { setArchiveRefusal(null); setConfirmingArchive(true) }}
             className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
           >
             Archive
@@ -217,6 +231,7 @@ export function SpecPhaseBar({ path }: { path: string }) {
         <ArchiveConfirmDialog
           title={document.title}
           isPending={setPhase.isPending}
+          error={archiveRefusal}
           onCancel={() => setConfirmingArchive(false)}
           onConfirm={onConfirmArchive}
         />

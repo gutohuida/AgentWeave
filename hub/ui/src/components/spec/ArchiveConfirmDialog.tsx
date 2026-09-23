@@ -13,11 +13,15 @@ import { useDialogFocus } from '@/hooks/useDialogFocus'
 export function ArchiveConfirmDialog({
   title,
   isPending,
+  error = null,
   onCancel,
   onConfirm,
 }: {
   title: string
   isPending: boolean
+  /** The Hub's refusal, shown in the dialog that asked for the archive (F205: archiving an
+   *  exploring or proposed document is refused once it has produced work). */
+  error?: string | null
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -43,6 +47,12 @@ export function ArchiveConfirmDialog({
         <p className="mt-1 text-xs" style={{ color: 'var(--text-3)' }}>
           This cannot be undone. Once archived, there is no control in AgentWeave that reopens it.
         </p>
+
+        {error && (
+          <p role="alert" className="mt-3 text-xs" style={{ color: 'var(--amber)' }}>
+            {error}
+          </p>
+        )}
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" size="sm" onClick={onCancel} disabled={isPending}>
