@@ -353,11 +353,21 @@ async def test_with_every_agent_held_a_flow_firing_is_refused_and_records_nothin
 
 AUTHOR = "rung3-author"
 REVIEWER = "rung3-reviewer"
-# Rebased for the R8 rung-3 rebuild (`an-unstaffed-review-names-its-holders` task 2.3) -- a fuller
-# pass over these three assertions, including a held-vs-booked interaction fixture, is task 2.16.
+# Rebased for the R8 rung-3 rebuild (`an-unstaffed-review-names-its-holders` task 2.3). Task 2.16
+# re-based the two assertions below onto exact equality; the held-vs-booked interaction fixture
+# is task 2.15, below in this same section.
 _TODAY = (
     "could not staff this step: no reviewer is free. rung3-author is the one that completed this "
     "task. Land it, on the task, to review it yourself."
+)
+#: Task 2.16's rebase of `test_rung_three_names_the_usage_limit_when_a_hold_is_why_nobody_was_free`
+#: onto `==`: `_rung_3_join`'s own join of the excluded clause (AUTHOR) and the held clause
+#: (REVIEWER), in roster name order ("rung3-author" sorts before "rung3-reviewer"), no REJECT
+#: sentence (no clause here is "booked").
+_HELD_TODAY = (
+    "could not staff this step: no reviewer is free. rung3-author is the one that completed this "
+    "task; rung3-reviewer is waiting for its provider's usage limit to reset. Land it, on the "
+    "task, to review it yourself."
 )
 
 
@@ -371,6 +381,9 @@ async def _completed_task(db, task_id="task-rung3"):
 async def test_rung_three_names_the_usage_limit_when_a_hold_is_why_nobody_was_free(
     app, auth_headers, bind_runner
 ):
+    """Task 2.16: re-based onto `==` -- a substring check on this file's only exact-equality
+    surface let five earlier rounds miss the join itself (`test_reviewer_ladder.py`'s own
+    `test_rung_3_reason_is_this_exact_string_for_a_completed_task` note)."""
     await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
     await _hold(REVIEWER)
     async with async_session_factory() as db:
@@ -380,8 +393,7 @@ async def test_rung_three_names_the_usage_limit_when_a_hold_is_why_nobody_was_fr
         )
 
     assert choice.rung == "unstaffed"
-    assert "waiting for its provider's usage limit to reset" in choice.reason
-    assert "either running a turn, already holding active work, or " not in choice.reason
+    assert choice.reason == _HELD_TODAY
 
 
 async def test_rung_three_reads_exactly_as_today_with_no_agent_held(app, auth_headers, bind_runner):
@@ -409,6 +421,115 @@ async def test_rung_three_with_the_hold_fits_a_job_runs_error_summary(
 
     assert "usage limit" in choice.reason
     assert len(choice.reason) <= 500
+
+
+async def _booked_elsewhere(db, *, agent, task_id, suffix):
+    """A second live loop, so *agent*'s task is reachable without the firing under test walking
+    it -- the same shape `test_reviewer_ladder.py`'s `_live_loop`/`_held_elsewhere` use, kept local
+    here rather than imported to avoid a cycle with `test_a_task_nothing_will_move_holds_nobody`
+    (which already imports `_hold` from this file)."""
+    db.add(
+        AIJob(
+            id=f"job-{suffix}",
+            project_id=PROJECT,
+            name=f"Elsewhere {suffix}",
+            agent="loop-owner",
+            message="work the queue",
+            cron="*/5 * * * *",
+            session_mode="new",
+            enabled=True,
+        )
+    )
+    await db.commit()
+    db.add(Loop(id=f"loop-{suffix}", project_id=PROJECT, job_id=f"job-{suffix}", purpose=suffix))
+    await db.commit()
+    db.add(
+        Task(
+            id=task_id,
+            project_id=PROJECT,
+            title="booked elsewhere",
+            status="assigned",
+            assignee=agent,
+            loop_id=f"loop-{suffix}",
+        )
+    )
+    await db.commit()
+
+
+async def test_a_held_agent_holding_nothing_is_named_by_the_held_clause_not_running(
+    app, auth_headers, bind_runner
+):
+    """Task 2.15: `_rung_3_clause_kind` (`scheduler.py`) checks `record.held` before it checks a
+    holding or falls through to "running" -- a held agent holding nothing must read as held, never
+    as running a turn it is not running."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    await _hold(REVIEWER)
+    async with async_session_factory() as db:
+        task = await _completed_task(db)
+        choice = await resolve_reviewer(
+            db, task, project_id=PROJECT, exclude={AUTHOR: "is the one that completed this task"}
+        )
+
+    assert f"{REVIEWER} is waiting for its provider's usage limit to reset" in choice.reason
+    assert f"{REVIEWER} is running a turn" not in choice.reason
+
+
+async def test_a_held_and_booked_agent_is_named_only_by_the_hold(app, auth_headers, bind_runner):
+    """Task 2.15, R8's second case: a held agent that is *also* booked (a task reachable through a
+    second live loop) is named by the hold; its task id must not appear, because `held` outranks
+    `booked` in `_rung_3_clause_kind`'s precedence (`scheduler.py:1394-1396` in R8's citation; the
+    function itself, above `_rung_3_booked_clause`, is the current line range)."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR, REVIEWER)
+    await _hold(REVIEWER)
+    async with async_session_factory() as db:
+        await _booked_elsewhere(
+            db, agent=REVIEWER, task_id="task-2-15-booked", suffix="2-15-elsewhere"
+        )
+        task = await _completed_task(db)
+        choice = await resolve_reviewer(
+            db, task, project_id=PROJECT, exclude={AUTHOR: "is the one that completed this task"}
+        )
+
+    assert f"{REVIEWER} is waiting for its provider's usage limit to reset" in choice.reason
+    assert "task-2-15-booked" not in choice.reason
+
+
+async def test_the_rung_3_reason_never_claims_archiving_a_loop_frees_an_agent(
+    app, auth_headers, bind_runner
+):
+    """Task 2.17: over a fixture with a holding reachable in another live loop (the shape R5's
+    now-removed archive remedy answered), the reason must never suggest pausing or archiving a
+    loop frees its agent."""
+    booked = "rung3-booked"
+    await _roster(app, auth_headers, bind_runner, AUTHOR, booked)
+    async with async_session_factory() as db:
+        await _booked_elsewhere(db, agent=booked, task_id="task-2-17-booked", suffix="2-17")
+        task = await _completed_task(db, task_id="task-2-17")
+        choice = await resolve_reviewer(
+            db, task, project_id=PROJECT, exclude={AUTHOR: "is the one that completed this task"}
+        )
+
+    assert "pause" not in choice.reason.lower()
+    assert "archiv" not in choice.reason.lower()
+    assert "ending" not in choice.reason.lower()
+
+
+async def test_the_rung_3_reason_does_not_reject_when_nobody_booked_is_named(
+    app, auth_headers, bind_runner
+):
+    """Task 2.17, R8: with no booked agent on the record (the only other agent is merely held),
+    `_RUNG_3_REJECT` must not be appended -- rejecting a task frees nobody where nothing in the
+    sentence names a booked agent."""
+    held = "rung3-held-only"
+    await _roster(app, auth_headers, bind_runner, AUTHOR, held)
+    await _hold(held)
+    async with async_session_factory() as db:
+        task = await _completed_task(db, task_id="task-2-17-noreject")
+        choice = await resolve_reviewer(
+            db, task, project_id=PROJECT, exclude={AUTHOR: "is the one that completed this task"}
+        )
+
+    assert "Rejecting" not in choice.reason
 
 
 # ---------------------------------------------------------------------------

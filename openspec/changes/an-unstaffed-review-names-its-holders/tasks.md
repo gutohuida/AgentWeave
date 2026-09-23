@@ -794,7 +794,7 @@ mutation and the observed failure beside the task when ticking it.
       Full relevant suite: `pytest hub/tests/test_review_divergence.py
       hub/tests/test_run_divergence.py hub/tests/test_a_task_nothing_will_move_holds_nobody.py
       hub/tests/test_reviewer_ladder.py -q` → 77 passed. CI's exact ruff/black/mypy clean.
-- [ ] 2.15 (R6) Test: an agent whose queue is held, running no turn and holding nothing, is named
+- [x] 2.15 (R6) Test: an agent whose queue is held, running no turn and holding nothing, is named
       by the **held** clause and **not** by the **running** clause. **(R9: this line said "clause
       4 … not clause 5", R6's numbering; under the delta's R8 numbering clause 4 is *booked*, so
       read literally it asked for the wrong clause. The delta numbers held 3, booked 4, running 5.)**
@@ -809,7 +809,21 @@ mutation and the observed failure beside the task when ticking it.
       This is the shipped SHALL at `openspec/specs/agent-flows/spec.md` — *"the reason surfaced
       SHALL name the hold among the grounds"* — and it is the requirement D2's pre-R6 clause list
       silently dropped.
-- [ ] 2.16 (R6) Update the three shipped tests in `hub/tests/test_a_held_agent_is_busy.py` that
+
+      **Built 2026-09-23, night iteration 14.** Two tests added to `hub/tests/test_a_held_agent_is_busy.py`
+      (section 3.4d): `test_a_held_agent_holding_nothing_is_named_by_the_held_clause_not_running`
+      (the base case) and `test_a_held_and_booked_agent_is_named_only_by_the_hold` (R8's second
+      case, a booked task reachable through a new local `_booked_elsewhere` fixture -- a second
+      live loop, kept local to this file rather than imported from
+      `test_a_task_nothing_will_move_holds_nobody` to avoid a circular import, since that file
+      already imports `_hold` from this one). *Mutation 1* (fold held into running, i.e. delete
+      `_rung_3_clause_kind`'s `if record.held: return "held"` line): both new tests failed, plus
+      the rebased 2.16 test below (3 failed total) -- the held agent's clause read "is running a
+      turn" and, in the booked case, the task id appeared. *Mutation 2* (R6's own order: booked
+      checked before held): only the booked-agent test failed, on the task id appearing --
+      confirming precedence, not just presence, is what the test pins. Both reverted; `git diff
+      --stat hub/hub/scheduler.py` clean after each.
+- [x] 2.16 (R6) Update the three shipped tests in `hub/tests/test_a_held_agent_is_busy.py` that
       D2 and D3 necessarily break, and say in each commit why the old assertion no longer holds:
       - `:370-381` asserts the old blanket clause as a substring — rewrite against clause 4;
       - `:384-390` is `assert choice.reason == _TODAY`, **exact equality** with today's whole
@@ -820,20 +834,71 @@ mutation and the observed failure beside the task when ticking it.
       - the `error_summary` fit test — re-check it against the re-measured budget (2.4).
       **Do not weaken these to substring checks to make them pass.** An exact-equality test on the
       operator's only surface is deliberate; re-base it and keep it exact.
-- [ ] 2.17 (R6) Test: the rung-3 reason never contains "pause", and never claims that ending or
+
+      **Built 2026-09-23, night iteration 14.**
+      `test_rung_three_names_the_usage_limit_when_a_hold_is_why_nobody_was_free` (the `:370-381`
+      test) rebased from two substring checks onto `choice.reason == _HELD_TODAY`, a new literal
+      derived from `_rung_3_join`'s own precedence (AUTHOR excluded, sorts first; REVIEWER held,
+      no REJECT since no clause here is booked) and confirmed by running the test before adjusting
+      anything -- it passed on the first try, matching the derivation.
+      `test_rung_three_reads_exactly_as_today_with_no_agent_held` (the `:384-390` test) was **found
+      already exact** (`assert choice.reason == _TODAY`, `_TODAY` itself already rebased onto D2's
+      sentence during task 2.3's build, per that constant's own comment) -- re-ran it standalone to
+      confirm it still passes rather than assuming so from the comment; it does, no edit needed.
+      `test_rung_three_with_the_hold_fits_a_job_runs_error_summary` (the `error_summary` fit test)
+      re-checked against 2.4's shipped 500-character bound: still asserts `len(choice.reason) <=
+      500` and passes (the two 32-character names plus one held clause is far under budget) --
+      no change needed, re-verified rather than assumed.
+- [x] 2.17 (R6) Test: the rung-3 reason never contains "pause", and never claims that ending or
       archiving a loop frees an agent. One test over a fixture with holdings in another live loop —
       the case R5 wrote the archive remedy for.
       *Mutation:* restore R5's archive clause. The test must fail.
       **R8:** also assert that with **no** booked agent (the only other agent held), the reason does
       not contain `"Rejecting"`. *Mutation:* append REJECT unconditionally. The test must fail
       (R8-4).
-- [ ] 2.18 (R9) Test: the empty roster, through `resolve_reviewer` on a project whose every agent
+
+      **Built 2026-09-23, night iteration 14.** Two tests added to
+      `hub/tests/test_a_held_agent_is_busy.py`:
+      `test_the_rung_3_reason_never_claims_archiving_a_loop_frees_an_agent` (a booked-elsewhere
+      fixture via the same local `_booked_elsewhere` helper 2.15 added; asserts `"pause"`,
+      `"archiv"` and `"ending"` are absent, case-insensitively) and
+      `test_the_rung_3_reason_does_not_reject_when_nobody_booked_is_named` (a held-only fixture;
+      asserts `"Rejecting"` is absent). *Mutation 1:* temporarily widened `_RUNG_3_REJECT` with an
+      "or pause or archive the loop ... to free them" clause -- the archive test failed on the
+      `"pause"` assertion, as predicted. *Mutation 2:* temporarily made `_rung_3_join` append
+      `_RUNG_3_REJECT` unconditionally instead of `if booked else ""` -- the no-reject test failed
+      on `"Rejecting"` appearing. Both reverted; `git diff --stat hub/hub/scheduler.py` clean after
+      each.
+- [x] 2.18 (R9) Test: the empty roster, through `resolve_reviewer` on a project whose every agent
       is archived, for a `completed` task. Assert the whole reason with `==` against
       `"could not staff this step: no reviewer is free. The project has no agent on its roster.
       Land it, on the task, to review it yourself."` (one line, one space after each period). The
       delta's scenario *"An empty roster is stated"* had no task behind it at any round.
       *Mutation:* lowercase the `T`. The test must fail; a substring check on `"no agent on its
       roster"` would not.
+
+      **Built 2026-09-23, night iteration 14.**
+      `test_rung_3_reason_for_an_empty_roster_is_this_exact_string` added to
+      `hub/tests/test_reviewer_ladder.py` -- one agent rostered then archived (`Agent.lifecycle =
+      "archived"`, the same pattern `test_an_archived_agent_is_not_selected` uses), so
+      `_roster_availability` returns no record at all and `_rung_3_reason`'s empty-roster branch is
+      the one exercised. *Mutation:* lowercased the `T` in `"The project has no agent..."` -- failed
+      on the `==` literal exactly as predicted. Reverted; `git diff --stat hub/hub/scheduler.py`
+      clean after.
+
+      **Full relevant suite:** `pytest hub/tests/test_reviewer_ladder.py
+      hub/tests/test_a_held_agent_is_busy.py hub/tests/test_a_flow_names_what_it_cannot_staff.py
+      hub/tests/test_a_task_nothing_will_move_holds_nobody.py hub/tests/test_review_divergence.py
+      hub/tests/test_run_divergence.py hub/tests/test_the_evidence_names_the_author.py -q` → **154
+      passed** (149 + 5 new). `pytest hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q`
+      (6.0's own regression guard, standalone) → **34 passed**, unchanged -- group 2 did not revert
+      group 1's projection. `ruff check src/ hub/ tests/` and `mypy src/` (CI's exact paths) clean;
+      `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` needed one reformat
+      (`test_reviewer_ladder.py`'s new archived-agent query, line-wrapping only) -- applied,
+      re-checked clean, and the affected suite re-run afterward (83 passed).
+
+      **This closes group 2 of `an-unstaffed-review-names-its-holders` in full.** Remaining groups
+      in tonight's queue: group 5 (UI bundle) and group 6 (verify + drive).
 
 ## 3. ~~Once per task (design D4)~~ MOVED 2026-09-15
 

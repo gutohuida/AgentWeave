@@ -245,6 +245,44 @@ async def test_rung_3_reason_is_this_exact_string_for_an_under_review_task(
     )
 
 
+async def test_rung_3_reason_for_an_empty_roster_is_this_exact_string(
+    app, auth_headers, bind_runner
+):
+    """Task 2.18: every agent on the project is archived, so `_roster_availability` returns no
+    record at all -- `_rung_3_reason`'s own empty-roster branch, never exercised by the tests
+    above (they always leave at least the author on the roster)."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR)
+
+    async with async_session_factory() as db:
+        from sqlalchemy import select
+
+        from hub.db.models import Agent
+
+        agent = (
+            (
+                await db.execute(
+                    select(Agent).where(Agent.project_id == "proj-test", Agent.name == AUTHOR)
+                )
+            )
+            .scalars()
+            .one()
+        )
+        agent.lifecycle = "archived"
+        await db.commit()
+        task = await _task(db, status="completed")
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
+
+    assert choice.reason == (
+        "could not staff this step: no reviewer is free. The project has no agent on its roster. "
+        "Land it, on the task, to review it yourself."
+    )
+
+
 # ---------------------------------------------------------------------------
 # 4.2 — "free" is not running AND holding no active task
 # ---------------------------------------------------------------------------
