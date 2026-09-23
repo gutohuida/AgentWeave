@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from hub.conversations import new_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import Project, Run, TurnUsage
 
@@ -208,6 +209,10 @@ async def test_conversation_accounting_sums_that_conversation_and_ignores_the_pr
     async with async_session_factory() as session:
         project = await session.get(Project, "proj-test")
         assert project is not None
+        # The route answers only for a conversation this project has (F239).
+        conversation = new_conversation(project_id=project.id, agent="claude", origin="operator")
+        conversation.id = conversation.lineage_id = "conv-many"
+        session.add(conversation)
         # More rows than `accounting_snapshot`'s `recent_limit` default (50) — a conversation
         # rollup has to be a real aggregate, not a slice of the project-wide recent window.
         for index in range(60):
@@ -260,14 +265,16 @@ async def test_conversation_accounting_sums_that_conversation_and_ignores_the_pr
 
 
 @pytest.mark.asyncio
-async def test_conversation_accounting_unknown_conversation_is_zero_not_404(
+async def test_conversation_accounting_unknown_conversation_is_404_not_zero(
     app, auth_headers
 ) -> None:
+    """Reversed by F239: a zero for a conversation that does not exist read as "this cost
+    nothing", indistinguishable from a real, unmeasured conversation."""
     response = await app.get(
         "/api/v1/projects/proj-test/accounting/conversations/conv-nonexistent", headers=auth_headers
     )
-    assert response.status_code == 200
-    assert response.json()["measured_turns"] == 0
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Conversation not found"
 
 
 @pytest.mark.asyncio

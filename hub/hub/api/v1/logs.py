@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,7 +12,7 @@ from ...db.engine import get_session
 from ...db.models import Agent, EventLog
 from ...schemas.logs import EventLogResponse, LogEventCreate
 from ...sse import sse_manager
-from ...utils import persist_event
+from ...utils import KNOWN_SEVERITIES, persist_event
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
@@ -38,6 +38,20 @@ async def list_log_agents(
     return sorted(names)
 
 
+def require_known_severity(severity: str) -> str:
+    """*severity*, or a 400 naming the ones that exist (F257).
+
+    The write path normalises an unknown severity to `warn`, so no row can carry one; filtering by
+    one answered an empty list, which reads as "nothing of that kind happened".
+    """
+    if severity not in KNOWN_SEVERITIES:
+        known = ", ".join(sorted(KNOWN_SEVERITIES | {"all"}))
+        raise HTTPException(
+            status_code=400, detail=f"Unknown severity {severity!r}; expected one of {known}"
+        )
+    return severity
+
+
 @router.get("", response_model=List[EventLogResponse])
 async def list_logs(
     offset: int = Query(0, ge=0),
@@ -56,13 +70,21 @@ async def list_logs(
     if event_type:
         q = q.where(EventLog.event_type == event_type)
     if severity and severity != "all":
-        q = q.where(EventLog.severity == severity)
+        q = q.where(EventLog.severity == require_known_severity(severity))
     if since:
+        # F255: a malformed `since` used to be dropped, and the answer read as the whole window —
+        # to a poller, "everything is new".
         try:
             since_dt = datetime.fromisoformat(since)
-            q = q.where(EventLog.timestamp > since_dt)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"since {since!r} is not an ISO 8601 timestamp; send one like "
+                    "2026-09-23T10:00:00Z (a + must be sent as %2B)"
+                ),
+            ) from exc
+        q = q.where(EventLog.timestamp > since_dt)
     q = q.order_by(EventLog.timestamp.asc()).offset(offset).limit(limit)
     result = await session.execute(q)
     return result.scalars().all()

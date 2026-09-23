@@ -7,11 +7,11 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..db.models import RUNNER_CLIS
 from ..model_catalog import get_provider
-from .common import RequestModel
+from .common import RequestModel, VisibleName
 
 
 class RunnerCreate(RequestModel):
-    name: str = Field(max_length=256)
+    name: VisibleName
     cli: str = Field(max_length=16)
     model: Optional[str] = Field(default=None, max_length=256)
     flags: Optional[List[str]] = None
@@ -25,7 +25,7 @@ class RunnerCreate(RequestModel):
 
 
 class RunnerUpdate(RequestModel):
-    name: Optional[str] = Field(default=None, max_length=256)
+    name: Optional[VisibleName] = None
     model: Optional[str] = Field(default=None, max_length=256)
     flags: Optional[List[str]] = None
 

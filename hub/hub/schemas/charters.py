@@ -5,16 +5,16 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from .common import RequestModel
+from .common import RequestModel, VisibleName
 
 
 class CharterCreate(RequestModel):
-    name: str = Field(min_length=1, max_length=256)
+    name: VisibleName
     content: str
 
 
 class CharterUpdate(RequestModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    name: Optional[VisibleName] = None
     content: Optional[str] = None
 
 

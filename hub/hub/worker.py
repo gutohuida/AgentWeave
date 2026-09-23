@@ -46,7 +46,7 @@ from pydantic import BaseModel, ValidationError
 
 from .db.engine import async_session_factory
 from .db.models import WorkerInvocation
-from .model_catalog import get_provider
+from .model_catalog import get_provider, undeclared_model_reason
 from .pty_runner import resolve_executable
 from .subprocess_windows import no_console_kwargs
 from .utils import short_id
@@ -435,7 +435,7 @@ async def run_worker(
     if cli not in SUPPORTED_CLIS:
         result = WorkerResult("unsupported_cli", error=f"{cli!r} has no one-shot invocation")
     elif not model_is_declared(cli, model):
-        result = WorkerResult("unknown_model", error=f"{model!r} is not a model {cli!r} declares")
+        result = WorkerResult("unknown_model", error=undeclared_model_reason(cli, model))
     else:
         worker_dir_context = tempfile.TemporaryDirectory(prefix="agentweave-worker-")
         worker_dir = worker_dir_context.name

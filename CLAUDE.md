@@ -146,8 +146,9 @@ pytest hub/tests/ -v      # Hub
   not delete them as cleanup. `.agentweave/` stays gitignored; `spec/` is tracked. An
   `agentweave.yml` at the root is a leftover: ask before keeping it.
 - Agent names match `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` (`src/agentweave/constants.py`)
-  — any match accepted — and the Hub restates it as `_AGENT_NAME_RE` (`hub/hub/api/v1/agents.py`,
-  `hub/hub/worktrees.py`); change them together. `VALID_MODES = ["hierarchical", "peer", "review"]`.
+  — any match accepted except `RESERVED_AGENT_NAMES` (`user`, `operator`) — and the Hub restates
+  both as `_AGENT_NAME_RE` (`hub/hub/api/v1/agents.py`, `hub/hub/worktrees.py`) and
+  `_RESERVED_AGENT_NAMES` (`hub/hub/worktrees.py`); change them together. `VALID_MODES = ["hierarchical", "peer", "review"]`.
 - **Stage paths explicitly; `git add -A` sweeps in scratch.** NEVER commit `kimichanges.md`,
   `kimiwork.md`.
 - A test for code that consumes an API payload uses **the ordering that route actually returns**,

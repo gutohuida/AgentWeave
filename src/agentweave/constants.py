@@ -74,7 +74,9 @@ TRANSPORT_CONFIG_FILE = AGENTWEAVE_DIR / "transport.json"
 # Agent name validation: alphanumeric / hyphen / underscore, 1-32 chars.
 # Replaces the old hardcoded two-item list — any name matching this is accepted.
 AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
-RESERVED_AGENT_NAMES = frozenset({"user"})
+# The Hub restates these in `hub/hub/worktrees.py` (`_RESERVED_AGENT_NAMES`); change together.
+# `operator` is the sender the Hub gives the operator's own messages (F415).
+RESERVED_AGENT_NAMES = frozenset({"user", "operator"})
 
 
 def is_valid_agent_name(name: str) -> bool:

@@ -390,8 +390,9 @@ async def test_releasing_an_absent_entry_is_refused(app, auth_headers):
         "/api/v1/projects/proj-test/queue/entries/entry-nonexistent/release",
         headers=auth_headers,
     )
-    assert refused.status_code == 409
-    assert "absent" in refused.json()["detail"]
+    # F200 (Round 4b): an id this project has no entry for is not found, and says so.
+    assert refused.status_code == 404
+    assert refused.json()["detail"] == "No queue entry entry-nonexistent in this project."
 
 
 @pytest.mark.asyncio

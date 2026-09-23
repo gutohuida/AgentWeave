@@ -3,15 +3,21 @@
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...agent_roster import require_known_agent
 from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
-from ...inbound_queue import DELIVERY_ATTEMPT_LIMIT, release_entry, withdraw_entry
+from ...inbound_queue import (
+    DELIVERY_ATTEMPT_LIMIT,
+    not_queued_reason,
+    release_entry,
+    withdraw_entry,
+)
 from ...launchability import get_agent_config, probe_agent
 from ...provider_allowance import hold_sentence, operator_would_probe, provider_hold
 from ...sse import sse_manager
@@ -97,6 +103,9 @@ async def get_queue_status(
     from ...db.models import Run
 
     project_id, _ = project
+    # F199: a typo'd name read as "idle, nothing waiting" — a sentence about an agent that is not
+    # on any roster.
+    await require_known_agent(session, project_id, agent)
     entries_result = await session.execute(
         select(InboundQueueEntry).where(
             InboundQueueEntry.project_id == project_id,
@@ -195,12 +204,17 @@ async def list_queue_entries(
     session: AsyncSession = Depends(get_session),
 ) -> List[InboundQueueEntry]:
     project_id, _ = project
+    states = ("queued", "delivered", "withdrawn")
+    if state_filter is not None and state_filter not in states:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid queue entry state {state_filter!r}; expected one of {', '.join(states)}",
+        )
+    await require_known_agent(session, project_id, agent)  # F199
     query = select(InboundQueueEntry).where(
         InboundQueueEntry.project_id == project_id, InboundQueueEntry.agent == agent
     )
     if state_filter is not None:
-        if state_filter not in ("queued", "delivered", "withdrawn"):
-            raise HTTPException(status_code=400, detail="Invalid queue entry state")
         query = query.where(InboundQueueEntry.state == state_filter)
     result = await session.execute(query.order_by(InboundQueueEntry.sequence))
     return list(result.scalars().all())
@@ -222,7 +236,7 @@ async def release_queue_entry(
     project_id, _ = project
     outcome = await release_entry(session, project_id, entry_id)
     if outcome.entry is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=outcome.refusal)
+        raise HTTPException(status_code=outcome.refusal_status, detail=outcome.refusal)
     entry = outcome.entry
     payload = {
         "entry_id": entry.id,
@@ -250,10 +264,8 @@ async def withdraw_queue_entry(
     project_id, _ = project
     entry = await withdraw_entry(session, project_id, entry_id)
     if entry is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Queue entry is absent or has already been delivered/withdrawn",
-        )
+        refusal_status, refusal = await not_queued_reason(session, project_id, entry_id, "withdraw")
+        raise HTTPException(status_code=refusal_status, detail=refusal)
     payload = {"entry_id": entry.id, "agent": entry.agent}
     await persist_event(session, project_id, "queue_entry_withdrawn", payload, agent=entry.agent)
     await sse_manager.broadcast(project_id, "queue_entry_withdrawn", payload)

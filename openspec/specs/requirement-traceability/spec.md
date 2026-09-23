@@ -215,6 +215,11 @@ work at all.
 A requirement that is structurally invalid or carries no identifier SHALL be reported as a
 diagnostic outside coverage rather than assigned a coverage state. It is not unserved; it is broken.
 
+A retired requirement with no linked work SHALL be reported as retired rather than unserved: the
+lowest tier means somebody should be building it, which is the one thing a retired requirement does
+not ask for. Its rank is unchanged, and a retired requirement with evidence or linked work reports
+what that evidence or work says.
+
 A project SHALL be able to report, for a document, which of its requirements have no linked work.
 
 Coverage SHALL also report whether the evidence's implementation footprint is reachable from the
@@ -232,6 +237,11 @@ choice between "stale but merged" and "verified but unmerged" that has no correc
 
 - **WHEN** a document has a requirement with no linked task
 - **THEN** its coverage state is that no work is linked
+
+#### Scenario: A retired requirement nothing serves is retired, not unserved
+
+- **WHEN** a requirement is retired from its document and no task is linked to it
+- **THEN** its coverage state is retired, never unserved
 
 #### Scenario: Evidence against an older wording is not verification
 

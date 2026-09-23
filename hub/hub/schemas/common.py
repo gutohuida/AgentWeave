@@ -1,6 +1,21 @@
 """Shared request and response schemas."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+
+def _visible(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("must contain a visible character")
+    return stripped
+
+
+#: A name a person picks something by (a runner, a charter). Stored stripped; an empty or
+#: whitespace-only one is refused, as the dialogs already refuse it, because every picker renders
+#: it as a blank row nobody can tell from another (F176, F184).
+VisibleName = Annotated[str, Field(max_length=256), AfterValidator(_visible)]
 
 
 class RequestModel(BaseModel):

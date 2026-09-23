@@ -67,6 +67,16 @@ TASK_BRANCH_PREFIX = BRANCH_PREFIX + "task/"
 
 _GIT_TIMEOUT_SECONDS = 30
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")
+#: Restated by the CLI as `RESERVED_AGENT_NAMES` (`src/agentweave/constants.py`); change together.
+#: `operator` is `schemas.messages.OPERATOR_SENDER` (F415): an agent of that name would be hidden
+#: from the roster's activity fallback and `agents_active`, and its messages read as the operator's.
+_RESERVED_AGENT_NAMES = {
+    "user": "it names the human operator",
+    "operator": (
+        "the Hub sends the operator's own messages as 'operator' and leaves that name out of the "
+        "agent roster"
+    ),
+}
 _TASK_ID_RE = re.compile(r"^task-[0-9a-f]{1,64}$")
 
 
@@ -129,12 +139,15 @@ def is_git_repo(path: Path) -> bool:
 
 
 def validate_agent_name(agent: str) -> None:
-    """Reject names that cannot safely become both a path component and git ref suffix."""
-    if not _AGENT_NAME_RE.fullmatch(agent) or agent.lower() == "user":
+    """Reject names that cannot safely become both a path component and git ref suffix, and the
+    names the Hub already gives someone who is not an agent."""
+    if not _AGENT_NAME_RE.fullmatch(agent):
         raise ValueError(
-            "invalid or reserved agent name; expected 1-32 letters, digits, underscores, "
-            "or hyphens (except 'user')"
+            "invalid agent name; expected 1-32 letters, digits, underscores, or hyphens"
         )
+    reason = _RESERVED_AGENT_NAMES.get(agent.lower())
+    if reason:
+        raise ValueError(f"reserved agent name '{agent}': {reason}; choose another name")
 
 
 def worktree_root(repo_root: Path) -> Path:

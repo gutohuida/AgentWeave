@@ -398,7 +398,7 @@ async def test_setup_token_does_not_fall_back_to_a_project_api_key(app) -> None:
         ("/api/v1/projects/proj-test/tasks", dict),
         ("/api/v1/projects/proj-test/agents", list),
         (
-            "/api/v1/projects/proj-test/agent/missing/conversations",
+            "/api/v1/projects/proj-test/agent/rostered/conversations",
             list,
         ),
         ("/api/v1/projects/proj-test/jobs", list),
@@ -409,6 +409,10 @@ async def test_setup_token_does_not_fall_back_to_a_project_api_key(app) -> None:
 async def test_explicit_project_resource_routes_preserve_response_contracts(
     app, auth_headers, project_path: str, response_type: type
 ) -> None:
+    # An agent's conversations are refused for a name nothing is recorded under (F194).
+    async with async_session_factory() as session:
+        session.add(Agent(id="agt-rostered", project_id="proj-test", name="rostered"))
+        await session.commit()
     response = await app.get(project_path, headers=auth_headers)
 
     assert response.status_code == 200

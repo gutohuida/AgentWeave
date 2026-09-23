@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Set
 from .db.engine import async_session_factory
 from .db.models import Run
 from .utils import persist_event
-from .workspace_writes import WriteLocation, can_classify, classify
+from .workspace_writes import WriteLocation, can_classify, classify, resolved_elsewhere
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,9 @@ class OutsideWriteRecorder:
     named agent. `tool` and `path` are the **first** call into that destination, raw and exactly
     as the tool declared it — the event names the same pair, so the durable record and the notice
     cannot describe different writes. `calls` is how many calls into that destination the run had
-    made when this row was last written.
+    made when this row was last written. `resolved_path` is present only when a link or junction
+    moved the write (F282): the declared path then reads as inside while `kind` says otherwise, and
+    this is where it really went — beside `path`, never instead of it.
 
     "20 entries **plus a total count**" is then satisfied by a final element of a different
     shape, present only when there were more than `MAX_DESTINATIONS` of them::
@@ -199,14 +201,20 @@ class OutsideWriteRecorder:
                 self._overflow.add(location)
                 await self._store()
                 continue
-            self._destinations[location] = {
+            entry: Dict[str, Any] = {
                 "kind": location.kind,
                 "name": location.name,
                 "tool": tool,
                 "path": path,
                 "calls": 1,
             }
-            await self._store_and_announce(location, tool, path)
+            # F282: beside the declared path, never instead of it. Present only when a link moved
+            # the write, so every other entry reads exactly as before.
+            resolved = resolved_elsewhere(path, workspace_dir=self._workspace_dir)
+            if resolved is not None:
+                entry["resolved_path"] = resolved
+            self._destinations[location] = entry
+            await self._store_and_announce(location, tool, path, resolved)
 
     def _value(self) -> List[Dict[str, Any]]:
         """The column's value as it stands. A fresh list every time, deliberately.
@@ -227,7 +235,9 @@ class OutsideWriteRecorder:
             run.outside_workspace_writes = self._value()
             await db.commit()
 
-    async def _store_and_announce(self, location: WriteLocation, tool: str, path: str) -> None:
+    async def _store_and_announce(
+        self, location: WriteLocation, tool: str, path: str, resolved: Optional[str] = None
+    ) -> None:
         """The first sighting of a destination: the durable record and the notice, together.
 
         One transaction for both (task 4.4b). They are two writes and not one record in two
@@ -248,6 +258,7 @@ class OutsideWriteRecorder:
                     "agent": self._agent,
                     "tool": tool,
                     "path": path,
+                    **({"resolved_path": resolved} if resolved is not None else {}),
                     "destination_kind": location.kind,
                     "destination_name": location.name,
                     "workspace_dir": self._workspace_dir,

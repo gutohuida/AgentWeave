@@ -14,7 +14,7 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import Agent, Runner
 from ...launchability import probe_agent
-from ...model_catalog import get_provider
+from ...model_catalog import get_provider, undeclared_model_reason
 from ...schemas.runners import RunnerCreate, RunnerResponse, RunnerUpdate
 from ...utils import short_id
 
@@ -40,7 +40,7 @@ def _reject_undeclared_model(cli: str, model: Optional[str], current: Optional[s
     if provider_entry is None or provider_entry.model(model) is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{model!r} is not a model {cli!r} declares",
+            detail=undeclared_model_reason(cli, model),
         )
 
 

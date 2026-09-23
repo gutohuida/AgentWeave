@@ -167,6 +167,14 @@ async def dismiss_permission_request(
             status.HTTP_409_CONFLICT,
             "this request is still waiting on you; answer it rather than clearing it away",
         )
+    # F232: the contract's second clause. An answered request is not on any list to clear, and
+    # stamping `dismissed_at` on it wrote an acknowledgement of an expiry that never happened.
+    if row.status != "expired":
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"this request was answered ({row.status}); only one that expired unanswered is "
+            "dismissed",
+        )
 
     # Idempotent: dismissing twice is the state the caller asked for, not a conflict.
     if not row.dismissed:

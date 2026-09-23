@@ -45,6 +45,7 @@ from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
     get_provider,
     permission_mode_values,
+    undeclared_model_reason,
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext
@@ -617,10 +618,37 @@ async def list_agents(
                 # its default no matter what the row says — and the operator sees a switch they
                 # set turn itself off.
                 can_accept_evidence=bool(agent_row.can_accept_evidence) if agent_row else False,
+                config=(
+                    {k: v for k, v in (agent_row.config or {}).items() if k in ROSTER_CONFIG_KEYS}
+                    if agent_row
+                    else {}
+                ),
             )
         )
 
     return summaries
+
+
+def _merge_patch(target: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    """RFC 7396 JSON merge patch: a null deletes, an object merges recursively, anything else
+    replaces."""
+    merged = dict(target)
+    for key, value in patch.items():
+        if value is None:
+            merged.pop(key, None)
+        elif isinstance(value, dict):
+            current = merged.get(key)
+            merged[key] = _merge_patch(current if isinstance(current, dict) else {}, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+#: The config keys the roster shows (F244): the ones that decide how and where an agent runs.
+#: An allow-list, because `config` is an open object any PATCH can fill, and a credential under a
+#: key nobody thought to deny (`env_vars` values, a token inside `mcp_servers`) must not reach a
+#: listing the UI polls.
+ROSTER_CONFIG_KEYS = ("read_only", "yolo", "runner", "model", "cli", "hub_client")
 
 
 @router.post("", response_model=OperatorAgentResponse, status_code=status.HTTP_201_CREATED)
@@ -631,6 +659,13 @@ async def create_operator_agent(
 ):
     """Create a Hub-owned agent identity from existing project resources."""
     project_id, _ = project
+    # F415 review: this route, the Add-agent dialog's, checked only the name pattern, so `operator`
+    # and `user` were created here while every route that runs an agent refused them. A 400 with a
+    # sentence, not a validator's 422, because the dialog renders `detail` as text.
+    try:
+        worktrees.validate_agent_name(body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
         await project_workspace.resolve_project_workspace(session, project_id)
     except project_workspace.ProjectWorkspaceError as exc:
@@ -661,7 +696,7 @@ async def create_operator_agent(
         if provider_entry is None or model_entry is None:
             raise HTTPException(
                 status_code=400,
-                detail=f"{body.model!r} is not a model {body.provider!r} declares",
+                detail=undeclared_model_reason(body.provider, body.model),
             )
         existing_runner = await session.execute(
             select(Runner).where(
@@ -2599,10 +2634,18 @@ async def patch_agent(
         if field in body:
             setattr(agent_row, field, _validated_waiting_seconds(field, body[field]))
 
-    # Merge config if provided
+    # `config` is a JSON merge patch (RFC 7396), applied recursively. F243: nothing could be unset —
+    # `{"config": null}` answered 200 and changed nothing. Now a null removes the key it names at
+    # any depth, `"config": null` clears the whole config (F219's rule for a runner's model), and
+    # `{}` is the standard's no-op.
     if "config" in body:
-        new_config = body["config"] or {}
-        agent_row.config = {**(agent_row.config or {}), **new_config}
+        new_config = body["config"]
+        if new_config is None:
+            agent_row.config = {}
+        elif not isinstance(new_config, dict):
+            raise HTTPException(status_code=400, detail="config must be an object or null")
+        else:
+            agent_row.config = _merge_patch(agent_row.config or {}, new_config)
 
     # After the config merge, deliberately: a body carrying both must end with the two agreeing,
     # and the posture is the newer spelling of the same choice, so it is the one that wins.
@@ -2728,6 +2771,17 @@ async def archive_agent(
     """
     project_id, _ = project
     agent_row = await _owned_agent(session, project_id, name)
+    # F397: already archived is already done. Still 200 (the caller's intent holds), but nothing
+    # is re-stamped or re-announced: a second `agent_archived` event read in the log exactly like a
+    # real archival, and `archived_at` lost the moment it actually happened.
+    if agent_row.lifecycle == "archived":
+        return {
+            "name": agent_row.name,
+            "lifecycle": agent_row.lifecycle,
+            "charter_id": agent_row.charter_id,
+            "released_charter_id": None,
+            "message": f"{agent_row.name} was already archived; nothing changed.",
+        }
 
     obstruction = await agent_archivable(session, agent_row)
     if obstruction is not None:
@@ -2743,12 +2797,22 @@ async def archive_agent(
             ).scalars()
         )
         if queued_ids:
+            # F180: the non-destructive remedy first. Binding a runner delivers the queue
+            # (`runner_newly_bound` redrains it, F96); discarding destroys it. The old sentence
+            # named only the discard and dropped why archiving is refused at all.
+            deliver = (
+                "Bind a runner so it can deliver them"
+                if agent_row.runner_id is None
+                else "Let them be delivered first (its queue status says why they are waiting)"
+            )
+            plural = "s" if len(queued_ids) != 1 else ""
             raise HTTPException(
                 status_code=409,
                 detail={
                     "message": (
-                        f"{name} has {len(queued_ids)} queued message"
-                        f"{'s' if len(queued_ids) != 1 else ''}. Discard them to archive the agent."
+                        f"{name} has {len(queued_ids)} queued message{plural}, and nothing "
+                        "delivers to an archived agent, so archiving it now would strand them. "
+                        f"{deliver}, or discard them to archive the agent now."
                     ),
                     "blocking_queue_entry_count": len(queued_ids),
                     "blocking_queue_entry_ids": queued_ids,
@@ -2798,6 +2862,15 @@ async def unarchive_agent(
     """Reopen an archived agent. Never refused — reopening obstructs nothing."""
     project_id, _ = project
     agent_row = await _owned_agent(session, project_id, name)
+    # F397's mirror: already open is already done, and a second `agent_unarchived` event would read
+    # in the log like a real reopening.
+    if agent_row.lifecycle != "archived":
+        return {
+            "name": agent_row.name,
+            "lifecycle": agent_row.lifecycle,
+            "charter_id": agent_row.charter_id,
+            "message": f"{agent_row.name} was not archived; nothing changed.",
+        }
 
     unarchive_agent_row(agent_row)
     await session.commit()

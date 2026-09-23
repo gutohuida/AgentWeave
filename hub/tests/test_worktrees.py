@@ -415,6 +415,12 @@ async def test_an_agents_workspace_reads_without_provisioning_one(
     not leave a checkout behind. Task 3.7 of 2026-08-08-agent-configuration-page.
     """
     await bind_project_workspace(repo)
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "vera", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg.status_code == 200
 
     resp = await app.get("/api/v1/projects/proj-test/worktrees/vera", headers=auth_headers)
     assert resp.status_code == 200
@@ -466,6 +472,12 @@ async def test_a_writer_with_no_repository_shares_the_project_directory(
     plain = tmp_path / "not-a-repo"
     plain.mkdir()
     await bind_project_workspace(plain)
+    reg = await app.post(
+        "/api/v1/projects/proj-test/agents/register",
+        json={"name": "xan", "contact_mode": "poll"},
+        headers=auth_headers,
+    )
+    assert reg.status_code == 200
 
     resp = await app.get("/api/v1/projects/proj-test/worktrees/xan", headers=auth_headers)
     assert resp.status_code == 200

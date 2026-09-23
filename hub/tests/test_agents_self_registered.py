@@ -427,10 +427,11 @@ async def test_agent_summary_carries_no_role_or_yolo(app, auth_headers):
     )
     assert resp.status_code == 200
 
-    # The config store keeps both — removal is of the response field, not of the setting.
+    # The config store keeps both — removal is of the response field, not of the setting. A
+    # merge of an unchanged key reads the config back (`{}` is refused since F243).
     resp = await app.patch(
         "/api/v1/projects/proj-test/agents/hermes-legacy-fields",
-        json={"config": {}},
+        json={"config": {"model": "sonnet"}},
         headers=auth_headers,
     )
     assert resp.status_code == 200

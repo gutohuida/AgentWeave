@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Iterable, List, Optional
+from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -320,8 +320,39 @@ class ReleaseOutcome:
 
     entry: Optional[InboundQueueEntry] = None
     refusal: Optional[str] = None
+    refusal_status: int = 409
     #: The depth the entry carried before the re-base, for the record of what the operator did.
     released_from_depth: Optional[int] = None
+
+
+async def not_queued_reason(
+    db: AsyncSession, project_id: str, entry_id: str, action: str
+) -> Tuple[int, str]:
+    """Why *entry_id* cannot be withdrawn or released, as `(status, sentence)` (F200).
+
+    One sentence used to cover four states, and it told an operator whose entry was withdrawn, or
+    was never this project's, that it had been delivered. An unknown id and another project's read
+    the same, so the refusal does not tell a caller that an entry exists elsewhere.
+    """
+    result = await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id))
+    entry = result.scalar_one_or_none()
+    if entry is None or entry.project_id != project_id:
+        return 404, f"No queue entry {entry_id} in this project."
+    if entry.state == "delivered":
+        run = f" in run {entry.delivered_in_run_id}" if entry.delivered_in_run_id else ""
+        return (
+            409,
+            f"Queue entry {entry_id} was already delivered{run}; there is nothing to {action}.",
+        )
+    if entry.state == "withdrawn" and entry.abandoned_reason:
+        return 409, (
+            f"The Hub already gave up delivering queue entry {entry_id} "
+            f"({entry.abandoned_reason.rstrip('.')}). Send the message again to retry it."
+        )
+    if entry.state == "withdrawn":
+        return 409, f"Queue entry {entry_id} was already withdrawn; there is nothing to {action}."
+    # Still queued: it changed state and back between the attempt and this read.
+    return 409, f"Queue entry {entry_id} changed while this {action} was being made; try again."
 
 
 async def release_entry(db: AsyncSession, project_id: str, entry_id: str) -> ReleaseOutcome:
@@ -334,9 +365,8 @@ async def release_entry(db: AsyncSession, project_id: str, entry_id: str) -> Rel
     result = await db.execute(select(InboundQueueEntry).where(InboundQueueEntry.id == entry_id))
     entry = result.scalar_one_or_none()
     if entry is None or entry.project_id != project_id or entry.state != "queued":
-        return ReleaseOutcome(
-            refusal="Queue entry is absent or has already been delivered/withdrawn"
-        )
+        status, refusal = await not_queued_reason(db, project_id, entry_id, "release")
+        return ReleaseOutcome(refusal=refusal, refusal_status=status)
     project = await db.get(Project, project_id)
     if project is None:
         raise ValueError(f"project {project_id!r} does not exist")

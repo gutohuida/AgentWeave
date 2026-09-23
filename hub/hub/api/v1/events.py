@@ -19,6 +19,7 @@ from ...auth import (
 from ...db.engine import get_session
 from ...db.models import EventLog, OperatorCredential
 from ...sse import make_connected_event, sse_manager
+from .logs import require_known_severity
 
 router = APIRouter(prefix="/events", tags=["events"])
 
@@ -40,7 +41,7 @@ async def event_history(
     project_id, _ = project
     q = select(EventLog).where(EventLog.project_id == project_id)
     if severity and severity != "all":
-        q = q.where(EventLog.severity == severity)
+        q = q.where(EventLog.severity == require_known_severity(severity))  # F257
     q = q.order_by(EventLog.timestamp.desc()).limit(limit)
     result = await session.execute(q)
     rows = result.scalars().all()

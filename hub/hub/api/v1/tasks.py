@@ -712,6 +712,38 @@ async def _authorize_loop_task_creation(
         )
 
 
+async def check_task_create(
+    session: AsyncSession, project_id: str, body: TaskCreate
+) -> List[SpecRequirement]:
+    """Every refusal a create makes from its body, asked without writing anything.
+
+    Returns the requirements `body` names, resolved. `create_job` asks this of each `initial_tasks`
+    entry before it commits the job and loop (F414), so a refusal added to task creation belongs
+    here, not after it in `create_task_for_actor`, or a loop seeded with that task is half-created
+    again.
+    """
+    # Resolved before the task exists. A create that stored the task and then refused its
+    # requirements would leave work on the board whose author believes it is linked.
+    try:
+        named = (
+            await resolve_identifiers(
+                session, project_id, body.requirement_ids, document_path=body.spec_document
+            )
+            if body.requirement_ids
+            else []
+        )
+    except LinkRefusedError as refusal:
+        raise HTTPException(status_code=422, detail=str(refusal)) from refusal
+    # The insert's `IntegrityError` below stays the backstop for a race; this is the answer for an
+    # id that was already taken when the caller asked.
+    if body.id and await session.get(Task, body.id) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Task id '{body.id}' already exists",
+        )
+    return named
+
+
 async def create_task_for_actor(
     body: TaskCreate,
     *,
@@ -733,18 +765,7 @@ async def create_task_for_actor(
     if body.loop_id is not None:
         await _authorize_loop_task_creation(session, project_id, body.loop_id, actor, body)
 
-    # Resolved before the task exists. A create that stored the task and then refused its
-    # requirements would leave work on the board whose author believes it is linked.
-    try:
-        named = (
-            await resolve_identifiers(
-                session, project_id, body.requirement_ids, document_path=body.spec_document
-            )
-            if body.requirement_ids
-            else []
-        )
-    except LinkRefusedError as refusal:
-        raise HTTPException(status_code=422, detail=str(refusal)) from refusal
+    named = await check_task_create(session, project_id, body)
 
     # Which document this work is against, so an agent given the task can reach it. `spec_document`
     # only ever disambiguated `requirement_ids` before, and the column was written solely by

@@ -356,6 +356,33 @@ async def test_a_request_still_being_waited_on_cannot_be_cleared_away(app, auth_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("allow", "answered"), [(False, "denied"), (True, "allowed")])
+async def test_an_answered_request_cannot_be_dismissed(app, auth_headers, allow, answered):
+    """F232: only an expired request may be dismissed. An answered one is not on any list to
+    clear, and stamping `dismissed_at` on it recorded an acknowledgement of an expiry that never
+    happened."""
+    headers = await _waiting_run()
+    request_id = await _open_request(app, headers)
+    decided = await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/decide",
+        json={"allow": allow},
+        headers=auth_headers,
+    )
+    assert decided.status_code == 200, decided.text
+
+    refused = await app.post(
+        f"/api/v1/projects/proj-test/permission-requests/{request_id}/dismiss",
+        headers=auth_headers,
+    )
+
+    assert refused.status_code == 409, refused.text
+    assert f"answered ({answered})" in refused.json()["detail"]
+    row = await _row(request_id)
+    assert row.status == answered
+    assert row.dismissed_at is None
+
+
+@pytest.mark.asyncio
 async def test_dismissing_twice_is_not_an_error(app, auth_headers):
     """The card can be clicked again from a stale render, and the second click asks for the
     state the row is already in."""

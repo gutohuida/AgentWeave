@@ -284,6 +284,26 @@ def get_provider(provider: str) -> Optional[ProviderDescriptor]:
     return CATALOG.get(provider)
 
 
+def undeclared_model_reason(provider: str, model: str) -> str:
+    """Why *model* is refused for *provider*, naming what would be accepted (F175, F182).
+
+    The one sentence for every site that refuses an undeclared model. An alias is published by
+    `GET /model-catalog` but not stored (a runner records the model id), so refusing one with "is
+    not a model it declares" was untrue; it names the id the alias stands for instead.
+    """
+    entry = get_provider(provider)
+    if entry is None:
+        return f"unknown provider {provider!r}; expected one of: {', '.join(sorted(CATALOG))}"
+    declared = ", ".join(m.id for m in entry.models)
+    for m in entry.models:
+        if model in m.aliases:
+            return (
+                f"{model!r} is the alias {provider!r} publishes for {m.id!r}; a runner stores the "
+                f"model id, so use {m.id!r}. {provider!r} declares: {declared}"
+            )
+    return f"{model!r} is not a model {provider!r} declares; expected one of: {declared}"
+
+
 def model_context_window(provider: str, model_id: str) -> Optional[int]:
     """The catalog's declared context window for *model_id*, or None if unknown or undeclared."""
     entry = get_provider(provider)
@@ -374,7 +394,7 @@ def validate_overrides(
             if entry.model(value) is None:
                 return {}, OverrideRejection(
                     control="model",
-                    reason=f"{value!r} is not a model {provider!r} declares",
+                    reason=undeclared_model_reason(provider, value),
                 )
             accepted["model"] = value
             continue

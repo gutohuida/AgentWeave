@@ -199,10 +199,13 @@ async def get_project_for_sse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="SSE ticket is bound to another project",
             )
-        proj_result = await session.execute(select(Project).where(Project.id == project_id))
-        project = proj_result.scalar_one_or_none()
-        project_name = project.name if project else project_id
-        return project_id, project_name
+        # F254: a ticket is an HMAC and an expiry, with no database in it, so it outlives a project
+        # deleted after it was minted. The header path above refuses a missing project; so does
+        # this one, rather than opening a stream nothing will ever broadcast on.
+        project = await session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        return project.id, project.name
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

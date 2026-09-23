@@ -21,6 +21,9 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
    says so, not when a window finds room.
 2. **This week.** The Merge Week scorecard's O5 opens no new `openspec/changes/` directory before
    2026-09-28. So the no-spec rounds run this week, and the spec tracks start on 2026-09-28.
+   **Relaxed by the operator on 2026-09-23:** the day window's own specs may open this week (it opened
+   `an-at-mention-an-agent-wrote-reads-no-file` and `pressing-run-names-the-reason-that-held` that
+   day). These rounds' spec tracks still start on 2026-09-28.
 
 ## How a round runs
 
@@ -205,8 +208,13 @@ Grouped by file, so each group is one context load.
 
 ## Round 4 — Hub routes that answer wrongly (the C/D sweep, ~2 days)
 
-**Status:** next. 30 findings: the 28 below plus **4e**, Round 3's two review residuals. Start
-with **F414**, the only B.
+**Status:** done 2026-09-23 on `round/4`; adversarial Opus review applied (`90ffd53`: one
+blocker — `POST /agents` still accepted `operator` — two should-fixes, six nits); full Hub suite
+CI-style 4741 passed / 0 failed, CLI 550 passed. 4e, 4a, 4b, 4c done: 27
+closed (F414, F415; F192, F194, F199, F239, F247, F254; F175, F182, F191, F200, F180, F208; F176,
+F184, F243, F244, F397, F204, F210, F214, F216, F232, F238, F255, F257, F282). **F249** moved to
+UI-1 beside F250: its fix changes the list routes' response shape, which the bundled panel reads.
+F62 (D7) and F149 (D1) stay with their decisions; 4d stays parked.
 
 Mostly S, mostly one guard or one sentence each. Batch them by the shared helper.
 

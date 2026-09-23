@@ -331,7 +331,7 @@ async def test_queued_input_refusal_names_exactly_what_can_be_discarded(app, aut
     detail = refused.json()["detail"]
     assert detail["blocking_queue_entry_count"] == 1
     assert len(detail["blocking_queue_entry_ids"]) == 1
-    assert "Discard" in detail["message"]
+    assert "discard" in detail["message"].lower()
 
     cleared = await app.delete(
         f"/api/v1/projects/proj-test/queue/entries/{detail['blocking_queue_entry_ids'][0]}",

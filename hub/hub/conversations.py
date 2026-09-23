@@ -179,6 +179,27 @@ async def get_open_conversation(
     return conversation
 
 
+async def conversation_unavailable_reason(
+    db: AsyncSession, *, project_id: str, agent: str, conversation_id: str
+) -> str:
+    """Why `get_open_conversation` found nothing, and what would work instead (F191).
+
+    One sentence used to cover every cause, so a typo, another agent's thread and an archived one
+    read alike and none named a repair. An unknown id and another project's read the same, so the
+    refusal does not tell a caller that a conversation exists elsewhere.
+    """
+    fresh = f"or omit conversation_id to start a new conversation with {agent}"
+    conversation = await get_conversation_by_id(db, conversation_id)
+    if conversation is None or conversation.project_id != project_id:
+        return f"No conversation {conversation_id} in this project. Check the id, {fresh}."
+    if conversation.agent != agent:
+        return (
+            f"Conversation {conversation_id} is {conversation.agent}'s, not {agent}'s. "
+            f"Address it to {conversation.agent}, {fresh}."
+        )
+    return f"Conversation {conversation_id} is archived. Unarchive it to continue it, {fresh}."
+
+
 async def latest_open_conversation(
     db: AsyncSession, *, project_id: str, agent: str
 ) -> Optional[Conversation]:

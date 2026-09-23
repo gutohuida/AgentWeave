@@ -118,6 +118,12 @@ async def test_patch_agent_refuses_binding_a_charter_to_an_archived_agent(app, a
 @pytest.mark.asyncio
 async def test_recent_chat_limit_is_bounded(app, auth_headers):
     # M14: limit must be between 1 and 500
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Agent
+
+    async with async_session_factory() as session:  # F194: the route refuses an unknown agent
+        session.add(Agent(id="agt-claude", project_id="proj-test", name="claude"))
+        await session.commit()
     resp_low = await app.get(
         "/api/v1/projects/proj-test/agent/claude/chat?limit=0",
         headers=auth_headers,

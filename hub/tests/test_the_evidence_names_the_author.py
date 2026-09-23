@@ -38,6 +38,7 @@ from hub.api.v1.agent_trigger import TriggerAgentError, trigger_agent_directly
 from hub.conversations import new_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import (
+    Agent,
     EventLog,
     EvidenceFootprint,
     InboundQueueEntry,
@@ -323,16 +324,22 @@ async def test_the_operator_s_evidence_leaves_every_agent_eligible(app, auth_hea
     """4.5. F306's untouched-task carve-out, and the only test of the `actor_kind` filter.
 
     `POST /spec/evidence` records the operator's evidence with `actor='operator'`
-    (`api/v1/spec.py`, `Actor(kind="operator", name="operator")`), and `operator` is a valid agent
-    name — `AGENT_NAME_RE` accepts it and `worktrees.validate_agent_name` reserves only `user`. So
-    the fixture's roster has an agent called `operator`, sorting first. That collision is what makes
-    the filter observable: with the operator's row carrying any name no agent has, dropping the
-    filter excludes nobody and the leg would pass against the mutated tree. Must fail with the
-    `actor_kind` filter dropped.
+    (`api/v1/spec.py`, `Actor(kind="operator", name="operator")`). Since F415 `operator` is a
+    reserved agent name, but an agent declared under it before that is still a row on the roster,
+    so the fixture inserts one directly, sorting first. That collision is what makes the filter
+    observable: with the operator's row carrying any name no agent has, dropping the filter excludes
+    nobody and the leg would pass against the mutated tree. Must fail with the `actor_kind` filter
+    dropped.
     """
     named_like_the_operator, second = "operator", "reviewer"
     assert sorted([second, named_like_the_operator])[0] == named_like_the_operator
-    await _roster(app, auth_headers, bind_runner, named_like_the_operator, second)
+    await _roster(app, auth_headers, bind_runner, second)
+    async with async_session_factory() as db:
+        db.add(
+            Agent(id="agt-legacy-operator", project_id="proj-test", name=named_like_the_operator)
+        )
+        await db.commit()
+    await bind_runner(named_like_the_operator, cli="claude")
     async with async_session_factory() as db:
         loop, task = await _f306(
             db,
