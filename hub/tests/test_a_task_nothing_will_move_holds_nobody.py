@@ -30,6 +30,7 @@ from hub.db.engine import async_session_factory
 from hub.db.models import (
     Agent,
     AIJob,
+    EventLog,
     InboundQueueEntry,
     JobRun,
     Loop,
@@ -714,4 +715,95 @@ async def _completed_task_for_roster_once(db):
     task = Task(id="task-roster-once", project_id=PROJECT, title="finished", status="completed")
     db.add(task)
     await db.commit()
+    return task
+
+
+# ---------------------------------------------------------------------------
+# 2.6 (`an-unstaffed-review-names-its-holders`) -- a real firing, three surfaces
+# ---------------------------------------------------------------------------
+
+D26 = "dd-bookmark-26"
+
+
+async def test_a_loopengine_shaped_firing_names_every_reachable_holder(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """2.6. Four agents: the author, and three others each holding work reachable only through a
+    *second* live loop this firing never fires (R8's fixture) -- so every one of them is booked,
+    none is walked, and the firing itself stalls on rung 3 naming all three plus the author's own
+    exclusion. Reads the stall through all three surfaces the route, the event and the board share:
+    `POST .../jobs/{id}/run`'s 409 detail, the `review_unstaffed` event's reason, and
+    `LoopSummary.stall_reason`.
+    """
+    from hub.api.v1.jobs import _batch_loop_summaries
+
+    await _roster(app, auth_headers, bind_runner, AUTHOR, B, C, D26)
+    async with async_session_factory() as db:
+        job, loop = await _flow_queue(db, suffix="2.6", declares_document=True)
+        task = await _flow_task(db, loop, suffix="2.6")
+        await _completed_by(db, task)
+        await record_review_evidence(db, task.id, suffix="reach-2.6", actor=AUTHOR)
+
+        # The second live loop: every non-author holding, and the author's own extra task, lives
+        # here so each is reachable without being walked by the firing under test (R8's fixture,
+        # replacing R3's now-self-defeating NULL-loop_id one).
+        _elsewhere_job, elsewhere = await _loop(db, suffix="2.6-elsewhere")
+
+        # REV: the author holds one live task outside the loop, as `dev` did on LoopEngine. It must
+        # be reachable too, or mutation (b) below cannot fail (R8).
+        await _holding(
+            db,
+            task_id="task-2.6-author",
+            assignee=AUTHOR,
+            status="in_progress",
+            loop_id=elsewhere.id,
+        )
+        await _holding(
+            db, task_id="task-2.6-b", assignee=B, status="under_review", loop_id=elsewhere.id
+        )
+        for i in range(1, 6):
+            await _holding(
+                db, task_id=f"task-2.6-c-{i}", assignee=C, status="pending", loop_id=elsewhere.id
+            )
+        # The delta's own scenario, "a task nothing will move is not named as a reason": a sixth
+        # task for the five-task agent, unreachable (no loop_id, nothing queued).
+        await _holding(db, task_id="task-2.6-c-unreachable", assignee=C, status="pending")
+        await _holding(
+            db, task_id="task-2.6-d", assignee=D26, status="in_progress", loop_id=elsewhere.id
+        )
+
+    with _no_spawn():
+        res = await app.post(f"/api/v1/projects/{PROJECT}/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+
+    async with async_session_factory() as db:
+        rows = (
+            (await db.execute(select(EventLog).where(EventLog.event_type == "review_unstaffed")))
+            .scalars()
+            .all()
+        )
+        matching = [row for row in rows if (row.data or {}).get("task_id") == task.id]
+        summary = (await _batch_loop_summaries(db, [job.id]))[job.id]
+
+    assert len(matching) == 1, matching
+    assert matching[0].data["reason"] == detail
+    assert summary.stall_reason == detail
+
+    expected = (
+        "could not staff this step: no reviewer is free. "
+        f"{B} is booked for task-2.6-b (under_review); "
+        f"{C} is booked for task-2.6-c-1 (pending), task-2.6-c-2 (pending), "
+        f"task-2.6-c-3 (pending) and 2 more; "
+        f"{D26} is booked for task-2.6-d (in_progress); "
+        f"{AUTHOR} is the one that completed this task. "
+        "Land it, on the task, to review it yourself. "
+        "Rejecting booked tasks that are no longer wanted can free their agents."
+    )
+    assert detail == expected
+    assert "task-2.6-c-unreachable" not in detail
+    for name in (B, C, D26):
+        assert f"{name} is booked for" in detail
+        assert f"{name} holds" not in detail
     return task

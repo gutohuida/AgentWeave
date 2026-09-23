@@ -395,10 +395,55 @@ mutation and the observed failure beside the task when ticking it.
 > `git diff --stat` showed no change. Recorded here rather than silently dropped, so a future round
 > does not re-open it without reading this note and re-checking the premise (own_review_remedy's
 > capitalization) first, since a change there would make the mutation live again.
-- [ ] 2.6 Test, LoopEngine-shaped, through a real firing (`POST …/jobs/{id}/run`), reading the
+- [x] 2.6 Test, LoopEngine-shaped, through a real firing (`POST …/jobs/{id}/run`), reading the
       `review_unstaffed` event **and** `LoopSummary.stall_reason`. Four agents: the author; one
       holding an `under_review` task; one holding five `pending` tasks; one holding an
       `in_progress` task with no turn.
+
+      **Built 2026-09-23, night iteration 10, from the R8 block below.** Added
+      `test_a_loopengine_shaped_firing_names_every_reachable_holder` to
+      `test_a_task_nothing_will_move_holds_nobody.py`, next to the file's own `_loop`/`_holding`
+      helpers it depends on. Fixture: `_flow_queue(declares_document=True)` + `_flow_task` +
+      `_completed_by` + `record_review_evidence` for the reviewable task (the job's own agent is
+      the author, per R8); a **second** live loop (`_loop(db, suffix="2.6-elsewhere")`) holding the
+      author's own extra `in_progress` task (REV) plus B's `under_review` task, C's five `pending`
+      tasks, and D's `in_progress` task, all carrying that second loop's id so each is reachable
+      without the firing under test ever walking it; a sixth, unreachable task for C
+      (`loop_id=None`, nothing queued) for the delta's own "a task nothing will move is not named"
+      scenario. Fired through `POST …/jobs/{id}/run` (`live_scheduler` + `_no_spawn()`), asserted
+      the whole reason `==` a literal, and cross-read it on all three surfaces: the 409 `detail`,
+      the `review_unstaffed` `EventLog` row's `data["reason"]`, and `LoopSummary.stall_reason`
+      (`_batch_loop_summaries`) — all three equal. Also asserted the unreachable sixth task's id is
+      absent and every non-author clause reads "is booked for", never "holds".
+
+      *Mutations, all applied live to `scheduler.py` and reverted, `git diff --stat` clean after
+      each:* (a) dropped the booked branch from `_rung_3_clause_kind` (falls to "running") — failed
+      on the `==` literal, every booked agent read "is running a turn" instead. (b) moved the
+      booked check ahead of the excluded check — failed: the author's own reachable holding (REV's
+      addition) made *it* read "is booked for task-2.6-author (in_progress)" instead of "is the one
+      that completed this task", exactly the fixture-dependent bite R8 predicted; without that
+      holding this mutation could not have failed. (c) `_rung_3_clause_text`'s excluded branch
+      returns a fixed `"{name} is excluded"` instead of the `exclude` mapping's own per-agent
+      reason — failed on the literal. *Fixture check (R6):* temporarily set every non-C holding's
+      `loop_id` to `None` (three of the four `_holding` calls — the loop over C's five tasks kept
+      its indentation and was not touched by the same edit, so C's five stayed reachable) — the
+      firing then answered 200, not 409 (B or D, now free, got staffed), proving the fixture's
+      reachability is what makes the stall happen at all, not an assertion artifact. Reverted;
+      `git diff --stat` clean.
+
+      Full relevant suite: `pytest hub/tests/test_reviewer_ladder.py
+      hub/tests/test_a_held_agent_is_busy.py hub/tests/test_a_flow_names_what_it_cannot_staff.py
+      hub/tests/test_a_task_nothing_will_move_holds_nobody.py hub/tests/test_review_divergence.py
+      hub/tests/test_run_divergence.py -q` → **133 passed** (130 + this task's 1 new test; matches
+      the file-level count of 32, up from 31). `ruff check src/ hub/ tests/`,
+      `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` (one reformat needed,
+      applied and re-checked clean), `mypy src/` (CI's exact paths) — all clean.
+
+      **2.7, 2.9 and 2.9b split off to their own queue item** (`unstaffed-group2-task2.7to2.9b`) —
+      each needs its own fixture design on top of this task's one (2.7 the divergence path's
+      restaff-with-nobody-left on both branches; 2.9 the twelve-agent 500-char fit; 2.9b the
+      64-character-id fallback), and this task alone — the real-firing, three-surface test the R8
+      block itself sized as one whole item's worth of work — took the room a firing has today.
 
       > **R6 — R3's `loop_id` NULL fixture is now self-defeating and must be replaced.** Under (f)
       > a holding with a NULL `loop_id` and no queued turn is **unreachable**: it holds nobody, so
