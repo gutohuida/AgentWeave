@@ -1577,6 +1577,22 @@ $//'` after. *(2026-09-21)*
   `test_hop_budget_bound.py` asserted the old behaviour and matched no keyword. Run the full
   suite (alone) before pushing a behaviour change, not only at the end of the round. *(2026-09-23)*
 
+## 2026-09-23 (evening) — UI-1
+
+- **Editing `hub/ui/src` while a full Hub suite runs changes that run's result.**
+  `test_surface_ceilings.py` scans the live UI source (via `scripts/drive/n11_*`) when it reaches
+  it, late in the alphabet, so a query hook added mid-run failed the ratchet in a run that was meant
+  to test the committed state. Make only non-query edits during a run, or rerun the ratchet after.
+  *(2026-09-23)*
+- **A Python heredoc that writes `'\n'` into a TS/JS string literal writes a real newline.**
+  Tests passed under vitest (esbuild tolerated the multi-line string), while `tsc` and eslint
+  rejected them. Use the Edit tool for any replacement that contains `
+`. *(2026-09-23)*
+- **Changing a response shape the committed bundle reads breaks `:8000` in both directions.** The
+  old bundle with new routes, or the new bundle with the old backend, both render wrong screens. A
+  round that changes a route the UI reads lands as one merge **plus** a `:8000` restart, and the
+  restart is the operator's call. *(2026-09-23)*
+
 ## RESOLVED
 
 Kept because "we used to believe this" is worth knowing, and because an entry that quietly

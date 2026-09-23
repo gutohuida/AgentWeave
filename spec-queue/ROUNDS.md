@@ -258,6 +258,13 @@ since 2026-08-29. It is parked with F325, pending D13.
 
 ## UI-1 — one bundle: controls that lie or do nothing (~2 days, B first)
 
+**Status:** done 2026-09-23 (commits `12db377`..`fa3f812` on `round/ui-1`, fast-forwarded into the
+2026-09-24 daily branch; Opus-reviewed and the review applied; full Hub suite 4753 passed, vitest
+1620 passed, browser check 13/13 on `:8010`; bundle rebuilt and `:8000` restarted at the operator's
+instruction). 22 of 23 closed: F186 F187 F179 F241 F237 F348 F171 F61 F307 F249 F250 F252 F315 F337
+F205 F229 F169 F275 F193 F256 F231, and F156's UI half (F255 was already closed in Round 4c).
+**F350 carried** (the row says why). Not driven live: F348 (needs a running turn). **Next: Round 5.**
+
 One bundle and one browser check, and it reaches `:8000` on reload.
 
 **Blocked until `:8000` is restarted past `c18a87b`** (the operator's call). Any rebuild now carries
