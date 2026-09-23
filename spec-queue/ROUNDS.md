@@ -42,8 +42,8 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
 
 **Round 0 → 1 → 2 → 3 → 4 → 5 this week**, with **D** put to the operator alongside, then the
 **spec tracks from 2026-09-28 in the order listed**. Round 1 comes early because every later round
-depends on a CI that tells the truth. Round 5 waits for tonight's F352 build. Within a round, work
-B before C before D.
+depends on a CI that tells the truth. Round 5 was waiting on F352, which landed and was driven on
+the 2026-09-23 night window, so it is unblocked. Within a round, work B before C before D.
 
 Counts place each finding in the **first** round that names it (later mentions are
 cross-references). They are the same numbers `ROUNDS.html` shows. **Track progress there:**
@@ -55,9 +55,9 @@ cross-references). They are the same numbers `ROUNDS.html` shows. **Track progre
 | 1 | Make CI tell the truth | 4 | ~1 day | nothing |
 | 2 | Decided, unbuilt | 7 | ~1 day | nothing (verdicts exist) |
 | 3 | Hub routes that act wrongly (B-led) | 28 | ~2–3 days | nothing |
-| 4 | Hub routes that answer wrongly (C/D sweep) | 28 | ~2 days | nothing |
-| UI-1 | One bundle: controls that lie or do nothing | 20 | ~2 days | ui-bundle, browser check |
-| 5 | Scheduler residuals, after F352 lands | 4 | ~1 day | tonight's F352 build verified |
+| 4 | Hub routes that answer wrongly (C/D sweep) | 28 (+2 in 4e, counted in Round 3) | ~2 days | nothing |
+| UI-1 | One bundle: controls that lie or do nothing | 20 (+2 carried from Round 3) | ~2 days | ui-bundle, browser check, `:8000` restarted past `c18a87b` |
+| 5 | Scheduler residuals | 4 (F373 and F400 moved to a change; 3 to build: F357, F167, F327) | ~1 day | nothing (F352 landed 2026-09-23) |
 | D | Operator decisions (13 questions) | 56 | ~2 DECIDE sessions | operator |
 | S1–S12 | Spec tracks, from 2026-09-28 | 33 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
 
@@ -139,7 +139,8 @@ reason its finding states. **F338** had never been measured; it reached. **F360*
 on Haiku (old rule 0/32, new rule 32/32, `scripts/drive/t_f360_probe_task_rule.py`). **F297**'s graceful
 stop was measured with a probe launched exactly as `cmd_hub_start` launches the Hub. Full Hub suite,
 run alone at `3cd9db1`: **4675 passed, 86 skipped, 0 failed (25:01)**. CLI suite: **549 passed, 4
-skipped**. Not driven live: F288, F359, F245, F246, F189, F326 (unit and route level only). **Next:
+skipped**. Merged into `autonomous/2026-09-21-daily` at `4724e64` (the daily branch had changed no
+product code since the fork; CLI suite on the merge 550 passed). Not driven live: F288, F359, F245, F246, F189, F326 (unit and route level only). **Next:
 Round 4.**
 
 Grouped by file, so each group is one context load.
@@ -204,6 +205,9 @@ Grouped by file, so each group is one context load.
 
 ## Round 4 — Hub routes that answer wrongly (the C/D sweep, ~2 days)
 
+**Status:** next. 30 findings: the 28 below plus **4e**, Round 3's two review residuals. Start
+with **F414**, the only B.
+
 Mostly S, mostly one guard or one sentence each. Batch them by the shared helper.
 
 **4a · the unknown entity is not a 200 or a vague 404.** Write one `require_known_agent` helper and
@@ -240,6 +244,11 @@ since 2026-08-29. It is parked with F325, pending D13.
 
 One bundle and one browser check, and it reaches `:8000` on reload.
 
+**Blocked until `:8000` is restarted past `c18a87b`** (the operator's call). Any rebuild now carries
+that commit's `{tasks, total, has_more}` envelope (F202), and `:8000`'s backend, unrestarted since
+2026-09-19, still answers the bare array -- the night window's group 5.4 gate found this on
+2026-09-23 and held that bundle back for the same reason.
+
 | Finding | Sev | Fix |
 |---|---|---|
 | F186 | B | Charter delete gets a confirmation. The delete is hard and cannot be undone. |
@@ -265,15 +274,23 @@ One bundle and one browser check, and it reaches `:8000` on reload.
 | F275 | C | *Carried from Round 3d.* `groupIntoTurns` puts an abandoned entry among the turns by its timestamp, not in the trailing `pending` group; the chat routes sort it in instead of appending it. |
 | F156 (UI half) | B | *Carried from Round 3f.* The approval drawer reads `will_attempt_merge`, `will_merge` is retired from `integration-preview`, and the drawer's "cherry-picks" becomes "merges" (integration runs `merge --no-ff`). |
 
-## Round 5 — scheduler residuals, only after tonight's F352 build is verified (~1 day)
+## Round 5 — scheduler residuals (~1 day)
 
-F352 and `an-unstaffed-review…` rewrite the same `decide_firing` / `run_job` functions tonight. A
-fix landed first would conflict, and a naive one regresses the others: F392 is that failure.
+**Status:** unblocked 2026-09-23. F352's build (`an-unstaffed-review-names-its-holders`) landed and
+was driven on the 2026-09-23 night window and is archived, so `decide_firing` / `run_job` are no
+longer being rewritten underneath this round. **F373 and F400 have left it:** the day window's
+`pressing-run-names-the-reason-that-held` (proposed 2026-09-23, with F411-F413, F23, F300, F312)
+names both, and a finding is carried in one change only. If that change is rejected they come
+back here. Three remain.
+
+*(Written before F352 landed:* F352 and `an-unstaffed-review…` rewrite the same `decide_firing` /
+`run_job` functions. A fix landed first would conflict, and a naive one regresses the others: F392
+is that failure.*)*
 
 | Finding | Sev | Fix |
 |---|---|---|
-| F373 | B | Pressing Run answers with an earlier firing's stall reason. Gate step 2 on `wrote_row` / `tick_count`. |
-| F400 | B | "No other agent is free" while one is. Rewrite the reason after F373. It was moved out of a change by operator decision, so re-check whether it wants its own proposal. |
+| ~~F373~~ | B | **Moved to `pressing-run-names-the-reason-that-held`.** Pressing Run answers with an earlier firing's stall reason. |
+| ~~F400~~ | B | **Moved to `pressing-run-names-the-reason-that-held`.** "No other agent is free" while one is. |
 | F357 | B | The review briefing names the evidence gate. This is copy, so no design is needed. |
 | F167 | B | `agents_that_worked` cannot see an author whose history is all the operator's, so F70/F142 recovery never fires. |
 | F327 | B | A flow-staffed review whose dispatch is refused leaves the reviewer holding the task. Uses the F319/F328 pattern. |
