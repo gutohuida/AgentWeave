@@ -253,6 +253,35 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] })
   })
 
+  it('refetches the worktrees panel when a run or a task moves a checkout (F250)', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    fetchSpy.mockResolvedValue(makeSSEResponse([
+      'event: run_started\ndata: {"project_id":"proj-1","agent":"claude","run_id":"run-1"}\n\n',
+      'event: task_updated\ndata: {"project_id":"proj-1","id":"task-1","status":"approved"}\n\n',
+    ]))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() => {
+      const worktreeCalls = invalidateSpy.mock.calls.filter(
+        ([filters]) => JSON.stringify(filters) === JSON.stringify({ queryKey: ['project', 'proj-1', 'worktrees'] }),
+      )
+      expect(worktreeCalls.length).toBe(2)
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'worktree-conflicts'] })
+  })
+
   it('dispatches permission_denied, so a refused agent is visible rather than silent', async () => {
     // Not in SSE_EVENT_TYPES means dropped client-side before any handler runs, and the
     // operator never learns the agent hit a wall.

@@ -512,15 +512,15 @@ async def test_the_conflicts_route_keeps_an_approved_tasks_branch_and_drops_a_re
 
     approved = await app.get("/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers)
     assert approved.status_code == 200
-    assert [{w["name"] for w in report["workspaces"]} for report in approved.json()] == [
-        {TASK, OTHER}
-    ]
+    assert [
+        {w["name"] for w in report["workspaces"]} for report in approved.json()["conflicts"]
+    ] == [{TASK, OTHER}]
 
     async with async_session_factory() as session:
         (await session.get(Task, TASK)).status = "rejected"
         await session.commit()
     rejected = await app.get("/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers)
-    assert rejected.json() == []
+    assert rejected.json()["conflicts"] == []
 
 
 def test_a_snapshot_in_a_task_checkout_names_the_task(repo):
@@ -621,7 +621,7 @@ async def test_the_worktrees_endpoint_lists_task_workspaces_and_says_which_is_wh
     listing = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
 
     assert listing.status_code == 200
-    by_name = {item["name"]: item for item in listing.json()}
+    by_name = {item["name"]: item for item in listing.json()["worktrees"]}
     assert set(by_name) == {TASK, "builder"}
     assert by_name[TASK] == {
         "kind": "task",
@@ -655,7 +655,7 @@ async def test_reading_the_worktrees_listing_provisions_nothing(
     listing = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
 
     assert listing.status_code == 200
-    assert listing.json() == []
+    assert listing.json() == {"repository": True, "unavailable_reason": None, "worktrees": []}
     assert not worktrees.task_root(repo).exists()
     assert not worktrees.worktree_root(repo).exists()
     # And git agrees: the only registered worktree is the project checkout itself.

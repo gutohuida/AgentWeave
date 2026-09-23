@@ -358,12 +358,12 @@ async def test_worktree_endpoints_list_active_agents_and_their_conflicts(
 
     assert listing.status_code == 200
     # `name`/`kind` since task 6.3 widened this listing past agents; both are agents here.
-    assert {(item["kind"], item["name"]) for item in listing.json()} == {
+    assert {(item["kind"], item["name"]) for item in listing.json()["worktrees"]} == {
         ("agent", "taylor"),
         ("agent", "uma"),
     }
     assert conflicts.status_code == 200
-    assert conflicts.json() == [
+    assert conflicts.json()["conflicts"] == [
         {
             "workspaces": [
                 {"kind": "agent", "name": "taylor", "branch": "agentweave/taylor"},
@@ -393,7 +393,7 @@ async def test_the_conflicts_route_checks_against_the_projects_main_branch(
     )
 
     assert conflicts.status_code == 200
-    assert conflicts.json() == [
+    assert conflicts.json()["conflicts"] == [
         {
             "workspaces": [
                 {"kind": "main", "name": "main", "branch": "main"},
@@ -519,7 +519,7 @@ async def test_the_conflicts_route_is_not_read_as_an_agent_name(
     await bind_project_workspace(repo)
     resp = await app.get("/api/v1/projects/proj-test/worktrees/conflicts", headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert resp.json()["conflicts"] == []
 
 
 @pytest.mark.asyncio
@@ -529,3 +529,33 @@ async def test_an_illegal_agent_name_is_refused(app, auth_headers, repo, bind_pr
         "/api/v1/projects/proj-test/worktrees/not%20a%20name", headers=auth_headers
     )
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_a_project_that_is_not_a_repository_says_so_on_both_lists(
+    app, auth_headers, tmp_path, bind_project_workspace
+):
+    """F249. Both list routes answered `[]` for a project that is not a git repository, the same as
+    a healthy one with no checkouts, and the panel then promised checkouts that would never come.
+    They now say which it is, with the per-agent route's reason."""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    await bind_project_workspace(plain)
+
+    for route, key in (("worktrees", "worktrees"), ("worktrees/conflicts", "conflicts")):
+        resp = await app.get(f"/api/v1/projects/proj-test/{route}", headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["repository"] is False
+        assert body[key] == []
+        assert "is not a git repository" in body["unavailable_reason"]
+        assert "git init" in body["unavailable_reason"]
+
+
+@pytest.mark.asyncio
+async def test_a_repository_with_no_checkouts_is_still_a_repository(
+    app, auth_headers, repo, bind_project_workspace
+):
+    await bind_project_workspace(repo)
+    resp = await app.get("/api/v1/projects/proj-test/worktrees", headers=auth_headers)
+    assert resp.json() == {"repository": True, "unavailable_reason": None, "worktrees": []}

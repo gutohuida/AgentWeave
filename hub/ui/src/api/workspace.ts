@@ -95,6 +95,15 @@ export interface WorkspaceInfo {
   path: string
 }
 
+/** `GET /worktrees`. `repository: false` is a project whose directory is not a git repository,
+ *  which has no checkouts to list and never will until it is one (F249); `unavailable_reason` is
+ *  the Hub's sentence for it. */
+export interface WorktreeListing {
+  repository: boolean
+  unavailable_reason?: string | null
+  worktrees: WorkspaceInfo[]
+}
+
 /**
  * Every provisioned checkout in the project, agent and task alike.
  *
@@ -103,9 +112,9 @@ export interface WorkspaceInfo {
  */
 export function useWorktrees() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<WorkspaceInfo[]>({
+  return useQuery<WorktreeListing>({
     queryKey: ['project', projectId, 'worktrees'],
-    queryFn: () => getJson<WorkspaceInfo[]>(`/api/v1/projects/${projectId}/worktrees`),
+    queryFn: () => getJson<WorktreeListing>(`/api/v1/projects/${projectId}/worktrees`),
     enabled: isConfigured && !!projectId,
   })
 }
@@ -124,6 +133,13 @@ export interface WorktreeConflict {
   paths: string[]
 }
 
+/** `GET /worktrees/conflicts`, shaped like `WorktreeListing` (F249). */
+export interface ConflictListing {
+  repository: boolean
+  unavailable_reason?: string | null
+  conflicts: WorktreeConflict[]
+}
+
 /**
  * `GET /worktrees/conflicts` — every pair of Hub-owned branches that `git merge-tree` says would
  * conflict, each also checked against the main branch (F241: computed, correct, and read by
@@ -131,13 +147,14 @@ export interface WorktreeConflict {
  *
  * Keyed apart from `['project', id, 'worktrees', …]` on purpose: `useAgentWorkspace` keys one
  * agent's checkout as `['worktrees', <agent>]`, and an agent may be named `conflicts` (F248).
- * Every pair is a merge-tree, so this is not polled.
+ * Every pair is a merge-tree, so this is not polled; `useSSE` refetches it on the events that
+ * move a branch (F250).
  */
 export function useWorktreeConflicts() {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
-  return useQuery<WorktreeConflict[]>({
+  return useQuery<ConflictListing>({
     queryKey: ['project', projectId, 'worktree-conflicts'],
-    queryFn: () => getJson<WorktreeConflict[]>(`/api/v1/projects/${projectId}/worktrees/conflicts`),
+    queryFn: () => getJson<ConflictListing>(`/api/v1/projects/${projectId}/worktrees/conflicts`),
     enabled: isConfigured && !!projectId,
   })
 }

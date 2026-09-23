@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorktreesPanel } from '@/components/environment/WorktreesPanel'
-import type { WorkspaceInfo, WorktreeConflict } from '@/api/workspace'
+import type { WorkspaceInfo, WorktreeConflict, WorktreeListing } from '@/api/workspace'
 
-let worktrees: WorkspaceInfo[] | undefined
+let worktrees: WorktreeListing | undefined
 let loading = false
 let error: unknown = null
 let conflicts: WorktreeConflict[] | undefined = []
@@ -14,7 +14,10 @@ vi.mock('@/api/workspace', async (importOriginal) => {
   return {
     ...actual,
     useWorktrees: () => ({ data: worktrees, isLoading: loading, error }),
-    useWorktreeConflicts: () => ({ data: conflicts, error: conflictsError }),
+    useWorktreeConflicts: () => ({
+      data: conflicts === undefined ? undefined : { repository: true, conflicts },
+      error: conflictsError,
+    }),
   }
 })
 
@@ -27,7 +30,8 @@ function renderPanel(
     conflictsError?: unknown
   } = {},
 ) {
-  worktrees = data
+  // The route's envelope (F249) around the checkouts each test names.
+  worktrees = data === undefined ? undefined : { repository: true, unavailable_reason: null, worktrees: data }
   loading = options.loading ?? false
   error = options.error ?? null
   conflicts = 'conflicts' in options ? options.conflicts : []
@@ -177,5 +181,23 @@ describe('the worktrees panel reports conflicts (F241)', () => {
 
     expect(screen.queryByTestId('worktree-conflicts-none')).not.toBeInTheDocument()
     expect(screen.queryByTestId('worktree-conflicts')).not.toBeInTheDocument()
+  })
+})
+
+describe('the worktrees panel in a project that is not a repository (F249)', () => {
+  it("says so in the Hub's words, and promises no checkouts", () => {
+    worktrees = {
+      repository: false,
+      unavailable_reason: '/p is not a git repository, so agents here work in the project directory and no isolated checkout is made. Running `git init` there would give each writing agent its own.',
+      worktrees: [],
+    }
+    loading = false
+    error = null
+    conflicts = []
+    render(<WorktreesPanel />)
+
+    expect(screen.getByTestId('worktrees-not-a-repository')).toHaveTextContent('/p is not a git repository')
+    expect(screen.queryByText(/appear here when an agent starts work/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('worktree-conflicts-none')).not.toBeInTheDocument()
   })
 })

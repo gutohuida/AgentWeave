@@ -18905,7 +18905,7 @@ cannot reach.
 
 ## F249 (D) — the worktrees list cannot say "this project is not a repository"
 
-**Status:** open — moved to UI-1 with F250 on 2026-09-23 (Round 4c): saying "not a repository" changes the list routes' response shape, which the bundled Worktrees panel reads, so the route and the view ship together. Both list routes still `return []` for a project that is not a
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — both list routes say whether the project is a repository, with the reason, and the panel shows it; see FIXED at the end of this entry. Was: open — moved to UI-1 with F250 on 2026-09-23 (Round 4c): saying "not a repository" changes the list routes' response shape, which the bundled Worktrees panel reads, so the route and the view ship together. Both list routes still `return []` for a project that is not a
 repository, indistinguishably from a healthy one with no checkouts, while the per-agent route says so
 and explains what would change it. [classified 2026-09-09, D-3]
 
@@ -18923,11 +18923,13 @@ non-repository project no agent will ever start such work.
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 3.
 
+**FIXED 2026-09-23 (interactive session, UI-1).** `GET /worktrees` answers `WorktreeListing {repository, unavailable_reason, worktrees}` and `GET /worktrees/conflicts` answers `ConflictListing {repository, unavailable_reason, conflicts}` (both in `api/v1/worktrees.py`). For a directory that is not a git repository, `repository` is false and the reason reads *`<root>` is not a git repository, so agents here work in the project directory and no isolated checkout is made. Running `git init` there would give each writing agent its own.* A repository with no checkouts is `repository: true` and an empty list, so the two are no longer the same answer. Only the UI and tests read these routes (checked), so the shape change ships with the bundle, as ROUNDS planned. `WorktreesPanel` shows the reason under *Not a git repository* in place of the empty state that promised checkouts, and shows no conflict line. Tests: `test_a_project_that_is_not_a_repository_says_so_on_both_lists`, `test_a_repository_with_no_checkouts_is_still_a_repository` (`test_worktrees.py`), seven existing route assertions moved to the envelope, and `worktreesPanel.test.tsx`'s F249 case.
+
 ---
 
 ## F250 (D) — nothing invalidates the worktrees query, so the panel does not notice a checkout being created
 
-**Status:** open. Nothing invalidates the worktrees query and no SSE event reaches it,
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — run and task events refetch the Worktrees panel and its conflict check; see FIXED at the end of this entry. Was: open. Nothing invalidates the worktrees query and no SSE event reaches it,
 so the panel still shows whatever was true at mount while agents provision checkouts behind it. [classified 2026-09-09, D-3]
 
 `useWorktrees` (`hub/ui/src/api/workspace.ts:100`) keys on `['project', projectId, 'worktrees']`
@@ -18942,6 +18944,8 @@ budget surfaces from the other direction: there the server broadcast an event th
 with the wrong invalidation; here there is no event to answer.
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 5.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `useSSE` invalidates `['project', pid, 'worktrees']` (which also prefixes each agent's workspace key) and `['project', pid, 'worktree-conflicts']` on `task_created`/`task_updated` (approve and reject release a task's checkout) and on `run_started` and the four terminal run events (a turn's checkout is provisioned before `run_started` is sent, and its snapshot lands before the terminal event, which is what moves a conflict). Invalidation refetches only mounted queries, so the merge-tree check costs nothing while the panel is closed. Test: `useSSE.test.tsx` `refetches the worktrees panel when a run or a task moves a checkout (F250)`.
 
 ---
 

@@ -6,6 +6,7 @@ import {
   type ConflictWorkspace,
   type WorkspaceInfo,
   type WorktreeConflict,
+  type WorktreeListing,
 } from '@/api/workspace'
 
 /**
@@ -27,6 +28,11 @@ import {
  * these branches, and which branch against the main one, `git merge-tree` says would not merge,
  * and on which files. The route existed and nothing read it, so a conflict the Hub had found was on
  * no screen at all.
+ *
+ * **Not a repository (F249).** A project whose directory is not a git repository gets no checkouts
+ * and never will until it becomes one. The list used to answer that as `[]`, and this panel then
+ * promised checkouts "when an agent starts work that needs one". It now says what the Hub says.
+ * Refetched by `useSSE` on run and task events (F250), so checkouts appear while it is open.
  */
 export function WorktreesPanel() {
   const { data, isLoading, error } = useWorktrees()
@@ -38,8 +44,12 @@ export function WorktreesPanel() {
       description="The isolated checkouts this project is using — one per writing agent, and one per task being worked."
     >
       <PanelBody data={data} isLoading={isLoading} error={error} />
-      {data && (
-        <Conflicts data={conflicts.data} error={conflicts.error} hasCheckouts={data.length > 0} />
+      {data?.repository && (
+        <Conflicts
+          data={conflicts.data?.conflicts}
+          error={conflicts.error}
+          hasCheckouts={data.worktrees.length > 0}
+        />
       )}
     </SettingsSection>
   )
@@ -50,7 +60,7 @@ function PanelBody({
   isLoading,
   error,
 }: {
-  data: WorkspaceInfo[] | undefined
+  data: WorktreeListing | undefined
   isLoading: boolean
   error: unknown
 }) {
@@ -76,7 +86,20 @@ function PanelBody({
     )
   }
 
-  if (data.length === 0) {
+  if (!data.repository) {
+    return (
+      <div className="py-4" data-testid="worktrees-not-a-repository">
+        <EmptyState
+          icon="file_vcs"
+          title="Not a git repository"
+          description={data.unavailable_reason ?? 'This project is not a git repository, so no isolated checkout is made.'}
+        />
+      </div>
+    )
+  }
+
+  const workspaces = data.worktrees
+  if (workspaces.length === 0) {
     return (
       <div className="py-4">
         <EmptyState
@@ -88,11 +111,11 @@ function PanelBody({
     )
   }
 
-  const agents = data.filter((workspace) => workspace.kind === 'agent')
-  const tasks = data.filter((workspace) => workspace.kind === 'task')
+  const agents = workspaces.filter((workspace) => workspace.kind === 'agent')
+  const tasks = workspaces.filter((workspace) => workspace.kind === 'task')
   // Anything the Hub reports under a kind this build does not know about is still shown rather
   // than dropped: a checkout that exists and is not listed is the failure this panel is fixing.
-  const others = data.filter((workspace) => workspace.kind !== 'agent' && workspace.kind !== 'task')
+  const others = workspaces.filter((workspace) => workspace.kind !== 'agent' && workspace.kind !== 'task')
 
   return (
     <div className="space-y-5 py-2" data-testid="worktrees-list">

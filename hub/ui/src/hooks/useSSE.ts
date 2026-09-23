@@ -436,6 +436,9 @@ export function useSSE(onEvent?: SSEListener) {
           // so the loops list/detail refetch here rather than staying stale until something else
           // invalidates them.
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
+          // Approving or rejecting a task releases its checkout (F250).
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktrees'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktree-conflicts'] })
           break
         case 'queue_entry_abandoned': {
           // The Hub stopped trying to deliver something. The queue card is where that shows, and
@@ -482,6 +485,11 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })
           queryClient.invalidateQueries({ queryKey: ['projects'] })
+          // F250: a turn's checkout is provisioned before `run_started` is sent, and its snapshot
+          // commit lands before the terminal event, which is what moves a conflict. Only a mounted
+          // Worktrees panel refetches, so the merge-tree check costs nothing while it is closed.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktrees'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'worktree-conflicts'] })
           break
         case 'accounting_budget_updated':
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'accounting'] })

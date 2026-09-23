@@ -99,6 +99,35 @@ class ConflictInfo(BaseModel):
     paths: List[str]
 
 
+class WorktreeListing(BaseModel):
+    """`GET /worktrees`: the checkouts, and whether this project can have any (F249).
+
+    A bare list could not say "this project is not a repository": it answered `[]`, the same as a
+    healthy repository with no checkouts, and the panel then promised checkouts that would never
+    come. `repository` and `unavailable_reason` are the per-agent route's own answer, on the list.
+    """
+
+    repository: bool
+    unavailable_reason: Optional[str] = None
+    worktrees: List[WorkspaceInfo]
+
+
+class ConflictListing(BaseModel):
+    """`GET /worktrees/conflicts`, shaped like `WorktreeListing` for the same reason (F249)."""
+
+    repository: bool
+    unavailable_reason: Optional[str] = None
+    conflicts: List[ConflictInfo]
+
+
+def _not_a_repository(repo_root) -> str:
+    return (
+        f"{repo_root} is not a git repository, so agents here work in the project directory and "
+        "no isolated checkout is made. Running `git init` there would give each writing agent "
+        "its own."
+    )
+
+
 async def _resolve_repo_root(project_id: str, session: AsyncSession):
     try:
         workspace = await project_workspace.resolve_project_workspace(session, project_id)
@@ -107,11 +136,11 @@ async def _resolve_repo_root(project_id: str, session: AsyncSession):
     return workspace.root
 
 
-@router.get("", response_model=List[WorkspaceInfo])
+@router.get("", response_model=WorktreeListing)
 async def list_worktrees(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
-) -> List[WorkspaceInfo]:
+) -> WorktreeListing:
     """List every Hub-owned checkout currently provisioned under this project's repo root —
     task checkouts as well as agent checkouts, each saying which it is (task 6.3).
 
@@ -127,25 +156,30 @@ async def list_worktrees(
     project_id, _ = project
     repo_root = await _resolve_repo_root(project_id, session)
     if not worktrees.is_git_repo(repo_root):
-        return []
-    return [
-        WorkspaceInfo(
-            kind=workspace.kind,
-            name=workspace.name,
-            branch=workspace.branch,
-            path=str(workspace.path),
+        return WorktreeListing(
+            repository=False, unavailable_reason=_not_a_repository(repo_root), worktrees=[]
         )
-        for workspace in sorted(
-            worktrees.list_workspace_branches(repo_root), key=lambda w: (w.kind, w.name)
-        )
-    ]
+    return WorktreeListing(
+        repository=True,
+        worktrees=[
+            WorkspaceInfo(
+                kind=workspace.kind,
+                name=workspace.name,
+                branch=workspace.branch,
+                path=str(workspace.path),
+            )
+            for workspace in sorted(
+                worktrees.list_workspace_branches(repo_root), key=lambda w: (w.kind, w.name)
+            )
+        ],
+    )
 
 
-@router.get("/conflicts", response_model=List[ConflictInfo])
+@router.get("/conflicts", response_model=ConflictListing)
 async def get_worktree_conflicts(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
-) -> List[ConflictInfo]:
+) -> ConflictListing:
     """Pairwise-check every provisioned Hub-owned branch against every other's with
     `git merge-tree` and report which workspaces diverge, and on which files. Task checkouts
     are included alongside agent checkouts, and each is also checked against the project's
@@ -154,7 +188,9 @@ async def get_worktree_conflicts(
     project_id, _ = project
     repo_root = await _resolve_repo_root(project_id, session)
     if not worktrees.is_git_repo(repo_root):
-        return []
+        return ConflictListing(
+            repository=False, unavailable_reason=_not_a_repository(repo_root), conflicts=[]
+        )
     # The branch integration merges into: the operator-accepted one, never a guess.
     project_row = await session.get(Project, project_id)
     main_branch = project_row.main_branch if project_row is not None else None
@@ -175,16 +211,19 @@ async def get_worktree_conflicts(
     # Every pair is a `git merge-tree`, and the count grows with the square of the branches: in a
     # thread, not on the event loop every other request is waiting on (the round's review).
     reports = await asyncio.to_thread(_check)
-    return [
-        ConflictInfo(
-            workspaces=(
-                _conflict_workspace(report.workspaces[0]),
-                _conflict_workspace(report.workspaces[1]),
-            ),
-            paths=report.paths,
-        )
-        for report in reports
-    ]
+    return ConflictListing(
+        repository=True,
+        conflicts=[
+            ConflictInfo(
+                workspaces=(
+                    _conflict_workspace(report.workspaces[0]),
+                    _conflict_workspace(report.workspaces[1]),
+                ),
+                paths=report.paths,
+            )
+            for report in reports
+        ],
+    )
 
 
 def _conflict_workspace(workspace: worktrees.WorkspaceBranch) -> ConflictWorkspaceInfo:
