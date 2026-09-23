@@ -46,6 +46,12 @@ Model IDs and context windows below are live-verified, not authored from memory:
   the default stays on a model every current client is offered, so an agent created against an
   older installed `codex` does not start on a model its CLI has never been told about.
 
+  **GPT-6-Sol** shipped the same release as GPT-6-Luna (Codex rust-v0.156.1, 2026-09-23T02:41Z,
+  changelog #47405: *"Choose GPT-6 Sol or GPT-6 Luna from the model picker"*). The installed CLI
+  here is still 0.146.0 (`models_cache.json`'s `client_version`), so — same as GPT-6-Luna above —
+  it could not be confirmed against a live 0.156.1 cache; declared from the changelog alone, same
+  context window as its sibling GPT-6 models, and also not the default for the reason given above.
+
   The effort control's values are the INTERSECTION of every listed model's
   `supported_reasoning_levels` (`low, medium, high, xhigh`) — not the union. The cache shows
   `"minimal"` is not declared by any current model and `"ultra"` only by one of four
@@ -231,6 +237,7 @@ CATALOG: Dict[str, ProviderDescriptor] = {
         provider="codex",
         label="Codex CLI",
         models=(
+            ModelDescriptor(id="gpt-6-sol", label="GPT-6-Sol", context_window=272_000),
             ModelDescriptor(id="gpt-6-luna", label="GPT-6-Luna", context_window=272_000),
             ModelDescriptor(
                 id="gpt-5.6-terra", label="GPT-5.6-Terra", context_window=272_000, default=True
