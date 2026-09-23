@@ -66,9 +66,24 @@ an existing write path.
 **The UI always sends a non-empty reason.** The default is `Stopped by the operator`, and the
 operator may replace it. `end_loop` records `ending_state="completed"` when the reason equals
 `QUEUE_DRAINED_REASON` (`loop_ending.py:32`, `:57-58`), so an operator who typed exactly
-`loop queue is empty` would record a completion. The UI does not produce that string itself. R2
-should decide whether the route should pin `stopped` for an operator stop. Pinning it would change
-`end_loop`'s signature, and R1 left that out of scope.
+`loop queue is empty` would record a completion. The UI does not produce that string itself.
+
+**R2 decided: pin it. An operator stop always records `stopped`.** This is not a new rule. The main
+spec already requires it: `agent-loops` *"How a loop ended is a distinct value, not only a written
+reason"* says completing SHALL be distinguishable from stopping *"without interpreting prose"*, and
+its scenario counts *"another stopped by the operator"* as a stop. `end_loop` deriving the value
+from the reason's text is exactly that interpretation. Today it is out of reach, because no UI
+writes `stop_reason`. This change adds a free-text reason field, so it becomes reachable, and an
+agent with the job allowance can already send it (`_require_agent_job_allowance` admits a PATCH
+from a run).
+
+How: `end_loop` gains a required keyword `completed: bool` and stops comparing `reason` to
+`QUEUE_DRAINED_REASON`. The comparison moves to the one caller that produced that string: the
+scheduler passes `completed=(loop_stop_reason == QUEUE_DRAINED_REASON)` (`scheduler.py:3156`).
+`update_job` (`jobs.py:1075`) and `archive_job` (`:1284`) pass `completed=False`. A required keyword,
+not a default, so a fourth caller must say which it is. There are no direct `end_loop` calls in
+`hub/tests/` (grep). The rule *"`ending_state` is written only if nothing recorded one already"*
+stays. Task 1.11 pins it.
 
 ## D3 — the operator stop writes its own `loop_stopped` event, in the same transaction
 
@@ -96,17 +111,59 @@ called from inside another function's uncommitted transaction"*).
 
 **What each route returns when what it calls raises:**
 
-- `PATCH /jobs/{id}` with `stop_reason`: `end_loop` only assigns, so it cannot raise. If
-  `persist_event(commit=False)` or the commit raises, the route returns 500 with nothing changed.
+- `PATCH /jobs/{id}` with `stop_reason`: `end_loop` only assigns, so it cannot raise.
+  `persist_event(commit=False)` only calls `session.add`, so in practice the commit is what fails.
+  If either raises, the route returns 500 with nothing changed: `get_session` closes the session
+  without committing (`db/engine.py:166-169`).
   The hook's `onSettled` invalidation re-reads the loop, which still shows it running, so the view
   matches the truth. If the broadcast raises after the commit, the route returns 500 while the stop
   landed. That is the existing shape of every broadcast in this file. The same invalidation makes
   the tab show the stopped loop, so the view is still correct.
-- `POST /loops/{id}/archive` and `/control` are unchanged. Each commits, then broadcasts, then
-  persists the event (`loops.py:180-185`, `:217-229`). If the event write raises, the route returns
-  500 after the change committed. The tab shows the 500's text, and the `onSettled` invalidation
-  shows the archived or delegated loop. R1 leaves those two routes as they are. Moving their events
-  into the transaction is the same one-line fix, and R2 should decide whether this change takes it.
+- `POST /loops/{id}/archive` and `/control`: see D3b. After it, a failed event write or commit
+  returns 500 with nothing changed, and a failed broadcast returns 500 after the change landed. In
+  both cases the `onSettled` invalidation re-reads the truth.
+- `POST /jobs/{id}/archive`: see D3a. Same shape as the stop.
+
+**The broadcast goes after the commit, never before.** Note for whoever lands second, this change or
+B9's `an-event-is-announced-only-once-its-write-is-committed`. That change adds `defer_broadcast`
+and an `ast` guard, `test_no_staged_event_is_broadcast_before_commit`. The guard fails any
+function that calls `persist_event(..., commit=False)` **and** calls `sse_manager.broadcast`
+anywhere in its body, even after the commit. After this change that would flag `update_job`
+(its existing `job_updated` and `loop_edit_staged` broadcasts included), `archive_job`,
+`archive_loop` and `set_loop_control`.
+- If B9 lands first, this change stages each new announcement with `defer_broadcast` and converts
+  those four functions' other broadcasts too.
+- If this change lands first, B9's IMPL converts them.
+Either way the wire order is unchanged: the route's own broadcast still follows the commit. R3
+should confirm B9's guard text has not narrowed in the meantime.
+
+## D3a — archiving a running loop's job is an operator stop too, and is recorded as one
+
+R2 found the same gap on the other operator path. `archive_job` ends a running loop through
+`end_loop(..., reason=ARCHIVED_WITH_JOB_REASON)` (`jobs.py:1279-1285`). It writes only
+`job_archived` with `{"id": job_id}` and no `loop_id` (`:1290-1291`). So the loop's own history
+(`GET /loops/{id}` reads `EventLog.loop_id == loop.id`, `loops.py:76-80`) shows neither the stop nor
+the archival. `job_archived` is also not one of the cases `useSSE` handles, so an open loop tab stays
+stale. The requirement this change ADDs, *"a stop the operator makes"*, would be false on this path
+if it were left alone.
+
+So `archive_job`, in the same transaction:
+- writes `loop_stopped` `{job_id, loop_id, reason: ARCHIVED_WITH_JOB_REASON}` when it ended the loop
+  (`ending_state` was `None`);
+- writes `loop_archived` `{"id": loop.id}` with `loop_id=loop.id` whenever the job has a loop. That
+  is the same payload `archive_loop` writes.
+
+Both are broadcast after the commit, so `useSSE.ts:544-556` invalidates the loop views. Human-only
+step 6 of the test guide then shows it in the loop's history as well as in its badge. Task 1.12.
+
+## D3b — `archive_loop` and `set_loop_control` move their events into the transaction
+
+**R2 decided: yes.** Today each route commits, broadcasts, and then commits the event separately
+(`loops.py:180-185`, `:217-229`). A failed event write answers 500 for a change that landed, and it
+leaves the change with no history row. That breaks `agent-loops` *"A loop has a controller…"*
+(*"Each change of control SHALL be recorded against the loop"*). This change is what makes these two
+routes reachable for the first time. The fix is the same two moved lines as D3:
+`persist_event(..., commit=False)` before `session.commit()`, then the broadcast. Task 1.13.
 
 ## D4 — what the tab shows, and when
 

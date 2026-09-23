@@ -28,42 +28,74 @@ available as a later, separate cleanup if the operator wants the column gone.
 
 ## D2 — the queries
 
+**R2 changed what "outstanding" means for the loop, and the query shape.** R1 counted a message as
+outstanding only while its entry is `queued`. That drops a message **delivered into a creator turn
+that is still running**. The creator is reading it right now and has not answered: it may be about
+to add the work the loop is waiting for. That is the plainest case of *"a request still in flight"*,
+the requirement's own title. So for the loop, a message is outstanding while its entry is `queued`,
+**or** `delivered` into a run whose `status` is still `running` (`entry.delivered_in_run_id`,
+indexed by `ix_inbound_queue_delivered_run`). `/status`'s `pending` stays *not yet delivered*
+(`queued` only), which is what the word means there (D3).
+
 ```python
 # scheduler._pending_loop_request, message branch
-select(Message)
-.join(InboundQueueEntry, InboundQueueEntry.message_id == Message.id)
-.where(
+in_flight = (
+    select(InboundQueueEntry.message_id)
+    .outerjoin(Run, Run.id == InboundQueueEntry.delivered_in_run_id)
+    .where(
+        InboundQueueEntry.project_id == job.project_id,
+        InboundQueueEntry.agent == creator_agent,
+        InboundQueueEntry.message_id.is_not(None),
+        or_(
+            InboundQueueEntry.state == "queued",
+            and_(InboundQueueEntry.state == "delivered", Run.status == "running"),
+        ),
+    )
+)
+select(Message).where(
     Message.project_id == job.project_id,
     Message.sender == job.agent,
     Message.recipient == creator_agent,
-    InboundQueueEntry.state == "queued",
-)
-.order_by(Message.timestamp.desc())
+    Message.id.in_(in_flight),
+).order_by(Message.timestamp.desc())
 ```
 
 ```python
 # status.py, message_counts.pending
-select(func.count(Message.id)).select_from(Message)
-.join(InboundQueueEntry, InboundQueueEntry.message_id == Message.id)
-.where(Message.project_id == project_id, InboundQueueEntry.state == "queued")
+select(func.count()).select_from(Message).where(
+    Message.project_id == project_id,
+    Message.id.in_(
+        select(InboundQueueEntry.message_id).where(
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.state == "queued",
+            InboundQueueEntry.message_id.is_not(None),
+        )
+    ),
+)
 ```
 
-- **An inner join**, deliberately. A message with no entry (pre-queue rows, the two `sender="hub"`
-  rows) will never be delivered, so it is not outstanding and not pending.
-- **One entry per message** (both creation sites, `new_entry(..., message_id=...)`), so the join
-  cannot double-count. `count(Message.id)` rather than `count()` makes that assumption visible.
-  `func.count(distinct(Message.id))` would hide a duplicate rather than count it. R2 should decide
-  whether a duplicate should fail a test instead.
-- `inbound_queue_entries.message_id` has no index (`models.py:611`). Both queries are bounded:
-  the scheduler query by project, sender and recipient, and status by project. This runs once per
-  empty-queue stop and once per status read. R1 adds no index, because an index would be a
-  migration. R2 may measure.
+- **An uncorrelated `IN` subquery, not a join (R2).** This settles R1's duplicate question by
+  construction. A message counts once however many entries name it, so there is no double count to
+  hide or to test for. Today each message gets exactly one entry: the two creation sites are
+  `messages.py:265-276` and `agents.py:2228-2236`, and they are the only `new_entry(...,
+  message_id=...)` calls. Requeue and withdrawal change that entry's `state` in place
+  (`inbound_queue.py:259-292`). So no duplicate test is planned.
+- **A message with no entry** (pre-queue rows, the two `sender="hub"` rows) is in no subquery, so it
+  is neither outstanding nor pending. It will never be delivered.
+- **No index on `message_id` is needed, and no migration (R2).** The subquery is constrained on the
+  entry side by `project_id`, `agent` and `state`. Those are the leading columns of the existing
+  `ix_inbound_queue_project_agent_state_arrival (project_id, agent, state, sequence)`
+  (`models.py:667-673`). For `/status`, `project_id` is a usable prefix. SQLite evaluates an
+  uncorrelated `IN` once, into a temporary b-tree, and then probes `messages` by primary key. An
+  index on `message_id` would help only a **correlated** `EXISTS` or a join driven from `messages`,
+  and neither is planned. IMPL confirms the plan with one `EXPLAIN QUERY PLAN` on the trial DB, and
+  records it in the task (task 3.3).
 
 **What each route returns when what it calls raises.** `GET /status` gathers seven queries with
 `asyncio.gather` (`status.py:38`). If the join raises, the route returns 500, as any of the seven
 already would. `_pending_loop_request` runs inside the firing's stop path
 (`scheduler.py:3192`). Its caller's own exception handling is unchanged, so a failure there
-behaves exactly as a failure in today's query does. The join adds no new kind of failure.
+behaves exactly as a failure in today's query does. The subquery adds no new kind of failure.
 
 ## D3 — what `pending` means to its reader
 

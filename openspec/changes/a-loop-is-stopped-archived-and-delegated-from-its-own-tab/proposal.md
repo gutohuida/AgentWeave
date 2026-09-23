@@ -55,11 +55,18 @@ only `jobs` queries, so an open loop tab stays stale.
 3. **An operator stop is recorded like a firing's stop.** `update_job` writes a `loop_stopped` event
    against the loop (reason, `loop_id`, `job_id`, actor) and broadcasts it, **only when this call
    ended the loop**. Editing the reason of a loop that has already ended adds no second stop. The event
-   is written in the same transaction as the ending.
+   is written in the same transaction as the ending. An operator stop always records
+   `ending_state="stopped"`, whatever its reason's text: `end_loop` takes `completed` from its
+   caller instead of comparing the reason to `loop queue is empty` (design D2, added by R2).
 4. **`archive_job` keeps retiring a running loop, and its docstring says why.** The 2026-09-23
    decision was provisional on "no stop control". It is re-answered here: still no refusal. See
-   design D1.
-5. **The route-reachability ceiling drops from 35 to 33** (`hub/tests/test_surface_ceilings.py`),
+   design D1. **When it ends the loop, it now records that as a `loop_stopped` against the loop,
+   and it always records `loop_archived` against the loop.** Today it writes only `job_archived`,
+   with no `loop_id`, so the loop's own history misses both (design D3a, added by R2).
+5. **`archive_loop` and `set_loop_control` write their events in the change's own transaction**,
+   not after it. Today a failed event write returns 500 for a change that landed and has no
+   history row (design D3b, added by R2).
+6. **The route-reachability ceiling drops from 35 to 33** (`hub/tests/test_surface_ceilings.py`),
    because both loop routes now have a client.
 
 ## What does not change
@@ -75,6 +82,10 @@ only `jobs` queries, so an open loop tab stays stale.
 
 - `hub/ui/src/api/loops.ts`, `hub/ui/src/components/spec/LoopTab.tsx`, their tests, and the bundle
   (`hub/hub/static/ui`, with `make ui`).
-- `hub/hub/api/v1/jobs.py` (`update_job`'s stop branch; `archive_job`'s docstring).
+- `hub/hub/api/v1/jobs.py` (`update_job`'s stop branch; `archive_job`'s loop events and docstring),
+  `hub/hub/loop_ending.py` (`end_loop(..., completed=)`), `hub/hub/scheduler.py` (its one
+  `end_loop` call), `hub/hub/api/v1/loops.py` (`archive_loop` and `set_loop_control` event order).
+- Interacts with B9's `an-event-is-announced-only-once-its-write-is-committed`: whichever lands
+  second converts these functions' broadcasts to its `defer_broadcast` (design D3).
 - `hub/tests/test_surface_ceilings.py` (ceiling constant).
 - Spec: `agent-loops`, two ADDED requirements.

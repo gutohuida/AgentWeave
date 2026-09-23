@@ -7,6 +7,8 @@
   message-creation site creates exactly one entry (`grep -rn "Message(" hub/hub`). Check whether
   option (b) removes each consequence F259 names. Decide D2's open points: whether a duplicate entry
   should fail a test, and whether the `message_id` index is needed.
+  **Done 2026-09-24.** No duplicate test: the `IN` subquery cannot double-count. No index: the
+  entry side uses the existing composite index. R2 added the running-turn clause (design D2).
 - [ ] 0.2 R3: the same, fresh.
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
@@ -26,6 +28,12 @@
   messages, the newer one `delivered` and the older one `queued`. The payload's `reason` is the
   older one's subject. **Fails today**: the newer one is picked. This also pins the newest-first
   order among the candidates that qualify.
+- [ ] 1.4a `test_a_message_the_creator_is_still_reading_is_outstanding` (new): the entry is
+  `delivered` with `delivered_in_run_id` naming a creator `Run` whose `status == "running"`. The
+  payload names that message. It passes today as a control, because `read` is false. **It fails on
+  R1's `queued`-only version**, which is how the running-turn clause is known to be in the query. A
+  second case sets that run to `completed` and gets `pending_request: null`, which is 1.2's shape
+  through a real run row.
 - [ ] 1.5 `hub/tests/test_status.py` `test_pending_counts_mail_not_yet_delivered` (new): two
   operator messages (`POST /messages`, no `from`) to a registered agent with no runner, so both stay
   `queued`. `pending == 2`. Mark one entry `delivered` in the DB, and `pending == 1` while
@@ -43,6 +51,11 @@
   with `claude` stripped from PATH. As a batch, see F264's foot: the exhaustion tests need an
   earlier test to create the schema. Then run the full `hub/tests/`.
 - [ ] 3.2 The CLAUDE.md lint block.
+- [ ] 3.3 Run `EXPLAIN QUERY PLAN` for both D2 queries against a trial-Hub database, never `:8000`.
+  Record that the entry side uses `ix_inbound_queue_project_agent_state_arrival` (or
+  `ix_inbound_queue_delivered_run` for the run join), and that `messages` is probed by primary key.
+  If either shows a full scan of `inbound_queue_entries` per message, stop and reopen D2's index
+  verdict.
 
 ## 4. Close
 

@@ -6,8 +6,12 @@
    after. They look the event up by `event_type`, because `GET /loops/{id}` returns events
    newest-first.
 2. **Rewording is not a second stop.** Control 1.3 passes before and after.
-3. **A stop that cannot be recorded does not happen.** Task 1.4: the response is 500, and the loop
-   is still running with its job still enabled.
+3. **A stop that cannot be recorded does not happen.** Task 1.4: the request fails, and the loop
+   is still running with its job still enabled. Task 1.13 is the same check for control and
+   archival.
+3a. **An operator stop is a stop.** Task 1.11: the reason `loop queue is empty` still records
+   `stopped`.
+3b. **Archiving a running loop's job is in the loop's history.** Task 1.12.
 4. **The tab offers exactly the actions the Hub would accept.** Tasks 1.5-1.10 fail before, since
    no controls exist, and pass after. The state table is design D4.
 5. **The ratchet moved the right way.** `n10_route_reachability.py` reports 33 clientless routes,
@@ -29,4 +33,5 @@
 5. With a second browser tab open on the same loop, stop it from the first tab. The second tab
    updates without a reload, through the `loop_stopped` SSE event.
 6. Archive a **running** loop's job from the Jobs page. It is still accepted, and the loop tab shows
-   it stopped with *"archived with its job"* (design D1, unchanged behaviour).
+   it stopped with *"archived with its job"* (design D1, unchanged behaviour). An open loop tab
+   updates without a reload, and its history now lists the stop and the archival (design D3a).

@@ -60,3 +60,15 @@ conversation header, except for the collaboration badge, which moves under D2. K
 component that a test certifies is how F178 went unnoticed for 24 days. The test's own opening
 comment says the indicator *"moved here — the place an operator looks"* while nothing mounted it.
 `useAgentLaunchability` stays consumed, by `RunnerPicker`.
+
+## D5 — collisions with other open changes (R2)
+
+- `agents-no-longer-register-themselves` task 2.9 removes the `EXT` badge from `AgentCard.tsx:65-72`.
+  If this change lands first, that step has nothing left to edit and is dropped. If it lands
+  second, this change deletes the file as planned. Neither needs the other.
+- `a-runner-choice-names-its-model` task 2.2 edits `RunnerPicker`'s `<option>` labels, the same
+  component. The two edits touch different lines (the options, and the status lines below the
+  `Select`). This is a textual merge only.
+- The picker can now show two `role="status"` lines, the cannot-run line and this one, though never
+  both for one verdict (D3). Tests find each line by its text, not with a single
+  `getByRole('status')`.

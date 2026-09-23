@@ -3,6 +3,8 @@
 ## Agent-verifiable
 
 1. **Delivered mail is not outstanding.** Tasks 1.2, 1.3 and 1.4 fail before the fix and pass after.
+1a. **Mail the creator is still reading is outstanding.** Task 1.4a passes before, and fails on a
+   `queued`-only query.
 2. **Undelivered mail still is.** The restaged tests in 1.1 pass after. They fail after the fix
    without their restaging, which shows the join took effect.
 3. **Pending means undelivered.** Task 1.5 fails before and passes after.

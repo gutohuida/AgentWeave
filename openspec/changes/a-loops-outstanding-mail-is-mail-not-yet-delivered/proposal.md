@@ -39,9 +39,10 @@ pending forever.
 
 ## What changes
 
-1. `_pending_loop_request`'s message branch counts a message as outstanding only while its inbound
-   entry is `queued`. It joins `InboundQueueEntry` on `message_id` and replaces
-   `Message.read == False`. The project filter and the newest-first order stay.
+1. `_pending_loop_request`'s message branch counts a message as outstanding while its inbound
+   entry is `queued`, or `delivered` into a creator run that is still `running` (R2: the creator is
+   reading it and has not answered). This replaces `Message.read == False` with an `IN` subquery
+   over `InboundQueueEntry` (design D2). The project filter and the newest-first order stay.
 2. `GET /status`'s `message_counts.pending` counts messages whose entry is `queued`: mail not yet
    delivered.
 3. `agent-loops`' requirement is MODIFIED to say what *outstanding* means (the delta), and to drop

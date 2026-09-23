@@ -41,7 +41,9 @@ The view SHALL state who currently decides additions to the loop's queue. Stoppi
 
 ### Requirement: An operator's stop is recorded in the loop's history as a firing's stop is
 
-A stop the operator makes SHALL be recorded against the loop as an event carrying its reason, the loop, the job, the actor and the time, in the same operation that ends the loop, and SHALL be announced to listening clients as a stop of that loop. An operation that changes the recorded reason of a loop that had already ended SHALL NOT record a second stop.
+A stop the operator makes, whether stated directly or by archiving the loop's job, SHALL be recorded against the loop as an event carrying its reason, the loop, the job, the actor and the time, in the same operation that ends the loop, and SHALL be announced to listening clients as a stop of that loop. An operation that changes the recorded reason of a loop that had already ended SHALL NOT record a second stop.
+
+A loop the operator stops SHALL record that it stopped, never that it completed, whatever the text of the reason given. Archiving a loop, directly or with its job, and each change of its control SHALL likewise be recorded against the loop in the same operation as the change, so that a change is never recorded without its event or its event without the change.
 
 #### Scenario: The operator's stop appears in the loop's own history
 
@@ -59,3 +61,21 @@ A stop the operator makes SHALL be recorded against the loop as an event carryin
 - **GIVEN** a loop that has already ended
 - **WHEN** a caller supplies a new stop reason for it
 - **THEN** no further stop event is recorded against the loop
+
+#### Scenario: An operator's stop is a stop whatever its reason says
+
+- **GIVEN** a loop that has not ended
+- **WHEN** the operator stops it giving the reason "loop queue is empty"
+- **THEN** the loop records that it stopped, not that it completed
+
+#### Scenario: Archiving a running loop's job is recorded in the loop's history
+
+- **GIVEN** a loop that has not ended
+- **WHEN** the operator archives the loop's job
+- **THEN** the loop's history contains a stop event naming that it was archived with its job
+- **AND** an event recording that the loop was archived
+
+#### Scenario: A change of control that cannot be recorded does not happen
+
+- **WHEN** recording a change of a loop's control fails
+- **THEN** the loop's controller is unchanged
