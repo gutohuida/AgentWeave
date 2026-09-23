@@ -283,7 +283,7 @@ that commit's `{tasks, total, has_more}` envelope (F202), and `:8000`'s backend,
 | F205 | C | The two `→ archived` edges get a button. |
 | F169 | C | Render the approval advisory. |
 | F315 | C | "Mark waiting" shows it is pending and refuses a second press. |
-| F350 | C | The composer send button stays on-panel below ~560 px. |
+| F350 | C | The composer send button stays on-panel below ~560 px. **Carried out of UI-1 (2026-09-23):** the repair is the narrow layout (the rail as a drawer or header control below 760px), a design change that has to be measured in a browser, not a CSS cap set blind. |
 | F252 + F255 | B | Logs show newest-first, with paging. The route and the view change together. F255's malformed `since` is the same query. |
 | F307 | B | The first Tab in a confirm-only dialog stays in the dialog. The operator named which control gets focus as a separate question, so it is in D13. |
 | F193 | B | An archived agent's open conversation shows one state in both rail views, with a remedy. Its product answer is in D10. |

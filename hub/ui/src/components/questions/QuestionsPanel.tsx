@@ -3,7 +3,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { readableApiError } from '@/api/client'
 import { useAgents } from '@/api/agents'
-import { DEFAULT_QUESTION_TIMEOUT_SECONDS, useDeclineQuestion, useQuestions, type Question } from '@/api/questions'
+import { DEFAULT_QUESTION_TIMEOUT_SECONDS, useDeclineQuestion, useQuestions, useResolvedQuestions, type Question } from '@/api/questions'
 import { AnswerForm } from './AnswerForm'
 import { usePermissionDecisions } from '@/api/permissions'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -120,10 +120,9 @@ function DeclineControl({ question }: { question: Question }) {
 export function QuestionsPanel() {
   const pageRef = useRef<HTMLDivElement>(null)
   const { data: unanswered, isLoading, isError, error } = useQuestions(false)
-  // Unfiltered, then narrowed to what is resolved: `answered=true` excludes a declined question and
+  // Answered or declined, newest first: `answered=true` excludes a declined question and
   // `answered=false` excludes it too (F228), so neither list alone could show one as declined.
-  const { data: everything } = useQuestions()
-  const answered = everything?.filter((question) => question.answered || question.declined)
+  const { data: answered, error: resolvedError } = useResolvedQuestions()
   // The questions payload carries no timeout of its own — the window belongs to the agent that
   // asked, and the roster is the only place this surface can reach it. Joining here costs nothing:
   // every other screen already holds this query under the same key.
@@ -234,6 +233,12 @@ export function QuestionsPanel() {
       {unanswered?.length === 0 && <EmptyState icon="help" title="No pending questions" description="Agent questions will appear here." />}
 
       <PermissionDecisions />
+
+      {resolvedError && !answered && (
+        <p className="mt-2 text-xs" role="status" style={{ color: 'var(--text-3)' }} data-testid="questions-resolved-error">
+          {readableApiError(resolvedError, 'Could not read the answered and declined questions.')}
+        </p>
+      )}
 
       {answered && answered.length > 0 && (
         <details className="answered-questions mt-2">

@@ -175,7 +175,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/projects/ProjectManagerModal.tsx', 'useNativeDialogAvailability', 1, 'BLANK', '', '`nativeAvailability?.available` (:141, :169) falls back to the manual path — deliberate degradation'),
     ('components/quality/QualityHealthPanel.tsx', 'useSessionSync', 1, 'MISREPORT', '', "EmptyState 'No quality governance configured' (:43-52) — a claim about the project's governance, made from a failed fetch"),
     ('components/quality/QualityHealthPanel.tsx', 'useTasks', 1, 'MISREPORT', '', "`(tasks ?? [])` filters render 'All reviewed tasks clear' (:103)"),
-    ('components/questions/QuestionsPanel.tsx', 'useQuestions', 2, 'BLANK', '', '`{answered && answered.length > 0 && …}` (:197) hides a history disclosure'),
     ('components/questions/QuestionsPanel.tsx', 'useAgents', 1, 'BLANK', '', 'the per-agent timeout lookup (:143)'),
     ('components/runners/RunnersPage.tsx', 'useRunners', 1, 'MISREPORT', '', "`{!runners || runners.length === 0}` renders EmptyState 'No runners yet' (:81-84)"),
     ('components/runners/RunnersPage.tsx', 'useModelCatalog', 1, 'NAMED', '', "`catalogAvailable = !!catalog` (:202) renders 'The model catalog is unavailable — this runner will use the provider's default.' (:292). No `error` is bound and none is needed"),

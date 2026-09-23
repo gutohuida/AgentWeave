@@ -4,6 +4,7 @@ import { Icon } from '@/components/common/Icon'
 import { hubDate } from '@/lib/hubTime'
 import { useLogAgents, useLogs } from '@/api/logs'
 import { useAgents } from '@/api/agents'
+import { useConfigStore } from '@/store/configStore'
 import { Button } from '@/components/ui/button'
 import { LogLine } from './LogLine'
 import { useQueryClient } from '@tanstack/react-query'
@@ -120,6 +121,7 @@ export function LogsView() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const bodyRef   = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
+  const selectedProjectId = useConfigStore((state) => state.selectedProjectId)
 
   const { data: entries = [], isLoading, error: logsError, dataUpdatedAt, hasOlder, loadOlder, isLoadingOlder } = useLogs({
     agent:    agentFilter || undefined,
@@ -164,9 +166,18 @@ export function LogsView() {
       seenIdsRef.current = new Set(entries.map((e) => e.id))
       return
     }
-    const fresh = entries.filter((e) => !seen.has(e.id)).map((e) => e.id)
+    // Arrived means newer than anything seen. A page loaded with "Load older entries" (F252) is
+    // unseen too, and flashing 500 rows of history as new arrivals would say the opposite.
+    const newestSeen = entries.reduce(
+      (max, e) => (seen.has(e.id) ? Math.max(max, hubDate(e.timestamp).getTime()) : max),
+      0,
+    )
+    const unseen = entries.filter((e) => !seen.has(e.id))
+    unseen.forEach((e) => seen.add(e.id))
+    const fresh = unseen
+      .filter((e) => hubDate(e.timestamp).getTime() >= newestSeen)
+      .map((e) => e.id)
     if (fresh.length === 0) return
-    fresh.forEach((id) => seen.add(id))
     setArrivedIds((prev) => new Set([...prev, ...fresh]))
     flashTimersRef.current.push(window.setTimeout(() => {
       setArrivedIds((prev) => {
@@ -194,7 +205,9 @@ export function LogsView() {
   }
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
+    // The logs key is project-prefixed (`useLogs`); `['logs']` matched nothing, so Refresh did
+    // nothing at all.
+    queryClient.invalidateQueries({ queryKey: ['project', selectedProjectId, 'logs'] })
   }
 
   // Deliberately `new Date`, not `hubDate`: `dataUpdatedAt` is React Query's own epoch

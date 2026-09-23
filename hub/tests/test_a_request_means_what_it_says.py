@@ -310,21 +310,64 @@ async def test_a_path_no_link_moved_reads_exactly_as_before(tmp_path):
 
 async def test_the_logs_page_is_the_newest_and_pages_back(app, auth_headers):
     """F252. The Logs route answered oldest first, so its 500-row window was the project's first
-    five hundred events and nothing newer could be read. Newest first, `offset` counting back."""
-    for n in range(5):
-        created = await app.post(
-            f"{P}/logs", json={"event_type": f"f252-{n}"}, headers=auth_headers
-        )
-        assert created.status_code == 201
+    five hundred events and nothing newer could be read. Newest first, `offset` counting back.
+
+    Rows carry explicit timestamps a second apart: `EventLog.id` is random, so equal timestamps
+    (plausible on a coarse clock) would leave the order to the id and the test to chance."""
+    from datetime import datetime, timedelta, timezone
+
+    base = datetime(2026, 9, 23, 12, 0, tzinfo=timezone.utc)
+    async with async_session_factory() as db:
+        for n in range(5):
+            db.add(
+                EventLog(
+                    id=f"evt-f252-{n}",
+                    project_id="proj-test",
+                    event_type=f"f252-{n}",
+                    severity="info",
+                    timestamp=base + timedelta(seconds=n),
+                )
+            )
+        await db.commit()
 
     def ours(rows):
         return [row["event_type"] for row in rows if row["event_type"].startswith("f252-")]
 
-    first = await app.get(f"{P}/logs?event_type=f252-4", headers=auth_headers)
-    assert ours(first.json()) == ["f252-4"]
     page = await app.get(f"{P}/logs?limit=500", headers=auth_headers)
     assert ours(page.json()) == ["f252-4", "f252-3", "f252-2", "f252-1", "f252-0"]
     newest_two = ours((await app.get(f"{P}/logs?limit=2", headers=auth_headers)).json())
     older = ours((await app.get(f"{P}/logs?limit=2&offset=2", headers=auth_headers)).json())
     assert newest_two == ["f252-4", "f252-3"]
     assert older == ["f252-2", "f252-1"]
+
+
+async def test_resolved_questions_are_answered_or_declined_newest_first(app, auth_headers):
+    """UI-1 review of F229: the Questions page's resolved list read the unfiltered route, whose
+    oldest-first window of 100 stops growing once a project passes 100 questions, and neither
+    `answered` filter carries a declined question. `resolved=true` is both, newest first."""
+    from datetime import datetime, timedelta, timezone
+
+    from hub.db.models import Question
+
+    base = datetime(2026, 9, 23, 12, 0, tzinfo=timezone.utc)
+    async with async_session_factory() as db:
+        for n, (answered, declined) in enumerate(
+            [(True, False), (False, True), (False, False), (True, False)]
+        ):
+            db.add(
+                Question(
+                    id=f"q-res-{n}",
+                    project_id="proj-test",
+                    from_agent="asker",
+                    question=f"question {n}",
+                    answered=answered,
+                    declined=declined,
+                    created_at=base + timedelta(seconds=n),
+                )
+            )
+        await db.commit()
+
+    resp = await app.get(f"{P}/questions?resolved=true", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    ids = [row["id"] for row in resp.json() if row["id"].startswith("q-res-")]
+    assert ids == ["q-res-3", "q-res-1", "q-res-0"]

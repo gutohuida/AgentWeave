@@ -122,9 +122,9 @@ class ConflictListing(BaseModel):
 
 def _not_a_repository(repo_root) -> str:
     return (
-        f"{repo_root} is not a git repository, so agents here work in the project directory and "
-        "no isolated checkout is made. Running `git init` there would give each writing agent "
-        "its own."
+        f"{repo_root} is not a git repository (or git is not on the Hub's PATH), so agents here "
+        "work in the project directory and no isolated checkout is made. A repository with at "
+        "least one commit (`git init` and a first commit) would give each writing agent its own."
     )
 
 

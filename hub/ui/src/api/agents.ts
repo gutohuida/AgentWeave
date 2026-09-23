@@ -236,6 +236,9 @@ export function useArchiveAgent() {
           query.queryKey[1] === projectId &&
           query.queryKey[2] === 'agents',
       })
+      // The rail's agent list is the projects summary (open agents only), so an archive or an
+      // unarchive moves a conversation between the tree and its Archived agents group (F193).
+      queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] === 'projects' })
     },
   })
 }

@@ -77,8 +77,7 @@ function ApprovalWritesNote({ taskId, canApprove }: { taskId: string; canApprove
           {target.source_branch ? ` from ${target.source_branch}` : ''}
         </span>
       ))}{' '}
-      into <strong>{data.main_branch}</strong>. If that would not merge cleanly, approval is refused
-      and nothing is written.
+      into <strong>{data.main_branch}</strong>.{data.reason ? ` The Hub: ${data.reason}.` : ''}
     </p>
   )
 }
@@ -105,7 +104,7 @@ function ApprovalReport({ taskId, entries }: { taskId: string; entries: Approval
         {entries.map((entry, index) => (
           <li key={index}>
             {entry.kind === 'requirement'
-              ? `${entry.identifier || 'A requirement'} is ${entry.state.replace(/_/g, ' ')}: ${entry.remedy}.`
+              ? `${entry.identifier || 'A requirement'} is ${entry.state.replace(/_/g, ' ')}: ${entry.remedy.replace(/\.+$/, '')}.`
               : `Evidence ${entry.evidence_id}${entry.identifier ? ` for ${entry.identifier}` : ''} is still awaiting review; ${entry.commit_sha ? `its commit ${entry.commit_sha.slice(0, 12)} merges` : 'it merges'}${entry.target_branch ? ` into ${entry.target_branch}` : ''} when it is accepted.`}
           </li>
         ))}
@@ -207,6 +206,8 @@ export function TaskDetailDrawer({ task, onClose, onOpenRequirement }: TaskDetai
   useEffect(() => {
     setRefusal(null)
     setBlockingReason(null)
+    // The drawer instance outlives the task it shows; an advisory belongs to the task approved.
+    setApprovalReport([])
   }, [task?.id])
 
   // The reason panel takes the keyboard itself when it appears. `autoFocus` used to do this and was

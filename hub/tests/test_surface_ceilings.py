@@ -33,9 +33,7 @@ DRIVE = REPO_ROOT / "scripts" / "drive"
 
 # Measured 2026-09-10. Lower these when the count drops; never raise one.
 CLIENTLESS_ROUTE_CEILING = 35
-UNHANDLED_SITE_CEILING = (
-    98  # 100 -> 98 2026-09-23: the Logs screen reads both its errors (F252, F256)
-)
+UNHANDLED_SITE_CEILING = 97  # 100 -> 97 2026-09-23: Logs reads both its errors (F252, F256); so does the resolved-questions list
 # Re-measured 2026-09-22, the one exception to "never raise". The 52 of 2026-09-10 was counted
 # through a table keyed by line number, and by then 5 of its MISREPORT rows already named lines
 # with no call site. Those 5 surfaces had dropped out of the count while still misreporting, and 3
@@ -178,7 +176,7 @@ def test_a_new_call_above_a_classified_one_is_refused_not_absorbed(tmp_path: Pat
     The MISREPORT count and the stale check cannot see it: the row still matches a site, just the
     wrong one. The displaced site is unclassified, and that is what the ratchet refuses.
     """
-    anchor = "  const { data: agents = [] } = useAgents()\n"
+    anchor = "  const { data: agents = [], isLoading: agentsLoading } = useAgents()\n"
 
     def insert_above(copy: Path) -> None:
         app = copy / "App.tsx"

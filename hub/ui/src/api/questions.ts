@@ -66,6 +66,18 @@ export function useQuestions(answered?: boolean) {
   })
 }
 
+/** Answered or declined, newest first (`resolved=true`) — the Questions page's closing section.
+ *  Neither `answered` filter carries a declined question, and the unfiltered list is the oldest
+ *  100, which stops showing anything new once a project passes 100 questions (UI-1 review). */
+export function useResolvedQuestions() {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<Question[]>({
+    queryKey: ['project', projectId, 'questions', 'resolved'],
+    queryFn: () => getJson<Question[]>(`/api/v1/projects/${projectId}/questions?resolved=true`),
+    enabled: isConfigured && !!projectId,
+  })
+}
+
 export function useAnswerQuestion() {
   const queryClient = useQueryClient()
   const { selectedProjectId: projectId } = useConfigStore()

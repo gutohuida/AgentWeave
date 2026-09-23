@@ -9,7 +9,8 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
-/** The dialogs currently holding the keyboard, oldest first. Only the newest wraps Tab: with two
+/** The dialogs currently holding the keyboard, oldest first. Only the newest answers Escape or
+ *  wraps Tab: with two
  *  open, the older one's listener would otherwise see focus "outside" its panel — inside the newer
  *  dialog — and pull it back behind that dialog (F307's fix makes that reachable). */
 const openDialogs: object[] = []
@@ -41,6 +42,9 @@ export function useDialogFocus(
         // of the nested owners it is meant to defer to, and this condition would then read a flag
         // nobody had set yet.
         if (event.defaultPrevented) return
+        // Two dialogs of this hook's own, both listening on `document`: the older was registered
+        // first and so hears the key first. Only the newest answers it.
+        if (openDialogs[openDialogs.length - 1] !== token) return
         event.preventDefault()
         closeRef.current()
         return

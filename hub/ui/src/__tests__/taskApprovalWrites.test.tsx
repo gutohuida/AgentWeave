@@ -73,7 +73,9 @@ describe('the approve control states what approving writes (F9)', () => {
         main_branch: 'master',
         targets: [{ commit_sha: 'cecbc88751eaff', source_branch: 'agentweave/builder' }],
         will_attempt_merge: true,
-        reason: '',
+        // The route's own sentence since F156 (`tasks.py`, integration-preview).
+        reason:
+          'approval will merge one commit into master; whether it merges cleanly is checked at approval, which refuses if it does not',
       },
     }
     renderDrawer(makeTask())
@@ -87,7 +89,7 @@ describe('the approve control states what approving writes (F9)', () => {
     // F156: integration runs `merge --no-ff`, and only an attempt is known before approval.
     expect(note).toHaveTextContent('it merges')
     expect(note).not.toHaveTextContent('cherry-pick')
-    expect(note).toHaveTextContent('approval is refused and nothing is written')
+    expect(note).toHaveTextContent('whether it merges cleanly is checked at approval')
   })
 
   it('says plainly when approving will merge nothing, and why', () => {

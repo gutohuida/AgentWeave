@@ -38,6 +38,7 @@ vi.mock('@/api/questions', async (importOriginal) => ({
         : { data: pending, isLoading: loading, ...questionsState },
   useAnswerQuestion: () => ({ mutate: answer, isPending: false, reset, ...answerState }),
   useDeclineQuestion: () => ({ mutate: decline, isPending: false }),
+  useResolvedQuestions: () => ({ data: resolved, isLoading: false, error: null }),
 }))
 
 vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: roster }) }))

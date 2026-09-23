@@ -282,6 +282,34 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'worktree-conflicts'] })
   })
 
+  it('refreshes permission decisions and the rail from the central switch (UI-1 review)', async () => {
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidateSpy = vi.spyOn(client, 'invalidateQueries')
+
+    fetchSpy.mockResolvedValue(makeSSEResponse([
+      'event: permission_decided\ndata: {"project_id":"proj-1","id":"perm-1","agent":"claude","status":"allowed"}\n\n',
+      'event: agent_unarchived\ndata: {"project_id":"proj-1","name":"ghost"}\n\n',
+    ]))
+
+    function Probe() {
+      useSSE()
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>
+    )
+
+    // F231: the decision list is read with the run panel (and its own listener) unmounted.
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'proj-1', 'permission-requests'] })
+    )
+    // F193: the rail's agents are the projects summary.
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] }))
+  })
+
   it('dispatches permission_denied, so a refused agent is visible rather than silent', async () => {
     // Not in SSE_EVENT_TYPES means dropped client-side before any handler runs, and the
     // operator never learns the agent hit a wall.

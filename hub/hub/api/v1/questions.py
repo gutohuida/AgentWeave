@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import project_workspace
@@ -322,6 +322,7 @@ async def ask_question(
 @router.get("", response_model=List[QuestionResponse])
 async def list_questions(
     answered: Optional[bool] = Query(None),
+    resolved: bool = Query(False),
     offset: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
     project: Tuple[str, str] = Depends(get_project),
@@ -337,7 +338,16 @@ async def list_questions(
     # with an answer box under it, forever (F228). The unfiltered list still returns it.
     if answered is False:
         q = q.where(Question.declined == False)  # noqa: E712
-    q = q.order_by(Question.created_at).offset(offset).limit(limit)
+    # `resolved=true`: answered **or declined**, newest first. The Questions page's resolved list
+    # needs both, and neither `answered` filter carries a declined question; read unfiltered, the
+    # oldest-first window of 100 stopped growing once a project passed 100 questions (UI-1 review
+    # of F229, the same trap F252 was for logs).
+    if resolved:
+        q = q.where(or_(Question.answered == True, Question.declined == True))  # noqa: E712
+        q = q.order_by(Question.created_at.desc())
+    else:
+        q = q.order_by(Question.created_at)
+    q = q.offset(offset).limit(limit)
     result = await session.execute(q)
     rows = list(result.scalars().all())
     return await _with_asker_state(session, rows)

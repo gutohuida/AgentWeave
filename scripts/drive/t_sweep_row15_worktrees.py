@@ -244,14 +244,22 @@ def db_run(run_id):
     return rows[0] if rows else None
 
 
+# Since F249 (UI-1, 2026-09-23) both list routes answer an envelope, `{repository,
+# unavailable_reason, worktrees|conflicts}`, so "not a repository" is no longer the same answer as
+# "no checkouts". These unwrap it; `listing_of` keeps the envelope for the leg that reads it.
+def listing_of(prefix, route):
+    code, body = api("GET", f"{prefix or A}/{route}")
+    return code, body if isinstance(body, dict) else {}
+
+
 def worktrees_list(prefix=None):
-    code, body = api("GET", f"{prefix or A}/worktrees")
-    return code, body if isinstance(body, list) else []
+    code, body = listing_of(prefix, "worktrees")
+    return code, body.get("worktrees", [])
 
 
 def conflicts(prefix=None):
-    code, body = api("GET", f"{prefix or A}/worktrees/conflicts")
-    return code, body if isinstance(body, list) else body
+    code, body = listing_of(prefix, "worktrees/conflicts")
+    return code, body.get("conflicts", [])
 
 
 def workspace(agent, prefix=None):
@@ -510,10 +518,11 @@ ok(
     bool(ws_n.get("unavailable_reason")) and ws_n.get("isolated") is False,
     json.dumps({k: ws_n.get(k) for k in ("isolated", "provisioned", "unavailable_reason")})[:300],
 )
+_, envelope_n = listing_of(A_NOGIT, "worktrees")
 ok(
     "the list distinguishes 'not a repository' from 'no checkouts yet'",
-    listed_n != [] or conf_n != [],
-    f"list={listed_n!r} conflicts={conf_n!r} — both empty, the same answer a healthy empty repo gives",
+    envelope_n.get("repository") is False and bool(envelope_n.get("unavailable_reason")),
+    json.dumps(envelope_n)[:300],
 )
 
 

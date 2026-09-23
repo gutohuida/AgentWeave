@@ -63,6 +63,8 @@ const SSE_EVENT_TYPES = [
   'project_opened',
   'project_relocated',
   'project_settings_updated',
+  'agent_archived',
+  'agent_unarchived',
 ]
 
 const MAX_BUFFERED = 200
@@ -557,6 +559,19 @@ export function useSSE(onEvent?: SSEListener) {
         case 'project_opened':
         case 'project_relocated':
           queryClient.invalidateQueries({ queryKey: ['projects'] })
+          break
+        case 'permission_requested':
+        case 'permission_decided':
+          // Here, not only in `usePendingPermissionRequests`: that hook is mounted by the run
+          // panel alone, and the Questions page's decision list (F231) is read with it unmounted.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'permission-requests'] })
+          break
+        case 'agent_archived':
+        case 'agent_unarchived':
+          // The rail reads its agents from `['projects']` (F193: an archived agent's conversations
+          // are grouped and marked there), and the roster from the agents key.
+          queryClient.invalidateQueries({ queryKey: ['projects'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
           break
         case 'project_settings_updated':
           // `PUT /settings` also writes `token_budget`, the field the accounting routes read, and

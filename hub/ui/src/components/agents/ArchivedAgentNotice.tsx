@@ -46,6 +46,10 @@ export function ArchivedAgentNotice({ agentName }: { agentName: string }) {
         )}
       </>
     )
+  } else if (agent) {
+    // On the roster and open: the open roster this page resolves agents from did not have it,
+    // which means it could not be read or has not caught up. Not a reason to call it missing.
+    body = <p>{agentName} is on the roster, but could not be opened here. Try again in a moment.</p>
   } else {
     body = <p>{agentName} is not on this project&apos;s roster.</p>
   }

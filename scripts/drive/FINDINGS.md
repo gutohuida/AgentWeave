@@ -12814,6 +12814,8 @@ has the same wrong verb -- a UI-round item alongside retiring `will_merge`.
 
 **FIXED 2026-09-23 (interactive session, UI-1): the UI half.** The drawer reads `will_attempt_merge`, and `will_merge` is retired from `integration-preview` (the route, `TaskIntegrationPreview`, and the three test files that asserted it; `test_dashboard_truth` now asserts its absence). `ApprovalWritesNote` says *it merges*, not *cherry-picks*: integration runs `merge --no-ff` (`task_integration.py`), and the route's docstring said cherry-pick too, now corrected. The note adds that approval refuses and writes nothing if the merge would not apply cleanly. Test: `taskApprovalWrites.test.tsx` (fixtures moved to the new field; new assertions on the wording).
 
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** The drawer's extra sentence, *if that would not merge cleanly, approval is refused and nothing is written*, was false for two targets that conflict with each other: the gate checks each against main alone. It is replaced by the Hub's own `reason`, which the comment already claimed was shown and was not. `t_f156_preview_promises_the_merge.py` and `t_row17_integration.py` read `will_attempt_merge` now; their checks that assert the old defect's shape will report it fixed.
+
 
 ---
 
@@ -14005,6 +14007,8 @@ assertions about a product the drive had imagined. They are now assertions about
 exists, with the reasoning written into the harness so the next run does not re-derive it.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** `TaskDetailDrawer` keeps `approval_report` from the response to the approving request, from the status menu (`PATCH /tasks/{id}`, via `update_task_for_actor`) and from *Land it* (`POST /tasks/{id}/land`), and renders it as *Approved, with N things to know. This is shown once: the Hub does not keep it.*, one line per entry: a `requirement` entry as `<FR> is <state>: <remedy>.`, and an `awaiting_evidence` entry as the evidence, its requirement, and the commit that merges when it is accepted. New `ApprovalReportEntry` type in `api/tasks.ts`. Persisting the advisory was not done; the entry's severity argument (nothing lost from the audit trail) stands. Tests: `taskApprovalReportAndPending.test.tsx` (three F169 cases).
+
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** The drawer instance outlives the task it shows (the boards keep one mounted), and the per-task reset did not clear the advisory, so approving task A and then opening task B showed A's entries under B. Cleared with the rest on `task.id`; test `does not carry one task's advisory into the next task opened in the same drawer`. A remedy ending in a period no longer prints two.
 
 ---
 
@@ -15589,6 +15593,8 @@ consistency bug: the same conversation is present or absent depending on a rail 
 preference, not a filter.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** The operator's answer to D10 (2026-09-23): shown, marked, with Unarchive. `AgentTree` gathers conversations whose agent is not on the open roster into an *Archived agents* group (it iterated the roster, so they were dropped silently), and `RecencyView` keeps them in place. In both, `ConversationRow`'s new `agentArchived` prop draws an *agent archived* chip. Opening one no longer renders *Agent unavailable.*: new `ArchivedAgentNotice` reads the whole roster (`useAgents('all')`) and says *<name> is archived. Its conversations are kept. Unarchive it to read and continue this one.*, with an *Unarchive <name>* button (`useArchiveAgent`, `archived: false`) and its refusal. An agent on no roster at all is said to be so, and a failed roster read says it cannot tell. Once unarchived, the roster refetch resolves the agent and the conversation opens as before. The backend is unchanged: archiving an agent still leaves its conversations open, which is the chosen behaviour. Tests: `archivedAgentNotice.test.tsx` (3), `recencyView.test.tsx` (three F193 cases, both views).
+
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** Three corrections. After *Unarchive*, the rail stayed stale: `useArchiveAgent` invalidated the roster keys, but the rail reads `project.agents` from `['projects']`. It now invalidates `['projects']` too, and `agent_archived`/`agent_unarchived`, which the Hub broadcasts and the UI never listened for, are in `useSSE`'s list and switch. `App` rendered the notice while the open roster was still loading, when every agent is absent from `[]`, so it now waits. An agent the full roster has as open is no longer described as *not on this project's roster*. The chip's *agent archived* stands, because the Hub has no agent delete route, so an agent absent from the open roster is archived.
 
 ## F194 (C) — the conversation and chat routes answer 200 for an agent that does not exist
 
@@ -18031,6 +18037,8 @@ it was declined and no way to have declined it there in the first place.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** Each question row on `QuestionsPanel` has *Decline without answering*, calling the same `POST /questions/{id}/decline` as the run card, with the Hub's refusal shown beside it. The resolved section now reads the unfiltered list narrowed to answered-or-declined: since F228, `answered=false` excludes a declined question and `answered=true` never included one, so neither filtered list could show it. Such a question carries a `declined` badge instead of `answered`, under *Answered or declined (N)*. Tests: `questionsPanel.test.tsx` (three new; the mock now serves the unfiltered call).
 
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** Reading the unfiltered list for the resolved section repeated F252's trap: the route is oldest-first with `limit=100`, so past 100 questions nothing newly answered or declined would appear. New `resolved=true` on `GET /questions` (answered **or** declined, newest first) and `useResolvedQuestions`; a failed read says so. Test `test_resolved_questions_are_answered_or_declined_newest_first`.
+
 ---
 
 ## F230 (C) — Allow crosses the workspace boundary the product enforces everywhere else, and the card cannot say so
@@ -18125,6 +18133,8 @@ argued: the read side already exists and is already reachable over HTTP.
 stating the absence.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** New `usePermissionDecisions(enabled)` (`api/permissions.ts`) asks `GET /permission-requests?pending_only=false`, the widening the entry names, which no screen had used. `QuestionsPanel` shows it as a collapsed *Permission decisions* disclosure, fetched only once opened: each decided request with its status badge (allowed, denied, expired), agent, tool, and who decided it and when. Its key sits under `['project', id, 'permission-requests']`, so the existing SSE invalidation on `permission_requested`/`permission_decided` refreshes it. F389's event half (a persisted event per allow) is D and not done. Test: `questionsPanel.test.tsx` (F231 case: not fetched until opened; allowed and denied listed; pending not).
+
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** The paragraph above said the existing SSE invalidation refreshed the list. It did not: that listener lives in `usePendingPermissionRequests`, which only the run panel mounts, and the Questions page renders without it. `permission_requested`/`permission_decided` now invalidate `['project', pid, 'permission-requests']` in `useSSE`'s central switch; `useSSE.test.tsx` covers it.
 
 ---
 
@@ -18940,6 +18950,8 @@ non-repository project no agent will ever start such work.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** `GET /worktrees` answers `WorktreeListing {repository, unavailable_reason, worktrees}` and `GET /worktrees/conflicts` answers `ConflictListing {repository, unavailable_reason, conflicts}` (both in `api/v1/worktrees.py`). For a directory that is not a git repository, `repository` is false and the reason reads *`<root>` is not a git repository, so agents here work in the project directory and no isolated checkout is made. Running `git init` there would give each writing agent its own.* A repository with no checkouts is `repository: true` and an empty list, so the two are no longer the same answer. Only the UI and tests read these routes (checked), so the shape change ships with the bundle, as ROUNDS planned. `WorktreesPanel` shows the reason under *Not a git repository* in place of the empty state that promised checkouts, and shows no conflict line. Tests: `test_a_project_that_is_not_a_repository_says_so_on_both_lists`, `test_a_repository_with_no_checkouts_is_still_a_repository` (`test_worktrees.py`), seven existing route assertions moved to the envelope, and `worktreesPanel.test.tsx`'s F249 case.
 
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** Two corrections. *Only the UI and tests read these routes (checked)* was wrong: `scripts/drive/t_sweep_row15_worktrees.py` read them, coerced the envelope to `[]`, and would have failed falsely. It now unwraps the envelope, and its leg 3 checks `repository: false` with a reason. The sentence promised that `git init` alone would give each agent a checkout, but provisioning refuses a repository with no commit, and `is_git_repo` is also false when git is not on the Hub's PATH. It now names both: *(or git is not on the Hub's PATH)* and *A repository with at least one commit (`git init` and a first commit)*.
+
 ---
 
 ## F250 (D) — nothing invalidates the worktrees query, so the panel does not notice a checkout being created
@@ -19085,6 +19097,8 @@ from whatever half-hour happens to sit inside the first 500 rows.
 **Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 4.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** `list_logs` orders `timestamp DESC, id DESC`, and `offset` counts back from the newest, the order `/events/history` already used. `useLogs` is now a `useInfiniteQuery` over that route: its first page is the newest `limit` entries, `loadOlder` fetches the page before, and the pages are joined in time order and de-duplicated by id (an entry arriving between two requests shifts the offsets, so a page can repeat a row, never skip one). `LogsView` keeps its tail layout and gains *Load older entries* at the top while there is an older page. Two things came with it. First, `n11_query_error_surface.DECL_RE` matched only `useQuery`, so the switch made the Logs call site vanish from `test_surface_ceilings`' count while it still ignored its error; the pattern now matches `useInfiniteQuery`. Second, the site was repaired rather than hidden: a failed read renders `Could not read this project's log.` instead of *No log entries yet*, its MISREPORT row is retired, and the two ceilings drop 100 to 99 and 55 to 54. F255's malformed `since`, paired with this in ROUNDS, was closed in Round 4c. Tests: `test_the_logs_page_is_the_newest_and_pages_back` (`test_a_request_means_what_it_says.py`), `logsNewestFirst.test.tsx` (2), `logsVolumeStrip.test.tsx` (failure line, load-older).
+
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** *Load older entries* made the older page flash as new arrivals; the arrival effect now counts an unseen row as new only when it is not older than the newest row already seen. The Refresh button invalidated `['logs']`, which matches no key, so it did nothing (predates the round); it now invalidates the project's logs key. The route test inserts rows with explicit timestamps: `EventLog.id` is random, and equal timestamps on a coarse clock would have left the order to chance.
 
 ---
 
@@ -21426,6 +21440,8 @@ present, only its position lies. Worth noting beside F188, which is about the sa
 abandonment reaching the operator at all.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** Both halves ROUNDS named. The route: new `agent_chat._split_undelivered` separates `_queued_entries_for`'s answer, and both chat routes sort abandoned entries in with the history by their own timestamp (`arrived_at`), appending only the still-waiting ones. The view: `groupIntoTurns` walks the entries in that order; an abandoned entry becomes a one-entry turn marked `abandoned`, in place, and `pending` holds only `queued` entries. `AgentTimeline` renders such a turn as the message with its *not delivered* chip and reason, outside `[data-turn-boundary]`, and computes the newest-run turn (`lastTurn`, which gates the working indicator) from run turns only. Tests: `test_an_abandoned_entry_sits_where_it_happened` (`test_agent_chat.py`, both routes; fails on the old route), and `agentTimelineModel.test.ts` (fixture in the route's new order).
+
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** One consequence, now stated: the agent-wide recent view (`GET /agent/{name}/chat`) applies its `limit` after the abandoned entries are sorted in, so an abandoned entry older than that window drops out of the recent view, like any other entry of its age. It is still in its own conversation's view, which is F87's concern.
 
 ## What held
 
@@ -25966,6 +25982,8 @@ fail that file loudly, which is the right moment to revisit it.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** `useDialogFocus`'s Tab branch now checks whether focus is inside the panel at all: when it is not (still on the trigger, as measured), a Tab moves it to the panel's first control and a Shift+Tab to its last, with `preventDefault`. Initial focus is untouched; which control gets it on open is D13's separate question. Because that makes an older dialog's listener act whenever focus sits in a newer one, the hook now keeps a module-level stack of open dialogs and only the newest wraps Tab. All seven call sites are modal and none is mounted inside another today. Tests: `useDialogFocus.test.tsx` (four new; the two first-Tab cases fail on the old hook, and the nested case fails with the stack check removed). Not yet re-driven in a browser (UI-1's closing check).
 
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** Escape had the same two-dialog problem, predating the round: the older dialog's listener was registered first and so closed first. It is now gated on the same stack. Test: `useDialogFocus — Escape with two of its own dialogs open`.
+
 ---
 
 ## F308 (B) — pinning CI to the resolution buys agreement by spending the drift alarm, and nothing replaced it
@@ -26563,6 +26581,8 @@ whatever change owns optimistic feedback for task mutations.
 this), `F310`.
 
 **FIXED 2026-09-23 (interactive session, UI-1).** The confirm button is disabled while `updateTask.isPending` (it used to consult only whether a reason was typed), carries `aria-busy`, and reads `Marking waiting…`. `useUpdateTask`'s `onSuccess` returns the invalidation promise, so `isPending` holds through the refetch that was the measured 1.5-3s of silence, not only through the PATCH. Test: `taskApprovalReportAndPending.test.tsx` (F315 case).
+
+**Review follow-up 2026-09-23 (adversarial Opus review of UI-1).** Precision: `useUpdateTask`'s `onSuccess` already returned the invalidation promise before this round, and the change here is the `disabled`/`aria-busy`/label on the button, which relies on it.
 
 ---
 

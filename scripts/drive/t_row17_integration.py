@@ -192,8 +192,8 @@ def main():
         check("the preview answers 200", c == 200, str(c))
         check(
             "it says it will not merge, rather than saying nothing",
-            pv.get("will_merge") is False,
-            repr(pv.get("will_merge")),
+            pv.get("will_attempt_merge") is False,
+            repr(pv.get("will_attempt_merge")),
         )
         check(
             "and the reason names the missing thing, not just 'no'",
@@ -213,7 +213,7 @@ def main():
         c, pv = preview(tid)
         previews[label] = pv
         print(f"  {label} " + blob(pv, 700))
-        check(f"{label}: the preview now says it WILL merge", pv.get("will_merge") is True, blob(pv, 200))
+        check(f"{label}: the preview now says it WILL merge", pv.get("will_attempt_merge") is True, blob(pv, 200))
         check(
             f"{label}: and names the commit it is about to write",
             bool(pv.get("targets")),
@@ -327,7 +327,7 @@ def main():
     c_pv, pv_b = preview(B)
     check(
         "F141: the preview still reads will_merge=true for the branch just refused as unmergeable",
-        pv_b.get("will_merge") is True,
+        pv_b.get("will_attempt_merge") is True,
         blob(pv_b, 200),
     )
     print(f"  main: {before[:8]} -> {after_a[:8]} -> {after_b[:8]}")

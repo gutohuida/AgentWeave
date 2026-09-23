@@ -229,8 +229,8 @@ def main():
     )
     check(
         "it says the merge WILL happen",
-        before.get("will_merge") is True,
-        repr(before.get("will_merge")),
+        before.get("will_attempt_merge") is True,
+        repr(before.get("will_attempt_merge")),
     )
     check(
         "and it offers no reason to doubt it",
@@ -266,8 +266,8 @@ def main():
     )
     check(
         "so preview and gate disagree, about one commit, at one moment",
-        before.get("will_merge") is True and code == 409,
-        f"will_merge={before.get('will_merge')} approve={code}",
+        before.get("will_attempt_merge") is True and code == 409,
+        f"will_merge={before.get('will_attempt_merge')} approve={code}",
     )
     code, after_refusal = api("GET", f"/projects/{P}/tasks/{conflicted}")
     check(
@@ -281,8 +281,8 @@ def main():
     print(f"\n  {after}\n")
     check(
         "the drawer still promises the merge, having been contradicted",
-        after.get("will_merge") is True and after.get("reason") == "",
-        f"will_merge={after.get('will_merge')!r} reason={after.get('reason')!r}",
+        after.get("will_attempt_merge") is True and after.get("reason") == "",
+        f"will_merge={after.get('will_attempt_merge')!r} reason={after.get('reason')!r}",
     )
     check(
         "nothing in it changed at all",
@@ -299,8 +299,8 @@ def main():
     print(f"\n  {empty}\n")
     check(
         "will_merge is false where there is no target",
-        empty.get("will_merge") is False,
-        repr(empty.get("will_merge")),
+        empty.get("will_attempt_merge") is False,
+        repr(empty.get("will_attempt_merge")),
     )
     check(
         "and the false answer carries a stated reason",
@@ -321,8 +321,8 @@ def main():
     print(f"\n  {clean_preview}\n")
     check(
         "the clean task's preview is byte-identical in the fields that matter",
-        clean_preview.get("will_merge") is True and clean_preview.get("reason") == "",
-        f"will_merge={clean_preview.get('will_merge')!r} reason={clean_preview.get('reason')!r}",
+        clean_preview.get("will_attempt_merge") is True and clean_preview.get("reason") == "",
+        f"will_merge={clean_preview.get('will_attempt_merge')!r} reason={clean_preview.get('reason')!r}",
     )
 
     code, approved = api("PATCH", f"/projects/{P}/tasks/{clean}", {"status": "approved"})
@@ -351,10 +351,10 @@ def main():
     check(
         "THE FINDING: one `will_merge: true` covered a refusal and a merge, and said "
         "nothing to tell them apart",
-        before.get("will_merge") == clean_preview.get("will_merge")
+        before.get("will_attempt_merge") == clean_preview.get("will_attempt_merge")
         and before.get("reason") == clean_preview.get("reason"),
-        f"conflicting={before.get('will_merge')!r}/{before.get('reason')!r} "
-        f"clean={clean_preview.get('will_merge')!r}/{clean_preview.get('reason')!r}",
+        f"conflicting={before.get('will_attempt_merge')!r}/{before.get('reason')!r} "
+        f"clean={clean_preview.get('will_attempt_merge')!r}/{clean_preview.get('reason')!r}",
     )
 
     step("VERDICT")

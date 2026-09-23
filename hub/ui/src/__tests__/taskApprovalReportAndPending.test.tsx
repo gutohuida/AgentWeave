@@ -112,6 +112,31 @@ describe('the approval advisory reaches the drawer that approved (F169)', () => 
     expect(screen.getByTestId('task-approval-report-task-1')).toHaveTextContent('one thing to know')
   })
 
+  it("does not carry one task's advisory into the next task opened in the same drawer", async () => {
+    land.mockImplementation((_vars: unknown, options: { onSuccess: (t: Task) => void }) => {
+      options.onSuccess(makeTask('approved', { approval_report: REPORT }))
+    })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <TaskCardHost task={makeTask('completed')} />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    await user.click(screen.getByTestId('task-open-task-1'))
+    await user.click(screen.getByTestId('task-land-task-1'))
+    expect(screen.getByTestId('task-approval-report-task-1')).toBeTruthy()
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <TaskCardHost task={makeTask('completed', { id: 'task-2' })} />
+      </QueryClientProvider>,
+    )
+    await user.click(screen.getByTestId('task-open-task-2'))
+
+    expect(screen.queryByTestId('task-approval-report-task-2')).toBeNull()
+  })
+
   it('shows nothing for an approval with nothing to report', async () => {
     land.mockImplementation((_vars: unknown, options: { onSuccess: (t: Task) => void }) => {
       options.onSuccess(makeTask('approved', { approval_report: [] }))

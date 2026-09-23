@@ -91,7 +91,7 @@ const SIDEBAR_COLLAPSED_KEY = 'aw.sidebarCollapsed'
 export default function App() {
   const { isConfigured, mode, bootstrapState, selectedProjectId: projectId } = useConfigStore()
   const { data: projects } = useProjects()
-  const { data: agents = [] } = useAgents()
+  const { data: agents = [], isLoading: agentsLoading } = useAgents()
   const [setupOpen, setSetupOpen] = useState(false)
   const [projectManagerMode, setProjectManagerMode] = useState<ProjectManagerMode | null>(null)
   const [agentCreateProjectId, setAgentCreateProjectId] = useState<string | null>(null)
@@ -371,7 +371,9 @@ export default function App() {
         }
       />
     ) : (
-      agentName ? (
+      // Not while the open roster is still loading: every agent is absent from `[]`, and the notice
+      // would describe an open agent as missing (the Round's review).
+      agentsLoading ? null : agentName ? (
         <ArchivedAgentNotice agentName={agentName} />
       ) : (
         <div className="flex h-full items-center justify-center" style={{ color: 'var(--text-3)' }}>

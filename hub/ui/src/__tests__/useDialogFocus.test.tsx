@@ -129,3 +129,23 @@ describe('useDialogFocus — the first Tab (F307)', () => {
     expect(document.activeElement).toBe(inner.cancel)
   })
 })
+
+describe('useDialogFocus — Escape with two of its own dialogs open', () => {
+  it('closes only the newer one', () => {
+    const outer = mountPanel()
+    const inner = mountPanel()
+    const outerRef = createRef<HTMLElement>()
+    const innerRef = createRef<HTMLElement>()
+    ;(outerRef as { current: HTMLElement | null }).current = outer.panel
+    ;(innerRef as { current: HTMLElement | null }).current = inner.panel
+    const closeOuter = vi.fn()
+    const closeInner = vi.fn()
+    renderHook(() => useDialogFocus(true, outerRef, closeOuter))
+    renderHook(() => useDialogFocus(true, innerRef, closeInner))
+
+    inner.inner.dispatchEvent(escapeEvent())
+
+    expect(closeInner).toHaveBeenCalledTimes(1)
+    expect(closeOuter).not.toHaveBeenCalled()
+  })
+})
