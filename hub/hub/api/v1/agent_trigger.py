@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
@@ -1841,6 +1842,42 @@ async def _broadcast_run_lifecycle(
     await sse_manager.broadcast(project_id, event_type, payload)
 
 
+#: Seconds between attempts at an observational write that met SQLite's lock (F359). Each attempt
+#: already waits out the engine's own `busy_timeout` before it fails, so these only space retries.
+OBSERVATION_RETRY_DELAYS: Tuple[float, ...] = (0.5, 2.0)
+
+
+async def _record_observation(write, *, run_id: str, what: str) -> None:
+    """Run *write* (`async (db) -> None`) on a fresh session, surviving SQLite's write lock.
+
+    F359: a streamed output row or usage reading is the run's bookkeeping about the agent, not the
+    agent's work. Every one was written unguarded inside the read loop, so a `database is locked`
+    on one of them reached the run's `except`, marked the run failed, and skipped the snapshot and
+    evidence re-point a finished run gets -- while the agent process ran on, unobserved, and
+    finished the work anyway (measured on `:8000`: 304 outputs in, then failed, work committed by
+    the next run two minutes later). Losing one timeline row is the smaller harm, so a lock is
+    retried and then dropped with a warning. Anything else still propagates: an unexpected error is
+    a defect, and swallowing it would hide every output of every run.
+    """
+    for delay in (*OBSERVATION_RETRY_DELAYS, None):
+        try:
+            async with async_session_factory() as db:
+                await write(db)
+            return
+        except OperationalError as exc:
+            if "database is locked" not in str(exc):
+                raise
+            if delay is None:
+                logger.warning(
+                    "Dropped %s for run %s: the database stayed locked through %d attempts",
+                    what,
+                    run_id,
+                    len(OBSERVATION_RETRY_DELAYS) + 1,
+                )
+                return
+            await asyncio.sleep(delay)
+
+
 def _log_abnormal_run_end(exc: BaseException, *, run_id: str, agent: str, label: str) -> None:
     """How a run that ended on an exception is reported, for the two transports (F298).
 
@@ -2197,8 +2234,8 @@ async def _execute_run(
                         return
             for event in parsed.events:
                 sequence += 1
-                async with async_session_factory() as db:
-                    await record_agent_output(
+                await _record_observation(
+                    lambda db, event=event, sequence=sequence: record_agent_output(
                         db,
                         project_id,
                         agent,
@@ -2209,15 +2246,20 @@ async def _execute_run(
                         payload=event.payload,
                         run_id=run_id,
                         sequence=sequence,
-                    )
+                    ),
+                    run_id=run_id,
+                    what=f"output {sequence}",
+                )
                 # Task 4.3a. After the output row, not before: the timeline entry is what the
                 # operator is shown, and this is observational bookkeeping about it.
                 await outside_writes.note(event)
             if parsed.usage is not None:
-                async with async_session_factory() as db:
-                    await record_context_usage(
-                        db, project_id, agent, parsed.usage.to_payload(agent)
-                    )
+                usage_payload = parsed.usage.to_payload(agent)
+                await _record_observation(
+                    lambda db: record_context_usage(db, project_id, agent, usage_payload),
+                    run_id=run_id,
+                    what="a context-usage reading",
+                )
             if parsed.accounting is not None:
                 accounting_sample = (
                     parsed.accounting
@@ -2466,17 +2508,25 @@ async def _execute_run(
             # ended", not "it succeeded" — and `AgentTimeline.tsx:430` returns null for it either
             # way. The row is durable rather than visible; the visible outcome is the terminal
             # label the timeline route's `runs` map carries.
-            await record_agent_output(
-                db,
-                project_id,
-                agent,
-                content=f"Run {final_status} (exit {exit_code}).",
-                session_id=session_id,
-                conversation_id=conversation_id,
-                kind="status",
-                payload={"phase": "completed", "exit_code": exit_code},
+            #
+            # Through `_record_observation`, on its own session, like every streamed row (F359):
+            # the terminal status is already committed, so a lock here must not throw the rest of
+            # this block -- the title, the re-drain -- onto the failure path.
+            await _record_observation(
+                lambda status_db: record_agent_output(
+                    status_db,
+                    project_id,
+                    agent,
+                    content=f"Run {final_status} (exit {exit_code}).",
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    kind="status",
+                    payload={"phase": "completed", "exit_code": exit_code},
+                    run_id=run_id,
+                    sequence=sequence + 1,
+                ),
                 run_id=run_id,
-                sequence=sequence + 1,
+                what="the run's closing status row",
             )
 
         # After the response has landed, so the titler sees the exchange rather than the
@@ -2536,6 +2586,17 @@ async def _execute_run(
         # marked, to preserve real cancellation semantics for anything that legitimately depends
         # on it propagating.
         _log_abnormal_run_end(exc, run_id=run_id, agent=agent, label="run")
+        # F359: a run recorded as failed must not leave its agent running. Nothing reads the
+        # process's output past this point, and the tail below releases the queue -- so a live
+        # process here would go on writing into the same worktree as the next turn it frees.
+        # Best-effort: the failure record matters more than confirming the kill.
+        try:
+            if pty.isalive():
+                await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: pty.terminate(force=True)
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not terminate run %s's process after it failed", run_id)
         await _record_run_failure_tail(
             project_id=project_id,
             agent=agent,
@@ -2785,8 +2846,8 @@ async def _execute_codex_appserver_run(
         async def _on_event(event) -> None:
             nonlocal sequence
             sequence += 1
-            async with async_session_factory() as db:
-                await record_agent_output(
+            await _record_observation(
+                lambda db, sequence=sequence: record_agent_output(
                     db,
                     project_id,
                     agent,
@@ -2797,14 +2858,21 @@ async def _execute_codex_appserver_run(
                     payload=event.payload,
                     run_id=run_id,
                     sequence=sequence,
-                )
+                ),
+                run_id=run_id,
+                what=f"output {sequence}",
+            )
             # Task 4.3b — the same call `_flush_line` makes, on the same recorder class, in the
             # same position relative to the output row.
             await outside_writes.note(event)
 
         async def _on_usage(usage) -> None:
-            async with async_session_factory() as db:
-                await record_context_usage(db, project_id, agent, usage.to_payload(agent))
+            usage_payload = usage.to_payload(agent)
+            await _record_observation(
+                lambda db: record_context_usage(db, project_id, agent, usage_payload),
+                run_id=run_id,
+                what="a context-usage reading",
+            )
 
         async def _on_accounting(accounting) -> None:
             nonlocal accounting_sample

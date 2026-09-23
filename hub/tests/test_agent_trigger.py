@@ -3015,3 +3015,128 @@ async def test_a_cancelled_run_records_a_reason_rather_than_an_empty_string(app,
         run = await db.get(Run, "run-f304")
         assert run.status == "failed"
         assert run.error == "CancelledError"
+
+
+# --- F359: a run is not ended by the Hub's own bookkeeping write ------------------------------
+#
+# Every streamed output row was written unguarded inside the read loop, so SQLite's `database is
+# locked` on one of them failed the run -- skipping the snapshot and evidence re-point a finished
+# run gets -- while the agent process ran on with nobody reading it.
+
+_F359_LINES = [
+    '{"type":"assistant","session_id":"s","message":{"content":[{"type":"text","text":"one"}]}}\n',
+    '{"type":"assistant","session_id":"s","message":{"content":[{"type":"text","text":"two"}]}}\n',
+    '{"type":"result","subtype":"success","is_error":false,"session_id":"s"}\n',
+]
+
+
+def _locked():
+    from sqlalchemy.exc import OperationalError
+
+    return OperationalError("INSERT INTO agent_outputs", {}, Exception("database is locked"))
+
+
+async def _f359_trigger(app, auth_headers, bind_runner, agent, spawn, record):
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {agent: {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner(agent, cli="claude")
+    with patch("hub.api.v1.agent_trigger.PtySession.spawn", spawn):  # noqa: SIM117
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            with patch.object(agent_trigger, "record_agent_output", record):
+                # `create=True` so this file also runs against code that predates the constant,
+                # which is how these tests were checked to fail for the right reason.
+                with patch.object(
+                    agent_trigger, "OBSERVATION_RETRY_DELAYS", (0.0, 0.0), create=True
+                ):
+                    response = await app.post(
+                        "/api/v1/projects/proj-test/agent/trigger",
+                        json={"agent": agent, "message": "work", "session_mode": "new"},
+                        headers=auth_headers,
+                    )
+                    assert response.status_code == 200, response.text
+                    await _await_background_run()
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    async with async_session_factory() as db:
+        return await db.get(Run, response.json()["run_id"])
+
+
+@pytest.mark.asyncio
+async def test_a_locked_output_write_does_not_fail_the_run(app, auth_headers, bind_runner):
+    attempts = []
+
+    async def _always_locked(db, project_id, agent, **kwargs):
+        attempts.append(kwargs["sequence"])
+        raise _locked()
+
+    run = await _f359_trigger(
+        app, auth_headers, bind_runner, "f359-locked", _fake_pty(_F359_LINES), _always_locked
+    )
+    assert run.status == "completed", run.error
+    assert run.error is None
+    # Every event was still read and attempted -- the loop went on past each dropped row -- and
+    # each was tried once plus once per retry delay before being dropped.
+    sequences = sorted(set(attempts))
+    assert len(sequences) >= 3 and sequences == list(range(1, sequences[-1] + 1))
+    assert all(attempts.count(n) == 3 for n in sequences)
+
+
+@pytest.mark.asyncio
+async def test_a_lock_that_clears_on_retry_still_records_the_row(app, auth_headers, bind_runner):
+    real = agent_trigger.record_agent_output
+    failed_once = set()
+
+    async def _locked_once(db, project_id, agent, **kwargs):
+        if kwargs["sequence"] not in failed_once:
+            failed_once.add(kwargs["sequence"])
+            raise _locked()
+        return await real(db, project_id, agent, **kwargs)
+
+    run = await _f359_trigger(
+        app, auth_headers, bind_runner, "f359-retry", _fake_pty(_F359_LINES), _locked_once
+    )
+    assert run.status == "completed", run.error
+
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import AgentOutput
+
+    async with async_session_factory() as db:
+        rows = (
+            (await db.execute(select(AgentOutput).where(AgentOutput.run_id == run.id)))
+            .scalars()
+            .all()
+        )
+    # Every event the stream produced has its row, each after one locked attempt.
+    assert sorted(row.sequence for row in rows) == sorted(failed_once)
+    assert len(rows) >= 3
+
+
+@pytest.mark.asyncio
+async def test_a_run_failed_by_its_read_loop_does_not_leave_its_process_running(
+    app, auth_headers, bind_runner
+):
+    sessions = []
+    inner = _fake_pty(_F359_LINES)
+
+    def _spawn(*args, **kwargs):
+        session = inner(*args, **kwargs)
+        session.isalive.return_value = True
+        sessions.append(session)
+        return session
+
+    async def _broken(db, project_id, agent, **kwargs):
+        raise RuntimeError("not a lock: a defect, which still ends the run")
+
+    run = await _f359_trigger(
+        app, auth_headers, bind_runner, "f359-orphan", MagicMock(side_effect=_spawn), _broken
+    )
+    assert run.status == "failed"
+    assert "not a lock" in (run.error or "")
+    sessions[0].terminate.assert_called_once_with(force=True)

@@ -19,8 +19,8 @@ from sqlalchemy import select
 
 from hub.api.v1.agent_trigger import TriggerAgentError
 from hub.db.engine import async_session_factory
-from hub.db.models import InboundQueueEntry, Task
-from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, withdraw_entry
+from hub.db.models import InboundQueueEntry, Run, Task
+from hub.inbound_queue import DELIVERY_ATTEMPT_LIMIT, deliver_entries_with_run, withdraw_entry
 from hub.turn_scheduler import schedule_agent
 
 from .test_a_refused_review_leaves_nothing_behind import (
@@ -31,6 +31,7 @@ from .test_a_refused_review_leaves_nothing_behind import (
     _refused,
     _register,
     _row,
+    _runs,
 )
 
 pytestmark = pytest.mark.asyncio
@@ -156,3 +157,55 @@ async def test_a_delete_that_waits_on_a_refused_dispatch_agrees_with_the_record(
         assert row.delivery_attempts == DELIVERY_ATTEMPT_LIMIT
         assert row.abandoned_reason.startswith("delivery failed")
         assert (abandoned, withdrawn) == (1, 0)
+
+
+# --- F338: delivery is the third writer, and it follows the same rule -------------------------
+
+
+async def test_a_withdrawal_that_lands_between_delivery_read_and_write_is_not_overwritten(app):
+    """Delivery read the entry as queued, then wrote it `delivered` by primary key. A withdrawal
+    committing in between -- the window a plain turn leaves open, since nothing ahead of the read
+    writes -- was answered as a success and then overwritten, and the run started with input the
+    operator was told they withdrew. The withdrawal is committed from inside that window here.
+
+    Mutation: the claiming `UPDATE`'s `state == "queued"` condition dropped. This must fail, with
+    the entry `delivered` and the run committed.
+    """
+    agent = "wg-deliver"
+    conversation_id = await _conversation(agent)
+    entry_id = await _entry(agent, conversation_id, content="withdraw me")
+    withdrew: list = []
+
+    async with async_session_factory() as delivering:
+        real_execute = delivering.execute
+
+        async def execute_then_withdraw(*args, **kwargs):
+            result = await real_execute(*args, **kwargs)
+            if not withdrew:  # right after delivery's read, before its write
+                async with async_session_factory() as operator:
+                    withdrew.append(
+                        await withdraw_entry(operator, "proj-test", entry_id) is not None
+                    )
+            return result
+
+        with patch.object(delivering, "execute", execute_then_withdraw):
+            with pytest.raises(RuntimeError, match="queue changed before atomic delivery"):
+                await deliver_entries_with_run(
+                    delivering,
+                    project_id="proj-test",
+                    agent=agent,
+                    entry_ids=[entry_id],
+                    run=Run(
+                        id="run-wg-deliver",
+                        project_id="proj-test",
+                        agent=agent,
+                        conversation_id=conversation_id,
+                        status="running",
+                        turn_depth=0,
+                    ),
+                )
+
+    assert withdrew == [True], "the operator's withdrawal was refused, so the window was missed"
+    row = await _row(entry_id)
+    assert (row.state, row.delivered_in_run_id) == ("withdrawn", None)
+    assert "run-wg-deliver" not in await _runs()

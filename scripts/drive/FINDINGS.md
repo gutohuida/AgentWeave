@@ -15521,7 +15521,7 @@ typo in a script or a scheduled job.
 
 ## F195 (C) — the conversation titler does not run in the project's directory, and the parameter that would make it is dead
 
-**Status:** open, and sized. `spec-queue/DECISIONS.md:263` counts 21
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- the titler resolves the project's own directory; the sweep found no other project spawn without `cwd`; see FIXED at the end of this entry. Was: open, and sized. `spec-queue/DECISIONS.md:263` counts 21
 `subprocess.run`/`Popen` sites of which 13 already pass `cwd`, leaving about 8, and `:545` decides to
 do the narrow repair and that sweep together. Neither has been done; the titler still inherits the
 Hub process's directory. [classified 2026-09-09, D-3]
@@ -15556,6 +15556,22 @@ Cheap to fix (the project's `ProjectWorkspace` path, threaded through the two ca
 parameter is already there waiting for it. Filed C rather than B because the titler is best-effort
 by design and a wrong title costs a rename — but it is a real cross-project leak of whatever
 configuration happens to sit above the Hub's launch directory.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** The repair and the sweep, together as
+DECISIONS decided. **Repair:** the dead `cwd` parameter is gone from `generate_conversation_title`
+and `maybe_generate_title`; the titler now resolves the project's directory itself, through
+`project_workspace.resolve_project_workspace` (the module attribute, as every other caller uses it),
+inside the session it already opens -- so no caller can forget it again, which is how the parameter
+went dead. A project whose directory cannot be resolved is **not titled**: the truncated title is
+the floor, and one written under another directory's instructions is worse. **Sweep:** re-counted
+2026-09-23 with an AST walk over `hub/hub/` -- 18 spawn sites, 13 passing `cwd`. The five that do
+not are project-independent by nature: `asyncio.run` in `migrations/env.py` (not a spawn), the OS
+folder picker (`native_dialog.py`), `taskkill` in `pty_runner.terminate_process_tree`, the
+console-borrowing `cmd.exe` in `subprocess_windows.py`, and nothing else. So the titler was the
+only project spawn without a directory. Tests (`test_title_generation.py`):
+`test_the_titler_runs_in_the_projects_own_directory`,
+`test_a_project_with_no_resolvable_directory_is_not_titled` -- both fail on the old code (`cwd`
+`None`; the unresolvable project titled anyway). Not re-driven with the ZEBRA control.
 
 ## What HELD — including the two things this row existed to ask
 
@@ -21092,7 +21108,7 @@ at any point.
 
 ## F275 (C) - an abandoned operator message renders after the failures it caused
 
-**Status:** open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it.
+**Status:** open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it. **Round 3d, 2026-09-23: deferred to a UI round.** The server order is not what decides the screen: `agentTimelineModel.groupIntoTurns` puts every non-delivered entry, abandoned or waiting, into `pending`, rendered after every turn -- so the repair is the UI placing an abandoned entry among the turns by its timestamp (with the route sorting it in, not appending it). That needs a bundle, and no bundle can be committed until `:8000` is restarted past `c18a87b` (the night window's group 5.4 gate, 2026-09-23).
 
 `_queued_entries_for` returns entries that are still `queued` **and** entries the Hub gave up on
 (`hub/hub/api/v1/agent_chat.py:249-280`), and both routes append its result **after** the timestamp
@@ -24527,7 +24543,7 @@ the eighth is a baseline that must pass in both. Restored, the file is 8/8 green
 
 ## F297 (B) — `agentweave stop` on Windows force-kills the Hub, so nothing the shutdown sequence does ever runs
 
-**Status:** open
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- Windows stop sends CTRL_BREAK into the Hub's console and waits 10 s before forcing; see FIXED at the end of this entry. Was: open
 
 `src/agentweave/cli.py:528-545`, `_hub_kill_pid`, the one thing `cmd_stop` calls once it has
 confirmed a native Hub is serving the recorded port:
@@ -24621,6 +24637,25 @@ taskkill /PID <pid from tk.marker.started> /F
   two are worth landing in that order.
 - The docstring is currently false on Windows and should stop claiming a SIGTERM that is not sent,
   whatever else is done.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** `_hub_native_start` needed no change:
+it already spawns the detached Hub with `CREATE_NEW_PROCESS_GROUP` (added with F341's
+`CREATE_NO_WINDOW`), so every Hub `cmd_hub_start` launches today can take the graceful path. The one
+obstacle left was that `GenerateConsoleCtrlEvent` only reaches processes sharing the caller's
+console, and the Hub has its own hidden one. New `_hub_break_windows(pid)` runs a stdlib-only helper
+process (`_CTRL_BREAK_HELPER`: `FreeConsole`, `AttachConsole(pid)`, ignore the event itself,
+`GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid)`) and then waits up to
+`_HUB_GRACEFUL_STOP_SECONDS` (10, the POSIX branch's figure) on a `SYNCHRONIZE` handle.
+`_hub_kill_pid` falls back to `taskkill /F` only when that fails -- a Hub started some other way, or
+one whose shutdown hangs -- so the bound holds. Docstring corrected. Measured first with a probe
+launched with `cmd_hub_start`'s exact flags: the helper exits 0, uvicorn runs the lifespan teardown
+and exits. What happens to run processes on the old forced path stays unmeasured, and no longer
+matters for a graceful stop: `terminate_all_active_runs` now runs. Tests
+(`tests/test_hub_graceful_stop.py`): two platform-independent tests of the fallback, and
+`test_a_hub_detached_as_cmd_start_does_it_runs_its_shutdown_when_stopped` (Windows only, real
+processes, through `_hub_kill_pid`) -- on the old code it fails with "stopped without running its
+lifespan shutdown". Not driven against a real Hub with a turn in flight; 2026-09-09's
+`f295_shutdown_drive.py` measured that case at 0.42 s with the same signal.
 
 ---
 
@@ -27693,7 +27728,7 @@ compare the activity line with the row's copied JSON.
 
 ## F338 (D) — delivery reads an entry as queued and then marks it delivered by key, so a withdrawal that lands in between is answered 200 and delivered anyway
 
-**Status:** open, still read from the source only — re-read 2026-09-15 (night `ledger-conflicts`): `deliver_entries_with_run` is unchanged in shape, now at `hub/hub/inbound_queue.py:133-170` (moved by `98385cd`), selecting `state == "queued"` at `:142-152` before the `Run` is added at `:160`, then setting `delivered` on those objects at `:161-164`; still not measured and not driven.
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- measured first (it reached), then delivery claimed with a conditional `UPDATE`; see FIXED at the end of this entry. Was: open, still read from the source only — re-read 2026-09-15 (night `ledger-conflicts`): `deliver_entries_with_run` is unchanged in shape, now at `hub/hub/inbound_queue.py:133-170` (moved by `98385cd`), selecting `state == "queued"` at `:142-152` before the `Run` is added at `:160`, then setting `delivered` on those objects at `:161-164`; still not measured and not driven.
 
 Filed 2026-09-13 by the day window's `d6-repair`, while fixing F328. **Read from
 the source. Not measured, and not driven.**
@@ -27724,6 +27759,22 @@ does what the operator had asked it to do in the first place.
 the write lock first (write the `Run` row) and read after it. Measure first. F328's drive
 (`scripts/drive/t_d6_0913_f328_withdraw_race.py`) is the pattern, with a plain turn in place of a
 refused review.
+
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** **Measured first, and it reaches.** A
+test commits an operator withdrawal from inside the window -- right after delivery's `SELECT`, on a
+second session -- and on the old code `deliver_entries_with_run` did not raise: the entry ended
+`delivered` over the committed `withdrawn`, with the run committed. So the autoflush question the
+entry left open does not close the window on a plain turn. Repaired as F328 was, and as the entry's
+own "possible repair" named: the run is added and flushed, then the entries are claimed with one
+`UPDATE ... WHERE id IN (...) AND state = 'queued'`, and a matched count short of the ids rolls the
+whole delivery back (claimed rows, the run, and the task binding the caller staged ahead of it) and
+raises the existing `"queue changed before atomic delivery"` -- the same error the pre-write check
+already raised, so the one caller's contract is unchanged. The returned objects are brought in line
+with `set_committed_value`, so nothing is written back by primary key. Test:
+`test_a_withdrawal_that_lands_between_delivery_read_and_write_is_not_overwritten`
+(`test_a_withdrawal_and_a_give_up_do_not_both_win.py`, beside F328's two sides) -- on the old code
+it fails with `DID NOT RAISE`. Not driven through the route.
 
 ---
 
@@ -28944,7 +28995,7 @@ recorded reason that disagrees with the row.
 
 ## F359 (B) — a run killed by the Hub's own write is marked failed without the snapshot or re-point a finished run gets
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- a locked bookkeeping write no longer ends the run, and a run that does fail no longer leaves its process running; see FIXED at the end of this entry. Was: open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 F349 is the same lock seen from a trigger request.
 
 **What happened.** Three runs ended on `(sqlite3.OperationalError) database is locked` raised by
@@ -28965,6 +29016,34 @@ not hold it.
 
 **Open to R1.** Whether the harness process is stopped when the read loop raises, or runs on
 unobserved, is not verified.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** The open question first, answered
+from the code: **it runs on, unobserved.** The `except` marks the run failed and `finally` drops the
+session from `active_ptys`; nothing terminates the process. So the finding's own evidence is the
+orphan finishing the work -- and the failure tail re-drains the queue, so the next turn can start in
+the same worktree beside it. That ruled out the finding's suggested repair (snapshot on the failure
+path): it would race a live agent. Two changes instead, in `agent_trigger.py`:
+
+1. **A bookkeeping write cannot end the run.** New `_record_observation(write, run_id=, what=)` runs
+   an observational write on a fresh session; `OperationalError` "database is locked" is retried
+   after each of `OBSERVATION_RETRY_DELAYS` (0.5 s, 2 s -- each attempt already waits out the 5 s
+   `busy_timeout`) and then dropped with a warning. Anything else still raises: a defect must stay
+   loud. Applied to every streamed output row and context-usage reading on **both** transports
+   (`_flush_line`, and the app-server path's `_on_event`/`_on_usage`), and to the closing
+   `"Run <status> (exit N)."` status row, which is written after the terminal commit and is the only
+   settled marker a stopped, failed or Codex run has. With the lock no longer fatal, the run reaches
+   its normal end, which snapshots the worktree and re-points the evidence -- the two steps the
+   finding says were skipped.
+2. **A run recorded as failed stops its process.** The PTY run's `except` now terminates the process
+   (`pty.terminate(force=True)`, the stop route's call) when it is still alive, best-effort, before
+   the failure tail releases the queue. The app-server path needed nothing: `run_turn`'s own
+   `finally` closes its subprocess.
+
+Tests (`test_agent_trigger.py`): `test_a_locked_output_write_does_not_fail_the_run` (every event
+attempted three times, run `completed`), `test_a_lock_that_clears_on_retry_still_records_the_row`,
+`test_a_run_failed_by_its_read_loop_does_not_leave_its_process_running`. All three fail on the old
+code for the stated reason (run `failed` on "database is locked"; `terminate` never called). Not
+driven live: reproducing the lock needs a second writer holding SQLite past `busy_timeout`.
 
 ## F360 (B) — the checkpoint probe asks for the tasks "assigned to this agent" while a loop checkpoint lists the loop's whole queue, so half of a flow's checkpoints are marked failed
 

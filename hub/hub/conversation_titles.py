@@ -22,6 +22,7 @@ from typing import List, Optional
 
 from sqlalchemy import select
 
+from . import project_workspace
 from .conversations import get_conversation_by_id, title_from_message
 from .db.engine import async_session_factory
 from .db.models import Agent, AgentOutput, Conversation, InboundQueueEntry, Project, Runner
@@ -91,7 +92,7 @@ def title_from_output(output: str) -> str:
     return title_from_message(candidate)
 
 
-def _run_titler(cmd: List[str], cwd: Optional[str]) -> str:
+def _run_titler(cmd: List[str], cwd: str) -> str:
     """Blocking spawn. Returns "" on any failure — this never raises into the caller."""
     try:
         completed = subprocess.run(  # noqa: S603 — argv list, no shell
@@ -165,9 +166,7 @@ async def _resolve_runner(db, project: Project, agent_name: str) -> Optional[Run
     return None
 
 
-async def generate_conversation_title(
-    *, project_id: str, conversation_id: str, cwd: Optional[str] = None
-) -> Optional[str]:
+async def generate_conversation_title(*, project_id: str, conversation_id: str) -> Optional[str]:
     """Upgrade a conversation's truncated title to a generated one, if the project asked for it.
 
     Every exit before the spawn is a silent no-op: off by default, an operator's title is never
@@ -193,6 +192,19 @@ async def generate_conversation_title(
         if not excerpt.strip():
             return None
         agent_name = conversation.agent
+
+        # F195: the project's own directory, resolved here rather than passed in. A `cwd`
+        # parameter existed and no caller ever supplied it, so every titling spawn inherited the
+        # Hub process's directory and read whatever `CLAUDE.md` sat above the Hub's launch point
+        # (measured: a project's "titles MUST begin with ZEBRA" was ignored, the AgentWeave
+        # repository's own memory read instead). A project whose directory cannot be resolved is
+        # not titled -- the truncated title is the floor, and a title written under another
+        # directory's instructions is worse than it.
+        try:
+            workspace = await project_workspace.resolve_project_workspace(db, project_id)
+        except project_workspace.ProjectWorkspaceError:
+            return None
+        cwd = str(workspace.root)
 
     cmd = build_title_command(
         cli=runner.cli, model=runner.model, prompt=_PROMPT.format(excerpt=excerpt)
@@ -224,15 +236,11 @@ async def generate_conversation_title(
     return title
 
 
-async def maybe_generate_title(
-    *, project_id: str, conversation_id: Optional[str], cwd: Optional[str] = None
-) -> None:
+async def maybe_generate_title(*, project_id: str, conversation_id: Optional[str]) -> None:
     """Fire-and-forget wrapper for the run-completion path. Never raises, never delays a turn."""
     if not conversation_id:
         return
     try:
-        await generate_conversation_title(
-            project_id=project_id, conversation_id=conversation_id, cwd=cwd
-        )
+        await generate_conversation_title(project_id=project_id, conversation_id=conversation_id)
     except Exception:  # noqa: BLE001 — a title is never worth failing a completed run over
         logger.debug("conversation titling failed", exc_info=True)
