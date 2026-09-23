@@ -7,6 +7,7 @@ import {
   useUpdateAgentDescription,
   useUpdateAgentGrant,
   useUpdateAgentPermissionDefault,
+  useAgentLaunchability,
 } from '@/api/agents'
 import { permissionModeValues, useModelCatalog } from '@/api/modelCatalog'
 import { useBindAgentCharter, useCharters } from '@/api/charters'
@@ -215,10 +216,18 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
 
 /** Rebinds this one agent. Deliberately not a link through to the Runner record: rebinding one
  *  agent and editing a record bound by many are different acts, and offering them from the same
- *  control invites the second when the operator meant the first. */
+ *  control invites the second when the operator meant the first.
+ *
+ *  Under the control it says what the Hub says when this agent cannot run (F179). "No runner" is
+ *  not a neutral value: `probe_agent` reports the agent unrunnable, and a message sent to it waits
+ *  in its queue with that same sentence as its `waiting_reason`. The sentence is the Hub's own,
+ *  from `GET /agents/launchability`, so a missing CLI or credential reads here too. */
 export function RunnerPicker({ agent }: { agent: AgentSummary }) {
   const { data: runners = [], isLoading } = useRunners()
   const bindRunner = useBindAgentRunner()
+  const { data: launchability } = useAgentLaunchability()
+  const verdict = launchability?.agents[agent.name]
+  const cannotRun = verdict?.runnable === false
 
   if (isLoading) {
     return <span className="text-xs" style={{ color: 'var(--text-3)' }}>Loading runners...</span>
@@ -238,13 +247,18 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
           opacity: bindRunner.isPending ? 0.6 : 1,
         }}
       >
-        <option value="">No runner</option>
+        <option value="">No runner (cannot run)</option>
         {runners.map((runner) => (
           <option key={runner.id} value={runner.id}>
             {runner.name} ({runner.cli})
           </option>
         ))}
       </Select>
+      {cannotRun && (
+        <p role="status" className="text-xs mt-2" style={{ color: 'var(--amber)' }}>
+          This agent cannot run: {verdict.reason ?? 'the Hub reports it as not runnable.'}
+        </p>
+      )}
       {bindRunner.isError && (
         <p className="text-xs mt-2" style={{ color: 'var(--red)' }}>
           Could not update runner binding.

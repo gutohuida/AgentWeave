@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input, Textarea } from '@/components/ui/input'
 import { SettingsSection } from '@/components/environment/SettingsSection'
 import { tint } from '@/lib/colorTint'
+import { readableApiError } from '@/api/client'
 import {
   Charter,
   CharterCreate,
@@ -14,16 +15,7 @@ import {
   useUpdateCharter,
 } from '@/api/charters'
 import { charterSummary } from '@/components/charters/charterSummary'
-
-function errorDetail(error: unknown): string {
-  if (!(error instanceof Error)) return 'Could not delete charter'
-  try {
-    const parsed = JSON.parse(error.message) as { detail?: string }
-    return parsed.detail ?? error.message
-  } catch {
-    return error.message
-  }
-}
+import { DeleteCharterDialog } from '@/components/charters/DeleteCharterDialog'
 
 export function ChartersPage() {
   const { data: charters = [], isLoading } = useCharters()
@@ -33,6 +25,10 @@ export function ChartersPage() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Charter | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState<Charter | null>(null)
+  // The create/update refusal, rendered inside the form that caused it (F187). Cleared whenever a
+  // form opens or submits, so a sentence about the previous attempt never describes this one.
+  const [formError, setFormError] = useState<string | null>(null)
   // Which charters are open for reading. Held per-id rather than as a single selection so
   // two can be compared side by side — the whole reason this is a disclosure and not a
   // modal. Deliberately not persisted: it describes what is being looked at right now.
@@ -70,7 +66,7 @@ export function ChartersPage() {
       title="Charters"
       description="Authored behavior and boundaries that can be assigned to an agent."
       actions={(
-        <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+        <Button variant="primary" size="sm" onClick={() => { setFormError(null); setCreating(true) }}>
           <Icon name="add" size={18} />
           New Charter
         </Button>
@@ -136,19 +132,13 @@ export function ChartersPage() {
                       </span>
                     </button>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button variant="ghost" size="icon-xs" onClick={() => setEditing(charter)} aria-label={`Edit ${charter.name}`}>
+                      <Button variant="ghost" size="icon-xs" onClick={() => { setFormError(null); setEditing(charter) }} aria-label={`Edit ${charter.name}`}>
                         <Icon name="edit" size={16} />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        onClick={() => {
-                          setDeleteError(null)
-                          deleteCharter.mutate(charter.id, {
-                            onError: (error: unknown) => setDeleteError(errorDetail(error)),
-                            onSuccess: () => collapse(charter.id),
-                          })
-                        }}
+                        onClick={() => setConfirmingDelete(charter)}
                         disabled={deleteCharter.isPending}
                         aria-label={`Delete ${charter.name}`}
                       >
@@ -187,8 +177,15 @@ export function ChartersPage() {
           title="New Charter"
           initial={null}
           isPending={createCharter.isPending}
+          error={formError}
           onCancel={() => setCreating(false)}
-          onSubmit={(values) => createCharter.mutate(values, { onSuccess: () => setCreating(false) })}
+          onSubmit={(values) => {
+            setFormError(null)
+            createCharter.mutate(values, {
+              onSuccess: () => setCreating(false),
+              onError: (error: unknown) => setFormError(readableApiError(error, 'The Hub refused this charter.')),
+            })
+          }}
         />
       )}
       {editing && (
@@ -196,11 +193,34 @@ export function ChartersPage() {
           title="Edit Charter"
           initial={editing}
           isPending={updateCharter.isPending}
+          error={formError}
           onCancel={() => setEditing(null)}
-          onSubmit={(updates) => updateCharter.mutate(
-            { id: editing.id, updates },
-            { onSuccess: () => setEditing(null) },
-          )}
+          onSubmit={(updates) => {
+            setFormError(null)
+            updateCharter.mutate(
+              { id: editing.id, updates },
+              {
+                onSuccess: () => setEditing(null),
+                onError: (error: unknown) => setFormError(readableApiError(error, 'The Hub refused this change.')),
+              },
+            )
+          }}
+        />
+      )}
+      {confirmingDelete && (
+        <DeleteCharterDialog
+          name={confirmingDelete.name}
+          content={confirmingDelete.content}
+          onCancel={() => setConfirmingDelete(null)}
+          onConfirm={() => {
+            const charter = confirmingDelete
+            setConfirmingDelete(null)
+            setDeleteError(null)
+            deleteCharter.mutate(charter.id, {
+              onError: (error: unknown) => setDeleteError(readableApiError(error, 'Could not delete charter')),
+              onSuccess: () => collapse(charter.id),
+            })
+          }}
         />
       )}
     </SettingsSection>
@@ -211,12 +231,14 @@ function CharterForm({
   title,
   initial,
   isPending,
+  error,
   onCancel,
   onSubmit,
 }: {
   title: string
   initial: Charter | null
   isPending: boolean
+  error: string | null
   onCancel: () => void
   onSubmit: (values: CharterCreate) => void
 }) {
@@ -259,6 +281,15 @@ function CharterForm({
           onChange={(event) => setContent(event.target.value)}
           className="h-72 px-3 py-2 font-mono text-sm"
         />
+        {error && (
+          <div
+            role="alert"
+            className="mt-3 rounded-md px-3 py-2 text-xs"
+            style={{ background: tint('var(--red)'), color: 'var(--red)' }}
+          >
+            {error}
+          </div>
+        )}
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
           <Button

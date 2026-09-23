@@ -14633,7 +14633,7 @@ only the two definitions.
 
 ## F179 (B) — an agent that cannot run at all is presented as a neutral dropdown value
 
-**Status:** open. Filed by the row-3 sweep (`58bd3fd`) alongside F178, never fixed. Named in
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the runner picker states the Hub's reason whenever the agent cannot run; see FIXED at the end of this entry. Was: open. Filed by the row-3 sweep (`58bd3fd`) alongside F178, never fixed. Named in
 the 2026-09-01 exploration `a-refusal-reaches-the-operator` and in `spec-queue/DECISIONS.md`;
 neither repairs it. [classified 2026-09-09, D-2]
 
@@ -14666,6 +14666,8 @@ PATCH /projects/<p>/agents/q1       {"runner_id": null}              -> 200
 POST  /projects/<p>/agent/trigger   {"agent":"q1","message":"held"}  -> 200  status=queued
 open  /?project=<p>&agent=q1&settings=execution
 ```
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `RunnerPicker` reads `useAgentLaunchability()` and, when the agent's verdict is `runnable: false`, renders `This agent cannot run: <reason>` under the control as a `role="status"` line: the Hub's own sentence from `probe_agent`, so an unbound agent reads `No runner is bound to this agent. Bind one in the Hub UI before it can run.`, and a missing CLI or credential reads too. The empty option is now labelled `No runner (cannot run)`. Rebinding invalidates `['project', pid, 'agents']`, which prefixes the launchability key, so the line clears on bind. Eight test files that spread the real `@/api/agents` module gained a `useAgentLaunchability` stub. Tests: `runnerPickerCannotRun.test.tsx` (4).
 
 ---
 
@@ -14997,7 +14999,7 @@ in the roster.
 
 ## F186 (B) — the charter screen destroys authored text on one click, with no confirmation and no undo
 
-**Status:** open. Filed by the row-4 sweep (`66e085f`), never fixed and never specced. No
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — delete asks first, naming the charter and how much text would be lost; see FIXED at the end of this entry. Was: open. Filed by the row-4 sweep (`66e085f`), never fixed and never specced. No
 external mention anywhere in `openspec/` or `spec-queue/`. [classified 2026-09-09, D-2]
 
 **Severity:** B. Destructive, immediate, irreversible, and the record it destroys is the one thing
@@ -15025,8 +15027,10 @@ row — which, given F183, is a row that may be one of several with the same nam
 (`page.locator('[role="dialog"], [role="alertdialog"]').count() == 0`), and
 `GET /charters/{id}` answers 404 within the same second. `row4-05-deleted-no-confirm.png`.
 
+**FIXED 2026-09-23 (interactive session, UI-1).** The delete control no longer fires the delete: it opens `DeleteCharterDialog` (new, `hub/ui/src/components/charters/`), an `alertdialog` shaped after `ClearInstructionsDialog` that names the charter, counts the lines of authored text that would be lost (so two same-named rows, F183, read differently), and says AgentWeave keeps no copy. Confirm closes it and fires `DELETE /charters/{id}`; Cancel, Escape and a scrim click fire nothing. The route's 409 for a bound charter still renders in the page's alert, now through `readableApiError` (the file's private `errorDetail` is gone). The route stays a hard delete; a soft delete would need a migration and was not asked for. Tests: `charterDeleteAndRefusal.test.tsx` (four for F186), each failing against the old page.
+
 ## F187 (B) — the charter form swallows its own refusal: the operator clicks Save and is told nothing
-**Status:** open
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the create and edit forms render the Hub's refusal inside the form; see FIXED at the end of this entry. Was: open
 
 **Severity:** B. F173's exact shape, at a third site.
 
@@ -15054,6 +15058,8 @@ open, and `page.inner_text("body")` contains neither `256` nor any word for refu
 computes for the operator with no file under `hub/ui/src` that reads it (F169, F173, F178, F179,
 F180). This one is slightly different and slightly worse: the Hub's sentence is a plain FastAPI 422
 the client already receives, so nothing needed computing at all. The client just drops it.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `ChartersPage` passes `onError` to both mutations and holds the refusal in `formError`; `CharterForm` renders it as a `role="alert"` inside the dialog, which stays open. The sentence is `readableApiError`'s reading of the body, so the 256-character refusal reads `String should have at most 256 characters`. It is cleared when a form opens and on every submit, so a sentence about the previous attempt never describes this one. Tests: `charterDeleteAndRefusal.test.tsx` (three for F187; the create and edit ones fail against the old page, and the third guards the clearing).
 
 ---
 
