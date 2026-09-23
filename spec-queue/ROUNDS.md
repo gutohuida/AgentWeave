@@ -130,6 +130,18 @@ The operator has already answered these, so none needs a question or a spec.
 
 ## Round 3 — Hub routes that act wrongly (B-led, ~2–3 days)
 
+**Status:** done 2026-09-23 (commits `779820e`..`3cd9db1`, branch `round/3d` for 3d–3f, Opus-reviewed
+and the review applied). 27 of 28 built. **F275** needs a UI bundle, which cannot ship until `:8000`
+restarts past `c18a87b`, so it moved to **UI-1** with **F156**'s UI half. The review found no blocker
+and six residuals, all applied (`3cd9db1`); its two separate defects are filed and queued as **F411** and
+**F412** in Round 4 (4e). Everything was checked against the old code: each new test fails there for the
+reason its finding states. **F338** had never been measured; it reached. **F360** was reproduced live
+on Haiku (old rule 0/32, new rule 32/32, `scripts/drive/t_f360_probe_task_rule.py`). **F297**'s graceful
+stop was measured with a probe launched exactly as `cmd_hub_start` launches the Hub. Full Hub suite,
+run alone at `3cd9db1`: **4675 passed, 86 skipped, 0 failed (25:01)**. CLI suite: **549 passed, 4
+skipped**. Not driven live: F288, F359, F245, F246, F189, F326 (unit and route level only). **Next:
+Round 4.**
+
 Grouped by file, so each group is one context load.
 
 **3a · `messages.py` — the operator's own messages**
@@ -215,6 +227,12 @@ malformed `since` is ignored), F257 (an unknown severity filter answers 200), F2
 can't say "not a repository"), F282 (junction refusal prints the declared path, not the resolved
 one), F62 → D7, F149 → D1.
 
+**4e · carried from Round 3's review (2026-09-23).** **F411** (B, first in this round): `create_loop`
+with `initial_tasks` still commits the job and loop before a per-task refusal (entry status, an unknown
+requirement id) can land -- F265's half-created loop through a second door; validate every initial task
+before the first commit. **F412** (C): reserve `operator` as an agent name, since Round 3a made it the
+runless sender (the CLI and Hub name rules change together).
+
 **4d · the Codex caveat.** F322 (Codex network by cwd) cannot be driven: Codex has been undrivable
 since 2026-08-29. It is parked with F325, pending D13.
 
@@ -244,6 +262,8 @@ One bundle and one browser check, and it reaches `:8000` on reload.
 | F252 + F255 | B | Logs show newest-first, with paging. The route and the view change together. F255's malformed `since` is the same query. |
 | F307 | B | The first Tab in a confirm-only dialog stays in the dialog. The operator named which control gets focus as a separate question, so it is in D13. |
 | F193 | B | An archived agent's open conversation shows one state in both rail views, with a remedy. Its product answer is in D10. |
+| F275 | C | *Carried from Round 3d.* `groupIntoTurns` puts an abandoned entry among the turns by its timestamp, not in the trailing `pending` group; the chat routes sort it in instead of appending it. |
+| F156 (UI half) | B | *Carried from Round 3f.* The approval drawer reads `will_attempt_merge`, `will_merge` is retired from `integration-preview`, and the drawer's "cherry-picks" becomes "merges" (integration runs `merge --no-ff`). |
 
 ## Round 5 — scheduler residuals, only after tonight's F352 build is verified (~1 day)
 
