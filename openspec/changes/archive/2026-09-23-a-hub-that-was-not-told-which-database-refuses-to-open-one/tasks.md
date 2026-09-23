@@ -2,7 +2,9 @@
 
 **Round 1, 2026-09-20. Round 2, 2026-09-20. Round 3, 2026-09-20. Round 4, 2026-09-21. Approved
 2026-09-22 (`spec-queue/APPROVALS.md`, F388, A). Groups 1 and 3 built 2026-09-22 night, one commit
-per the approval note. Groups 2 and 4 built 2026-09-22 night. Groups 5, 6 remain unbuilt.**
+per the approval note. Groups 2 and 4 built 2026-09-22 night. Groups 5 and 6 built and driven
+2026-09-23 night (D-5; F388 fixed 85b4b28). The `app-lifecycle` delta was synced in group 5.
+Archived 2026-09-23.**
 
 **R4 (after the adversarial Opus pass returned DO NOT APPROVE on 2026-09-20) rewrote 2.7, 3.2 and
 4.1, extended 4.5, and added 2.8, 3.7, 4.10 and 4.11.** Existing numbers are unchanged. All four
