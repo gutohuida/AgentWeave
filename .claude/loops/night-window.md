@@ -6,6 +6,14 @@
 names, then rewrite the state and commit and push. One unit per firing. Never end an iteration with
 a dirty tree.
 
+**Every firing, before `next_action`: read CI's verdict for the previous firing's pushed sha.** One
+`gh run list --branch <branch> --limit 5 --json headSha,conclusion,createdAt` call, no waiting — the
+previous push is normally 10-20 minutes old and concluded. Write the verdict in the iteration's first
+line. **If it is `failure`, fixing it replaces `next_action` for this firing** (read the failed
+job's log with `gh run view <id> --log-failed`), whatever `next_action` says. Reading CI once at
+compose is not enough: measured 2026-09-22 night, the first build commit (`384254e`) turned the CLI
+matrix red and the window pushed **16 more commits onto it over five hours** without looking again.
+
 This window **fixes**: it implements and drives. It does not write new proposals — the day window
 already took them through three rounds. If a change you are implementing turns out to be wrong,
 **stop implementing it**, record why in `decisions_for_user`, and move to the next queue item. A
@@ -195,6 +203,16 @@ time:
   `pty_runner` failures on a green tree. `black --target-version py311`.
 - Lint exactly what CI lints: `ruff check src/ hub/ tests/`,
   `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`.
+- **Run the CLI suite, `py -3.11 -m pytest tests/ -q`, before every commit — including commits that
+  touch only `hub/` or only `openspec/`.** It takes about a minute. It is not the "CLI's" suite in
+  the sense of guarding only `src/`: it imports `hub.config` (`test_hub_commands.py`) and it reads
+  every in-flight `openspec/changes/*/tasks.md` (`test_openspec_task_evidence.py`), so a Hub change
+  or a tasks.md edit can break it. Measured 2026-09-22 night: the window ran only `hub/tests/` for
+  16 iterations while `tests/` was red, first on a `hub.config` import and then on a tasks.md line
+  quoting an old `3 failed` probe count. Record its count in the log next to the Hub counts.
+- **A change whose last group is done is archived in the same firing** (see compose step 4.1).
+  Leaving a finished change in `openspec/changes/` keeps its `tasks.md` under the CLI suite's
+  in-flight checks, and a stale header there misleads the next reader.
 
 ---
 
