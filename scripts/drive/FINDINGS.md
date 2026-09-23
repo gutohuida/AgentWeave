@@ -31853,3 +31853,37 @@ mostly re-spend real agent-turn cost to re-confirm what already matches. Instead
   real and intentional, not an oversight.
 - **Not driven again live today; no new defect found. Status: n/a (verification only, not a
   finding).**
+
+## F409 (A) -- another agent's text can make a Claude turn read any file, before any tool call, past every posture
+
+**Status:** open (proposed: `openspec/changes/an-at-mention-an-agent-wrote-reads-no-file`, R1 2026-09-23)
+**Source:** drive
+**Theme:** Workspace & permissions
+
+**What happens.** The `claude` CLI expands an `@path` token in its `-p` prompt into an attached file
+before the model runs, with no tool call. `format_turn_prompt` (`hub/hub/inbound_queue.py:129`)
+puts every queued entry's content into that prompt verbatim: a peer's `send_message`, a job or loop
+briefing (task title, description, acceptance criteria, prior checkpoint), a checkpoint delivery,
+a delegation task, and (inside an operator-origin entry) the agent's own `ask_user` question
+(`questions.py:229`, `:233`). `runner_commands.py:283` passes it as `-p`. So one agent can make
+another agent's turn read any file the Hub's user can read, and neither `--disallowedTools` nor the
+default "Workspace only" posture sees it, because the Hub's `--permission-prompt-tool` is only asked
+about tool calls. Nothing records the read. Boundary escapes are graded A in this ledger
+(F321, F323, F331).
+
+**Measured on this machine, 2026-09-23, `claude` 2.1.280** (first by the research routine, then
+independently in the day window's D-2 round, which is this filing). The prompt had the Hub's exact
+queue shape, and every file tool was disallowed. It returned a marker from a file outside the
+working directory with **0 tool calls**, and the CLI's session transcript holds
+`"attachment":{"type":"file"}`. `@../x`, `@"<abs>"`, a backslash path, and an at-sign after a
+newline, tab, U+00A0, U+3000, U+2028 or **U+FEFF**, inside a code fence, or after `> ` all expand
+the same way. A backslash immediately before the at-sign stops it. Full table and probe:
+`scripts/drive/d2_0923_at_mention_tokeniser.py` and the change's `design.md`.
+
+**Why the upstream opt-out is not the fix.** `client_composed: true` on a stream-json user frame
+(claude-agent-sdk-python #1269) stops the read, but it was measured dropping the deferred-tools and
+MCP-instructions attachments. With the Hub's own `--mcp-config`, the model could name **none** of
+the 27 `mcp__agentweave__*` tools.
+
+**Not yet driven through a live Hub.** The measured link is the CLI's behaviour on the exact prompt
+shape. The Hub's path to that prompt was read, not driven. The change's task 4.1 drives it end to end.
