@@ -32322,10 +32322,28 @@ job. The pre-check makes this a race only, as it was before.
 
 ## F415 (C) — `operator` is not a reserved agent name, and Round 3a gave it a meaning
 
-**Status:** open. Filed 2026-09-23 by the adversarial review of Round 3. F261's repair (Round 3a) made
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — `operator` is reserved beside `user` in the Hub and the CLI; see FIXED at the end of this entry. Was: open. Filed 2026-09-23 by the adversarial review of Round 3. F261's repair (Round 3a) made
 `"operator"` the runless sender of `POST /messages` and skips it in `GET /agents`' activity fallback and
 `GET /status`'s `agents_active`. `validate_agent_name` (`worktrees.py`) reserves only `user`, so an agent
 can be named `operator`: it would be hidden from the roster fallback and the active count, and its
 messages would collide with `OPERATOR_SENDER`. Repair shape: reserve `operator` beside `user` in
 `validate_agent_name` and `AGENT_NAME_RE`'s callers (CLAUDE.md: the CLI and Hub restatements change
 together), with a refusal naming why.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4e).** `hub/hub/worktrees.py` has
+`_RESERVED_AGENT_NAMES`, a map from each reserved name to why it is reserved. `validate_agent_name`
+now refuses `operator` (compared case-insensitively, as `user` was) with `reserved agent name
+'operator': the Hub sends the operator's own messages as 'operator' and leaves that name out of the
+agent roster; choose another name`. A malformed name gets its own message, no longer "invalid or
+reserved". The CLI's `RESERVED_AGENT_NAMES` (`src/agentweave/constants.py`) adds `operator`, and
+CLAUDE.md's agent-name rule names both restatements. This reaches every route that already called
+`validate_agent_name`: session sync, `POST /agents/register`, `request_agent`, the trigger and
+worktree routes. No existing agent is stranded: a read-only query of `:8000`'s and the trial Hub's
+databases found no agent named `operator` or `user`.
+`hub/tests/test_operator_is_a_reserved_agent_name.py`: on the old code, session sync and
+`/agents/register` accepted `operator` (200) and `validate_agent_name` did not raise. A fifth test
+compares the CLI's set, read from its source with `ast`, to the Hub's. Every one of these passes on
+the new code. `test_the_evidence_names_the_author.py`'s 4.5 test rostered an agent named `operator`
+through session sync to make the `actor_kind` filter observable. It now inserts that agent as a row
+created before this change, the only way one can exist now, and still fails with the filter dropped
+(checked: `{'operator'} == set()`). CLI `tests/test_config.py` refuses `operator` in `agentweave.yml`.
