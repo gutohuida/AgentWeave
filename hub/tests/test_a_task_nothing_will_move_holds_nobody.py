@@ -807,3 +807,79 @@ async def test_a_loopengine_shaped_firing_names_every_reachable_holder(
         assert f"{name} is booked for" in detail
         assert f"{name} holds" not in detail
     return task
+
+
+# ---------------------------------------------------------------------------
+# 2.9 (`an-unstaffed-review-names-its-holders`) -- twelve agents, the 500-char fit
+# ---------------------------------------------------------------------------
+
+
+async def test_twelve_booked_agents_still_fit_the_500_character_bound(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """2.9. Twelve agents, each booked for three tasks reachable only through a second live loop
+    (R8's fixture, as 2.6 established), plus a thirteenth (the author) -- enough for 2.4's own
+    budget walk to shrink the clause list and name only some of them, not just 2.3's happy path.
+    The last agent in name order is also usage-held, so held wording must still reach the tail
+    (R8-5) even though that agent itself is never individually named.
+    """
+    names = [f"zz-2-9-{i:02d}" for i in range(1, 13)]
+    held_name = names[-1]
+    await _roster(app, auth_headers, bind_runner, AUTHOR, *names)
+    await _hold(held_name)
+
+    async with async_session_factory() as db:
+        job, loop = await _flow_queue(db, suffix="2.9", declares_document=True)
+        task = await _flow_task(db, loop, suffix="2.9")
+        await _completed_by(db, task)
+        await record_review_evidence(db, task.id, suffix="reach-2.9", actor=AUTHOR)
+
+        # R8's fixture: every booked holding lives in a second live loop this firing never fires,
+        # so each is reachable without ever being walked by the firing under test.
+        _elsewhere_job, elsewhere = await _loop(db, suffix="2.9-elsewhere")
+        for i, name in enumerate(names, start=1):
+            for j in range(1, 4):
+                await _holding(
+                    db,
+                    task_id=f"t-2.9-{i:02d}-{j}",
+                    assignee=name,
+                    status="pending",
+                    loop_id=elsewhere.id,
+                )
+
+    with _no_spawn():
+        res = await app.post(f"/api/v1/projects/{PROJECT}/jobs/{job.id}/run", headers=auth_headers)
+
+    assert res.status_code == 409, res.text
+    detail = res.json()["detail"]
+
+    history = await app.get(
+        f"/api/v1/projects/{PROJECT}/jobs/{job.id}/history", headers=auth_headers
+    )
+    assert history.status_code == 200, history.text
+    rows = [row for row in history.json() if row["status"] == "skipped"]
+    assert len(rows) == 1, rows
+    reason = rows[0]["error_summary"]
+    assert reason == detail
+    assert len(reason) <= 500, f"expected <= 500 chars, got {len(reason)}"
+
+    expected = (
+        "could not staff this step: no reviewer is free. "
+        f"{AUTHOR} is the one that completed this task; "
+        "zz-2-9-01 is booked for t-2.9-01-1 (pending), t-2.9-01-2 (pending), "
+        "t-2.9-01-3 (pending); "
+        "zz-2-9-02 is booked for t-2.9-02-1 (pending), t-2.9-02-2 (pending), "
+        "t-2.9-02-3 (pending); "
+        "and 10 more agents are excluded, busy, waiting for a usage limit or unbound. "
+        "Land it, on the task, to review it yourself. "
+        "Rejecting booked tasks that are no longer wanted can free their agents."
+    )
+    assert reason == expected
+    assert len(reason) == 470
+    assert "waiting for a usage limit" in reason
+    assert reason.endswith(
+        "Land it, on the task, to review it yourself. "
+        "Rejecting booked tasks that are no longer wanted can free their agents."
+    )
+    for name in names[2:]:
+        assert name not in reason

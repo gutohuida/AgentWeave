@@ -549,7 +549,7 @@ mutation and the observed failure beside the task when ticking it.
       fixture and assertion in full, and its own R8 mutation is checked, live, to be unfalsifiable
       on this tree (see the note). Not built as its own test; the reasoning is recorded, not the
       task silently dropped.
-- [ ] 2.9 Test, twelve agents each holding three tasks:
+- [x] 2.9 Test, twelve agents each holding three tasks:
       - the reason is at most 500 characters, counts the unnamed agents, and still names the
         remedy;
       - `GET …/jobs/{id}/history` answers **200** with the stall row in it.
@@ -564,6 +564,66 @@ mutation and the observed failure beside the task when ticking it.
       reachable, all twelve agents are free, and rung 3 is never reached. (iv) Make one agent
       late in name order usage-held and assert `"waiting for a usage limit"` appears in the
       tail — *mutation:* always use R3's tail. The test must fail (R8-5).
+
+      **Built 2026-09-23, night iteration 12.** Added
+      `test_twelve_booked_agents_still_fit_the_500_character_bound` to
+      `test_a_task_nothing_will_move_holds_nobody.py`: the author plus twelve agents
+      (`zz-2-9-01`..`zz-2-9-12`, sorted after the author so the join order is author-then-roster),
+      each booked for three tasks reachable only through a second live loop (2.6's R8 fixture,
+      `_loop`/`_holding`, already in this file) so 2.4's own budget walk has to fire, not just 2.3's
+      happy path. The last agent in name order (`zz-2-9-12`) is also usage-held via `_hold`
+      (imported already at the top of the file), so the tail must still carry the held variant even
+      though that agent itself falls into the tail rather than being named. Derived the exact
+      literal by calling `_rung_3_reason` directly against hand-built `AgentAvailability`/`Holding`
+      objects mirroring the fixture (a `%TEMP%` scratchpad, not shipped) before writing the test, per
+      2.6's own precedent, rather than guessing then adjusting the assertion to match: 470
+      characters, only the first two agents named in full (three tasks each), the third onward
+      (ten agents, including the held one) folded into
+      `"; and 10 more agents are excluded, busy, waiting for a usage limit or unbound"`, then the
+      `"Land it, on the task, to review it yourself. Rejecting booked tasks that are no longer
+      wanted can free their agents."` tail. Ordered the route assertions POST-run (409) → GET
+      history (200) → literal comparison → length bound, deliberately: 2.11's own note that a
+      mutation should trip the `history.status_code == 200` assertion itself, not an earlier one
+      that never lets the test reach the route the task is about.
+
+      **All four R8 mutations applied live and reverted (`git diff --stat` on `scheduler.py` and
+      `hub/hub/db/models.py` clean after each):**
+      - (i) `_RUNG_3_REASON_BOUND` raised to 500,000 *and* `fit_error_summary` made an identity
+        function (both the code bound and the model fit removed) — `GET …/jobs/{id}/history` raised
+        `fastapi.exceptions.ResponseValidationError` (`string_too_long` on `error_summary`, the
+        1,265-character unfitted reason), exactly the 500 the task predicts, proving the test
+        reaches `JobRunResponse`.
+      - (ii) `_RUNG_3_REASON_BOUND` alone raised to 500,000, `fit_error_summary` left shipped — the
+        history route answered 200 (the model's naive slice-to-499-plus-`…` still fits the column),
+        but the stored `error_summary` cut off mid-clause (`"...zz-2-9-05 is booked for t-2.9-05-1
+        (pendin…"`), never reaching the remedy. Failed on the literal `==`, the assertion this
+        mutation is meant to trip.
+      - (iii) fixture check, done as a temporary edit to the test itself (not the mutations above):
+        every holding's `loop_id` set to `None` instead of the second loop's id. The firing then
+        answered `200`, not `409` — with all twelve holdings unreachable every agent was free, and
+        rung 3 was never reached at all, proving the fixture's reachability is what produces the
+        stall this test is actually about.
+      - (iv) `_rung_3_tail` rewritten to always return R3's plain wording, dropping the `"held" in
+        remaining_kinds` branch — failed on the literal `==` (the shorter plain tail also left one
+        more clause-budget for `zz-2-9-03`'s own booked clause to fit, so the string changed shape
+        as well as losing the held wording — the ripple R8-5 itself warns a length-based fit
+        produces).
+
+      **Verification:**
+      - `pytest hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q` → **33 passed** (32 +
+        this task's 1, the 6.0 regression guard unchanged).
+      - `pytest hub/tests/test_reviewer_ladder.py hub/tests/test_a_held_agent_is_busy.py
+        hub/tests/test_a_flow_names_what_it_cannot_staff.py
+        hub/tests/test_a_task_nothing_will_move_holds_nobody.py hub/tests/test_review_divergence.py
+        hub/tests/test_run_divergence.py hub/tests/test_the_evidence_names_the_author.py -q` →
+        **148 passed** (147 + this task's 1).
+      - `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/
+        hub/tests/ tests/`, `mypy src/` (CI's exact commands/paths) — all clean, no reformat
+        needed.
+
+      **2.9b split off** to its own queue item — 2.9 alone, with its own literal derivation and four
+      live-checked mutations, took the room this firing had; 2.9b's 64-character-id fallback
+      fixture needs its own build, the same call iterations 7, 9, 10 and 11 made on this same group.
 - [ ] 2.9b Test (R3): the first agent in name order holds three tasks with 64-character
       caller-chosen ids (created through `POST …/tasks` with `id`), and its name is 32 characters.
       Assert:
