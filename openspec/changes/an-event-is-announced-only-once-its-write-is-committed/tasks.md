@@ -1,6 +1,6 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in `spec-queue/tracks/B9.md`
 
-- [ ] 0.1 R2: re-derive D1-D4 from the code without reading R1's argument first: `hub/hub/sse.py`, `hub/hub/run_divergence.py:66-107`, `hub/hub/task_transition_service.py:700-800`, every `persist_event(..., commit=False)` site, and the SQLAlchemy event order (re-run the measurement in design D1 in a scratch script outside the repo)
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B9.md`; SQLAlchemy measurement re-run and matched): re-derive D1-D4 from the code without reading R1's argument first: `hub/hub/sse.py`, `hub/hub/run_divergence.py:66-107`, `hub/hub/task_transition_service.py:700-800`, every `persist_event(..., commit=False)` site, and the SQLAlchemy event order (re-run the measurement in design D1 in a scratch script outside the repo)
 - [ ] 0.2 R3: a second independent re-derivation; `openspec validate an-event-is-announced-only-once-its-write-is-committed --strict` passes
 - [ ] 0.3 Operator approval in `spec-queue/APPROVALS.md`
 

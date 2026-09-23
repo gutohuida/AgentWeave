@@ -1,6 +1,6 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in `spec-queue/tracks/B9.md`
 
-- [ ] 0.1 R2: re-derive D1-D4 from `hub/hub/sse.py`, `hub/hub/api/v1/events.py`, `hub/ui/src/hooks/useSSE.ts`, `hub/ui/src/components/activity/ActivityLog.tsx` and `hub/ui/src/api/agents.ts:540-570` without reading R1's argument first
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B9.md`): re-derive D1-D4 from `hub/hub/sse.py`, `hub/hub/api/v1/events.py`, `hub/ui/src/hooks/useSSE.ts`, `hub/ui/src/components/activity/ActivityLog.tsx` and `hub/ui/src/api/agents.ts:540-570` without reading R1's argument first
 - [ ] 0.2 R3: a second independent re-derivation; `openspec validate a-live-view-that-fell-behind-is-told-and-catches-up --strict` passes
 - [ ] 0.3 Operator approval in `spec-queue/APPROVALS.md`
 

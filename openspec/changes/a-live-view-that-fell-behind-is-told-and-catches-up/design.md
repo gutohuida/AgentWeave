@@ -55,7 +55,7 @@ reconciliation poll at `api/agents.ts:560`. `onSseReconnect`'s docstring (`:131-
 *"fires whenever the client may have missed events: after a reconnect, or when the Hub reports a
 gap"*; the name stays, since both callers mean exactly that.
 
-`ActivityLog.tsx:136-144` drops any live event whose `project_id` is not the selected project's. A
+`ActivityLog.tsx:136-146` (the check is at `:139`) drops any live event whose `project_id` is not the selected project's. A
 gap passes that filter unconditionally. `summaryForEvent` (`lib/eventSummary.ts`) gains
 `stream_gap`: *"The live connection fell behind and {n} events were not delivered. Views were
 refreshed; this feed may be missing lines until Activity is reopened."* The feed is not refetched:
@@ -71,6 +71,6 @@ leaves through the route's existing `finally`.
 
 ## Open questions
 
-None for the operator. Noticed, not in scope: `OverviewPage.tsx:101` lists the last ten buffered
+None for the operator. Noticed, not in scope (R2 confirmed): `components/overview/OverviewPage.tsx:101` lists the last ten buffered
 events of **every** project, unfiltered by the selected project — the one live consumer that does not
 apply the `ActivityLog` filter. Worth a finding; it grows more visible once F251 admits 18 more kinds.

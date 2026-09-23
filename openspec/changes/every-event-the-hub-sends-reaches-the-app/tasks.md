@@ -1,6 +1,6 @@
 ## 0. Rounds and prerequisites — no task below may start until these are done
 
-- [ ] 0.1 R2: re-derive the vocabulary from `hub/hub` (every `.broadcast(` call, multi-line ones included, by AST, not grep) and the allowlist from `hub/ui/src/hooks/useSSE.ts:21-68`, without reading R1's list first; re-check D4's table against each payload and each UI query key
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B9.md`): re-derive the vocabulary from `hub/hub` (every `.broadcast(` call, multi-line ones included, by AST, not grep) and the allowlist from `hub/ui/src/hooks/useSSE.ts:21-68`, without reading R1's list first; re-check D4's table against each payload and each UI query key
 - [ ] 0.2 R3: a second independent re-derivation; `openspec validate every-event-the-hub-sends-reaches-the-app --strict` passes
 - [ ] 0.3 The operator answers B9-Q1 (design D2); record it in `spec-queue/DECISIONS.md`
 - [ ] 0.4 `an-event-is-announced-only-once-its-write-is-committed` is implemented and its test 1.1 passes on the tree this change starts from (or both land in one commit). **Do not start group 2 otherwise** — F335's false line would reach the feed
@@ -26,7 +26,7 @@
 - [ ] 2.3 (D3) `scripts/generate_sse_event_kinds.py`; run it; commit `hub/ui/src/lib/sseEventKinds.generated.ts`
 - [ ] 2.4 (D2) `hub/ui/src/hooks/useSSE.ts`: delete `SSE_EVENT_TYPES`; skip `connected` beside the `message` skip; dispatch every other named frame; type `SSEEvent.type` as `SseEventKind` with the skew comment. Delete the now-obsolete comment at `:538-543` about kinds "absent from `SSE_EVENT_TYPES`"
 - [ ] 2.5 (D4) The central switch: the cases in D4's table; `job_deleted` → `job_archived`
-- [ ] 2.6 Fix any `tsc` fallout from 2.4 (each is either a dead handler to delete or a kind missing from the registry — never widen the type to `string` to silence it); list each in the round log
+- [ ] 2.6 Fix any `tsc` fallout from 2.4 (each is either a dead handler to delete or a kind missing from the registry — never widen the type to `string` to silence it); list each in the round log. R2 expects exactly two, both dead handlers: `case 'job_deleted'` (`useSSE.ts:523`, replaced in 2.5) and `case 'question_not_asked'` in `eventBelongsToTimeline` (`api/agents.ts:400`). The latter's comment says it is kept for old `event_logs` rows, but the function is called only from the live SSE listener (`api/agents.ts:418`) and nothing broadcasts that kind, so it is dead there; `summaryForEvent`'s copy (`eventSummary.ts:125`) stays, because it takes `type: string` and renders history rows
 - [ ] 2.7 Run group 1; `py -3.11 -m pytest hub/tests -q`; `cd hub/ui && npm test && npm run lint && npm run build`; `ruff check hub/ scripts/ --select E9,F63,F7,F82,F401,F841`; `black --check --target-version py311 hub/hub hub/tests`
 - [ ] 2.8 `python scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together
 

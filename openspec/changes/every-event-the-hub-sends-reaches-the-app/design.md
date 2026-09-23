@@ -19,7 +19,10 @@ lands) for frames the stream itself writes. 63 kinds at R1's scan.
 `hub/tests/test_sse_event_vocabulary.py` walks `hub/hub` with `ast`:
 
 1. Every `.broadcast(` / `.publish(` / `defer_broadcast(` call whose kind argument is a string
-   literal names a key of `EVENT_KINDS`. Fails today for all 63 (the registry does not exist); after
+   literal names a key of `EVENT_KINDS`. The kind is positional argument 1 of `broadcast` and
+   `publish` (`project_id, event_type, data`) but argument 2 of `defer_broadcast` (`session,
+   project_id, event_type, data`); the walk reads each by its own position, or by the
+   `event_type=` keyword. Fails today for all 63 (the registry does not exist); after
    the fix, a typo'd or new unregistered kind fails naming file and line.
 2. A call whose kind is **not** a literal is allowed only at a declared site. Today there is one:
    `_broadcast_run_lifecycle` (`agent_trigger.py:1916`), which asserts `event_type in
@@ -59,7 +62,10 @@ to the existing `message` skip at `useSSE.ts:333-336`.
 `scripts/generate_sse_event_kinds.py` imports `hub.sse_events` and writes
 `hub/ui/src/lib/sseEventKinds.generated.ts`: a header saying it is generated and from what, then
 `export const SSE_EVENT_KINDS = [...] as const` (sorted) and `export type SseEventKind = (typeof
-SSE_EVENT_KINDS)[number]`. `test_sse_event_vocabulary.py::test_the_generated_vocabulary_is_current`
+SSE_EVENT_KINDS)[number]`. The array holds `EVENT_KINDS`' keys **plus every stream frame the app
+dispatches to listeners** — `stream_gap` once `a-live-view-that-fell-behind-is-told-and-catches-up`
+has landed (R2: that change's `ActivityLog` compares `event.type === 'stream_gap'`, which is TS2367
+if the union lacks it). `connected` is excluded: the read loop skips it before dispatch (D2). `test_sse_event_vocabulary.py::test_the_generated_vocabulary_is_current`
 regenerates into memory and compares byte for byte with the committed file; its failure message
 names the command to run. No `npm` step runs Python: the generated file is committed like the
 bundle.
@@ -76,7 +82,8 @@ Each case uses the event's server-stamped `project_id` (`pid`), as every existin
 | `agent_requested` | `agents`, `['projects']` | A new agent is on the roster (the rail reads agents from `['projects']`, `useSSE.ts:571-573`) |
 | `question_declined` | `questions`, `status` | As `question_answered` (`:460-464`) |
 | `task_blocked`, `task_unblocked` | `tasks`, `status`, `questions` | Board and the waiting-on-you surfaces |
-| `run_diverged`, `run_divergence_resolved`, `review_unstaffed` | `tasks`, `status` | Task cards and the drawer show divergences (`TaskCard.tsx`, `TaskDetailDrawer.tsx`); a divergence may restaff |
+| `run_diverged`, `run_divergence_resolved` | `tasks`, `status` | The card's divergence badge reads `task.has_open_divergence` from the tasks list (`TaskCard.tsx:396`); `run_diverged` may restaff, and `run_divergence_resolved` rides a move to `under_review` that the scheduler path announces with no `task_updated` (only `tasks.py:1472` and `spec.py:1634` broadcast that kind). `['project', pid, 'divergences', …]` (`useDivergences`, `api/tasks.ts:447`) is **not** invalidated: no component mounts it |
+| `review_unstaffed` | `loops`, `loops/<loop_id>` | R2: it writes nothing but its own event row (`_emit_review_unstaffed`, `scheduler.py:2427-2478`: "It does not touch the job"), so no task or status query changes. The surface that names an unstaffable review is the loop card's stall reason (`decide_firing`, `scheduler.py:2070-2086`); the payload carries `loop_id` |
 | `queue_agent_held`, `queue_agent_paused` | `agents`, `queue/<agent>` | As the queue family (`:499-510`) |
 | `worktree_released` | `worktrees`, `worktree-conflicts` | As F250's cases (`:441-443`) |
 | `checkpoint_ready`, `conversation_cut_over` | — | `useCheckpoints` (`api/checkpoints.ts:45-51`) |
@@ -86,9 +93,17 @@ Each case uses the event's server-stamped `project_id` (`pid`), as every existin
 ## D5 — the feed
 
 Admitting 18 kinds puts them in `eventBuffer` and in the Activity feed. Each either has a sentence
-already (six do) or renders through the default branch. No new sentences are in scope; R2 should
-look at whether `checkpoint_due` and `agent_requested` read acceptably through the default branch
-(`eventSummary.ts:164-168`, which falls back to the kind's name).
+already (six do) or renders through the default branch. No new sentences are in scope.
+
+**R2 checked the default branch.** `EventRow` renders the kind name as the row's title
+(`components/activity/EventRow.tsx:81`) and prints a summary only when it differs from that name
+(`:82`). The default branch (`eventSummary.ts:164-168`) returns the first of `error`, `message`,
+`summary`, `title` in the payload, else the kind name. `checkpoint_due` (`checkpoint_trigger.py:222`,
+`:280`: `conversation_id`, `agent`, threshold fields) and `agent_requested` (`agents.py:2242-2250`:
+`agent`, `template`, `requester`, …) carry none of those, so each renders as its actor plus the bare
+kind label, like every other kind without a sentence. Legible; whether it is enough is the
+human-only check's question, and a "no" there is a new finding about a sentence, not a reason to
+drop the kind. (`conversation_updated` carries `title`, so its row shows the conversation's title.)
 
 ## What each route returns when what it calls raises
 
