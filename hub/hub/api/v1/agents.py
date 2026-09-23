@@ -48,7 +48,7 @@ from ...model_catalog import (
     undeclared_model_reason,
 )
 from ...output_recording import record_agent_output, record_context_usage
-from ...review_turn import ReviewContext
+from ...review_turn import ReviewContext, verdict_evidence_sentence
 from ...schemas.agents import (
     AgentHeartbeatCreate,
     AgentOutputCreate,
@@ -1751,6 +1751,17 @@ async def _render_hub_agent_context(
                 "if it is not. Leaving it where it is ends your turn without a review having "
                 "happened, and the work waits for a person."
             )
+            # F357: the evidence gate, beside the verdict it can refuse. The loop briefing says the
+            # same thing through the same helper.
+            review_task = await db.get(Task, review.task_id)
+            if review_task is not None:
+                gate = await verdict_evidence_sentence(
+                    db,
+                    review_task,
+                    may_decide=bool(agent_row is not None and agent_row.can_accept_evidence),
+                )
+                if gate:
+                    lines.append(f"- {gate}")
             lines.append(
                 "- Your own working checkout is outside this turn's boundary. You are not in it "
                 "and cannot reach it from here."

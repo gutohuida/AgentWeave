@@ -29317,7 +29317,7 @@ re-loading the run after the rollback. Test:
 
 ## F357 (B) — a flow's review turn tells its reviewer to approve, and says nothing about the evidence gate that will refuse it
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed (this commit) [Round 5, 2026-09-23] -- both review channels now name the evidence gate beside the verdict; see FIXED at the end of this entry. Was: open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 
 **What happened.**
 - **Five of the Architect's approvals were refused** (`49d507bb` 18:00, `0682583f` 19:41,
@@ -29344,6 +29344,24 @@ is read only at `requirement_evidence.py:674` and in `agents.py`.
 
 **Why B.** The review turns were genuine and the verdicts were right. Each one hit a refusal that the
 briefing had set up, and the agents misreported the result to their peers.
+
+**FIXED 2026-09-23 (interactive session, Round 5).** Re-verified first: both channels still gave the
+verdict instruction alone (`scheduler._briefing_verdict_lines`, `agents.py` review block), and the
+gate's refusal (`requirement_gate._check_unaccepted`) was unchanged. One sentence,
+`review_turn.verdict_evidence_sentence`, now follows the verdict on **both** channels, so they
+cannot disagree. It is keyed on what is waiting now, from the gate's own source
+(`task_integration.awaiting_targets`): a task with nothing awaiting -- every documentless loop -- is
+told nothing new. It names each waiting piece (requirement and commit), says `approved` *can* be
+refused until it is accepted (not "is": the gate's mixed case lets approval through when something
+else would merge), and says `revision_needed` is unaffected. Then, by the reviewer's own
+`can_accept_evidence` grant: a granted reviewer is told to decide with `decide_evidence` first, then
+approve; an ungranted one is told the decision is the operator's, that a refused approval recorded
+no verdict, to send the verdict as a message, and **not to tell anyone the task is approved** -- the
+misreport this finding measured. `_compose_loop_briefing` gained a required `agent=` keyword (no
+default, like `is_review`) so the briefing can read the reviewer's grant. `resolve_reviewer` still
+does not prefer a granted agent; that is staffing, not copy, and is left to S1/D9.
+Test: `hub/tests/test_review_briefing_names_the_evidence_gate.py` (4), built on the gate's own
+awaiting-evidence fixture; three fail with the sentence disabled.
 
 ## F358 (B) — evidence can be decided while the run that recorded it is still live, so the reviewer judges a commit the Hub is about to replace
 

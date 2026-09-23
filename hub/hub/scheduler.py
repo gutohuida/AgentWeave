@@ -2521,7 +2521,7 @@ def _briefing_completion_lines(task: Task, *, is_flow: bool) -> list[str]:
     return [sentence, ""]
 
 
-def _briefing_verdict_lines(task: Task) -> list[str]:
+async def _briefing_verdict_lines(session: AsyncSession, task: Task, *, agent: str) -> list[str]:
     """How a review turn ends, on the channel that drives tool calls.
 
     Deliberately duplicated with `api/v1/agents.py`, which says the same thing in the turn context
@@ -2534,14 +2534,27 @@ def _briefing_verdict_lines(task: Task) -> list[str]:
     `commit_for_task_review`; naming it here would be a second copy of a fact that can disagree
     with the checkout the reviewer is standing in, which is the case `ReviewContext.work_moved`
     already exists to handle on the channel that resolved it.
+
+    **The evidence gate is named beside the verdict** (F357), by the same shared sentence the
+    context channel uses, keyed on the reviewing *agent*'s grant.
     """
-    return [
+    from . import review_turn
+    from .spec_lifecycle import Actor
+
+    lines = [
         f"**End the review with a verdict, using `update_task`.** The task is `{task.status}`: "
         "set it to `approved` if the work is right, or `revision_needed` if it is not. Leaving "
         "it where it is ends your turn without a review having happened, and the work waits for "
         "a person.",
         "",
     ]
+    may_decide = await requirement_evidence.may_accept(
+        session, task.project_id, Actor(kind="agent", name=agent)
+    )
+    gate = await review_turn.verdict_evidence_sentence(session, task, may_decide=may_decide)
+    if gate:
+        lines.extend([gate, ""])
+    return lines
 
 
 async def _briefing_evidence_lines(
@@ -2583,6 +2596,7 @@ async def _compose_loop_briefing(
     prior_checkpoint: Optional[Checkpoint],
     *,
     is_review: bool,
+    agent: str,
 ) -> str:
     """The context a loop firing gets ahead of the operator's own message (design D5): purpose,
     the claimed queue item, the prior firing's checkpoint if one exists, and a one-line queue
@@ -2674,7 +2688,7 @@ async def _compose_loop_briefing(
     # much the previous agent happened to write.
     if claimed_task is not None:
         lines.extend(
-            _briefing_verdict_lines(claimed_task)
+            await _briefing_verdict_lines(session, claimed_task, agent=agent)
             if is_review
             else _briefing_completion_lines(claimed_task, is_flow=bool(loop.spec_document_id))
         )
@@ -3333,6 +3347,7 @@ class JobScheduler:
                     claimed_task,
                     prior_checkpoint,
                     is_review=bool(selection is not None and selection.is_review),
+                    agent=acting_agent,
                 )
                 content = f"{briefing}\n{job.message}"
 
@@ -3692,7 +3707,7 @@ class JobScheduler:
 
         prior_checkpoint = await _briefing_checkpoint(session, loop, task, is_review=is_review)
         briefing = await _compose_loop_briefing(
-            session, loop, task, prior_checkpoint, is_review=is_review
+            session, loop, task, prior_checkpoint, is_review=is_review, agent=agent
         )
         entry = new_entry(
             project_id=job.project_id,

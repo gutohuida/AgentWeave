@@ -175,6 +175,56 @@ async def _declared_reviewer_name(session: AsyncSession, task: Task) -> Optional
     return None
 
 
+async def verdict_evidence_sentence(
+    session: AsyncSession, task: Task, *, may_decide: bool
+) -> Optional[str]:
+    """What the evidence gate means for this review's verdict, or None when nothing is waiting (F357).
+
+    Both review channels (the loop briefing and the turn context) tell a reviewer to end with
+    `approved` or `revision_needed`, and that instruction predates `approval-refuses-unaccepted-
+    evidence`. Measured on LoopEngine, 2026-09-14: seven approvals refused by the gate, and the
+    reviewers told their peers the task was approved anyway -- the briefing had set up the refusal
+    and said nothing about it. One sentence, built here, so the two channels cannot disagree.
+
+    Keyed on what is waiting now, from the gate's own source (`awaiting_targets`), so a task with
+    no requirements -- every documentless loop -- is told nothing. *may_decide* is the reviewer's
+    `can_accept_evidence` grant; the reviewer is never the author, but a requirement can be served
+    by more than one task, so "not your own" is still said.
+
+    "Can be refused", not "is refused": the gate allows the mixed case where something else of
+    this task's would merge (`requirement_gate._check_unaccepted`), and a reviewer cannot tell
+    which case it is in.
+    """
+    from . import task_integration
+    from .requirement_gate import _identifiers_for
+
+    awaiting = await task_integration.awaiting_targets(session, task)
+    if not awaiting:
+        return None
+    identifiers = await _identifiers_for(session, [row.requirement_id for row in awaiting])
+    pieces = "; ".join(
+        f"`{identifiers.get(row.requirement_id or '', '') or 'a requirement'}` at "
+        f"`{(row.commit_sha or '')[:12] or 'an unnamed commit'}`"
+        for row in awaiting
+    )
+    sentence = (
+        f"**This task's evidence is still waiting for a decision** ({pieces}). Until it is "
+        "accepted, `approved` can be refused: approving would merge none of it. "
+        "`revision_needed` is not affected."
+    )
+    if may_decide:
+        return sentence + (
+            " You can decide evidence: if the work is right, accept what it demonstrates with "
+            "`decide_evidence` first (not any you recorded yourself), then approve."
+        )
+    return sentence + (
+        " Deciding evidence is the operator's, not yours. If `approved` is refused, your verdict "
+        "was not recorded: leave the task where it is, send the verdict as a message saying the "
+        "work is ready and waiting on the operator's evidence decision, and do not tell anyone "
+        "the task is approved."
+    )
+
+
 async def prepare_review_turn(
     session: AsyncSession,
     *,

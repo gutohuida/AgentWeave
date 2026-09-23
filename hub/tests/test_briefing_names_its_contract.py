@@ -117,7 +117,9 @@ async def _brief(loop, task, *, is_review):
         fresh_task = None
         if task is not None:
             fresh_task = (await db.execute(select(Task).where(Task.id == task.id))).scalar_one()
-        return await _compose_loop_briefing(db, fresh, fresh_task, None, is_review=is_review)
+        return await _compose_loop_briefing(
+            db, fresh, fresh_task, None, is_review=is_review, agent="dev"
+        )
 
 
 # ---------------------------------------------------------------------------

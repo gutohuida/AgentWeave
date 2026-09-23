@@ -768,8 +768,8 @@ async def test_3_10_criteria_render_into_a_loop_briefing_one_line_each(app):
         loop = (await db.execute(select(Loop).where(Loop.id == "loop-crit-briefing"))).scalar_one()
         task = (await db.execute(select(Task).where(Task.id == task_id))).scalar_one()
         assert all(isinstance(line, str) for line in task.acceptance_criteria)
-        briefing = await _compose_loop_briefing(db, loop, task, None, is_review=False)
-        review = await _compose_loop_briefing(db, loop, task, None, is_review=True)
+        briefing = await _compose_loop_briefing(db, loop, task, None, is_review=False, agent="dev")
+        review = await _compose_loop_briefing(db, loop, task, None, is_review=True, agent="dev")
 
     for rendered in (briefing, review):
         assert "Acceptance criteria:" in rendered
