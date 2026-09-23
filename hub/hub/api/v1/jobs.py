@@ -22,7 +22,7 @@ from ...schemas.tasks import TaskCreate
 from ...sse import sse_manager
 from ...task_transitions import operator, run_actor
 from ...utils import persist_event, short_id
-from .tasks import create_task_for_actor
+from .tasks import check_task_create, create_task_for_actor
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,38 @@ async def _record_job_run_failure(
 def _loop_opts_in(purpose: Optional[str], stop_at, stop_when_queue_empties: Optional[bool]) -> bool:
     """Design D6's "at least one field" rule — a bare default does not opt a job in."""
     return purpose is not None or stop_at is not None or stop_when_queue_empties is True
+
+
+async def _check_initial_tasks(
+    session: AsyncSession, project_id: str, bodies: List[TaskCreate]
+) -> None:
+    """Refuse the whole create if any `initial_tasks` entry would be refused (F414).
+
+    Asks `check_task_create` of each entry, plus the one refusal it cannot see: two entries naming
+    the same id, where the second insert collides with the first. The refusal names the entry.
+    """
+    seen: Dict[str, int] = {}
+    for index, task_body in enumerate(bodies):
+        try:
+            if task_body.id and task_body.id in seen:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Task id '{task_body.id}' is also given to initial_tasks"
+                        f"[{seen[task_body.id]}]"
+                    ),
+                )
+            await check_task_create(session, project_id, task_body)
+        except HTTPException as refusal:
+            raise HTTPException(
+                status_code=refusal.status_code,
+                detail=(
+                    f"initial_tasks[{index}] ({task_body.title!r}): {refusal.detail}. "
+                    "Nothing was created."
+                ),
+            ) from refusal
+        if task_body.id:
+            seen[task_body.id] = index
 
 
 async def _check_spec_document_conflict(
@@ -627,13 +659,13 @@ async def create_job(
     # Design D2's "definition window": `initial_tasks` is validated up front, before any row is
     # created, so one malformed entry cannot leave a job (and its loop) half-created behind a 422.
     initial_task_bodies: List[TaskCreate] = []
-    for item in body.initial_tasks or []:
+    for index, item in enumerate(body.initial_tasks or []):
         try:
             initial_task_bodies.append(TaskCreate(**item))
         except ValidationError as e:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"invalid initial_tasks entry: {e}",
+                detail=f"invalid initial_tasks[{index}] entry: {e}\nNothing was created.",
             ) from e
 
     # F265: the seeding below goes through `_authorize_loop_task_creation`, which admits the
@@ -666,6 +698,10 @@ async def create_job(
     # before an unrelated job sweep caught it.
     if _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
         await _check_spec_document_conflict(session, project_id, body.spec_document_id)
+        # F414: the tasks are created one commit at a time after the job and loop, so a refusal of
+        # the second (an unknown requirement, an id already taken) used to leave an enabled loop
+        # holding the first. Every refusal a task create makes from its body is asked here instead.
+        await _check_initial_tasks(session, project_id, initial_task_bodies)
 
     job_id = f"job-{short_id()}"
 
@@ -734,10 +770,11 @@ async def create_job(
             ) from e
         # Seeds the new loop's queue in the same call that creates it (design D2's "definition
         # window"). `create_task_for_actor` is the single `Task(` construction site — reused here
-        # rather than duplicated. Its loop-authorship gate (`_authorize_loop_task_creation`) passes
-        # because the F265 check above already refused every caller it would refuse: its creator
-        # rule was asked before any row existed, and `job.run_count` is always 0 for a job this
-        # call just created, so the "already fired" restriction never applies here.
+        # rather than duplicated. None of its refusals can fire here: its loop-authorship gate
+        # (`_authorize_loop_task_creation`) passes because the F265 check above already refused
+        # every caller it would refuse, and `job.run_count` is always 0 for a job this call just
+        # created; the entry status is `TaskCreate`'s own validator; and `_check_initial_tasks`
+        # asked the rest (F414). Only a race on a task id can still refuse here.
         actor = (
             run_actor(run_identity, agent_identity)
             if agent_identity and run_identity

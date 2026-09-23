@@ -21,6 +21,9 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
    says so, not when a window finds room.
 2. **This week.** The Merge Week scorecard's O5 opens no new `openspec/changes/` directory before
    2026-09-28. So the no-spec rounds run this week, and the spec tracks start on 2026-09-28.
+   **Relaxed by the operator on 2026-09-23:** the day window's own specs may open this week (it opened
+   `an-at-mention-an-agent-wrote-reads-no-file` and `pressing-run-names-the-reason-that-held` that
+   day). These rounds' spec tracks still start on 2026-09-28.
 
 ## How a round runs
 

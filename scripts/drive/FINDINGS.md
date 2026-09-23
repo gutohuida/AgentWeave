@@ -32291,7 +32291,7 @@ folding it in.
 
 ## F414 (B) — `create_loop` with `initial_tasks` still commits the loop and job before a task can be refused
 
-**Status:** open. Filed 2026-09-23 by the adversarial review of Round 3 (read from the source, not
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — every `initial_tasks` entry is checked before the job is committed; see FIXED at the end of this entry. Was: open. Filed 2026-09-23 by the adversarial review of Round 3 (read from the source, not
 driven). F265's repair (Round 3b) refuses the *authorisation* failure before any row is written, but
 `hub/hub/api/v1/jobs.py:700-755` still commits the job and loop, enabled, and then creates each
 initial task through `create_task_for_actor`, which can refuse per task: `guard_entry_status` on the
@@ -32301,6 +32301,24 @@ Tasks are committed one at a time, so a refusal on the second leaves the first. 
 authorisation gate, and D2's "validated up front" covers only the schema. The same half-created loop
 F265 described, through a different refusal. Repair shape: validate every initial task (status,
 identifiers) before the first commit, or create the job, loop and tasks in one transaction.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4e).** The first repair shape. `tasks.py` has
+a new `check_task_create(session, project_id, body)` that runs every refusal a create makes from its
+body (`resolve_identifiers`, and an id already on the board) without writing anything.
+`create_task_for_actor` calls it in place of its own inline resolution, so the two cannot drift, and
+its docstring says a new refusal belongs there. `create_job` calls `_check_initial_tasks` inside the
+loop branch, before the job row, and that also refuses two entries naming the same id. Every refusal
+names the entry (`initial_tasks[1] ('Second task'): ...`) and ends "Nothing was created." The schema
+refusal's detail does too. **Correction to this entry:** the entry-status half never half-created.
+`TaskCreate`'s own validator refuses a non-entry status at D2's up-front parse, as a 422, before any
+row exists; `guard_entry_status` inside `create_task_for_actor` could not fire for an initial task.
+Measured, not argued: `hub/tests/test_a_refused_initial_task_leaves_no_loop.py` puts the refused task
+*second*. On the old code the unknown-requirement, duplicate-id and id-already-taken cases each left
+a job, a loop and the first task (1/1/1, and 1/1/2 over the pre-existing task), and the recovery case
+counted two jobs. The status case answered 422 with nothing written, but without naming the entry. On
+the new code all six pass. Residual, not fixed: the job and loop are still two commits, so a lost race
+for the spec document between `_check_spec_document_conflict` and the loop's commit still leaves the
+job. The pre-check makes this a race only, as it was before.
 
 ## F415 (C) — `operator` is not a reserved agent name, and Round 3a gave it a meaning
 
