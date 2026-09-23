@@ -4,7 +4,10 @@
 `spec-queue/research/2026-09-23.md`, re-measured independently in this round.
 **Round 2, 2026-09-23:** re-derived against the code. It widened the scope to the Hub's two
 one-shot workers (measured to expand) and moved the D6 trigger. See design.md's Round log.
-**Nothing here is implemented yet.** R3 has not run.
+**Round 3, 2026-09-23:** re-derived again. It found a second operator message that carries agent
+text, the board's Start work (design D8). It also moved D7's un-escaping of worker output out of the
+prompt and into code, and made the probe's path grading symmetric. See the Round log's R3 entry.
+**Nothing here is implemented yet.**
 
 ## Why
 
@@ -78,12 +81,18 @@ would cut every agent off from the Hub.
   sentence. It says that an `@` in text the operator did not write is shown as `\@`, and why (design
   D6). The question echo is covered. A turn whose blocks contain no `\@` is byte-identical to today.
 - **The one-shot workers neutralise their whole prompt (R2, design D7).** `build_worker_command`
-  and `build_title_command` escape every `@` in the prompt, for both CLIs. The checkpoint generation
-  template gains one rule that tells the model to write at-signs without the backslash
-  (`checkpoint/2`). `grade_probe` undoes the escape in the probe's answers before comparing paths,
-  so a changed file under `@scope/` is not graded missing.
-- **What is stored does not change.** Queue entries, messages, questions and jobs keep their text as
-  written. Only the prompt handed to the runner differs, so the conversation view shows what was
+  and `build_title_command` escape every `@` in the prompt, for both CLIs. **(R3)** What a worker
+  returns is un-escaped in code by the exact inverse, `restore_file_mentions`. `worker._interpret`
+  applies it to the parsed JSON, and the titler applies it to its output. So a stored checkpoint or
+  title never carries `\@`, whatever the model writes. `_normalise` drops separators before an
+  at-sign on both sides, so a changed file under `@scope/` is not graded missing, however the probe
+  writes it. No template or prompt version changes.
+- **The board's Start work escapes the task title (R3, design D8).** `useStartWorkOnTask` builds
+  `Work on task <id>: <title>` in the browser, and it is queued as the operator. An agent can author
+  the title, so its at-signs are escaped where the message is built, as the question echo's are.
+- **What is stored does not change**, except in the two mixed-author strings (the question echo and
+  Start work), which are escaped where they are built. Queue entries, messages, questions and jobs
+  otherwise keep their text as written. Only the prompt handed to the runner differs, so the conversation view shows what was
   sent.
 - **A regression probe**: `scripts/drive/d2_0923_at_mention_tokeniser.py` keeps its measured table
   and exits non-zero when a CLI upgrade changes any row. The live drive (tasks group 4) adds the
@@ -110,20 +119,27 @@ would cut every agent off from the Hub.
 - `hub/hub/file_mentions.py` (new): `neutralise_file_mentions` and the D6 sentence.
 - `hub/hub/inbound_queue.py`: `format_turn_prompt` neutralises non-operator blocks and adds the
   sentence.
-- `hub/hub/worker.py` (`build_worker_command`), `hub/hub/conversation_titles.py`
-  (`build_title_command`) and `hub/hub/checkpoint_generation.py` (one template rule, the prompt
-  version, and `grade_probe`'s undo).
+- `hub/hub/worker.py` (`build_worker_command`, `_interpret`), `hub/hub/conversation_titles.py`
+  (`build_title_command`, `generate_conversation_title`) and `hub/hub/checkpoint_generation.py`
+  (`_normalise`). The templates and prompt versions do not change (R3).
+- `hub/ui/src/api/tasks.ts` (`useStartWorkOnTask`), `hub/ui/src/lib/fileMentions.ts` (new), a UI
+  test, and the refreshed bundle under `hub/hub/static/ui` (R3, D8).
 - `hub/hub/api/v1/questions.py`: `_batch_delivery_text` escapes `row.question`.
 - `hub/tests/test_inbound_queue.py`, the questions tests, `test_checkpoint_generation.py` and
   `test_title_generation.py`: new rows. Existing exact-string
   assertions whose content has no `@` do not move.
 - `scripts/drive/d2_0923_at_mention_tokeniser.py` (written in R1) and
-  `scripts/drive/d3_0923_worker_at_mention.py` (written in R2), both as evidence.
+  `scripts/drive/d3_0923_worker_at_mention.py` (written in R2), both as evidence, and
+  `scripts/drive/d4_0923_worker_json_escape.py` (written in R3), for how a worker answers once its
+  prompt is escaped.
 - `openspec/specs/agent-run-sandboxing/spec.md`: one ADDED requirement.
 - **Behaviour an operator can notice:** an agent sees `\@` where a peer, a job or a task wrote `@`.
   That includes email addresses and Python decorators in a pasted snippet (design Risks). An
   operator-authored **job** prompt with a hand-typed `@path` no longer expands, because job entries
   are not operator-origin (design D3). The agent reads that file with a tool call instead, which the
   posture judges.
-- **Hub restart:** this is Hub process code, not the per-run MCP server. `:8000` picks it up only
-  when the operator restarts it. No migration, no API change and no UI change.
+- **Hub restart:** the Hub part is Hub process code, not the per-run MCP server. `:8000` picks it up
+  only when the operator restarts it. **The UI part (D8) is different.** It is a committed bundle, so
+  it reaches `:8000` on its next browser reload, before any restart. That is harmless: until the
+  Hub restarts, the agent sees an escaped title in a turn with no D6 sentence. No migration and no
+  API change.

@@ -20,8 +20,12 @@ A source added later SHALL be treated as not written by the operator until it is
 
 A one-shot worker, such as the one that writes a checkpoint or titles a conversation, SHALL have
 every mention in its prompt neutralised, including the operator's. No worker attaches files that
-way. A worker's output that the system stores SHALL NOT carry the neutralisation, and a check
-that compares a worker's answer with the system's records SHALL undo it first.
+way. A worker's output that the system stores SHALL NOT carry the neutralisation, whatever the worker
+wrote. A check that compares a worker's answer with the system's records SHALL give the same
+result whether or not the answer carries it.
+
+A message the operator sends that the system composes around text an agent wrote, such as a
+request to start work on a task an agent titled, SHALL carry that text neutralised.
 
 #### Scenario: A peer's mention of a file outside the workspace attaches nothing
 
@@ -59,3 +63,14 @@ that compares a worker's answer with the system's records SHALL undo it first.
 
 - **WHEN** a checkpoint lists a changed file whose path contains an at-sign, and the probe answers with that path as it was shown
 - **THEN** the probe does not report the path as missing or invented
+
+#### Scenario: Starting work on a task an agent titled attaches nothing
+
+- **WHEN** an agent creates a task whose title mentions a file outside the workspace, and the operator starts an agent's work on that task from the board
+- **THEN** the started agent's harness attaches no file for that mention
+- **AND** the task keeps its title as the agent wrote it
+
+#### Scenario: A worker that copies the neutralisation does not store it
+
+- **WHEN** a checkpoint worker's answer repeats a neutralised mention exactly as it was shown
+- **THEN** the stored checkpoint shows the mention as originally written

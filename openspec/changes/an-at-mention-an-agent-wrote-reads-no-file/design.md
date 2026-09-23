@@ -60,6 +60,7 @@ It then appends `entry.content` unescaped (`:129`).
 | `operator` | `agent_trigger.py:1498` (`POST /agent/trigger`, Hub key only) | the operator's composer text |
 | `operator` | `messages.py:268` when `by_operator` (`run_id is None`, `:62`) | the operator's chat text |
 | `operator` | `questions.py:165` | `_batch_delivery_text`: **the agent's own question** plus the operator's answer |
+| `operator` | `agent_trigger.py:1498`, from the board's **Start work** (`hub/ui/src/api/tasks.ts:446-465`, `useStartWorkOnTask`, called by `TaskCard.tsx:93`) | **R3:** `` `Work on task ${taskId}: ${title}` ``, composed in the browser. `title` is the task's title, which an agent can author (`create_task`, `mcp_server.py:248-249`). See D8 |
 | `agent` | `messages.py:268` | another agent's `send_message` (`mcp_server.py:237`) |
 | `agent` | `agents.py:2185` | the delegation task text from a spawning agent |
 | `job` | `scheduler.py:3314` / `:3335`, `:3664-3668` | `f"{briefing}\n{job.message}"`. The briefing (`scheduler.py:2556-2731`) interpolates the loop's `purpose` (`:2661`), the claimed task's title (`:2666`, `:2674`), description (`:2677`) and acceptance criteria (`:2682`), and a prior checkpoint (`:2691-2696`). `job.message` comes from `POST /jobs` or MCP `create_job`/`create_loop`, by the operator or by an agent when `allow_agent_jobs` is on (`jobs.py:560-570`, `created_by_run_id` at `:693`) |
@@ -69,7 +70,10 @@ It then appends `entry.content` unescaped (`:129`).
 
 `origin_type == "operator"` is trustworthy. An agent reaches the queue only through a run credential
 (`agent_auth.py`), and `messages.py:62` marks a message as the operator's only when no run is bound.
-One operator-origin entry carries agent text: the question echo. (R2 checked the one route that
+Two operator-origin entries carry agent text: the question echo (D4), and **(R3)** the board's
+Start work message, whose task title an agent can have written (D8). Both mix the two authors in
+one string, so each is neutralised where it is composed, while the halves can still be told apart.
+(R2 checked the one route that
 queues `operator` with no run: `POST /agent/trigger` depends on `get_project`, which calls
 `_operator_from_credential` (`auth.py:134-159`), so a run credential cannot reach it.) `new_entry`
 accepts a closed set of five origins (`inbound_queue.py:41-44`), so "an origin added later" means
@@ -189,7 +193,9 @@ halves apart, for a cosmetic difference in an echo of the agent's own words.
 
 `agent_chat.py:195` renders queue entries from stored `content`. Neutralising at write time would
 put `\@` in the operator's view of a peer's message and would corrupt round-trips (a checkpoint's
-notes read back by `read_checkpoint`). Only the runner prompt changes.
+notes read back by `read_checkpoint`). Only the runner prompt changes. The two exceptions are the
+mixed-author strings, which are escaped where they are composed and stored that way: the question
+echo (D4) and, from R3, the board's Start work message (D8).
 
 ### D6 — Say so once, in the queue preamble
 
@@ -208,8 +214,8 @@ untouched, so R1's rule would have delivered an escaped question with no explana
 trigger catches it without the two modules sharing any state. Its only other effect: an operator who
 types `\@` themselves also gets the sentence, which is still true and harmless. The constant lives
 beside `neutralise_file_mentions` (D7) so both composers can use it. A turn whose blocks contain no
-`\@` is byte-identical to today; that includes every operator-only turn except a question echo that
-had an at-sign to escape.
+`\@` is byte-identical to today; that includes every operator-only turn except a question echo, or
+(R3, D8) a Start work message, that had an at-sign to escape.
 
 ### D7 — The one-shot workers neutralise their whole prompt (R2)
 
@@ -230,30 +236,83 @@ had an at-sign to escape.
   `hub/hub/file_mentions.py`. They do not go in `inbound_queue.py`, so `worker.py` and
   `conversation_titles.py` do not import queue code for a string function.
 
-Two consequences need their own lines:
+Two consequences need their own lines. **Both were revised in R3** (Round log R3-2, R3-3). R2
+had them as a generation-template rule plus an undo in the probe's answers.
 
-- **The generation template gains one fixed rule:** *"At-signs in the material below have a
-  backslash in front of them that the original did not have; write them without it."* This keeps
-  the stored body's text (which the operator reads) free of `\@`. The body is then escaped again
-  wherever it next reaches a CLI: as a `checkpoint`-origin delivery (D3) and inside the probe's
-  prompt (this decision). `CHECKPOINT_PROMPT_VERSION` goes from `checkpoint/1` to `checkpoint/2`
-  (`checkpoint_generation.py:57`), because the template changed.
-- **The probe's grading undoes the escape before comparing.** The probe asks for file paths
-  "exactly as written", and the rendered checkpoint lists `files_changed` (`:293-294`). A path such
-  as `packages/@scope/x` reaches the probe as `packages/\@scope/x`. `_normalise` (`:370-373`) then
-  turns every `\` into `/`, which gives `packages//@scope/x`. That never matches the envelope, so a
-  good checkpoint would be graded `failed`. `grade_probe` therefore maps `\@` to `@` in the
-  **answers** before `_normalise`. The envelope is Hub truth and was never escaped. The probe
-  template is unchanged, so `PROBE_PROMPT_VERSION` stays.
+- **What a worker returns is un-escaped in code, not by asking the model.** A new
+  `restore_file_mentions(text)` beside `neutralise_file_mentions` is its exact inverse,
+  `text.replace("\\@", "@")`. For any text `T`, `restore(neutralise(T)) == T`, including a `T` that
+  already contained `\@`, because every at-sign in the neutralised text has exactly one inserted
+  backslash in front of it. `worker._interpret` (`worker.py:489-535`) applies it to every string in
+  the parsed JSON payload, recursively, **before** `output_model.model_validate`. That is one place
+  for both checkpoint kinds (`checkpoint_generation.py:547`, `:636`, the only `run_worker` callers)
+  and any later worker. `generate_conversation_title` applies it to the CLI's output before
+  `title_from_output` (`conversation_titles.py:206`). The stored checkpoint body and the stored
+  title therefore carry no `\@` whatever the model does. The requirement's "SHALL NOT carry the
+  neutralisation" becomes something a unit test can pin. A prompt instruction cannot give that.
+  **`_GENERATION_PROMPT` is unchanged and `CHECKPOINT_PROMPT_VERSION` stays `checkpoint/1`.** R2's
+  rule is dropped. It is not needed: measured in R3, generation stored no `\@` with or without it
+  (3 of 3 runs each). And it would make the inverse lossy, because a model told to drop the
+  backslash turns an original `\@` (sent as `\\@`) into `@`. The stored invocation's `answer_text`
+  keeps the raw reply, as a diagnostic.
+- **The probe's path comparison is made insensitive to the escape on both sides.** The probe asks
+  for file paths "exactly as written", and the rendered checkpoint lists `files_changed`
+  (`:293-294`), so `packages/@scope/x` reaches the probe as `packages/\@scope/x`. **Measured in
+  R3:** Haiku copied it that way in 2 of 3 probe runs. Today's `_normalise` (`:370-373`) maps `\`
+  to `/` and would grade that answer missing and invented. The restore above already turns
+  `packages/\@scope/x` back into `packages/@scope/x`. Alone, it would leave R2's residual: a reply
+  written with Windows separators, `node_modules\@types\x`, becomes `node_modules@types\x`.
+  `_normalise` therefore also drops any run of separators directly before an at-sign, after it maps
+  `\` to `/`: `re.sub(r"/+@", "@", …)`. This is applied to **both** the envelope and the answers,
+  as `_normalise` already is (`:384`, `:390`). `packages/@scope/x`, `packages/\@scope/x`,
+  `node_modules\@types\x` and a leading `\@scope/x` all compare equal to the envelope's form. The
+  cost is that `a/@b` and `a@b` compare equal. Two such paths in one checkpoint is not a case worth a
+  rule. The probe template is unchanged, so `PROBE_PROMPT_VERSION` stays.
+
+### D8 — The board's Start work neutralises the task title where it composes the message (R3)
+
+`useStartWorkOnTask` (`hub/ui/src/api/tasks.ts:446-465`) posts
+`` message: `Work on task ${taskId}: ${title}` `` to `POST /agent/trigger`, which queues it as an
+`operator` entry (`agent_trigger.py:1498`). D3 passes operator entries through untouched, and
+`title` can be an agent's (`create_task`). So an agent that titles a task
+`Fix @/home/u/.ssh/id_rsa handling` makes the next agent the operator starts on that task attach
+the file. It is the same shape as the question echo (D4): two authors in one string, separable only
+where it is built. Here that place is the browser.
+
+The fix is `` `Work on task ${taskId}: ${neutraliseFileMentions(title)}` ``, with a one-line
+`neutraliseFileMentions` in a new `hub/ui/src/lib/fileMentions.ts`. It carries a comment naming
+`hub/hub/file_mentions.py` as the rule it mirrors. The task id is Hub-minted and holds no at-sign.
+Consequences, the same as D4's:
+- The stored message shows `\@` in the chat, because it is the operator entry's content.
+- D6's trigger fires on it, so the agent is told what the backslash means.
+- The `Task` row keeps its title.
+
+Rejected: resolving it in the Hub. The route could find `named_task.title` inside `body.message` and
+escape that substring. That is string surgery on a message it did not compose, and it breaks the
+first time the UI's wording changes. Rejected, and offered to the operator as **Q3**: drop the title
+from the message (`Work on task ${taskId}`). The run is bound to the task anyway, and that is the
+cleanest possible invariant ("operator content is the operator's"). But it costs the operator the
+title in the chat, and the conversation titler loses its best input.
+
+This is a UI change. The bundle is refreshed and `hub/ui/src` and `hub/hub/static/ui` are committed
+together (`.claude/rules/`). The committed bundle reaches `:8000` on its next reload, with no
+restart. Only this one message changes.
 
 ## Risks
 
-- **A Windows-separator probe answer before a scoped directory (R2, from D7).** Today a reply of
-  `node_modules\@types\x` normalises to `node_modules/@types/x`. After D7's undo it reads
-  `node_modules@types/x`, which counts as missing and invented. It needs the model to answer with
-  separators the rendered checkpoint does not contain (the envelope paths come from git, which uses
-  POSIX separators). Accepted. R3 should judge whether the undo should be limited to `/\@` and a
-  leading `\@`.
+- **A Windows-separator probe answer before a scoped directory.** R2 recorded this as a residual
+  of its answers-only undo. **Closed in R3** by D7's symmetric `_normalise`. Task 1.9 includes the
+  case.
+- **A worker reply that is not valid JSON because of the escape (R3).** `\@` is not a legal JSON
+  string escape. A model that copied an escaped at-sign into a string value *without* doubling the
+  backslash would produce text that `extract_json_object` cannot parse (checked in R3: it returns
+  `None`), and the invocation would record `unparseable`. **Measured in R3, not observed.** Nine
+  Haiku worker turns (`scripts/drive/d4_0923_worker_json_escape.py`) returned zero unparseable
+  replies. Every copied at-sign came back as `\\@` in the raw JSON, which is a valid escape that
+  decodes to `\@`, and the restore then undoes it. If another model does it, the failure is loud (an
+  `unparseable` checkpoint, recorded with its raw answer), not a wrong stored body. Accepted without
+  a lenient parser: rewriting a model's JSON before parsing it is a larger, riskier change than the
+  one being guarded.
 - **An agent copies `\@` into a file.** A peer's message with a decorator or an email reaches the
   agent as `\@…`, and an agent pasting a snippet verbatim could write the backslash. It is
   mitigated by D6, which names the notation once per turn. The residual risk is real and low:
@@ -284,6 +343,9 @@ Two consequences need their own lines:
    trusting `created_by_run_id`.
 2. **Q2 (D2):** Does the operator accept `a\@b.com` in what agents read, in exchange for a rule that
    does not mirror the CLI's tokeniser?
+3. **Q3 (D8, R3):** Board Start work: keep the task title in the message with its at-signs escaped
+   (the default, D8), or drop the title from the message so that operator-origin content is only
+   ever the operator's?
 
 ## Round log
 
@@ -325,3 +387,34 @@ Two consequences need their own lines:
     `Agent "None"`, filed as **F410**.
   - **R2-9, tokeniser rerun:** **41/41 rows match** (exit 0, fresh marker) on `claude` 2.1.280. D2 stands.
   - `openspec validate --strict`: valid after these edits. **R3 must not start from these notes.**
+- **R3, 2026-09-23 (day window, D-4):** a second fresh comparison. The proposal and D1-D7 were read
+  as the claims under test. R2's Round log was not read until R3-1 to R3-4 had been found. I started from `grep` for every `"-p"`, `exec` and stdin write in
+  `hub/hub` and `src/agentweave`, then every `origin_type=` site, then every browser-composed
+  `message:` template in `hub/ui/src`. Four results:
+  - **R3-1, a second operator-origin entry carries agent text (new D8).** The board's Start work
+    posts `` `Work on task ${taskId}: ${title}` `` as the operator (`tasks.ts:455`), and an agent
+    can author the title. R1 and R2 both held that only the question echo mixes authors; neither
+    looked at what the browser composes. Fixed at composition in the UI, D4's pattern. The
+    alternative is Q3. New tasks 1.11, 2.3b and 4.2b. This makes the change a UI change (bundle
+    refresh).
+  - **R3-2, D7's "stored output carries no `\@`" was a SHALL enforced only by a prompt rule.**
+    Replaced by `restore_file_mentions`, the exact inverse, applied in `worker._interpret` to the
+    parsed payload and to the titler's output. The template rule and the `checkpoint/2` bump are
+    dropped. **Measured** (`scripts/drive/d4_0923_worker_json_escape.py`, 9 Haiku turns, `claude`
+    2.1.280): generation stored 0 `\@` both with R2's rule and without it (3/3 each), so the rule
+    bought nothing observable, and it would have made the inverse lossy. Task 1.10 is rewritten.
+  - **R3-3, the probe's grading made symmetric.** Measured: Haiku copied `packages/\@scope/...`
+    verbatim in 2 of 3 probe runs. Today's `_normalise` fails those. R2's answers-only undo and
+    R3's symmetric rule both pass them, but only the symmetric rule also passes the
+    Windows-separator form. R2 had accepted that residual; it is now closed. Task 1.9 is widened.
+  - **R3-4, a risk checked and not observed.** `\@` is an illegal JSON escape, and
+    `extract_json_object` returns `None` on a raw `\@` inside a string (run in R3). In all 9 turns
+    Haiku emitted `\@`, the legal form. Recorded in Risks as loud-if-it-happens.
+  - **Held, re-derived rather than re-read:**
+    - The agent-turn choke point. `trigger_agent_directly` has one caller, `turn_scheduler.py:408`.
+    - Exactly three `"-p"` sites. No SDK spawn. The CLI package's subprocess calls carry no prompt
+      (`docker`, a browser, PowerShell, `mcp list`).
+    - D2's inverse property. `\@` in the original goes out as `\@` and restores to `\@`.
+    - D3's default-deny over the five origins.
+    - D6's trigger. It now also fires for D8.
+  - `openspec validate --strict`: valid after these edits.

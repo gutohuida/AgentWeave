@@ -31856,7 +31856,7 @@ mostly re-spend real agent-turn cost to re-confirm what already matches. Instead
 
 ## F409 (A) -- another agent's text can make a Claude turn read any file, before any tool call, past every posture
 
-**Status:** open (proposed: `openspec/changes/an-at-mention-an-agent-wrote-reads-no-file`, R1 and R2 2026-09-23)
+**Status:** open (proposed: `openspec/changes/an-at-mention-an-agent-wrote-reads-no-file`, R1, R2 and R3 2026-09-23)
 **Source:** drive
 **Theme:** Workspace & permissions
 
@@ -31898,6 +31898,13 @@ and neither worker has any permission posture. Measured with argv built by the H
 the stored checkpoint, which the operator reads and the successor agent is given. The agent turn's
 `--append-system-prompt-file` context was measured as a control and does **not** expand. The change's
 design D7 covers the workers.
+
+**R3 found one more vector (2026-09-23), read and not driven: the board's Start work.**
+`useStartWorkOnTask` (`hub/ui/src/api/tasks.ts:455`) posts `Work on task <id>: <title>` as an
+*operator* message, and an agent can write the title (`create_task`). Operator entries are passed
+through untouched, so a task an agent titled with an `@<outside path>` makes the next agent the
+operator starts on it attach the file. The change's design D8 covers it (the title is escaped where
+the browser builds the message).
 
 ---
 

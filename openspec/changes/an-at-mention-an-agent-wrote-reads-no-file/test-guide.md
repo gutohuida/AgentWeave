@@ -8,11 +8,13 @@
 | Operator text is untouched | same file (tasks 1.2, 1.4) | an operator-only turn is byte-identical to today, with no explanatory sentence |
 | The question echo | the questions tests (task 1.6) | the agent's question is escaped and the operator's answer is not |
 | The question echo explains itself | `test_inbound_queue.py` (task 1.3a) | an operator-only turn carrying an escaped question gets the D6 sentence once |
-| The one-shot workers are neutralised | `test_checkpoint_generation.py`, `test_title_generation.py` (tasks 1.7 to 1.10) | both builders escape every at-sign for both CLIs; the templates hold none; a changed file under `@scope/` still passes the probe; the prompt version is `checkpoint/2` |
+| The one-shot workers are neutralised | `test_checkpoint_generation.py`, `test_title_generation.py` (tasks 1.7 to 1.10) | both builders escape every at-sign for both CLIs; the templates hold none; a changed file under `@scope/` passes the probe in plain, escaped and Windows-separator form; a parsed worker answer and a stored title carry no `\@`; the prompt versions are unchanged |
+| Start work escapes an agent's title | the UI test (task 1.11) and `npm run lint` | a title with an at-sign is posted escaped; one without is byte-identical |
+| How a worker answers an escaped prompt | `py -3.11 scripts/drive/d4_0923_worker_json_escape.py 3` | every row `outcome: ok`; no generation row stores `\@` once the restore is applied |
 | The workers, against the real CLI | `py -3.11 scripts/drive/d3_0923_worker_at_mention.py` (task 3.1) | before the fix both workers show `expanded=True`; after it both show `expanded=False`; the system-prompt-file control is `expanded=False` both times |
 | Nothing else moved | full `hub/tests/` (task 2.5) | the count is recorded; every moved assertion is named |
 | The CLI still behaves as measured | `py -3.11 scripts/drive/d2_0923_at_mention_tokeniser.py` (task 3.1) | `N/N match the 2026-09-23 measurement`; the `escaped` and `escaped_twice` rows say `expanded=False` |
-| The product, end to end | the scratch-Hub drive (tasks 4.1, 4.2, 4.2a) | B's CLI transcript has no file attachment for a peer's `@<outside path>`; the operator's `@<inside path>` still attaches |
+| The product, end to end | the scratch-Hub drive (tasks 4.1, 4.2, 4.2a, 4.2b) | B's CLI transcript has no file attachment for a peer's `@<outside path>`; the operator's `@<inside path>` still attaches |
 
 ## Human-only
 
@@ -35,3 +37,7 @@ is Hub process code, so unlike an MCP-server change it does not reach `:8000` un
 5. In a conversation where an agent has written a path with an at-sign in front of it, take a
    checkpoint. **Expect:** the checkpoint describes the conversation and does not quote the
    file's contents, and its text shows the at-sign without a backslash (design D7).
+6. Have an agent create a task whose title contains an at-sign (an email address will do), then
+   press **Start work** on its card. **Expect:** the opening message in the new conversation shows
+   the title with a backslash before the at-sign, and the card keeps the title as written (design
+   D8). Answer Q3 if you would rather the message carried no title at all.

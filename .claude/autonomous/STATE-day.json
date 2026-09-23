@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6c0a467",
     "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 4,
+    "iteration": 5,
     "log_file": ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d4-r3",
-    "next_action": "Do D-4/spec loop A, R3 on openspec/changes/an-at-mention-an-agent-wrote-reads-no-file: a second independent re-derivation against the code that must not start from R2's notes -- re-derive from grep which paths put recorded text on a CLI's argv or stdin, and judge D7 (whole-prompt neutralisation at the worker builders, the checkpoint/2 template rule, grade_probe's \\@ undo and its Windows-separator residual) and D6's revised trigger against checkpoint_generation.py, worker.py, conversation_titles.py, inbound_queue.py and questions.py. Fix in place, record R3 in design.md's Round log, tick tasks 0.2, openspec validate --strict.",
+    "current": "d2b-r1",
+    "next_action": "Do D-2b/spec loop B, R1: pick the next item in DIRECTION.md's / the playbook's priority order (an open ledger finding with no proposal, else research candidate #2) whose blast radius shares NO file with loop A's change (an-at-mention-an-agent-wrote-reads-no-file now touches file_mentions.py, inbound_queue.py, questions.py, worker.py, conversation_titles.py, checkpoint_generation.py, hub/ui/src/api/tasks.ts + bundle). Explore, file the finding if needed, propose into openspec/changes/<name>/ (proposal, design with Round log, tasks, test-guide, spec delta), openspec validate --strict. If gpt-6-sol turns out to be a no-spec repair, leave it for d6 and take the next finding.",
     "queue": [
         {
             "id": "compose",
@@ -41,9 +41,9 @@
         },
         {
             "id": "d4-r3",
-            "status": "open",
+            "status": "done",
             "title": "Spec loop A, R3 - independent re-derivation",
-            "detail": "Second, independent fresh comparison against the code. openspec validate --strict must pass (SHALL on a requirement's first physical line)."
+            "detail": "Done iteration 5: R3 added D8 (board Start work posts an agent-authorable task title as operator text; escaped in the UI, Q3 offers dropping it), replaced D7's template rule with a code-side exact inverse (restore_file_mentions in worker._interpret + titler), made _normalise symmetric. Probe scripts/drive/d4_0923_worker_json_escape.py: 9 Haiku turns, 0 unparseable. validate --strict valid."
         },
         {
             "id": "d2b-r1",
