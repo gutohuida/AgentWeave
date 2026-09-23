@@ -59,6 +59,7 @@ from ...conversation_titles import maybe_generate_title
 from ...conversations import (
     conversation_for_provider_session,
     conversation_id_for_run,
+    conversation_unavailable_reason,
     get_conversation_by_id,
     get_open_conversation,
     name_conversation,
@@ -661,7 +662,12 @@ async def _trigger_agent_directly(
         conversation_id=conversation_id,
     )
     if conversation is None:
-        raise TriggerAgentError(status.HTTP_409_CONFLICT, "Conversation is unavailable")
+        raise TriggerAgentError(
+            status.HTTP_409_CONFLICT,
+            await conversation_unavailable_reason(
+                session, project_id=project_id, agent=agent, conversation_id=conversation_id
+            ),
+        )
 
     agent_row_result = await session.execute(
         select(Agent).where(Agent.project_id == project_id, Agent.name == agent)
@@ -1460,7 +1466,15 @@ async def trigger_agent(
             conversation_id=body.conversation_id,
         )
         if conversation is None:
-            raise HTTPException(status_code=409, detail="Conversation is unavailable")
+            raise HTTPException(
+                status_code=409,
+                detail=await conversation_unavailable_reason(
+                    session,
+                    project_id=project_id,
+                    agent=body.agent,
+                    conversation_id=body.conversation_id,
+                ),
+            )
     elif body.session_mode == "resume" and body.session_id:
         conversation = await conversation_for_provider_session(
             session,

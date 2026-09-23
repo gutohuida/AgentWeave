@@ -45,6 +45,7 @@ from ...model_catalog import (
     FULL_ACCESS_PERMISSION_MODE,
     get_provider,
     permission_mode_values,
+    undeclared_model_reason,
 )
 from ...output_recording import record_agent_output, record_context_usage
 from ...review_turn import ReviewContext
@@ -661,7 +662,7 @@ async def create_operator_agent(
         if provider_entry is None or model_entry is None:
             raise HTTPException(
                 status_code=400,
-                detail=f"{body.model!r} is not a model {body.provider!r} declares",
+                detail=undeclared_model_reason(body.provider, body.model),
             )
         existing_runner = await session.execute(
             select(Runner).where(
@@ -2743,12 +2744,22 @@ async def archive_agent(
             ).scalars()
         )
         if queued_ids:
+            # F180: the non-destructive remedy first. Binding a runner delivers the queue
+            # (`runner_newly_bound` redrains it, F96); discarding destroys it. The old sentence
+            # named only the discard and dropped why archiving is refused at all.
+            deliver = (
+                "Bind a runner so it can deliver them"
+                if agent_row.runner_id is None
+                else "Let them be delivered first (its queue status says why they are waiting)"
+            )
+            plural = "s" if len(queued_ids) != 1 else ""
             raise HTTPException(
                 status_code=409,
                 detail={
                     "message": (
-                        f"{name} has {len(queued_ids)} queued message"
-                        f"{'s' if len(queued_ids) != 1 else ''}. Discard them to archive the agent."
+                        f"{name} has {len(queued_ids)} queued message{plural}, and nothing "
+                        "delivers to an archived agent, so archiving it now would strand them. "
+                        f"{deliver}, or discard them to archive the agent now."
                     ),
                     "blocking_queue_entry_count": len(queued_ids),
                     "blocking_queue_entry_ids": queued_ids,

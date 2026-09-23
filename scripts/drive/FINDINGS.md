@@ -14372,7 +14372,7 @@ consequence either way.
 
 ## F175 (C) — the model refusal is the one gate in the catalog that names nothing that would work
 
-**Status:** open. Verified 2026-09-09: alias resolution still lives only in
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — the refusal names every declared model, and an alias's id; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: alias resolution still lives only in
 `context_window_for_model` (`hub/hub/model_catalog.py:288`), and the refusal sentence still names no
 value that would work. The catalog change that shipped a model picker made this API-only rather than
 repairing it. [classified 2026-09-09, D-3]
@@ -14413,6 +14413,16 @@ precisely what F173 makes invisible, since on the screen the operator does not e
 sentence.
 
 **Reproduction:** the two `(F175)` assertions in `t_sweep_row2_runners.py`.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4b).** `model_catalog.undeclared_model_reason(provider, model)` is now the one sentence for every
+site that refuses an undeclared model: `validate_overrides`, `runners._reject_undeclared_model` and
+`POST /agents`. It keeps the old sentence and appends `expected one of: <every declared id>`. For
+an alias the catalog publishes (`opus`) it no longer calls the alias undeclared. It says `'opus' is the
+alias 'claude' publishes for 'claude-opus-5-5'; a runner stores the model id, so use
+'claude-opus-5-5'` and lists the ids. Aliases are still refused, not resolved, which keeps runner
+records canonical, the choice this entry called defensible. Measured by `hub/tests/test_a_refusal_says_what_would_work.py`: its five model
+legs fail on the old code; the alias leg reads the alias off `GET /model-catalog` rather than
+assuming it.
 
 ---
 
@@ -14652,7 +14662,7 @@ open  /?project=<p>&agent=q1&settings=execution
 
 ## F180 (C) — the archive refusal offers only the destructive remedy, and drops the reason the non-destructive one exists
 
-**Status:** open. Filed 2026-09-01 out of row 3's screen pass; the route still composes
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — the refusal says why and offers delivery before discard; see FIXED at the end of this entry. Was: open. Filed 2026-09-01 out of row 3's screen pass; the route still composes
 its own discard-only sentence over the lifecycle module's fuller one, so binding a runner is still
 never offered as the non-destructive remedy. One of the six instances
 `2026-09-01-a-refusal-reaches-the-operator` counted, which produced no change. [classified 2026-09-09, D-3]
@@ -14680,6 +14690,16 @@ renders `queueRefusal.message`, so the only sentence reaching the operator is th
 discard.
 
 **Reproduction:** F179's setup, then press *Archive agent* on the Identity section.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4b).** `POST /agents/{name}/archive`'s queued-input refusal now reads `<name> has N queued message(s),
+and nothing delivers to an archived agent, so archiving it now would strand them. Bind a runner so
+it can deliver them, or discard them to archive the agent now.` That is the lifecycle module's reason
+plus the repair F96 already treats as the real one. With a runner bound, the first remedy becomes
+`Let them be delivered first (its queue status says why they are waiting)`. The dict's
+`blocking_queue_entry_*` fields are unchanged, so the bundled `ArchiveControl` renders the new
+sentence above its discard button as it is; this needs no bundle. `agentArchival.test.tsx`'s fixture now carries
+the sentence the route sends, and `test_agent_archival.py`'s `"Discard"` check reads it
+case-insensitively. Measured by `hub/tests/test_a_refusal_says_what_would_work.py` for both runner states; it fails on the old code.
 
 ---
 
@@ -14737,7 +14757,7 @@ promised one filter would prevent it.
 ---
 
 ## F182 (C) — F175's refusal, restated at a second site, still naming nothing that would work
-**Status:** open
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — fixed with F175, by the same helper; see FIXED at the end of this entry. Was: open
 
 `agents.py:630-634`:
 
@@ -14758,6 +14778,8 @@ answer both.
 **Not reachable from the create dialog**, which is why it is C rather than B: `AgentCreateDialog`
 sources the model from a `<select>` over the catalog, so an operator cannot provoke it. It is the
 API's answer to an API caller.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4b).** Fixed with F175 by one helper, as this entry asked. See F175's FIXED paragraph. The `POST /agents` leg of `hub/tests/test_a_refusal_says_what_would_work.py` drives this site.
 
 ---
 
@@ -15369,7 +15391,7 @@ conversation releases cleanly.
 
 ## F191 (C) — `Conversation is unavailable` is one sentence for three different causes and names no repair
 
-**Status:** open. Verified 2026-09-09: the single sentence is still at
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — each cause has its own sentence and repair; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: the single sentence is still at
 `hub/hub/api/v1/agent_trigger.py:1366` (and `:594`), unchanged, for all three causes, on a route
 whose other refusals are exemplary. Named in no change. [classified 2026-09-09, D-3]
 
@@ -15387,6 +15409,14 @@ all three cases. Compare the sibling refusals measured green in the same run: th
 says *"Unarchive it first"*, the unknown agent says *"Create it in the Hub UI, or correct the name"*,
 and the decided task says *"Move it to 'revision_needed' to reopen it, or start the turn without
 naming a task."* This one is the outlier on a route whose other refusals are exemplary.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4b).** `conversations.conversation_unavailable_reason` sits beside `get_open_conversation`, and both refusal
+sites use it (`trigger_agent_directly`'s entry and `POST /agent/trigger`'s pre-check). It still
+answers 409, now with one of three sentences. An unknown id, and another project's conversation read
+identically so nothing leaks: `No conversation <id> in this project. Check the id, or omit
+conversation_id to start a new conversation with <agent>.`. Another agent's thread: `... is wren's,
+not vera's. Address it to wren, or omit ...`. An archived thread: `... is archived. Unarchive it to
+continue it, or omit ...`. Measured by `hub/tests/test_a_refusal_says_what_would_work.py`, which fails on the old code.
 
 ## F192 (C) — stop reports an agent that does not exist as merely idle
 
@@ -15964,7 +15994,7 @@ leg answered the healthy-looking zero and the list leg `[]`.
 
 ## F200 (C) — one refusal string for four distinguishable states, and it asserts a delivery that never happened
 
-**Status:** open. One sentence still covers an unknown id, a cross-project id, a
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — each state has its own sentence; an unknown or foreign entry is a 404; see FIXED at the end of this entry. Was: open. One sentence still covers an unknown id, a cross-project id, a
 delivered entry and a withdrawn one, and it still asserts a delivery that never happened. Named in no
 change. [classified 2026-09-09, D-3]
 
@@ -15986,6 +16016,16 @@ the house style, naming the entry's depth, the project's budget, why this is not
 would help, and where to look instead — *"Queue entry is at hop 0, within the project's hop budget
 of 6, so the hop budget is not what is holding it. Check the agent's queue status for the reason it
 is waiting."*
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4b).** `inbound_queue.not_queued_reason(db, project_id, entry_id, action)` answers `(status,
+sentence)` for both the withdraw route and `release_entry`; `ReleaseOutcome` gained
+`refusal_status`. An unknown id and another project's entry answer the same **404** `No queue entry
+<id> in this project.`, and the foreign entry is left untouched, as before. Delivered: `409 ... was
+already delivered in run <run>; there is nothing to withdraw|release.` Withdrawn by the operator:
+`409 ... was already withdrawn ...`. Abandoned by the Hub: `409 The Hub already gave up delivering
+... (<abandoned_reason>). Send the message again to retry it.` Nothing claims a delivery that did not
+happen. The UI's two callers render the refusal without branching on its status. Measured by `hub/tests/test_a_refusal_says_what_would_work.py`
+for both routes; it fails on the old code.
 
 ## What HELD — including the one mechanism nothing had ever driven
 
@@ -16649,7 +16689,7 @@ each other's context.
 
 ## F208 (D) — the arrange refusal names neither the cause nor the remedy
 
-**Status:** open. The arrange refusal still names neither the cause nor the reindex that
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — the refusal names the reindex and the home it may ask for; see FIXED at the end of this entry. Was: open. The arrange refusal still names neither the cause nor the reindex that
 would clear it; the harness that meets the sentence records it unchanged. Low, and it compounds the
 reachability entry beside it rather than standing alone. [classified 2026-09-09, D-3]
 
@@ -16668,6 +16708,11 @@ about the work first."*
 
 Low, and it compounds **F206** rather than standing alone: nothing in the UI can call either route,
 so the only caller who meets this sentence is already using `curl`.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4b).** `POST /spec/documents/arrange` on a corpus with no usable index keeps its `message` prefix and
+`diagnostics`, and now continues: `Build one with POST /spec/reindex, passing {"home": "<document
+path>"} if it answers that no home is recorded, then arrange again.` Measured by `hub/tests/test_a_refusal_says_what_would_work.py`; fails on
+the old code. F206 (no UI can call either route) is untouched.
 
 ## What held — and the machine itself is close to airtight
 

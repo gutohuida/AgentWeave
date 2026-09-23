@@ -1278,7 +1278,15 @@ async def arrange_document(
     if manifest is None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail={"message": f"no usable index to arrange ({state})", "diagnostics": diagnostics},
+            # F208: name the route that builds the index, and the input it refuses to guess.
+            detail={
+                "message": (
+                    f"no usable index to arrange ({state}). Build one with POST /spec/reindex, "
+                    'passing {"home": "<document path>"} if it answers that no home is recorded, '
+                    "then arrange again."
+                ),
+                "diagnostics": diagnostics,
+            },
         )
 
     by_path = manifest.by_path()

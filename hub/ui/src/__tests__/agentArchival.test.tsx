@@ -102,7 +102,10 @@ describe('an agent is archived, never deleted', () => {
     const user = userEvent.setup()
     archiveError = new ApiError(409, JSON.stringify({
       detail: {
-        message: 'codex-1 has 2 queued messages. Discard them to archive the agent.',
+        message:
+          'codex-1 has 2 queued messages, and nothing delivers to an archived agent, so archiving '
+          + 'it now would strand them. Bind a runner so it can deliver them, or discard them to '
+          + 'archive the agent now.',
         blocking_queue_entry_count: 2,
         blocking_queue_entry_ids: ['queue-1', 'queue-2'],
       },
