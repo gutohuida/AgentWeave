@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6c0a467",
     "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d6",
-    "next_action": "Do D-6: standing candidate is gpt-6-sol in hub/hub/model_catalog.py (research candidate #2's remaining half). Confirm it clears the D-6 bar (touches no openspec/specs requirement, no migration/API/schema change, fully described by an existing finding/repro), add it, run the lint set CI runs, drive it (not just test it), mutation-check any test added, set the finding's Status line to fixed <sha>. If it turns out to want a spec, stop and queue it for tomorrow instead of finishing it. Otherwise fall back to a FINDINGS.md status sweep. Then D-7 the merge gate, always last. Then log, state, commit, push.",
+    "current": "d7-gate",
+    "next_action": "Do D-7, the merge gate, always last. Find CI's run for the exact HEAD sha (b8d30f2, pushed by iteration 10 -- check `gh run list --branch autonomous/2026-09-21-daily` for a run whose headSha matches current HEAD; the sidequest window's own commits ahead of it queue their own CI runs and are not this gate's business). Wait up to 25 min polling ~90s for that exact sha's run to conclude. success + `git rev-list HEAD..master` = 0 + HEAD == @{u} + no HOLD MERGE in DIRECTION.md -> `git merge --ff-only`, push master, start tomorrow's branch from it. Still running at budget -> stop waiting, log the run id, leave it for tomorrow's step 1, and set next_action to null anyway (nothing else is queued today). Then log, state, commit, push.",
     "queue": [
         {
             "id": "compose",
@@ -71,9 +71,9 @@
         },
         {
             "id": "d6",
-            "status": "open",
+            "status": "done",
             "title": "Repairs that need no spec, if the day has room",
-            "detail": "Standing candidate: add gpt-6-sol to hub/hub/model_catalog.py (research candidate #2's remaining half) -- confirm it touches no openspec/specs requirement, no migration/API/schema change, and drive it before closing. Otherwise a FINDINGS.md status sweep."
+            "detail": "Done iteration 10: added gpt-6-sol to hub/hub/model_catalog.py (research candidate #2's remaining half, commit b8d30f2). Cleared the D-6 bar (no spec requirement, no migration/API/schema change, fully described by spec-queue/research/2026-09-23.md candidate #2). ruff/black/mypy clean, 28 existing tests pass unchanged, check_model_catalog.py's drift is expected (same shape gpt-6-luna already carried). Drove the real GET /api/v1/model-catalog route via TestClient against the trial database with the trial bootstrap key (no mocks): codex models now ['gpt-6-sol', 'gpt-6-luna', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5']. No F-numbered finding existed for this (it was a research-file candidate, not a filed finding), so no Status line to set. Candidate #2 fully closed."
         },
         {
             "id": "d7-gate",
