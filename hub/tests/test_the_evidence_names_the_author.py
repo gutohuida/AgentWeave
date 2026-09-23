@@ -64,6 +64,7 @@ from hub.task_transition_service import (
 from hub.task_transitions import operator, run_actor
 
 from .test_a_flow_names_what_it_cannot_staff import _flow, _roster, _rows
+from .test_a_task_nothing_will_move_holds_nobody import _holding, _loop
 from .test_agent_trigger import _init_repo
 
 pytestmark = pytest.mark.asyncio
@@ -692,3 +693,144 @@ async def test_the_surfaced_reason_says_worked_on_not_completed(
     assert "could not staff this step" in reason, reason
     assert "has worked on this task" in reason, reason
     assert "completed" not in reason, reason
+
+
+# ---------------------------------------------------------------------------
+# 2.7 — divergence restaff with nobody left, on both branches
+# ---------------------------------------------------------------------------
+
+HELD = "zz-held"
+
+
+async def _silent_review_of_agent_completed_work(db, *, suffix):
+    """The agent-completed counterpart to `_silent_review_of_operator_completed_work`: an agent's
+    own transition history records it, so `completion_attribution.agent` is not `None` and
+    `_answer_failed_review`'s author layer never runs — only the completer layer
+    (`exclude[attribution.agent] = "is the one that completed this task"`) can name `WORKER`.
+    """
+    task = Task(id=f"task-ev-ac-{suffix}", project_id="proj-test", title="work", status="pending")
+    db.add(task)
+    await db.commit()
+    completer = run_actor(run_id=f"run-ev-worker-ac-{suffix}", agent=WORKER)
+    for status in ("assigned", "in_progress", "completed"):
+        await apply_transition(db, task, status, completer)
+    await db.commit()
+
+    task.assignee = SILENT
+    await apply_transition(db, task, "under_review", run_actor(f"run-stage-ac-{suffix}", SILENT))
+    review_run = Run(
+        id=f"run-ev-silent-ac-{suffix}", project_id="proj-test", agent=SILENT, status="completed"
+    )
+    db.add(review_run)
+    await db.flush()
+    db.add(
+        InboundQueueEntry(
+            id=f"entry-ev-ac-{suffix}",
+            project_id="proj-test",
+            agent=SILENT,
+            origin_type="job",
+            content="Review the work",
+            hop_depth=0,
+            state="delivered",
+            delivered_in_run_id=review_run.id,
+            review_task_id=task.id,
+        )
+    )
+    await bind_run_to_task(db, review_run, task)
+    await db.commit()
+
+    assert await agent_that_completed(db, task.id) == WORKER
+    return task, review_run
+
+
+async def _diverged_reason(review_run_id):
+    """Read the `run_diverged` event's own `reason`, R8's instruction for 2.7: the divergence
+    path never surfaces on `review_unstaffed` -- that event belongs to the flow's own staffing,
+    not to a review a run just finished."""
+    async with async_session_factory() as db:
+        events = (
+            (await db.execute(select(EventLog).where(EventLog.event_type == "run_diverged")))
+            .scalars()
+            .all()
+        )
+    [payload] = [e.data for e in events if (e.data or {}).get("run_id") == review_run_id]
+    return payload["reason"]
+
+
+async def test_a_silent_review_of_agent_completed_work_with_nobody_left(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """2.7, agent-completed branch. `WORKER` completed the task (a recorded actor, not the
+    operator), so the completer layer names it "is the one that completed this task" -- and
+    `SILENT`'s own clause, from the reviewer layer that runs independently of who completed the
+    work, must still read "recorded no verdict" and never "completed". A third agent, `HELD`,
+    holds a task reachable only through a *second* live loop (R8's fixture, matching 2.6's) so the
+    roster has someone unavailable through a booked holding rather than through the exclude
+    mapping -- proving the divergence path reaches rung 3's booked clause too, not only the
+    exclude-map clause a two-agent roster could never tell apart from "nobody else exists".
+
+    *Mutations* (task 2.7): (a) map silent reviewers to the author clause -- `SILENT`'s clause
+    reads "has worked on this task" instead, failing the "recorded no verdict" assertion. (b) R1's
+    order, laying the author layer last -- a no-op here, because `attribution.agent is not None`
+    skips the author layer entirely; this branch is not expected to catch (b), the operator-
+    completed branch below is.
+    """
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, WORKER, SILENT, HELD)
+    async with async_session_factory() as db:
+        task, review_run = await _silent_review_of_agent_completed_work(db, suffix="ac")
+        _job, elsewhere = await _loop(db, suffix="2.7-ac")
+        await _holding(
+            db,
+            task_id="task-2.7-ac-held",
+            assignee=HELD,
+            status="in_progress",
+            loop_id=elsewhere.id,
+        )
+
+    assert await evaluate_run_end(review_run.id) is not None
+
+    reason = await _diverged_reason(review_run.id)
+    assert f"{SILENT} reviewed this task and recorded no verdict" in reason, reason
+    assert f"{SILENT} has worked on this task" not in reason, reason
+    assert f"{SILENT} is the one that completed this task" not in reason, reason
+    assert f"{WORKER} is the one that completed this task" in reason, reason
+    assert f"{HELD} is booked for task-2.7-ac-held" in reason, reason
+
+
+async def test_a_silent_review_of_operator_completed_work_with_nobody_left(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path
+):
+    """2.7, operator-completed branch. `SILENT` is *also* in `agents_that_may_have_authored`
+    (its own `-> under_review` transition names it, exactly as `_silent_review_of_operator_completed_work`'s
+    docstring already builds), so this is the case where the author layer and the reviewer layer
+    disagree about `SILENT`'s clause and the layering order (task 2.2: authors first, reviewers
+    overwrite) decides which one is read. `HELD` again holds a task reachable only through a
+    second live loop, matching the agent-completed test above.
+
+    *Mutations* (task 2.7): (a) map silent reviewers to the author clause -- `SILENT`'s clause
+    reads "has worked on this task", failing. (b) R1's order, laying the author layer *last* --
+    the author layer would then overwrite the reviewer layer's `SILENT` entry, and `SILENT`'s
+    clause reverts to "has worked on this task" here specifically, because (unlike the
+    agent-completed branch) `attribution.agent is None` on this task, so the author layer runs.
+    """
+    await bind_project_workspace(_init_repo(tmp_path / "repo"))
+    await _roster(app, auth_headers, bind_runner, WORKER, SILENT, HELD)
+    async with async_session_factory() as db:
+        task, review_run = await _silent_review_of_operator_completed_work(db, suffix="op-nobody")
+        _job, elsewhere = await _loop(db, suffix="2.7-op")
+        await _holding(
+            db,
+            task_id="task-2.7-op-held",
+            assignee=HELD,
+            status="in_progress",
+            loop_id=elsewhere.id,
+        )
+
+    assert await evaluate_run_end(review_run.id) is not None
+
+    reason = await _diverged_reason(review_run.id)
+    assert f"{SILENT} reviewed this task and recorded no verdict" in reason, reason
+    assert f"{SILENT} has worked on this task" not in reason, reason
+    assert f"{WORKER} has worked on this task" in reason, reason
+    assert f"{HELD} is booked for task-2.7-op-held" in reason, reason

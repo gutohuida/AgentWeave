@@ -513,7 +513,7 @@ mutation and the observed failure beside the task when ticking it.
       `excluded_because` for every agent. Each must fail.
       *Mutation (R6):* make every held task unreachable. The test must fail — and if it does not,
       the fixture is still the one R6 replaced.
-- [ ] 2.7 Test, divergence restaff with nobody left, on **both** branches:
+- [x] 2.7 Test, divergence restaff with nobody left, on **both** branches:
       - agent-completed: the silent reviewer's clause says it recorded no verdict, and nowhere says
         it completed the task;
       - operator-completed: the silent reviewer, which `agents_that_may_have_authored` also
@@ -526,6 +526,24 @@ mutation and the observed failure beside the task when ticking it.
       `test_the_evidence_names_the_author.py:663-694` does. Every other agent must be unavailable
       through a **reachable** holding (second live loop), a hold, or a running turn; an agent
       holding only an unreachable task is free and the restaff succeeds instead.
+
+      **Built 2026-09-23, night iteration 11.** Added `_silent_review_of_agent_completed_work`
+      (the agent-completed counterpart to the file's existing operator-completed fixture) and two
+      tests, `test_a_silent_review_of_agent_completed_work_with_nobody_left` and
+      `test_a_silent_review_of_operator_completed_work_with_nobody_left`, to
+      `test_the_evidence_names_the_author.py`. Both roster a third agent, `HELD`, holding a task
+      reachable only through a second live loop (`_loop`/`_holding`, imported from
+      `test_a_task_nothing_will_move_holds_nobody`, R8's fixture) — proving the divergence path
+      reaches rung 3's `booked` clause, not only the exclude-map clause a two-agent roster could
+      never distinguish from "nobody else exists". Read `payload["reason"]` off the `run_diverged`
+      event, never `review_unstaffed`. Both mutations applied live and reverted cleanly
+      (`git diff --stat` showed nothing after each): (a) mapping silent reviewers to "has worked on
+      this task" failed both tests; (b) laying the author layer after the reviewer layer failed
+      only the operator-completed test — the agent-completed one is unaffected by (b), because
+      `attribution.agent is not None` skips the author layer on that branch entirely, exactly as
+      predicted. 147 passed across the seven-file relevant suite (the six named plus
+      `test_a_flow_names_what_it_cannot_staff.py`); 6.0's own guard alone: 32 passed (unchanged).
+      `ruff`/`mypy` clean; `black` needed one reformat, applied and re-checked clean.
 ~~- [ ] 2.8~~ **SUBSUMED BY 2.3, 2026-09-23 (night iteration 9) — see the split note above 2.6.**
       `test_rung_3_reason_is_this_exact_string_for_an_under_review_task` already builds this task's
       fixture and assertion in full, and its own R8 mutation is checked, live, to be unfalsifiable
