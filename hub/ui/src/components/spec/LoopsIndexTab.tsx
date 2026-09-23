@@ -239,6 +239,7 @@ export function LoopsIndexTab({
                     className="truncate pl-0.5 text-left"
                     style={{ fontSize: 11, color: 'var(--amber)' }}
                     data-testid={`loops-index-stall-${loop.id}`}
+                    title={loop.stall_reason}
                   >
                     {loop.stall_reason.replace(/^loop queue is /, '')}
                   </p>

@@ -908,7 +908,7 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
 
 ## 5. The board line (design D6), under the day's bundle rule
 
-- [ ] 5.1 `title={loop.stall_reason}` on the stall `<p>` in `LoopsIndexTab.tsx`, and a unit test
+- [x] 5.1 `title={loop.stall_reason}` on the stall `<p>` in `LoopsIndexTab.tsx`, and a unit test
       asserting the attribute carries the full reason.
 
       > **R8 — this group edits `hub/ui/` and ships a bundle. The bundle reaches the operator's live
@@ -923,12 +923,68 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
       >   stall line's test is at `:144`), with a reason longer than 200 characters that starts with
       >   `"loop queue is "`, asserting `title` equals it exactly. *Mutation:* remove the attribute,
       >   or set it to the stripped text. Each must fail.
-- [ ] 5.2 `cd hub/ui && npm run lint && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`.
-- [ ] 5.3 Drive the served bundle in Chromium on the drive Hub. Hover the stall line and read the
+
+      **Built 2026-09-23, iteration 15.** Added `title={loop.stall_reason}` to the `<p>` at
+      `LoopsIndexTab.tsx:237-244` and `test carries the full, unstripped stall reason in the title
+      attribute, even once truncated on screen` to `loopsIndexTab.test.tsx` (a 268-character reason
+      starting `"loop queue is "`, `toHaveAttribute('title', longReason)`). Both R8 mutations
+      (remove the attribute; set it to the stripped text) applied live to the component and
+      reverted — each failed the new test as predicted, `git diff --stat` clean after each. Full
+      file: 12 passed (11 + 1).
+
+      **R8's own premise had gone stale and had to be re-derived, not trusted.** `git log -1
+      --format=%H -- hub/ui/src` is `c18a87b` (2026-09-22, "F202, F203, F209, F212, F201"), newer
+      than the committed bundle's stamped `src_commit` (`35a162c`, built 2026-09-22T18:07:55) — a
+      rebuild tonight does **not** carry only this attribute, it also carries that commit's frontend
+      changes (`api/tasks.ts`, `App.tsx`, `TasksBoard.tsx` and five more, 407 insertions). Recorded
+      here rather than silently building past the note's own instruction to re-check.
+- [x] 5.2 `cd hub/ui && npm run lint && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`.
+
+      **Built 2026-09-23, iteration 15.** `npm run lint` clean. `npm run build` (`tsc && vite
+      build`) succeeded, no type errors. `refresh_ui_bundle.py` wrote a new stamp
+      (`src_commit 9389b92`, this branch's head at build time). `git diff --stat` on
+      `hub/hub/static/ui` afterward: the old JS chunk deleted, a new one added, `index.html` and the
+      stamp changed — the expected shape of a real rebuild, not a no-op.
+- [x] 5.3 Drive the served bundle in Chromium on the drive Hub. Hover the stall line and read the
       full reason from `title`. Take a screenshot.
-- [ ] 5.4 Commit the bundle only if 5.3 passed **and** nothing the bundle calls is newer than the
+
+      **Driven 2026-09-23, iteration 15.** Throwaway Hub on port 8095, `DATABASE_URL` naming a
+      fresh sqlite file under `testbed/scratch/group5-drive/` (deleted after), never touching
+      `:8000`/`:8010`. Registered a throwaway project (`proj-a54ac8c12fa4`) via `POST
+      /projects/create`, one Haiku 4.5 agent, one job with a task moved to `blocked`, fired to
+      produce a real stall (`409`, `"loop queue is stalled: no claimable task among 1 open (1
+      blocked)"`) — the same shape `t_row11_stalls.py` shape 3 uses. Reaching the `LoopsIndexTab`
+      panel needed a real conversation (the empty-state "New conversation" screen does not mount
+      `PanelShell` at all), so sent one real message (Haiku 4.5, per the standing drive limit) to
+      open one, then `"Show panel"` -> `panel-launch-loops` -> the stall row. Playwright's
+      `get_attribute('title')` on `[data-testid^="loops-index-stall-"]` read back **exactly**
+      `'loop queue is stalled: no claimable task among 1 open (1 blocked)'` — the full, unstripped
+      reason, against the real built JS bundle and a real backend response, not a test mock.
+      Screenshots taken (`step5_loops.png`, `step6_hover_crop.png`); a synthetic `hover()` did not
+      paint a visible native-tooltip bubble in the headless screenshot (expected — Chromium does not
+      compositor-render OS title tooltips in headless mode), so the read is the DOM attribute value
+      Playwright reports for that hover target, not a visual tooltip capture.
+- [x] 5.4 Commit the bundle only if 5.3 passed **and** nothing the bundle calls is newer than the
       `:8000` process start. It calls nothing new. Otherwise revert `hub/hub/static/ui` and record
       why.
+
+      **Checked 2026-09-23, iteration 15 — the gate failed, so the bundle was reverted, not
+      committed.** 5.3 passed. The second half did not hold: `:8000`'s own process
+      (`python.exe -m uvicorn hub.main:app --host 127.0.0.1 --port 8000`, confirmed by command line
+      via `Get-CimInstance Win32_Process`, PID 9940) started 2026-09-19T11:57:33 — three days before
+      `c18a87b` (2026-09-22T19:39:47), the commit 5.1's own re-check surfaced as already carried by
+      this rebuild. That commit's `hub/ui/src/api/tasks.ts` changed `useTasks` to read the
+      `{tasks, total, has_more}` envelope (F202) with no fallback for a bare array — `:8000`'s
+      backend, unrestarted, still answers the pre-F202 bare array. Committing the new bundle would
+      have put that frontend code in front of the operator on their next reload while the backend
+      underneath it still answers the old shape: exactly the "calls something new" case this task
+      names, not a hypothetical one — checked by reading `hub/ui/src/api/tasks.ts` directly, not
+      assumed. `git checkout -- hub/hub/static/ui/index.html hub/hub/static/ui/ui-build-stamp.json
+      hub/hub/static/ui/assets/index-DLAuNdZ4.js` plus deleting the new chunk restored the bundle to
+      its last-committed state; `git status --short hub/hub/static/ui` was empty afterward. This
+      group's real, committed output is `hub/ui/src` alone (the `title` attribute and its test) —
+      the bundle rebuild stays a local, uncommitted verification step until a firing lands after
+      `:8000` has been restarted past `c18a87b`, which is the operator's call, not this loop's.
 
 ## 6. Verify
 

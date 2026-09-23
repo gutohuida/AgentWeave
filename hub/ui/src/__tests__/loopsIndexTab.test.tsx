@@ -146,6 +146,29 @@ describe('LoopsIndexTab — the governance glance (task B5.1)', () => {
     expect(line).toHaveTextContent('no claimable task')
   })
 
+  it('carries the full, unstripped stall reason in the title attribute, even once truncated on screen', () => {
+    // The visible line strips the leading "loop queue is " and is truncated with CSS `truncate`
+    // once it overflows — the full reason still has to be readable somewhere, or a long one is
+    // simply lost. `title` is that somewhere, and it must not repeat the on-screen stripping.
+    const longReason =
+      'loop queue is stalled: no claimable task among 2 open (2 completed), and nothing free to ' +
+      'claim it because every agent on the roster is either archived, holding a task reachable ' +
+      'only through a second live loop, or waiting on a usage limit that has not yet reset'
+    expect(longReason.length).toBeGreaterThan(200)
+
+    renderIndex([
+      loop({
+        id: 'l-long',
+        ending_state: null,
+        firing_active: false,
+        stall_reason: longReason,
+      }),
+    ])
+
+    const line = screen.getByTestId('loops-index-stall-l-long')
+    expect(line).toHaveAttribute('title', longReason)
+  })
+
   it('a loop that would fire carries no stall line at all', () => {
     renderIndex([loop({ id: 'l-ok', ending_state: null, firing_active: true })])
     expect(screen.queryByTestId('loops-index-stall-l-ok')).not.toBeInTheDocument()
