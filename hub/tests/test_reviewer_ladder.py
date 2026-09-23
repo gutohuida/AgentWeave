@@ -26,8 +26,8 @@ who checked the work.
 import pytest
 
 from hub.db.engine import async_session_factory
-from hub.db.models import Agent, AIJob, Loop, Run, SpecDocument, Task
-from hub.scheduler import _agents_that_are_free, resolve_reviewer
+from hub.db.models import Agent, AIJob, JobRun, Loop, Run, SpecDocument, Task
+from hub.scheduler import _agents_that_are_free, _stall_run_to_increment, resolve_reviewer
 from hub.spec_payload import SCHEMA_VERSION, embed_payload
 
 from .test_agent_trigger import _init_repo
@@ -495,3 +495,97 @@ async def test_a_single_agent_project_reaches_rung_3_with_no_special_case(
 
     assert staffed.agent == "second-agent"
     assert staffed.rung == "available"
+
+
+# ---------------------------------------------------------------------------
+# 2.10 (`an-unstaffed-review-names-its-holders`) — a stalled tick with an over-budget reason
+# still matches the row it should coalesce into
+# ---------------------------------------------------------------------------
+
+
+async def test_a_stall_reason_over_budget_still_matches_the_fitted_row(app):
+    """2.10, rewritten by R8. As originally written this test compared the *raw* `stall_reason`
+    and could never fail once task 2.4 bounds every rung-3 reason to 500 characters --
+    `fit_error_summary` then returns an already-short reason unchanged, so comparing the raw
+    string is identical to comparing the fitted one (F190's shape: a green test that cannot see
+    its own subject).
+
+    The comparison this test actually guards -- `latest.error_summary != fit_error_summary
+    (stall_reason)` -- already shipped, for the sibling directory's own D6, at
+    `scheduler.py:978`, and had no test of its own (`_stall_run_to_increment` appears nowhere
+    else in `hub/tests`). It stays here because this change is what makes a long, unfitted stall
+    reason ordinary.
+
+    *Mutation:* compare the raw `stall_reason` instead of `fit_error_summary(stall_reason)`. The
+    test must fail, because the row's own `error_summary` is stored fitted (500 chars, `@validates`
+    on `JobRun`) while the argument passed in here is the raw 600.
+    """
+    reason = "z" * 600
+    async with async_session_factory() as db:
+        job = AIJob(
+            id="job-stall-fit",
+            project_id="proj-test",
+            name="Stall fit",
+            agent="stall-owner",
+            message="work the queue",
+            cron="*/5 * * * *",
+            session_mode="new",
+            enabled=True,
+        )
+        db.add(job)
+        await db.commit()
+        run = JobRun(
+            id="run-stall-fit-first",
+            job_id=job.id,
+            project_id="proj-test",
+            status="skipped",
+            trigger="scheduled",
+            error_summary=reason,
+        )
+        db.add(run)
+        await db.commit()
+        # The model's own fit (`a-refusal-names-a-remedy-that-works` D2), not this task's --
+        # asserted so the premise below is what it looks like it is.
+        assert len(run.error_summary) == 500
+        assert run.error_summary.endswith("…")
+
+        counted = await _stall_run_to_increment(
+            db, job.id, reason, exclude_run_id="run-stall-fit-second"
+        )
+
+    assert counted is not None
+    assert counted.id == run.id
+
+
+async def test_a_stall_reason_that_actually_changed_does_not_match(app):
+    """2.10's negative case: a genuinely different reason (not merely a fitting artefact) must
+    not be coalesced into the previous row, or a queue that changed shape would hide it."""
+    async with async_session_factory() as db:
+        job = AIJob(
+            id="job-stall-fit-changed",
+            project_id="proj-test",
+            name="Stall fit changed",
+            agent="stall-owner",
+            message="work the queue",
+            cron="*/5 * * * *",
+            session_mode="new",
+            enabled=True,
+        )
+        db.add(job)
+        await db.commit()
+        run = JobRun(
+            id="run-stall-fit-changed-first",
+            job_id=job.id,
+            project_id="proj-test",
+            status="skipped",
+            trigger="scheduled",
+            error_summary="y" * 600,
+        )
+        db.add(run)
+        await db.commit()
+
+        counted = await _stall_run_to_increment(
+            db, job.id, "z" * 600, exclude_run_id="run-stall-fit-changed-second"
+        )
+
+    assert counted is None

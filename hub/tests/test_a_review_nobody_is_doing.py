@@ -139,7 +139,7 @@ async def _flow(db, *, suffix, agent=AUTHOR):
     return job, loop
 
 
-async def _wedged(db, loop, *, suffix, assignee, by_agent=True):
+async def _wedged(db, loop, *, suffix, assignee, by_agent=True, title=None):
     """A task at `under_review` with `assignee` on it and no turn anywhere.
 
     `by_agent` decides whose hand walked the edges, and that is the only variable between this
@@ -147,11 +147,15 @@ async def _wedged(db, loop, *, suffix, assignee, by_agent=True):
     see who produced the work; without it every edge is the operator's, `TaskTransition.actor_agent`
     is NULL throughout, and the recovery is blind — F167. Neither is supposed to change the
     outcome this change is about.
+
+    `title` defaults to the short fixture title every other caller here relies on; only
+    `an-unstaffed-review-names-its-holders` task 2.11 needs a long one, to reach `_wedged_review_
+    reason`'s own title-shortening fit.
     """
     task = Task(
         id=f"task-f154-{suffix}",
         project_id="proj-test",
-        title=f"work {suffix}",
+        title=title if title is not None else f"work {suffix}",
         status="pending",
         loop_id=loop.id,
     )
@@ -624,3 +628,40 @@ async def test_a_second_press_says_the_same_thing_and_writes_one_row(
     assert len(rows) == 1
     assert rows[0].status == "skipped"
     assert rows[0].tick_count == 2
+
+
+# ---------------------------------------------------------------------------
+# 2.11 (`an-unstaffed-review-names-its-holders`) — F367 through a real firing
+# ---------------------------------------------------------------------------
+
+
+async def test_f367_a_wedged_review_with_a_long_name_and_title_still_fits_the_column(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """2.11. Route-level regression cover for the sibling directory
+    (`a-refusal-names-a-remedy-that-works`): its title fit (`_wedged_review_reason`, unit-tested
+    at `test_a_refusal_names_a_remedy_that_works.py:119`) and its model-level `@validates`
+    (`fit_error_summary`) both shipped before this change existed. This test touches no code this
+    change writes -- F154's wedged-review sentence is not rung 3 -- so its result is not evidence
+    for any of this change's own decisions; it stays here because the sibling's fit has no
+    route-level cover of its own and this is the wedge that needed it.
+    """
+    reviewer = "r" * 32
+    await _roster(app, auth_headers, bind_runner, AUTHOR, reviewer)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="f367")
+        await _wedged(db, loop, suffix="f367", assignee=reviewer, title="t" * 256)
+
+    res = await app.post(f"/api/v1/projects/proj-test/jobs/{job.id}/run", headers=auth_headers)
+    assert res.status_code == 409, res.text
+
+    history = await app.get(
+        f"/api/v1/projects/proj-test/jobs/{job.id}/history", headers=auth_headers
+    )
+    assert history.status_code == 200, history.text
+    rows = history.json()
+    assert len(rows) == 1
+    reason = rows[0]["error_summary"]
+    assert reason is not None
+    assert len(reason) <= 500, f"expected <= 500 chars, got {len(reason)}"
+    assert reason.endswith("review it yourself, or send it back with revision_needed."), reason

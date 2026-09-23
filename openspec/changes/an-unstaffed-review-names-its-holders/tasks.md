@@ -370,6 +370,31 @@ mutation and the observed failure beside the task when ticking it.
       title fit). Built there, not here. **This half's own tasks (2.6, 2.9, 2.9b, 2.11) still
       depend on that fit existing** — it is a model-level `@validates`, so it applies to every
       write regardless of which change added it, and the sibling directory builds first.
+> **Night iteration 9, 2026-09-23 — split note.** The queue's own `unstaffed-group2-task2.6to2.11`
+> item named all six of 2.6-2.11 as one build. 2.10 and 2.11 were built this firing (above): both
+> are regression cover for the sibling directory's already-shipped code, with no new fixture design
+> and no ambiguity about what they test. The remaining four — 2.6, 2.7, 2.9, 2.9b — were not: they
+> all depend on R8's one open fixture decision (every non-author holding, and the author's own
+> extra task, must live in a *second* live loop this firing never fires, per 2.6's own R8 block —
+> a shape no test in this file has built yet) and 2.6 in particular is a real-firing test with a
+> 409/detail/event three-surface assertion, sized on its own to what iteration 7's split treated as
+> one whole item. Rushing four fixture-heavy tests after two already-verified ones risked exactly
+> the failure this project's history warns about (a plan that reads right and an implementation
+> that does not match it) — so they stay queued as their own item, `unstaffed-group2-task2.6to2.9b`,
+> for the next firing. **2.8 is not carried forward as a separate task.** Re-reading it against 2.3's
+> own build: `test_rung_3_reason_is_this_exact_string_for_an_under_review_task` (built with 2.3,
+> `test_reviewer_ladder.py`) already asserts the whole `under_review` reason with `==`, already
+> contains `". Decide it yourself:"` capitalised, and names the same fixture (a single-agent,
+> author-excluded roster) 2.8 would need. **Checked live, not assumed:** applied 2.8's own R8
+> mutation (drop `capitalize_first` from `_rung_3_reason`'s `remedy = ...` line) and re-ran both of
+> 2.3's exact-string tests — both still passed. `own_review_remedy` returns an already-capitalized
+> sentence for both statuses on this tree (2.3's own build-time correction note says so), so
+> `capitalize_first` is a genuine no-op here and *no* test reached through the real function can
+> observe that mutation — 2.8 as R8 specified it is unfalsifiable on this tree, the same vacuous-test
+> shape (F190) this file has flagged twice already (2.6's R6 note, 2.10's R8 rewrite). Reverted;
+> `git diff --stat` showed no change. Recorded here rather than silently dropped, so a future round
+> does not re-open it without reading this note and re-checking the premise (own_review_remedy's
+> capitalization) first, since a change there would make the mutation live again.
 - [ ] 2.6 Test, LoopEngine-shaped, through a real firing (`POST …/jobs/{id}/run`), reading the
       `review_unstaffed` event **and** `LoopSummary.stall_reason`. Four agents: the author; one
       holding an `under_review` task; one holding five `pending` tasks; one holding an
@@ -456,12 +481,11 @@ mutation and the observed failure beside the task when ticking it.
       `test_the_evidence_names_the_author.py:663-694` does. Every other agent must be unavailable
       through a **reachable** holding (second live loop), a hold, or a running turn; an agent
       holding only an unreachable task is free and the restaff succeeds instead.
-- [ ] 2.8 Test, an `under_review` row (the F70 recovery or the divergence restaff) reaching rung 3:
-      the reason names approve, reject and revision_needed, and not Land it.
-      *Mutation:* always emit the `completed` remedy. The test must fail.
-      **R8:** assert the whole reason with `==`, which must contain `". Decide it yourself:"` —
-      capitalised. *Mutation (R8):* drop `capitalize_first` from 2.3's join. The test must fail;
-      a substring check on `"decide it yourself"` would not.
+~~- [ ] 2.8~~ **SUBSUMED BY 2.3, 2026-09-23 (night iteration 9) — see the split note above 2.6.**
+      `test_rung_3_reason_is_this_exact_string_for_an_under_review_task` already builds this task's
+      fixture and assertion in full, and its own R8 mutation is checked, live, to be unfalsifiable
+      on this tree (see the note). Not built as its own test; the reasoning is recorded, not the
+      task silently dropped.
 - [ ] 2.9 Test, twelve agents each holding three tasks:
       - the reason is at most 500 characters, counts the unnamed agents, and still names the
         remedy;
@@ -493,7 +517,7 @@ mutation and the observed failure beside the task when ticking it.
       With `loop_id` NULL they are unreachable, the agent is free, and the test never reaches
       rung 3. R8 measured the widest clause as **143** at one task under the `booked` verb, inside
       the **226** `under_review` clause budget (2.4).
-- [ ] 2.10 Test: two consecutive stalled firings with an unchanged reason over 500 characters leave
+- [x] 2.10 Test: two consecutive stalled firings with an unchanged reason over 500 characters leave
       **one** stall row with `tick_count == 2`.
       *Mutation:* compare the raw `stall_reason` at `:923`. The test must fail.
 
@@ -512,7 +536,17 @@ mutation and the observed failure beside the task when ticking it.
       > test must fail (it returns `None`). It is regression cover for the sibling's shipped code,
       > not for this change's; it stays here because this change is what makes long stall reasons
       > ordinary.
-- [ ] 2.11 Test, F367 through a real firing: a wedged review (F154's shape) whose reviewer has a
+
+      **Built 2026-09-23, night iteration 9.** Added
+      `test_a_stall_reason_over_budget_still_matches_the_fitted_row` (the positive case, R8's
+      rewrite exactly) and `test_a_stall_reason_that_actually_changed_does_not_match` (the negative
+      case — a genuinely different reason must not coalesce) to `test_reviewer_ladder.py`, direct
+      unit tests of `_stall_run_to_increment` against a real `AIJob`/`JobRun` pair. *Mutation:*
+      replaced `fit_error_summary(stall_reason)` with the bare `stall_reason` at `scheduler.py:978`
+      — the positive test failed (`assert None is not None`, since the stored row's own
+      `@validates` fit it to 500 chars but the raw 600-char argument no longer matched). Reverted;
+      `git diff --stat` on `scheduler.py` showed no change. 2 passed both before and after.
+- [x] 2.11 Test, F367 through a real firing: a wedged review (F154's shape) whose reviewer has a
       32-character name and whose task has a 256-character title. Assert:
       - `GET …/jobs/{id}/history` answers 200;
       - the stall row's reason is at most 500 characters and still ends with the remedy
@@ -526,6 +560,19 @@ mutation and the observed failure beside the task when ticking it.
       code this change writes — F154's wedged-review sentence is not rung 3 — so it is route-level
       regression cover for the sibling. Its mutations can fail; keep it, but do not count it as
       evidence for any of this change's decisions.
+
+      **Built 2026-09-23, night iteration 9.** Added
+      `test_f367_a_wedged_review_with_a_long_name_and_title_still_fits_the_column` to
+      `test_a_review_nobody_is_doing.py` (F154's own file), through a real
+      `POST …/jobs/{id}/run` against a 32-character-name reviewer and a 256-character task title
+      (`_wedged` there widened with an optional `title=` kwarg, default unchanged for its other 20
+      callers). Both mutations applied live and reverted: (a) stripped `_wedged_review_reason`'s
+      title-shortening loop down to `text = _sentence(title)` — the test failed on the `endswith`
+      assertion (the remedy itself was truncated: `"...review i�"`, matching the task's own
+      prediction of what the mutation does); (b) with (a) still applied, also disabled `JobRun`'s
+      `@validates` — the route raised `fastapi.exceptions.ResponseValidationError` (`string_too_long`
+      on `error_summary`), which is the 500 the task predicts. Both reverted; `git diff --stat` on
+      `scheduler.py` and `hub/hub/db/models.py` showed no change after. 1 passed before and after.
 ~~- [ ] 2.12~~ **MOVED 2026-09-15** to `a-refusal-names-a-remedy-that-works/tasks.md` task 2.3.
       Built there, not here.
 ~~- [ ] 2.13~~ **MOVED 2026-09-15** to the same directory's task 4.10 (it tests D5's guard
