@@ -16912,7 +16912,7 @@ reviews, drift, reindex — is still unrun.
 
 ## F209 (C) — the accept route takes the operator's reason and throws it away
 
-**Status:** open, decided twice and never implemented. `spec-queue/ROADMAP.md:337` and
+**Status:** fixed c18a87b [Round 2, 2026-09-22] -- `accept_proposal` stores `resolution_reason` as `reject_proposal` does; pinned by `test_spec_edit_proposals.py` `test_an_accept_keeps_the_reason_it_was_given_exactly_as_a_reject_does`. The status line was left open by that commit and corrected 2026-09-23 (rounds-page audit, test re-run green). Was: open, decided twice and never implemented. `spec-queue/ROADMAP.md:337` and
 `DECISIONS.md:820` both choose *thread the reason through, or delete the field*, and the R-3.1
 re-check records **HOLDS, exactly**. Verified 2026-09-09: `spec_service.accept_proposal` still takes
 no `reason` parameter while `reject_proposal` three functions away stores one. [classified 2026-09-09, D-3]

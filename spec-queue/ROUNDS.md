@@ -61,21 +61,25 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
 depends on a CI that tells the truth. Round 5 was waiting on F352, which landed and was driven on
 the 2026-09-23 night window, so it is unblocked. Within a round, work B before C before D.
 
-Counts place each finding in the **first** round that names it (later mentions are
-cross-references). They are the same numbers `ROUNDS.html` shows. **Track progress there:**
-`py -3.11 scripts/rounds_page.py` regenerates it from this file and `FINDINGS.md`.
+Counts place each finding in the **first round that names it without striking it**. A hand-off
+is written by striking the id where the finding left (`| ~~F167~~ |` in a table, `~~F62~~ (D7)` in
+prose): the page shows it under that round as *moved →* and counts it where it went. A finding
+struck everywhere has left the plan (F373 and F400, to a proposed change) and is counted in no
+total. Other later mentions are cross-references. These are the same numbers `ROUNDS.html` shows
+(recounted 2026-09-23). **Track progress there:** `py -3.11 scripts/rounds_page.py` regenerates it
+from this file and `FINDINGS.md`.
 
 | Round | What | Findings | Size | Needs |
 |---|---|---|---|---|
-| 0 | Ledger hygiene and harness one-liners | 11 | ~1 h | nothing |
+| 0 | Ledger hygiene and harness one-liners | 8 (+3 moved: F395 → 3, F167 → 5, F382 → D) | ~1 h | nothing |
 | 1 | Make CI tell the truth | 4 | ~1 day | nothing |
-| 2 | Decided, unbuilt | 7 | ~1 day | nothing (verdicts exist) |
-| 3 | Hub routes that act wrongly (B-led) | 28 | ~2–3 days | nothing |
-| 4 | Hub routes that answer wrongly (C/D sweep) | 28 (+2 in 4e, counted in Round 3) | ~2 days | nothing |
-| UI-1 | One bundle: controls that lie or do nothing | 20 (+2 carried from Round 3) | ~2 days | ui-bundle, browser check, `:8000` restarted past `c18a87b` |
-| 5 | Scheduler residuals | **done 2026-09-23**: F357, F167 closed; F327 moved to spec track S13 (operator, 2026-09-23); F373 and F400 moved to a change | ~1 day | nothing (F352 landed 2026-09-23) |
-| D | Operator decisions (13 questions) | 56 | ~2 DECIDE sessions | operator |
-| S1–S12 | Spec tracks, from 2026-09-28 | 33 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
+| 2 | Decided, unbuilt | 6 (+1 moved: F349 → D) | ~1 day | nothing (verdicts exist) |
+| 3 | Hub routes that act wrongly (B-led) | 27 (+2 moved: F275, F156 → UI-1) | ~2–3 days | nothing |
+| 4 | Hub routes that answer wrongly (C/D sweep) | 27 (+3 moved: F62, F149, F322 → D) | ~2 days | nothing |
+| UI-1 | One bundle: controls that lie or do nothing | 22 (incl. F275, F156 from Round 3) | ~2 days | ui-bundle, browser check, `:8000` restarted past `c18a87b` |
+| 5 | Scheduler residuals | 2 (incl. F167 from Round 0; +3 moved: F327 → S13, F373 and F400 out of the plan) | ~1 day | nothing (F352 landed 2026-09-23) |
+| D | Operator decisions (13 questions) | 59 | ~2 DECIDE sessions | operator |
+| S1–S13 | Spec tracks, from 2026-09-28 | 34 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
 
 ---
 
@@ -87,7 +91,7 @@ Cheap, and it makes the open count honest before any real work starts.
 
 | Finding | Action |
 |---|---|
-| F395 (B) | Same root cause as F258 (confirmed: `messages.py` `hop_depth = hop_budget + 1` without a run). Fix it under F258 in Round 3, then close both. Keep F395's `origin_type` detail. |
+| ~~F395~~ (B) | **Moved to Round 3** (closed there with F258). Same root cause as F258 (confirmed: `messages.py` `hop_depth = hop_budget + 1` without a run). Fix it under F258 in Round 3, then close both. Keep F395's `origin_type` detail. |
 | F399 (D) | Literal duplicate of F234 (same line, same defect). Mark it a duplicate of F234 and fix it in Round 4. |
 | F381 (C) | Probably fixed by `24f3655` (`pendingQuestions.ts` filter). Verify with a test and close. |
 | F311 (C) | Bookkeeping only: F307's table omits `TaskDetailDrawer`. Correct the table and close. |
@@ -95,8 +99,8 @@ Cheap, and it makes the open count honest before any real work starts.
 | F138 (B) | Harness residual: `scripts/drive/aw.py` `HUB` defaults to `:8010`. Make it required, like `AW_KEY`. |
 | F346 (C) | Harness: `n10_route_reachability.py` `segment_match` lets a literal satisfy `{param}`, so the count reads 35 where the truth is 36. |
 | F170 (C) | `repo_hygiene.py` `EXCLUDE_PATTERNS` lacks `.agentweave/project.json`. |
-| F167 (B) | Has **no `## F167 ` heading**, so every tool that greps the ledger misses it. Give it one. Its fix is in Round 5. |
-| F382 (C) | A one-off overnight stall that never reproduced (a rerun gave 4440 passed). Propose **watch-only**, closed unless it recurs. The operator confirms in D. |
+| ~~F167~~ (B) | **Moved to Round 5** (fixed there). Has **no `## F167 ` heading**, so every tool that greps the ledger misses it. Give it one. Its fix is in Round 5. |
+| ~~F382~~ (C) | **Moved to D** (D13, watch-only). A one-off overnight stall that never reproduced (a rerun gave 4440 passed). Propose **watch-only**, closed unless it recurs. The operator confirms in D. |
 | F160 (C) | `test_tool_surface_matches_server.py` doesn't assert that optional arguments are described. Add the assertion. |
 
 ## Round 1 — make CI tell the truth (~1 day, highest leverage)
@@ -142,7 +146,7 @@ The operator has already answered these, so none needs a question or a spec.
 | F212 | C | DECISIONS, additive | Coverage `unserved` carries `document_id` alongside the identifier. |
 | F209 | C | 2026-09-08 R-3 | `accept_proposal` stores `reason`, as `reject` does. |
 | F201 | C | 2026-09-08 | Illegal `blocked` names the illegal transition (409) before the Pydantic validator asks for a reason. Nine validators share the ordering hazard. Fix the one measured, and list the others. |
-| F349 | B | half-fixed 09-22 | The remainder is a design question (a post-commit failure leaves the entry queued with nothing to drain it). **Moved to D13**, and listed here only so the round is complete. |
+| ~~F349~~ | B | half-fixed 09-22 | The remainder is a design question (a post-commit failure leaves the entry queued with nothing to drain it). **Moved to D13**, and listed here only so the round is complete. |
 
 ## Round 3 — Hub routes that act wrongly (B-led, ~2–3 days)
 
@@ -198,7 +202,7 @@ Grouped by file, so each group is one context load.
 | F288 | B | Reconciliation after a restart re-schedules only the interrupted runs' own agents. It breaches a **shipped requirement** (F286): call `redrain_queued_agents(project_id)`. |
 | F359 | B | A run killed by the Hub's own "database is locked" write skips the worktree snapshot and the footprint re-point. |
 | F338 | D | Delivery selects, then updates by key, so a withdrawal in between is overwritten to "delivered". Use the conditional-UPDATE claim (the F227 pattern). |
-| F275 | C | An abandoned operator message renders after the failures it caused (appended after the sort). |
+| ~~F275~~ | C | **Moved to UI-1** (needs the bundle). An abandoned operator message renders after the failures it caused (appended after the sort). |
 | F195 | C | The titler inherits the Hub's cwd, not the project's, and leaks another project's CLAUDE.md into titles. Do the ~8-site cwd sweep DECISIONS bundles with it. |
 | F297 | B | `agentweave stop` on Windows force-kills (`taskkill /F`), so lifespan shutdown never runs. Try a graceful stop first. |
 
@@ -216,7 +220,7 @@ Grouped by file, so each group is one context load.
 | Finding | Sev | Fix |
 |---|---|---|
 | F360 | B | The checkpoint probe asks about "tasks assigned to this agent" while a loop checkpoint lists the whole queue. |
-| F156 | B | `integration-preview` says `will_merge: true` for a task the gate refuses. The wording repair; the F154 residual. |
+| ~~F156~~ | B | **Moved to UI-1** (its UI half). `integration-preview` says `will_merge: true` for a task the gate refuses. The wording repair; the F154 residual. |
 | F277 | C | `restrict_spec_writes` omits `MultiEdit` from `--disallowedTools`. |
 
 ## Round 4 — Hub routes that answer wrongly (the C/D sweep, ~2 days)
@@ -227,7 +231,7 @@ CI-style 4741 passed / 0 failed, CLI 550 passed. 4e, 4a, 4b, 4c done: 27
 closed (F414, F415; F192, F194, F199, F239, F247, F254; F175, F182, F191, F200, F180, F208; F176,
 F184, F243, F244, F397, F204, F210, F214, F216, F232, F238, F255, F257, F282). **F249** moved to
 UI-1 beside F250: its fix changes the list routes' response shape, which the bundled panel reads.
-F62 (D7) and F149 (D1) stay with their decisions; 4d stays parked.
+~~F62~~ (D7) and ~~F149~~ (D1) stay with their decisions; 4d stays parked.
 
 Mostly S, mostly one guard or one sentence each. Batch them by the shared helper.
 
@@ -258,7 +262,7 @@ requirement id) can land -- F265's half-created loop through a second door; vali
 before the first commit. **F415** (C): reserve `operator` as an agent name, since Round 3a made it the
 runless sender (the CLI and Hub name rules change together).
 
-**4d · the Codex caveat.** F322 (Codex network by cwd) cannot be driven: Codex has been undrivable
+**4d · the Codex caveat.** ~~F322~~ (Codex network by cwd) cannot be driven: Codex has been undrivable
 since 2026-08-29. It is parked with F325, pending D13.
 
 ## UI-1 — one bundle: controls that lie or do nothing (~2 days, B first)

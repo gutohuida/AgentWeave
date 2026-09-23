@@ -5,6 +5,13 @@ it is fixed comes from scripts/drive/FINDINGS.md, through the same parser as BAC
 closing a finding (its `**Status:** fixed <sha>` line) and re-running this is all it takes to move
 the page.
 
+**Where a finding lives.** A finding counts toward exactly one round: the first that places it
+*without striking it*. A hand-off is written in ROUNDS.md by striking the id where the finding left
+(`| ~~F167~~ | ...` in a table, `~~F62~~ (D7)` in prose). The struck row stays on the page under the
+round it left, marked *moved -> <where it lives now>*, and is counted only there. A finding placed
+nowhere unstruck has left the plan (moved to a proposed change, say); it is listed, and counted in
+no total. Unstruck later mentions are cross-references and say "also in".
+
     py -3.11 scripts/rounds_page.py          write the page and print the progress report
     py -3.11 scripts/rounds_page.py --quiet  write the page and print only its path
 """
@@ -28,7 +35,11 @@ _FID = re.compile(r"\bF\d+\b")
 _DATE = re.compile(r"(20\d\d-\d\d-\d\d)")
 _SHA = re.compile(r"\b([0-9a-f]{7,12})\b")
 # "F192 (stop on an unknown agent)" or "F175 + F182 (one helper, two sites)" in a prose group.
-_PROSE_ITEM = re.compile(r"(F\d+(?:\s*\+\s*F\d+)*)\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)")
+_PROSE_ITEM = re.compile(
+    r"((?:~~)?F\d+(?:~~)?(?:\s*\+\s*(?:~~)?F\d+(?:~~)?)*)\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)"
+)
+# `~~F167~~`: the finding was handed on from here (see the module docstring).
+_STRUCK = re.compile(r"~~\s*(F\d+)\s*~~")
 # Sections of ROUNDS.md that hold work, and how their rows are read.
 _WORK_SECTION = re.compile(r"^## (Round \d+|UI-\d+|D |Spec tracks)")
 
@@ -49,11 +60,24 @@ def cells(line: str) -> list[str]:
     return [c.strip() for c in line.strip().strip("|").split("|")]
 
 
+def _group(label: str, note: str = "") -> dict:
+    return {"label": label, "note": note, "items": [], "moved": set()}
+
+
+def _add(group: dict, text: str, note: str) -> None:
+    """Every id in *text* joins *group*; a struck one is recorded as handed on from here."""
+    struck = set(_STRUCK.findall(text))
+    for fid in _FID.findall(text):
+        group["items"].append((fid, note))
+        if fid in struck:
+            group["moved"].add(fid)
+
+
 def _target(groups: list[dict], current: dict | None) -> dict:
     if current is not None:
         return current
     if not groups:
-        groups.append({"label": "", "note": "", "items": []})
+        groups.append(_group(""))
     return groups[0]
 
 
@@ -63,8 +87,7 @@ def _prose_items(prose: list[str], groups: list[dict], current: dict | None) -> 
         return
     target = _target(groups, current)
     for m in _PROSE_ITEM.finditer(" ".join(prose)):
-        for fid in _FID.findall(m.group(1)):
-            target["items"].append((fid, m.group(2)))
+        _add(target, m.group(1), m.group(2))
 
 
 def _parse_groups(kind: str, body: str) -> list[dict]:
@@ -78,7 +101,7 @@ def _parse_groups(kind: str, body: str) -> list[dict]:
             prose = []
         bold = re.match(r"^\*\*(.+?)\*\*\s*$", line)
         if bold:
-            current = {"label": bold.group(1), "note": "", "items": []}
+            current = _group(bold.group(1))
             groups.append(current)
             continue
         if line.startswith("|"):
@@ -86,24 +109,15 @@ def _parse_groups(kind: str, body: str) -> list[dict]:
             if not row or set(row[0]) <= set("-: ") or row[0] in ("Finding", "#", "Round"):
                 continue
             if kind == "decision":
-                groups.append(
-                    {
-                        "label": f"{row[0]} · {row[1]}",
-                        "note": "",
-                        "items": [(fid, "") for fid in _FID.findall(row[-1])],
-                    }
-                )
+                group = _group(f"{row[0]} · {row[1]}")
+                _add(group, row[-1], "")
+                groups.append(group)
             elif kind == "spec":
-                groups.append(
-                    {
-                        "label": f"{row[0]} · {row[1]}",
-                        "note": row[3] if len(row) > 3 else "",
-                        "items": [(fid, "") for fid in _FID.findall(row[2])],
-                    }
-                )
+                group = _group(f"{row[0]} · {row[1]}", row[3] if len(row) > 3 else "")
+                _add(group, row[2], "")
+                groups.append(group)
             else:
-                target = _target(groups, current)
-                target["items"].extend((fid, row[-1]) for fid in _FID.findall(row[0]))
+                _add(_target(groups, current), row[0], row[-1])
             continue
         if line.strip():
             prose.append(line.strip())
@@ -169,12 +183,19 @@ def build() -> tuple[str, dict]:
             ]
         r["groups"] = [g for g in r["groups"] if g["items"]]
 
-    # A finding counts toward the first round that places it; later mentions are cross-references.
+    # A finding counts toward the first round that places it **unstruck**; a struck placement is a
+    # hand-off (it left that round), and a later unstruck mention is a cross-reference.
     home: dict[str, str] = {}
+    left_from: dict[str, str] = {}
     for r in rounds:
         for g in r["groups"]:
             for fid, _ in g["items"]:
-                home.setdefault(fid, r["key"])
+                if fid in g["moved"]:
+                    left_from.setdefault(fid, r["key"])
+                else:
+                    home.setdefault(fid, r["key"])
+    # Handed on and placed nowhere else: it left the plan (to a proposed change, say).
+    out_of_plan = sorted((fid for fid in left_from if fid not in home), key=lambda x: int(x[1:]))
 
     def state(fid: str) -> str:
         f = findings.get(fid)
@@ -184,7 +205,12 @@ def build() -> tuple[str, dict]:
     done = [fid for fid in placed if state(fid) in ("fixed", "retired")]
     current_key = ""
     for r in rounds:
-        own = {fid for g in r["groups"] for fid, _ in g["items"] if home[fid] == r["key"]}
+        own = {
+            fid
+            for g in r["groups"]
+            for fid, _ in g["items"]
+            if fid not in g["moved"] and home.get(fid) == r["key"]
+        }
         r["own"] = sorted(own, key=lambda x: int(x[1:]))
         r["done"] = [fid for fid in r["own"] if state(fid) in ("fixed", "retired")]
         if (
@@ -213,7 +239,7 @@ def build() -> tuple[str, dict]:
         label = {"open": "open", "fixed": "fixed", "retired": "retired"}.get(st, st)
         return f'<span class="st st-{esc(st)}">{esc(label)}</span>'
 
-    def item_html(fid: str, note: str, r: dict) -> str:
+    def item_html(fid: str, note: str, r: dict, moved: bool = False) -> str:
         f = findings.get(fid, {})
         sev = f.get("sev", "?")
         st = state(fid)
@@ -222,11 +248,17 @@ def build() -> tuple[str, dict]:
         fix = f'<code class="sha">{esc(m.group(1))}</code>' if m else ""
         when = fixed_on(status) if st == "fixed" else ""
         xref = ""
-        if home.get(fid) != r["key"]:
+        if moved:
+            where = home.get(fid)
+            dest = f'<a href="#{esc(where)}">{esc(where)}</a>' if where else "out of the plan"
+            xref = f'<span class="xref moved">moved &rarr; {dest}</span>'
+        elif home.get(fid) != r["key"]:
             xref = f'<span class="xref">also in {esc(home.get(fid, ""))}</span>'
         note_html = f'<div class="note">{inline(note)}</div>' if note else ""
+        row_state = "moved" if moved else st
         return (
-            f'<li class="it" data-state="{esc(st)}" data-sev="{esc(sev)}" '
+            f'<li class="it{" it-moved" if moved else ""}" data-state="{esc(row_state)}" '
+            f'data-sev="{esc(sev)}" '
             f'data-text="{esc((fid + " " + f.get("title", "") + " " + note).lower())}">'
             f'<div class="row1">{chip(fid)}<span class="fid">{esc(fid)}</span>'
             f'<span class="sev sev-{esc(sev)}">{esc(sev)}</span>'
@@ -243,16 +275,22 @@ def build() -> tuple[str, dict]:
         for g in r["groups"]:
             label = f'<h4>{inline(g["label"])}</h4>' if g["label"] else ""
             gnote = f'<p class="gnote">{inline(g["note"])}</p>' if g["note"] else ""
-            items = "".join(item_html(fid, note, r) for fid, note in g["items"])
+            items = "".join(
+                item_html(fid, note, r, moved=fid in g["moved"]) for fid, note in g["items"]
+            )
             groups_html.append(f'<div class="grp">{label}{gnote}<ul>{items}</ul></div>')
         badge = '<span class="now">now</span>' if is_now else ""
+        handed = {fid for g in r["groups"] for fid in g["moved"]}
+        handed_txt = f", {len(handed)} moved out" if handed else ""
         if total and got == total:
-            complete = ' <span class="donechip">complete</span>'
+            complete = f' <span class="donechip">complete{handed_txt}</span>'
         elif r["closed_on"]:
             complete = (
                 f' <span class="donechip">done {esc(r["closed_on"])}, '
-                f"{total - got} handed on</span>"
+                f"{total - got} still open{handed_txt}</span>"
             )
+        elif handed:
+            complete = f' <span class="donechip">{len(handed)} moved out</span>'
         else:
             complete = ""
         sections.append(
@@ -283,6 +321,7 @@ def build() -> tuple[str, dict]:
         "done": got,
         "rounds": {r["key"]: [len(r["done"]), len(r["own"])] for r in rounds},
         "current": current_key,
+        "out_of_plan": out_of_plan,
     }
     page = TEMPLATE.format(
         now=esc(now),
@@ -295,6 +334,17 @@ def build() -> tuple[str, dict]:
         current=esc(current_key or "—"),
         sections="".join(sections),
         recent=recent_html,
+        out_of_plan=(
+            "".join(
+                f'<li><span class="fid">{esc(fid)}</span> '
+                f'<span class="sev sev-{esc(findings.get(fid, {}).get("sev", "?"))}">'
+                f'{esc(findings.get(fid, {}).get("sev", "?"))}</span> '
+                f'{esc(findings.get(fid, {}).get("title", ""))} '
+                f'<a href="#{esc(left_from[fid])}">from {esc(left_from[fid])}</a></li>'
+                for fid in out_of_plan
+            )
+            or '<li class="muted">Nothing has left the plan.</li>'
+        ),
         data=esc(json.dumps(snapshot)),
     )
     return page, snapshot
@@ -390,6 +440,9 @@ ul{{list-style:none;margin:0;padding:0}}
 .st-open{{background:var(--surface-2);color:var(--ink-2)}}
 .st-fixed{{background:var(--ok-soft);color:var(--ok)}}
 .st-retired{{background:var(--surface-2);color:var(--ink-3);text-decoration:line-through}}
+.it-moved{{opacity:.62}}
+.it-moved .fid{{text-decoration:line-through}}
+.xref.moved{{font-weight:600}}
 .st-missing{{background:var(--sevA-soft);color:var(--sevA)}}
 .it[data-state=fixed] .ttl,.it[data-state=retired] .ttl{{color:var(--ink-3);text-decoration:line-through}}
 .sev{{font-family:var(--mono);font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px}}
@@ -430,12 +483,16 @@ aside li .when{{display:block}}
   </div>
   <div class="layout">
     <main>{sections}</main>
-    <aside><div class="card"><h3>Recently closed</h3><ul>{recent}</ul></div></aside>
+    <aside><div class="card"><h3>Recently closed</h3><ul>{recent}</ul></div>
+    <div class="card"><h3>Moved out of the plan</h3><p class="muted">Handed on to a change this
+    plan does not track; counted in no total.</p><ul>{out_of_plan}</ul></div></aside>
   </div>
   <p class="foot">Derived from <code>spec-queue/ROUNDS.md</code> (which round) and
   <code>scripts/drive/FINDINGS.md</code> (whether it is fixed). Never edit this file; mark the
   finding's <code>**Status:** fixed &lt;sha&gt;</code> and run <code>py -3.11 scripts/rounds_page.py</code>.
-  A finding counts toward the first round that places it; later mentions say "also in".</p>
+  A finding counts toward the first round that places it unstruck. A struck id
+  (<code>~~F167~~</code>) is a hand-off: it shows under the round it left as "moved &rarr;" and
+  counts where it went; other later mentions say "also in".</p>
 </div>
 <script type="application/json" id="rounds-data">{data}</script>
 <script>
