@@ -13566,7 +13566,7 @@ reach.
 
 ## F167 (B) — the F70/F142 recovery cannot see an author whose history is entirely the operator's
 
-**Status:** open, and said so by the change that met it:
+**Status:** fixed (this commit) [Round 5, 2026-09-23] -- the wedge predicate also reads the evidence authors; the no-record case keeps F154's sentence by design. See FIXED at the end of this entry. Was: open, and said so by the change that met it:
 `2026-09-01-a-review-nobody-is-doing-is-named/proposal.md:119` -- *"it does not repair the
 recovery's blindness, and F167 stays open"*. `spec-queue/ROADMAP.md:187` records it as a known
 residual on the adjacent `wedged_review` path that does not reopen F142. [classified 2026-09-09, D-2]
@@ -13599,6 +13599,25 @@ and a fix for F154 that leans on `wedged_review` to carry the author case would 
 **The bound on the measurement, stated because the drive cannot exceed it.** Every edge in LANE 5
 was walked by the operator. A history containing an *agent-walked* edge is not measured here, and
 F70's recovery may well fire for it. What is measured is that the all-operator history defeats it.
+
+**FIXED 2026-09-23 (interactive session, Round 5).** Re-verified: the predicate at
+`scheduler.decide_firing`'s `WITH_REVIEWER` branch still read `agents_that_worked` alone, and the
+visible half had already been repaired by F154 (`a-review-nobody-is-doing-is-named`: an unattended
+row gets `_wedged_review_reason`, not "nothing is wrong"). What stayed open was the *recovery*.
+The predicate now reads `agents_that_worked | agents_that_recorded_evidence_for`. The evidence row is
+the one authorship record that reviewing does not manufacture, and it is the record the two guards
+already act on. `_guard_reviewer_is_not_the_author` refuses this entry on it, and
+`_guard_author_is_not_reviewer` refuses the verdict on it. So an assignee it names can be neither
+entered legitimately nor finish the review, and until now the flow reported that stranded row as a
+held review. A legitimately staffed reviewer records no evidence, so 5.4 (`a review genuinely in
+progress is still reported as held`) is unchanged.
+**The bound, deliberately kept:** where neither the transitions nor any evidence names the assignee
+(LANE 5's exact row -- the author never recorded anything), nothing on record separates an author
+from a reviewer the operator assigned, and the ladder would refuse for want of evidence naming a
+commit anyway. That row keeps F154's sentence, which names the task, the agent and the operator's
+three remedies. Tests: `test_a_flow_names_what_it_cannot_staff.py`
+`test_an_all_operator_history_wedged_on_its_evidence_author_is_restaffed` (fails before),
+`test_an_all_operator_history_with_no_authorship_record_is_still_named` (the bound).
 
 ## F156 reproduced deterministically — and the contrast lane is what turns it from a rough edge into a defect
 
@@ -13683,7 +13702,7 @@ Fresh project every run, never an existing one. The harness leaves the project a
 repository in place for inspection and prints both paths.
 
 ## F167's bound is now measured — the recovery DOES fire when one edge names an agent
-**Status:** open (note: bound measured by 2fc2322 -- narrows scope but ships no fix; still cited as open on 2026-09-16 at line 27973)
+**Status:** fixed (this commit) [Round 5, 2026-09-23] -- closed with F167; see F167's FIXED paragraph. Was: open (note: bound measured by 2fc2322 -- narrows scope but ships no fix; still cited as open on 2026-09-16 at line 27973)
 
 Driven 2026-08-31 (iteration 13), against the trial Hub on 8011 running this branch. New harness:
 `scripts/drive/t_f167_agent_walked_edge.py`. **13/13 checks**, reproduced twice, two Haiku spawns

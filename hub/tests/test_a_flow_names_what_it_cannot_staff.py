@@ -848,6 +848,61 @@ async def test_a_review_genuinely_in_progress_is_still_reported_as_held(
     assert decision.selections == ()
 
 
+async def test_an_all_operator_history_wedged_on_its_evidence_author_is_restaffed(
+    app, auth_headers, bind_runner
+):
+    """F167. Every edge is the operator's, so the transitions name nobody and F70's recovery was
+    blind to the author sitting on the task: the row was reported as a reviewer holding it.
+
+    The author here is named by the one record reviewing does not manufacture -- its evidence. It
+    is recorded **after** the operator's move into `under_review`, which is how it arrives now that
+    `_guard_reviewer_is_not_the_author` refuses the move once the evidence exists (a still-running
+    author turn recording as it finishes; or any row older than that guard). Such an assignee may
+    not record a verdict either, so reporting it held strands the task.
+    """
+    await _roster(app, auth_headers, bind_runner, WORKER, REVIEWER)
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="allop")
+        d = await _fixture_d(db, loop, suffix="allop")
+        fresh = await db.get(Task, d.id)
+        assert fresh.assignee == WORKER
+        await apply_transition(db, fresh, "under_review", operator())
+        await db.commit()
+        await _evidence(db, d.id, suffix="allop")
+        assert await agents_that_worked(db, d.id) == set(), "the history must name nobody"
+
+    async with async_session_factory() as db:
+        decision = await decide_firing(db, await db.get(Loop, loop.id), default_agent=WORKER)
+
+    assert decision._cannot_staff == (), "its author holds it, not a reviewer"
+    assert decision.unstaffed == ()
+    assert [(s.task.id, s.agent, s.is_review) for s in decision.selections] == [
+        (d.id, REVIEWER, True)
+    ]
+
+
+async def test_an_all_operator_history_with_no_authorship_record_is_still_named(
+    app, auth_headers, bind_runner
+):
+    """F167's bound, stated as a test. With no transition and no evidence naming the assignee,
+    nothing tells its author from a reviewer the operator assigned, and the ladder would refuse for
+    want of a commit anyway. The row keeps F154's sentence rather than a restaff."""
+    await _roster(app, auth_headers, bind_runner, WORKER, REVIEWER)
+    async with async_session_factory() as db:
+        _job, loop = await _flow(db, suffix="allop2")
+        d = await _fixture_d(db, loop, suffix="allop2")
+        fresh = await db.get(Task, d.id)
+        await apply_transition(db, fresh, "under_review", operator())
+        await db.commit()
+
+    async with async_session_factory() as db:
+        decision = await decide_firing(db, await db.get(Loop, loop.id), default_agent=WORKER)
+
+    assert decision.selections == ()
+    assert [task_id for task_id, _ in decision.unstaffed] == [d.id]
+    assert "is not reviewing it" in decision.unstaffed[0][1]
+
+
 async def test_a_task_with_no_completion_wedged_in_review_is_surfaced(
     app, auth_headers, bind_runner
 ):

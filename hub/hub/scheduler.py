@@ -1649,6 +1649,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     """
     from .task_transition_service import (
         agents_that_may_have_authored,
+        agents_that_recorded_evidence_for,
         agents_that_worked,
         completion_attribution,
     )
@@ -1761,12 +1762,27 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # often, since a staffed reviewer's own run is bound to the task it is inspecting. A
             # legitimately staffed reviewer is absent from the **transitions**, and that absence is
             # the whole of what carries the distinction.
+            #
+            # **Plus the evidence authors** (F167). Where the operator walked every edge, the
+            # transitions name nobody and the author is invisible to them -- F142's measured case
+            # arriving through its own fallback. An evidence row is the one record of authorship
+            # that reviewing does not manufacture (`agents_that_recorded_evidence_for`), and it is
+            # the record `_guard_reviewer_is_not_the_author` already refuses this entry on and
+            # `_guard_author_is_not_reviewer` already refuses the verdict on -- so an assignee named
+            # by it can neither be entered here legitimately nor finish the review, and reporting it
+            # as a reviewer holding the task strands the task. Where neither record names the
+            # assignee nothing distinguishes an author from a reviewer the operator assigned, and
+            # the ladder would refuse anyway for want of evidence naming a commit: F154's sentence
+            # below is that row's answer.
             if task.assignee:
                 wedged_author = (await completion_attribution(session, task.id)).agent
                 if wedged_author is not None:
                     wedged_review = wedged_author == task.assignee
                 else:
-                    wedged_review = task.assignee in await agents_that_worked(session, task.id)
+                    wedged_review = task.assignee in (
+                        await agents_that_worked(session, task.id)
+                        | await agents_that_recorded_evidence_for(session, task.id)
+                    )
                 if not wedged_review:
                     in_flight.append((task.id, task.assignee))
                     if task.id not in on_it:
