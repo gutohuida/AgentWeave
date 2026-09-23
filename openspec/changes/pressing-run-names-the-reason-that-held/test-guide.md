@@ -16,6 +16,11 @@ Each of these can be checked with no person watching.
    after: a crash before the row exists answers 500 *"Failed to fire job"*, not an earlier stall; a
    crash after the turn started answers 500 with the row's own reason, not *"already being
    worked … nothing is wrong"*.
+4b. **A row that is not a decline's is not read as one** (R3). Task 1.14 fails before the fix
+   (500 *"Failed to fire job"*) and passes after it (409 with the busy sentence).
+4c. **Known limit, not a check** (R3, F413). A firing that raises and leaves no row is still answered
+   as the decline it would have made. On an in-flight flow that answer is *"nothing is wrong"*. Do
+   not record this as a failure of this change unless Open Question 4 folded F413 in.
 5. **One derivation.** `grep -n "_loop_has_open_task" hub/hub/api/v1/jobs.py` finds nothing after
    the fix. The route reads `refusal.condition`.
 6. **Nothing else moved.** Full `hub/tests/` count recorded in 2.5, with only 1.6's two assertions

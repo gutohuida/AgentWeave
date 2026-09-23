@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6c0a467",
     "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d4b-r3",
-    "next_action": "Do D-4b/spec loop B, R3 on openspec/changes/pressing-run-names-the-reason-that-held (F400+F373): a second independent re-derivation that must not start from R2's notes. Re-derive run_job's not-success branch (hub/hub/api/v1/jobs.py) against every way _do_fire_job (hub/hub/scheduler.py) can end, including its single try/except and the success-with-failed-row path (F412), and check R2's widened D3 (answer from the written row whatever its status; in-flight re-decision only where nothing was written) against the code and against the existing tests that pin run_job's 500/409 answers (grep hub/tests for 'Failed to fire job'). Re-run scripts/drive/d2b_0923_run_answer_probe.py (copy under hub/tests as test_zz_probe_*.py, -s, delete). Fix what it finds, write Round 3 in design.md's Round log, tick task 0.2, openspec validate --strict.",
+    "current": "d5",
+    "next_action": "Do D-5: write spec-queue/review/review-2026-09-23.html per .claude/loops/day-window.md D-5's six-point order, covering today's two specced changes (openspec/changes/an-at-mention-an-agent-wrote-reads-no-file, R1-R3 done; openspec/changes/pressing-run-names-the-reason-that-held, R1-R3 done, Open Questions 1-4 incl. F411/F412/F413 fold-in). Report the PREVIOUS gate (not today's, which runs after this). Append today's section to spec-queue/APPROVALS.md, one row per specced change, no status token. Then log, state, commit, push.",
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "d4b-r3",
-            "status": "open",
+            "status": "done",
             "title": "Spec loop B, R3 - independent re-derivation",
-            "detail": "Second independent fresh comparison. openspec validate --strict must pass."
+            "detail": "Done iteration 8: re-derived _do_fire_job's exits before reading R2 (agreed on 10, found an 11th: raise after run was discarded). Measured 4 cases: pre-row crash on in-flight flow -> 'nothing is wrong'; pre-row crash on busy loop -> busy sentence; post-discard crash -> 'nothing is wrong' + job_run_failed naming a nonexistent run; concurrent tick's in_progress row -> 500 today. F413 filed (B), Open Question 4 (default separate). D3 else->500 replaced by named statuses (task 1.14). Precedence a total order. Proposal overclaim corrected. validate --strict valid."
         },
         {
             "id": "d5",

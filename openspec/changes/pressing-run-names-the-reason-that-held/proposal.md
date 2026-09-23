@@ -9,7 +9,10 @@ requirement. Two proposals editing those lines would collide (the F300/F312 rule
 never displays this answer at all. F411 stays out of scope (design Open Question 1).
 **Round 2, 2026-09-23** (D-3b) re-derived the decline paths from the code, measured two more false
 answers from the same branch (a firing that fails, before or after writing its row), widened D3 to
-cover them, and filed **F412** (Open Question 3). **Nothing here is implemented yet.**
+cover them, and filed **F412** (Open Question 3). **Round 3** (D-4b) re-derived them again. It found
+that a crash leaving no row cannot be told from a decline that left none, filed **F413** (Open
+Question 4), replaced D3's `else → 500` with named statuses, and made the precedence a total order.
+**Nothing here is implemented yet.**
 
 ## Why
 
@@ -63,7 +66,12 @@ firing record only when the manual firing wrote that record"*, `:1520`); the cod
   answered as a 500 with its reason; today the route re-decides the loop first, and measured, it
   answered *"already being worked … nothing is wrong"* over a firing that crashed after its turn
   started. A firing that crashed before writing anything is answered *"Failed to fire job"*; today it
-  gets an earlier firing's stall, as a 409.
+  gets an earlier firing's stall, as a 409. **R3 narrowed that claim.** This holds only where the
+  guard does not refuse and the work is not in flight. Otherwise a crash that left no row looks
+  exactly like a decline that left none. It is answered as that decline, which on an in-flight flow
+  is *"nothing is wrong"*. The repair belongs in the firing (F413, design Open Question 4). R3 also
+  made the row's statuses explicit, so a concurrent tick's `in_progress` row is no longer read as a
+  failure. Today that row answers 500, measured.
 - **The requirement is decided** (spec delta). The *"not yet decided"* paragraph becomes a SHALL.
   The answer names the condition that held and none that did not. *"Wrote that record"* becomes
   *"wrote or counted into"*, which says what a continuing stall already does.

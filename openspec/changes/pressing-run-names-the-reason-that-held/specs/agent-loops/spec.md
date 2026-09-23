@@ -11,7 +11,9 @@ there is no firing record to read a reason from, and the most recent record is s
 firing's.
 
 The answer SHALL name the condition that held, and SHALL NOT state a condition that did not hold or
-that was not the reason. Where more than one holds, the answer SHALL name the empty queue alone.
+that was not the reason. Where more than one holds, the answer SHALL name only the first that holds
+in this order: the empty queue, then the loop declaring no specification document, then no other
+agent being free.
 
 Where the loop's queue holds no task in a non-terminal status, the answer SHALL say so, and SHALL
 NOT state that no other agent is free. Stating that no other agent is free when one is free tells

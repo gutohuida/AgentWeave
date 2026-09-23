@@ -32002,3 +32002,54 @@ way (F411).
 row on success, and `terminal_failure` has known dishonest defaults (F108's section: six early
 returns claim it without meaning it), so which reasons are truly terminal needs its own look first.
 That change's Open Question 3 offers folding it in.
+
+## F413 (B) -- a firing that fails with no row left behind is invisible, and Run calls it "nothing is wrong"
+
+**Status:** open
+**Source:** drive
+**Theme:** Operator surfaces
+**Related:** F373, F412, F23. Found by D-4b's R3 of `pressing-run-names-the-reason-that-held` on
+2026-09-23 (day window), measuring what `run_job` answers when `_do_fire_job` raises.
+
+**What happens.** `_do_fire_job` has one `try`. Its `except` (`hub/hub/scheduler.py:3442-3465`) marks
+`run` failed and persists `job_run_failed` only `if "run" in locals()`. Two ways out leave no row:
+
+1. **Raised before `run` exists** (`:2942-2998`: the resume lookup, the loop read, the busy guard).
+   Nothing is written and no event is persisted. The failure exists only in the Hub's log. On the cron
+   path the product shows nothing at all.
+2. **Raised after `run` was discarded.** The in-flight and counted-stall branches call
+   `_discard_unused_run` and commit, then emit the staged loop edit (`:3202-3203`, `:3236-3237`). If
+   that raises, `run` is still a local, so the `except` persists a `job_run_failed` event naming a
+   run id that does not exist, and sets `failed` on an object no longer in the database.
+
+Because nothing was written, `run_job` cannot tell either from a healthy decline that also wrote
+nothing. It re-decides the loop and answers with that decision.
+
+**Measured** (route; probe `scripts/drive/d2b_0923_run_answer_probe.py`, R3 cases):
+
+```
+r3raise  flow, work in flight, resume lookup raises
+         -> 409 "Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong ..."
+         rows=[]  job_run_failed=[]
+r3busy   documentless loop, owner mid-turn, resume lookup raises (before the firing's own guard)
+         -> 409 "probe-owner is already running a turn, and no other agent is free ..."
+         rows=[]  job_run_failed=[]
+r3disc   flow, work in flight, a staged loop edit whose audit emit raises
+         -> 409 "... already being worked. Nothing was started, and nothing is wrong ..."
+         rows=[]  job_run_failed=[{... 'run_id': 'run-a0d474043a0d', 'error_summary': 'r3 probe: edit audit failed'}]
+```
+
+In `r3disc` the event log says the firing failed, names a run that does not exist, and the route says
+nothing is wrong.
+
+**Repair sketch (unverified).** Make every failed firing leave a `failed` row: where the `except`
+finds no `run` in the session (never built, or discarded), build one. Then
+`pressing-run-names-the-reason-that-held`'s D3 ("the row this press wrote is its answer, whatever
+its status") answers all three cases as 500 with the reason, with no further route edit. Needs its
+own look at a crash that recurs every tick: the rows would count against `_prune_job_history`'s
+100-row window, which is why the healthy declines record nothing. Counting into a matching `failed`
+row, as a stall does, is one answer.
+
+**Why it is not in that change.** It changes what the firing writes, which that change's non-goals
+exclude. It also changes the cron path, not just the route. That change's Open Question 4 offers
+folding it in.

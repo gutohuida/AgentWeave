@@ -280,3 +280,148 @@ async def test_r2_a_terminal_schedule_failure(app, auth_headers, bind_runner, li
 
         rows = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
         print(f"[r2term] rows={[(r.status, r.error_summary) for r in rows]}")
+
+
+async def _f373_staging(db, suffix, *, earlier=True):
+    """F373's flow: its only task `in_progress` under the busy owner, a sibling free, so the busy
+    guard passes and the walk finds everything in flight."""
+    job, loop, task = await _make_loop_job(db, suffix=suffix, agent=OWNER)
+    await _declare_document(db, loop, suffix)
+    task.status = "in_progress"
+    task.assignee = OWNER
+    if earlier:
+        db.add(
+            JobRun(
+                id=f"jobrun-{suffix}-earlier",
+                job_id=job.id,
+                project_id=PROJECT,
+                fired_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                status="skipped",
+                trigger="scheduled",
+                error_summary="loop queue is stalled: 1 still awaiting a prerequisite's approval",
+                requested_by_run_id="run-r3-sentinel",
+            )
+        )
+    await db.commit()
+    await _running_turn(db, agent=OWNER, suffix=suffix)
+    return job, loop, task
+
+
+async def _rows_and_events(job_id, tag):
+    from sqlalchemy import select
+
+    from hub.db.models import EventLog
+
+    async with async_session_factory() as db:
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job_id))).scalars().all()
+        events = (
+            (await db.execute(select(EventLog).where(EventLog.event_type == "job_run_failed")))
+            .scalars()
+            .all()
+        )
+        print(
+            f"[{tag}] rows={[(r.id, r.status, r.tick_count, r.requested_by_run_id) for r in rows]} "
+            f"job_run_failed={[e.data for e in events if (e.data or {}).get('job_id') == job_id]}"
+        )
+
+
+async def test_r3_a_firing_that_raises_before_its_row_on_an_in_flight_flow(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """R3 (D-4b): R2's pre-row crash, on a flow whose work is in flight. The route cannot tell a
+    crash that wrote nothing from an in-flight decline that wrote nothing, so D3's fallthrough
+    re-decides the loop -- which D3 forbids only where a row exists."""
+    from unittest.mock import patch
+
+    await _roster(app, auth_headers, bind_runner, OWNER, FREE)
+    async with async_session_factory() as db:
+        job, _loop, _task = await _f373_staging(db, "r3raise", earlier=False)
+        job.session_mode = "resume"
+        job.last_session_id = "sess-r3raise"
+        await db.commit()
+
+    async def _boom(*_a, **_k):
+        raise RuntimeError("r3 probe: resume lookup failed")
+
+    with patch("hub.scheduler.conversation_for_provider_session", _boom):
+        await _press(app, auth_headers, job.id)
+    await _rows_and_events(job.id, "r3raise")
+
+
+async def test_r3_a_firing_that_raises_before_its_row_on_a_busy_loop(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """R3: the same crash where the owner is mid-turn. The crash is before the firing's own guard,
+    so the route's re-ask is the first time the guard is asked at all."""
+    from unittest.mock import patch
+
+    await _roster(app, auth_headers, bind_runner, OWNER, FREE)
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="r3busy", agent=OWNER)
+        job.session_mode = "resume"
+        job.last_session_id = "sess-r3busy"
+        await db.commit()
+        await _running_turn(db, agent=OWNER, suffix="r3busy")
+
+    async def _boom(*_a, **_k):
+        raise RuntimeError("r3 probe: resume lookup failed")
+
+    with patch("hub.scheduler.conversation_for_provider_session", _boom):
+        await _press(app, auth_headers, job.id)
+    await _rows_and_events(job.id, "r3busy")
+
+
+async def test_r3_a_firing_that_raises_after_discarding_its_row(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """R3: the in-flight branch discards `run` and commits, then emits the staged loop edit. If
+    that raises, `"run" in locals()` is true for a row that no longer exists."""
+    from unittest.mock import patch
+
+    await _roster(app, auth_headers, bind_runner, OWNER, FREE)
+    async with async_session_factory() as db:
+        job, loop, _task = await _f373_staging(db, "r3disc", earlier=False)
+        loop.pending_edit_at = datetime.now(timezone.utc)
+        loop.pending_purpose = "r3 probe: a staged purpose"
+        await db.commit()
+
+    async def _boom(*_a, **_k):
+        raise RuntimeError("r3 probe: edit audit failed")
+
+    with patch("hub.scheduler._emit_loop_edit_applied", _boom):
+        await _press(app, auth_headers, job.id)
+    await _rows_and_events(job.id, "r3disc")
+
+
+async def test_r3_a_concurrent_ticks_row_is_not_a_failure(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """R3: `wrote_row` is true for any row that appears between the route's two reads. Simulate a
+    cron tick that fired (`in_progress`) while the press itself was refused by the busy guard."""
+    from unittest.mock import patch
+
+    from hub.scheduler import JobScheduler
+
+    await _roster(app, auth_headers, bind_runner, OWNER, FREE)
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="r3tick", agent=OWNER)
+        await _running_turn(db, agent=OWNER, suffix="r3tick")
+
+    async def _tick_then_refuse(self, fired_job, trigger="scheduled", session=None):
+        async with async_session_factory() as other:
+            other.add(
+                JobRun(
+                    id="jobrun-r3tick-cron",
+                    job_id=fired_job.id,
+                    project_id=PROJECT,
+                    fired_at=datetime.now(timezone.utc),
+                    status="in_progress",
+                    trigger="scheduled",
+                )
+            )
+            await other.commit()
+        return False
+
+    with patch.object(JobScheduler, "_fire_job_internal", _tick_then_refuse):
+        await _press(app, auth_headers, job.id)
+    await _rows_and_events(job.id, "r3tick")
