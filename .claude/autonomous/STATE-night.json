@@ -4,151 +4,37 @@
     "runner":  "claude",
     "model":  "opus",
     "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-21-daily",
+    "branch":  "autonomous/2026-09-24-daily",
     "parent_branch":  "master",
-    "parent_sha":  "6c0a467",
-    "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  16,
-    "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
+    "parent_sha":  "4052c33",
+    "stop_at":  "2026-09-24T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-23-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "queue finished",
-    "next_action":  null,
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
     "queue":  [
                   {
-                      "id":  "hub-refuses-groups1and3-impl",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: groups 1+3, one commit",
-                      "detail":  "Built 2026-09-22 iteration 2. hub/tests/test_config.py 6 passed, mutation-checked. tests/ CLI suite: 1 failed (expected, deferred to group 4/task 4.9), 546 passed, 3 skipped. ruff/black over CI's exact paths passed."
-                  },
-                  {
-                      "id":  "hub-refuses-group2-impl",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: group 2",
-                      "detail":  "Built 2026-09-22 iteration 3, commit 8a5b935. 5 new tests passed, both 2.7 mutations checked live and reverted cleanly. tests/ CLI suite: 1 failed (expected, group 4's 4.9), 546 passed, 3 skipped. ruff/black/mypy clean."
-                  },
-                  {
-                      "id":  "hub-refuses-group4-impl",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: group 4",
-                      "detail":  "Built 2026-09-22/23 iteration 4, commit 8b7fed8. Prose/docstring tasks 4.1-4.8, 4.10, 4.11 plus the real CLI fix 4.9 (test_first_start_migrations_leave_a_database_that_can_hold_a_conversation now sets DATABASE_URL via monkeypatch before the bare import hub.config). tests/ CLI suite: 547 passed, 3 skipped (deferred failure now fixed). hub/tests/test_config.py: 6 passed, unchanged. Mutation-checked live and reverted cleanly. ruff/black/mypy over CI's exact paths clean."
-                  },
-                  {
-                      "id":  "hub-refuses-group5-impl",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: group 5",
-                      "detail":  "Built 2026-09-23 iteration 5, commit 85b4b28. Applied the MODIFIED requirement into openspec/specs/app-lifecycle/spec.md per R2/R3's narrowed scenarios. openspec validate --strict passed. Full hub/tests/: 4640 passed, 86 skipped, no failures. CI's exact ruff/black/mypy clean."
-                  },
-                  {
-                      "id":  "hub-refuses-group6-drive",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "medium",
-                      "title":  "a-hub-that-was-not-told-which-database-refuses-to-open-one: group 6, drive",
-                      "detail":  "Driven 2026-09-23 iteration 6, no impl commit yet made (tasks.md + FINDINGS.md only, committed with the state advance). Port 8093, testbed/scratch/group6-drive/, deleted after. 6.1 refusal observed verbatim + default db mtime/size unchanged. 6.2 startup line observed both existed-before states (False then True) across a kill+restart. 6.3 PID kill confirmed via tasklist. F388 set to fixed 85b4b28 in FINDINGS.md as D-5."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.14",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "medium",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, task 2.14 (must build before 2.3)",
-                      "detail":  "Built 2026-09-23 iteration 7. `evaluate_run_end` (run_divergence.py) now returns None for a review run whose task moved off completed/under_review before the run ended, screened inside the review branch before _answer_failed_review. Test test_a_review_run_ending_after_its_task_left_review_restaffs_nobody added to test_review_divergence.py (case 1 only -- case 2, the AssertionError from own_review_remedy, needs 2.3's rung-3 rewrite to exist first and is noted in tasks.md as deferred to that task). Mutation-checked live and reverted. Full relevant suite (test_review_divergence/test_run_divergence/test_a_task_nothing_will_move_holds_nobody/test_reviewer_ladder): 77 passed. ruff/black/mypy over CI's exact paths clean. NOTE: group 2's single queue item from the compose iteration was split here into 2.14 / 2.1-2.4 / 2.6-2.11 / 2.15-2.18+6.0 -- the original item was sized for one compose pass, not one build pass; each split piece matches the size other groups in this same queue have taken."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.1to2.4",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.1-2.4 (rung-3 rebuild)",
-                      "detail":  "Built 2026-09-23 iteration 8, commit 755c5b6 (found already implemented, uncommitted, from a prior firing -- verified rather than redone). 130 passed across the six relevant test files. grep exclude= count 27 (25 R9 baseline + 2 new literal tests, not drift). ruff/black/mypy clean. Mutation-checked the join's '. ' vs '; ' live and reverted cleanly (diff stat matched pre-mutation exactly). 6.0 regression guard: 31 passed."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.6to2.11",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.6-2.11 (rung-3 test coverage)",
-                      "detail":  "Iteration 9, 2026-09-23: built 2.10 and 2.11 only (both regression cover for the sibling's already-shipped code, no open fixture question). 2.8 reasoned out as subsumed by 2.3's own exact-string test -- checked live: 2.8's own R8 mutation (drop capitalize_first) does not make 2.3's tests fail on this tree, because own_review_remedy already returns a capitalized sentence for both statuses, so the mutation is a genuine no-op and 2.8 as specified is unfalsifiable (F190 shape). Split reasoning recorded in tasks.md above task 2.6, and in 2.8's own strike-through. 2.6, 2.7, 2.9, 2.9b split off to unstaffed-group2-task2.6to2.9b -- they share one open fixture decision (the second-live-loop holdings shape from R8) none of them has built yet, and 2.6 alone is a real-firing/three-surface test sized like a whole item on its own. 68 passed (test_reviewer_ladder.py + test_a_review_nobody_is_doing.py + the 6.0 guard), both mutations (the stall-row dedup comparison, and the wedged-review title fit plus the @validates) checked live and reverted cleanly. ruff/black/mypy over CI's exact paths clean."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.6to2.9b",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.6, 2.7, 2.9, 2.9b (the fixture-heavy rung-3 tests)",
-                      "detail":  "Iteration 10, 2026-09-23: built 2.6 only, commit dbad393. test_a_loopengine_shaped_firing_names_every_reachable_holder added to test_a_task_nothing_will_move_holds_nobody.py -- four agents, R8's second-live-loop fixture, fired through a real POST .../jobs/{id}/run, asserted the whole reason == a literal across all three surfaces (409 detail, review_unstaffed event, LoopSummary.stall_reason). Three mutations (drop booked clause, reorder booked before excluded, hardcode the excluded reason) plus one fixture check (make holdings unreachable) all applied live and reverted, each behaving as predicted. 133 passed across the six-file relevant suite (130 + this task's 1); file-level 32 passed. ruff/black(one reformat)/mypy over CI's exact paths clean. 2.7/2.9/2.9b split off to unstaffed-group2-task2.7to2.9b -- each needs its own fixture design and 2.6 alone took a whole firing's room, the same call iterations 7 and 9 made on this same group."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.7to2.9b",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.7, 2.9, 2.9b",
-                      "detail":  "Iteration 11, 2026-09-23: built 2.7 only. Added _silent_review_of_agent_completed_work and two tests to test_the_evidence_names_the_author.py, each rostering a third HELD agent booked in a second live loop (R8's fixture, reused via import from test_a_task_nothing_will_move_holds_nobody). Both mutations (map silent reviewers to the author clause; lay the author layer after the reviewer layer) applied live and reverted cleanly, (b) failing only the operator-completed test as predicted (attribution.agent is not None on the agent-completed branch, so the author layer never runs there). 147 passed across the seven-file relevant suite; 6.0's own guard alone: 32 passed. ruff/mypy clean, black needed one reformat (applied, re-checked clean). 2.9/2.9b split off to unstaffed-group2-task2.9to2.9b -- each needs its own twelve-agent/fallback fixture and 2.7 alone took the room this firing had, the same call iterations 7, 9 and 10 made on this same group."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.9to2.9b",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.9, 2.9b",
-                      "detail":  "Iteration 12, 2026-09-23: built 2.9 only, commit cb21830. test_twelve_booked_agents_still_fit_the_500_character_bound added to test_a_task_nothing_will_move_holds_nobody.py -- twelve agents each booked for three tasks in a second live loop (2.6's R8 fixture) plus a held agent, forcing 2.4's budget walk to shrink and tail; literal derived from a direct call to _rung_3_reason before writing assertions. All four R8 mutations ((i) remove bound+fit, (ii) remove only the bound, (iii) fixture-reachability check, (iv) always-plain-tail) applied live and reverted cleanly. 148 passed across the seven-file relevant suite; 6.0's own guard alone: 33 passed. ruff/black/mypy over CI's exact paths clean. 2.9b split off to unstaffed-group2-task2.9b -- 2.9 alone took the room this firing had, the same call iterations 7, 9, 10 and 11 made on this same group."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.9b",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "medium",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, task 2.9b",
-                      "detail":  "Built 2026-09-23 iteration 13. test_a_thirty_two_character_name_still_fits_sixty_four_character_ids added to test_a_task_nothing_will_move_holds_nobody.py -- one 32-character agent holding three 64-character-id tasks in a second live loop (2.6's R8 fixture, via _holding), reached through resolve_reviewer directly against an under_review task (test_reviewer_ladder.py's exact-string pattern, not a real firing). Literal derived from a direct _rung_3_reason call; corrected clause order after the first run showed the roster sorts the holder before the author. Mutation (limits=(3,) dropping 2.4's (3,2,1) retry) applied live and reverted: agent drops out of the reason entirely, falls to tail, as predicted. 149 passed across the seven-file relevant suite; 34 passed standalone (6.0's own guard). ruff/mypy clean, black needed one reformat (applied, re-checked clean, additions only). Group 2's fixture-heavy split chain (2.6, 2.7, 2.9, 2.9b) is now complete."
-                  },
-                  {
-                      "id":  "unstaffed-group2-task2.15to2.18-and-6.0",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.15-2.18 plus the 6.0 regression guard",
-                      "detail":  "Built 2026-09-23 iteration 14. 2.15: two tests in test_a_held_agent_is_busy.py (base held-not-running case, plus R8's held-and-booked case via a new local _booked_elsewhere fixture -- kept local to avoid a circular import with test_a_task_nothing_will_move_holds_nobody, which already imports _hold from this file). 2.16: rebased test_rung_three_names_the_usage_limit_when_a_hold_is_why_nobody_was_free onto exact equality (_HELD_TODAY, derived and confirmed first-run); the other two named tests were found already correct/still passing on re-check, no edit needed. 2.17: two tests (archive/pause absence over a booked-elsewhere fixture; no-REJECT-when-nothing-booked over a held-only fixture). 2.18: empty-roster exact-string test in test_reviewer_ladder.py (one agent archived post-roster). All five R6/R8 mutations applied live to scheduler.py and reverted, each failing as predicted; git diff --stat clean after every one. Full relevant suite (test_reviewer_ladder/test_a_held_agent_is_busy/test_a_flow_names_what_it_cannot_staff/test_a_task_nothing_will_move_holds_nobody/test_review_divergence/test_run_divergence/test_the_evidence_names_the_author): 154 passed (149+5). 6.0's own guard standalone: 34 passed, unchanged. ruff/mypy over CI's exact paths clean; black needed one reformat (test_reviewer_ladder.py, line-wrapping only), applied and re-verified. This closes group 2 in full; group 5 (UI) and group 6 (verify+drive) remain queued after it."
-                  },
-                  {
-                      "id":  "unstaffed-group5-impl",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "high",
-                      "title":  "an-unstaffed-review-names-its-holders: group 5, UI bundle",
-                      "detail":  "Built 2026-09-23 iteration 15, commit e6d1c96. title={loop.stall_reason} added to LoopsIndexTab.tsx's stall <p>, one new test in loopsIndexTab.test.tsx (12 passed, both R8 mutations checked live and reverted). Bundle built and driven live on a throwaway Hub (port 8095, proj-a54ac8c12fa4, a real 409 stall, Playwright get_attribute('title') read the exact full reason) but deliberately NOT committed: 5.4's gate failed since hub/ui/src had moved past the last bundle stamp (c18a87b, F202's envelope change to useTasks) while :8000's backend process predates that commit -- shipping now would break the operator's live task board. hub/hub/static/ui reverted cleanly to its last committed state. Full reasoning in tasks.md's 5.4 note and iteration 15 of the log."
-                  },
-                  {
-                      "id":  "unstaffed-group6-drive",
-                      "status":  "done",
-                      "model":  "sonnet",
-                      "effort":  "medium",
-                      "title":  "an-unstaffed-review-names-its-holders: group 6, verify + drive",
-                      "detail":  "Built 2026-09-23 iteration 16. 6.0: 34 passed, both ends. 6.1: ruff/black/mypy/npm-lint all clean over CI's exact paths. 6.3: driven live on port 8096/profiles/drive0923 -- a real flow, two real Haiku turns each producing a real commit, evidence recorded naming it; the exact rung-3 409 sentence observed on the wire matching the history row and the review_unstaffed event byte-for-byte (A1/A2); R8's two replacement claims driven live -- an unreachable-only holder staffed directly with no stall (R8-a), and rejecting an agent's only reachable booking turned the next firing's 409 into a 200 that staffed it (R8-b). Full transcript scripts/drive/FINDINGS.md D-6. 6.2: full hub/tests/ 12 failed/4644 passed/86 skipped, all twelve failures test_pty_runner.py/test_lifespan_shutdown.py (real-process-spawn tests run concurrently with 6.3's live drive), re-run in isolation afterward: 32 passed, confirmed environmental not a regression. 6.5: test-guide.md re-derivation found already done by a prior uncommitted firing, verified against the shipped code and committed. 6.4: agent-flows delta synced into openspec/specs/ (openspec validate --strict passed), directory archived to archive/2026-09-23-an-unstaffed-review-names-its-holders, F352 marked both halves fixed. Both changes in tonight's ORDER now closed; next_action set to null."
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
