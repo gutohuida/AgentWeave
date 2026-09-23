@@ -1,5 +1,5 @@
 {
-    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today\u0027s DIRECTION.md section names one under an operator\u0027s DECISIONS.md row (day-window.md, \u0027A day that builds\u0027).",
+    "purpose":  "FILL. Drive the product, take findings and research candidates through the full three-round spec loop into openspec/changes/, and write the review page the operator approves from. This window does NOT implement, except on a build day: today's DIRECTION.md section names one under an operator's DECISIONS.md row (day-window.md, 'A day that builds').",
     "playbook":  ".claude/loops/day-window.md",
     "runner":  "claude",
     "model":  "opus",
@@ -8,33 +8,93 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T17:00:00+01:00",
-    "iteration":  0,
+    "iteration":  1,
     "log_file":  ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/day-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-day.json. Do no other work this iteration.",
+    "current":  "d1-drive",
+    "next_action":  "Do D-1: drive what last night built, scoped and live, per day-window.md D-1. Last night closed a-hub-that-was-not-told-which-database-refuses-to-open-one and an-unstaffed-review-names-its-holders (F352). Fresh project, fresh drive Hub on a free port from profiles/drive0923/, started from hub/ with uvicorn from source. Every real agent turn binds claude-haiku-4-5. Never against proj-5e960453 or proj-18e5d4e0, never :8000/:8010. New findings append to scripts/drive/FINDINGS.md with severity, file:line, reproduction, Status: open. Never leave a job enabled.",
     "queue":  [
                   {
                       "id":  "compose",
+                      "status":  "done",
+                      "title":  "Compose this window's queue from the playbook",
+                      "detail":  "Done iteration 1: tree hygiene commit b661766, backlog refreshed, gate not due (CI on inherited sha not concluded), research copied, drain count 0 -> clear column, two spec loops today. Full account in the log."
+                  },
+                  {
+                      "id":  "d1-drive",
                       "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/day-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                      "title":  "Drive last night's build",
+                      "detail":  "Scoped to a-hub-that-was-not-told-which-database-refuses-to-open-one and the unstaffed-review remedy. Fresh project/Hub, Haiku turns only. File findings in FINDINGS.md with Status: open."
+                  },
+                  {
+                      "id":  "d2-r1",
+                      "status":  "open",
+                      "title":  "Spec loop A, R1 - explore and propose",
+                      "detail":  "Priority order: a finding d1-drive just produced; else an open ledger finding with no proposal; else the research file's ranked list (spec-queue/research/2026-09-23.md candidate #1: an agent message can smuggle @/abs/path into a claude -p argv past every disallowed tool, zero tool calls, measured on CLI 2.1.280; claude-agent-sdk-python#1269, SDK v0.2.158, client_composed opt-out also measured). Write proposal.md/design.md/tasks.md/specs deltas under openspec/changes/."
+                  },
+                  {
+                      "id":  "d3-r2",
+                      "status":  "open",
+                      "title":  "Spec loop A, R2 - independent re-derivation",
+                      "detail":  "Fresh comparison of D-2's proposal against the actual code, not a re-read of R1's reasoning. Fix the proposal where the code disagrees."
+                  },
+                  {
+                      "id":  "d4-r3",
+                      "status":  "open",
+                      "title":  "Spec loop A, R3 - independent re-derivation",
+                      "detail":  "Second, independent fresh comparison against the code. openspec validate --strict must pass (SHALL on a requirement's first physical line)."
+                  },
+                  {
+                      "id":  "d2b-r1",
+                      "status":  "open",
+                      "title":  "Spec loop B, R1 - explore and propose",
+                      "detail":  "Drain count was 0: second independent loop today (2026-09-12 decision). Next item in the same priority order as D-2, with no file overlap against loop A's blast radius -- e.g. research candidate #2 (catalog missing gpt-6-sol; opus-5.5/gpt-6-luna already closed by this iteration's b661766) if it turns out to need more than a D-6 repair, or the next unproposed ledger finding."
+                  },
+                  {
+                      "id":  "d3b-r2",
+                      "status":  "open",
+                      "title":  "Spec loop B, R2 - independent re-derivation",
+                      "detail":  "Fresh comparison of D-2b's proposal against the actual code."
+                  },
+                  {
+                      "id":  "d4b-r3",
+                      "status":  "open",
+                      "title":  "Spec loop B, R3 - independent re-derivation",
+                      "detail":  "Second independent fresh comparison. openspec validate --strict must pass."
+                  },
+                  {
+                      "id":  "d5",
+                      "status":  "open",
+                      "title":  "Write the review page",
+                      "detail":  "spec-queue/review/review-2026-09-23.html per day-window.md D-5's six-point order. Report the previous gate (not today's, which runs after this). Append today's section to spec-queue/APPROVALS.md, one row per specced change, no status token."
+                  },
+                  {
+                      "id":  "d6",
+                      "status":  "open",
+                      "title":  "Repairs that need no spec, if the day has room",
+                      "detail":  "Standing candidate: add gpt-6-sol to hub/hub/model_catalog.py (research candidate #2's remaining half) -- confirm it touches no openspec/specs requirement, no migration/API/schema change, and drive it before closing. Otherwise a FINDINGS.md status sweep."
+                  },
+                  {
+                      "id":  "d7-gate",
+                      "status":  "open",
+                      "title":  "Merge gate - always last",
+                      "detail":  "Commit everything else first (git status --short empty). Find CI's run for the exact HEAD sha, wait up to 25 min polling ~90s. success + rev-list HEAD..master=0 + HEAD==@{u} + no HOLD MERGE in DIRECTION.md -> git merge --ff-only, push master, start tomorrow's branch from it. Still running at budget -> stop waiting, log the run id, leave it for tomorrow's step 1. Then next_action: null."
                   }
               ],
     "decisions_for_user":  [
 
                            ],
     "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
                    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
                    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
                    "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s go to decisions_for_user, not guessed.",
+                   "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
                    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
                    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
                    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
                ]
 }
