@@ -28389,10 +28389,14 @@ on the operator, not this finding.
 
 ## F352 (A) — a flow counts an agent busy for holding any live task anywhere in the project, so backlog outside the flow starves it of reviewers — and the reason it gives names nobody
 
-**Status:** open for the visibility half; **the definition half is fixed `4b59ee0`**
-(`a-task-nothing-will-move-holds-nobody`, driven and archived 2026-09-15). The operator's flow was
-unblocked by hand. Reported by the operator 2026-09-13: *"The loop got stuck because of task
-assignment."* [checked 2026-09-22, D-4: still a correct open row — `4b59ee0` fixed the definition half only; the visibility half (the reason names nobody) is the unbuilt `openspec/changes/an-unstaffed-review-names-its-holders`, awaiting the operator's approval.]
+**Status:** **both halves fixed.** The definition half is fixed `4b59ee0`
+(`a-task-nothing-will-move-holds-nobody`, driven and archived 2026-09-15). The visibility half is
+fixed by `an-unstaffed-review-names-its-holders` (rung 3's five-clause reason, groups 1-6,
+2026-09-23), driven live D-6: the reason now names every booked/held agent and what it holds,
+instead of "either running a turn, already holding active work, or is the one that completed this
+task." The operator's flow was unblocked by hand at the time. Reported by the operator 2026-09-13:
+*"The loop got stuck because of task assignment."* [checked 2026-09-22, D-4: `4b59ee0` fixed the
+definition half only, visibility still open. Closed 2026-09-23 by the change named above.]
 
 **Measured on the operator's Hub (LoopEngine, `loop-103ecb8aeb89`).** Fourteen firings, 21:20 to
 22:30 UTC, each recorded `review_unstaffed` for the two finished tasks the rest of the flow waited on
@@ -31737,3 +31741,66 @@ instance (pid 27296) at cleanup.
 Final check of the real default database: mtime/size unchanged from the pre-drive baseline.
 
 F388 marked `fixed 85b4b28` below — only now, per 6.5, not when the suite went green.
+
+## D-6, 2026-09-23 — `an-unstaffed-review-names-its-holders` group 6: rung-3 staffing, R5's two new claims, driven live
+
+Port 8096, profile `profiles/drive0923/`, `testbed/scratch/unstaffed-drive-032900/` (git-backed,
+never deleted mid-drive — kept for the morning to inspect if wanted). Never `:8000`/`:8010`. One
+runner bound to `claude-haiku-4-5-20251001`, four agents: `author`, `holder1`, `holder2`,
+`unreach`.
+
+**Setup, for real.** A flow (a job whose loop carries `spec_document_id`, via `POST
+/project/documents` then `PUT .../content` to add requirements `FR-1`/`FR-2`) with `author`
+completing two small real tasks (add `multiply`/`divide` to `calc.py`) through two real Haiku
+turns — each produced a real commit on the task's own worktree branch (`d299021`, `92b85aa`,
+read from `git log` in `.agentweave/tasks/<id>/`, not asserted). Evidence was then recorded
+against each requirement naming that commit (`POST /project/spec/evidence`, operator-recorded,
+which `requirement_evidence.record` accepts on arrival) — without a requirement link and recorded
+evidence, `commit_for_task_review` refuses with "no commit to review" and rung 3 is never reached;
+this was hit once (see the 02:35 history row below) before the requirement/evidence plumbing was
+in place, and is recorded rather than silently fixed and forgotten.
+
+A second, real, live (non-archived) loop held `holder1` and `holder2` each on one `pending` task
+(reachable — `loop_id` set to that loop). A bare task with no `loop_id` held `unreach`
+(unreachable).
+
+**A1/A2 — the exact sentence, on the wire, matching all three surfaces.** With the roster fully
+booked, `POST .../jobs/{id}/run` → 409:
+`"could not staff this step: no reviewer is free. author is the one that completed this task;
+holder1 is booked for task-c0b6866531b5 (pending); holder2 is booked for task-93bead919653
+(pending); unreach is booked for task-daff3f589a4b (pending). Land it, on the task, to review it
+yourself. Rejecting booked tasks that are no longer wanted can free their agents."`
+`GET .../jobs/{id}/history`'s matching row's `error_summary`, and the `review_unstaffed` event's
+`data.reason`, were read back byte-identical to that 409 detail — the same three-surface agreement
+2.6's unit test asserts, now observed against a real HTTP response and a real event feed rather
+than an in-process `app.post`.
+
+**R8(a) — an unreachable-only holder is staffed, not merely "not named".** With only `author` and
+`unreach` on the roster and `unreach`'s one task unreachable, the next firing staffed `unreach`
+directly: `task-de71566d8dba` moved `completed -> under_review`, `assignee: unreach`, **no stall
+at all**. That absence of a 409 is the observable proof design R5-0's projection treats an
+unreachable holding as free, not the text of a reason that never got produced.
+
+**R8(b) — rejecting an agent's only booking frees it, and the very next firing proves it.** With
+the roster fully booked (the 409 above), `PATCH task-c0b6866531b5 {"status": "rejected"}` (the
+operator's own control, `holder1`'s only reachable holding) then re-firing answered **200**, not
+409: `task-8fc30ed54650` moved `completed -> under_review`, `assignee: holder1`. The remedy the
+sentence prints — "Rejecting booked tasks that are no longer wanted can free their agents" — was
+watched working, not merely claimed.
+
+Both review turns ran for real and both approved the work. `GET history` returned 200 throughout,
+including after the 470-ish-character reason (well under `JOB_RUN_ERROR_SUMMARY_CHARS`'s 500 in
+this fixture's shape — 2.9's twelve-agent test is what forces the budget walk, not reachable here
+with three candidates). D4/F365 (two firings, two unstaffed tasks, one event each) was observed
+for free: the evidence-missing stall on `task-de71566d8dba` and the booked stall on
+`task-8fc30ed54650` each produced exactly one `review_unstaffed` event for two different tasks on
+two different firings — never coalesced into one.
+
+**Skipped per R8:** the drawer's status-menu refusal and a real agent's `under_review` refusal
+turn (D5's, moved to `a-refusal-names-a-remedy-that-works`, archived 2026-09-16) — not this
+change's to drive.
+
+**Teardown.** All three jobs (`job-21aba4c04762`, `job-78bc6ef5cde0`, `job-84e099d2865b`)
+`PATCH`ed to `enabled: false`; `GET /jobs` confirmed zero enabled agents afterward. The drive
+Hub process (port 8096) and its profile are left in place for the morning; nothing was written to
+`:8000` or `:8010` at any point.

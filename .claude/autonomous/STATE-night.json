@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  15,
+    "iteration":  16,
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "unstaffed-group6-drive",
-    "next_action":  "Build unstaffed-group6-drive of an-unstaffed-review-names-its-holders (group 6, verify + drive, tasks 6.0-6.5 in tasks.md) -- the queue's last item. Group 5 closed at iteration 15 (title attribute built, tested, driven live on a throwaway port 8095/proj-a54ac8c12fa4 with a real 409 stall; the bundle itself was built and verified but deliberately NOT committed -- 5.4's gate failed because hub/ui/src had moved past the last bundle stamp (commit c18a87b, F202's envelope change) while :8000's own backend process (started 2026-09-19) predates that commit, so shipping the rebuild now would break the operator's live task board on next reload; see tasks.md's 5.4 note and iteration 15 of the log for the full reasoning). 6.0: run the R5 regression guard (pytest hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q) before starting and again at the end -- both times it was 34 passed as of iteration 15, use that as the known-good baseline. 6.1: CI's exact lint set (ruff check src/ hub/ tests/; ruff check scripts/ --select E9,F63,F7,F82,F401,F841; black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/; mypy src/; cd hub/ui && npm run lint). 6.2: full hub/tests/ -q with the measured pass/skip counts recorded in tasks.md (expect the run to take ~20-30 minutes on this machine, per iteration 5's own note -- do not assume a hang before ~30 min). 6.3: drive R8's replacement bullets (not the struck-through stale ones -- read the task's own text for which bullets those are). 6.5: re-derive test-guide.md against what actually got built across groups 1-6. 6.4: archive housekeeping in FINDINGS.md -- retire F352's visibility half and the F353/F334/F365 status lines. After 6.4 closes, this closes BOTH changes in tonight's ORDER in full -- set next_action to null and current to a short 'queue finished' marker so the driver unregisters itself rather than re-deriving that there is nothing left to do.",
+    "current":  "queue finished",
+    "next_action":  null,
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
@@ -129,11 +129,11 @@
                   },
                   {
                       "id":  "unstaffed-group6-drive",
-                      "status":  "open",
+                      "status":  "done",
                       "model":  "sonnet",
                       "effort":  "medium",
                       "title":  "an-unstaffed-review-names-its-holders: group 6, verify + drive",
-                      "detail":  "6.0 R5 regression guard first and again at end. 6.1 CI lint set. 6.2 full hub/tests/ with counts recorded. 6.3 drive R8's replacement bullets (not the struck-through stale ones). 6.5 re-derive test-guide.md. 6.4 archive: retire F352 visibility half + F353/F334/F365 status lines in FINDINGS.md."
+                      "detail":  "Built 2026-09-23 iteration 16. 6.0: 34 passed, both ends. 6.1: ruff/black/mypy/npm-lint all clean over CI's exact paths. 6.3: driven live on port 8096/profiles/drive0923 -- a real flow, two real Haiku turns each producing a real commit, evidence recorded naming it; the exact rung-3 409 sentence observed on the wire matching the history row and the review_unstaffed event byte-for-byte (A1/A2); R8's two replacement claims driven live -- an unreachable-only holder staffed directly with no stall (R8-a), and rejecting an agent's only reachable booking turned the next firing's 409 into a 200 that staffed it (R8-b). Full transcript scripts/drive/FINDINGS.md D-6. 6.2: full hub/tests/ 12 failed/4644 passed/86 skipped, all twelve failures test_pty_runner.py/test_lifespan_shutdown.py (real-process-spawn tests run concurrently with 6.3's live drive), re-run in isolation afterward: 32 passed, confirmed environmental not a regression. 6.5: test-guide.md re-derivation found already done by a prior uncommitted firing, verified against the shipped code and committed. 6.4: agent-flows delta synced into openspec/specs/ (openspec validate --strict passed), directory archived to archive/2026-09-23-an-unstaffed-review-names-its-holders, F352 marked both halves fixed. Both changes in tonight's ORDER now closed; next_action set to null."
                   }
               ],
     "decisions_for_user":  [
