@@ -988,19 +988,39 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
 
 ## 6. Verify
 
-- [ ] 6.0 **R5 regression guard, run this before anything else and again at the end:**
+- [x] 6.0 **R5 regression guard, run this before anything else and again at the end:**
       `py -3.11 -m pytest hub/tests/test_a_task_nothing_will_move_holds_nobody.py -q`.
       It must be green before you start and green when you finish. If
       `test_the_loopengine_shape_staffs_its_review` goes red, the availability projection has
       reverted `4b59ee0` (design R5-0) — fix the projection, never the test.
-- [ ] 6.1 CI's lint set:
+
+      Run first (iteration 16, before any other 6.x step): **34 passed**, matching the baseline
+      every prior iteration measured. Re-run at the end after the drive and after 6.2's full suite
+      — record the second count in that firing's own note.
+- [x] 6.1 CI's lint set:
       - `ruff check src/ hub/ tests/`;
       - `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`;
       - `mypy src/`;
       - `cd hub/ui && npm run lint`.
-- [ ] 6.2 `py -3.11 -m pytest hub/tests/ -q`, full. Record pass and fail counts. Classify any
+
+      All four clean, iteration 16: `ruff check src/ hub/ tests/` — all checks passed. `black
+      --check --target-version py311 src/ hub/hub/ hub/tests/ tests/` — 594 files unchanged.
+      `mypy src/` — no issues in 22 source files. `cd hub/ui && npm run lint` — clean, no output.
+- [x] 6.2 `py -3.11 -m pytest hub/tests/ -q`, full. Record pass and fail counts. Classify any
       failure against DEAD-ENDS (F292 and F314 signatures) before calling it unrelated.
-- [ ] 6.3 Drive (night-window.md, *Driving*): a drive Hub on a free port with a fresh
+
+      Iteration 16: **12 failed, 4644 passed, 86 skipped** (2395s, `py -3.11`, not bare `python`).
+      All 12 failures were `test_pty_runner.py` (11) and
+      `test_lifespan_shutdown.py::test_hub_shutdown_kills_a_real_tracked_process` (1) — every one a
+      real-process-spawn/PID test, run **while 6.3's drive Hub and two real Haiku agent turns were
+      running concurrently** on this machine (contention, not the F292 `sqlite3 database is
+      locked` signature or F314's ordering flake — neither matches these names). Re-run in
+      isolation immediately after the drive's teardown, with nothing else on the machine spawning
+      processes: `py -3.11 -m pytest hub/tests/test_lifespan_shutdown.py::test_hub_shutdown_kills_a_real_tracked_process
+      hub/tests/test_pty_runner.py -q` → **32 passed**, all twelve green. Confirmed environmental,
+      not a regression; the full-suite number above is recorded as measured, not silently
+      corrected. 6.0's guard, re-run at the very end: **34 passed**, unchanged.
+- [x] 6.3 Drive (night-window.md, *Driving*): a drive Hub on a free port with a fresh
       `profiles/drive0914/` database; runners bound to `claude-haiku-4-5`; a flow with a document;
       the LoopEngine shape staged. Read:
       - the `review_unstaffed` event and the board's stall line;
@@ -1037,11 +1057,44 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
         > is D4 (F365), also the sibling's — harmless to observe, not a gate here.
 
       Leave no job enabled.
-- [ ] 6.5 (R6) Re-derive `test-guide.md`. It is untouched since R4: its own header says it needs
+
+      **Driven, iteration 16 (2026-09-23), port 8096, `profiles/drive0923/`,
+      `testbed/scratch/unstaffed-drive-032900/`.** A real git-backed project, runner bound to
+      `claude-haiku-4-5-20251001`, agents `author`/`holder1`/`holder2`/`unreach`. A real flow (a
+      job whose loop carries a `spec_document_id`) with a requirement per task; `author` did the
+      work for real (two Haiku turns, each a real commit — `d299021` and `92b85aa` — read from the
+      task's own worktree branch, not asserted), evidence recorded naming that commit, then the
+      loop re-fired to reach the review-staffing step for real:
+      - **A1/A2, both surfaces:** with `holder1`/`holder2`/`unreach` all booked via a second live
+        loop's reachable holdings, `POST .../jobs/{id}/run` answered 409 with `"could not staff
+        this step: no reviewer is free. author is the one that completed this task; holder1 is
+        booked for task-c0b6866531b5 (pending); holder2 is booked for task-93bead919653 (pending);
+        unreach is booked for task-daff3f589a4b (pending). Land it, on the task, to review it
+        yourself. Rejecting booked tasks that are no longer wanted can free their agents."` — and
+        the job's `GET history` row's `error_summary` and the `review_unstaffed` event's `reason`
+        both matched that 409 detail exactly, all three surfaces agreeing, as 2.6's test predicts.
+      - **R8(a), driven:** a holder (`unreach`) whose only task had no `loop_id` and nothing queued
+        was staffed directly as the reviewer on the very next firing — the task moved
+        `completed -> under_review`, `assignee: unreach` — with no stall at all, which is the
+        observable proof an unreachable-only holding counts as free rather than booked.
+      - **R8(b), driven:** with the roster fully booked (the 409 above), `PATCH`ing `holder1`'s one
+        reachable holding to `rejected` (the operator's own control) and re-firing answered 200,
+        not 409: the next firing staffed `holder1` as the reviewer directly, `assignee: holder1` —
+        the remedy the sentence prints, watched working, not merely claimed.
+      - Both review turns ran for real (Haiku) and both approved the work; `GET history` returned
+        200 throughout. The drawer's status-menu refusal and the real-turn-refusal bullets were
+        skipped per R8 (D5's, the sibling's). The two-firings/two-events bullet (D4/F365) was
+        observed for free: the evidence-missing stall on `task-de71566d8dba` and the booked stall
+        on `task-8fc30ed54650` each produced exactly one `review_unstaffed` event, for two
+        different tasks, on two different firings.
+      - Teardown: all three jobs (`job-21aba4c04762`, `job-78bc6ef5cde0`, `job-84e099d2865b`)
+        `PATCH`ed to `enabled: false`; `GET /jobs` confirmed zero enabled afterward. Full
+        transcript recorded in `scripts/drive/FINDINGS.md`, D-6.
+- [x] 6.5 (R6) Re-derive `test-guide.md`. It is untouched since R4: its own header says it needs
       re-deriving, it still calls the OPERATOR QUESTION open, and its A6 claim and human item 3 are
       written against option (e). Neither R5 nor R6 touched it. It must reflect the five clauses,
       the reachability filter, the removed archive remedy, and the hold clause.
-- [ ] 6.4 Archive:
+- [x] 6.4 Archive:
       - sync the `agent-flows` delta into `openspec/specs/` (the only one still owned by this
         directory — `agent-loops` and `task-lifecycle-governance` moved with the split and are
         synced by the sibling directory instead);
@@ -1051,3 +1104,12 @@ wholesale to `a-refusal-names-a-remedy-that-works/tasks.md` groups 3 and 4, renu
         and F367 are marked `fixed <sha>` by the sibling directory instead.
       - **R6: do not write that this change "leaves F352 open".** The pre-R6 `Impact` said so,
         justified by the operator question being open; it is closed.
+
+      Done, iteration 16 (2026-09-23). `agent-flows`'s `## ADDED Requirements` delta appended to
+      `openspec/specs/agent-flows/spec.md`; `openspec validate agent-flows --strict` → "valid".
+      Directory moved with `git mv` to
+      `archive/2026-09-23-an-unstaffed-review-names-its-holders`. F352's status line rewritten:
+      both halves now `fixed`, the visibility half naming this change and D-6's live drive
+      (`scripts/drive/FINDINGS.md`). F353/F334/F365/F367 already read `fixed <sha>` from the
+      sibling directory — confirmed, not re-written. Both queue items in tonight's ORDER
+      (`hub-refuses-groups1and3-impl` through `unstaffed-group6-drive`) are now closed.
