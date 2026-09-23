@@ -32,6 +32,11 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
 4. **Answered 2026-09-23 (D10, F193 only).** An archived agent's open conversation is *shown,
    marked, with Unarchive*: both rail views list it, and opening it offers to unarchive the agent.
    UI-only; archiving an agent still leaves its conversations open. Built in UI-1.
+5. **Answered 2026-09-23 evening (carried since handoff 0144).** The merge gate gets **no re-run
+   allowance** for F292/F314: both are closed (2026-09-22, by measurement), so condition 3 stays
+   strict. A new intermittent is filed as a new finding, not absorbed by a re-run.
+6. **Answered 2026-09-23 evening.** D13 goes **through `daily-review`**: the next review page puts
+   each item with a recommended answer. It is no longer carried as a handoff question.
 
 ## How a round runs
 
