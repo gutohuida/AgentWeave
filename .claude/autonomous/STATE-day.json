@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6c0a467",
     "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d5",
-    "next_action": "Do D-5: write spec-queue/review/review-2026-09-23.html per .claude/loops/day-window.md D-5's six-point order, covering today's two specced changes (openspec/changes/an-at-mention-an-agent-wrote-reads-no-file, R1-R3 done; openspec/changes/pressing-run-names-the-reason-that-held, R1-R3 done, Open Questions 1-4 incl. F411/F412/F413 fold-in). Report the PREVIOUS gate (not today's, which runs after this). Append today's section to spec-queue/APPROVALS.md, one row per specced change, no status token. Then log, state, commit, push.",
+    "current": "d6",
+    "next_action": "Do D-6: standing candidate is gpt-6-sol in hub/hub/model_catalog.py (research candidate #2's remaining half). Confirm it clears the D-6 bar (touches no openspec/specs requirement, no migration/API/schema change, fully described by an existing finding/repro), add it, run the lint set CI runs, drive it (not just test it), mutation-check any test added, set the finding's Status line to fixed <sha>. If it turns out to want a spec, stop and queue it for tomorrow instead of finishing it. Otherwise fall back to a FINDINGS.md status sweep. Then D-7 the merge gate, always last. Then log, state, commit, push.",
     "queue": [
         {
             "id": "compose",
@@ -65,9 +65,9 @@
         },
         {
             "id": "d5",
-            "status": "open",
+            "status": "done",
             "title": "Write the review page",
-            "detail": "spec-queue/review/review-2026-09-23.html per day-window.md D-5's six-point order. Report the previous gate (not today's, which runs after this). Append today's section to spec-queue/APPROVALS.md, one row per specced change, no status token."
+            "detail": "Done iteration 9: spec-queue/review/review-2026-09-23.html written per day-window.md D-5's six-point order (previous gate reported: 09-22's D-7, ff 72cfb99..6c0a467; both today's changes covered with each round's changes named; tonight's default queue worked out -- no specced work buildable absent an approval). Appended ## 2026-09-23 to spec-queue/APPROVALS.md, one row per change, no status token. Backlog regenerated first (nothing moved)."
         },
         {
             "id": "d6",

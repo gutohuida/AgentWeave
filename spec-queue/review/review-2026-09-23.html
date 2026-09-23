@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AgentWeave — review 2026-09-23</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --fg: #1b1b18; --card: #ffffff; --border: #ddd8cf;
+    --accent: #8a5a2b; --muted: #6b6559; --warn-bg: #fff3e0; --warn-border: #d98a2b;
+    --ok-bg: #eef6ee; --ok-border: #4c8c4c; --code-bg: #f0ede6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16151a; --fg: #e9e6df; --card: #201f26; --border: #38363f;
+      --accent: #d69a5c; --muted: #a39d90; --warn-bg: #3a2c14; --warn-border: #d98a2b;
+      --ok-bg: #17301a; --ok-border: #4c8c4c; --code-bg: #2a2830;
+    }
+  }
+  body { background: var(--bg); color: var(--fg); font-family: -apple-system, Segoe UI, sans-serif;
+         line-height: 1.5; max-width: 880px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  h2 { font-size: 1.15rem; margin-top: 2.2em; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  h3 { font-size: 1rem; margin-top: 1.4em; color: var(--accent); }
+  .sub { color: var(--muted); font-size: 0.92rem; margin-top: 0; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; margin: 10px 0; }
+  .warn { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .ok { background: var(--ok-bg); border: 1px solid var(--ok-border); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; background: var(--code-bg);
+         padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 0.93rem; }
+  th, td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  ul { margin: 6px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .sev-A { color: #c0392b; font-weight: 600; }
+  .sev-B { color: #c0781e; font-weight: 600; }
+  .sev-C { color: var(--muted); font-weight: 600; }
+  footer { margin-top: 3em; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--border); padding-top: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Review — 2026-09-23</h1>
+<p class="sub">FILL window (day), branch <code>autonomous/2026-09-21-daily</code> · iteration 9 of the day window</p>
+
+<h2>1 · Branch and the last merge gate</h2>
+<div class="card">
+  <p><strong>This reports the previous gate — 2026-09-22's closing <code>D-7</code></strong>
+  (iteration 8), not today's, which has not run yet (it is queued last, as <code>D-7</code>, after
+  this page).</p>
+  <ul>
+    <li>2026-09-22's <code>D-7</code> found its own arm-commit CI still <code>in_progress</code> at
+      close, waited, then found <code>success</code> for the exact final sha (<code>35708793360</code>).
+      All four gate conditions held (<code>git status --short</code> empty,
+      <code>HEAD..origin/master</code> = 0, CI success, no <code>HOLD MERGE</code>). <strong>It
+      opened</strong>: fast-forwarded <code>master</code> <code>72cfb99..6c0a467</code>, 42 files,
+      pushed clean.</li>
+    <li>This morning (2026-09-23, iteration 1) the step-1 fallback found nothing to do: the
+      inherited sha's CI (<code>88f3fa1</code>, run <code>35834369496</code>) had not concluded
+      (6 minutes old, well under the hang threshold), so condition 3 failed and no gate opened
+      there — an ordinary "not yet" reading, not a failure.</li>
+    <li><strong>The branch has not landed since</strong> and is now well ahead of <code>master</code>:
+      <code>git rev-list --count master..HEAD</code> was <strong>123</strong> at this morning's
+      check, spanning three days (<code>autonomous/2026-09-21-daily</code>, days 09-21/22/23) without
+      a fast-forward landing since 09-22's close. Today's own <code>D-7</code> re-checks at window
+      close, per the playbook.</li>
+  </ul>
+</div>
+
+<h2>2 · What the night window built</h2>
+<div class="card">
+  <p><strong>No night window ran between 09-22's close and this arm.</strong> The two changes closed
+  09-22 night (<code>a-hub-that-was-not-told-which-database-refuses-to-open-one</code> and
+  <code>an-unstaffed-review-names-its-holders</code>, both halves of F352) were reported on
+  2026-09-22's page and are covered again below only insofar as today's <code>D-1</code> re-drove
+  them.</p>
+</div>
+
+<h2>3 · What today's drive found</h2>
+<div class="card">
+  <p><span class="sev-C" style="color:var(--muted)">No new finding.</span> <code>D-1</code>
+  re-observed <code>a-hub-that-was-not-told-which-database-refuses-to-open-one</code> live from a
+  second angle group 6 hadn't covered (<code>.env</code> present vs. absent, port 8011,
+  <code>profiles/drive0923d1/</code>): both conditions behave as designed — no refusal with
+  <code>.env</code> present and <code>DATABASE_URL</code> unset, a verbatim import-time refusal with
+  it absent. <code>an-unstaffed-review-names-its-holders</code> got a lighter but real check: the
+  regression suite fresh on today's HEAD, <strong>65 passed</strong>, and the UI bundle-deferral
+  decision re-confirmed still deliberate from the drive Hub's own startup warning. Full account:
+  <code>scripts/drive/FINDINGS.md</code>, <code>## D-1, 2026-09-23 (day window)</code>.</p>
+</div>
+
+<h2>4 · What was specced</h2>
+
+<h3>A — <code>an-at-mention-an-agent-wrote-reads-no-file</code> (F409, severity A)</h3>
+<div class="card">
+  <p><strong>The problem.</strong> Every Hub turn's whole prompt goes on the <code>claude</code>
+  CLI's command line. Before the model runs, the CLI itself expands any <code>@path</code> token in
+  that text into an attached file read — <strong>no tool call, so no posture and no disallowed-tools
+  list ever sees it</strong>. The prompt is mostly text the operator did not write: another agent's
+  <code>send_message</code>, a job or loop briefing an agent can author, a checkpoint delivery, a
+  delegation. So one agent's text can make another agent's turn read any file the Hub's own user
+  account can read, silently. Measured live on <code>claude</code> 2.1.280: a marker file outside the
+  workspace, every file tool disallowed, returned with <strong>0 tool calls</strong> — the CLI's own
+  session transcript shows the attachment.</p>
+  <p><strong>The argument, in brief.</strong> Escape every <code>@</code> in non-operator text to
+  <code>\@</code> before it reaches a runner (measured: the CLI never expands one preceded by
+  <code>\</code>, whatever precedes that backslash) — unconditionally, because the CLI's whitespace
+  set (JavaScript's) diverges from a narrower rule's (U+FEFF expands a mention and is not whitespace
+  to Python's <code>\s</code>). <code>format_turn_prompt</code> neutralises every non-operator block;
+  the question echo and the board's Start work text are escaped where they are composed, since they
+  mix operator and agent authorship. The turn's preamble names the substitution once, when it fired.
+  A new probe, <code>scripts/drive/d2_0923_at_mention_tokeniser.py</code>, pins the CLI's own
+  tokeniser behaviour and fails on a CLI upgrade that changes it.</p>
+  <p><strong>What R2 changed.</strong> Widened scope: the Hub's two one-shot workers — the checkpoint
+  worker and the conversation titler — also put agent-authored text on their own <code>claude -p</code>
+  calls with no posture at all, and were <em>measured</em> to expand an outside <code>@path</code>;
+  the checkpoint worker's reply carried the file's contents, which would reach a stored checkpoint and
+  the successor agent. New design D7 neutralises both workers' whole prompt. The D6 "here's why"
+  trigger moved to "the blocks contain <code>\@</code>", because R1's rule missed the escaped question
+  echo. Closed: the Hub's notices, the divergence path (already covered by D3), the
+  <code>--append-system-prompt-file</code> context file (measured not to expand), and the trust
+  boundary on <code>/agent/trigger</code>. Filed F410 (C, out of scope): checkpoint and divergence
+  blocks reach the agent labelled <code>Agent "None"</code>.</p>
+  <p><strong>What R3 changed.</strong> Found a second mixed-author vector R1 and R2 both missed: the
+  board's Start work button posts <code>Work on task &lt;id&gt;: &lt;title&gt;</code> as an
+  <strong>operator</strong> message, and an agent can author the title (new design D8) — this pulls
+  the UI and its bundle into the change's impact. R3 also replaced D7's "stored worker output carries
+  no <code>\@</code>" prompt-rule (which R2 itself had already found one Windows-separator residual
+  in) with an exact code-side inverse, <code>restore_file_mentions</code>, checked exhaustively over
+  5,460 short strings with 0 failures; made the probe's grading symmetric; and offered dropping the
+  Start-work title entirely as Q3 instead of escaping it.</p>
+  <p><strong>Cost.</strong> M: <code>hub/hub/file_mentions.py</code> (new), edits to
+  <code>inbound_queue.py</code>, <code>worker.py</code>, <code>conversation_titles.py</code>,
+  <code>checkpoint_generation.py</code>, <code>questions.py</code>, one new
+  <code>agent-run-sandboxing</code> requirement, and a UI change (D8) needing a bundle refresh —
+  shares no file with change B. Two open operator questions (Q1, Q2) plus R3's new Q3 (drop the
+  Start-work title instead of escaping it).</p>
+</div>
+
+<h3>B — <code>pressing-run-names-the-reason-that-held</code> (F400 + F373, severity B)</h3>
+<div class="card">
+  <p><strong>The problem.</strong> <code>agent-loops</code> requires that a 409 from pressing Run
+  names the real reason a firing declined. Two of its answers are false. <strong>F400:</strong> since
+  <code>a-loop-staffs-the-agent-it-names</code> (archived 09-22), a documentless loop's work goes only
+  to the agent its job names, so when that agent is busy the refusal is never about the roster — yet
+  the route still answers <em>"no other agent is free to take this loop's work"</em>. Measured with a
+  sibling agent free: the sentence is false, and the code's own comment says restaffing
+  <em>"changes nothing"</em>. <strong>F373:</strong> an in-flight decline writes no row, so the route's
+  fallback to <code>latest_run</code> answers from an unrelated, possibly hour-old, earlier firing's
+  stall. Measured: a flow whose only task was being actively worked was answered
+  <em>"loop queue is stalled: 1 still awaiting a prerequisite's approval"</em>.</p>
+  <p><strong>The argument, in brief.</strong> The busy guard is refactored to report which of three
+  exclusive conditions held (queue empty / loop names one agent / no other agent free) instead of the
+  route re-deriving a guess; the route answers from a record only where this press wrote it or counted
+  into it (a <code>tick_count</code> copied to a plain <code>int</code> before firing, closing an
+  identity-aliasing trap R1 found in F373's own repair sketch); and the requirement's
+  previously-"not yet decided" documentless-open-task answer is decided.</p>
+  <p><strong>What R2 changed.</strong> Rebuilt the decline-path table from <code>grep</code>
+  independently (agreed with R1 on 9 rows) and found two more, both in the same branch: a firing that
+  raises <em>before</em> its row exists is answered from an hour-old stall (F373's shape, reached by a
+  crash); one that raises <em>after</em> its turn started writes <code>failed</code> but is still
+  answered <em>"already being worked … nothing is wrong"</em> over its own row. D3 widened: the row the
+  press wrote is its answer whatever its status (<code>failed</code> → 500), closing both. Filed F412
+  (B, Open Question 3, out of scope): a <code>terminal_failure</code> firing still returns
+  <code>True</code>, so Run answers <code>200 {"success": true}</code> over a <code>failed</code> row.
+  <code>LoopBusyRefusal.held</code> renamed to <code>condition</code> (the word was already taken).
+  Made tasks 1.7/1.8 non-vacuous with a seeded sentinel.</p>
+  <p><strong>What R3 changed.</strong> Re-derived independently before reading R2's notes, agreed on
+  all 10 rows, and found an 11th: a firing that raises <em>after</em> discarding its in-flight or
+  counted-stall row (during the staged-loop-edit emit) is still answered as a plain decline, and also
+  writes a stray <code>job_run_failed</code> event naming a run that does not exist. Filed F413 (B,
+  Open Question 4, out of scope): a crash that leaves no row cannot be told apart from a decline that
+  left none, from the route alone — D3 now names this limit explicitly (<em>"What D3 cannot see"</em>)
+  rather than silently claiming to cover it. D3's earlier <code>else → 500</code> was replaced with
+  named statuses, so a concurrent tick's own <code>in_progress</code> row (measured: answers 500
+  today) is no longer misread as a failure. The proposal's own overclaim — that a pre-row crash "is
+  answered Failed to fire job" — was corrected to hold only where the guard does not refuse and
+  nothing is in flight. Precedence made a total order (empty queue, then scope, then roster).</p>
+  <p><strong>Cost.</strong> S: <code>hub/hub/scheduler.py</code> (new structured guard function) and
+  <code>hub/hub/api/v1/jobs.py</code>'s <code>not success</code> branch only — no migration, no API
+  shape change, no UI, no bundle. Shares no file with change A. Two existing test assertions move on
+  purpose. Four open operator questions: fold F411 in (Q1, the Run button shows none of this at all —
+  kept out only because it would need the same UI bundle change A does), the scope-clause wording
+  (Q2), fold F412 in (Q3), fold F413 in (Q4).</p>
+</div>
+
+<h2>5 · What tonight's night window will do if the operator approves nothing</h2>
+<div class="card">
+  <p>Per <code>night-window.md</code>'s compose order: (1) unarchived-but-implemented changes ready
+  to archive — <strong>none</strong>, <code>openspec/changes/</code> holds only the two changes above,
+  both unbuilt; (2) open findings with a proposal, severity A first — the only open severity-A
+  findings are <strong>F299</strong> and <strong>F301</strong> (both <strong>deferred</strong> by the
+  operator 2026-09-21, won't build), <strong>F325</strong> (Codex-only, undrivable here, no proposal
+  yet), and <strong>F409</strong> itself (proposed today — this is the change awaiting approval, not
+  separate work); (3) <code>APPROVED</code> rows — none written yet for today.</p>
+  <p><strong>In short: absent an approval on one or both of today's changes, tonight has no specced
+  work to build.</strong> The default fallback is the backlog/ledger housekeeping the compose step
+  always does, plus whatever falls to <code>D-6</code>'s no-spec carve-out (today's standing candidate
+  there is <code>gpt-6-sol</code> in the model catalog, still open as this page is written).</p>
+</div>
+
+<h2>6 · Research, briefly</h2>
+<div class="card">
+  <p><strong>Candidate #1 (the leading one, S/M cost) became today's change A</strong>, above — another
+  agent's <code>send_message</code> text can smuggle an <code>@/abs/path</code> into a
+  <code>claude -p</code> argv and get it read with zero tool calls and every tool disallowed. Measured
+  today on CLI 2.1.280; the upstream mechanism is confirmed
+  (<code>claude-agent-sdk-python#1269</code>, shipped in SDK v0.2.158 2026-09-23T01:40Z) but its
+  <code>client_composed</code> opt-out was measured unusable for AgentWeave — it silently drops the
+  Hub's deferred-tools and MCP-instructions attachments, so a turn using it can name none of the 27
+  <code>mcp__agentweave__*</code> tools. What it means for AgentWeave: without this change, any agent
+  in a multi-agent flow can read any file the Hub process can read, off any other agent's turn, with
+  nothing in the audit trail to show it happened.</p>
+  <p><strong>Candidate #2 — the model catalog is missing recent ids.</strong> Mostly already closed by
+  this morning's own tree-hygiene commit (<code>b661766</code>, found dirty on arrival and committed
+  separately: added <code>claude-opus-5-5</code>/<code>claude-fable-5-1</code> aliases and
+  <code>gpt-6-luna</code>, dropped two retired GPT-5.4 ids). <code>gpt-6-sol</code> is still absent —
+  left for a <code>D-6</code> no-spec repair slot today, not fixed as part of research triage. What it
+  would mean for AgentWeave: the catalog stays a true reflection of what the CLI actually resolves,
+  so the operator never picks a model id the Hub cannot run.</p>
+</div>
+
+<footer>
+  Generated by the day window, iteration 9. Sources:
+  <code>.claude/autonomous/2026-09-23-day-log.md</code>, <code>scripts/drive/FINDINGS.md</code>,
+  <code>spec-queue/APPROVALS.md</code>,
+  <code>openspec/changes/an-at-mention-an-agent-wrote-reads-no-file/</code>,
+  <code>openspec/changes/pressing-run-names-the-reason-that-held/</code>,
+  <code>spec-queue/research/2026-09-23.md</code>.
+</footer>
+
+</body>
+</html>

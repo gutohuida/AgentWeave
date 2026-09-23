@@ -16,6 +16,24 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-23
+
+Review page: `review/review-2026-09-23.html`. **Written by the day window, not the DECIDE session —
+no status token on either row below.** Two changes went through the full three-round spec loop
+today; both are new proposals, neither built or archived.
+
+- `an-at-mention-an-agent-wrote-reads-no-file`   F409 (A); R1/R2/R3 done; three open design
+  questions (Q1: accept that an operator-typed `@path` in a scheduled job's prompt no longer
+  expands, since job entries are not operator-origin; Q2: accept `a\@b.com` in what agents read, in
+  exchange for a rule that need not mirror the CLI's own tokeniser; Q3, added in R3: escape the
+  board's Start-work task title, or drop the title from the message instead); touches the UI and
+  needs a bundle refresh (design D8); shares no file with the change below.
+- `pressing-run-names-the-reason-that-held`   F400 + F373 (B); R1/R2/R3 done; four open design
+  questions (Q1 fold F411 in — the Run button shows none of this today; Q2 the scope-clause
+  wording; Q3 fold F412 in — a `terminal_failure` firing still answers `200 {"success": true}`; Q4
+  fold F413 in — a crash that leaves no row cannot be told from a decline that left none); route and
+  scheduler only, no UI, no migration; shares no file with the change above.
+
 ## 2026-09-22
 
 Review page: `review/review-2026-09-22.html`. **Written in an interactive session with the operator
