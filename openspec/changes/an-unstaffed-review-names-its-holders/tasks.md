@@ -141,8 +141,20 @@ mutation and the observed failure beside the task when ticking it.
 > a surfaced reason into an unhandled `AssertionError` inside the scheduler. In an unattended
 > window that is the failure to expect. The list below is otherwise in its original order.
 
-- [ ] 2.1 Change `resolve_reviewer`'s `exclude` to `Mapping[str, str]` (agent → clause) and remove
+- [x] 2.1 Change `resolve_reviewer`'s `exclude` to `Mapping[str, str]` (agent → clause) and remove
       `excluded_because`. Rung 1b reads `exclude[resolution.agent]`.
+
+      **Built 2026-09-23.** `grep -n "await _agents_that_are_free("` at build time still returned
+      exactly `:348`, `:1263`, `:1444` (1.2's own re-verification, unaffected by this task) and
+      `grep -rn "exclude=" hub/ --include=*.py` returned **25 lines**, matching R9's count exactly
+      -- the tree had not moved since R9. All 21 `resolve_reviewer` call sites updated: the 13 in
+      `test_reviewer_ladder.py` and 3 in `test_a_held_agent_is_busy.py` mechanically (a script
+      replacing `exclude={NAME}` with `exclude={NAME: "is the one that completed this task"}`), the
+      1 in `test_a_task_nothing_will_move_holds_nobody.py` the same way, the 2 in
+      `test_a_flow_names_what_it_cannot_staff.py` by hand (`exclude=set()` → `exclude={}`,
+      `exclude=await agents_that_worked(...)` → `exclude=dict.fromkeys(await
+      agents_that_worked(...), "has worked on this task")`), and the 2 runtime sites
+      (`decide_firing`, `_answer_failed_review`) per 2.2 below.
       - `decide_firing` (`scheduler.py:1550-1584`; **R8: now `:1808-1843`**) builds the mapping
         from exactly the clauses it passes today.
       - Update every call site. A missed one fails only where it reaches a named exclusion, and CI
@@ -170,14 +182,23 @@ mutation and the observed failure beside the task when ticking it.
           (dated 2026-08-14). 21 `resolve_reviewer` call sites is still right; the tree has not moved.
       - **R6: re-verify every line above before editing.** This list has been wrong at three
         consecutive rounds. Grep for `exclude=` and count; do not trust the numbers.
-- [ ] 2.2 `run_divergence` (`:430-446`) builds the mapping in three layers, each overwriting the
+- [x] 2.2 `run_divergence` (`:430-446`) builds the mapping in three layers, each overwriting the
       one before:
       1. on the operator-completed branch, `agents_that_may_have_authored` → "has worked on this
          task";
       2. the silent reviewers and `run.agent` → "reviewed this task and recorded no verdict";
       3. on the agent-completed branch, the recorded completer → "is the one that completed this
          task".
-- [ ] 2.3 Rung 3 builds its reason from the same `_roster_availability` read (1.2).
+
+      **Built 2026-09-23.** `_answer_failed_review` now builds one `dict[str, str]`, applying layer
+      1 only `if attribution.agent is None`, then layer 2 unconditionally (`_reviewers_that_gave_no
+      _verdict` then `run.agent`, each `dict.update`/assignment overwriting layer 1's entry for the
+      same agent), then layer 3 only `if attribution.agent is not None`. A dedicated test proving
+      the overwrite order on an agent that is both a silent reviewer and the recorded completer is
+      task 2.7's, not built here -- this task is the mapping construction, not its own regression
+      test. The full relevant suite (130 tests, listed at 2.4's own note) passed unchanged, which
+      exercises `_answer_failed_review` end to end without asserting the layering directly.
+- [x] 2.3 Rung 3 builds its reason from the same `_roster_availability` read (1.2).
 
       > **R8, 2026-09-21 — this block supersedes every earlier bullet of 2.3 where they disagree.
       > Build from this block.** The bullets below it are kept for their reasoning.
@@ -236,6 +257,31 @@ mutation and the observed failure beside the task when ticking it.
       > **Assert the joined string exactly, for both statuses** (the R6-8 rule). One test per
       > status, `==` against a literal.
 
+      **Built 2026-09-23, from the R8 block above.** `scheduler.py` gained `_rung_3_clause_kind`
+      (the five-way precedence), `_rung_3_clause_text`, `_rung_3_booked_clause`, `_rung_3_tail`,
+      `_rung_3_join` and `_rung_3_reason`, all pure functions over `_roster_availability`'s one read
+      -- `resolve_reviewer`'s fallback now returns
+      `ReviewerChoice(rung="unstaffed", reason=_rung_3_reason(task, availability, exclude))` in
+      place of the old static-sentence `f"..."`.
+
+      **Build-time correction to the R8 block's own premise.** R8-3 says `own_review_remedy`
+      returns *"decide it yourself: approve, …"* lowercase for `under_review`
+      (`scheduler.py:2020`). At the tree this was built against (`scheduler.py:2142`) it returns
+      `"Decide it yourself: …"`, **already capitalized** -- the tree moved since R8 wrote that note,
+      the fourth such drift this file records (R7 on the caller list, R8/R9 on the `exclude=`
+      count). `capitalize_first` is still applied unconditionally, per the R8 rule, and is a no-op
+      on the tree as it stands; the two literal tests below assert the actual capitalized string,
+      not R8's predicted lowercase one, so a future regression that *does* lowercase the sentence
+      would still be caught by the join, just not by a case change this task's tests do not exist to
+      detect.
+
+      **`test_rung_3_reason_is_this_exact_string_for_a_completed_task` and
+      `..._for_an_under_review_task`** (`test_reviewer_ladder.py`) are the R6-8/R8 pair this block
+      calls for: a single-agent (author-excluded) roster, `==` against a literal, one per status.
+      *Mutation:* changed the join's `". "` before the remedy to `"; "` (the exact defect class
+      R6-8 found the last round missed). Both tests failed, on the literal `==`. Reverted;
+      `git diff --stat` confirmed the file was back to the one-line change.
+
       - clause precedence is excluded, then no runner, then holds (three, then "and N more"), then
         running; **(R8: superseded — see the block above)**
       - clauses in name order, leading with `could not staff this step: nobody is free.`
@@ -268,9 +314,24 @@ mutation and the observed failure beside the task when ticking it.
         paused loop still holds, `scheduler.py:1084-1085`) and must never claim that ending or
         archiving a loop frees an agent (reachability is an OR; the queued arm survives an
         archive). Both would be fresh instances of F353.
-- [ ] 2.4 Bound the reason to 500 characters. If the whole sentence fits, use it. Otherwise add
+- [x] 2.4 Bound the reason to 500 characters. If the whole sentence fits, use it. Otherwise add
       clauses in name order while the prefix, the clauses, the tail
       "; and N more agents are excluded, busy or unbound" and the remedy still fit.
+
+      **Built 2026-09-23.** `_rung_3_reason` tries the full join first (2.3's happy path); over
+      budget, it walks `availability` in name order, retrying a booked clause at `limit=3, 2, 1`
+      (recomputing the trial join, including the tail's *actual* remaining count and held-variant
+      wording, at each retry) before leaving that agent and everyone after it to the tail. Sanity-
+      checked directly against `_rung_3_reason` (not through a real firing -- that fixture is 2.6's
+      and the twelve-agent length tests are 2.9/2.9b's, not duplicated here): a 20-agent roster each
+      booked for three 24-character task ids stayed under 500 at both statuses (480/492) with the
+      fit visibly shrinking a later agent's booked clause from three named tasks to two before
+      falling to the tail's "N more agents are excluded, busy or unbound"; a held agent pushed past
+      the fit cutoff produced the tail's held variant ("waiting for a usage limit or unbound"); the
+      empty-roster branch and a small roster with one held agent (2.3's own R8 concern) both checked
+      separately. These are mechanism checks, not the shipped regression tests -- 2.9's twelve-agent
+      fixture and 2.9b's fallback fixture are still open and still need their own `==`-against-a-
+      literal assertions once built.
       - **R8: the tail names the hold when it counts a held agent.** If any agent left to the tail
         took the held clause, the tail is `"; and N more agents are excluded, busy, waiting for a
         usage limit or unbound"` (77 characters at N=12, 78 at N=999). Otherwise it is R3's. The

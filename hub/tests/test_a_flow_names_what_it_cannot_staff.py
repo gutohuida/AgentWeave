@@ -469,7 +469,7 @@ async def test_an_empty_exclusion_would_resolve_the_worker_as_its_own_reviewer(
 
     async with async_session_factory() as db:
         naive = await resolve_reviewer(
-            db, await db.get(Task, b.id), project_id="proj-test", exclude=set()
+            db, await db.get(Task, b.id), project_id="proj-test", exclude={}
         )
         assert (
             naive.agent == WORKER
@@ -479,7 +479,7 @@ async def test_an_empty_exclusion_would_resolve_the_worker_as_its_own_reviewer(
             db,
             await db.get(Task, b.id),
             project_id="proj-test",
-            exclude=await agents_that_worked(db, b.id),
+            exclude=dict.fromkeys(await agents_that_worked(db, b.id), "has worked on this task"),
         )
         assert guarded.agent is None
         assert guarded.rung == "unstaffed"

@@ -353,10 +353,11 @@ async def test_with_every_agent_held_a_flow_firing_is_refused_and_records_nothin
 
 AUTHOR = "rung3-author"
 REVIEWER = "rung3-reviewer"
+# Rebased for the R8 rung-3 rebuild (`an-unstaffed-review-names-its-holders` task 2.3) -- a fuller
+# pass over these three assertions, including a held-vs-booked interaction fixture, is task 2.16.
 _TODAY = (
-    "could not staff this step: no agent is free to take it. Every agent on the roster is either "
-    "running a turn, already holding active work, or is the one that completed this task and so "
-    "may not review it."
+    "could not staff this step: no reviewer is free. rung3-author is the one that completed this "
+    "task. Land it, on the task, to review it yourself."
 )
 
 
@@ -374,7 +375,9 @@ async def test_rung_three_names_the_usage_limit_when_a_hold_is_why_nobody_was_fr
     await _hold(REVIEWER)
     async with async_session_factory() as db:
         task = await _completed_task(db)
-        choice = await resolve_reviewer(db, task, project_id=PROJECT, exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db, task, project_id=PROJECT, exclude={AUTHOR: "is the one that completed this task"}
+        )
 
     assert choice.rung == "unstaffed"
     assert "waiting for its provider's usage limit to reset" in choice.reason
@@ -385,7 +388,9 @@ async def test_rung_three_reads_exactly_as_today_with_no_agent_held(app, auth_he
     await _roster(app, auth_headers, bind_runner, AUTHOR)
     async with async_session_factory() as db:
         task = await _completed_task(db)
-        choice = await resolve_reviewer(db, task, project_id=PROJECT, exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db, task, project_id=PROJECT, exclude={AUTHOR: "is the one that completed this task"}
+        )
 
     assert choice.reason == _TODAY
 
@@ -398,7 +403,9 @@ async def test_rung_three_with_the_hold_fits_a_job_runs_error_summary(
     await _hold(reviewer)
     async with async_session_factory() as db:
         task = await _completed_task(db, task_id="t" * 64)
-        choice = await resolve_reviewer(db, task, project_id=PROJECT, exclude={author})
+        choice = await resolve_reviewer(
+            db, task, project_id=PROJECT, exclude={author: "is the one that completed this task"}
+        )
 
     assert "usage limit" in choice.reason
     assert len(choice.reason) <= 500

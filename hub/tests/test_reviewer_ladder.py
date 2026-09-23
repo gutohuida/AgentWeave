@@ -94,7 +94,12 @@ async def test_rung_1_a_declared_reviewer_that_resolves_is_used(
     async with async_session_factory() as db:
         await _declare_reviewer(repo, db, name="critic")
         task = await _task(db, document_id="doc-ladder", task_key="t1")
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent == "critic"
     assert choice.rung == "declared"
@@ -118,7 +123,12 @@ async def test_rung_1b_a_declaration_that_does_not_resolve_is_surfaced_never_sub
     async with async_session_factory() as db:
         await _declare_reviewer(repo, db, name="critic")
         task = await _task(db, document_id="doc-ladder", task_key="t1")
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent is None
     assert choice.rung == "unresolved"
@@ -143,7 +153,12 @@ async def test_rung_1b_also_covers_a_declaration_naming_the_author(
     async with async_session_factory() as db:
         await _declare_reviewer(repo, db, name=AUTHOR)
         task = await _task(db, document_id="doc-ladder", task_key="t1")
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent is None
     assert choice.rung == "unresolved"
@@ -156,7 +171,12 @@ async def test_rung_2_no_declaration_falls_back_to_availability(app, auth_header
 
     async with async_session_factory() as db:
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent == "reviewer-one"
     assert choice.rung == "available"
@@ -167,11 +187,62 @@ async def test_rung_3_nobody_eligible_surfaces_a_reason(app, auth_headers, bind_
 
     async with async_session_factory() as db:
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent is None
     assert choice.rung == "unstaffed"
     assert "could not staff this step" in choice.reason
+
+
+async def test_rung_3_reason_is_this_exact_string_for_a_completed_task(
+    app, auth_headers, bind_runner
+):
+    """`an-unstaffed-review-names-its-holders` task 2.3, R8's own rule: assert the joined string
+    with `==` against a literal, not a substring -- five earlier rounds missed the join itself by
+    checking only fragments of it."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR)
+
+    async with async_session_factory() as db:
+        task = await _task(db, status="completed")
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
+
+    assert choice.reason == (
+        "could not staff this step: no reviewer is free. ladder-author is the one that completed "
+        "this task. Land it, on the task, to review it yourself."
+    )
+
+
+async def test_rung_3_reason_is_this_exact_string_for_an_under_review_task(
+    app, auth_headers, bind_runner
+):
+    """The sibling of the test above, on the other status `own_review_remedy` answers -- R8's own
+    note that every earlier round measured only the `completed` join and missed that
+    `capitalize_first` matters on this one."""
+    await _roster(app, auth_headers, bind_runner, AUTHOR)
+
+    async with async_session_factory() as db:
+        task = await _task(db, status="under_review")
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
+
+    assert choice.reason == (
+        "could not staff this step: no reviewer is free. ladder-author is the one that completed "
+        "this task. Decide it yourself: approve, reject, or send it back with revision_needed."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +257,12 @@ async def test_an_agent_running_a_turn_is_not_selected(app, auth_headers, bind_r
         db.add(Run(id="run-busy-one", project_id="proj-test", agent="busy-one", status="running"))
         await db.commit()
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     # `busy-one` sorts first by name, so picking it would be the default and picking `free-one`
     # is the rule working.
@@ -239,7 +315,12 @@ async def test_an_agent_holding_an_active_task_is_not_selected(app, auth_headers
     async with async_session_factory() as db:
         await _held_elsewhere(db, loop_id=await _live_loop(db))
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent == "zz-free"
 
@@ -254,7 +335,12 @@ async def test_an_agent_holding_only_a_task_outside_every_loop_is_selected(
     async with async_session_factory() as db:
         await _held_elsewhere(db, loop_id=None)
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent == "aa-loaded"
 
@@ -280,7 +366,12 @@ async def test_a_completed_task_does_not_make_its_assignee_busy(app, auth_header
         )
         await db.commit()
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent == "aa-finished"
 
@@ -319,7 +410,12 @@ async def test_an_agent_with_no_runner_bound_is_not_selected(app, auth_headers, 
 
     async with async_session_factory() as db:
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent is None
     assert choice.rung == "unstaffed"
@@ -344,7 +440,12 @@ async def test_an_archived_agent_is_not_selected(app, auth_headers, bind_runner)
         gone.lifecycle = "archived"
         await db.commit()
         task = await _task(db)
-        choice = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        choice = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert choice.agent == "zz-here"
 
@@ -369,7 +470,12 @@ async def test_a_single_agent_project_reaches_rung_3_with_no_special_case(
 
     async with async_session_factory() as db:
         task = await _task(db)
-        alone = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        alone = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
         # The author *is* free by every measure except being the author.
         assert await _agents_that_are_free(db, "proj-test") == [AUTHOR]
 
@@ -380,7 +486,12 @@ async def test_a_single_agent_project_reaches_rung_3_with_no_special_case(
 
     async with async_session_factory() as db:
         task = await db.get(Task, "task-ladder")
-        staffed = await resolve_reviewer(db, task, project_id="proj-test", exclude={AUTHOR})
+        staffed = await resolve_reviewer(
+            db,
+            task,
+            project_id="proj-test",
+            exclude={AUTHOR: "is the one that completed this task"},
+        )
 
     assert staffed.agent == "second-agent"
     assert staffed.rung == "available"

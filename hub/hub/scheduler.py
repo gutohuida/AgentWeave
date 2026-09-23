@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, Mapping, Optional, Sequence, Set
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1260,14 +1260,150 @@ async def _agents_a_loop_may_staff(session: AsyncSession, loop: Loop) -> "list[s
     return await _agents_that_are_free(session, loop.project_id)
 
 
+#: Design D2/D3's rung-3 prefix (task 2.3, R8) -- "reviewer", not the pre-REV "nobody is free.",
+#: because rung 3 is reached only while resolving a reviewer, never for ordinary work.
+_RUNG_3_PREFIX = "could not staff this step: no reviewer is free. "
+#: Appended once, only when at least one named agent took the booked clause (task 2.3, R8-4):
+#: rejecting a task frees nobody where nothing in the sentence names a booked agent.
+_RUNG_3_REJECT = " Rejecting booked tasks that are no longer wanted can free their agents."
+#: Design D2/D3's 500-character bound on a rung-3 reason (task 2.4), enforced here as well as at
+#: the model (`fit_error_summary`) so an over-long reason is refused loudly rather than silently
+#: truncated.
+_RUNG_3_REASON_BOUND = 500
+
+
+def _capitalize_first(text: str) -> str:
+    """`s[:1].upper() + s[1:]` (task 2.3, R8-3) -- `own_review_remedy` returns a lowercase sentence
+    for `under_review`, and placed after rung 3's ". " it would start a sentence in lowercase."""
+    return text[:1].upper() + text[1:]
+
+
+def _rung_3_clause_kind(record: AgentAvailability, exclude: "Mapping[str, str]") -> str:
+    """Which of rung 3's five clauses *record* takes, by precedence (task 2.3, R8-1): excluded, no
+    runner, held, booked, running. Independent of the booked clause's own fit (2.4) -- which
+    holdings are named may shrink, but never which clause an agent takes."""
+    if record.name in exclude:
+        return "excluded"
+    if not record.has_runner:
+        return "no_runner"
+    if record.held:
+        return "held"
+    if any(holding.reachable for holding in record.holdings):
+        return "booked"
+    return "running"
+
+
+def _rung_3_booked_clause(name: str, reachable: "Sequence[Holding]", *, limit: int) -> str:
+    """`"{name} is booked for {id} (status), ... and N more"` (task 2.3, R8) -- *limit* tasks named
+    by id, in the order `_roster_availability` already holds them (by task id), the rest counted."""
+    shown = reachable[:limit]
+    named = ", ".join(f"{holding.task_id} ({holding.status})" for holding in shown)
+    remaining = len(reachable) - len(shown)
+    if remaining > 0:
+        named = f"{named} and {remaining} more"
+    return f"{name} is booked for {named}"
+
+
+def _rung_3_clause_text(
+    record: AgentAvailability, exclude: "Mapping[str, str]", kind: str, *, booked_limit: int = 3
+) -> str:
+    if kind == "excluded":
+        return f"{record.name} {exclude[record.name]}"
+    if kind == "no_runner":
+        return f"{record.name} has no runner bound"
+    if kind == "held":
+        return f"{record.name} is waiting for its provider's usage limit to reset"
+    if kind == "booked":
+        reachable = [holding for holding in record.holdings if holding.reachable]
+        return _rung_3_booked_clause(record.name, reachable, limit=booked_limit)
+    return f"{record.name} is running a turn"
+
+
+def _rung_3_tail(remaining_kinds: "Sequence[str]") -> str:
+    """ "; and N more agents are excluded, busy or unbound" (task 2.4, R3), or its held variant
+    (task 2.4, R8) when at least one agent left to the tail took the held clause -- otherwise the
+    hold would be named nowhere, breaking `agent-flows`' shipped SHALL."""
+    if not remaining_kinds:
+        return ""
+    n = len(remaining_kinds)
+    if "held" in remaining_kinds:
+        return f"; and {n} more agents are excluded, busy, waiting for a usage limit or unbound"
+    return f"; and {n} more agents are excluded, busy or unbound"
+
+
+def _rung_3_join(
+    remedy: str, texts: "Sequence[str]", remaining_kinds: "Sequence[str]", *, booked: bool
+) -> str:
+    """The join, written out because R6-8 found the last one nobody concatenated (task 2.3, R8):
+    `PREFIX + "; ".join(clauses [+ tail]) + ". " + capitalize_first(remedy) + (REJECT if any
+    record took the booked clause else "")`."""
+    return (
+        _RUNG_3_PREFIX
+        + "; ".join(texts)
+        + _rung_3_tail(remaining_kinds)
+        + ". "
+        + remedy
+        + (_RUNG_3_REJECT if booked else "")
+    )
+
+
+def _rung_3_reason(
+    task: Task, availability: "Sequence[AgentAvailability]", exclude: "Mapping[str, str]"
+) -> str:
+    """Design D2/D3's rung-3 sentence, bound to `_RUNG_3_REASON_BOUND` characters (tasks 2.3, 2.4).
+
+    Pure over `_roster_availability`'s one read (design D1) -- nothing here queries again, which is
+    what `test_resolve_reviewer_reads_the_roster_once` pins.
+    """
+    remedy = _capitalize_first(own_review_remedy(task))
+    if not availability:
+        # Task 2.3, R8: no "; ".join of an empty clause list, and no REJECT -- rejecting a task
+        # frees nobody when nobody is on the roster to free.
+        return f"{_RUNG_3_PREFIX}The project has no agent on its roster. {remedy}"
+
+    kinds = [_rung_3_clause_kind(record, exclude) for record in availability]
+
+    full_texts = [
+        _rung_3_clause_text(record, exclude, kind, booked_limit=3)
+        for record, kind in zip(availability, kinds, strict=True)
+    ]
+    full = _rung_3_join(remedy, full_texts, (), booked="booked" in kinds)
+    if len(full) <= _RUNG_3_REASON_BOUND:
+        return full
+
+    # Over budget (task 2.4): add clauses in name order, retrying a booked clause at two named
+    # tasks then one before giving up on that agent's own clause and leaving it, and every agent
+    # after it (already in name order), to the tail.
+    included: "list[str]" = []
+    booked_present = False
+    for index, (record, kind) in enumerate(zip(availability, kinds, strict=True)):
+        remaining_after = kinds[index + 1 :]
+        limits = (3, 2, 1) if kind == "booked" else (3,)
+        placed = False
+        for limit in limits:
+            text = _rung_3_clause_text(record, exclude, kind, booked_limit=limit)
+            trial_booked = booked_present or kind == "booked"
+            candidate = _rung_3_join(
+                remedy, included + [text], remaining_after, booked=trial_booked
+            )
+            if len(candidate) <= _RUNG_3_REASON_BOUND:
+                included.append(text)
+                booked_present = trial_booked
+                placed = True
+                break
+        if not placed:
+            return _rung_3_join(remedy, included, kinds[index:], booked=booked_present)
+
+    return _rung_3_join(remedy, included, (), booked=booked_present)
+
+
 async def resolve_reviewer(
     session: AsyncSession,
     task: Task,
     *,
     project_id: str,
-    exclude: "set[str]",
+    exclude: "Mapping[str, str]",
     unavailable: "Optional[set[str]]" = None,
-    excluded_because: str = "is the one that completed this task",
 ) -> ReviewerChoice:
     """Who should take *task*, walking design D4's ladder. `exclude` is who may not (the author).
 
@@ -1306,16 +1442,18 @@ async def resolve_reviewer(
     So a declaration resolving into `unavailable` is `rung="deferred"` instead, and rung 2 simply
     walks past those candidates.
 
-    **`excluded_because` is why an excluded agent is excluded, and it is a parameter because it is
-    not always the same reason** (design D13). The ladder used to hard-code *"is the one that
-    completed this task"* into both refusal sentences, which is true only where an agent is recorded
-    as completing the work. Where the **operator** completed it, the exclusion is every agent that
-    may have authored the work and no agent completed anything -- so the hard-coded clause would
-    state a completion that did not happen. That is not cosmetic: rung 3's sentence is the one
-    `decide_firing` promotes to `stall_reason` and `_emit_review_unstaffed` broadcasts, so it is the
-    whole of what the operator is shown in place of the queue's status histogram. A change whose
-    entire subject is telling the operator a fact about the task cannot ship that fact in a sentence
-    that is untrue.
+    **`exclude` carries each agent's own reason, because it is not always the same reason**
+    (design D13, widened at `an-unstaffed-review-names-its-holders` task 2.1 from a bare `set` to a
+    `Mapping[str, str]`). The ladder used to hard-code *"is the one that completed this task"* into
+    both refusal sentences, which is true only where an agent is recorded as completing the work.
+    Where the **operator** completed it, the exclusion is every agent that may have authored the
+    work and no agent completed anything -- so the hard-coded clause would state a completion that
+    did not happen, and different excluded agents can be excluded for different reasons at once (a
+    silent reviewer versus the recorded completer, `run_divergence`'s own three-layer mapping). That
+    is not cosmetic: rung 3's sentence is the one `decide_firing` promotes to `stall_reason` and
+    `_emit_review_unstaffed` broadcasts, so it is the whole of what the operator is shown in place of
+    the queue's status histogram. A change whose entire subject is telling the operator a fact about
+    the task cannot ship that fact in a sentence that is untrue.
 
     The clause and not the whole sentence: the ladder owns its own vocabulary -- rung 1b's *"the
     flow will not substitute somebody else for a named reviewer"* is the ladder's argument, not the
@@ -1346,7 +1484,7 @@ async def resolve_reviewer(
                 rung="unresolved",
                 reason=(
                     f"this task names {resolution.declared!r} as its reviewer, and that agent "
-                    f"{excluded_because}. Naming a different reviewer, or reviewing "
+                    f"{exclude[resolution.agent]}. Naming a different reviewer, or reviewing "
                     f"it yourself, is the way forward -- the flow will not substitute somebody "
                     f"else for a named reviewer."
                 ),
@@ -1390,22 +1528,7 @@ async def resolve_reviewer(
             ),
         )
 
-    # The hold is named only where it is one of the reasons (`a-spent-allowance-holds-the-queue`,
-    # D6): `_agents_that_are_free` now counts a held agent as busy, so without the clause this
-    # sentence would be false whenever a hold is why nobody was free. Conditional, so a project
-    # that never meets a usage limit reads exactly as before.
-    roster_held = any(
-        record.held and record.has_runner and record.name not in exclude for record in availability
-    )
-    waiting = "waiting for its provider's usage limit to reset, " if roster_held else ""
-    return ReviewerChoice(
-        rung="unstaffed",
-        reason=(
-            f"could not staff this step: no agent is free to take it. Every agent on the roster is "
-            f"either running a turn, already holding active work, {waiting}or {excluded_because} "
-            f"and so may not review it."
-        ),
-    )
+    return ReviewerChoice(rung="unstaffed", reason=_rung_3_reason(task, availability, exclude))
 
 
 @dataclass(frozen=True)
@@ -1813,8 +1936,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # **An agent completed it.** Byte-identical to what shipped, and deliberately so
             # (design D6): where the product has a *decided* answer to who the author is, the whole
             # corpus is keyed on it and this change does not widen it.
-            exclude = {attribution.agent}
-            excluded_because = "is the one that completed this task"
+            exclude = {attribution.agent: "is the one that completed this task"}
         else:
             # **The operator completed it**, which is provenance -- a person did it -- and not an
             # absence. Withholding review here removes the flow's own second half at exactly the
@@ -1833,8 +1955,9 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             # associates with the task. Over-inclusive by construction, because with no completion
             # row the author is not provable from anything and a source's silence is not evidence
             # that an agent did not work the task.
-            exclude = await agents_that_may_have_authored(session, task)
-            excluded_because = "has worked on this task"
+            exclude = dict.fromkeys(
+                await agents_that_may_have_authored(session, task), "has worked on this task"
+            )
 
         choice = await resolve_reviewer(
             session,
@@ -1842,7 +1965,6 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             project_id=loop.project_id,
             exclude=exclude,
             unavailable=taken,
-            excluded_because=excluded_because,
         )
         if choice.agent is not None:
             selections.append(LoopSelection(task=task, agent=choice.agent, is_review=True))

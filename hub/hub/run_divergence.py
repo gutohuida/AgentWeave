@@ -407,10 +407,14 @@ async def _answer_failed_review(
     was the claim this docstring used to make — *"the resolver already excludes the author by
     construction"* — failing on the arm where there is no completer to name.
 
-    The reason travels with the exclusion. On the operator-completed branch the excluded agents
-    *worked on* the task and none of them completed it, so the resolver is told so; its default
-    sentence says an excluded agent *completed* it, which is true only on the other branch
-    (`agent-flows`: a surfaced reason does not claim an agent completed work no agent completed).
+    The reason travels with the exclusion, one per agent now rather than one for the whole call
+    (task 2.1's `Mapping[str, str]`): on the operator-completed branch the authors *worked on* the
+    task and none of them completed it; a silent reviewer and this run's own agent *reviewed* it and
+    recorded no verdict; the recorded completer, where one exists, *completed* it. Three different
+    true statements about three different reasons an agent may not review this task, layered onto
+    one mapping (task 2.2) rather than collapsed into one clause that could only be true of one of
+    them (`agent-flows`: a surfaced reason does not claim an agent completed work no agent
+    completed).
     """
     # Local imports, matching `scheduler._task_is_claimable_by`'s own: this module is imported by
     # the trigger path that `scheduler` also reaches, and the module docstring's line about keeping
@@ -428,22 +432,33 @@ async def _answer_failed_review(
             f"reviewer, reviewing it yourself, or asking this one again is the way forward.",
         )
 
-    barred = await _reviewers_that_gave_no_verdict(session, task)
-    barred.add(run.agent)
+    # Three layers, each overwriting the one before (task 2.2): the operator-completed branch's
+    # authors, then the silent reviewers and this run's own agent, then the agent-completed
+    # branch's recorded completer -- so an agent that is both a silent reviewer and the recorded
+    # completer reads as the completer, the more specific fact.
     attribution = await completion_attribution(session, task.id)
+    exclude: "dict[str, str]" = {}
+    if attribution.agent is None:
+        exclude.update(
+            dict.fromkeys(
+                await agents_that_may_have_authored(session, task), "has worked on this task"
+            )
+        )
+    exclude.update(
+        dict.fromkeys(
+            await _reviewers_that_gave_no_verdict(session, task),
+            "reviewed this task and recorded no verdict",
+        )
+    )
+    exclude[run.agent] = "reviewed this task and recorded no verdict"
     if attribution.agent is not None:
-        barred.add(attribution.agent)
-        excluded_because = "is the one that completed this task"
-    else:
-        barred |= await agents_that_may_have_authored(session, task)
-        excluded_because = "has worked on this task"
+        exclude[attribution.agent] = "is the one that completed this task"
 
     choice = await resolve_reviewer(
         session,
         task,
         project_id=run.project_id,
-        exclude=barred,
-        excluded_because=excluded_because,
+        exclude=exclude,
     )
     if choice.agent is None:
         # Rung 3, or a declaration that appeared since. Either way nobody is fired and the reason

@@ -696,7 +696,12 @@ async def test_resolve_reviewer_reads_the_roster_once(app, auth_headers, bind_ru
         fresh = await db.get(Task, task.id)
         event.listen(engine.sync_engine, "before_cursor_execute", _capture)
         try:
-            choice = await resolve_reviewer(db, fresh, project_id=PROJECT, exclude={author})
+            choice = await resolve_reviewer(
+                db,
+                fresh,
+                project_id=PROJECT,
+                exclude={author: "is the one that completed this task"},
+            )
         finally:
             event.remove(engine.sync_engine, "before_cursor_execute", _capture)
 
