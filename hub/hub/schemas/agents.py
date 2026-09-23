@@ -119,6 +119,10 @@ class AgentSummary(BaseModel):
     # lets approval merge an agent's work. Closed by default; a project that grants no agent still
     # has the operator, who can always accept.
     can_accept_evidence: bool = False
+    # The agent's stored config, e.g. `{"read_only": true}` — which decides where it works
+    # (`worktrees.is_writing_agent`). Absent from the roster before F244, so an agent moved off
+    # isolation read the same as every other one. Empty for an agent with no row.
+    config: Dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"from_attributes": True}
 

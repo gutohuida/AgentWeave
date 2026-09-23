@@ -207,6 +207,27 @@ def classify(
     return _within_project(project, resolved)
 
 
+def resolved_elsewhere(path: str, *, workspace_dir: Optional[str]) -> Optional[str]:
+    """Where *path* really lands, when a link or junction moves it; `None` when it does not (F282).
+
+    `classify` follows links, so a path declared inside the workspace and linked out of it is
+    classified where it lands, and the declared path printed beside that verdict reads as a
+    contradiction. The declared path is what the agent must be told about; this is what the
+    operator must be shown. Joins before it resolves, for `classify`'s reason.
+    """
+    root = _resolved_directory(workspace_dir)
+    if root is None:
+        return None
+    absolute = path if os.path.isabs(path) else os.path.join(root, path)
+    try:
+        resolved = os.path.realpath(absolute)
+    except (OSError, ValueError):
+        return None
+    if os.path.normcase(os.path.abspath(absolute)) == os.path.normcase(resolved):
+        return None
+    return resolved
+
+
 def can_classify(workspace_dir: Optional[str]) -> bool:
     """Whether `classify` can return anything but `unknown` for this workspace.
 

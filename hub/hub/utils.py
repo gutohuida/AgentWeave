@@ -26,7 +26,7 @@ def short_id() -> str:
 #: `ActivityLog.tsx`'s `SEVERITY_FILTERS`). Anything else — a caller's typo, an external
 #: `POST /logs` request, the historical `"warning"` spelling — is normalised to `"warn"` rather
 #: than written through, so an unrecognised spelling can never reach the operator unfiltered.
-_KNOWN_SEVERITIES = frozenset({"info", "warn", "error", "debug"})
+KNOWN_SEVERITIES = frozenset({"info", "warn", "error", "debug"})
 
 
 async def persist_event(
@@ -56,7 +56,7 @@ async def persist_event(
     """
     from .db.models import EventLog
 
-    normalised_severity = severity if severity in _KNOWN_SEVERITIES else "warn"
+    normalised_severity = severity if severity in KNOWN_SEVERITIES else "warn"
 
     entry = EventLog(
         id=f"evt-{short_id()}",

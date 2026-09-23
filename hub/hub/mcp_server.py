@@ -1121,10 +1121,22 @@ def _where(path: str, root: str) -> Optional[str]:
     try:
         shared = os.path.commonpath([root, resolved])
     except ValueError:  # different drives on Windows
-        return _OUTSIDE
+        return _resolves_elsewhere(absolute, resolved)
     if os.path.normcase(shared) != os.path.normcase(root):
-        return _OUTSIDE
+        return _resolves_elsewhere(absolute, resolved)
     return None
+
+
+def _resolves_elsewhere(absolute: str, resolved: str) -> str:
+    """`_OUTSIDE`, plus where the path really lands when a link moved it (F282).
+
+    A path reached through a link or junction reads as inside the workspace as written, and the
+    refusal quoting only that left the verdict beside it unexplained. The declared path is still
+    what the refusal quotes first; this adds the resolved one only when the two differ.
+    """
+    if os.path.normcase(os.path.abspath(absolute)) == os.path.normcase(resolved):
+        return _OUTSIDE
+    return f"{_OUTSIDE}: it resolves to {_quote(resolved)}"
 
 
 def _judge_path(

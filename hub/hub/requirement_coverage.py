@@ -53,6 +53,13 @@ VERIFIED = "verified"
 IN_PROGRESS = "in_progress"
 NOT_STARTED = "not_started"
 UNSERVED = "unserved"
+# The lowest tier's name for a retired requirement (F214): "a requirement nobody has to build any
+# more is not unserved, it is over" (`requirement_links.unserved`). Not a rank of its own, so not
+# in `PRECEDENCE`: it is "no linked work at all", said of a row that no longer asks for any. A
+# retired requirement with evidence or linked work still reports what that evidence or work says,
+# and the approval gate — which reads only requirements a task links, so never reaches the lowest
+# tier — decides on those exactly as before.
+RETIRED = "retired"
 
 # Highest first. The order is the specification; the function below reads it rather than restating
 # it as a chain of conditionals whose order could drift from this list.
@@ -180,6 +187,7 @@ def _state(
     evidence: List[RequirementEvidence],
     digest: str,
     linked: List[Task],
+    retired: bool = False,
 ) -> str:
     current = [item for item in evidence if item.digest == digest]
     accepted = [item for item in current if item.review_state == ACCEPTED]
@@ -202,7 +210,7 @@ def _state(
         # live attempt — it is the whole current story.
         return REJECTED
     if not linked:
-        return UNSERVED
+        return RETIRED if retired else UNSERVED
     if all(task.status in NOT_STARTED_STATUSES for task in linked):
         return NOT_STARTED
     return IN_PROGRESS
@@ -294,6 +302,7 @@ async def requirement_coverage(
             evidence=evidence,
             digest=requirement.digest,
             linked=linked,
+            retired=requirement.state == "retired",
         )
         accepted = [
             item

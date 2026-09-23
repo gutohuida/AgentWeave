@@ -475,3 +475,83 @@ async def test_two_documents_declaring_the_same_identifier_are_told_apart_in_uns
     by_requirement_id = {entry["requirement_id"]: entry for entry in coverage["requirements"]}
     for row in same_identifier:
         assert by_requirement_id[row["requirement_id"]]["document_id"] == row["document_id"]
+
+
+@pytest.mark.asyncio
+async def test_a_retired_requirement_nobody_serves_is_retired_not_unserved(
+    app, auth_headers, builder, tmp_path
+):
+    """F214: `unserved` means somebody should be building this, which is the one thing a
+    retired requirement is not. The requirement route reads coverage with retired rows included,
+    so it is where the word showed."""
+    await _document(app, auth_headers, builder)
+    await _document_resubmitted_without_beta(builder, app)
+
+    detail = await app.get(
+        f"{BASE}/spec/requirements/FR-2", params={"document": PATH}, headers=auth_headers
+    )
+
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["requirement"]["state"] == "retired"
+    assert detail.json()["coverage"]["state"] == "retired"
+    # The active one nobody serves is still unserved: only the retired row changed.
+    assert _entry(await _coverage(app, auth_headers), "FR-1")["state"] == "unserved"
+
+
+async def _document_resubmitted_without_beta(run_headers, app):
+    saved = await app.post(
+        SUBMIT,
+        json={
+            "path": PATH,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "Coverage demo",
+                "requirements": [ALPHA],
+            },
+        },
+        headers=run_headers,
+    )
+    assert saved.status_code == 200, saved.text
+
+
+@pytest.mark.asyncio
+async def test_a_drift_candidate_names_what_its_reader_has_seen(
+    app, auth_headers, builder, tmp_path
+):
+    """F216: the operator asked to say which one was wrong was handed `spreq-…` and `ev-…`."""
+    from hub.db.models import RequirementDrift
+
+    await _document(app, auth_headers, builder)
+    recorded = await app.post(
+        f"{BASE}/spec/evidence",
+        json={"identifier": "FR-1", "summary": "the due list renders", "locator": "README.md"},
+        headers=auth_headers,
+    )
+    assert recorded.status_code == 201, recorded.text
+    async with async_session_factory() as session:
+        evidence = await session.get(RequirementEvidence, recorded.json()["id"])
+        requirement = await session.get(SpecRequirement, evidence.requirement_id)
+        session.add(
+            RequirementDrift(
+                id="drift-names",
+                project_id="proj-test",
+                requirement_id=requirement.id,
+                evidence_id=evidence.id,
+                state="candidate",
+                digest=requirement.digest,
+            )
+        )
+        await session.commit()
+
+    drift = await app.get(f"{BASE}/spec/drift", headers=auth_headers)
+
+    assert drift.status_code == 200, drift.text
+    [row] = drift.json()["drift"]
+    assert row["requirement"] == {"identifier": "FR-1", "document": PATH}
+    assert row["evidence"]["summary"] == "the due list renders"
+    assert row["evidence"]["locator"] == "README.md"
+    assert row["evidence"]["actor_kind"] == "operator"
+    assert row["created_at"]
+    # The ids stay, for the resolve route that takes them.
+    assert row["id"] == "drift-names"

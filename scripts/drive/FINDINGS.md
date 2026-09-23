@@ -14428,7 +14428,7 @@ assuming it.
 
 ## F176 (C) — the API creates a nameless runner the dialog refuses to create
 
-**Status:** open. Verified 2026-09-09: `RunnerCreate.name`
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — a blank runner name is refused and names are stored stripped; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `RunnerCreate.name`
 (`hub/hub/schemas/runners.py:14`) still declares `max_length=256` with no minimum, so the empty string
 is still accepted with a 201 while the dialog refuses it. The catalog change's design names this as a
 separate open finding rather than folding it in. [classified 2026-09-09, D-3]
@@ -14448,6 +14448,12 @@ agent settings runner select, `ProjectSettingsPanel`'s checkpoint-runner select.
 those is unselectable in practice.
 
 **Reproduction:** the `(F176)` assertion, or the one call above.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `schemas/common.VisibleName` (new) is `max_length=256` plus a validator that strips and refuses an
+empty result ("must contain a visible character"). `RunnerCreate.name` and `RunnerUpdate.name` use
+it, so `""` and `"   "` are 422 on create and rename, and `"  Reviewer  "` is stored as `Reviewer`,
+which is what the dialog already sends. Measured by `hub/tests/test_a_request_means_what_it_says.py`; fails on the old code. Existing nameless rows are not
+renamed.
 
 ---
 
@@ -14910,7 +14916,7 @@ door are probed, because closing one leaves the other.
 
 ## F184 (C) — a whitespace-only charter name is accepted by the API and renders as a blank row
 
-**Status:** open. Verified 2026-09-09: `CharterCreate.name`
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — a whitespace-only charter name is refused; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `CharterCreate.name`
 (`hub/hub/schemas/charters.py:12`) is still `Field(min_length=1, max_length=256)`, which a
 whitespace-only string satisfies, so the screen remains stricter than the API it calls. [classified 2026-09-09, D-3]
 
@@ -14926,6 +14932,9 @@ named entries (`row4-08-picker.png`, both UI runs). It is selectable and it says
 
 **Reproduction.** `POST /projects/{pid}/charters {"name": "   ", "content": "x"}` returns `201`, and
 the response echoes `"name": "   "`.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** Fixed with F176 by the same `VisibleName` type: `CharterCreate.name` and `CharterUpdate.name`.
+`"   "` is 422 on create and rename, and names are stored stripped. Measured by `hub/tests/test_a_request_means_what_it_says.py`; fails on the old code.
 
 ## F185 (B) — a charter held only by an ARCHIVED agent cannot be deleted, and the refusal names an agent the roster does not show
 
@@ -16541,7 +16550,7 @@ in leg 6, and the substantive reds are the same set both times) and
 
 ## F204 (C) — the phase route is the one door in the machine that refuses a call with no body, and it refuses it as *malformed*
 
-**Status:** open. Verified 2026-09-09: `hub/hub/api/v1/spec.py:1501` still declares
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — a bodyless phase call reaches the phase machine; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `hub/hub/api/v1/spec.py:1501` still declares
 `body: PhaseRequest` with no default, so a model whose every field is optional is still required by
 FastAPI and a bodyless operator decision is still answered as malformed. [classified 2026-09-09, D-3]
 
@@ -16574,6 +16583,10 @@ turning a well-formed operator decision into a message about a field.
 **Held at C.** The Hub UI is unaffected: `useSetSpecPhase` (`hub/ui/src/api/spec.ts:302-309`) always
 posts `{ reason: reason ?? '' }`. The population is direct HTTP clients and scripted operators — and
 this harness, which lost its first run to it.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `POST /documents/phase` takes `body: Optional[PhaseRequest] = None` and defaults it in the route,
+the shape `/spec/reindex` already had. A call with no body now reaches the route, which on the test's
+unknown path answers 404 instead of 422 `body: Field required`. Measured by `hub/tests/test_a_request_means_what_it_says.py`; fails on the old code.
 
 ## F205 (C) — the two phase edges added for F37 are offered by no screen, and the documents they were added for are exactly the ones the UI will not archive
 
@@ -16868,7 +16881,7 @@ size-limited, which is a promise.
 
 ## F210 (C) — F204's shape, twice more: both proposal decisions refuse a bodyless call
 
-**Status:** open. Verified 2026-09-09: both proposal routes still bind
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — both proposal decisions accept a bodyless call; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: both proposal routes still bind
 `body: ProposalDecision` with no default (`hub/hub/api/v1/spec.py:618`, `:668`), so the one-word
 repair this entry names is untaken at both sites. [classified 2026-09-09, D-3]
 
@@ -16891,6 +16904,10 @@ different routes with a different model, and because a fix to one will not touch
 **Rigor is *not* this shape, and that is worth recording as a negative.** `RigorRequest.rigor` is
 genuinely required, so refusing a bodyless call is right; an empty-object call (`{}`) is refused
 `422` naming **`rigor`**, which is the correct answer. Measured, not assumed.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** Fixed with F204's shape at both sites: `accept` and `reject` take `Optional[ProposalDecision] =
+None`. Measured by the same `hub/tests/test_a_request_means_what_it_says.py` parametrised test: bodyless accept and reject reach the route (404 for
+the test's unknown proposal) where they were 422; fails on the old code.
 
 ## F211 (C) — F206's shape, three more routes with no operator surface
 
@@ -17010,7 +17027,7 @@ permanently unacceptable. There is no withdraw or cancel route; the only exit is
 records a rejection that never happened as a judgement.
 
 ## F214 (D) — a retired requirement is reported `unserved`, which is the one thing it is not
-**Status:** open
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — a retired requirement nobody serves reads `retired`; see FIXED at the end of this entry. Was: open
 
 `GET /spec/requirements/{identifier}` computes coverage with `include_retired=True`
 (`hub/hub/api/v1/spec.py:770`) and returns whatever `_state` produces — for a retired requirement
@@ -17030,6 +17047,19 @@ that is false.
 
 Severity D: the requirement block right beside it says `retired`, so a careful reader is not misled.
 A counter is.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `requirement_coverage._state` takes `retired`, and at the lowest tier ("no linked work at all")
+answers `retired` for a retired requirement instead of `unserved`. It is in `_state`, the single
+implementation, and deliberately not a new rank: `PRECEDENCE` is unchanged, so the specification's
+precedence test and the one-implementation test still hold. A retired requirement with evidence or
+linked work still reports what those say. So the approval gate, which enforces only
+requirements a task links and so never reaches the lowest tier, decides exactly as before. That is
+why the narrower change: labelling *every* retired requirement `retired` would have turned a verified
+retired requirement into a blocking one. `openspec/specs/requirement-traceability/spec.md` states it
+(one paragraph and one scenario in *Coverage is one computation with one precedence*; `openspec
+validate --strict` passes). Measured by `test_requirement_coverage.py`
+`test_a_retired_requirement_nobody_serves_is_retired_not_unserved`, through `GET
+/spec/requirements/FR-2`; on the old code it answers `unserved`.
 
 ## What held — and most of this subsystem is in good shape
 
@@ -17200,7 +17230,7 @@ routes), the spec flow now has **17 routes with no operator surface**, measured.
 
 ## F216 (C) — the drift candidate names nothing its reader has ever seen
 
-**Status:** open. Verified 2026-09-09: the drift list still projects the same six fields
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — each drift row names the requirement, its document and the evidence; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: the drift list still projects the same six fields
 (`hub/hub/api/v1/spec.py:968-978`), with no identifier, no document path and no timestamp, and the
 route that would resolve the database id is the one with no operator surface. [classified 2026-09-09, D-3]
 
@@ -17233,6 +17263,12 @@ wrote it there.
 
 Reproduction: record operator evidence, commit a change to a footprinted path,
 `POST /spec/drift/detect`, `GET /spec/drift`. Measured twice, in two fixture projects.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `GET /spec/drift` keeps its six fields and adds `created_at`, `requirement: {identifier,
+document}` (the `FR-n` and the document path) and `evidence: {summary, locator, actor, actor_kind}`,
+batched in three queries. Nothing in the UI reads the route yet (F206's reachability); this is what
+a surface that does will need. Measured by `test_requirement_coverage.py`
+`test_a_drift_candidate_names_what_its_reader_has_seen`, which fails on the old code.
 
 ## F217 (C) — an agent's accepted evidence is never drift-checked in practice, and an operator's for the same requirement is
 
@@ -18056,7 +18092,7 @@ stating the absence.
 
 ## F232 (D) — `dismiss` accepts a card the operator answered, though its contract says only an expired one
 
-**Status:** open. Verified 2026-09-09: the dismiss guard still refuses only `pending`
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — dismiss refuses an answered request; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: the dismiss guard still refuses only `pending`
 (`hub/hub/api/v1/permissions.py:165`), so `allowed` and `denied` still fall through and the
 contract's second clause is still unimplemented. Confined to the record, as filed. [classified 2026-09-09, D-3]
 
@@ -18088,6 +18124,12 @@ card answers 409 with *"this request is still waiting on you; answer it rather t
 away"*, and leaves it pending.
 
 **Reproduction:** `scripts/drive/t_sweep_row12_permissions.py`, leg 3. The harness's single red.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** After the `pending` refusal, `dismiss_permission_request` refuses any status but `expired` with
+`409 this request was answered (<status>); only one that expired unanswered is dismissed`, and
+writes nothing. Measured by `test_permission_request_lifecycle.py`
+`test_an_answered_request_cannot_be_dismissed`, for both `allowed` and `denied`. On the old code
+both answered 200 and stamped `dismissed_at`.
 
 ## F233 (D) — a checkpoint warning can be dismissed before it is shown, and that silences it for good
 
@@ -18330,7 +18372,7 @@ accounting-relevant setting.
 
 ## F238 (C) — half of all budget changes are missing from the project's own activity history
 
-**Status:** open. Verified 2026-09-09: `PUT /settings` still only broadcasts
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — `PUT /settings` records what it changed; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `PUT /settings` still only broadcasts
 (`hub/hub/api/v1/projects.py:528-530`) with no `persist_event` beside it, so every setting that route
 writes still leaves no record while the accounting route's writes do. [classified 2026-09-09, D-3]
 
@@ -18364,6 +18406,12 @@ every budget change persists the same event type — and reported a pass for a r
 persisted nothing. The timestamp is what makes the two distinguishable.
 
 **Reproduction:** `scripts/drive/t_sweep_row14_accounting.py`, leg 3.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `update_project_settings` works out which fields changed before writing them, and when any did it
+calls `persist_event(..., "project_settings_updated", {"changed": {field: {"was", "now"}},
+"settings": ...})` beside the broadcast it already sent. A save that changes nothing records
+nothing. Measured by `hub/tests/test_a_request_means_what_it_says.py`: two identical saves leave one event, naming `hop_budget` was/now. On the
+old code there were none.
 
 ## F239 (C) — the per-conversation usage rollup answers "0 tokens" for a conversation that does not exist
 
@@ -18605,7 +18653,7 @@ standing open next to it, with none of the protection the comment says the chang
 
 ## F243 (C) — a stored agent config cannot be cleared through the route that set it
 
-**Status:** open. Both clears still answer 200 and change nothing, so *put it back the
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — `config: null` clears it, a null key removes that key, `{{}}` is refused; see FIXED at the end of this entry. Was: open. Both clears still answer 200 and change nothing, so *put it back the
 way it was* still fails silently on this route -- the same shape the runner-model clear has, which is
 what makes it a pattern rather than a slip. Named in no change. [classified 2026-09-09, D-3]
 
@@ -18629,11 +18677,17 @@ was still un-isolated — which is how F242's third consequence was found at all
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 8; cross-reference `t_f219_runner_model_clear.py`.
 
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `PATCH /agents/{name}` still merges `config` key by key; the UI never sends it. An explicit
+`"config": null` now clears the whole config (F219's rule: explicit null clears). A key given as
+`null` is removed from the merge result. `"config": {}` merges nothing, so it is **refused** with a
+400 that names both working forms, instead of answering 200 over no change. A non-object is a
+400. Measured by `hub/tests/test_a_request_means_what_it_says.py` (three legs); fails on the old code.
+
 ---
 
 ## F244 (C) — the roster listing carries no `config`, so the setting that decides where an agent works is invisible on it
 
-**Status:** open. Verified 2026-09-09: `OperatorAgentResponse`
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — the roster carries `config`; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `OperatorAgentResponse`
 (`hub/hub/api/v1/agents.py:113-120`) still declares seven fields and no `config`, so an agent moved
 off isolation is still indistinguishable from every other one on the roster. [classified 2026-09-09, D-3]
 
@@ -18652,6 +18706,11 @@ that expose the flag are the response to the `PATCH` that set it and, indirectly
 indistinguishable from every other one on the roster.
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 8.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `AgentSummary` gained `config`, filled by `GET /agents` from the row (empty for an agent with
+none), **without `env_vars`**, whose values can be credentials. `_runner_summary` prints only their
+names for the same reason. Measured by `hub/tests/test_a_request_means_what_it_says.py`, which also asserts a planted env value is absent from
+the whole roster body; fails on the old code.
 
 ---
 
@@ -18806,7 +18865,7 @@ cannot reach.
 
 ## F249 (D) — the worktrees list cannot say "this project is not a repository"
 
-**Status:** open. Both list routes still `return []` for a project that is not a
+**Status:** open — moved to UI-1 with F250 on 2026-09-23 (Round 4c): saying "not a repository" changes the list routes' response shape, which the bundled Worktrees panel reads, so the route and the view ship together. Both list routes still `return []` for a project that is not a
 repository, indistinguishably from a healthy one with no checkouts, while the per-agent route says so
 and explains what would change it. [classified 2026-09-09, D-3]
 
@@ -19058,7 +19117,7 @@ HMAC and an expiry, with no database in it.
 
 ## F255 (C) — a malformed `since` is silently ignored, and the route answers as though no filter was asked for
 
-**Status:** open. Verified 2026-09-09: `list_logs` still swallows a malformed `since`
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — a malformed `since` is a 400; see FIXED at the end of this entry. Was: open. Verified 2026-09-09: `list_logs` still swallows a malformed `since`
 (`hub/hub/api/v1/logs.py:62-65`) and answers the whole window as though no filter had been asked for.
 A trap laid for the next caller rather than a live defect, which is when it is cheapest to repair. [classified 2026-09-09, D-3]
 
@@ -19090,6 +19149,11 @@ and a `since` in the future correctly returns none.
 
 **Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 5.
 
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `list_logs` answers `400 since 'not-a-timestamp' is not an ISO 8601 timestamp; send one like
+2026-09-23T10:00:00+00:00` instead of dropping the filter. A valid `since` works as before. The
+UI's Logs view sends no `since`, and the one UI poller that does (agent output) is a different
+route. The newest-first paging half stays in UI-1 with F252. Measured by `hub/tests/test_a_request_means_what_it_says.py`; fails on the old code.
+
 ---
 
 ## F256 (D) — the Logs screen's agent filter offers names that are on no roster
@@ -19119,7 +19183,7 @@ someone once logged", with nothing on screen distinguishing them.
 
 ## F257 (D) — filtering by a severity that cannot exist answers 200 with an empty list
 
-**Status:** open. Both readers still apply an unvalidated severity while the write path
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — an unknown severity is a 400 on both readers; see FIXED at the end of this entry. Was: open. Both readers still apply an unvalidated severity while the write path
 normalises an unknown one, so a typo still reads as *there are no events of that kind* on the screen
 whose job is saying whether something happened. [classified 2026-09-09, D-3]
 
@@ -19138,6 +19202,11 @@ The four legal values are already enumerated client-side (`LogsView.tsx:11`), an
 them one import away.
 
 **Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 8.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `logs.require_known_severity` (new) refuses a severity outside `utils.KNOWN_SEVERITIES` (made
+public; the write path's normaliser reads the same set) with `400 Unknown severity 'banana';
+expected one of all, debug, error, info, warn`. `GET /logs` and `GET /events/history` both call it.
+Measured by `hub/tests/test_a_request_means_what_it_says.py` on both routes; fails on the old code.
 
 ---
 
@@ -21637,7 +21706,7 @@ is the honest one.
 
 ## F282 (C) - a junction inside the workspace is correctly classified as outside and correctly refused; what is wrong is the path both of them then print
 
-**Status:** open. The declared path is still what both the refusal and the record print,
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — the refusal and the record name the resolved path beside the declared one; see FIXED at the end of this entry. Was: open. The declared path is still what both the refusal and the record print,
 so the verdict still disagrees with the path beside it. `spec-queue/APPROVALS.md:511` carries it to
 the operator as the day window's to take up; nothing has been taken up. [classified 2026-09-09, D-3]
 
@@ -21680,6 +21749,22 @@ agent must be told about, the resolved path is what the operator must be shown.
 one, because there is no link to resolve - two names for one inode, both legitimately inside. That is
 a real hole and it is unrelated to symlinks; it is recorded here so a later sweep does not
 rediscover it and file it as the same thing.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** The shape this entry proposed: the resolved path is added **beside** the declared path, never in
+its place.
+- **Refusal:** `mcp_server._where` answers `is outside your workspace: it resolves to '<real
+  path>'` when `abspath(declared) != realpath(declared)`, and the unchanged `_OUTSIDE` sentence
+  otherwise. It stays stdlib-only, per the MCP rules.
+- **Record and notice:** `workspace_writes.resolved_elsewhere` (new) gives the same answer. The
+  recorder adds `resolved_path` to the destination's entry in `Run.outside_workspace_writes`, and
+  to the `agent_wrote_outside_workspace` event, only when a link moved the write. It is a JSON
+  column, so no migration.
+- **Evidence:** `hub/tests/test_a_request_means_what_it_says.py` makes a real junction (`mklink /J`, as this entry was measured; a symlink
+  elsewhere) and asserts both answers. A no-link path reads exactly as before. On the old code the
+  new helper did not exist, so its legs fail on import. The refusal half was also checked directly
+  against the old `mcp_server.py` with the same junction: `'is outside your workspace'`, with no
+  target named.
+- **Not fixed:** the hard-link hole this entry records is unrelated and untouched.
 
 ## F283 (B) - the Permissions pill sits on "Edit files" while the run it describes is spawned under "Workspace only"
 **Status:** open
@@ -31745,7 +31830,7 @@ and found one hole left open:
 
 **Source:** drive
 
-**Status:** open. **Found 2026-09-21** by the day window's D-1 drive of
+**Status:** fixed (this commit) [Round 4, 2026-09-23] — re-archiving is a no-op 200; see FIXED at the end of this entry. Was: open. **Found 2026-09-21** by the day window's D-1 drive of
 `an-archived-agent-holds-nothing-and-is-offered-nowhere` (`scripts/drive/d1_0921_archived_agent_drive.py`).
 
 **Repro.** Fresh project, agents `aa`, `bb`, a charter bound to both. `POST /agents/bb/archive`
@@ -31767,6 +31852,11 @@ tags archived holders and points at the archived filter; launchability omits arc
 runs a real Haiku turn charterless. The one BAD line was the script's wrong expectation: archiving
 mid-turn is refused 409 "cc has a run in progress. Wait for it to finish, or stop it first." --
 a gate that held and says what to do.
+
+**FIXED 2026-09-23 (interactive session, Round 4, group 4c).** `archive_agent` returns early when the agent is already archived: 200, `lifecycle: archived`,
+`released_charter_id: null`, `message: "<name> was already archived; nothing changed."`. It writes no
+event and leaves `archived_at` unchanged. Measured by `hub/tests/test_a_request_means_what_it_says.py` (the second call leaves one
+`agent_archived` event and the first `archived_at`); fails on the old code.
 
 ## F398 (C) -- `dismiss-checkpoint-warning` accepts a conversation that was never warned, and the pre-emptive dismissal silences its first warning for good
 

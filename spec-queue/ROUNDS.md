@@ -208,8 +208,11 @@ Grouped by file, so each group is one context load.
 
 ## Round 4 — Hub routes that answer wrongly (the C/D sweep, ~2 days)
 
-**Status:** next. 30 findings: the 28 below plus **4e**, Round 3's two review residuals. Start
-with **F414**, the only B.
+**Status:** built 2026-09-23 on `round/4` (worktree), review pending. 4e, 4a, 4b, 4c done: 27
+closed (F414, F415; F192, F194, F199, F239, F247, F254; F175, F182, F191, F200, F180, F208; F176,
+F184, F243, F244, F397, F204, F210, F214, F216, F232, F238, F255, F257, F282). **F249** moved to
+UI-1 beside F250: its fix changes the list routes' response shape, which the bundled panel reads.
+F62 (D7) and F149 (D1) stay with their decisions; 4d stays parked.
 
 Mostly S, mostly one guard or one sentence each. Batch them by the shared helper.
 

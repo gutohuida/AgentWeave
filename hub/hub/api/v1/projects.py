@@ -30,6 +30,7 @@ from ...project_workspace import (
 )
 from ...schemas.common import RequestModel
 from ...sse import sse_manager
+from ...utils import persist_event
 
 logger = logging.getLogger(__name__)
 
@@ -515,7 +516,13 @@ async def update_project_settings(
                 ),
             )
 
-    for field, value in merged.model_dump().items():
+    settings_now = merged.model_dump()
+    changed = {
+        field: {"was": getattr(project, field), "now": value}
+        for field, value in settings_now.items()
+        if getattr(project, field) != value
+    }
+    for field, value in settings_now.items():
         setattr(project, field, value)
     await session.commit()
 
@@ -525,9 +532,17 @@ async def update_project_settings(
     from ...turn_scheduler import redrain_queued_agents
 
     await redrain_queued_agents(resolved_project_id)
-    await sse_manager.broadcast(
-        resolved_project_id, "project_settings_updated", merged.model_dump()
-    )
+    # F238: recorded, not only broadcast. The accounting route persists its budget writes, so a
+    # budget changed there reached the project's history and the same budget changed here did not.
+    # `changed` is what the history is for; a save that changed nothing records nothing.
+    if changed:
+        await persist_event(
+            session,
+            resolved_project_id,
+            "project_settings_updated",
+            {"changed": changed, "settings": settings_now},
+        )
+    await sse_manager.broadcast(resolved_project_id, "project_settings_updated", settings_now)
     return merged
 
 

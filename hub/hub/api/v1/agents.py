@@ -618,6 +618,13 @@ async def list_agents(
                 # its default no matter what the row says — and the operator sees a switch they
                 # set turn itself off.
                 can_accept_evidence=bool(agent_row.can_accept_evidence) if agent_row else False,
+                # Without `env_vars`, whose values can be credentials: the agent-context renderer
+                # prints only their names for the same reason (`_runner_summary` below).
+                config=(
+                    {k: v for k, v in (agent_row.config or {}).items() if k != "env_vars"}
+                    if agent_row
+                    else {}
+                ),
             )
         )
 
@@ -2600,10 +2607,27 @@ async def patch_agent(
         if field in body:
             setattr(agent_row, field, _validated_waiting_seconds(field, body[field]))
 
-    # Merge config if provided
+    # Merge config if provided. F243: absent and empty used to be the same thing, so nothing could
+    # be unset — `{"config": {}}` and `{"config": null}` both answered 200 and changed nothing. An
+    # explicit null clears the whole config (F219's rule for a runner's model); a key given as null
+    # is removed; `{}` merges nothing, so it is refused rather than answered as though it had.
     if "config" in body:
-        new_config = body["config"] or {}
-        agent_row.config = {**(agent_row.config or {}), **new_config}
+        new_config = body["config"]
+        if new_config is None:
+            agent_row.config = {}
+        elif not isinstance(new_config, dict):
+            raise HTTPException(status_code=400, detail="config must be an object or null")
+        elif not new_config:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "config {} changes nothing: config is merged key by key. Send "
+                    '"config": null to clear all of it, or {"<key>": null} to remove one key.'
+                ),
+            )
+        else:
+            merged = {**(agent_row.config or {}), **new_config}
+            agent_row.config = {key: value for key, value in merged.items() if value is not None}
 
     # After the config merge, deliberately: a body carrying both must end with the two agreeing,
     # and the posture is the newer spelling of the same choice, so it is the one that wins.
@@ -2729,6 +2753,17 @@ async def archive_agent(
     """
     project_id, _ = project
     agent_row = await _owned_agent(session, project_id, name)
+    # F397: already archived is already done. Still 200 (the caller's intent holds), but nothing
+    # is re-stamped or re-announced: a second `agent_archived` event read in the log exactly like a
+    # real archival, and `archived_at` lost the moment it actually happened.
+    if agent_row.lifecycle == "archived":
+        return {
+            "name": agent_row.name,
+            "lifecycle": agent_row.lifecycle,
+            "charter_id": agent_row.charter_id,
+            "released_charter_id": None,
+            "message": f"{agent_row.name} was already archived; nothing changed.",
+        }
 
     obstruction = await agent_archivable(session, agent_row)
     if obstruction is not None:

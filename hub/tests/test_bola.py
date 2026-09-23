@@ -292,9 +292,12 @@ async def test_cross_project_list_reads_return_empty_data(app, other_project, pr
 
     # The merged chat timeline also returns a dict wrapper (task 8.3) — both the
     # sessionless and session-scoped forms must report an empty entries list.
+    # Since F194 (Round 4a) the sessionless form asks whether the name is an agent *of this
+    # project*; `alice` is Project A's, so Project B is told it is unknown here — the same answer a
+    # typo gets, which says nothing about Project A.
     recent_chat_resp = await app.get(f"{base}/agent/alice/chat", headers=b)
-    assert recent_chat_resp.status_code == 200
-    assert recent_chat_resp.json()["entries"] == []
+    assert recent_chat_resp.status_code == 404
+    assert "alice is not an agent in this project" in recent_chat_resp.json()["detail"]
 
     chat_resp = await app.get(
         f"{base}/agent/alice/chat/{project_a_resources['session_id']}",

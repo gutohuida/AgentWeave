@@ -52,6 +52,7 @@ from ...db.models import (
     Project,
     RequirementDrift,
     RequirementEvidence,
+    SpecDocument,
     SpecEditProposal,
     SpecRequirement,
 )
@@ -615,11 +616,14 @@ class ProposalDecision(RequestModel):
 async def accept_proposal_route(
     path: str,
     proposal_id: str,
-    body: ProposalDecision,
+    body: Optional[ProposalDecision] = None,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
     """Apply one pending proposal's unit, or refuse and say why. There is no agent equivalent."""
+    # F204/F210: every field of the body is optional, so a call with no body at all is a complete
+    # request; without the default FastAPI refused it as malformed before the route could run.
+    body = body or ProposalDecision()
     project_id, _ = project
     document = await _require_document(session, project_id, path)
     proposal = await _require_proposal(session, document.id, proposal_id)
@@ -666,11 +670,14 @@ async def accept_proposal_route(
 async def reject_proposal_route(
     path: str,
     proposal_id: str,
-    body: ProposalDecision,
+    body: Optional[ProposalDecision] = None,
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
     """Refuse a pending proposal. The live document is untouched — nothing to clean up."""
+    # F204/F210: every field of the body is optional, so a call with no body at all is a complete
+    # request; without the default FastAPI refused it as malformed before the route could run.
+    body = body or ProposalDecision()
     project_id, _ = project
     document = await _require_document(session, project_id, path)
     proposal = await _require_proposal(session, document.id, proposal_id)
@@ -984,19 +991,71 @@ async def list_drift(
         .scalars()
         .all()
     )
-    return {
-        "drift": [
-            {
-                "id": row.id,
-                "requirement_id": row.requirement_id,
-                "evidence_id": row.evidence_id,
-                "state": row.state,
-                "observed": row.observed,
-                "resolution": row.resolution,
-            }
-            for row in rows
-        ]
+    # F216: the operator asked "say which one was wrong" was handed `spreq-…` and `ev-…`. What they
+    # have seen is the requirement's `FR-n` in a document, and the evidence's summary and author.
+    requirements = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(SpecRequirement).where(
+                    SpecRequirement.id.in_({row.requirement_id for row in rows} or {""})
+                )
+            )
+        ).scalars()
     }
+    documents = {
+        row.id: row.path
+        for row in (
+            await session.execute(
+                select(SpecDocument).where(
+                    SpecDocument.id.in_({req.document_id for req in requirements.values()} or {""})
+                )
+            )
+        ).scalars()
+    }
+    evidence = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(RequirementEvidence).where(
+                    RequirementEvidence.id.in_({row.evidence_id for row in rows} or {""})
+                )
+            )
+        ).scalars()
+    }
+
+    def _view(row: RequirementDrift) -> Dict[str, Any]:
+        requirement = requirements.get(row.requirement_id)
+        item = evidence.get(row.evidence_id)
+        return {
+            "id": row.id,
+            "requirement_id": row.requirement_id,
+            "evidence_id": row.evidence_id,
+            "state": row.state,
+            "observed": row.observed,
+            "resolution": row.resolution,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "requirement": (
+                {
+                    "identifier": requirement.identifier,
+                    "document": documents.get(requirement.document_id),
+                }
+                if requirement is not None
+                else None
+            ),
+            "evidence": (
+                {
+                    "summary": item.summary,
+                    "locator": item.locator,
+                    "actor": item.actor,
+                    "actor_kind": item.actor_kind,
+                }
+                if item is not None
+                else None
+            ),
+        }
+
+    return {"drift": [_view(row) for row in rows]}
 
 
 @router.post("/spec/drift/{drift_id}/resolve")
@@ -1525,7 +1584,7 @@ async def propose_document(
 
 @router.post("/documents/phase")
 async def set_phase(
-    body: PhaseRequest,
+    body: Optional[PhaseRequest] = None,
     path: str = Query(...),
     to: str = Query(...),
     project: Tuple[str, str] = Depends(get_project),
@@ -1537,6 +1596,9 @@ async def set_phase(
     a run's token authenticates against `/agent-actions`, which has no phase
     route at all.
     """
+    # F204/F210: every field of the body is optional, so a call with no body at all is a complete
+    # request; without the default FastAPI refused it as malformed before the route could run.
+    body = body or PhaseRequest()
     project_id, _ = project
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
