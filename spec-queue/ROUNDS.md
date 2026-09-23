@@ -24,6 +24,11 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
    **Relaxed by the operator on 2026-09-23:** the day window's own specs may open this week (it opened
    `an-at-mention-an-agent-wrote-reads-no-file` and `pressing-run-names-the-reason-that-held` that
    day). These rounds' spec tracks still start on 2026-09-28.
+3. **Answered 2026-09-23 (carried since handoff 0144).** `archive_job` does **not** refuse a running
+   loop: the job's archive keeps ending the loop itself (F224). A refusal was chosen, then withdrawn
+   once the operator was shown that no screen can stop a loop (F225/D6), which would strand the app
+   as `agent-loops` records for 2026-08-21. Revisit only if a stop control ships. Recorded in
+   `archive_job`'s docstring.
 
 ## How a round runs
 

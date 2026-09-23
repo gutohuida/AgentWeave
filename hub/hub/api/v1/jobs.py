@@ -1233,8 +1233,13 @@ async def archive_job(
     returns immediately in that case, a few lines above) — mirrored here rather than restated
     differently, so the two checks agree on what "an agent is calling" means. The operator's own
     path through this same route is intentionally NOT restricted this way and does not require the
-    loop to have ended first either (that rule, B2.3, is specific to archiving the *loop* itself) —
-    an open question recorded in the change's own log, not resolved here.
+    loop to have ended first either (that rule, B2.3, is specific to archiving the *loop* itself).
+
+    **Decided by the operator, 2026-09-23: it stays that way.** Refusing a running loop here was
+    offered and declined, because the app has no control that stops a loop (F225, D6), so the
+    refusal would strand the operator exactly as `agent-loops`' "Archiving a job retires its loop"
+    scenario records happening on 2026-08-21. The job's archive ends the loop instead (F224, below).
+    Revisit only if a stop control ships.
     """
     project_id, _ = project
     await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
