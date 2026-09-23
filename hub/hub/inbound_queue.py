@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Iterable, List, Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from .conversations import get_conversation_by_id
 from .db.models import InboundQueueEntry, Project, Run
@@ -130,6 +131,13 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
     return "\n\n".join(blocks)
 
 
+class QueueChangedError(RuntimeError):
+    """The entries a turn was about to deliver are no longer all queued -- withdrawn, or delivered
+    elsewhere, between being selected and being claimed. Nothing was delivered. A fact about
+    timing, not a fault: `agent_trigger` turns it into a transient refusal, so the scheduler
+    re-reads what is still queued and counts nothing (F338)."""
+
+
 async def deliver_entries_with_run(
     db: AsyncSession,
     *,
@@ -151,21 +159,49 @@ async def deliver_entries_with_run(
     )
     entries = list(result.scalars().all())
     if [entry.id for entry in entries] != entry_ids:
-        raise RuntimeError("queue changed before atomic delivery")
+        raise QueueChangedError("queue changed before atomic delivery")
     if run.conversation_id is not None and any(
         entry.conversation_id != run.conversation_id for entry in entries
     ):
         raise RuntimeError("one run cannot deliver entries from different conversations")
     now = datetime.now(timezone.utc)
+    # F338: the claim is the `UPDATE`'s own condition, as F328 made every withdrawal. The select
+    # above runs outside a write transaction on a plain turn (SQLite locks at the write, not the
+    # read), so an operator's withdrawal can commit between it and this commit; writing these rows
+    # back by primary key overwrote that `withdrawn` with `delivered`, after the operator had been
+    # answered 200. Now whichever writes first wins, and a delivery that lost refuses whole. The run
+    # is flushed first so the rows can name it.
     db.add(run)
+    await db.flush()
+    claimed = await db.execute(
+        update(InboundQueueEntry)
+        .where(
+            InboundQueueEntry.project_id == project_id,
+            InboundQueueEntry.agent == agent,
+            InboundQueueEntry.id.in_(entry_ids),
+            InboundQueueEntry.state == "queued",
+        )
+        .values(
+            state="delivered",
+            delivered_in_run_id=run.id,
+            delivered_at=now,
+            # The wait is over, so the reason it was waiting is history. Cleared here rather than
+            # left to age because a delivered entry can come back — `return_run_entries` requeues
+            # it — and a stale explanation of a wait that ended is worse than none (F97).
+            waiting_reason=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != len(entry_ids):
+        # Nothing of this delivery may land: not the rows it did claim, not the run, not anything
+        # the caller staged for it (the task binding is staged before delivery for this reason).
+        await db.rollback()
+        raise QueueChangedError("queue changed before atomic delivery")
     for entry in entries:
-        entry.state = "delivered"
-        entry.delivered_in_run_id = run.id
-        entry.delivered_at = now
-        # The wait is over, so the reason it was waiting is history. Cleared here rather than
-        # left to age because a delivered entry can come back — `return_run_entries` requeues it
-        # — and a stale explanation of a wait that ended is worse than none (F97).
-        entry.waiting_reason = None
+        set_committed_value(entry, "state", "delivered")
+        set_committed_value(entry, "delivered_in_run_id", run.id)
+        set_committed_value(entry, "delivered_at", now)
+        set_committed_value(entry, "waiting_reason", None)
     await db.commit()
     return entries
 

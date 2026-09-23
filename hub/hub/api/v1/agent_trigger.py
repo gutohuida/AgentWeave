@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
@@ -65,6 +66,7 @@ from ...conversations import (
 from ...db.engine import async_session_factory, get_session
 from ...db.models import Agent, Conversation, PermissionRequest, Project, Run, Runner, Task
 from ...inbound_queue import (
+    QueueChangedError,
     abandoned_for_run,
     deliver_entries_with_run,
     new_entry,
@@ -583,7 +585,51 @@ def effective_question_wait(agent_row: Optional[Agent]) -> int:
     return _parse_question_wait(raw)
 
 
-async def trigger_agent_directly(
+class _ReviewCheckoutClaim:
+    """A review checkout this call provisioned, until a run takes it over (F326).
+
+    `task-lifecycle-governance`: *"A refused review leaves no checkout behind"*, for any reason.
+    `prepare_review_turn` provisions `.agentweave/reviews/<reviewer>` part-way through the trigger,
+    and every refusal after it -- the context write, the runner, the Hub's own address, delivery
+    itself -- left that checkout registered. Held by the wrapper rather than released at each
+    refusal, so a refusal added later is covered without anyone remembering to. Only a checkout
+    *this call* provisioned is ever released: a refusal ahead of provisioning ("already running a
+    turn") may be looking at a checkout a live review is standing in.
+    """
+
+    def __init__(self) -> None:
+        self.repo_root: Optional[Path] = None
+        self.reviewer: Optional[str] = None
+        self.handed_off = False
+
+
+async def trigger_agent_directly(**kwargs: Any) -> TriggerAgentResponse:
+    """Validate and spawn *agent* directly, returning its run identifier.
+
+    The core of what `POST /agent/trigger` does (see that route below), factored out so a
+    scheduled job (`scheduler.py`, task 3.10) goes through the exact same direct-execution
+    path a manual trigger does — no synthetic `Message` for the watchdog to later detect and
+    re-trigger, which is the same class of indirection Decision 2 already removed from the
+    manual-trigger path in task 3.5. Raises `TriggerAgentError` on any rejection.
+
+    Takes `_trigger_agent_directly`'s keyword arguments. The wrapper exists for one thing: a
+    review checkout this call provisioned is released if the call does not end in a started run.
+    """
+    claim = _ReviewCheckoutClaim()
+    try:
+        return await _trigger_agent_directly(**kwargs, review_claim=claim)
+    except BaseException:
+        if claim.repo_root is not None and claim.reviewer is not None and not claim.handed_off:
+            try:
+                await asyncio.to_thread(
+                    worktrees.release_review_checkout, claim.repo_root, claim.reviewer
+                )
+            except Exception:  # noqa: BLE001 — the refusal is what the caller needs to see
+                logger.exception("Could not release %s's refused review checkout", claim.reviewer)
+        raise
+
+
+async def _trigger_agent_directly(
     *,
     project_id: str,
     agent: str,
@@ -598,15 +644,8 @@ async def trigger_agent_directly(
     task_id: Optional[str] = None,
     divergence_source_run_id: Optional[str] = None,
     review_task_id: Optional[str] = None,
+    review_claim: _ReviewCheckoutClaim,
 ) -> TriggerAgentResponse:
-    """Validate and spawn *agent* directly, returning its run identifier.
-
-    The core of what `POST /agent/trigger` does (see that route below), factored out so a
-    scheduled job (`scheduler.py`, task 3.10) goes through the exact same direct-execution
-    path a manual trigger does — no synthetic `Message` for the watchdog to later detect and
-    re-trigger, which is the same class of indirection Decision 2 already removed from the
-    manual-trigger path in task 3.5. Raises `TriggerAgentError` on any rejection.
-    """
     from sqlalchemy import select
 
     try:
@@ -873,6 +912,9 @@ async def trigger_agent_directly(
             # Task 3.4. The reason comes from the resolver unchanged, so the operator reads why
             # there is nothing to review rather than that something failed.
             raise TriggerAgentError(status.HTTP_409_CONFLICT, str(exc), request_level=True) from exc
+        # Provisioned now; from here until a run takes it over, a refusal releases it (F326).
+        review_claim.repo_root = repo_root
+        review_claim.reviewer = agent
 
     if work_dir and worktrees.is_writing_agent(config) and project_is_repo:
         raise TriggerAgentError(
@@ -1240,13 +1282,26 @@ async def trigger_agent_directly(
 
     delivered = []
     if queue_entry_ids:
-        delivered = await deliver_entries_with_run(
-            session,
-            project_id=project_id,
-            agent=agent,
-            entry_ids=queue_entry_ids,
-            run=run,
-        )
+        try:
+            delivered = await deliver_entries_with_run(
+                session,
+                project_id=project_id,
+                agent=agent,
+                entry_ids=queue_entry_ids,
+                run=run,
+            )
+        except QueueChangedError as exc:
+            # F338's review: a bare `RuntimeError` here escaped `turn_scheduler._attempt_turn`,
+            # which catches only this type -- `POST /messages` answered 500 after committing the
+            # message, and a re-drain stopped at the first agent that raised. Losing the claim to
+            # a withdrawal means nothing is left to do *now*: transient, so the scheduler re-reads
+            # what is still queued and counts nothing against it.
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                "This turn's input changed while it was being started (withdrawn or delivered "
+                "elsewhere); nothing was delivered.",
+                transient=True,
+            ) from exc
     else:
         session.add(run)
         await session.commit()
@@ -1296,6 +1351,8 @@ async def trigger_agent_directly(
     )
     _background_runs.add(task)
     task.add_done_callback(_background_runs.discard)
+    # The run owns the review checkout now; nothing after this is a refusal of it (F326).
+    review_claim.handed_off = True
 
     try:
         await persist_event(
@@ -1841,6 +1898,47 @@ async def _broadcast_run_lifecycle(
     await sse_manager.broadcast(project_id, event_type, payload)
 
 
+#: Seconds between attempts at an observational write that met SQLite's lock (F359). Each attempt
+#: already waits out the engine's own `busy_timeout` before it fails, so these only space retries.
+OBSERVATION_RETRY_DELAYS: Tuple[float, ...] = (0.5, 2.0)
+
+
+async def _record_observation(write, *, run_id: str, what: str, drop: bool = True) -> None:
+    """Run *write* (`async (db) -> None`) on a fresh session, surviving SQLite's write lock.
+
+    F359: a streamed output row or usage reading is the run's bookkeeping about the agent, not the
+    agent's work. Every one was written unguarded inside the read loop, so a `database is locked`
+    on one of them reached the run's `except`, marked the run failed, and skipped the snapshot and
+    evidence re-point a finished run gets -- while the agent process ran on, unobserved, and
+    finished the work anyway (measured on `:8000`: 304 outputs in, then failed, work committed by
+    the next run two minutes later). Losing one timeline row is the smaller harm, so a lock is
+    retried and then dropped with a warning. Anything else still propagates: an unexpected error is
+    a defect, and swallowing it would hide every output of every run.
+
+    `drop=False` retries the same way but re-raises a lock that outlasts the retries, for a write
+    the run cannot go on without (the provider session binding).
+    """
+    for delay in (*OBSERVATION_RETRY_DELAYS, None):
+        try:
+            async with async_session_factory() as db:
+                await write(db)
+            return
+        except OperationalError as exc:
+            if "database is locked" not in str(exc):
+                raise
+            if delay is None:
+                if not drop:
+                    raise
+                logger.warning(
+                    "Dropped %s for run %s: the database stayed locked through %d attempts",
+                    what,
+                    run_id,
+                    len(OBSERVATION_RETRY_DELAYS) + 1,
+                )
+                return
+            await asyncio.sleep(delay)
+
+
 def _log_abnormal_run_end(exc: BaseException, *, run_id: str, agent: str, label: str) -> None:
     """How a run that ended on an exception is reported, for the two transports (F298).
 
@@ -2160,7 +2258,13 @@ async def _execute_run(
             # Resolve session_id from *this* line before writing its own events, so the row
             # that establishes the session carries it too, not just subsequent rows.
             if parsed.session_id:
-                async with async_session_factory() as db:
+                prior_conflict, prior_session_id = binding_conflict, session_id
+
+                async def _bind(db) -> None:
+                    nonlocal binding_conflict, session_id
+                    # Every attempt starts from the same state, so one that met the lock and was
+                    # retried leaves nothing half-applied behind it.
+                    binding_conflict, session_id = prior_conflict, prior_session_id
                     run = await db.get(Run, run_id)
                     conversation = await get_conversation_by_id(db, conversation_id)
                     if conversation is None:
@@ -2194,11 +2298,22 @@ async def _execute_run(
                             agent=agent,
                             severity="warn",
                         )
-                        return
+
+                # F359, from the round's review: this is the first write of every run -- its most
+                # contended moment -- and it was the one left unguarded, so a lock here still failed
+                # the run and now also terminated it mid-work. Retried like every streamed row, but
+                # never dropped: the binding decides which provider session is resumed, so if the
+                # lock outlasts the retries the run still fails, loudly, rather than going on
+                # unbound.
+                await _record_observation(
+                    _bind, run_id=run_id, what="the provider session binding", drop=False
+                )
+                if binding_conflict is not None:
+                    return
             for event in parsed.events:
                 sequence += 1
-                async with async_session_factory() as db:
-                    await record_agent_output(
+                await _record_observation(
+                    lambda db, event=event, sequence=sequence: record_agent_output(
                         db,
                         project_id,
                         agent,
@@ -2209,15 +2324,20 @@ async def _execute_run(
                         payload=event.payload,
                         run_id=run_id,
                         sequence=sequence,
-                    )
+                    ),
+                    run_id=run_id,
+                    what=f"output {sequence}",
+                )
                 # Task 4.3a. After the output row, not before: the timeline entry is what the
                 # operator is shown, and this is observational bookkeeping about it.
                 await outside_writes.note(event)
             if parsed.usage is not None:
-                async with async_session_factory() as db:
-                    await record_context_usage(
-                        db, project_id, agent, parsed.usage.to_payload(agent)
-                    )
+                usage_payload = parsed.usage.to_payload(agent)
+                await _record_observation(
+                    lambda db: record_context_usage(db, project_id, agent, usage_payload),
+                    run_id=run_id,
+                    what="a context-usage reading",
+                )
             if parsed.accounting is not None:
                 accounting_sample = (
                     parsed.accounting
@@ -2466,17 +2586,25 @@ async def _execute_run(
             # ended", not "it succeeded" — and `AgentTimeline.tsx:430` returns null for it either
             # way. The row is durable rather than visible; the visible outcome is the terminal
             # label the timeline route's `runs` map carries.
-            await record_agent_output(
-                db,
-                project_id,
-                agent,
-                content=f"Run {final_status} (exit {exit_code}).",
-                session_id=session_id,
-                conversation_id=conversation_id,
-                kind="status",
-                payload={"phase": "completed", "exit_code": exit_code},
+            #
+            # Through `_record_observation`, on its own session, like every streamed row (F359):
+            # the terminal status is already committed, so a lock here must not throw the rest of
+            # this block -- the title, the re-drain -- onto the failure path.
+            await _record_observation(
+                lambda status_db: record_agent_output(
+                    status_db,
+                    project_id,
+                    agent,
+                    content=f"Run {final_status} (exit {exit_code}).",
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    kind="status",
+                    payload={"phase": "completed", "exit_code": exit_code},
+                    run_id=run_id,
+                    sequence=sequence + 1,
+                ),
                 run_id=run_id,
-                sequence=sequence + 1,
+                what="the run's closing status row",
             )
 
         # After the response has landed, so the titler sees the exchange rather than the
@@ -2536,6 +2664,17 @@ async def _execute_run(
         # marked, to preserve real cancellation semantics for anything that legitimately depends
         # on it propagating.
         _log_abnormal_run_end(exc, run_id=run_id, agent=agent, label="run")
+        # F359: a run recorded as failed must not leave its agent running. Nothing reads the
+        # process's output past this point, and the tail below releases the queue -- so a live
+        # process here would go on writing into the same worktree as the next turn it frees.
+        # Best-effort: the failure record matters more than confirming the kill.
+        try:
+            if pty.isalive():
+                await asyncio.get_running_loop().run_in_executor(
+                    None, lambda: pty.terminate(force=True)
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception("Could not terminate run %s's process after it failed", run_id)
         await _record_run_failure_tail(
             project_id=project_id,
             agent=agent,
@@ -2785,8 +2924,8 @@ async def _execute_codex_appserver_run(
         async def _on_event(event) -> None:
             nonlocal sequence
             sequence += 1
-            async with async_session_factory() as db:
-                await record_agent_output(
+            await _record_observation(
+                lambda db, sequence=sequence: record_agent_output(
                     db,
                     project_id,
                     agent,
@@ -2797,14 +2936,21 @@ async def _execute_codex_appserver_run(
                     payload=event.payload,
                     run_id=run_id,
                     sequence=sequence,
-                )
+                ),
+                run_id=run_id,
+                what=f"output {sequence}",
+            )
             # Task 4.3b — the same call `_flush_line` makes, on the same recorder class, in the
             # same position relative to the output row.
             await outside_writes.note(event)
 
         async def _on_usage(usage) -> None:
-            async with async_session_factory() as db:
-                await record_context_usage(db, project_id, agent, usage.to_payload(agent))
+            usage_payload = usage.to_payload(agent)
+            await _record_observation(
+                lambda db: record_context_usage(db, project_id, agent, usage_payload),
+                run_id=run_id,
+                what="a context-usage reading",
+            )
 
         async def _on_accounting(accounting) -> None:
             nonlocal accounting_sample
@@ -3125,11 +3271,33 @@ async def get_agent_sessions(
     result = await session.execute(q)
     rows = result.all()
 
+    # F189: the directory each session's turns actually ran in -- `Run.workspace_dir`, the value
+    # handed to the process as its cwd (design D7) -- newest run first, so a session that moved
+    # reports where it is now. This was a hardcoded `.agentweave/agents/<agent>-session.json`, the
+    # shape of the deleted CLI session subsystem, which nothing writes; the Workspace section
+    # rendered it as "where the agent's work actually happened". `None` for a session none of
+    # whose runs recorded one (rows older than the column), which the UI already leaves blank.
+    directories: Dict[str, str] = {}
+    session_ids = [row.session_id for row in rows if row.session_id]
+    if session_ids:
+        run_rows = await session.execute(
+            select(Run.session_id, Run.workspace_dir)
+            .where(
+                Run.project_id == project_id,
+                Run.agent == agent,
+                Run.session_id.in_(session_ids),
+                Run.workspace_dir.isnot(None),
+            )
+            .order_by(Run.started_at.desc())
+        )
+        for session_id, workspace_dir in run_rows.all():
+            directories.setdefault(session_id, workspace_dir)
+
     sessions = [
         {
             "id": row.session_id,
             "type": "agent",
-            "path": f".agentweave/agents/{agent}-session.json",
+            "path": directories.get(row.session_id),
             "last_active": row.last_active.isoformat() if row.last_active else None,
             "started_at": row.started_at.isoformat() if row.started_at else None,
         }

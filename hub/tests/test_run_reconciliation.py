@@ -362,6 +362,83 @@ async def test_reconciliation_redrains_immediately_when_the_address_is_known(app
     assert has_deferred_schedules() is False
 
 
+async def _seed_f288(db):
+    """An interrupted run's own agent, a second agent parked behind it in the same project, and
+    a third agent with queued input in a project no interrupted run touched."""
+    db.add(
+        Run(
+            id="run-f288-crashed",
+            project_id="proj-test",
+            agent="f288-holder",
+            status="running",
+            pid=None,
+        )
+    )
+    for project_id, agent in (("proj-test", "f288-parked"), ("proj-f288-other", "f288-elsewhere")):
+        db.add(
+            new_entry(
+                project_id=project_id,
+                agent=agent,
+                origin_type="operator",
+                content="waiting on the task checkout",
+                hop_depth=0,
+            )
+        )
+    await db.commit()
+
+
+# --- F288: reconciliation is a terminal-status site like any other ----------------------------
+#
+# `agent-conversation-workspace`, *A run that has ended releases the queue behind it*: every agent
+# holding queued input in a project is re-evaluated when a run there reaches a terminal status.
+# Reconciliation re-drained only the interrupted run's own agent, so an agent parked on that run's
+# task checkout waited until something unrelated re-drained the project (measured: 6m15s).
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_redrains_every_queued_agent_in_the_interrupted_runs_project(
+    app, monkeypatch
+):
+    monkeypatch.delenv("HUB_URL", raising=False)
+    async with async_session_factory() as db:
+        await _seed_f288(db)
+
+    scheduled = []
+
+    async def _record(project_id, agent):
+        scheduled.append((project_id, agent))
+
+    with patch("hub.turn_scheduler.schedule_agent", _record):
+        with patch("hub.bound_address.get", return_value=("127.0.0.1", 8010)):
+            assert await reconcile_interrupted_runs() >= 1
+
+    assert ("proj-test", "f288-holder") in scheduled
+    assert ("proj-test", "f288-parked") in scheduled
+    # Scoped to the projects a run ended in, as the requirement is.
+    assert ("proj-f288-other", "f288-elsewhere") not in scheduled
+
+
+@pytest.mark.asyncio
+async def test_a_deferred_reconciliation_redrain_still_covers_the_parked_agent(app, monkeypatch):
+    monkeypatch.delenv("HUB_URL", raising=False)
+    async with async_session_factory() as db:
+        await _seed_f288(db)
+
+    scheduled = []
+
+    async def _record(project_id, agent):
+        scheduled.append((project_id, agent))
+
+    with patch("hub.turn_scheduler.schedule_agent", _record):
+        with patch("hub.bound_address.get", return_value=None):
+            assert await reconcile_interrupted_runs() >= 1
+            assert scheduled == []
+        assert await drain_deferred_schedules() >= 2
+
+    assert ("proj-test", "f288-parked") in scheduled
+    assert ("proj-f288-other", "f288-elsewhere") not in scheduled
+
+
 @pytest.mark.asyncio
 async def test_draining_deferred_schedules_is_idempotent(app):
     assert await drain_deferred_schedules() == 0

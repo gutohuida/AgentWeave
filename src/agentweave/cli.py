@@ -535,14 +535,79 @@ def _hub_pid_running(port: Optional[int] = None, profile: str = "default") -> Op
         return None
 
 
+# Run in a child process by `_hub_break_windows`: leave this console, attach to the Hub's hidden
+# one, and raise CTRL_BREAK for the Hub's process group, whose id is the Hub's own pid because
+# `cmd_start` spawns it with CREATE_NEW_PROCESS_GROUP. The helper is not in that group, so the
+# event does not reach it; `SetConsoleCtrlHandler(None, True)` only additionally ignores Ctrl+C.
+_CTRL_BREAK_HELPER = """
+import ctypes, sys
+pid = int(sys.argv[1])
+k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+k32.FreeConsole()
+if not k32.AttachConsole(pid):
+    sys.exit(1)
+k32.SetConsoleCtrlHandler(None, True)
+sys.exit(0 if k32.GenerateConsoleCtrlEvent(1, pid) else 2)
+"""
+
+_HUB_GRACEFUL_STOP_SECONDS = 10
+
+
+def _hub_break_windows(pid: int) -> bool:
+    """Ask a detached Windows Hub to shut down the way Ctrl+Break would. True if it exited.
+
+    F297: `taskkill /F` is `TerminateProcess`, which nothing can intercept, so the Hub's lifespan
+    teardown — `terminate_all_active_runs`, the scheduler shutdown — never ran on the operator's
+    platform. Windows has no SIGTERM, and a windowless console process ignores the `WM_CLOSE` a plain
+    `taskkill` sends; CTRL_BREAK is the signal uvicorn turns into a graceful exit. It can only be
+    raised from inside the target's console, hence the helper process. Measured 2026-09-23 with a
+    probe launched with `cmd_start`'s exact flags: the lifespan teardown ran and the process exited.
+    """
+    import ctypes
+    import subprocess as _sp
+
+    CREATE_NO_WINDOW = 0x08000000  # noqa: N806
+    SYNCHRONIZE = 0x00100000  # noqa: N806
+    WAIT_OBJECT_0 = 0  # noqa: N806
+    try:
+        sent = _sp.run(
+            [sys.executable, "-c", _CTRL_BREAK_HELPER, str(pid)],
+            capture_output=True,
+            timeout=15,
+            creationflags=CREATE_NO_WINDOW,
+        )
+    except (OSError, _sp.SubprocessError):
+        return False
+    if sent.returncode != 0:
+        return False
+    ERROR_INVALID_PARAMETER = 87  # noqa: N806 - what OpenProcess reports for a pid that has exited
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+    if not handle:
+        # Gone only if the pid no longer names a process. Anything else -- access denied above
+        # all -- means it may still be running, and saying "stopped" would leave it serving
+        # while the pid file is deleted; the forced fallback decides instead.
+        return bool(ctypes.get_last_error() == ERROR_INVALID_PARAMETER)  # type: ignore[attr-defined]
+    try:
+        waited = kernel32.WaitForSingleObject(handle, _HUB_GRACEFUL_STOP_SECONDS * 1000)
+        return bool(waited == WAIT_OBJECT_0)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _hub_kill_pid(pid: int) -> None:
-    """Terminate a native Hub process by PID (graceful SIGTERM, then forced)."""
+    """Terminate a native Hub process by PID: graceful first, forced only if that fails.
+
+    Graceful is SIGTERM on POSIX and CTRL_BREAK on Windows (`_hub_break_windows`), each given
+    `_HUB_GRACEFUL_STOP_SECONDS` to run the Hub's shutdown before the forced fallback.
+    """
     import subprocess as _sp
     import time as _time
 
     try:
         if sys.platform == "win32":
-            _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=15)
+            if not _hub_break_windows(pid):
+                _sp.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=15)
         else:
             os.kill(pid, 15)  # SIGTERM
             for _ in range(10):

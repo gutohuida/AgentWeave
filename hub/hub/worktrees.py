@@ -39,7 +39,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .repo_hygiene import seed_repo_excludes
 from .subprocess_windows import no_console_kwargs
@@ -1123,7 +1123,69 @@ def _merge_tree_conflicts(repo_root: Path, branch_a: str, branch_b: str) -> List
     return paths
 
 
-def detect_conflicts(repo_root: Path) -> List[ConflictReport]:
+#: `WorkspaceBranch.kind` for the branch the work merges into. Not a checkout the Hub owns, so its
+#: `name` is the branch itself and its `path` the project root.
+MAIN_BRANCH_KIND = "main"
+
+
+def _resolves(repo_root: Path, ref: Optional[str]) -> bool:
+    return (
+        bool(ref) and _run_git(repo_root, "rev-parse", "--verify", ref, check=False).returncode == 0
+    )
+
+
+def retained_task_branches(
+    repo_root: Path, task_ids: Iterable[str], main_branch: Optional[str]
+) -> List[WorkspaceBranch]:
+    """Task branches whose checkout was released but whose work has not reached *main_branch*.
+
+    F246: `release_task_workspace` removes a finished task's checkout and keeps its branch on
+    purpose -- it is the record of the work and what a reopened task resumes from -- and
+    `list_workspace_branches` lists checkouts, so the branch dropped out of the conflict check the
+    moment the task ended, while the Hub's own release event warned it held unmerged commits.
+
+    Only *task_ids* are considered: the caller decides which tasks' work is still meant to land
+    (the route excludes rejected ones). A branch whose commits are all in *main_branch* has landed
+    and is left out. With no resolvable main branch nothing is retained: nothing could be called
+    landed, so every approved branch would stay in the check forever and report its successors as
+    conflicts -- the same reason F245 checks nothing against a main branch it was not given (the
+    round's review). `path` is where the checkout would be, since there is none.
+    """
+    wanted = set(task_ids)
+    if not wanted or not _resolves(repo_root, main_branch):
+        return []
+    listed = _run_git(
+        repo_root,
+        "for-each-ref",
+        "--format=%(refname:short)",
+        f"refs/heads/{TASK_BRANCH_PREFIX}",
+        check=False,
+    )
+    checked_out = {workspace.branch for workspace in list_workspace_branches(repo_root)}
+    retained: List[WorkspaceBranch] = []
+    for branch in sorted(listed.stdout.split()):
+        task_id = branch[len(TASK_BRANCH_PREFIX) :]
+        if task_id not in wanted or branch in checked_out:
+            continue
+        ahead = _run_git(repo_root, "rev-list", "--count", f"{main_branch}..{branch}", check=False)
+        if ahead.returncode != 0 or ahead.stdout.strip() == "0":
+            continue
+        retained.append(
+            WorkspaceBranch(
+                kind="task",
+                name=task_id,
+                branch=branch,
+                path=task_worktree_path(repo_root, task_id),
+            )
+        )
+    return retained
+
+
+def detect_conflicts(
+    repo_root: Path,
+    main_branch: Optional[str] = None,
+    retained: Sequence[WorkspaceBranch] = (),
+) -> List[ConflictReport]:
     """Pairwise-check every currently-provisioned Hub-owned branch against every
     other's, surfacing which workspaces diverge and on which files
     (hub-native-runtime's "Divergent changes surface as a conflict" scenario).
@@ -1132,9 +1194,27 @@ def detect_conflicts(repo_root: Path) -> List[ConflictReport]:
     on per-task isolation, so a check that walked agent branches only would have gone quiet on a
     project doing everything through tasks — reporting no conflicts because it was looking at the
     empty half of the namespace.
+
+    Each workspace is also checked against *main_branch*, the branch integration merges into
+    (F245). That was the conflict an operator most needs — *this work will not merge* — and the
+    check structurally could not report it, because the base is not a Hub-owned checkout and so
+    was never one of a pair; the first anyone heard of it was integration failing at approval.
+    Those reports come first, with the main branch as their first workspace. `None` (the project
+    has not accepted a main branch) or a branch that does not resolve checks nothing against it:
+    `detect_main_branch` is a suggestion, and a conflict against a guessed base is not a fact.
+
+    *retained* adds branches with no checkout (`retained_task_branches`, F246) to every check.
     """
-    workspaces = list_workspace_branches(repo_root)
+    workspaces = [*list_workspace_branches(repo_root), *retained]
     reports: List[ConflictReport] = []
+    if main_branch and _resolves(repo_root, main_branch):
+        base = WorkspaceBranch(
+            kind=MAIN_BRANCH_KIND, name=main_branch, branch=main_branch, path=repo_root
+        )
+        for workspace in workspaces:
+            paths = _merge_tree_conflicts(repo_root, main_branch, workspace.branch)
+            if paths:
+                reports.append(ConflictReport(workspaces=(base, workspace), paths=paths))
     for i in range(len(workspaces)):
         for j in range(i + 1, len(workspaces)):
             a, b = workspaces[i], workspaces[j]

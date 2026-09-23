@@ -12756,7 +12756,7 @@ it.
 
 ## F156 (B) — `integration-preview` says `will_merge: true` for a task approval refuses outright
 
-**Status:** open, and twice declared out of scope by the changes nearest to it:
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- the preview says approval will *attempt* the merge, in a new field and in its reason; see FIXED at the end of this entry. Was: open, and twice declared out of scope by the changes nearest to it:
 `2026-09-01-a-conflict-refusal-names-what-clears-it/proposal.md:116` (*"F156 is not in scope"*) and
 `2026-09-01-a-loop-declares-whether-it-needs-evidence/design.md:403` (*"adjacent and is not fixed
 here"*). `integration-preview` still answers `will_merge: true` for a task approval refuses. [classified 2026-09-09, D-2]
@@ -12790,7 +12790,25 @@ commit will be attempted; whether it merges cleanly is checked at approval"*. C 
 concept, B because this is the one surface whose entire purpose is to be right about what approval
 will do.
 
+**FIXED 2026-09-23 (interactive session, Round 3, group 3f).** The vocabulary repair, as the entry
+and `ROUNDS.md` both put it; still no probe, since the docstring's reasoning holds. Both of the
+entry's options, because the rename alone needs a bundle: `integration-preview` now answers
+`will_attempt_merge` (what the route can actually know) and, when there are targets, a `reason` --
+*"approval will cherry-pick one commit into master; whether it applies cleanly is checked at
+approval, which refuses if it does not"* -- where it answered `""`. `will_merge` stays, same value,
+documented as the old name, because the committed drawer (`TaskDetailDrawer.tsx:42`) switches on it
+and no bundle can ship until `:8000` restarts past `c18a87b`; retiring it is a UI-round item. The
+drawer's own sentence ("Approving writes to your repository: it cherry-picks ... into ...") already
+describes an attempt, so nothing the operator reads today is false. Tests:
+`test_the_preview_names_the_commit_and_both_branches` (`test_dashboard_truth.py`) and the loop
+preview test in `test_loop_lands_its_work.py`, both of which pinned the empty reason -- the defect
+itself -- now pin the sentence and the new field.
 
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** The reason said "cherry-pick"; integration runs
+`git merge --no-ff` (`task_integration.integrate`). Now *"approval will merge one commit into master;
+whether it merges cleanly is checked at approval, which refuses if it does not"*. The committed
+drawer's own copy ("Approving writes to your repository: it cherry-picks ...", `TaskDetailDrawer.tsx`)
+has the same wrong verb -- a UI-round item alongside retiring `will_merge`.
 
 ## F157 (C) — a loop field on `POST /jobs` is silently dropped; the same field on `PATCH` is refused
 
@@ -15227,7 +15245,7 @@ and pruning is the whole repair, and the operator has to know that from outside 
 
 ## F189 (B) — the Workspace section shows a path that does not exist, and calls it where the work happened
 
-**Status:** open, and explicitly excluded by the nearest change:
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- each session reports its runs' recorded `workspace_dir`; see FIXED at the end of this entry. Was: open, and explicitly excluded by the nearest change:
 `2026-09-04-a-blocked-agent-workspace-holds-its-input/design.md:44` -- *"not a fix for F189 (the
 Workspace section's invented session path), which is adjacent in the ledger"*. [classified 2026-09-09, D-2]
 
@@ -15261,6 +15279,15 @@ disk  : C:\...\row5fixB\.agentweave\agents  -> does not exist (the .agentweave/ 
 A correct answer was available and was measured present in the same assertion:
 `.agentweave/worktrees/r5runnerr5b` **exists** and is where that turn actually ran. So the field is
 not merely unimplementable — the workspace resolution the run already performed knows the answer.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** `GET /agent/sessions/{agent}` now
+reports, per session, the newest `Run.workspace_dir` among that session's runs -- the value handed to
+the process as its cwd (design D7), which is exactly "the workspace resolution the run already
+performed". A session none of whose runs recorded one (rows older than the column) reports `null`,
+never an invented path; `SessionRow` already renders the path only when present, so no bundle.
+Absolute, as the column stores it. Test: `test_a_provider_session_reports_the_directory_its_turns_ran_in`
+(`test_agent_trigger.py`) -- on the old code it reads back the `...-session.json` string. Not
+re-driven with the screenshot.
 
 ## F190 (A) — RETIRED 2026-09-03 — no turn can ever say it was stopped, failed or interrupted, because the status map is built backwards from a payload sorted the other way
 
@@ -15521,7 +15548,7 @@ typo in a script or a scheduled job.
 
 ## F195 (C) — the conversation titler does not run in the project's directory, and the parameter that would make it is dead
 
-**Status:** open, and sized. `spec-queue/DECISIONS.md:263` counts 21
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- the titler resolves the project's own directory; the sweep found no other project spawn without `cwd`; see FIXED at the end of this entry. Was: open, and sized. `spec-queue/DECISIONS.md:263` counts 21
 `subprocess.run`/`Popen` sites of which 13 already pass `cwd`, leaving about 8, and `:545` decides to
 do the narrow repair and that sweep together. Neither has been done; the titler still inherits the
 Hub process's directory. [classified 2026-09-09, D-3]
@@ -15556,6 +15583,22 @@ Cheap to fix (the project's `ProjectWorkspace` path, threaded through the two ca
 parameter is already there waiting for it. Filed C rather than B because the titler is best-effort
 by design and a wrong title costs a rename — but it is a real cross-project leak of whatever
 configuration happens to sit above the Hub's launch directory.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** The repair and the sweep, together as
+DECISIONS decided. **Repair:** the dead `cwd` parameter is gone from `generate_conversation_title`
+and `maybe_generate_title`; the titler now resolves the project's directory itself, through
+`project_workspace.resolve_project_workspace` (the module attribute, as every other caller uses it),
+inside the session it already opens -- so no caller can forget it again, which is how the parameter
+went dead. A project whose directory cannot be resolved is **not titled**: the truncated title is
+the floor, and one written under another directory's instructions is worse. **Sweep:** re-counted
+2026-09-23 with an AST walk over `hub/hub/` -- 18 spawn sites, 13 passing `cwd`. The five that do
+not are project-independent by nature: `asyncio.run` in `migrations/env.py` (not a spawn), the OS
+folder picker (`native_dialog.py`), `taskkill` in `pty_runner.terminate_process_tree`, the
+console-borrowing `cmd.exe` in `subprocess_windows.py`, and nothing else. So the titler was the
+only project spawn without a directory. Tests (`test_title_generation.py`):
+`test_the_titler_runs_in_the_projects_own_directory`,
+`test_a_project_with_no_resolvable_directory_is_not_titled` -- both fail on the old code (`cwd`
+`None`; the unresolvable project titled anyway). Not re-driven with the ZEBRA control.
 
 ## What HELD — including the two things this row existed to ask
 
@@ -15669,6 +15712,14 @@ Harnesses kept: `t_sweep_row7_queue.py` (52 API assertions, run twice), `t_sweep
 (13 screen assertions), and `t_row6_hop_chain.py` re-run on this fixture for the hop leg. Five
 findings, four of them about what a refusal or a write *says*; the queue's mechanics themselves
 came through clean.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** Running in the project's primary checkout on an excerpt of the
+transcript -- untrusted text -- the titler inherited every built-in tool. It now runs `claude --tools ""`
+and `codex exec --sandbox read-only`. Measured with F195's ZEBRA control (Haiku, a directory whose
+`CLAUDE.md` demands the prefix): `--tools ""` keeps the project's memory (`ZEBRA B-tree Indexes in
+Databases`), while `--restricted` and `--setting-sources ""` both drop it, so neither is used. The
+project's own settings hooks still run on a titling call, as in its sessions -- the price of reading its
+memory, recorded rather than hidden.
 
 ## F196 (B) — one route writes a value another route's response model cannot serialise, and the project settings page is then unreachable in both directions
 
@@ -18535,7 +18586,7 @@ indistinguishable from every other one on the roster.
 
 ## F245 (B) — the conflict check never compares a task branch against the branch it will merge into
 
-**Status:** open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- each workspace is also checked against the project's main branch; see FIXED at the end of this entry. Was: open. Filed by the row-15 drive (`4488e8f`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `detect_conflicts` (`worktrees.py:1014`) walks `list_workspace_branches` and pairs each
 *provisioned Hub-owned checkout* with each other. The base branch is not a Hub-owned checkout, so
@@ -18556,11 +18607,23 @@ territory of F155's conflict remedy).
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 6.
 
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** `detect_conflicts(repo_root,
+main_branch=None)` now runs one `merge-tree` per workspace against *main_branch* before the pairwise
+pass, reporting each hit with the base as its first workspace (`kind: "main"`,
+`worktrees.MAIN_BRANCH_KIND`, `name` and `branch` the branch itself). `GET /worktrees/conflicts`
+passes `Project.main_branch` -- the operator-accepted branch integration merges into, not
+`detect_main_branch`'s suggestion; with none set, or one that does not resolve, nothing is checked
+against it, because a conflict against a guessed base is not a fact. No UI reads this route today,
+so no bundle. Tests (`test_worktrees.py`): `test_a_workspace_that_will_not_merge_into_main_is_reported`,
+`test_no_main_branch_or_an_unresolvable_one_checks_nothing_against_it`,
+`test_the_conflicts_route_checks_against_the_projects_main_branch` -- the route test fails on the old
+code with `[]`, the finding's own measurement. Not re-driven with leg 6.
+
 ---
 
 ## F246 (C) — finishing a task takes its conflict off the report while the divergence remains
 
-**Status:** open. Releasing the checkout still takes the branch out of
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- a released task branch with unmerged work stays in the conflict check unless the task was rejected; see FIXED at the end of this entry. Was: open. Releasing the checkout still takes the branch out of
 `list_workspace_branches`, so a finished task's branch still stops being conflict-checked while the
 Hub's own release event records unmerged commits on it. Named in no change. [classified 2026-09-09, D-3]
 
@@ -18587,6 +18650,27 @@ and `approved -> revision_needed` is a legal edge, so a reopened task resumes fr
 has been outside the conflict check for as long as it was closed.
 
 **Reproduction:** `t_sweep_row15_worktrees.py`, leg 7.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** New
+`worktrees.retained_task_branches(repo_root, task_ids, main_branch)`: one `for-each-ref` over
+`refs/heads/agentweave/task/`, kept where the task is one the caller names, the branch has no
+checkout, and (when the main branch resolves) `rev-list main..branch` is non-empty -- work that has
+not landed. `detect_conflicts` takes them as `retained`, so they meet every check, the main-branch
+one included (F245). The route names every task in the project **except `rejected`**: the entry
+calls a rejected branch going quiet "arguable", and keeping refused work in the report forever would
+be noise the operator cannot clear; `approved` work waiting on integration, and a reopened task's
+branch, stay visible -- the case the entry measured. Tests (`test_task_worktrees.py`):
+`test_a_released_task_branch_with_unmerged_work_stays_in_the_conflict_check`,
+`test_a_released_branch_whose_work_landed_or_was_not_asked_for_is_left_out`,
+`test_the_conflicts_route_keeps_an_approved_tasks_branch_and_drops_a_rejected_one` -- the route test
+fails on the old code with `[]`, the entry's "silent". Not re-driven with leg 7.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** With no main branch accepted, nothing could be called landed, so
+every approved branch stayed in the check forever and reported its successors as conflicts, and
+`detect_conflicts` ran a `merge-tree` per pair synchronously inside the async route. Now
+`retained_task_branches` retains nothing without a resolvable main branch (F245's "no guessed base"
+rule), and the route runs both git passes in `asyncio.to_thread`. The route test now accepts `main`
+first; the unit test pins the no-main case.
 
 ---
 
@@ -21092,7 +21176,7 @@ at any point.
 
 ## F275 (C) - an abandoned operator message renders after the failures it caused
 
-**Status:** open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it.
+**Status:** open. Filed 2026-09-03. A consequence of F87's fix, not an oversight in it. **Round 3d, 2026-09-23: deferred to a UI round.** The server order is not what decides the screen: `agentTimelineModel.groupIntoTurns` puts every non-delivered entry, abandoned or waiting, into `pending`, rendered after every turn -- so the repair is the UI placing an abandoned entry among the turns by its timestamp (with the route sorting it in, not appending it). That needs a bundle, and no bundle can be committed until `:8000` is restarted past `c18a87b` (the night window's group 5.4 gate, 2026-09-23).
 
 `_queued_entries_for` returns entries that are still `queued` **and** entries the Hub gave up on
 (`hub/hub/api/v1/agent_chat.py:249-280`), and both routes append its result **after** the timestamp
@@ -21202,7 +21286,7 @@ measurement inline so the next reader does not re-derive it.
 
 ## F277 (C) - `restrict_spec_writes` omits `MultiEdit`, the one write tool that edits a file the same way the three it names do
 
-**Status:** open. Filed 2026-09-04 (night window, task 2.2c of
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- `MultiEdit` added to the disallow list; the wider question stays open; see FIXED at the end of this entry. Was: open. Filed 2026-09-04 (night window, task 2.2c of
 `a-write-outside-the-workspace-is-recorded`). **Filed, deliberately not fixed** - see the last
 section.
 
@@ -21263,6 +21347,16 @@ spec-authoring turn runs, it is `authoring-rigor-and-scope`'s scenario rather th
 and the honest version of it asks the wider question this finding raises - whether a nudge that
 `Bash` walks straight through should be enumerating tools at all, or whether that posture wants the
 approver rather than a disallow list.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3f).** The one word, as `ROUNDS.md` placed
+it: `--disallowedTools Edit,MultiEdit,Write,NotebookEdit` (`runner_commands.py`), with the reason
+beside it. `test_spec_authoring_restriction.py`'s two literal assertions follow it, and
+`test_restrict_spec_writes_is_not_the_definition_of_a_write_tool` keeps its point -- the Claude
+disallow list is still not the definition of a write tool, since it can never name Codex's
+`apply_patch` -- with its F277 line flipped to `"MultiEdit" in disallowed`, as its own message
+asked. **The wider question is not answered here and stays open:** whether a restriction `Bash`
+walks straight through should enumerate tools at all, or hand this posture to the approver. That is
+`authoring-rigor-and-scope`'s question and a decision, not a repair.
 
 ---
 
@@ -22049,7 +22143,7 @@ once it ended.
 
 ## F288 (B) - a Hub restart ends a run without releasing anything but that run's own agent, so an agent parked on the crashed run's task checkout is stranded
 
-**Status:** open. Filed 2026-09-05 by the day window's D-1 drive, driving F286's seam independently
+**Status:** fixed (this commit) [Round 3, 2026-09-23] — reconciliation re-evaluates every agent with queued input in each project a run was interrupted in; see FIXED at the end of this entry. Was: open. Filed 2026-09-05 by the day window's D-1 drive, driving F286's seam independently
 of the night window's own A/B harness. No change in `openspec/changes/` covers it.
 
 **This is a breach of a requirement that shipped last night, not an unspecified gap.**
@@ -22141,6 +22235,20 @@ that the change touches no requirement in `openspec/specs/`. This one is a breac
 requirement. Whether the existing requirement already covers it and only the code is wrong, or the
 requirement needs a scenario naming reconciliation so a test can be written against it, is the spec
 loop's question rather than this finding's.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** A repair, not a spec track: the
+requirement is quantified over every run that reaches a terminal status, `interrupted` is one, and
+nothing in it exempts reconciliation — so the code was wrong and the requirement already right.
+`reconcile_interrupted_runs` now adds, after its commit, every `(project_id, agent)` with `queued`
+entries in each project it interrupted a run in (`_queued_agents_in`, the multi-project form of
+`redrain_queued_agents`' query), and hands the union to `schedule_or_defer` as before — so the
+pre-address deferral still applies and the parked agent is covered on the deferred path too, which a
+direct `redrain_queued_agents` call would have bypassed. Read after the commit, so entries
+`return_run_entries` put back count. Scoped to the affected projects, as the requirement is. Tests
+(`test_run_reconciliation.py`): `test_reconciliation_redrains_every_queued_agent_in_the_interrupted_runs_project`
+and `test_a_deferred_reconciliation_redrain_still_covers_the_parked_agent` — both fail on the old
+code (the parked agent is never scheduled). Not driven live: `t_d1_0905_reconcile_strand.py` is the
+harness that would show the 6m15s strand closing.
 
 ---
 
@@ -24513,7 +24621,7 @@ the eighth is a baseline that must pass in both. Restored, the file is 8/8 green
 
 ## F297 (B) — `agentweave stop` on Windows force-kills the Hub, so nothing the shutdown sequence does ever runs
 
-**Status:** open
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- Windows stop sends CTRL_BREAK into the Hub's console and waits 10 s before forcing; see FIXED at the end of this entry. Was: open
 
 `src/agentweave/cli.py:528-545`, `_hub_kill_pid`, the one thing `cmd_stop` calls once it has
 confirmed a native Hub is serving the recorded port:
@@ -24607,6 +24715,34 @@ taskkill /PID <pid from tk.marker.started> /F
   two are worth landing in that order.
 - The docstring is currently false on Windows and should stop claiming a SIGTERM that is not sent,
   whatever else is done.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** `_hub_native_start` needed no change:
+it already spawns the detached Hub with `CREATE_NEW_PROCESS_GROUP` (added with F341's
+`CREATE_NO_WINDOW`), so every Hub `cmd_hub_start` launches today can take the graceful path. The one
+obstacle left was that `GenerateConsoleCtrlEvent` only reaches processes sharing the caller's
+console, and the Hub has its own hidden one. New `_hub_break_windows(pid)` runs a stdlib-only helper
+process (`_CTRL_BREAK_HELPER`: `FreeConsole`, `AttachConsole(pid)`, ignore the event itself,
+`GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid)`) and then waits up to
+`_HUB_GRACEFUL_STOP_SECONDS` (10, the POSIX branch's figure) on a `SYNCHRONIZE` handle.
+`_hub_kill_pid` falls back to `taskkill /F` only when that fails -- a Hub started some other way, or
+one whose shutdown hangs -- so the bound holds. Docstring corrected. Measured first with a probe
+launched with `cmd_hub_start`'s exact flags: the helper exits 0, uvicorn runs the lifespan teardown
+and exits. What happens to run processes on the old forced path stays unmeasured, and no longer
+matters for a graceful stop: `terminate_all_active_runs` now runs. Tests
+(`tests/test_hub_graceful_stop.py`): two platform-independent tests of the fallback, and
+`test_a_hub_detached_as_cmd_start_does_it_runs_its_shutdown_when_stopped` (Windows only, real
+processes, through `_hub_kill_pid`) -- on the old code it fails with "stopped without running its
+lifespan shutdown". Not driven against a real Hub with a turn in flight; 2026-09-09's
+`f295_shutdown_drive.py` measured that case at 0.42 s with the same signal.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** `OpenProcess` failing was read as "already gone"; only
+`ERROR_INVALID_PARAMETER` means that now -- access denied falls through to the forced kill instead of
+printing "stopped" over a live Hub. The helper's comment was corrected (`SetConsoleCtrlHandler(None,
+True)` ignores Ctrl+C only; the helper is outside the target group anyway). **Open, not measured:**
+uvicorn runs lifespan teardown only after in-flight requests finish, so a request held longer than
+`_HUB_GRACEFUL_STOP_SECONDS` (10 s) still ends in `taskkill /F` -- the probe had no client connected.
+The review also could not confirm `uvicorn>=0.27` (the declared floor) handles SIGBREAK; 0.41 does, and
+without it CTRL_BREAK is no worse than the old hard kill.
 
 ---
 
@@ -26997,7 +27133,7 @@ reviews; on Codex app-server that agent does not get the review block).
 
 ## F326 (D) — a review turn refused after its checkout is provisioned leaves the checkout registered
 
-**Status:** open. Filed 2026-09-12 by R1 of `a-refused-review-leaves-nothing-behind`, and measured at unit level on `87dfbf4`. It is outside that change's verdict, which is about the task and not the checkout, and nothing proposes a fix.
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- a review checkout this call provisioned is released when the call ends without a started run; see FIXED at the end of this entry. Was: open. Filed 2026-09-12 by R1 of `a-refused-review-leaves-nothing-behind`, and measured at unit level on `87dfbf4`. It is outside that change's verdict, which is about the task and not the checkout, and nothing proposes a fix.
 
 **The claim.** Where a review turn is refused *after* `prepare_review_turn` has provisioned
 `.agentweave/reviews/<reviewer>`, the refusal leaves that checkout on disk and registered with git.
@@ -27033,6 +27169,28 @@ any reason"*, and the ledger should record where that is not true.
 **A possible repair, not proposed.** Move the address check and `build_command` above the review
 block, since neither depends on the review checkout (inferred). Or release the review checkout on
 a non-transient refusal raised after provisioning.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3e).** Neither of the entry's two repairs:
+moving the address check and `build_command` above the review block covers two of the three sites
+and none added later, and releasing only on a *non-transient* refusal leaves the transient one --
+the site R1 measured -- still breaching "for any reason". Instead `trigger_agent_directly` is now a
+thin wrapper over `_trigger_agent_directly` holding a `_ReviewCheckoutClaim`: the inner function
+marks it right after `prepare_review_turn` succeeds and marks it handed off right after the run's
+task is registered, and the wrapper releases the checkout (`worktrees.release_review_checkout`) if
+the call raises anything in between. Every refusal after provisioning is covered, including ones not
+yet written. Only a checkout *this call* provisioned is released -- a refusal ahead of provisioning
+("already running a turn") may be looking at one a live review stands in. The transient case now
+costs a re-provision on retry, which is what the spec's "for any reason" asks. The name stays on
+the wrapper, so `turn_scheduler` and every test patch are unchanged, and
+`test_trigger_agent_directly_has_one_caller` still passes. Test:
+`test_leg_t_leaves_no_review_checkout_behind` (`test_a_refused_review_leaves_nothing_behind.py`) --
+R1's measurement as a test, with the real `ensure_review_checkout`; on the old code the checkout is
+still registered.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** Two residuals, not changed: the release is awaited inside
+`except BaseException`, so a second cancellation during it skips it; and anything raising after
+delivery commits but before the run's task is created would release the checkout under a `running`
+Run with no process -- a strand that predates this round.
 
 ---
 
@@ -27679,7 +27837,7 @@ compare the activity line with the row's copied JSON.
 
 ## F338 (D) — delivery reads an entry as queued and then marks it delivered by key, so a withdrawal that lands in between is answered 200 and delivered anyway
 
-**Status:** open, still read from the source only — re-read 2026-09-15 (night `ledger-conflicts`): `deliver_entries_with_run` is unchanged in shape, now at `hub/hub/inbound_queue.py:133-170` (moved by `98385cd`), selecting `state == "queued"` at `:142-152` before the `Run` is added at `:160`, then setting `delivered` on those objects at `:161-164`; still not measured and not driven.
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- measured first (it reached), then delivery claimed with a conditional `UPDATE`; see FIXED at the end of this entry. Was: open, still read from the source only — re-read 2026-09-15 (night `ledger-conflicts`): `deliver_entries_with_run` is unchanged in shape, now at `hub/hub/inbound_queue.py:133-170` (moved by `98385cd`), selecting `state == "queued"` at `:142-152` before the `Run` is added at `:160`, then setting `delivered` on those objects at `:161-164`; still not measured and not driven.
 
 Filed 2026-09-13 by the day window's `d6-repair`, while fixing F328. **Read from
 the source. Not measured, and not driven.**
@@ -27710,6 +27868,30 @@ does what the operator had asked it to do in the first place.
 the write lock first (write the `Run` row) and read after it. Measure first. F328's drive
 (`scripts/drive/t_d6_0913_f328_withdraw_race.py`) is the pattern, with a plain turn in place of a
 refused review.
+
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** **Measured first, and it reaches.** A
+test commits an operator withdrawal from inside the window -- right after delivery's `SELECT`, on a
+second session -- and on the old code `deliver_entries_with_run` did not raise: the entry ended
+`delivered` over the committed `withdrawn`, with the run committed. So the autoflush question the
+entry left open does not close the window on a plain turn. Repaired as F328 was, and as the entry's
+own "possible repair" named: the run is added and flushed, then the entries are claimed with one
+`UPDATE ... WHERE id IN (...) AND state = 'queued'`, and a matched count short of the ids rolls the
+whole delivery back (claimed rows, the run, and the task binding the caller staged ahead of it) and
+raises the existing `"queue changed before atomic delivery"` -- the same error the pre-write check
+already raised, so the one caller's contract is unchanged. The returned objects are brought in line
+with `set_committed_value`, so nothing is written back by primary key. Test:
+`test_a_withdrawal_that_lands_between_delivery_read_and_write_is_not_overwritten`
+(`test_a_withdrawal_and_a_give_up_do_not_both_win.py`, beside F328's two sides) -- on the old code
+it fails with `DID NOT RAISE`. Not driven through the route.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** The lost claim surfaced as a bare `RuntimeError`, which
+`turn_scheduler._attempt_turn` does not catch: `POST /messages` answered 500 after committing the
+message, and `redrain_queued_agents`/reconciliation stopped at the first agent raising. Now
+`inbound_queue.QueueChangedError` (both mismatch sites) and the trigger's one delivery call turns it
+into a **transient** `TriggerAgentError`, so the scheduler re-reads what is still queued and counts
+nothing. Test: `test_a_delivery_that_loses_its_claim_is_a_transient_refusal_to_the_scheduler` --
+on the pre-follow-up code the error escapes `schedule_agent`.
 
 ---
 
@@ -28930,7 +29112,7 @@ recorded reason that disagrees with the row.
 
 ## F359 (B) — a run killed by the Hub's own write is marked failed without the snapshot or re-point a finished run gets
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- a locked bookkeeping write no longer ends the run, and a run that does fail no longer leaves its process running; see FIXED at the end of this entry. Was: open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 F349 is the same lock seen from a trigger request.
 
 **What happened.** Three runs ended on `(sqlite3.OperationalError) database is locked` raised by
@@ -28952,9 +29134,47 @@ not hold it.
 **Open to R1.** Whether the harness process is stopped when the read loop raises, or runs on
 unobserved, is not verified.
 
+**FIXED 2026-09-23 (interactive session, Round 3, group 3d).** The open question first, answered
+from the code: **it runs on, unobserved.** The `except` marks the run failed and `finally` drops the
+session from `active_ptys`; nothing terminates the process. So the finding's own evidence is the
+orphan finishing the work -- and the failure tail re-drains the queue, so the next turn can start in
+the same worktree beside it. That ruled out the finding's suggested repair (snapshot on the failure
+path): it would race a live agent. Two changes instead, in `agent_trigger.py`:
+
+1. **A bookkeeping write cannot end the run.** New `_record_observation(write, run_id=, what=)` runs
+   an observational write on a fresh session; `OperationalError` "database is locked" is retried
+   after each of `OBSERVATION_RETRY_DELAYS` (0.5 s, 2 s -- each attempt already waits out the 5 s
+   `busy_timeout`) and then dropped with a warning. Anything else still raises: a defect must stay
+   loud. Applied to every streamed output row and context-usage reading on **both** transports
+   (`_flush_line`, and the app-server path's `_on_event`/`_on_usage`), and to the closing
+   `"Run <status> (exit N)."` status row, which is written after the terminal commit and is the only
+   settled marker a stopped, failed or Codex run has. With the lock no longer fatal, the run reaches
+   its normal end, which snapshots the worktree and re-points the evidence -- the two steps the
+   finding says were skipped.
+2. **A run recorded as failed stops its process.** The PTY run's `except` now terminates the process
+   (`pty.terminate(force=True)`, the stop route's call) when it is still alive, best-effort, before
+   the failure tail releases the queue. The app-server path needed nothing: `run_turn`'s own
+   `finally` closes its subprocess.
+
+Tests (`test_agent_trigger.py`): `test_a_locked_output_write_does_not_fail_the_run` (every event
+attempted three times, run `completed`), `test_a_lock_that_clears_on_retry_still_records_the_row`,
+`test_a_run_failed_by_its_read_loop_does_not_leave_its_process_running`. All three fail on the old
+code for the stated reason (run `failed` on "database is locked"; `terminate` never called). Not
+driven live: reproducing the lock needs a second writer holding SQLite past `busy_timeout`.
+
+**Review follow-up 2026-09-23 (adversarial Opus pass over Round 3, applied in the next commit).** The provider session binding in `_flush_line` -- the first write
+of every run, its most contended moment -- was left unguarded, so a lock there still failed the run
+and the new terminate killed it mid-work. It now goes through `_record_observation(..., drop=False)`:
+retried like every streamed row, each attempt starting from the same state, and re-raised (never
+dropped) if the lock outlasts the retries, since the binding decides which provider session is
+resumed. Test: `test_a_lock_on_the_session_binding_is_retried_not_fatal` -- on the
+pre-follow-up code the run fails on "database is locked". The Codex app-server path still has no
+process terminate on failure (its `run_turn` closes the subprocess); not pursued while Codex is
+undrivable.
+
 ## F360 (B) — the checkpoint probe asks for the tasks "assigned to this agent" while a loop checkpoint lists the loop's whole queue, so half of a flow's checkpoints are marked failed
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed (this commit) [Round 3, 2026-09-23] -- the probe asks for the tasks the grader checks; reproduced and verified live on Haiku; see FIXED at the end of this entry. Was: open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 
 **Measured.** All 14 of the project's checkpoints were loop-scoped, and each envelope carried 32
 tasks. 7 passed and 7 failed. **Every failure was the `task_ids` dimension, with all 32 missing and
@@ -28973,6 +29193,21 @@ Hub's own list does not answer.
 
 **Why B.** It is a coin toss on every loop checkpoint. It reports half of a flow's checkpoints as
 failed, and it tells their successors to distrust a summary that has nothing wrong with it.
+
+**FIXED 2026-09-23 (interactive session, Round 3, group 3f).** The probe's task rule now asks for
+what `grade_probe` compares against: *"List the id of every task listed under the checkpoint's Tasks
+heading, whatever its status."* Scope-neutral, so it is right for the agent-scoped list and the
+loop-scoped one alike, and it names the heading `render_checkpoint` writes. `PROBE_PROMPT_VERSION`
+is `checkpoint-probe/2`, so every `WorkerInvocation` says which rule produced it. **Reproduced and
+verified live, not only reasoned:** `scripts/drive/t_f360_probe_task_rule.py` has Haiku (the probe's
+model) read a 32-task loop checkpoint whose written summary is in the agent's voice -- the old rule
+recovered **0/32 on three reads of three**, the finding's exact signature, and the new rule **32/32
+on three of three**. (A five-task version with a neutral summary recovered 5/5 under both rules: the
+failure needs the loop note plus a summary that names the agent's own work, which is what real loop
+checkpoints have.) Test: `test_the_probe_asks_for_the_tasks_the_grader_checks_not_an_assignment`
+(`test_checkpoint_generation.py`) -- the wording and the version, since a unit test cannot run the
+model; the drive script is the behavioural check. Checkpoints already marked `failed` by the old
+rule keep their status.
 
 ## F361 (B) — a peer message past the hop budget is suspended with no reason on its entry, and its sender is told it was sent
 
@@ -32053,3 +32288,26 @@ row, as a stall does, is one answer.
 **Why it is not in that change.** It changes what the firing writes, which that change's non-goals
 exclude. It also changes the cron path, not just the route. That change's Open Question 4 offers
 folding it in.
+
+## F414 (B) — `create_loop` with `initial_tasks` still commits the loop and job before a task can be refused
+
+**Status:** open. Filed 2026-09-23 by the adversarial review of Round 3 (read from the source, not
+driven). F265's repair (Round 3b) refuses the *authorisation* failure before any row is written, but
+`hub/hub/api/v1/jobs.py:700-755` still commits the job and loop, enabled, and then creates each
+initial task through `create_task_for_actor`, which can refuse per task: `guard_entry_status` on the
+body's status and `resolve_identifiers` (422 for an unknown requirement id, `tasks.py:~731-748`).
+Tasks are committed one at a time, so a refusal on the second leaves the first. The comment there
+("the F265 check above already refused every caller it would refuse") holds only for the
+authorisation gate, and D2's "validated up front" covers only the schema. The same half-created loop
+F265 described, through a different refusal. Repair shape: validate every initial task (status,
+identifiers) before the first commit, or create the job, loop and tasks in one transaction.
+
+## F415 (C) — `operator` is not a reserved agent name, and Round 3a gave it a meaning
+
+**Status:** open. Filed 2026-09-23 by the adversarial review of Round 3. F261's repair (Round 3a) made
+`"operator"` the runless sender of `POST /messages` and skips it in `GET /agents`' activity fallback and
+`GET /status`'s `agents_active`. `validate_agent_name` (`worktrees.py`) reserves only `user`, so an agent
+can be named `operator`: it would be hidden from the roster fallback and the active count, and its
+messages would collide with `OPERATOR_SENDER`. Repair shape: reserve `operator` beside `user` in
+`validate_agent_name` and `AGENT_NAME_RE`'s callers (CLAUDE.md: the CLI and Hub restatements change
+together), with a refusal naming why.

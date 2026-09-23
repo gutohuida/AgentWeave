@@ -485,6 +485,21 @@ async def test_leg_t_leaves_the_task_as_it_was(
     assert await _runs() == []
 
 
+async def test_leg_t_leaves_no_review_checkout_behind(
+    app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
+):
+    """F326: the deferral is raised after `prepare_review_turn` has provisioned
+    `.agentweave/reviews/<reviewer>`, and nothing released it -- against the main scenario "A
+    refused review leaves no checkout behind", *for any reason*. Measured by R1 on `87dfbf4` with
+    this leg and the real `ensure_review_checkout`, which the suite otherwise stubs."""
+    monkeypatch.setattr(worktrees, "ensure_review_checkout", _REAL_ENSURE_REVIEW_CHECKOUT)
+    await _leg_t(app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch)
+
+    repo = tmp_path / "repo"
+    assert worktrees.existing_review_checkout(repo, REVIEWER) is None
+    assert not worktrees.review_path(repo, REVIEWER).exists()
+
+
 # ---------------------------------------------------------------------------
 # 1.6 — F320 at the scheduler
 # ---------------------------------------------------------------------------

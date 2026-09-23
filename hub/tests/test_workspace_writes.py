@@ -134,10 +134,10 @@ def test_the_claude_path_keys_are_a_subset_of_the_approvers():
 def test_restrict_spec_writes_is_not_the_definition_of_a_write_tool():
     """Task 2.2c -- file the gap, do not inherit it, and do not fix it here.
 
-    `restrict_spec_writes` passes `--disallowedTools Edit,Write,NotebookEdit` and omits
-    `MultiEdit`, which the timeline counts as a write. So a spec-authoring agent restricted by
-    that flag may still be able to write through `MultiEdit`. That is a real gap and it is
-    recorded as F277; it is not this change's to fix.
+    `restrict_spec_writes` passed `--disallowedTools Edit,Write,NotebookEdit` and omitted
+    `MultiEdit`, which the timeline counts as a write -- recorded as F277, not this change's to
+    fix. F277 was fixed in Round 3f (2026-09-23), so the flag now names `MultiEdit`; the rest of
+    this test stands, because the two lists still are not one definition.
 
     What this change must not do is treat that flag as the answer to "which tools write". It is a
     permissions decision about one kind of agent, Claude-only by construction -- a
@@ -153,7 +153,7 @@ def test_restrict_spec_writes_is_not_the_definition_of_a_write_tool():
     command = build_command(runner="claude", cli="claude", prompt="hi", restrict_spec_writes=True)
     disallowed = set(command[command.index("--disallowedTools") + 1].split(","))
 
-    assert "MultiEdit" not in disallowed, "F277 fixed upstream -- retire the finding, not this test"
+    assert "MultiEdit" in disallowed  # F277
     assert "MultiEdit" in WRITE_TOOLS
     assert CODEX_WRITE_TOOL not in disallowed
     assert set(WRITE_TOOLS) != disallowed

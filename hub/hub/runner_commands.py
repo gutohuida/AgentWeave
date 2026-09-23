@@ -222,7 +222,11 @@ def _build_claude_command(
         # a different axis (F4/design D6, round 2): a yolo-configured agent is exactly the run
         # posture likeliest to act on a discovered fix instead of proposing one, so it is the one
         # this restriction must not have an exception for.
-        cmd += ["--disallowedTools", "Edit,Write,NotebookEdit"]
+        #
+        # `MultiEdit` is Claude's default tool for a multi-hunk edit, so leaving it out (F277) let
+        # the most ordinary way to change a file through silently -- a model reaching for it never
+        # learned it was meant to propose. A nudge, not a sandbox: `Bash` is not named either.
+        cmd += ["--disallowedTools", "Edit,MultiEdit,Write,NotebookEdit"]
     # An operator's `permission_mode` control arrives inside `control_args`, which is spliced in
     # above; the default posture below is appended *after* it and would win. Suppress the default
     # whenever the override supplied one, or the composer's Permissions pill would appear to work

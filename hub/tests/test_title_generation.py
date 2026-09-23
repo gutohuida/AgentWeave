@@ -20,7 +20,8 @@ from hub.db.models import Project
 
 def test_claude_command_is_a_one_shot_prompt() -> None:
     cmd = build_title_command(cli="claude", model="claude-opus-5", prompt="P")
-    assert cmd == ["claude", "--model", "claude-opus-5", "-p", "P"]
+    # `--tools ""`: the excerpt is untrusted text, run in the project's directory (F195).
+    assert cmd == ["claude", "--tools", "", "--model", "claude-opus-5", "-p", "P"]
     # None of an agent turn's apparatus: no streaming JSON, no MCP server, no permission mode.
     assert "--output-format" not in cmd
     assert "--mcp-config" not in cmd
@@ -29,7 +30,7 @@ def test_claude_command_is_a_one_shot_prompt() -> None:
 
 def test_codex_command_is_a_one_shot_prompt() -> None:
     cmd = build_title_command(cli="codex", model=None, prompt="P")
-    assert cmd == ["codex", "exec", "--skip-git-repo-check", "P"]
+    assert cmd == ["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only", "P"]
 
 
 def test_an_unsupported_cli_builds_nothing() -> None:
@@ -358,3 +359,61 @@ async def test_a_runner_from_another_project_is_rejected(app, auth_headers) -> N
     rejected = await app.put("/api/v1/projects/proj-test/settings", json=body, headers=auth_headers)
     assert rejected.status_code == 400
     assert "Unknown runner" in rejected.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# F195: where it runs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_titler_runs_in_the_projects_own_directory(
+    app, auth_headers, bind_runner, monkeypatch, tmp_path
+) -> None:
+    """The spawn inherited the Hub process's directory, so it read whatever `CLAUDE.md` sat above
+    the Hub's launch point instead of the project's. `_default_project_workspace` resolves every
+    project to this test's `tmp_path`, so that is where the titler has to run."""
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    directories = []
+
+    def _run(cmd, cwd):
+        directories.append(cwd)
+        return "Checkout flake investigation"
+
+    monkeypatch.setattr(conversation_titles, "_run_titler", _run)
+    await conversation_titles.generate_conversation_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+
+    assert directories == [str(tmp_path)]
+
+
+@pytest.mark.asyncio
+async def test_a_project_with_no_resolvable_directory_is_not_titled(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    import hub.project_workspace as project_workspace
+
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    calls = []
+    _fake_spawn(monkeypatch, "Should never be written", calls)
+
+    async def _unbound(session, project_id, **kwargs):
+        raise project_workspace.ProjectWorkspaceUnavailable(
+            "project has no bound working directory",
+            code="project_workspace_unbound",
+            directory_state="unbound",
+        )
+
+    monkeypatch.setattr(project_workspace, "resolve_project_workspace", _unbound)
+    result = await conversation_titles.generate_conversation_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+
+    assert result is None
+    assert calls == []
+    assert (await _title(conversation_id))[0] != "Should never be written"

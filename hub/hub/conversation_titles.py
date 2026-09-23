@@ -22,6 +22,7 @@ from typing import List, Optional
 
 from sqlalchemy import select
 
+from . import project_workspace
 from .conversations import get_conversation_by_id, title_from_message
 from .db.engine import async_session_factory
 from .db.models import Agent, AgentOutput, Conversation, InboundQueueEntry, Project, Runner
@@ -64,13 +65,19 @@ def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optio
     JSON, an MCP server, a permission posture, a context file. None of it applies to a process
     that reads one prompt and prints one line.
     """
+    # No tools, on either CLI (F195's review). Since F195 the titler runs in the project's own
+    # directory on an excerpt of the transcript, which is untrusted text -- a prompt injection in it
+    # must find nothing to act with. `--tools ""` removes every built-in tool and still reads the
+    # project's `CLAUDE.md`, which is the point of running there; measured 2026-09-23 with F195's
+    # ZEBRA control, `--restricted` and `--setting-sources ""` both drop that memory as well, so
+    # neither is used. The project's own settings hooks still run, as they do in its sessions.
     if cli == "claude":
-        cmd = [cli]
+        cmd = [cli, "--tools", ""]
         if model:
             cmd += ["--model", model]
         return cmd + ["-p", prompt]
     if cli == "codex":
-        cmd = [cli, "exec", "--skip-git-repo-check"]
+        cmd = [cli, "exec", "--skip-git-repo-check", "--sandbox", "read-only"]
         if model:
             cmd += ["--model", model]
         return cmd + [prompt]
@@ -91,7 +98,7 @@ def title_from_output(output: str) -> str:
     return title_from_message(candidate)
 
 
-def _run_titler(cmd: List[str], cwd: Optional[str]) -> str:
+def _run_titler(cmd: List[str], cwd: str) -> str:
     """Blocking spawn. Returns "" on any failure — this never raises into the caller."""
     try:
         completed = subprocess.run(  # noqa: S603 — argv list, no shell
@@ -165,9 +172,7 @@ async def _resolve_runner(db, project: Project, agent_name: str) -> Optional[Run
     return None
 
 
-async def generate_conversation_title(
-    *, project_id: str, conversation_id: str, cwd: Optional[str] = None
-) -> Optional[str]:
+async def generate_conversation_title(*, project_id: str, conversation_id: str) -> Optional[str]:
     """Upgrade a conversation's truncated title to a generated one, if the project asked for it.
 
     Every exit before the spawn is a silent no-op: off by default, an operator's title is never
@@ -193,6 +198,19 @@ async def generate_conversation_title(
         if not excerpt.strip():
             return None
         agent_name = conversation.agent
+
+        # F195: the project's own directory, resolved here rather than passed in. A `cwd`
+        # parameter existed and no caller ever supplied it, so every titling spawn inherited the
+        # Hub process's directory and read whatever `CLAUDE.md` sat above the Hub's launch point
+        # (measured: a project's "titles MUST begin with ZEBRA" was ignored, the AgentWeave
+        # repository's own memory read instead). A project whose directory cannot be resolved is
+        # not titled -- the truncated title is the floor, and a title written under another
+        # directory's instructions is worse than it.
+        try:
+            workspace = await project_workspace.resolve_project_workspace(db, project_id)
+        except project_workspace.ProjectWorkspaceError:
+            return None
+        cwd = str(workspace.root)
 
     cmd = build_title_command(
         cli=runner.cli, model=runner.model, prompt=_PROMPT.format(excerpt=excerpt)
@@ -224,15 +242,11 @@ async def generate_conversation_title(
     return title
 
 
-async def maybe_generate_title(
-    *, project_id: str, conversation_id: Optional[str], cwd: Optional[str] = None
-) -> None:
+async def maybe_generate_title(*, project_id: str, conversation_id: Optional[str]) -> None:
     """Fire-and-forget wrapper for the run-completion path. Never raises, never delays a turn."""
     if not conversation_id:
         return
     try:
-        await generate_conversation_title(
-            project_id=project_id, conversation_id=conversation_id, cwd=cwd
-        )
+        await generate_conversation_title(project_id=project_id, conversation_id=conversation_id)
     except Exception:  # noqa: BLE001 — a title is never worth failing a completed run over
         logger.debug("conversation titling failed", exc_info=True)

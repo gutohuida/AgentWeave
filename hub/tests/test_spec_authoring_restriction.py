@@ -14,7 +14,7 @@ def test_claude_gets_disallowed_tools_when_spec_document_is_open():
         runner="claude", cli="claude", prompt="hello", restrict_spec_writes=True
     )
     assert "--disallowedTools" in command
-    assert command[command.index("--disallowedTools") + 1] == "Edit,Write,NotebookEdit"
+    assert command[command.index("--disallowedTools") + 1] == "Edit,MultiEdit,Write,NotebookEdit"
 
 
 def test_claude_restriction_holds_under_yolo():
@@ -26,7 +26,7 @@ def test_claude_restriction_holds_under_yolo():
         restrict_spec_writes=True,
     )
     assert "--disallowedTools" in command
-    assert command[command.index("--disallowedTools") + 1] == "Edit,Write,NotebookEdit"
+    assert command[command.index("--disallowedTools") + 1] == "Edit,MultiEdit,Write,NotebookEdit"
     assert "--dangerously-skip-permissions" in command  # yolo's own flag is untouched
 
 
