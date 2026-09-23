@@ -63,6 +63,14 @@ async def list_logs(
     project: Tuple[str, str] = Depends(get_project),
     session: AsyncSession = Depends(get_session),
 ):
+    """A page of the project's log, **newest first** (F252); `offset` counts back from the newest.
+
+    It answered oldest first, so `limit=500` with no offset was the first five hundred events the
+    project ever recorded, and every later one was unreachable from the Logs screen, which
+    refetched that same window on every live event. `/events/history` already reads this table
+    newest first; the two routes now agree on which end an operator wants. The screen shows a page
+    in time order and asks for the next page back to reach older entries.
+    """
     project_id, _ = project
     q = select(EventLog).where(EventLog.project_id == project_id)
     if agent:
@@ -85,7 +93,7 @@ async def list_logs(
                 ),
             ) from exc
         q = q.where(EventLog.timestamp > since_dt)
-    q = q.order_by(EventLog.timestamp.asc()).offset(offset).limit(limit)
+    q = q.order_by(EventLog.timestamp.desc(), EventLog.id.desc()).offset(offset).limit(limit)
     result = await session.execute(q)
     return result.scalars().all()
 

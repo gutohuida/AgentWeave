@@ -19031,7 +19031,7 @@ it true.
 
 ## F252 (B) — the Logs screen renders the oldest 500 events a project ever recorded, and can never show a newer one
 
-**Status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** fixed (this commit) [UI-1, 2026-09-23] — the Logs route answers newest first and the screen pages back from the newest; see FIXED at the end of this entry. Was: open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
 
 `useLogs` (`hub/ui/src/api/logs.ts:34`) asks for `limit=500` and no offset. `list_logs`
 (`hub/hub/api/v1/logs.py:66`) answers:
@@ -19068,6 +19068,8 @@ page picked the wrong end. The volume strip on that page ("last 30m", `LogsView.
 from whatever half-hour happens to sit inside the first 500 rows.
 
 **Reproduction:** `t_sweep_row16_logs_events_sse.py`, leg 4.
+
+**FIXED 2026-09-23 (interactive session, UI-1).** `list_logs` orders `timestamp DESC, id DESC`, and `offset` counts back from the newest, the order `/events/history` already used. `useLogs` is now a `useInfiniteQuery` over that route: its first page is the newest `limit` entries, `loadOlder` fetches the page before, and the pages are joined in time order and de-duplicated by id (an entry arriving between two requests shifts the offsets, so a page can repeat a row, never skip one). `LogsView` keeps its tail layout and gains *Load older entries* at the top while there is an older page. Two things came with it. First, `n11_query_error_surface.DECL_RE` matched only `useQuery`, so the switch made the Logs call site vanish from `test_surface_ceilings`' count while it still ignored its error; the pattern now matches `useInfiniteQuery`. Second, the site was repaired rather than hidden: a failed read renders `Could not read this project's log.` instead of *No log entries yet*, its MISREPORT row is retired, and the two ceilings drop 100 to 99 and 55 to 54. F255's malformed `since`, paired with this in ROUNDS, was closed in Round 4c. Tests: `test_the_logs_page_is_the_newest_and_pages_back` (`test_a_request_means_what_it_says.py`), `logsNewestFirst.test.tsx` (2), `logsVolumeStrip.test.tsx` (failure line, load-older).
 
 ---
 

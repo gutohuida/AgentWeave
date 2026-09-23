@@ -162,7 +162,6 @@ CLASSIFIED: list[tuple[str, str, int, str, str, str]] = [
     ('components/layout/StatusBar.tsx', 'useStatus', 1, 'MISREPORT', '', 'every count falls back to zero (:25-28): 0 pending messages, 0 active tasks, 0 unanswered questions, 0 agents'),
     ('components/layout/StatusBar.tsx', 'useAgents', 1, 'SUPPRESSED', '', '`contextWarningCount` (:21) drops to 0 and the context warning (:113) does not render'),
     ('components/layout/StatusBar.tsx', 'useAccounting', 1, 'SUPPRESSED', '', '`exhausted={accounting?.budget.exhausted ?? false}` (:122) — an exhausted budget renders no notice'),
-    ('components/logs/LogsView.tsx', 'useLogs', 1, 'MISREPORT', '', "'No log entries yet. Trigger some activity to see entries here.' (:362)"),
     ('components/logs/LogsView.tsx', 'useLogAgents', 1, 'MISREPORT', 'PICKER', "the agent filter's options (:251)"),
     ('components/messages/MessagesFeed.tsx', 'useMessages', 1, 'MISREPORT', 'DEAD', "EmptyState 'No messages' (:143-145) — in a component nothing imports (F260), so no operator reaches it"),
     ('components/messages/MessagesFeed.tsx', 'useMessageHistory', 1, 'MISREPORT', 'DEAD', "EmptyState 'No message history' (:143-145), same dead component"),
@@ -217,7 +216,9 @@ def site_key(site: dict) -> tuple[str, str, int]:
     return (site["file"], site["hook"], site["occurrence"])
 
 
-DECL_RE = re.compile(r"useQuery\s*[<(]")
+# `useInfiniteQuery` too: the Logs hook became one (F252), and a pattern that saw only `useQuery`
+# lost its call site from the count while the site still ignored its error.
+DECL_RE = re.compile(r"use(?:Infinite)?Query\s*[<(]")
 EXPORT_FN_RE = re.compile(r"^export function (use\w+)")
 
 
@@ -291,9 +292,10 @@ def declarations() -> list[dict]:
             if m:
                 current = m.group(1)
                 current_start = lineno
-            if not DECL_RE.search(line):
+            decl = DECL_RE.search(line)
+            if not decl:
                 continue
-            pos = sum(len(x) + 1 for x in lines[: lineno - 1]) + line.index("useQuery")
+            pos = sum(len(x) + 1 for x in lines[: lineno - 1]) + decl.start()
             opts = balanced(text, pos)
             prefix = statement_prefix(text, pos)
             out.append(

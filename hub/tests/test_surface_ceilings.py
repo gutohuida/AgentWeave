@@ -33,14 +33,14 @@ DRIVE = REPO_ROOT / "scripts" / "drive"
 
 # Measured 2026-09-10. Lower these when the count drops; never raise one.
 CLIENTLESS_ROUTE_CEILING = 35
-UNHANDLED_SITE_CEILING = 100
+UNHANDLED_SITE_CEILING = 99  # 100 -> 99 2026-09-23: the Logs screen reads its error (F252)
 # Re-measured 2026-09-22, the one exception to "never raise". The 52 of 2026-09-10 was counted
 # through a table keyed by line number, and by then 5 of its MISREPORT rows already named lines
 # with no call site. Those 5 surfaces had dropped out of the count while still misreporting, and 3
 # more followed by 2026-09-21, which read as "dropped to 49" (F396). Keyed by hook and occurrence,
 # the same classifications give 55: 49 plus the 6 lost rows whose sites are still live. The other 2
 # were real repairs, and their rows were removed.
-MISREPORT_CEILING = 55
+MISREPORT_CEILING = 54  # 55 -> 54 2026-09-23: the same site, its MISREPORT row retired
 
 
 def _load(name: str) -> ModuleType:

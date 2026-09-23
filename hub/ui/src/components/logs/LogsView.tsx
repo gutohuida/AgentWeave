@@ -120,7 +120,7 @@ export function LogsView() {
   const bodyRef   = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
 
-  const { data: entries = [], isLoading, dataUpdatedAt } = useLogs({
+  const { data: entries = [], isLoading, error: logsError, dataUpdatedAt, hasOlder, loadOlder, isLoadingOlder } = useLogs({
     agent:    agentFilter || undefined,
     severity: severity !== 'all' ? severity : undefined,
     live,
@@ -355,6 +355,11 @@ export function LogsView() {
           <div className="space-y-2 p-3" aria-label="Loading log entries">
             {[0, 1, 2, 3, 4, 5].map((row) => <div key={row} className="skeleton h-6 w-full" aria-hidden="true" />)}
           </div>
+        ) : logsError && entries.length === 0 ? (
+          // A failed read is not an empty log: "No log entries yet" was what it said.
+          <p role="alert" className="font-mono text-xs p-4" style={{ color: 'var(--amber)' }}>
+            Could not read this project&apos;s log.
+          </p>
         ) : filtered.length === 0 ? (
           <p className="font-mono text-xs p-4" style={{ color: 'var(--text-3)' }}>
             {search || severity !== 'all' || agentFilter
@@ -375,6 +380,21 @@ export function LogsView() {
               <span className="shrink-0 w-20">AGENT</span>
               <span className="flex-1">MESSAGE</span>
             </div>
+            {/* F252: the screen opens on the newest page; older entries are a page back. */}
+            {hasOlder && (
+              <div className="flex justify-center py-1.5">
+                <button
+                  type="button"
+                  onClick={() => loadOlder()}
+                  disabled={isLoadingOlder}
+                  className="text-xs font-medium"
+                  style={{ color: 'var(--blue)' }}
+                  data-testid="logs-load-older"
+                >
+                  {isLoadingOlder ? 'Loading older entries…' : 'Load older entries'}
+                </button>
+              </div>
+            )}
             {filtered.map((entry) => (
               <LogLine key={entry.id} entry={entry} isNew={arrivedIds.has(entry.id)} />
             ))}

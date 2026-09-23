@@ -306,3 +306,25 @@ async def test_a_path_no_link_moved_reads_exactly_as_before(tmp_path):
 
     assert mcp_server._where(outside, os.path.realpath(workspace)) == mcp_server._OUTSIDE
     assert resolved_elsewhere(outside, workspace_dir=str(workspace)) is None
+
+
+async def test_the_logs_page_is_the_newest_and_pages_back(app, auth_headers):
+    """F252. The Logs route answered oldest first, so its 500-row window was the project's first
+    five hundred events and nothing newer could be read. Newest first, `offset` counting back."""
+    for n in range(5):
+        created = await app.post(
+            f"{P}/logs", json={"event_type": f"f252-{n}"}, headers=auth_headers
+        )
+        assert created.status_code == 201
+
+    def ours(rows):
+        return [row["event_type"] for row in rows if row["event_type"].startswith("f252-")]
+
+    first = await app.get(f"{P}/logs?event_type=f252-4", headers=auth_headers)
+    assert ours(first.json()) == ["f252-4"]
+    page = await app.get(f"{P}/logs?limit=500", headers=auth_headers)
+    assert ours(page.json()) == ["f252-4", "f252-3", "f252-2", "f252-1", "f252-0"]
+    newest_two = ours((await app.get(f"{P}/logs?limit=2", headers=auth_headers)).json())
+    older = ours((await app.get(f"{P}/logs?limit=2&offset=2", headers=auth_headers)).json())
+    assert newest_two == ["f252-4", "f252-3"]
+    assert older == ["f252-2", "f252-1"]

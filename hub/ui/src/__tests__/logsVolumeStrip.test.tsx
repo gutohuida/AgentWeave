@@ -115,3 +115,35 @@ describe('LogsView arrival flash', () => {
     expect(screen.getAllByText('event_b')[0].closest('.log-row-main')).toHaveClass('is-new')
   })
 })
+
+describe('LogsView on a failed read', () => {
+  it('says the log could not be read, not that it is empty', () => {
+    logsResult.current = {
+      data: [],
+      isLoading: false,
+      dataUpdatedAt: 0,
+      error: new Error('502'),
+    } as typeof logsResult.current
+    render(withQueryClient(<LogsView />))
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Could not read this project's log.")
+    expect(screen.queryByText(/No log entries yet/)).not.toBeInTheDocument()
+  })
+})
+
+describe('LogsView paging (F252)', () => {
+  it('offers the page before the one on screen when there is one', () => {
+    const loadOlder = vi.fn()
+    logsResult.current = {
+      data: [entry('a', 1)],
+      isLoading: false,
+      dataUpdatedAt: Date.now(),
+      hasOlder: true,
+      loadOlder,
+    } as typeof logsResult.current
+    render(withQueryClient(<LogsView />))
+
+    screen.getByTestId('logs-load-older').click()
+    expect(loadOlder).toHaveBeenCalledTimes(1)
+  })
+})
