@@ -8,12 +8,12 @@
     "parent_branch":  "master",
     "parent_sha":  "6c0a467",
     "stop_at":  "2026-09-23T07:00:00+01:00",
-    "iteration":  6,
+    "iteration":  8,
     "log_file":  ".claude/autonomous/2026-09-22-night-log.md",
     "findings_file":  "scripts/drive/FINDINGS.md",
     "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "unstaffed-group2-task2.1to2.4",
-    "next_action":  "Build tasks 2.1-2.4 of openspec/changes/an-unstaffed-review-names-its-holders/tasks.md -- the rung-3 rebuild (design D2/D3), building FROM the R8 block inside each task (2.1's exclude:Mapping, 2.2's three-layer mapping in run_divergence.py, 2.3's exact clause precedence/wording/join per the R8 block, 2.4's 500-char bound). Update every resolve_reviewer call site the R8/R9 grep counts name (test_reviewer_ladder.py 13, test_a_flow_names_what_it_cannot_staff.py 2, test_a_held_agent_is_busy.py 3, test_a_task_nothing_will_move_holds_nobody.py 1, scheduler.py decide_firing, run_divergence.py's _answer_failed_review) -- re-verify the count by grep first, per R6's own warning that this list has been wrong at every round. Write at least one test asserting the joined rung-3 string with == against a literal, for both completed and under_review. Run hub/tests/test_a_task_nothing_will_move_holds_nobody.py before and after (6.0's own guard). Verify with the group's own tests plus ruff/black/mypy over CI's exact paths, mutation-check at least one behavioral assertion live and revert, record measured results in tasks.md, then commit and push.",
+    "current":  "unstaffed-group2-task2.6to2.11",
+    "next_action":  "Build tasks 2.6-2.11 of openspec/changes/an-unstaffed-review-names-its-holders/tasks.md -- group 2's rung-3 test coverage, now that 2.1-2.4 (the rung-3 rebuild, commit 755c5b6) have landed. Build each from its own R8 (or, where none, R6/R3) block: 2.6 the LoopEngine-shaped firing test through a real POST .../jobs/{id}/run (second live loop fixture per R8, assert the whole reason with == and the 409/detail three-surface match), 2.7 divergence restaff on both branches (agent-completed and operator-completed), 2.8 an under_review row reaching rung 3 (assert capitalize_first fired, not a substring), 2.9 the twelve-agent 500-char fit plus its four R8 sub-mutations, 2.9b the fallback fixture with 64-character ids, 2.10 the rewritten _stall_run_to_increment test (R8's replacement, not the original vacuous one), 2.11 F367 route-level regression cover. This is the largest remaining piece of group 2 -- if it does not fit in one firing, split it the way iteration 7 split the original unstaffed-group2-impl item (recorded reasoning in the queue entry, not just the log), rather than rushing all six sub-tasks unverified. Run hub/tests/test_a_task_nothing_will_move_holds_nobody.py before and after (6.0's own guard). Verify with ruff/black/mypy over CI's exact paths, mutation-check at least one behavioral assertion live and revert, record measured results in tasks.md, then commit and push.",
     "queue":  [
                   {
                       "id":  "hub-refuses-groups1and3-impl",
@@ -65,11 +65,11 @@
                   },
                   {
                       "id":  "unstaffed-group2-task2.1to2.4",
-                      "status":  "open",
+                      "status":  "done",
                       "model":  "sonnet",
                       "effort":  "high",
                       "title":  "an-unstaffed-review-names-its-holders: group 2, tasks 2.1-2.4 (rung-3 rebuild)",
-                      "detail":  "The exclude:Mapping signature, the three-layer mapping in run_divergence.py, the R8 clause precedence/wording/join for rung 3, and the 500-char bound with its tail. Build from each task's own R8 block; the bullets below each block are superseded reasoning, not the spec. Update every resolve_reviewer call site (R8/R9 grep count, re-verified at build time)."
+                      "detail":  "Built 2026-09-23 iteration 8, commit 755c5b6 (found already implemented, uncommitted, from a prior firing -- verified rather than redone). 130 passed across the six relevant test files. grep exclude= count 27 (25 R9 baseline + 2 new literal tests, not drift). ruff/black/mypy clean. Mutation-checked the join's '. ' vs '; ' live and reverted cleanly (diff stat matched pre-mutation exactly). 6.0 regression guard: 31 passed."
                   },
                   {
                       "id":  "unstaffed-group2-task2.6to2.11",
