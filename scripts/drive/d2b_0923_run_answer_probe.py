@@ -163,3 +163,120 @@ async def test_f373_identity_map_mutates_the_earlier_row_in_place(
             f"\n[f373i] same_object={latest is earlier} snapshot={snapshot} "
             f"earlier_now={earlier.tick_count} latest={latest.tick_count}"
         )
+
+
+async def test_r2_a_firing_that_raises_before_its_row_exists(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """R2 (D-3b): a decline R1's table did not list. `_do_fire_job`'s `except` marks `run` failed
+    only `if "run" in locals()`; an exception raised before the row is built writes nothing, so the
+    route meets an earlier firing's row exactly as it does after an in-flight decline."""
+    from unittest.mock import patch
+
+    await _roster(app, auth_headers, bind_runner, OWNER)
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="r2raise", agent=OWNER)
+        job.session_mode = "resume"
+        job.last_session_id = "sess-r2raise"
+        db.add(
+            JobRun(
+                id="jobrun-r2raise-earlier",
+                job_id=job.id,
+                project_id=PROJECT,
+                fired_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                status="skipped",
+                trigger="scheduled",
+                error_summary="loop queue is stalled: 1 still awaiting a prerequisite's approval",
+                requested_by_run_id="run-r2-sentinel",
+            )
+        )
+        await db.commit()
+
+    async def _boom(*_a, **_k):
+        raise RuntimeError("r2 probe: resume lookup failed")
+
+    with patch("hub.scheduler.conversation_for_provider_session", _boom):
+        await _press(app, auth_headers, job.id)
+    async with async_session_factory() as db:
+        from sqlalchemy import select
+
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        print(
+            f"[r2raise] rows={[(r.id, r.status, r.tick_count, r.requested_by_run_id) for r in rows]}"
+        )
+
+
+async def test_r2_requester_sentinel_survives_a_counted_stall(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """R2: an operator press carries no run identity, so "the requester is unchanged" is vacuous
+    unless the earlier row holds a value a press could overwrite. Seed one and press again."""
+    await _roster(app, auth_headers, bind_runner, OWNER)
+    async with async_session_factory() as db:
+        job, _loop, task = await _make_loop_job(db, suffix="r2sent", agent=OWNER)
+        task.status = "blocked"
+        await db.commit()
+    await _press(app, auth_headers, job.id)
+    async with async_session_factory() as db:
+        from sqlalchemy import select
+
+        row = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().one()
+        print(f"[r2sent] after first press requested_by={row.requested_by_run_id!r}")
+        row.requested_by_run_id = "run-r2-sentinel"
+        await db.commit()
+    await _press(app, auth_headers, job.id)
+    async with async_session_factory() as db:
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        print(f"[r2sent] rows={[(r.id, r.tick_count, r.requested_by_run_id) for r in rows]}")
+
+
+async def test_r2_a_firing_that_raises_after_its_turn_started(
+    app, auth_headers, bind_runner, live_scheduler
+):
+    """R2: the route's own advice is "ask the route what it returns when the function it calls
+    raises". Here the firing writes its row, the turn starts, and a later step raises: the row reads
+    `failed`, and the route re-decides the loop before reading it."""
+    from unittest.mock import patch
+
+    await _roster(app, auth_headers, bind_runner, OWNER)
+    async with async_session_factory() as db:
+        job, _loop, task = await _make_loop_job(db, suffix="r2late", agent=OWNER)
+
+    async def _start_then_raise(project_id, agent):
+        async with async_session_factory() as db:
+            await _running_turn(db, agent=agent, suffix="r2late")
+        raise RuntimeError("r2 probe: failed after the turn started")
+
+    # Not `_press`: its `_no_spawn` patches the same name and would shadow this one.
+    with patch("hub.turn_scheduler.schedule_agent", _start_then_raise):
+        res = await app.post(f"/api/v1/projects/{PROJECT}/jobs/{job.id}/run", headers=auth_headers)
+    print(f"\n[{job.id}] {res.status_code} {res.text}")
+    async with async_session_factory() as db:
+        from sqlalchemy import select
+
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        t = await db.get(Task, task.id)
+        print(
+            f"[r2late] rows={[(r.status, r.error_summary) for r in rows]} task={t.status}/{t.assignee}"
+        )
+
+
+async def test_r2_a_terminal_schedule_failure(app, auth_headers, bind_runner, live_scheduler):
+    """R2, adjacent: `schedule_agent` reports that no turn began (`terminal_failure`). The firing
+    marks its row `failed` and still returns `True`, so the route takes the success branch."""
+    from unittest.mock import AsyncMock, patch
+
+    from hub.turn_scheduler import ScheduleResult
+
+    await _roster(app, auth_headers, bind_runner, OWNER)
+    async with async_session_factory() as db:
+        job, _loop, _task = await _make_loop_job(db, suffix="r2term", agent=OWNER)
+    refused = ScheduleResult(waiting_reason="r2 probe: runner refused", terminal_failure=True)
+    with patch("hub.turn_scheduler.schedule_agent", AsyncMock(return_value=refused)):
+        res = await app.post(f"/api/v1/projects/{PROJECT}/jobs/{job.id}/run", headers=auth_headers)
+    print(f"\n[{job.id}] {res.status_code} {res.text}")
+    async with async_session_factory() as db:
+        from sqlalchemy import select
+
+        rows = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        print(f"[r2term] rows={[(r.status, r.error_summary) for r in rows]}")

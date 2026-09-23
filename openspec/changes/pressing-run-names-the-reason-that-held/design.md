@@ -23,7 +23,12 @@ in `_fire_job_internal` (`scheduler.py:2908-3466`), read in R1:
 | In flight (`DECISION_IN_FLIGHT`, F23) | `:3193-3208` | **no** | **The newest row's reason if it is `skipped` (F373)**, else the in-flight answer |
 | Stall, first firing | `:3243-3264` | yes, `skipped` | That row's reason (409) |
 | Stall continues (D6 of `loop-notices-and-reacts`) | `:3222-3242` | **no**, counts `tick_count` | That row's reason (409), correctly |
-| Exception after `run` exists | `:3444-3464` | yes, `failed` | 500 with its summary |
+| Exception before `run` exists (R2) | `:2941-2998`, caught at `:3442` | **no**: `if "run" in locals()` is false | **The newest row's reason if it is `skipped`** (measured, R2), else 500 `Failed to fire job` |
+| Exception after `run` exists | `:3444-3464` | yes, `failed` | **Re-decides first**: the in-flight answer where `_loop_in_flight_decision` finds the queue in flight (measured, R2), else 500 with its summary |
+
+R2 rebuilt this table from `grep "return False\|return True"` over `:2908-3466` before reading R1's,
+and agreed on nine rows. It found the two exception rows' behaviour R1 did not list: `_do_fire_job`
+has one `try`, and its `except` marks a row `failed` only when the row already exists.
 
 The route tells "this press wrote the row" apart from "an earlier firing wrote it" by comparing the
 newest row's **id** before and after (D11 of `a-spent-allowance-holds-the-queue`, `:1363-1375`). A
@@ -53,6 +58,9 @@ It returns only the busy sentence. The route then re-derives which half held wit
 | flow, only task `in_progress` under the owner, owner mid-turn, a sibling free, an hour-old `skipped` row | 409 `loop queue is stalled: 1 still awaiting a prerequisite's approval` — **false (F373)**. The earlier row keeps `tick_count=1` and its requester |
 | continuing stall, pressed twice | 409 with the stall reason both times; one row, `tick_count` 1→2. Correct |
 | **identity**: in one session, read the newest row, fire, read again | `latest is earlier` → `True`; `earlier.tick_count` 1→2 **in place** |
+| **R2** documentless loop, owner idle, `session_mode="resume"`, the resume lookup raises, an hour-old `skipped` row | 409 `loop queue is stalled: 1 still awaiting a prerequisite's approval`. No row written. **False**: the firing crashed, and the answer is an earlier firing's stall, as a conflict |
+| **R2** documentless loop, owner idle, the turn starts and a later step raises (`schedule_agent` patched to start a `Run`, then raise) | 409 `Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong…` over the row **this press wrote**, which reads `failed` / `r2 probe: failed after the turn started`. **False** |
+| **R2** `schedule_agent` returns `terminal_failure` | 200 `{"success": true}` over a row reading `failed`. **Out of scope**: the firing returns `True` (F412, Open Question 3) |
 
 The last row is the constraint on D3. The session factory is `expire_on_commit=False`
 (`db/engine.py:163`), and `_stall_run_to_increment` returns the identity-mapped instance the route
@@ -98,8 +106,8 @@ BUSY_NO_FREE_AGENT = "no_free_agent"    # a flow whose pool is empty
 
 
 class LoopBusyRefusal(NamedTuple):
-    reason: str   # `_loop_agent_busy_reason`'s sentence, unchanged
-    held: str     # one of the three constants above
+    reason: str      # `_loop_agent_busy_reason`'s sentence, unchanged
+    condition: str   # one of the three constants above
 
 
 async def _loop_flow_busy_refusal(session, loop, agent) -> Optional[LoopBusyRefusal]: ...
@@ -109,8 +117,10 @@ async def _loop_flow_busy_reason(session, loop, agent) -> Optional[str]:
 ```
 
 `_loop_flow_busy_refusal` has today's body with its three returns labelled. Where
-`_agents_a_loop_may_staff` returns `[]`, `held` is `BUSY_LOOP_SCOPE` if `loop.spec_document_id is None`,
-else `BUSY_NO_FREE_AGENT`. That is the same predicate `_agents_a_loop_may_staff` itself uses
+`_agents_a_loop_may_staff` returns `[]`, `condition` is `BUSY_LOOP_SCOPE` if `loop.spec_document_id is None`,
+else `BUSY_NO_FREE_AGENT`. **Not `held`** (R1's name, renamed by R2): in this module *held* means a
+provider-allowance hold (`provider_hold`, `held_agents`), and the guard itself refuses a held
+agent, so `refusal.held == BUSY_EMPTY_QUEUE` would read as a statement about a hold. That is the same predicate `_agents_a_loop_may_staff` itself uses
 (`:1258`), and the archived change's D7 defines "documentless" by it. The docstring moves with the
 body; the wrapper keeps a one-line docstring pointing at it.
 
@@ -127,9 +137,9 @@ get `True` from `("", …)`.
 
 ### D2 — One clause per condition; a flow's two sentences do not move
 
-`run_job` maps `held` to `why`:
+`run_job` maps `condition` to `why`:
 
-| `held` | Documentless loop | Flow |
+| `condition` | Documentless loop | Flow |
 |---|---|---|
 | `BUSY_EMPTY_QUEUE` | `this loop's queue holds no open task` | `this loop's queue holds no open task for another agent to take` (unchanged) |
 | `BUSY_LOOP_SCOPE` | `this loop's work goes only to {job.agent}, the agent its job names` | — (unreachable: a flow is never `BUSY_LOOP_SCOPE`) |
@@ -178,6 +188,30 @@ counted = (
 answered_by_row = wrote_row or counted
 ```
 
+**R2: the row this press wrote is its answer, whatever its status.** `wrote_row` with `success` false
+means the row reads `skipped` or `failed`: every path that writes and declines sets one of the two
+(Context table). Today only `skipped` is read off the row. A `failed` row falls through to
+`_loop_in_flight_decision`, which re-decides the loop *after* the failure and, measured, answers
+*"already being worked … nothing is wrong"* over a firing that crashed after its turn started.
+So the branch becomes:
+
+```python
+if answered_by_row:
+    if latest_run.status == "skipped":
+        raise HTTPException(409, detail=latest_run.error_summary or "Job was skipped.")
+    raise HTTPException(500, detail=latest_run.error_summary or "Failed to fire job")
+# Below here the press wrote nothing and counted into nothing.
+loop = await _job_loop(session, job)
+...busy re-ask, then the in-flight answers, then 500 "Failed to fire job"
+```
+
+A counted row is always `skipped` (`_stall_run_to_increment` matches only `skipped`, `:978`), so the
+`failed` arm is reached only through `wrote_row`. The final 500 no longer reads
+`latest_run.error_summary`: below the gate there is no row of this press's to read, and the existing
+`if … wrote_row …` guard on it becomes dead. Where the press wrote nothing and nothing refuses or is
+in flight, the firing raised before its row existed (Context, R2 rows), and *"Failed to fire job"* is
+the true answer; the exception is in the Hub's log, which is where `_do_fire_job` sends it.
+
 Two gates change:
 
 - The busy-guard re-ask runs where `not answered_by_row` (today: `not wrote_row`). A counted stall
@@ -188,10 +222,13 @@ Two gates change:
   (`scheduler.py:2984`), so the route can meet a counted stall with a busy agent only where the agent
   became busy between the two. Task 1.9 simulates that race with a patched guard. It cannot be
   staged with real state.
-- `if latest_run and latest_run.status == "skipped"` becomes
-  `if latest_run is not None and answered_by_row and latest_run.status == "skipped"`. An in-flight
-  decline now falls through to `_loop_in_flight_decision`, and the answer is the in-flight one:
-  *"already being worked … nothing is wrong"*, or the held form where the work waits on a hold.
+- The row is read only where `answered_by_row` (the block above). An in-flight decline now falls
+  through to `_loop_in_flight_decision`, and the answer is the in-flight one: *"already being worked
+  … nothing is wrong"*, or the held form where the work waits on a hold. A firing that raised before
+  its row existed falls through all three and answers 500 *"Failed to fire job"*, not an earlier
+  firing's stall.
+- `_loop_in_flight_decision` is asked only where the press wrote nothing (it is below the gate). It
+  is never asked to explain a row this press wrote.
 
 The requester stamp (`:1376-1381`) stays keyed on `wrote_row`. A counted row was written by an earlier
 firing, and the requirement says the route *"SHALL NOT change that record's requester"*.
@@ -221,6 +258,15 @@ The MODIFIED requirement:
 - adds three scenarios: the documentless open-task case with a sibling free, the documentless empty
   queue, and F373's in-flight press over an earlier skipped record. It also adds an `AND` to the
   counted-stall case under the existing *"A firing that recorded its own refusal…"* scenario.
+- **R2 adds** a paragraph and two scenarios: a firing that recorded a failure is answered as a
+  failure carrying its reason, never as work in flight; a firing that recorded nothing and was
+  neither refused nor in flight is answered as a failure to fire, never with an earlier firing's
+  reason.
+
+**R2: `agent-loops:793` does not join the delta.** Its first sentence names two of the guard's three
+conditions, and its fifth paragraph states the third (the empty queue) as its own SHALL. Together
+they state the guard completely, and this change moves no decision the guard makes. The sentence the
+operator reads is governed at `:1499`, which this delta rewrites.
 
 ## Risks / Trade-offs
 
@@ -232,6 +278,15 @@ The MODIFIED requirement:
   guard), the sentence names it twice: *"X is already running a turn, and this loop's work goes only
   to X…"*. That is deliberate. The repetition is what tells the operator that no other agent is
   involved. Open Question 2 offers a shorter form.
+- **`wrote_row` can be a concurrent tick's row (R2).** A cron firing that writes a row between the
+  route's two reads makes `wrote_row` true for a press that wrote nothing, and the route answers
+  from the tick's row. This is today's behaviour, unchanged, and narrower than F373: both firings ran
+  within milliseconds against the same queue. D3 does not make it worse; `failed` rows are read the
+  same way `skipped` ones already are.
+- **Plain jobs move too (R2).** The gate is not loop-specific. A plain job whose firing raised before
+  its row existed, after an earlier coalesced `skipped` row, answered 409 with the coalesce reason;
+  it will answer 500 *"Failed to fire job"*. A plain job's counted coalesce is still answered from
+  its row, because `counted` covers it.
 - **MCP callers see a changed sentence.** An agent that pattern-matched *"no other agent is free"* on
   a documentless loop sees the scope clause instead. Nothing in `hub/hub/`, `src/agentweave/`, `hub/ui/src/` or `docs/`
   contains either moved phrase except `jobs.py` itself (`grep`, R1).
@@ -247,6 +302,14 @@ The MODIFIED requirement:
 2. **Wording of the scope clause.** Proposed: *"this loop's work goes only to {agent}, the agent its
    job names"*. Shorter: *"this loop runs only {agent}"*. R2/R3 may change it; the spec pins meaning,
    not words.
+
+3. **Fold F412 in?** (filed by R2, measured). When `schedule_agent` reports that no turn began
+   (`terminal_failure`), `_do_fire_job` marks its row `failed` (`scheduler.py:3400-3406`) and still
+   returns `True`, so `run_job` answers `200 {"success": true}`. It is F108's open class, on this
+   route. It stays out because `terminal_failure` has known dishonest defaults (F108's section: six
+   early returns claim it without meaning it), so reading it here needs its own look at which
+   reasons are really terminal, and because it changes the success branch, which this change does
+   not touch. Default: separate finding.
 
 ## Round log
 
@@ -269,3 +332,34 @@ The MODIFIED requirement:
   that no UI, doc, template or test outside `hub/tests/` matches on the moved sentences; and check the
   `agent-loops` requirement at `:793` (the busy guard's own), whose first sentence names only two
   of the three conditions, for whether this delta must touch it too.
+
+### Round 2 — 2026-09-23 (day window, D-3b)
+
+- **Rebuilt the decline table from `grep` before reading R1's.** Agreed on nine rows and their line
+  ranges. Found two R1 did not describe: an exception **before** the row exists writes nothing (the
+  `except` guards on `"run" in locals()`), and an exception **after** it writes `failed` but is then
+  re-decided by `_loop_in_flight_decision`. Both measured through the route (Context, R2 rows): the
+  first answered an hour-old stall as a 409, the second answered *"already being worked … nothing is
+  wrong"* over the `failed` row the press itself wrote.
+- **D3 widened**: the row the press wrote is its answer whatever its status (`skipped` → 409,
+  `failed` → 500), and the in-flight re-decision is asked only where the press wrote nothing. This is
+  the argument D3 already made for `skipped`, applied to the other status a declining write can have.
+  Tasks 1.12, 1.13 and 2.3; spec delta paragraph and two scenarios.
+- **Re-ran R1's probe** on `0beef69`: all seven cases reproduce exactly (F400's two false clauses, the
+  flow control, F373's stale stall, the continuing stall, and the identity trap,
+  `same_object=True snapshot=1 earlier_now=2`). Three R2 cases added to the probe.
+- **Renamed `LoopBusyRefusal.held` → `condition`**: *held* is this module's word for a provider hold.
+- **Made two assertions non-vacuous.** An operator's press sends no run identity, so R1's *"the
+  earlier row's requester is unchanged"* (tasks 1.7, 1.8) compared `None` with `None`. Measured: a
+  seeded `run-r2-sentinel` survives a counted stall. The tasks now seed one.
+- **Checked `agent-loops:793`**: no delta needed (D4).
+- **Tightened the precedence**: where two conditions hold the answer names the empty queue *alone*;
+  R1's "SHALL name the empty queue" did not forbid naming the scope beside it.
+- **Checked R1's other claims**: 18 test files call `_fire_job_internal` (`grep -l`);
+  `test_board_agent_role.py:385`/`:420` stage documentless loops and pin the roster clause;
+  `test_a_task_nothing_will_move_holds_nobody.py:454` stages a flow and is unaffected; `:574` stages a
+  documentless empty queue and pins only an absence, so it keeps passing (task 1.3 adds the new
+  assertion). No file under `hub/hub/` except `jobs.py`, nor `hub/ui/src/`, `src/` or `docs/`,
+  contains either moved phrase. The board's re-ask (`jobs.py:357`) still reads only the sentence.
+- **Filed F412 (B)**: a terminal schedule failure answers Run with `200 {"success": true}`. Open
+  Question 3.

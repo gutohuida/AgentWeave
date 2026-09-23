@@ -12,8 +12,12 @@ Each of these can be checked with no person watching.
    The earlier row's `tick_count` and requester are unchanged.
 4. **A continuing stall still answers from its own row.** Control 1.8 passes before and after, and
    1.9 pins the gate that skips the busy re-ask for a counted stall.
+4a. **A firing that fails is answered as a failure** (R2). Tasks 1.12 and 1.13 fail before and pass
+   after: a crash before the row exists answers 500 *"Failed to fire job"*, not an earlier stall; a
+   crash after the turn started answers 500 with the row's own reason, not *"already being
+   worked … nothing is wrong"*.
 5. **One derivation.** `grep -n "_loop_has_open_task" hub/hub/api/v1/jobs.py` finds nothing after
-   the fix. The route reads `refusal.held`.
+   the fix. The route reads `refusal.condition`.
 6. **Nothing else moved.** Full `hub/tests/` count recorded in 2.5, with only 1.6's two assertions
    changed on purpose.
 7. **The real route and the real MCP tool**, on a trial Hub (3.1, 3.2). Record the detail strings

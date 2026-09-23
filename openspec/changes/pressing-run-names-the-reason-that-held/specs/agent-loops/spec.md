@@ -11,7 +11,7 @@ there is no firing record to read a reason from, and the most recent record is s
 firing's.
 
 The answer SHALL name the condition that held, and SHALL NOT state a condition that did not hold or
-that was not the reason. Where more than one holds, the answer SHALL name the empty queue.
+that was not the reason. Where more than one holds, the answer SHALL name the empty queue alone.
 
 Where the loop's queue holds no task in a non-terminal status, the answer SHALL say so, and SHALL
 NOT state that no other agent is free. Stating that no other agent is free when one is free tells
@@ -34,6 +34,13 @@ SHALL ask the guard again before anything else, because the guard is the first q
 asked, and SHALL answer a refusal with the guard's reason. A record some earlier firing wrote, and
 this firing did not count into, is not this firing's answer. The route SHALL NOT change a record's
 requester to whoever pressed Run unless the manual firing wrote that record.
+
+Where the manual firing wrote a record, that record SHALL be the answer whatever it says. A record of
+a failure SHALL be answered as a failure carrying that record's reason, and SHALL NOT be answered by
+deciding the loop again after the failure; the route SHALL NOT state that the work is already being
+worked, or that nothing is wrong. Where the firing wrote no record, counted into none, the guard does
+not refuse, and the queue is not in flight, the firing failed before it recorded anything, and the
+answer SHALL be a failure to fire. It SHALL NOT carry an earlier firing's reason.
 
 Where the firing declined because every task on the queue is in flight, and an agent those tasks are
 staffed to is held, the answer SHALL name that agent and the time its hold ends. It SHALL NOT state
@@ -96,6 +103,19 @@ start until the hold ends.
 
 - **WHEN** the operator presses Run on a loop, the firing records a skipped firing with its reason, and the loop's agent has become busy since
 - **THEN** the answer is a conflict carrying the recorded reason, not the busy guard's
+
+#### Scenario: A firing that fails after its turn started is answered as a failure
+
+- **WHEN** the operator presses Run on a loop, the firing writes its record, its turn starts, and a later step of the firing fails, so the record reads as failed
+- **THEN** the answer is a server error carrying the record's reason
+- **AND** it does not state that the work is already being worked, or that nothing is wrong
+
+#### Scenario: A firing that fails before recording anything is not answered with an earlier firing's reason
+
+- **WHEN** a loop's latest record is an earlier firing's skipped record, the operator presses Run, the loop's agent is idle, and the firing fails before it writes a record
+- **THEN** the answer is a server error reading that the job failed to fire
+- **AND** it does not carry the earlier record's reason
+- **AND** the earlier record's count of firings and its requester are unchanged
 
 #### Scenario: A continuing stall is answered from the record it counted into
 

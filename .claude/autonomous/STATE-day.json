@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "6c0a467",
     "stop_at": "2026-09-23T17:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-23-day-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "d3b-r2",
-    "next_action": "Do D-3b/spec loop B, R2 on openspec/changes/pressing-run-names-the-reason-that-held (F400+F373): an independent re-derivation against hub/hub/api/v1/jobs.py (run_job's not-success branch, the board's :357 re-ask) and hub/hub/scheduler.py (_loop_flow_busy_reason, _agents_a_loop_may_staff, _stall_run_to_increment, every return False in _fire_job_internal). Rebuild the decline-path table from grep BEFORE reading design's; check whether agent-loops :793 must join the delta; re-run scripts/drive/d2b_0923_run_answer_probe.py (copy under hub/tests as test_zz_probe_*.py, -s, delete). Fix what it finds, write Round 2 in design.md's Round log, tick task 0.1, openspec validate --strict.",
+    "current": "d4b-r3",
+    "next_action": "Do D-4b/spec loop B, R3 on openspec/changes/pressing-run-names-the-reason-that-held (F400+F373): a second independent re-derivation that must not start from R2's notes. Re-derive run_job's not-success branch (hub/hub/api/v1/jobs.py) against every way _do_fire_job (hub/hub/scheduler.py) can end, including its single try/except and the success-with-failed-row path (F412), and check R2's widened D3 (answer from the written row whatever its status; in-flight re-decision only where nothing was written) against the code and against the existing tests that pin run_job's 500/409 answers (grep hub/tests for 'Failed to fire job'). Re-run scripts/drive/d2b_0923_run_answer_probe.py (copy under hub/tests as test_zz_probe_*.py, -s, delete). Fix what it finds, write Round 3 in design.md's Round log, tick task 0.2, openspec validate --strict.",
     "queue": [
         {
             "id": "compose",
@@ -53,9 +53,9 @@
         },
         {
             "id": "d3b-r2",
-            "status": "open",
+            "status": "done",
             "title": "Spec loop B, R2 - independent re-derivation",
-            "detail": "Fresh comparison of pressing-run-names-the-reason-that-held against the actual code; must not start from R1's tables."
+            "detail": "Done iteration 7: decline table rebuilt from grep (agrees on 9 rows); two paths R1 missed measured -- a firing raising before its row exists answered an hour-old stall (409), one raising after its turn started answered 'already being worked' over its own failed row. D3 widened (written row is the answer whatever its status), tasks 1.12/1.13, spec paragraph + 2 scenarios; held->condition; 1.7/1.8 seeded sentinel; :793 needs no delta. F412 filed (terminal schedule failure answers 200 success), Open Question 3. validate --strict valid."
         },
         {
             "id": "d4b-r3",

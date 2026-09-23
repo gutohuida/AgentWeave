@@ -7,7 +7,9 @@ requirement. Two proposals editing those lines would collide (the F300/F312 rule
 **re-measured on HEAD `dcdf723`** through the real route
 (`scripts/drive/d2b_0923_run_answer_probe.py`). Round 1 also filed **F411**: the app's Run button
 never displays this answer at all. F411 stays out of scope (design Open Question 1).
-**Nothing here is implemented yet.**
+**Round 2, 2026-09-23** (D-3b) re-derived the decline paths from the code, measured two more false
+answers from the same branch (a firing that fails, before or after writing its row), widened D3 to
+cover them, and filed **F412** (Open Question 3). **Nothing here is implemented yet.**
 
 ## Why
 
@@ -57,6 +59,11 @@ firing record only when the manual firing wrote that record"*, `:1520`); the cod
   the route read (`same_object=True`, 1→2 in place). So comparing the object with itself after the
   firing would always read "unchanged". A counted stall still answers from its row; an in-flight
   decline now falls through to the in-flight answer.
+  **R2 widened this:** the row the press wrote is its answer whatever its status. A `failed` row is
+  answered as a 500 with its reason; today the route re-decides the loop first, and measured, it
+  answered *"already being worked … nothing is wrong"* over a firing that crashed after its turn
+  started. A firing that crashed before writing anything is answered *"Failed to fire job"*; today it
+  gets an earlier firing's stall, as a 409.
 - **The requirement is decided** (spec delta). The *"not yet decided"* paragraph becomes a SHALL.
   The answer names the condition that held and none that did not. *"Wrote that record"* becomes
   *"wrote or counted into"*, which says what a continuing stall already does.

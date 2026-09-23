@@ -29404,6 +29404,13 @@ Round 3).** That change widens this finding's reach. The in-flight decline was a
 wherever a free agent existed. It now also reaches projects where the only free agents hold nothing
 but out-of-loop tasks, because those agents are now free. Not repaired there, and still open.
 
+**Note, 2026-09-23 (D-3b, R2 of `pressing-run-names-the-reason-that-held`).** Two more instances of
+the same shape, measured through the route. A firing that **raises before its row exists** writes
+nothing (`_do_fire_job`'s `except` guards on `"run" in locals()`), and was answered 409 with an
+hour-old stall. A firing that **raises after its turn started** writes `failed`, and the route
+re-decided the loop before reading it: 409 *"already being worked … nothing is wrong"*. Both folded
+into that change's D3 (tasks 1.12, 1.13).
+
 ## F374 (B) — a review refused by the evidence gate is re-staffed to a second reviewer, who meets the same gate, and the surfaced reason blames staffing
 
 **Status:** open. Filed 2026-09-15 by the night window's drive of
@@ -31961,3 +31968,37 @@ never displays.
 route-only. This fix needs a UI bundle refresh, and today's first spec loop
 (`an-at-mention-an-agent-wrote-reads-no-file`) already rebuilds the bundle. The day playbook forbids
 two same-day proposals sharing a file. That change's Open Question 1 offers folding this in.
+
+---
+
+## F412 (B) -- pressing Run answers `200 {"success": true}` when no turn began
+
+**Status:** open
+**Source:** drive
+**Theme:** Operator surfaces
+**Related:** F108 (the class: a permanently refused request answering 200), F411, F400, F373. Found by
+D-3b's R2 on 2026-09-23 (day window), measuring every way `run_job` can end.
+
+**What happens.** `_do_fire_job` queues the entry and calls `schedule_agent`. Where the result is
+`waiting_reason` with `terminal_failure` (`hub/hub/scheduler.py:3399-3406`), it marks the firing's
+`JobRun` `failed` with that reason, commits, and **carries on to `return True`** (`:3440`). So
+`run_job` (`hub/hub/api/v1/jobs.py:1372-1383`) takes its success branch and answers
+`200 {"success": true, "job_id": …, "run_id": …}`. The row it names reads `failed`.
+
+**Measured** (route, `schedule_agent` patched to return
+`ScheduleResult(waiting_reason="r2 probe: runner refused", terminal_failure=True)`; probe
+`scripts/drive/d2b_0923_run_answer_probe.py`, `test_r2_a_terminal_schedule_failure`):
+
+```
+POST /jobs/job-busy-r2term/run -> 200 {"success":true,"job_id":"job-busy-r2term","run_id":"run-b21d515e223f"}
+JobRun rows: [("failed", "r2 probe: runner refused")]
+```
+
+An agent calling MCP `run_job` is told the job fired. The operator's Run button shows nothing either
+way (F411).
+
+**Why it is not in `pressing-run-names-the-reason-that-held`.** That change edits only the route's
+`not success` branch. This needs either the firing to return `False` here or the route to read the
+row on success, and `terminal_failure` has known dishonest defaults (F108's section: six early
+returns claim it without meaning it), so which reasons are truly terminal needs its own look first.
+That change's Open Question 3 offers folding it in.
