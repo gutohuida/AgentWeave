@@ -32749,12 +32749,26 @@ that fails if a foreign project's event reaches the strip.
 
 ## F420 (B) — the checkpoint and probe worker runs `claude -p` with every default tool enabled, on untrusted transcript text
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `build_worker_command` (`hub/hub/worker.py:120-146`)
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — the Claude worker argv now carries `--tools ""`, pinned whole in a test. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `build_worker_command` (`hub/hub/worker.py:120-146`)
 builds `claude --output-format json [--model M] -p <prompt>` for Claude, with no `--tools ""`, while
 Codex gets `--ephemeral --sandbox read-only`. The prompt carries conversation transcript text, which
 is untrusted: anything an agent read or a user pasted can steer a worker that holds the default tool
 set. F195 closed this same gap for the titler. Repair shape: pass `--tools ""` (as the titler does)
 for every JSON-mode worker call, with a test that fails if the flag is dropped.
+
+**FIXED 2026-09-24 (Round 6):** `hub/hub/worker.py` `build_worker_command` now builds
+`claude --tools "" --output-format json [--model M] -p <prompt>` — the same `[cli, "--tools", ""]`
+head `conversation_titles.build_title_command` uses since F195; Codex is unchanged
+(`--ephemeral --sandbox read-only`). Neither worker prompt needs a tool: `_GENERATION_PROMPT` and
+`_PROBE_PROMPT` (`checkpoint_generation.py`) each ask only for a JSON object written from the text
+they carry. Production path: `generate_checkpoint` → `run_worker(kind="checkpoint")` and
+`probe_checkpoint` → `run_worker(kind="checkpoint_probe")` → `build_worker_command` → `_run_worker_process`.
+Live check (Haiku, temp directory, the exact argv through `resolve_executable`): exit 0, envelope
+parsed, and asked to list its tools the model named no built-in tool. **Residual, not fixed here:**
+it still listed the account's claude.ai connector tools (`mcp__claude_ai_Claude_Docs__*`), which
+`--tools ""` does not remove — the titler shares this; a candidate finding. Tests:
+`hub/tests/test_worker.py::test_the_claude_command_asks_for_json_and_is_not_an_agent_turn` pins the
+whole argv with and without a model.
 
 ## F421 (B) — an `unwritten` checkpoint becomes the next checkpoint's anchor
 
