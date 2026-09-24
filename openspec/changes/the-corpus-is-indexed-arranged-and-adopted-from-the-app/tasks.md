@@ -18,6 +18,8 @@ UI, new `hub/ui/src/__tests__/specCorpusStrip.test.tsx` and additions to the bro
 - [ ] 1.7 (D3) **Adopt all 2** → the corpus adopt mutation; a result with one `skipped` path shows its `documents[path].message`, and a `discovery_truncated` diagnostic is shown
 - [ ] 1.8 (D4) **Place under…** lists filed documents minus the open one plus *No parent*, preselects the current parent, and calls arrange with `{path, parent}`; *No parent* sends `parent: null`
 - [ ] 1.9 (D4) A 409 from arrange shows the message and a **Rebuild index** button; a 422 lists its diagnostics
+- [ ] 1.10 (D2, R2) The home select lists only `useSpecList` entries with a `document_id` (a tracked document whose file is gone is not offered); a rebuild answering `written: null` with no home diagnostic shows *Nothing to index*
+- [ ] 1.11 (D3, R2) After a successful **Adopt**, the strip shows **Rebuild index** as its primary action with the sentence that adopted documents are filed on the next rebuild
 
 ## 2. The fix
 

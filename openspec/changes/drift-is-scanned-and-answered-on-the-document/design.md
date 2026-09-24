@@ -70,7 +70,8 @@ the sentence says so rather than implying it scanned one document. An error body
 One line under the rows: *"K pieces of accepted evidence here are not watched for drift"*,
 expandable to each `FR-n`, summary and reason: `names_no_file` → *"it names no file or commit — name
 one in the locator to have it watched"*; `recorded_before_watching` → *"recorded before drift watched
-files — record it again to have it watched"*. `unwatched` gains the same `document` filter as
+files — record it again to have it watched"*; `no_footprint` (added by the first change in R2) →
+*"the Hub could not read the workspace when it was recorded — record it again"*. `unwatched` gains the same `document` filter as
 `drift`.
 
 ### D4 — A candidate is answered once
@@ -119,7 +120,9 @@ reworded (noted in the first change's design).
 ## Risks / Trade-offs
 
 - **B5 edits the coverage bar.** This change edits one string in `SpecCoverageBar.tsx`. Whichever
-  change lands second rebases it.
+  change lands second rebases it. B5's `the-coverage-bar-takes-the-evidence-decision-it-asks-for`
+  also adds one `invalidateQueries` line (`specEvidence`) to `useSpecEvents`, as D5 here does
+  (`specDrift`); both are additive lines in one block (R2).
 - **A project-wide scan from a document** may raise candidates elsewhere. The sentence in D2 says
   how many, and the rail's coverage bars refresh through the broadcast.
 
@@ -130,6 +133,17 @@ reworded (noted in the first change's design).
    ships both, so the finding closes instead. Record that on the finding at IMPL.
 
 ## Round log
+
+### Round 2 — 2026-09-24 (B6 R2)
+
+Re-derived: `detect`/`list_drift`/`resolve` routes (`spec.py:956-1084`), `resolve_drift`
+(`requirement_evidence.py:1190-1222`, no state check: confirmed), `EvidenceRefusedError.http_status`
+(`:77-80`), the resolve route's fixed 422 (`spec.py:1078-1081`, so task 2.1's mapping change is
+needed), `REMEDY[DRIFTING]` (`requirement_gate.py:60-62`), `useSpecEvents` (`api/spec.ts:151-181`).
+`spec_updated` with `path: null` is already broadcast by `spec/adopt` (`spec.py:1415`) and both
+consumers guard on a falsy path (`api/spec.ts:168`, `:196`): safe. F216's fields confirmed at
+`spec.py:1017-1052` (`a7b2df1`, ledger status fixed). Added the third `unwatched` reason and B5's
+`useSpecEvents` line. Nothing else disagreed.
 
 ### Round 1 — 2026-09-24 (B6 R1)
 

@@ -15,8 +15,10 @@ at exactly the moment the work ships — and an agent's evidence is always recor
 so the loss would fall entirely on the agent plane. Whether the work has reached the main line only
 ever changes from no to yes, so a footprint changes basis at most once.
 
-A footprint that names no line of work, or names one that no longer exists while its work is not yet
-on the main line, SHALL raise nothing. Being unable to tell is not evidence of drift.
+A footprint whose work is not yet on the main line, and that names no line of work or names one
+that no longer exists, SHALL raise nothing. Being unable to tell is not evidence of drift. A
+footprint whose work is on the main line is compared against the main line whatever line of work it
+names.
 
 Footprints of different kinds SHALL be compared against their own kind of observation.
 
@@ -43,6 +45,13 @@ Footprints of different kinds SHALL be compared against their own kind of observ
 - **WHEN** a candidate was resolved while the work was on its branch
 - **AND** the work then reaches the main line with the same content for the watched files
 - **THEN** no new candidate is raised
+
+#### Scenario: Work on the main line is watched even when no branch was named
+
+- **WHEN** a footprint names no line of work, because it was taken on a detached checkout
+- **AND** its commit is reachable from the main line
+- **AND** a later commit on the main line changes a file it watches
+- **THEN** a drift candidate is raised for that evidence
 
 #### Scenario: A vanished branch raises nothing
 

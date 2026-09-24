@@ -90,6 +90,9 @@ statements (the index stores no statement, `SpecRequirement` columns).
 
 ## Risks / Trade-offs
 
+- **B5's `a-document-moves-forward-only-through-its-checks` edits `SpecPhaseBar.tsx`** too: the
+  Approve button's `onError` (`:136-145` region). This change edits `onRigor` (`:62-92`) and the
+  Enforcement select (`:178-215`). Different regions; whichever lands second rebases (R2).
 - **The select stops acting on change.** An operator used to one click now confirms. The confirm is
   inline and one more click, which is the cost of the record.
 
@@ -98,6 +101,17 @@ statements (the index stores no statement, `SpecRequirement` columns).
 1. **Demotion requires a reason in the app?** Recommended yes (D2).
 
 ## Round log
+
+### Round 2 — 2026-09-24 (B6 R2)
+
+Re-derived: `rigor_history` (`spec.py:536-559`), `history_for` (`spec_rigor.py:181-187`,
+`created_at, id` ascending), `list_requirements` (`spec.py:738-773`, `order_by(identifier)`, a string
+sort; `include_retired` defaults `True`), `requirement_detail` and `_requirement` (`:776-819`,
+`:376-398`: 404 unknown document or identifier, 422 ambiguous only without `document`),
+`onRigor`/the select (`SpecPhaseBar.tsx:62-92`, `:178-196`), `useSetSpecRigor` (`api/spec.ts:298-309`,
+sends `reason ?? ''`). All held. F169 confirmed fixed (`TaskDetailDrawer.tsx:366`, `:406`;
+`taskApprovalReportAndPending.test.tsx`; ledger status fixed). Added the `SpecPhaseBar` collision
+with B5.
 
 ### Round 1 — 2026-09-24 (B6 R1)
 

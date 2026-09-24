@@ -61,11 +61,17 @@ Nothing renders when the index is valid and nothing is untracked, except the qui
 
 **Rebuild index** posts `reindex` with no body. If the answer has `index.written == null` and its
 `diagnostics` carry `index_home_required`, the strip turns into a question: *"Which document is the
-corpus's home?"* — a select of the tracked documents (from `useSpecDocuments`), preselecting none —
-and **Rebuild with this home** posts `{home}`. Otherwise it shows the summary: documents indexed
+corpus's home?"* — a select of the documents that are **both tracked and on disk** (`useSpecList`
+entries with a `document_id`), preselecting none — and **Rebuild with this home** posts `{home}`.
+R2 corrected R1's source (`useSpecDocuments`): `build_index` files only documents that are on disk
+*and* known (`spec_documents.py:259-269`), so a tracked row whose file is gone would answer
+`home_missing` plus `index_home_required` again and loop the question. When `written == null` and
+there is no home diagnostic (no tracked document is on disk, `:318-319`), the strip says *"Nothing
+to index: no tracked document is on disk"* and points at Adopt. Otherwise it shows the summary: documents indexed
 (`written.documents`), totals of `created` / `reworded` / `retired` across `documents`,
 `corpus.rerendered.length` re-rendered, and each `corpus.skipped` entry with its reason. Every
-diagnostic in `index.diagnostics` other than the home ones is listed verbatim (`code — path`).
+diagnostic in `index.diagnostics` other than the home ones is listed verbatim (`code — path`);
+`unindexable_document` (a file with no row, `:271-275`) is listed with an **Adopt** action beside it.
 
 The choice is never made for the operator: `_select_home`'s refusal to guess (`spec_documents.py:
 440-455`) is the behaviour this dialog serves, not one it works around.
@@ -75,6 +81,12 @@ The choice is never made for the operator: `_select_home`'s refusal to guess (`s
 A row in `SpecTree` whose node has `documentId == null` and `missing == false` shows an **Adopt**
 button (rail and dialog density alike). It posts `documents/adopt {path}`. A refusal shows its
 `detail.message`, and for `document_exists` its `differences` (`field: file vs row`).
+
+**Adoption does not file a document in the index** (R2: nothing in `spec_adoption.py` writes
+`spec/index.json`; `write_index` has two callers, reindex and arrange). So after any successful
+adopt the strip shows **Rebuild index** as its primary action with *"Adopted documents are filed
+in the index on the next rebuild"*; without it an adopted document cannot be placed (arrange answers
+404 *not in the index*).
 
 **Adopt all N** posts `spec/adopt`, then lists `skipped` paths with each `documents[path].message`,
 and `diagnostics` verbatim — `discovery_truncated` in particular, because *"a truncated sweep
@@ -104,8 +116,11 @@ files.
   the database commit — `spec/index.json` or a re-rendered document can be on disk while the
   digests recorded for them are rolled back. This change does not alter it (a pre-existing
   ordering, shared by `arrange`, `spec.py:1375-1379`); the strip shows the 500 body and says
-  *"the index may be partly written — rebuild again"*. **Flagged for R2** to decide whether it
-  deserves a finding of its own.
+  *"the index may be partly written — rebuild again"*. **R2 confirmed it from the code**:
+  `write_index` is a plain `write_text` (`spec_documents.py:345`), `rerender_corpus` calls
+  `write_document` unwrapped (`spec_service.py:881`), and both routes commit only afterwards
+  (`spec.py:1265`, `:1379`). Not carried: the orchestrator decides whether to file it (see the
+  bundle record's candidates).
 - `arrange`, `adopt`, `spec/adopt`: every refusal is before any write. `spec/adopt` never fails as a
   whole by design.
 
@@ -131,6 +146,15 @@ documents' own navigation — a separate question).
 1. **Merge: M1, M2 or M3?** Recommended M1 now; M3 as its own exploration.
 
 ## Round log
+
+### Round 2 — 2026-09-24 (B6 R2)
+
+Re-derived the four routes' bodies and refusals (`spec.py:1213-1416`, `:1470-1524`), `build_index`
+and `_select_home` (`spec_documents.py:247-469`), `rerender_corpus`, and the UI types
+(`api/spec.ts:15-67`, `specNavigation.ts:27-32`). Corrected: the home select's source (D2); the
+empty-corpus answer (D2); adoption leaves the document unindexed (D3). D6's ordering hazard
+confirmed. F205 (`SpecPhaseBar.tsx:146-160`) and F208 (`spec.py:1338-1348`) confirmed fixed, both
+marked fixed in the ledger.
 
 ### Round 1 — 2026-09-24 (B6 R1)
 

@@ -15,6 +15,7 @@ In `hub/tests/test_spec_edit_proposals.py` (its `_gate_document`, `_document`, `
 - [ ] 1.5 (D3) `POST …/proposals/{id}/withdraw` → 200, `status: withdrawn`, `resolution_reason` is the note; the live document is byte-identical; the proposal is gone from the pending list; a second withdraw → 409 `proposal_not_pending`; an unknown id → 404. FAILS today (route absent)
 - [ ] 1.6 (D3) `withdraw_proposal` with an agent actor raises `withdraw_is_the_operators`. FAILS today
 - [ ] 1.7 (D5) Patch `hub.api.v1.spec.sse_manager.broadcast`: reject broadcasts `spec_updated` once; withdraw broadcasts once. FAILS today for reject
+- [ ] 1.13 (D5, R2) Patch `hub.api.v1.spec.sse_manager.broadcast`; accept a proposal made stale by a sibling's accept → 409 `proposal_stale`, and `spec_updated` is broadcast once after the stale mark is committed. FAILS today (no broadcast on the refusal path)
 - [ ] 1.8 Control: the file's existing tests (including `test_accepting_a_second_proposal_against_the_same_digest_is_refused_as_stale` and `test_an_unchanged_resubmission_creates_zero_proposals`) pass before and after; record the count
 
 UI, `hub/ui/src/__tests__/specProposalsPanel.test.tsx`:
@@ -28,7 +29,7 @@ UI, `hub/ui/src/__tests__/specProposalsPanel.test.tsx`:
 - [ ] 2.1 (D1, D2) `propose_edit`: one pending-proposals read; sameness and supersession; `ProposeResult.already_pending`
 - [ ] 2.2 (D1) `already_pending` in the responses of `submit_spec_document` (agent), `write_document_content`, `merge_document`; the MCP docstring names it and says a repeat is recorded once
 - [ ] 2.3 (D3) `withdraw_proposal`; the route; `ProposalWithdrawal`
-- [ ] 2.4 (D5) reject broadcasts; mutations invalidate `specProposals`
+- [ ] 2.4 (D5) reject broadcasts; accept broadcasts after its stale-refusal commit; mutations invalidate `specProposals` on settled
 - [ ] 2.5 (D4) UI: `useWithdrawSpecProposal`, the button, the twin marker, the status union
 - [ ] 2.6 Run group 1; `py -3.11 -m pytest hub/tests/ -q` full count inline; `npm run lint`, `npx vitest run`, `ruff`, `black` clean. `test_mcp_tool_schemas.py` / `test_tool_surface_matches_server.py` pass (a docstring change only)
 - [ ] 2.7 `npm run build`, `py -3.11 scripts/refresh_ui_bundle.py`; commit source and bundle together

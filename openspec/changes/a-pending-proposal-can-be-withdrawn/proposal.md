@@ -46,7 +46,8 @@ reject route emits `spec_updated` (`api/spec.ts:163-166`); it does not.
   identical to an earlier one still pending (twins created before this change, or by two proposers)
   as *"same as the one above"*.
 - **Reject and withdraw refresh the list.** Both routes broadcast `spec_updated`; both mutations
-  invalidate `specProposals`. The false comment in `useSpecEvents` becomes true.
+  invalidate `specProposals`. So does an accept refused as stale, which commits the row's move to
+  `stale` and today leaves it on screen with live buttons (added in R2). The false comment in `useSpecEvents` becomes true.
 
 ## Capabilities
 

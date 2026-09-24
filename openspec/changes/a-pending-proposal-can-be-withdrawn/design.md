@@ -83,15 +83,23 @@ it, and adding an agent-plane route and MCP tool for the rest is not asked for b
 duplicates and proposals nobody is pursuing"*). A pending proposal whose `unit_kind`, `unit_key`,
 `change_kind` and `proposed_payload` equal an **earlier** row in the list (the route's
 `created_at` ascending order) carries *"same as the one above"* and its Withdraw is the emphasised
-action. The comparison is in the route's order on purpose — "above" means earlier.
+action. The comparison is in the route's order on purpose — "above" means earlier. Payloads are
+compared by a key-sorted serialisation, not `JSON.stringify` as returned: the column is JSON, and
+two equal objects need not arrive with the same key order (R2).
 
 `SpecEditProposal['status']` gains `'withdrawn' | 'superseded'`.
 
-### D5 — Reject and withdraw refresh every view
+### D5 — Reject, withdraw and a stale accept refresh every view
 
 `reject_proposal_route` broadcasts `spec_updated {path}` after commit, as accept does. The reject,
-accept and withdraw mutations invalidate `['project', pid, 'specProposals', path]` on success, so the
-pressing tab does not wait for the SSE round-trip. The comment at `api/spec.ts:164-166` is then true.
+accept and withdraw mutations invalidate `['project', pid, 'specProposals', path]` **on settled**, not
+only on success, so the pressing tab does not wait for the SSE round-trip.
+
+**Added in R2 — the same defect on accept's refusal path.** An accept refused as stale **commits** the
+row's move to `stale` before answering 409 (`spec.py:642-649`), and broadcasts nothing. The list is
+pending-only, so that row should leave; today it stays, with live buttons, in the pressing tab
+(`useSpecMutation` invalidates on success only) and in every other tab. So the accept route also
+broadcasts `spec_updated {path}` after that commit, and the mutations invalidate on settled. The comment at `api/spec.ts:164-166` is then true.
 
 ### D6 — What each route answers when what it calls raises
 
@@ -121,6 +129,18 @@ withdraw; showing withdrawn/superseded history in the panel (the list route retu
 1. **W3 (recommended), W1 or W2?**
 
 ## Round log
+
+### Round 2 — 2026-09-24 (B6 R2)
+
+Re-derived: `propose_edit`/`_create_proposal` (`spec_service.py:290-437`: diffs against stored
+only, reads no pending proposal; stamps `expected_digest` and the proposer), `reject_proposal`
+(`:562-584`), the list/accept/reject routes (`spec.py:588-694`: list is pending-only, `created_at`
+ascending; reject broadcasts nothing; accept's stale refusal commits then 409s), `_proposal_view`
+(`:562-578`, carries every field D4 compares), the agent response (`agent_actions.py:1671-1680`),
+the MCP docstring (`mcp_server.py:1801`, `:1809-1812`), `useSpecEvents` (`api/spec.ts:163-167`,
+the false comment). All of R1's claims held. Added: accept's stale-refusal path to D5 (task 1.13),
+on-settled invalidation, key-order-insensitive twin comparison. Editing `mcp_server.py` loads
+`.claude/rules/` for that file at IMPL.
 
 ### Round 1 — 2026-09-24 (B6 R1)
 

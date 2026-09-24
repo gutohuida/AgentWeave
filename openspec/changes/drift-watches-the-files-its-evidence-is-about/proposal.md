@@ -51,7 +51,8 @@ compare an agent commit's whole tree against `main` and raise every file anybody
   `reachable_from_main` is true is compared against the project's main branch; one that is not yet
   there is compared against the branch it names, as today.
 - **Evidence that watches nothing says so**: `GET /spec/drift` gains an `unwatched` list (accepted
-  evidence whose footprint watches no file, with the reason), and the footprint view reports
+  evidence whose footprint watches no file, or that has no footprint at all, with the reason), and
+  the footprint view reports
   `watched_from` and how many files it watches, so the recorder sees it at the moment of recording.
 - **Footprints recorded before this change are not scanned**, and are listed as unwatched with the
   reason `recorded_before_watching`. Nothing in the product can reach drift today (F129), so no
@@ -82,5 +83,9 @@ None.
 - No UI. No agent-plane or MCP change beyond `footprint_view`'s two added keys, which the agent's
   `record_evidence` response shares (`agent_actions.py:1235-1243`).
 
-Cross-bundle: F215 (bundle B5) quotes the 44-candidate measurement in its own entry. B5 should not
+Cross-bundle: **builds on B5's `a-footprint-names-the-line-of-work-its-commit-is-on`, which lands
+first** (same four functions; B5 moves `branch`, this moves `entries`). design.md's "Builds on B5"
+section lists exactly which of B5's pieces this change assumes (added in R2).
+
+F215 (bundle B5) quotes the 44-candidate measurement in its own entry. B5 should not
 carry the narrowing; it is here.
