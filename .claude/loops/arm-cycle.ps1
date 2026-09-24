@@ -246,6 +246,11 @@ $state = [ordered]@{
   queue             = @(
     [ordered]@{ id = "compose"; status = "open"; title = "Compose this window's queue from the playbook"; detail = "The playbook at $($w.Playbook) is the authority. Do not improvise a queue from memory; a fresh process has none." }
   )
+  # F305 (decided 2026-09-24, spec-queue/tracks/B11.md Final, row B11-all): one channel.
+  # decisions_for_user carries only ids of OPEN rows in spec-queue/DECISIONS.md -- never a
+  # sentence. Always armed empty; a window populates it during compose (day-window.md
+  # Iteration 1 step 3, night-window.md's own raise sites) by looking up each inherited id in
+  # DECISIONS.md and dropping -- with a logged line -- any id that is not OPEN there.
   decisions_for_user = @()
   limits            = @(
     "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
@@ -253,7 +258,7 @@ $state = [ordered]@{
     "Nothing destructive: no deleting projects, databases, or kept reproductions.",
     "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
     "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's go to decisions_for_user, not guessed.",
+    "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
     "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
     "Tests under py -3.11, never bare python. black needs --target-version py311.",
     "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",

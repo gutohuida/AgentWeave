@@ -177,6 +177,17 @@ Only the first firing of the window does this. It ends by writing a full `queue`
    three answers: what was built, what was **driven** versus merely tested, and what the night window
    recorded in `decisions_for_user`.
 
+   **One channel: `decisions_for_user` carries only ids of `OPEN` rows in `spec-queue/DECISIONS.md`**
+   (F305, decided 2026-09-24 — `spec-queue/tracks/B11.md` Final, row `B11-all`). Before any of last
+   night's `decisions_for_user` entries go into this window's own `STATE-day.json`, look each id up in
+   `DECISIONS.md`. Carry it forward only if that id's row there still reads `OPEN`. **Drop and log any
+   id that is `DECIDED`, `DEFERRED`, or names no row at all** — one line per dropped id in today's
+   compose log entry, naming the id and the row's actual status (or "no such row in DECISIONS.md").
+   `DECISIONS.md` is the authority; a dropped id is not lost, only its stale copy is. Raise a new
+   decision the same way, from here on: add an `OPEN` row to `DECISIONS.md` first (its contract
+   already lets a window add rows), then put only that row's id in `decisions_for_user` — never a
+   sentence.
+
 4. **Take delivery of the research.** `AgentWeaveResearch` wrote it at 07:10 to
    `~/.claude/routines/agentweave-research/out/research-<today>.md` — **outside** the repository,
    because that task deliberately never writes here. Copy it to `spec-queue/research/<today>.md` and
@@ -336,8 +347,9 @@ starting the next change's R1, so stopping anywhere leaves at most one change pa
 
 - **`REV` stands in for the operator's Opus review.** It reads the change and every decision it
   rests on, looking for a reason not to build, and it may stop the change. Record what it found. If
-  it finds nothing, say so. A review that stops a change is a good outcome: record why in
-  `decisions_for_user`, leave the change specced, and go to the next one.
+  it finds nothing, say so. A review that stops a change is a good outcome: add an `OPEN` row to
+  `spec-queue/DECISIONS.md` recording why, put only that row's id in `decisions_for_user`, leave the
+  change specced, and go to the next one.
 - **`IMPL` and `DRIVE` follow `night-window.md` exactly.** That means mutation checks, CI's lint
   set, a UI change driven in a browser against the served bundle, a drive Hub on a free port with a
   fresh `profiles/drive<MMDD>/` database, and Haiku for every real agent turn. The night's rules
@@ -597,7 +609,9 @@ before any work, so a later firing inherits them even if this one dies mid-thoug
 - **Do not browse the open web.** Research is `AgentWeaveResearch`'s job, in a process that keeps the
   permission classifier. See `.claude/loops/README.md` for why.
 - **Every claim is measured or labelled unverified.** If something could not be run, the log says so.
-- **Decisions that are genuinely the operator's get written to `decisions_for_user`, not guessed.**
+- **Decisions that are genuinely the operator's get an `OPEN` row in `spec-queue/DECISIONS.md`, with
+  only that row's id in `decisions_for_user`** — never guessed, and never free text. At compose, drop
+  and log any inherited id whose `DECISIONS.md` row is not `OPEN` (F305, iteration 1 step 3, above).
 - Stage explicit paths, never `git add -A`. Never commit `kimichanges.md` or `kimiwork.md`.
 - Tests run under `py -3.11`, never bare `python`. `black` needs `--target-version py311`.
 - The hub suite runs whole in **15–47 minutes** and far exceeds the 600s command cap — run it in

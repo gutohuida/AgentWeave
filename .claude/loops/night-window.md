@@ -16,9 +16,10 @@ matrix red and the window pushed **16 more commits onto it over five hours** wit
 
 This window **fixes**: it implements and drives. It does not write new proposals — the day window
 already took them through three rounds. If a change you are implementing turns out to be wrong,
-**stop implementing it**, record why in `decisions_for_user`, and move to the next queue item. A
-proposal that survives three rounds and then fails contact with the code is exactly the finding this
-whole arrangement exists to surface; do not paper over it at 03:00.
+**stop implementing it**, add an `OPEN` row to `spec-queue/DECISIONS.md` recording why, put only that
+row's id in `decisions_for_user`, and move to the next queue item. A proposal that survives three
+rounds and then fails contact with the code is exactly the finding this whole arrangement exists to
+surface; do not paper over it at 03:00.
 
 Map, tasks, state layout and the cycle-branch rule: `.claude/loops/README.md`.
 File contract: `spec-queue/README.md`. Design and rejected alternatives:
@@ -304,7 +305,10 @@ invocation.
   Hub-suite figure that `spec-queue/DECISIONS.md` had already recorded as wrong, in writing, for two
   days, while the window went on sizing its work against it. A note nobody is scheduled to act on is
   indistinguishable from not having noticed.
-- **Decisions that are genuinely the operator's go to `decisions_for_user`, not guessed.**
+- **Decisions that are genuinely the operator's get an `OPEN` row in `spec-queue/DECISIONS.md`, with
+  only that row's id in `decisions_for_user`** — never guessed, and never free text (F305: one
+  channel, `DECISIONS.md` is the authority; day-window.md's iteration 1 step 3 is where an inherited
+  id gets dropped once its row stops reading `OPEN`).
 - Stage explicit paths, never `git add -A`. Never commit `kimichanges.md` or `kimiwork.md`.
 - `.agentweave/` and `spec/` at the repository root belong to the migration and are not stray test
   output — do not delete them as cleanup.
