@@ -106,6 +106,10 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
             origin = "Operator"
         elif entry.origin_type == "job":
             origin = "Scheduled job"
+        elif entry.origin_type == "checkpoint":
+            origin = "Checkpoint"
+        elif entry.origin_type == "divergence":
+            origin = "Divergence"
         else:
             origin = f'Agent "{entry.origin_agent}"'
         # Per entry rather than in the preamble, because `delivery_attempts` is per entry: one turn

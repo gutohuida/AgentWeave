@@ -162,6 +162,49 @@ def test_scheduled_job_origin_is_typed_and_has_no_origin_agent():
         )
 
 
+def test_checkpoint_and_divergence_origins_are_labelled_not_none():
+    # F410: origin_agent is forbidden for every origin_type except "agent" (`new_entry`), so a
+    # checkpoint or divergence entry is always stored with origin_agent=None -- the same shape
+    # production builds it in (`checkpoint_cutover.new_entry(...)`, `checkpoint_trigger.py`,
+    # `run_divergence.py`), none of which pass origin_agent.
+    checkpoint = new_entry(
+        project_id="p",
+        agent="a",
+        origin_type="checkpoint",
+        content="the checkpoint content",
+        hop_depth=0,
+    )
+    divergence = new_entry(
+        project_id="p",
+        agent="a",
+        origin_type="divergence",
+        content="the divergence content",
+        hop_depth=0,
+    )
+    assert checkpoint.origin_agent is None
+    assert divergence.origin_agent is None
+
+    prompt = format_turn_prompt([checkpoint, divergence])
+    assert "None" not in prompt
+    assert "Checkpoint (hop 0):\nthe checkpoint content" in prompt
+    assert "Divergence (hop 0):\nthe divergence content" in prompt
+
+
+def test_agent_to_agent_label_unchanged_by_checkpoint_divergence_fix():
+    peer = new_entry(
+        project_id="p",
+        agent="a",
+        origin_type="agent",
+        origin_agent="user",
+        content="peer message",
+        hop_depth=1,
+    )
+    assert format_turn_prompt([peer]) == (
+        "[AgentWeave inbound queue — delivered inline in arrival order]\n\n"
+        'Agent "user" (hop 1):\npeer message'
+    )
+
+
 @pytest.mark.asyncio
 async def test_queue_settings_defaults_update_and_reject_invalid(app, auth_headers):
     defaults = await app.get("/api/v1/projects/proj-test/queue/settings", headers=auth_headers)

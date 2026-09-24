@@ -32498,7 +32498,7 @@ the browser builds the message).
 
 ## F410 (C) -- a checkpoint or divergence delivery reaches the agent labelled `Agent "None"`
 
-**Status:** open
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — `format_turn_prompt` now labels `checkpoint` and `divergence` entries explicitly instead of falling into the `Agent "{origin_agent}"` branch. Was: open
 **Source:** review
 **Theme:** Agents & runners
 **Related:** F409's R2, which read `format_turn_prompt` line by line and found this.
@@ -32512,6 +32512,26 @@ agent reads `Agent "None" (hop 0):` above a checkpoint handed to a successor, ab
 request for checkpoint notes, and above a divergence response. That credits Hub text to an agent
 named "None". **Read, not driven.** No test asserts the label for these two origins (`grep` of
 `hub/tests` for `format_turn_prompt` finds only `operator`, `agent` and `job` rows).
+
+**FIXED 2026-09-24 (Round 6):** `hub/hub/inbound_queue.py`'s `format_turn_prompt` gained two more
+`elif` branches before the catch-all: `entry.origin_type == "checkpoint"` renders `Checkpoint`,
+`entry.origin_type == "divergence"` renders `Divergence`. The catch-all (`f'Agent "{entry.origin_agent}"'`)
+is now reached only by `origin_type == "agent"`, the one origin `new_entry` requires `origin_agent`
+for — so it can no longer see a `None`. Production path: `turn_scheduler.schedule_agent`
+(`hub/hub/turn_scheduler.py:411`) calls `format_turn_prompt(selected)` on every entry a turn
+delivers, including the `checkpoint` entries `checkpoint_cutover.cutover` and
+`checkpoint_trigger.check_and_maybe_checkpoint` queue and the `divergence` entry
+`run_divergence.queue_divergence_response` queues — none of the three pass `origin_agent`, so
+before this fix every one of them rendered `Agent "None"`. Tests added to
+`hub/tests/test_inbound_queue.py`: `test_checkpoint_and_divergence_origins_are_labelled_not_none`
+(builds a `checkpoint` and a `divergence` entry via `new_entry` exactly as production does, with no
+`origin_agent`, and asserts the formatted prompt contains no `"None"` and shows `Checkpoint (hop 0):`
+/ `Divergence (hop 0):`) and `test_agent_to_agent_label_unchanged_by_checkpoint_divergence_fix`
+(an `origin_type="agent"` entry still formats as `Agent "user" (hop 1):\npeer message`, byte for
+byte). `py -3.11 -m pytest hub/tests/test_inbound_queue.py hub/tests/test_delivery_attempts.py
+hub/tests/test_failed_run_returns_input.py -q` — 50 passed (the latter two import
+`format_turn_prompt` too and were run because they import the changed module). `hub/hub/mcp_server.py`
+was not touched. Not a spec-track change — no `openspec/specs/` promise describes these labels.
 
 ---
 
