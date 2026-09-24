@@ -32815,3 +32815,52 @@ route then reads `evidence`/`review` to build its answer and raises `MissingGree
 (`agent_actions.py:1354-1357`) fails the same way. The repair is to build both routes' responses
 before integrating. The test's stub must load the task through the session, or it opens no transaction
 and passes today.
+
+## F427 (B) — a footprint watches the whole tree, so one commit raises a drift candidate for every piece of evidence
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 1). Measured by R1: evidence on `ledger.py`, then a commit to `other.py`, gave one candidate. The footprint's `entries` hold the whole tree (`requirement_evidence.py:539`, `:969`). **Carried by B6's `drift-watches-the-files-its-evidence-is-about`** (approved 2026-09-24).
+
+
+## F428 (C) — rejecting a proposal in the app leaves it on screen
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 2). There is no broadcast, and the mutation invalidates nothing (`spec.py:669-694`, `api/spec.ts:244-256`). **Carried by B6's `a-pending-proposal-can-be-withdrawn`.**
+
+
+## F429 (C) — the app records every rigor change with an empty reason
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 3). `SpecPhaseBar.tsx:62-70` sends an empty reason, but the spec requires the reason to be recorded. **Carried by B6's `a-documents-rigor-history-and-retired-requirements-are-on-screen`.**
+
+
+## F430 (B) — a drift candidate can be answered twice, and the second answer overwrites the first
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 4). `resolve_drift` has no state check. **Carried by B6's `drift-is-scanned-and-answered-on-the-document`** (it answers once; a second answer is a 409).
+
+
+## F431 (C) — an accept refused as stale commits `stale` and leaves the row on screen
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 9). Found by R2 (`spec.py:642-649`). **Carried by B6's `a-pending-proposal-can-be-withdrawn`.**
+
+
+## F432 (C) — evidence with no footprint row is never scanned and never reported
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 10). Found by R2. **Carried by B6's `drift-watches-the-files-its-evidence-is-about`** (listed as unwatched, reason `no_footprint`).
+
+
+## F433 (C) — only one unit of a multi-unit proposal can be accepted before its siblings go stale
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 5). The spec calls the units individually acceptable, but accepting one makes the rest stale. Not carried by any change: it is an operator design question (should siblings rebase, or be accepted together?).
+
+
+## F434 (B) — reindex and arrange write files before the database commit, so an `OSError` leaves files written and digests rolled back
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 6). `spec.py:1255-1265`, `:1375-1379`. Not carried. Repair shape: write after the commit, or delete what was written on failure, answering a sentence and not a bare 500.
+
+
+## F435 (C) — a drift candidate is never superseded when its requirement is reworded, although the model says it is
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 7). `models.py:2643-2644` documents supersession that no code performs. Not carried.
+
+
+## F436 (B) — any drift answer silences that exact change forever, whether or not the answer was true
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 11). Found by R3. For example, pressing *Code corrected* before the code is actually reverted stops the candidate from ever returning (`requirement_evidence.py:1221`, `:1160-1163`). Not carried. B6's change 2 words its buttons as past-tense facts. Repair shape: re-check that the answer holds on the next scan, or scope the silence to the answered commit.

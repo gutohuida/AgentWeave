@@ -237,3 +237,15 @@ after B2's changes land.
 A follow-up from B2's `a-firing-is-counted-once-however-many-agents-it-starts` (Open Question 1),
 queued in the 2026-09-24 daily review. Once a `JobRun` row is one agent's share of one firing, a wide
 firing shows several rows with nothing saying whose each one is. Show the agent on each history row.
+
+## R9 — Agents draft capability content as proposals, and the operator accepts them
+**Asked:** 2026-09-24
+**Theme:** Spec & requirements
+**Ready:** thinking
+
+This is option M3 from bundle B6 (`spec-queue/tracks/B6.md`, F206), queued as its own exploration in the
+2026-09-24 daily review. Today no agent can write a capability document (`spec_service.py:159-162`),
+and the operator has no screen for authoring one either (`PUT …/content` has no client), so the merge
+route has nothing to merge from the app. M3 would change *"capability documents are written by the
+operator"* to *"accepted by the operator"*. It is an exploration first (openspec-explore), not a
+proposal.
