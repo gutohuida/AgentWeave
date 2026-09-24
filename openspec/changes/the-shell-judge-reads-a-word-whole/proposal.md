@@ -30,6 +30,13 @@ glob matched (`cp n sub/l*/..`). It also found the literal form, `cp n sub/l/../
 through the Bash tool on Windows today**. Steps 13 and 14 are R6's, and the operator decided that
 step 14 is in this change (`B4-link-dotdot`). The memo key now carries D5's colon flag.
 
+**R7, 2026-09-24 (independent comparison of R6's fixes).** Steps 13 and 14 fire on the paths the
+design names and give the outcomes it claims. Three corrections to D8 step 4 and one named cost:
+the refusal at a `..` after a globbed link now names where the step lands (as written it could not,
+and task 1.4f's assertion could not pass); a literal component's link test is `os.lstat`, not a
+`DirEntry` test; what each raise inside `_glob_links` gives is stated; and a traversal out and back
+in through a globbed link (`ls sub/l*/../ws/n`) is refused.
+
 ## Why
 
 Under the default posture every shell command an agent runs is read by `mcp_server._decide`, and
@@ -161,6 +168,9 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 - (R6) On Windows, a path with a `..` after an inside link pointing to a shallower directory is
   refused wherever the physical reading lands outside, although PowerShell, `cmd` and the file tools
   write it lexically inside (design D12, Costs).
+- (R7) A traversal out and back into the workspace through a globbed link
+  (`ls sub/l*/../ws/n`, with `sub/l` a link to the workspace) is refused at the `..`, although it
+  lands inside. The same path without the glob is allowed.
 - (R4) `**` is matched as `*` unless the command names `globstar`, so a program's own recursive
   glob through a link two or more levels down is not seen.
 - (R4) `host:x/y` and `user@alias:path` (a dotless host) are read as paths (operator, 2026-09-24).

@@ -404,6 +404,7 @@ answered. An error in place of an answer is not a decision.
 - **WHEN** a shell command names a glob that matches a link inside the workspace, followed by a
   parent-directory step, such as `sub/l*/..` with `sub/l` a link to the workspace root
 - **THEN** the command is refused
+- **AND** the reason names the directory that step reaches, not only the pattern as written
 
 #### Scenario: An extended pattern group that can match the parent directory is refused
 

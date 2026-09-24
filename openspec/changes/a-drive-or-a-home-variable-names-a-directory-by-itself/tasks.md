@@ -4,7 +4,7 @@
 - [x] 0.2b R4 (revise round after the operator's 2026-09-24 review): re-derived from the code at `b7d976a`; recorded in `B4.md` under "R4"
 - [x] 0.2c R5: an independent verification round of the R4 design
 - [x] 0.2d R6 (revise round after the second Opus pre-approval review, `spec-queue/tracks/reviews/B4-2026-09-24-second.md`): the PowerShell `env:` pattern, bash's `env:` forms, `Temp:` in PowerShell only, the bracket glob through the sibling's D11; recorded in `B4.md` under "R6"
-- [ ] 0.2e R7: one independent comparison round of R6's fixes against the code, before approval; recorded in `B4.md`
+- [x] 0.2e R7: one independent comparison round of R6's fixes against the code, before approval; recorded in `B4.md` under "R7" (no defect of this change's own; `B4-temp-dialect` cited)
 - [x] 0.3a The operator answers design Open Questions 2 and 3: answered 2026-09-24 afternoon in `spec-queue/DECISIONS.md` (`B4-dep-links`: build D10 as written, residual filed as F444; `B4-drive-exists`: a drive word is judged only when the drive exists). D5 and `PWD` were answered earlier the same day
 - [ ] 0.3 The operator approves in `APPROVALS.md` (after the Opus pre-approval review); told first that `:8000`'s next run uses the edited file
 - [ ] 0.4 (R4; order decided in `B4-residuals`: both in one night window) `the-shell-judge-reads-a-word-whole` is built first. This change uses its `_glob_links`, budget, level-by-level escape reading, `_DRIVE_LETTERS` and `hub-judge-windows` job

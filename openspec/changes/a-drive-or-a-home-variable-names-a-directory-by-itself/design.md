@@ -84,13 +84,23 @@ REVISING rounds"). Every open question is answered:
 - **(R6, new) D2's bash pattern gains PowerShell's `env:` forms.** From the Bash tool,
   `powershell -c 'Copy-Item x $env:TEMP'` reaches rule 4 as `␀env:TEMP` (measured), which no bash
   spelling matched. It is the operator's inner-shell case one dialect over.
-- **`Temp:` is read in the PowerShell dialect only** (the review's LOW; R6's choice, put to the
-  operator to confirm). Windows PowerShell 5.1 has no `Temp:` drive (measured), and in the bash
+- **`Temp:` is read in the PowerShell dialect only** (the review's LOW; R6's choice, confirmed by
+  the operator as `B4-temp-dialect`). Windows PowerShell 5.1 has no `Temp:` drive (measured), and in the bash
   reading `temp:` is ordinary text (a YAML key in a heredoc).
 - **Named:** `$PWD.Path` and the other member accesses (Costs). `_DRIVE_LETTERS` is read at call
   time (change 1's D9).
 
 The record is in `spec-queue/tracks/B4.md`, under "R6".
+
+**R7 ran on 2026-09-24 (independent comparison of R6's fixes)**, against the code at `658332b`, with
+`_lex`, `_words` and `_decide` in-process in `py -3.11` and real junctions in
+`testbed/scratch/b4-r7/`. Each R6 fix is reached by the word it is for: `powershell -c 'Copy-Item x
+$env:TEMP'` and `…${env:USERPROFILE}` from the Bash tool give `␀env:TEMP` and `␀{env:USERPROFILE`;
+`$tmp = New-TemporaryFile; Remove-Item $tmp` gives `$tmp` twice; a heredoc's `temp: 5` gives `temp`;
+`cp n [u]p` and `cp n u[p]` give `u]p` and `u[p`, so D10 needs change 1's D11. Each is allowed today
+(measured). A glued or colon-joined bracket glob (`cp -t[u]p n`, `Copy-Item n -Destination:[u]p`)
+keeps its brackets, because the bracket is not at the word's edge, and reaches D10 step 3 as the
+option's value. No defect of this change's own. `B4-temp-dialect` is cited where R6 asked for it.
 
 ---
 
@@ -139,8 +149,9 @@ see D4 below), a piece is first trimmed of `_WORD_TRIM` less `:`. If that fullma
   host, R5's rule refused ordinary text: a heredoc line `temp: 5` gives the word `temp:` (measured:
   today `_words` yields `temp`), which would have been refused as the temporary directory. So the
   bash reading does not keep the colon of `temp:`. What this leaves is a named residual: from the
-  Bash tool, `pwsh -c 'Copy-Item x Temp:'` is allowed, today and after. The other choice, keeping
-  the rule and naming the cost, is put to the operator to confirm.
+  Bash tool, `pwsh -c 'Copy-Item x Temp:'` is allowed, today and after. **(Operator,
+  `B4-temp-dialect`)** Confirmed: `Temp:` is a drive in the PowerShell dialect only, and the
+  residual is accepted. Rejected: both dialects.
 - A colon-joined option value (`_COLON_OPTION_RE`) is read with its colon kept, so
   `-Destination:Z:` judges `Z:`. **(R2)** The trim rule alone does not do this. `_words` turns
   `-Destination:Z:` into `-Destination:Z`, so the trim must also keep the colon when the piece,
@@ -485,3 +496,6 @@ operator", questions 1 to 5) on 2026-09-24 afternoon, in `spec-queue/DECISIONS.m
 5. **Answered (`B4-residuals`), the sibling change's questions:** its `case`-arm residual stays, and
    its four device names stay exempt, accepting the inner-PowerShell `> /dev/null` residual. Neither
    bears on this change's rules.
+6. **Answered (`B4-temp-dialect`), R6's `Temp:` choice.** `Temp:` is a drive in the PowerShell
+   dialect only (D1). In bash, `temp:` is ordinary text. The residual, `pwsh -c '…Temp:'` sent from
+   the Bash tool, is accepted. Rejected: both dialects.

@@ -34,7 +34,15 @@ a word only when that drive exists.
 - step 2's bash spelling also matches PowerShell's `$env:NAME`, which a nested `powershell -c`
   expands (measured: allowed today from the Bash tool);
 - step 1's `Temp:` is read in PowerShell only (Windows PowerShell 5.1 has no such drive, measured),
-  so a heredoc's `temp:` stands; this is R6's choice, put to the operator to confirm.
+  so a heredoc's `temp:` stands. R6's choice, confirmed by the operator (`B4-temp-dialect`,
+  `spec-queue/DECISIONS.md`).
+
+**R7, 2026-09-24 (independent comparison of R6's fixes).** The four R6 fixes fire where they are
+placed, re-measured against the code at `658332b`: the words `␀env:TEMP` and `␀{env:USERPROFILE`,
+the PowerShell `$tmp` words, a heredoc's `temp`, and the bracket-kept words `[u]p` and `u[p]` that
+change 1's D11 must yield (today `_words` gives `u]p` and `u[p`). `cp -t[u]p n` and
+`Copy-Item n -Destination:[u]p` reach D10 step 3 through the option's value, with no D11 needed.
+No defect of this change's own; the `Temp:` wording now cites the operator's answer.
 
 ## Why
 

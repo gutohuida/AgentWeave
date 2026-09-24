@@ -88,6 +88,25 @@ changed:
 
 The record is in `spec-queue/tracks/B4.md`, under "R6".
 
+**R7 ran on 2026-09-24 (independent comparison of R6's fixes).** It re-derived D11 and D12 from
+`hub/hub/mcp_server.py` at `658332b` (no product change since `a7b2df1`), measuring with `_lex`,
+`_words`, `_where`, `_judge_path` and `_decide` in-process in `py -3.11`, a throwaway `_physical`
+written from D12's text, Git Bash 5.2.37, and real junctions (`mklink /J`) in
+`testbed/scratch/b4-r7/`. D11 and D12 fire where they are placed and give the outcomes they claim,
+with four corrections:
+
+- **D8 step 4's `..` refusal did not name where it lands.** `_judge_path` on the real parent gives
+  `_OUTSIDE` alone (measured), so task 1.4f's assertion "names the workspace's parent" could not
+  pass. The refusal now names it through `_resolves_elsewhere`.
+- **D8 step 4's link test for a literal component** was step 3's `DirEntry` test, and there is no
+  `DirEntry` there. It is now `os.lstat`, since `os.path.islink` is False for a junction on 3.11.
+- **`_glob_links` calls `_physical`, `realpath` and `lstat` outside `_where`'s `try`.** What each
+  raise gives is now stated ("What each changed route returns").
+- **A named cost:** the walk judges each `..` step, so `ls sub/l*/../ws/n` is refused although it
+  lands inside.
+
+Also: D5's refusal quotes the word with its colon restored, which task 1.6 already assumed.
+
 ---
 
 **Built on the recommended answer to D4** (the built-in default posture for a Claude run stays
@@ -384,7 +403,9 @@ one.
 copy to the remote home directory) reaches the judge as `user@example.com`. It is allowed today
 (measured), and `_SCP_ADDRESS_RE` as written never sees its colon. So `_words` also yields whether
 it trimmed a `:` directly after the word, and D5 matches the word with that colon restored. (R6:
-the flag is part of the memo key; see "The bounds".) Over
+the flag is part of the memo key; see "The bounds".) **(R7)** The refusal quotes the word with the
+colon restored (`'user@example.com:'`), the text D5 matched, so a refusal of the colon form reads
+differently from any answer for the same word without it (task 1.6 asserts `'a@example.com:'`). Over
 42,860 Bash commands from this repository's own transcripts, the rule with the colon kept matched
 only two words, both `git@github.com:o/r.git` in earlier probes.
 
@@ -519,20 +540,43 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
      which is real, because a child of a real directory that is not a link is itself real. After a
      link it is the link's `os.path.realpath`, once the link has been judged inside.
    - A component that is `..`, as written or as D3's candidate, moves the branch to
-     `os.path.dirname(<real>)`. The directory reached is judged by `_judge_path` on that real path,
-     quoting the piece as written, and an outside answer refuses. `.` leaves the branch where it is.
-     Both apply to the last component too.
+     `os.path.dirname(<real>)`. The directory reached is judged against the root as `_where` judges
+     a path, and an outside answer refuses. `.` leaves the branch where it is. Both apply to the
+     last component too.
+   - **(R7) The refusal names where the step lands.** It quotes the piece as written and gives
+     `_resolves_elsewhere(<listed>/.., <real parent>)`, where `<listed>` is the path the branch
+     reached as the shell spells it (the base, then each entry's `DirEntry.path` or the literal
+     name joined on). So each branch carries its listed path beside its real one. Passing the real
+     parent to `_judge_path` as the path would not do: `_resolves_elsewhere` names the resolved
+     path only when it differs from the path given, so the reason would be the bare
+     `'sub/l*/..' is outside your workspace` (R7 measured exactly that), with nothing to say why
+     text that reads as inside is outside. That is the unexplained verdict F282 removed for links.
    - A component with no glob character, other than `..` and `.`, is not matched against a listing:
-     the branch moves to `<real>/<component>`, and, if that entry is a link (step 3's test), the link
-     is judged and followed as a match would be. A name that does not exist still moves the branch,
-     so a later `..` returns to `<real>`. On POSIX the kernel refuses `missing/..`, so this can only
-     add a refusal.
+     the branch moves to `<real>/<component>`, and, if that entry is a link, the link is judged and
+     followed as a match would be. **(R7) There is no `DirEntry` here, so step 3's test is made on
+     `os.lstat(<real>/<component>)`:** `stat.S_ISLNK(st_mode)`, or on Windows the reparse-point bit
+     of `st_file_attributes`. `os.path.islink` is not enough: on Python 3.11 it is False for a
+     junction (R7 measured it on `sub/l`), and `os.path.isjunction` arrives only in 3.12. An
+     `OSError` or `ValueError` from `lstat` means the name is not a link (it does not exist, or its
+     directory cannot be searched, which the shell cannot pass either). A name that does not exist
+     still moves the branch, so a later `..` returns to `<real>`. On POSIX the kernel refuses
+     `missing/..`, so this can only add a refusal.
 
-   Each `..` step costs one `_judge_path` on a real path (one `realpath`, which returns it
-   unchanged). It happens once per branch, and every branch came from a listed entry that was
-   charged to the budget, so the steps are bounded by the entry budget. Control, measured:
+   Each `..` step costs one `_where`-style judgement on a real path (one `realpath`, which returns
+   it unchanged). There is one per `..` component of each branch, every branch came from a listed
+   entry that was charged to the budget, and a branch ends at its first outside step, so the steps
+   are bounded by the entry budget times the piece's components. Control, measured:
    `ls in/../sub`, with `in` a junction to `ws/sub` (a link to a directory of the same depth), lists
    `ws/sub` in Git Bash and stays allowed.
+
+   **(R7) Cost: a traversal out and back in through a globbed link.** The walk judges the directory
+   each `..` reaches, not only where the piece ends. So `ls sub/l*/../ws/n`, with `sub/l` a link to
+   the workspace `ws`, is refused at the `..` although Git Bash expands it to `sub/l/../ws/n`, which
+   is `ws/n`, inside (R7 measured the expansion). Judging only the end would allow it. The walk
+   keeps the per-step judgement because it stops a branch at the first step outside, before any
+   listing outside the workspace is made or charged. The cost needs a glob matching an inside link
+   to a shallower directory and a path that climbs back into the workspace by name, and the same
+   path without the glob is allowed.
 
    **(R5) A `**` walk
    under `globstar` does not descend through a link** (bash 4.3 and later do not either); it judges
@@ -815,6 +859,14 @@ whenever `_decide` raises. The step-by-step:
 - `_glob_links` catches `OSError` and `ValueError` around each `os.scandir` **and its iteration**
   (R5: the iterator can raise part-way through a listing), each `DirEntry.is_dir()` and each
   `DirEntry.stat()`, and treats them as "no match" for that entry or directory.
+- **(R7)** `_glob_links` also calls `_physical` (the base, step 1), `os.path.realpath` (a link it
+  follows, step 4) and `os.lstat` (a literal component, step 4) outside `_where`'s `try`. Each is
+  wrapped the same way. A raise from the base's `_physical`, or a base past its 64-step bound,
+  gives no matches. That is not an allow: the literal piece has already been judged by `_where`,
+  whose physical reading makes the same `realpath` calls on the same prefix (the base is a prefix
+  of the piece), so it has answered `_UNRESOLVED` and refused. A raise from a followed link's
+  `realpath` ends that branch; `_judge_path` on the same path has just resolved it. D6 remains the
+  backstop for anything else.
 - The escape-removed readings (D7) end when a level changes nothing, so a final backslash cannot
   loop (R5). It is
   iterative, with an explicit stack, and bounded by the entry budget. (R5) A link cycle ends because a
@@ -882,6 +934,8 @@ New, or kept on purpose:
   (`echo git@github.com:o/r.git`, a commit message naming one; D5).
 - **(R5) A glob mentioned in a heredoc that also names `globstar`** is walked at every depth, and
   may pass the entry bound. The flag is read from the command's text.
+- **(R7) A traversal out and back in through a globbed link** (`ls sub/l*/../ws/n`, with `sub/l` a
+  link to the workspace) is refused at the `..`, although it lands inside (D8 step 4).
 
 ## Open questions
 
