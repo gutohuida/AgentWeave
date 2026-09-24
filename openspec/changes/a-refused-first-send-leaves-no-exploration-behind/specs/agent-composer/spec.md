@@ -41,6 +41,7 @@ phase like any other.
 - **THEN** the request SHALL be answered with the refusal
 - **AND** the document created for that request SHALL be archived, with the refusal as the reason
 - **AND** its creation event SHALL still be recorded
+- **AND** the document's file SHALL show it as archived
 - **AND** subscribers SHALL be told the specification list changed
 
 #### Scenario: The commit fails

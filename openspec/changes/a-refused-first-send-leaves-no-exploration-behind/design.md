@@ -115,9 +115,15 @@ reasons found in the code and the main spec:
    tree's current view (`specNavigation.ts:53`, `:103-104`) and shown under *Archived* in the
    browser (`SpecDocumentBrowser.tsx:136-149`).
 
-So `spec_service.retire_refused_exploration(session, document, *, reason)` calls `transition` to
-`archived` with `_operator()` and the refusal's detail as the reason, commits, and broadcasts
-`spec_updated`. It does nothing, and returns `False`, unless the document is still `exploring`
+So `spec_service.retire_refused_exploration(session, workspace, document, *, reason)` calls
+`transition` to `archived` with `_operator()` and the refusal's detail as the reason, then
+`spec_service.rerender_phase(session, workspace, document)`, commits, and broadcasts
+`spec_updated`: the same three steps, in the same order, as the operator's own `POST
+/documents/phase` (`spec.py:1606-1629`). R3: without `rerender_phase` the row would say `archived`
+while the file's visible status still said `exploring` (`rerender_phase`'s docstring,
+`spec_service.py:788-813`: the file's metadata is a copy refreshed there). If `rerender_phase`
+raises `OSError`, the phase is still committed, since the row is the authority, and the route
+logs it. It does nothing, and returns `False`, unless the document is still `exploring`
 and its only events are the `created` and content events this request wrote. `transition`'s own
 guard already refuses a document with requirements or tasks. It is called in the F108 branch
 **whether or not** `withdraw_refused_entry` returns `True`: `False` means the scheduler withdrew the
@@ -127,6 +133,29 @@ answers with the original refusal and logs the path.
 
 The commit-failure branch removes only the file (the rows were never committed). That is not a
 deletion of anything the Hub recorded.
+
+**Reachability from the composer (R3).** The composer sends only `agent`, `message` and
+`overrides` (`NewConversationSurface.tsx:98-106`), for an agent picked from its rows. Of
+`trigger_agent_directly`'s request-level refusals (`agent_trigger.py`, every `request_level=True`):
+the name check (`:656`) and the archived check (`:708`) are restated by the route before creation
+(`:1415-1435`); the review and batching refusals (`:444`, `:459`, `:832-921`) need a review entry,
+which D1 refuses; the `work_dir` refusals (`:930`, `:942`) need a `work_dir`, which the route also
+checks first; and the two unsupported-runner refusals (`:738`, `:1173`) cannot fire, because a
+runner's `cli` is validated against `RUNNER_CLIS = ("claude", "codex")` (`db/models.py:311`), both in
+`SUPPORTED_RUNNERS` (`runner_commands.py:60`) and both built by `build_command`. That leaves an agent
+with no row (`:676-687`), which the composer cannot name (no route deletes an `Agent` row), and an
+agent **archived between the route's check and the dispatch** in the same request. So from the real
+composer this branch fires only on that race; an API caller naming a non-existent agent reaches it
+directly, which is how tasks 1.2/1.2b stage it. It is kept because it is cheap, it is correct for the
+race, and a request-level refusal added to `trigger_agent_directly` later lands in it rather than
+reopening F330 (the argument against pre-checking every refusal, below). F330's recorded case and
+its reproduction are both closed by D1 and the commit compensation, not by this branch.
+
+What the operator sees in that case: the composer's error with the refusal's sentence, their text
+back in the box (`Composer.tsx:216-217`), no new document in the current tree, and the archived
+placeholder under *Archived* in the browser. The conversation row this request committed stays,
+with its entry withdrawn; that is F108's existing behaviour for every refused first send and is not
+changed here.
 
 **The residual, stated:** after a post-commit dispatch refusal the file stays under `spec/changes/`
 and the row stays, archived. The operator is not shown it in the current tree. This is what
@@ -167,3 +196,7 @@ precondition, `:8000` restarted past `c18a87b`).
   append-only events. D1 gains the full refusal list and two more 400 conflicts. D2 gains the
   environment-level and unexpected-raise rows. The F108 branch retires the document whether or
   not this call withdrew the entry.
+- **R3 (2026-09-24):** D3's retire now also calls `rerender_phase`, as the operator's phase route
+  does, so the file does not keep showing `exploring`. D3 gains the reachability argument: from the
+  real composer the archive branch fires only on an archive race; D1 and the commit compensation are
+  what close F330's recorded cases. No decision changed.

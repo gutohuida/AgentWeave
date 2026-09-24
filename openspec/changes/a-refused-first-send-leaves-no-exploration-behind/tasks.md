@@ -12,8 +12,9 @@
     D-B12-1;
   - challenge D3 against `spec-document-authority` `:1891`'s "rather than a separate deletion
     path".
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate
-  a-refused-first-send-leaves-no-exploration-behind --strict` passes.
+- [x] 0.2 R3 (2026-09-24): a second independent re-derivation. `openspec validate
+  a-refused-first-send-leaves-no-exploration-behind --strict` passes. Added `rerender_phase` to the
+  retire (2.2, 1.2) and D3's reachability argument.
 - [ ] 0.3 The operator answers D-B12-1 and D-B12-2 in `spec-queue/DECISIONS.md` and approves the
   change in `APPROVALS.md`.
 
@@ -37,7 +38,8 @@ workspace under `tmp_path` so the `spec/` files can be listed.
   does not check) or a runner with no execution adapter (`:731-738`). The answer is that
   refusal's status. The entry is `withdrawn`. The document is `archived`, its `created` event is
   still present, its last event is a `phase` event whose reason is the refusal's detail, and a
-  `spec_updated` event was broadcast. Record that it FAILS before group 2.
+  `spec_updated` event was broadcast, and the file's rendered status reads archived (R3: fails
+  if `rerender_phase` is left out). Record that it FAILS before group 2.
 - [ ] 1.2b The same, with `withdraw_refused_entry` patched to return `False` (the scheduler got
   there first). The document is still archived. Fails if the retire call is nested under the
   withdraw's `True` branch.
@@ -75,7 +77,8 @@ workspace under `tmp_path` so the `spec/` files can be listed.
   sequence into it, and call it from `POST /project/documents`. Behaviour is unchanged there. The
   existing document-creation tests are the control.
 - [ ] 2.2 `spec_service.retire_refused_exploration(...)`, per design D3: archive through
-  `spec_lifecycle.transition`, never delete.
+  `spec_lifecycle.transition`, then `rerender_phase`, then commit and broadcast, as `POST
+  /documents/phase` does. Never delete.
 - [ ] 2.3 `TriggerAgentRequest.start_exploration` and `TriggerAgentResponse.spec_document`. In
   `trigger_agent`, implement the 400 conflicts, the creation immediately before `new_entry`, the
   compensated commit, and the retire call in the F108 branch whatever `withdraw_refused_entry` returns. Also set

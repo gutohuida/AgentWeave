@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B12 -- Single-finding specs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B12.md, tracked</p>
+  <h1>B12 &mdash; Single-finding specs</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F65, F130, F330, F363, F278</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D-B12-1 and D-B12-2 (F330), D-B12-3 (F363); F363 also depends on F354 (B11), which R1 treats as an assumption</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/a-specification-is-read-in-results-that-fit/</code>, <code>openspec/changes/a-refused-first-send-leaves-no-exploration-behind/</code>, <code>openspec/changes/a-file-path-is-not-redacted-as-a-credential/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R3 done — parked for operator</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><a class="toc-item" href="#R2">R2</a><a class="toc-item" href="#R3">R3</a><a class="toc-item toc-final" href="#Final">Final</a></nav>
+  </div>
+  <section class="sec-final" id="Final"><h2>Final -- what the bundle reached, and why</h2><div class="md-body"><p><strong>Parked awaiting the operator&#x27;s approval. IMPL has not started.</strong></p>
+<h5>Decisions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Recommended answer</th><th>Why</th></tr></thead><tbody><tr><td>D-B12-1</td><td>F330: what happens to a document created for a first send that is refused?</td><td><strong>Nothing committed is deleted.</strong> The trigger route creates the document itself, after all its own refusals and in the same transaction as the message, so a refusal before the commit or a failed commit leaves nothing (the route removes the one file it wrote). A refusal from the dispatch after the commit <strong>archives</strong> the document as the operator&#x27;s act, just as the operator&#x27;s own archive does.</td><td>Deleting would erase recorded document events, which <code>spec-document-authority</code> forbids (&quot;A recorded event MUST NOT be edited or removed&quot;), and would be the separate deletion path the same spec rules out. The archive case is rare: from the real composer only an agent archived mid-request reaches it.</td></tr><tr><td>D-B12-2</td><td>F330: the document cannot be created (names exhausted, write error). Send anyway?</td><td><strong>Refuse the send and say why.</strong></td><td>A first explore turn without its document is the exact failure the explore control exists to prevent (<code>NewConversationSurface.tsx:72-76</code>); the composer restores the text on any refusal, so nothing is lost.</td></tr><tr><td>D-B12-3</td><td>F363: how is an agent&#x27;s spec read kept inside what its harness accepts?</td><td><strong>The Hub enforces a 40,000-character budget on the whole response and names the requirements still to ask for</strong> (by identifier, or key when there is none), plus an <code>outline</code> view.</td><td>Claude Code spills an MCP result to a file above 50,000 characters (read from the installed CLI); three documents in <code>spec/</code> already exceed that; an agent cannot see the ceiling, so a size it chose would be chosen wrong.</td></tr></tbody></table></div>
+<h5>Changes</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>openspec/changes/a-specification-is-read-in-results-that-fit/</code></td><td>F363</td><td>Budgets <code>read_spec_document</code>&#x27;s response, continues by requirement identifier or key, adds <code>outline</code>, accepts a document id, answers an unreadable file with 409 instead of 500.</td><td>M: route, <code>spec_reading.fit_view</code>, tool signature; about 13 tests</td></tr><tr><td><code>openspec/changes/a-refused-first-send-leaves-no-exploration-behind/</code></td><td>F330</td><td><code>POST /agent/trigger</code> gains <code>start_exploration</code>; the composer makes one request; a refused send leaves no document (or an archived one after a dispatch refusal).</td><td>M: route, two <code>spec_service</code> helpers, composer; two commits, the UI one after <code>:8000</code> restarts</td></tr><tr><td><code>openspec/changes/a-file-path-is-not-redacted-as-a-credential/</code></td><td>F278</td><td>The run-event redactor keeps ordinary file paths of three or more segments and still redacts long credential-like segments inside them.</td><td>S: one function and a test rewrite</td></tr></tbody></table></div>
+<h5>Open for the operator</h5>
+<ol>
+<li><strong>D-B12-1</strong>: archive, never delete (recommended). <em>If delete:</em> the change must add MODIFIED</li>
+</ol>
+<p>deltas to two <code>spec-document-authority</code> requirements (append-only events; &quot;rather than a separate deletion path&quot;), and the file would also vanish from <code>spec/changes/</code>.</p>
+<ol>
+<li><strong>D-B12-2</strong>: refuse the send (recommended). <em>If &quot;send anyway&quot;:</em> a creation failure becomes a</li>
+</ol>
+<p>notice on a 200, and the existing vitest case stays.</p>
+<ol>
+<li><strong>D-B12-3</strong>: Hub-enforced 40,000-character budget with identifier continuation (recommended).</li>
+</ol>
+<p><em>Agent-chosen <code>max_chars</code>:</em> fails invisibly, since the agent sees a spill notice, not a size. <em>Only <code>outline</code>:</em> the default read shrinks, but criteria reads still spill.</p>
+<ol>
+<li><strong>Order with B11 (F354)</strong>: recommended B11&#x27;s pin IMPL, then your <code>:8000</code> restart, then F363&#x27;s</li>
+</ol>
+<p><code>mcp_server.py</code> half. F363 is also safe without it (its D5), so B11 is not a hard blocker.</p>
+<ol>
+<li><strong>F330&#x27;s UI commit</strong> waits for your <code>:8000</code> restart past its Python commit: a new composer on an</li>
+</ol>
+<p>old Hub would have every explore send refused (unknown field).</p>
+<h5>Findings that did not need a change</h5>
+<ul>
+<li><strong>F130: already fixed</strong> (Round 3, 2026-09-22). <code>checkpoints.boundary_of</code></li>
+</ul>
+<p>(<code>hub/hub/checkpoints.py:158</code>) is used by <code>runs_to_cover</code> (<code>:200</code>) and <code>compute_envelope</code> (<code>:410</code>); pinned by <code>test_a_checkpoint_over_an_empty_span_keeps_the_boundary_where_it_was</code> and <code>test_an_empty_checkpoint_written_before_the_fix_is_read_through_its_predecessor</code> (<code>hub/tests/test_checkpoint_record.py:443</code>, <code>:462</code>). Needs a ledger close; ROUNDS&#x27; single-finding row should drop it.</p>
+<ul>
+<li><strong>F65: needs only a ledger close.</strong> The entry it describes (a queued review with no commit to</li>
+</ul>
+<p>check out) can no longer be created: <code>decide_firing</code> asks <code>commit_for_task_review</code> (<code>scheduler.py:1970</code>) before staffing and reports the task unstaffed (added by <code>3e07726</code>, 2026-08-28); <code>POST /agent/trigger</code> refuses 409 before queueing (<code>agent_trigger.py:1527</code>); the divergence restaff (<code>run_divergence.py:483</code>) follows a review that ran, and evidence rows are never deleted. The only queue sites setting <code>review_task_id</code> are <code>agent_trigger.py:1582</code>, <code>run_divergence.py:483</code> and <code>scheduler.py:3417</code>, <code>:3747</code>. A pre-2026-08-28 leftover is given up after <code>DELIVERY_ATTEMPT_LIMIT = 3</code>. &quot;Queued as Q4-SPEC&quot; is a historical label; no such change exists. Optional: one regression test that an evidence-less review selection queues no entry (no existing test asserts the queue stays empty).</p>
+<ul>
+<li><strong>Candidate new finding (not filed):</strong> <code>list_evidence</code>&#x27;s <code>document</code> argument is silently ignored</li>
+</ul>
+<p>when no <code>identifier</code> is given (<code>agent_actions.py:1248-1275</code>), so a call passing a document id &quot;succeeds&quot; by not reading it. Surfaced by R1 while re-verifying F363; worth filing on its own.</p></div></section><section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>Read at worktree HEAD <code>ce086b6</code> (the bundle-opening commit on top of <code>404c7d5</code>; it touched no product code). The ROUNDS row also lists F213, but the bundle table moved it to B6, so it is not handled here. In severity order: F130 (B), F363 (B), then F65, F330 and F278 (C).</p>
+<h5>F130 (B) — already fixed; no change</h5>
+<p>ROUNDS.md&#x27;s condition was <em>&quot;if Round 3c finds no contract&quot;</em>. Round 3c found the contract: its entry reads <em>&quot;A repair, not a spec track: <code>conversation-checkpoint</code>&#x27;s </em>A checkpoint is anchored on its predecessor rather than regenerated* already says generation &#x27;SHALL NOT re-read the whole conversation from its start&#x27;&quot;<em> (<code>scripts/drive/FINDINGS.md:10084</code>). It was fixed on 2026-09-22 in Round 3 (group 3c) with <code>checkpoints.boundary_of(anchor)</code>, which <code>compute_envelope</code> and <code>runs_to_cover</code> both use. The tests are <code>test_a_checkpoint_over_an_empty_span_keeps_the_boundary_where_it_was</code> and <code>test_an_empty_checkpoint_written_before_the_fix_is_read_through_its_predecessor</code> (<code>test_checkpoint_record.py</code>). Its status line says </em>&quot;fixed … [Round 3, 2026-09-22]&quot;* (<code>:9988</code>). The one residual the entry names is that a legacy NULL row can cost one more empty checkpoint. That is self-healing and needs no spec. <strong>Needs:</strong> nothing. ROUNDS&#x27; single-finding row should drop it.</p>
+<h5>F363 (B) — still open; change <code>a-specification-is-read-in-results-that-fit</code></h5>
+<p>Re-verified. The route has no size bound (<code>hub/hub/api/v1/agent_actions.py:1374-1481</code>). <code>include</code> is still only <code>requirements|full</code> (<code>:1377</code>), and a <code>spdoc-</code> id still reaches <code>validate_spec_path</code> (<code>:1401-1404</code> → <code>spec_manifest.py:72</code>), which answers <em>&quot;path must begin with &#x27;spec/&#x27;&quot;</em>. Measured on this repository&#x27;s own corpus: the default view of <code>spec/capabilities/agent-conversation-workspace/spec.html</code> is over 72,000 characters before its envelope, with 47 requirements (30.7 KB of statements and 41.9 KB of criteria).</p>
+<p><strong>One claim in the finding changed shape.</strong> <em>&quot;<code>list_evidence</code> accepts that id&quot;</em> is not quite right. <code>list_evidence_for_agent</code> (<code>agent_actions.py:1248-1275</code>) reads <code>document</code> <strong>only</strong> when <code>identifier</code> is given, and then resolves it by path (<code>_resolve_requirement</code>, <code>:1154-1164</code>, which would 404 on an id). Without <code>identifier</code>, <code>document</code> is ignored silently, so the call &quot;accepts&quot; the id by not looking at it. The ids agents actually hold come from tasks (<code>spec_document_id</code>, <code>mcp_server.py:754</code>, <code>:859</code>). <code>run_task_binding.spec_document_for_task</code> (<code>:464-477</code>) exists because a builder tried the id and was refused. <strong>Candidate new finding (not filed, since R1 does not edit FINDINGS.md):</strong> <code>list_evidence</code>&#x27;s <code>document</code> is silently ignored when <code>identifier</code> is empty.</p>
+<p><strong>The F354 dependency.</strong> <code>spec-queue/tracks/B11.md</code> did not exist when R1 ran. <strong>Assumption stated:</strong> R1 assumes nothing about F354&#x27;s answer. The change is designed so that either version skew between <code>mcp_server.py</code> (spawned from the working tree) and the running Hub degrades to today&#x27;s behaviour, never to a refusal (design D5). The skew table:</p>
+<ul>
+<li><strong>New tool, old Hub:</strong> the extra <code>identifiers</code> query parameter is ignored. An <code>include=outline</code></li>
+</ul>
+<p>gets a 422, which is why the tool&#x27;s default must stay <code>requirements</code> (task 1.11).</p>
+<ul>
+<li><strong>Old tool, new Hub:</strong> everything works.</li>
+</ul>
+<p>So F354 decides only <em>when</em> IMPL&#x27;s commit may land on the branch <code>:8000</code> runs, not the design. If B11 recommends pinning the server the Hub loaded, D5 becomes belt and braces.</p>
+<p><strong>D-B12-3 — how the read is bounded.</strong></p>
+<ul>
+<li>(a) <strong>A budget enforced by the Hub, with continuation by requirement identifier.</strong> Recommended.</li>
+</ul>
+<p>An agent cannot see the harness ceiling, so a bound it chooses is chosen wrong. Identifier-keyed continuation matches how agents already reason (<code>FR-n</code>) and also serves a builder that only needs its task&#x27;s requirements.</p>
+<ul>
+<li>(b) A <code>max_chars</code> or page parameter chosen by the agent. It fails invisibly, because the agent</li>
+</ul>
+<p>sees a spill notice and not a size.</p>
+<ul>
+<li>(c) Only add <code>outline</code>. The default read shrinks, but criteria reads still spill.</li>
+</ul>
+<p>Recommended: (a), at 40,000 serialised characters. R2 must confirm Claude Code&#x27;s MCP ceiling. R1 believes it is 25 k tokens by default (<code>MAX_MCP_OUTPUT_TOKENS</code>), but did not verify.</p>
+<p><strong>Route under raise (design D6).</strong> <code>read_document</code> raising <code>OSError</code> or <code>UnicodeDecodeError</code> is an unhandled 500 today (<code>spec_documents.py:136-142</code>). R1 left the choice of owning it to R2; the recommendation is a 409 naming the reason.</p>
+<h5>F65 (C) — changed shape; the state it describes can no longer be born; no change</h5>
+<p>The finding&#x27;s status line (<em>&quot;still ends … on the first refusal rather than after three attempts&quot;</em>) is inverted relative to the code. The operator&#x27;s chosen fix (2026-08-26) was to make &quot;no evidence to review&quot; <strong>terminal on the first refusal</strong>. Today it is counted like every request-level refusal and given up after <code>DELIVERY_ATTEMPT_LIMIT = 3</code> (<code>hub/hub/inbound_queue.py:222</code>; <code>turn_scheduler.py:596-608</code>, where <code>gives_up = attempts &gt;= DELIVERY_ATTEMPT_LIMIT</code> and the entry is withdrawn with <code>abandoned_reason</code> and a <code>queue_entry_abandoned</code> event).</p>
+<p><strong>&quot;Queued as Q4-SPEC&quot;: no such change exists.</strong> <code>openspec/changes/</code> has no Q4-SPEC directory and no archived change carries F65. <code>FINDINGS.md:3166</code> (F53&#x27;s D-4 note, 2026-09-22) already records that <em>&quot;that queue label is historical&quot;</em>. The same label on F65 is historical too.</p>
+<p><strong>What closed the defect: every path that could queue a review with no commit to check out now refuses before queueing.</strong></p>
+<ol>
+<li><strong>Loops and flows</strong> (F65&#x27;s own origin: a loop briefing). <code>decide_firing</code></li>
+</ol>
+<p>(<code>scheduler.py:1617</code>) asks <code>commit_for_task_review</code> before resolving a reviewer and reports the task as <code>unstaffed</code> with the reason (<code>scheduler.py:1956-1979</code>). This was added by <code>3e07726</code> (2026-08-28, <em>&quot;a firing does not stage a review it cannot start&quot;</em>), two days after F65 was filed. The loop path (<code>scheduler.py:3747</code>) and the flow path (<code>:3417</code>) both take their selections from <code>decide_firing</code> (<code>:3235</code>). Tests: <code>test_a_review_needs_something_to_review.py:158-225</code>.</p>
+<ol>
+<li><strong>The operator&#x27;s <code>POST /agent/trigger</code></strong> refuses 409 before anything is queued</li>
+</ol>
+<p>(<code>agent_trigger.py:1522-1529</code>).</p>
+<ol>
+<li><strong>The divergence restaff of a failed review</strong> (<code>run_divergence.py:483</code>) follows a review turn</li>
+</ol>
+<p>that ran, so evidence naming a commit existed. Evidence rows are never deleted: <code>grep</code> finds no <code>delete(RequirementEvidence…)</code> in <code>hub/hub</code>, and <code>mark_artifact_removed</code> is dead and in any case keeps the row (<code>requirement_evidence.py:864-885</code>).</p>
+<p>So the entry F65 describes can arise today only as a leftover from before 2026-08-28. Such a leftover is given up after three passes, and until then it blocks archiving its agent with a 409 that names it and offers the remedy (<code>agents.py:2799-2832</code>, F180).</p>
+<p><strong>Needs:</strong> a ledger close on F65, not a spec. The close should cite <code>3e07726</code>, the route refusal, and the three-attempt give-up, and should note that the operator&#x27;s &quot;terminal on first refusal&quot; is now moot because nothing can produce the entry. <strong>Optionally</strong>, add one regression test that <code>decide_firing</code> never queues an entry with <code>review_task_id</code> set for an evidence-less task. The existing tests assert the selection and the task status, and R2 should check whether any of them asserts that the queue is empty. R2 should also re-check claim 3 (any other <code>new_entry(..., review_task_id=…)</code> site: R1 found <code>agent_trigger.py:1582</code>, <code>run_divergence.py:267/483</code> and <code>scheduler.py:3417/3747</code> only).</p>
+<h5>F330 (C) — still open; change <code>a-refused-first-send-leaves-no-exploration-behind</code></h5>
+<p>Re-verified at <code>hub/ui/src/components/agents/NewConversationSurface.tsx:83-117</code>: the create happens first, the trigger second, and a refusal throws with no cleanup. <code>POST /project/documents</code> writes the file before its commit (<code>spec.py:1461</code> → <code>spec_service.py:238</code>). A file under <code>spec/</code> without a row is not inert, because discovery and adoption find it. <code>RequestModel</code> refuses unknown fields (<code>schemas/common.py:21</code>, F116). That makes the shipping order a hard constraint: a new bundle against the old Hub would refuse every explore send (design D5). So the change ships as two commits, with the UI only after the operator restarts <code>:8000</code>.</p>
+<p><strong>D-B12-1 — what happens to a document created for a refused send.</strong></p>
+<ul>
+<li>(a) <strong>The request that created it discards it</strong> (file, events, index rows and the row), gated on</li>
+</ul>
+<p>the document still being <code>exploring</code>, having no later event, and being named by no task or loop. The function is reachable from no route. Recommended.</p>
+<ul>
+<li>(b) The composer archives it through the phase machine</li>
+</ul>
+<p>(<code>spec-document-authority</code> <code>:1891</code>). This keeps &quot;no deletion&quot;, but the row and the file remain, so F330&#x27;s <em>&quot;in the repository and in the spec list&quot;</em> is only half fixed. It also does nothing when the tab closes or the network drops.</p>
+<ul>
+<li>(c) Create it at dispatch. It needs a queue-entry column (a migration), gives no path to a</li>
+</ul>
+<p>queued first send, and still has to compensate for a file written before a rolled-back dispatch.</p>
+<p>The argument for (a) against <code>:1891</code>&#x27;s <em>&quot;rather than a separate deletion path&quot;</em>: that requirement governs a document someone has seen. This one is the refused request undoing its own write. R2 is asked to challenge it.</p>
+<p><strong>D-B12-2 — the document cannot be created (naming exhausted, write error).</strong></p>
+<ul>
+<li>(a) <strong>Refuse the send and say why.</strong> Recommended. The composer restores the text on any throw</li>
+</ul>
+<p>(<code>Composer.tsx:216-217</code>), so nothing is lost. Sending without the document is exactly the symptom the explore control was built to stop (<code>NewConversationSurface.tsx:72-76</code>).</p>
+<ul>
+<li>(b) Today&#x27;s behaviour: send anyway, silently without a document. It is pinned by the vitest case</li>
+</ul>
+<p><em>&quot;still starts the conversation when the document cannot be created&quot;</em>, which (a) replaces.</p>
+<p><strong>Route under raise:</strong> design D2 tabulates every raise (mint, create, file write, commit, dispatch refusal) and what each leaves behind. A failed file removal answers with the original error and leaves a file with no row, which is no worse than today.</p>
+<p><strong>Out of scope, stated in the spec:</strong> input answered <code>200 queued</code> and later given up after three delivery failures. The operator was told it was accepted, and the document is retired through its phase.</p>
+<h5>F278 (C) — still open; change <code>a-file-path-is-not-redacted-as-a-credential</code></h5>
+<p>Re-verified by calling <code>hub.runner_events.redact_secrets</code> at HEAD: <code>/Users/operator/code/agentweave/hub/main.py</code> becomes <code>&lt;redacted&gt;.py</code>, and <code>/workspace/proj/.agentweave/worktrees/beta/src/app.py</code> becomes <code>/workspace/proj/.&lt;redacted&gt;.py</code>. The pattern is unchanged (<code>runner_events.py:57-60</code>). No decision is needed.</p>
+<p>The fix keeps the pattern and decides in the replacement. A catch-all match with at least three <code>/</code> segments, each an ordinary lowercase or camel-case word, is kept, and any segment of 32 or more characters inside it is still redacted. Measured:</p>
+<ul>
+<li>every credential in the existing tests is still redacted;</li>
+<li>the AWS-style <code>wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY</code> is still redacted;</li>
+<li><code>…/v1/tokens/&lt;40 hex&gt;</code> keeps its path and loses the value;</li>
+<li>the residual is 1 survivor in 1,146,498 random base64 strings containing <code>/</code>;</li>
+<li>two-segment paths were rejected, because 3 of 790,914 random strings survived under that rule.</li>
+</ul>
+<p><strong>A test pins the defect:</strong> <code>test_write_paths_on_run_events.py:139-148</code> asserts that the path is <em>absent</em> from <code>payload[&quot;input&quot;]</code>. Task 1.5 rewrites it to keep proving read-before-redact ordering, with a path that still redacts. The CLI twin (<code>src/agentweave/diagnostics.py:43</code>) has no <code>/</code> in its class and is untouched.</p>
+<h5>What was written</h5>
+<ul>
+<li>The three change directories above, each with <code>proposal.md</code>, <code>design.md</code>, <code>tasks.md</code>,</li>
+</ul>
+<p><code>test-guide.md</code>, a spec delta and <code>.openspec.yaml</code>. All three pass <code>openspec validate &lt;name&gt; --strict</code>.</p>
+<ul>
+<li>Deltas: <code>spec-document-authority</code> (2 ADDED), <code>agent-composer</code> (1 ADDED), <code>agent-stream-events</code></li>
+</ul>
+<p>(<em>Structured payload safety</em>, MODIFIED).</p>
+<ul>
+<li>No product code, tests, FINDINGS, ROUNDS, APPROVALS or DECISIONS were edited.</li>
+</ul>
+<h5>Open for R2</h5>
+<ul>
+<li>F363: the MCP ceiling (D1), the <code>outline</code> size, whether FastAPI ignores the undeclared query</li>
+</ul>
+<p>parameter, D6&#x27;s <code>OSError</code>, and B11&#x27;s F354 answer if it exists by then.</p>
+<ul>
+<li>F330: the complete list of refusals on each side of the creation point; whether a</li>
+</ul>
+<p>non-request-level dispatch refusal can reach the caller as an error; whether the spec list hides archived documents; and the challenge to D3.</p>
+<ul>
+<li>F278: re-run the residual measurement.</li>
+<li>F65: check whether any test asserts that no entry is queued for an evidence-less review</li>
+</ul>
+<p>selection, and re-grep the <code>review_task_id</code> sites.</p></div></section><section class="sec-round" id="R2"><h2>R2 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Re-derived at the worktree&#x27;s HEAD. 31 load-bearing claims checked against the code; 9 disagreed or were incomplete. <code>spec-queue/tracks/B11.md</code> still does not exist; B11&#x27;s F354 change (<code>openspec/changes/an-agents-tool-server-is-the-one-its-hub-loaded/</code>) does. All three changes pass <code>openspec validate --strict</code> after the edits.</p>
+<h5>Claims that disagreed with the code, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Claim (round)</th><th>What the code says</th><th>Changed</th></tr></thead><tbody><tr><td>1</td><td>F363 D1: Claude Code spills at 25k tokens (<code>MAX_MCP_OUTPUT_TOKENS</code>)</td><td>Read from the installed CLI (2.1.280, <code>claude.exe</code>): a result is <strong>spilled</strong> to <code>tool-results/</code> above <code>min(maxResultSizeChars=1e5, C$=50000)</code> = <strong>50,000 characters</strong> of text. <code>MAX_MCP_OUTPUT_TOKENS</code> (default 25,000 tokens, about 100,000 characters) is a separate, larger <strong>truncation</strong> limit. A remote flag can override the spill threshold per tool</td><td>D1 rewritten with both limits. The 40,000 budget stands, with 10,000 characters of headroom; the budget now counts the whole response</td></tr><tr><td>2</td><td>F363: the default view of the largest document is over 72 KB</td><td>66,559 characters by <code>json.dumps</code>, 64,450 as fastmcp 3.1.0 sends it (compact <code>pydantic_core.to_json</code>). Three documents in <code>spec/</code> exceed 50,000</td><td>Numbers corrected in the proposal and design; conclusion unchanged</td></tr><tr><td>3</td><td>F363 D3: outline size unknown</td><td>Largest outline over the 34 documents: 13,199 characters</td><td>Recorded</td></tr><tr><td>4</td><td>F363 D2/D3: continuation by identifier reaches every requirement</td><td><code>requirement_view</code> returns unindexed requirements with an identifier from the document&#x27;s identity block, which can be <code>None</code> (<code>spec_reading.py:164-189</code>); they could never be asked for again</td><td><code>identifiers</code> also matches <code>key</code>; <code>remaining_identifiers</code> names the key when the identifier is null. Spec sentence and task 1.12 added</td></tr><tr><td>5</td><td>F363 D6: <code>read_document</code> raising <code>OSError</code> is the only unhandled raise</td><td>Also <code>UnicodeDecodeError</code> (a <code>ValueError</code>) and <code>ProjectPathError</code> from <code>resolve_relative</code> (<code>project_workspace.py:78-80</code>); all three are 500 today</td><td>Decided: all three answer 409, after the precedent at <code>spec.py:197-205</code>. Task 1.13 added</td></tr><tr><td>6</td><td>F363 Context: an agreement test covers <code>include</code> (<code>test_mcp_tool_schemas.py:86</code>)</td><td>No test covers <code>read_spec_document</code>; the route&#x27;s values are inside a <code>pattern=</code> string</td><td>Context corrected; task 1.11 now makes the values an importable constant first</td></tr><tr><td>7</td><td>F363 task 1.3: declare requirements out of identifier order</td><td>Identifiers are minted in declaration order, so a first submission cannot be out of order</td><td>Task 1.3 uses 12+ requirements (string vs numeric order) and a reordered second revision</td></tr><tr><td>8</td><td><strong>F330 D3: discarding the document is compatible with the main spec except for <code>:1891</code></strong></td><td>The discard deletes <code>spec_document_events</code> rows. <code>spec-document-authority</code> <em>Every change to a document is recorded as an attributed event</em> says &quot;A recorded event MUST NOT be edited or removed&quot; (scenario <em>History cannot be rewritten</em>). R1 did not weigh it</td><td><strong>D-B12-1 reversed</strong> (below). Design D3, proposal, spec delta, tasks 1.2/1.2b/1.7/2.2/2.3 and the test guide rewritten</td></tr><tr><td>9</td><td>F330 D3: discard only when <code>withdraw_refused_entry</code> returns <code>True</code></td><td><code>False</code> means the scheduler withdrew it first (<code>inbound_queue.py:443-447</code>); the route raises the refusal either way, so the composer never learns the path</td><td>Retire in the F108 branch regardless; task 1.2b</td></tr></tbody></table></div>
+<p>Two smaller F330 additions: D1&#x27;s creation point now lists <strong>every</strong> route refusal (<code>agent_trigger.py:1415-1565</code>, all before <code>new_entry</code>), and <code>start_exploration</code> is also refused with <code>session_mode=&quot;resume&quot;</code> and with <code>review_task_id</code>. D2 gains two rows: an environment-level refusal answers <code>200 queued</code> (no <code>refusal</code>, <code>:1654-1658</code>), and an unexpected raise after the commit leaves a still-queued entry with its document, which is correct.</p>
+<h5>D-B12-1 reversed</h5>
+<p>R2 recommends <strong>(d): nothing committed is ever deleted.</strong> Route-level refusals are all before the creation point, and a failed commit rolls the rows back while the route removes its own file. That covers F330&#x27;s recorded case (F329&#x27;s 500 at the commit) and its reproduction (an archived agent). Only a dispatch refusal after the commit remains, such as an agent with no row (<code>agent_trigger.py:676-687</code>, not checked by the route) or a runner with no adapter (<code>:731-738</code>). There the route <strong>archives</strong> the document through <code>spec_lifecycle.transition</code> as the operator&#x27;s act (<code>exploring → archived</code> is permitted for a document with no requirements or tasks, <code>spec_lifecycle.py:320-341</code>). Archived documents are left out of the spec tree&#x27;s current view (<code>specNavigation.ts:53</code>, <code>:103-104</code>) and listed under <em>Archived</em> in the browser (<code>SpecDocumentBrowser.tsx:136-149</code>). So the file stays in <code>spec/changes/</code> for that rare case only.</p>
+<ul>
+<li>(a) R1&#x27;s delete remains available, but it needs MODIFIED deltas to two main-spec requirements</li>
+</ul>
+<p>(append-only events, and <code>:1891</code>&#x27;s &quot;rather than a separate deletion path&quot;). R2&#x27;s answer to the question R1 left open: the &quot;deletion path&quot; argument alone might hold, but the append-only rule does not bend to it.</p>
+<ul>
+<li>(b) The composer archives, and (c) create at dispatch: rejected for R1&#x27;s reasons, which still hold.</li>
+</ul>
+<h5>What stands</h5>
+<ul>
+<li><strong>F130</strong>: already fixed. <code>boundary_of</code> (<code>checkpoints.py:158</code>) is used by <code>runs_to_cover</code> (<code>:200</code>)</li>
+</ul>
+<p>and <code>compute_envelope</code> (<code>:410</code>), and both named tests exist (<code>test_checkpoint_record.py:443</code>, <code>:462</code>). A ledger close, not a spec.</p>
+<ul>
+<li><strong>F65</strong>: R1&#x27;s verdict stands. Every <code>new_entry</code> site was re-grepped: <code>review_task_id</code> is set only at</li>
+</ul>
+<p><code>agent_trigger.py:1582</code>, <code>run_divergence.py:267</code> (reached from <code>:483</code>) and <code>scheduler.py:3417</code> and <code>:3747</code>. The scheduler&#x27;s gate (<code>scheduler.py:1956-1979</code>) refuses before a review is selected. <strong>No existing test asserts the queue stays empty</strong> for an evidence-less review selection (<code>test_a_review_needs_something_to_review.py</code> asserts selection and task status only), so R1&#x27;s optional regression test is worth adding when F65 is closed.</p>
+<ul>
+<li><strong>F363</strong>: D-B12-3 (a Hub-enforced 40,000-character budget, continuation by identifier) stands, now</li>
+</ul>
+<p>on the correct ceiling. D4 (the id in <code>path</code>) stands: ids are <code>spdoc-</code> + 12 hex (<code>utils.py:20-22</code>, <code>spec_lifecycle.py:213</code>). D5 stands: FastAPI ignores undeclared query parameters on a route that declares each with <code>Query</code> (<code>agent_actions.py:1374-1379</code>). <strong>F354</strong>: B11&#x27;s change recommends pinning the tool server at Hub start and orders its IMPL before F363&#x27;s <code>mcp_server.py</code> half; this agrees with R1&#x27;s stated assumption, and nothing in F363&#x27;s design changes.</p>
+<ul>
+<li><strong>F278</strong>: every code claim holds (three callers: <code>runner_events.py:177</code>, <code>:206</code>,</li>
+</ul>
+<p><code>scheduler.py:94</code>; the pinning test at <code>test_write_paths_on_run_events.py:139-148</code>). The residual was re-measured with an independent implementation: 0 in 685,660. D1 item 1 decided (a named <code>entropy</code> group, test <code>m.lastgroup</code>). Noted: all-capitals segments (<code>README</code>) stay redacted, and <code>jobs.py:61</code>&#x27;s separate redactor has no <code>/</code> and is untouched.</p>
+<ul>
+<li><strong>Collisions</strong>: none. B11&#x27;s change and <code>the-shell-judge-reads-a-word-whole</code> mention</li>
+</ul>
+<p><code>mcp_server.py</code> but touch no function these changes touch.</p></div></section><section class="sec-round" id="R3"><h2>R3 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Re-derived at the worktree&#x27;s HEAD, weighted to F330&#x27;s reversed decision and F363&#x27;s F354 ordering. 22 load-bearing claims checked; 2 disagreed. All three changes pass <code>openspec validate --strict</code>.</p>
+<h5>F330: is R2&#x27;s archive path reachable, and what does each refusal return?</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Refusal (composer&#x27;s real request: <code>agent</code>, <code>message</code>, <code>overrides</code>, <code>NewConversationSurface.tsx:98-106</code>)</th><th>Route returns</th><th>Left behind (after the change)</th><th>Operator sees</th></tr></thead><tbody><tr><td>Any route-level refusal, <code>agent_trigger.py:1415-1565</code> (archived agent, workspace, closed conversation, overrides…)</td><td>its 4xx, before <code>new_entry</code> (<code>:1567</code>)</td><td>nothing: creation is after these</td><td>the sentence, text restored (<code>Composer.tsx:216-217</code>)</td></tr><tr><td>Naming exhausted / <code>PhaseError</code> at creation</td><td>409 with <code>code</code></td><td>nothing</td><td>the sentence, text restored</td></tr><tr><td>Commit fails (<code>:1586</code>, F329&#x27;s case)</td><td>the raise (500)</td><td>nothing, once the route removes its file</td><td>generic error, text restored</td></tr><tr><td>Request-level dispatch refusal naming this entry (F108, <code>:1611-1641</code>)</td><td>the refusal&#x27;s status</td><td>the document, <strong>archived</strong>, file kept</td><td>the sentence, text restored; nothing new in the current tree; the placeholder under <em>Archived</em></td></tr><tr><td>Environment-level dispatch refusal (no <code>request_level</code>, e.g. no runner bound, <code>:689-696</code>)</td><td>200 <code>queued</code> (<code>turn_scheduler.py:674-681</code> builds no <code>refusal</code>)</td><td>the document, correctly (input still queued)</td><td>the conversation opens with its document</td></tr><tr><td>Unexpected raise after the commit</td><td>500</td><td>document and queued entry, correctly</td><td>an error for input that will run (true of every send today)</td></tr></tbody></table></div>
+<p><strong>The F108 row is reachable from the composer only by a race.</strong> Every <code>request_level=True</code> raise in <code>trigger_agent_directly</code> was enumerated: <code>:656</code> and <code>:708</code> are restated by the route before creation; <code>:444</code>, <code>:459</code> and <code>:832-921</code> need a review entry (D1 refuses <code>start_exploration</code> with <code>review_task_id</code>); <code>:930</code> and <code>:942</code> need a <code>work_dir</code> (checked by the route first); <code>:738</code> and <code>:1173</code> cannot fire, since a runner&#x27;s <code>cli</code> is validated against <code>RUNNER_CLIS = (&quot;claude&quot;, &quot;codex&quot;)</code> (<code>db/models.py:311</code>), both in <code>SUPPORTED_RUNNERS</code> (<code>runner_commands.py:60</code>) and both built. <code>:686</code> (no <code>Agent</code> row) cannot be named by a composer that picks from rows (no route deletes an <code>Agent</code>) but is reachable from the API, which is how tasks 1.2/1.2b stage it. So the composer reaches the archive only when the agent is archived between the route&#x27;s check and the dispatch. <strong>R2&#x27;s decision stands</strong> (no delete; archive after commit): it is cheap, right for the race, and catches any request-level refusal added later. But F330&#x27;s recorded case (F329&#x27;s commit 500) and its reproduction (an archived agent) are closed by D1 and the commit compensation, not by the archive. Written into design D3 as a reachability paragraph.</p>
+<h5>Claims that disagreed, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Claim</th><th>Code</th><th>Changed</th></tr></thead><tbody><tr><td>1</td><td>F330 D3: the retire is <code>transition</code> + commit + broadcast</td><td>The operator&#x27;s own archive, <code>POST /documents/phase</code> (<code>spec.py:1606-1629</code>), also calls <code>spec_service.rerender_phase</code> (<code>spec_service.py:788-813</code>), which rewrites the file&#x27;s visible status. Without it the row says <code>archived</code> and the file still says <code>exploring</code></td><td>The retire now mirrors that route: transition, <code>rerender_phase</code>, commit, broadcast. An <code>OSError</code> from the rewrite still commits the phase (the row is the authority). Design D3, task 2.2, task 1.2&#x27;s assertion, and one spec scenario line</td></tr><tr><td>2</td><td>F330 (implicit): the archive branch is how F330 gets fixed</td><td>Race-only from the composer (above)</td><td>Reachability paragraph added to D3; no decision changed</td></tr></tbody></table></div>
+<h5>What stands</h5>
+<ul>
+<li><strong>F330</strong>: D1&#x27;s creation point and full refusal list, D2&#x27;s rows, <code>withdraw_refused_entry</code>&#x27;s <code>False</code></li>
+</ul>
+<p>case (<code>inbound_queue.py:440-455</code>), the <code>exploring → archived</code> guard (<code>spec_lifecycle.py:320-341</code>: operator-only, refuses a document with requirements or tasks), the two-event guard (<code>create_document</code> writes <code>created</code>; <code>save_document</code> writes one content event; the reindex writes no document event), and D5&#x27;s two-commit shipping order (<code>RequestModel</code> refuses unknown fields).</p>
+<ul>
+<li><strong>F363 vs F354</strong>: B11&#x27;s <code>an-agents-tool-server-is-the-one-its-hub-loaded</code> pins <code>mcp_server.py</code> at</li>
+</ul>
+<p>Hub start and recommends: its IMPL, then <code>:8000</code>&#x27;s restart, then F363&#x27;s <code>mcp_server.py</code> half (its <code>design.md:113-114</code>). F363&#x27;s design (header note and D5) prefers the same order and shows it is safe without the pin. Consistent. The pin does not affect task 1.11: only the test imports the route&#x27;s constant, and <code>mcp_server.py</code> keeps its stdlib + fastmcp import rule. D6&#x27;s 409s agree with <code>spec.py:195-206</code> (that route&#x27;s 400 for <code>ProjectPathError</code> is for a caller&#x27;s path; D6 says so).</p>
+<ul>
+<li><strong>F278</strong>: the pattern (<code>runner_events.py:57-60</code>) and the pinning assertion</li>
+</ul>
+<p>(<code>test_write_paths_on_run_events.py:139-148</code>) are as the change says.</p>
+<ul>
+<li><strong>F65 / F130</strong>: re-confirmed (evidence in Final).</li>
+</ul></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B12.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>
