@@ -32916,3 +32916,14 @@ changes extend that to globs and bare names, so in a JavaScript worktree `ls *`,
 today. **Must be fixed before a JavaScript project is registered.** The repair shape (a read-through
 exemption for the known shared-dependency links, or not linking them) is open.
 
+## F445 (C) — a link inside the workspace that points outside lists the outside file as a workspace file
+
+**Status:** open. Filed 2026-09-24 (operator decision `F409-approve`), measured by the second
+pre-approval review of `an-at-mention-an-agent-wrote-reads-no-file`
+(`spec-queue/tracks/reviews/F409-2026-09-24-second.md`). With a junction inside the workspace pointing
+outside (no admin needed on Windows), git lists `docs/secret.txt` through it, so the composer's file
+picker offers it, and a Haiku `claude -p` turn given `@docs/secret.txt` attached the outside file. The
+Hub's own file reader already refuses such a path, so the listing and the reader disagree. Not a
+bypass on its own: creating the link needs a shell call the posture judges. Repair shape open: filter
+the picker's listing by the same resolution the reader uses. Sibling of F444.
+

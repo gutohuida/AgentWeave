@@ -741,6 +741,17 @@ R5 on `the-shell-judge-reads-a-word-whole`, `a-drive-or-a-home-variable-names-a-
   It is the same F409 route and the only way agent text reaches what the operator types; the
   typed-answer exemption depends on it. Rejected: splitting it out, which would leave a measured
   bypass open until the split landed.
+- DECIDED   B4-link-dotdot  **A `..` after a link is judged physically, in change 1.** The second
+  pre-approval review (`spec-queue/tracks/reviews/B4-2026-09-24-second.md`) measured `cp n sub/l/../y`
+  writing outside through the Bash tool on Windows today, and `sub/l*/..` allowed after the change.
+  Change 1 adds the physical reading to D8's walk and to `_where`, with tests, so its restated
+  "Traversal and links cannot escape" holds. Rejected: a separate finding with the delta qualified.
+  Both B4 changes stay REVISING; the operator runs R6 in a later session, after a handoff.
+- DECIDED   F409-approve  **`an-at-mention-an-agent-wrote-reads-no-file` is approved once the
+  second review's seven fixes are applied** (`spec-queue/tracks/reviews/F409-2026-09-24-second.md`),
+  including the two cross-change notes written into B5's `evidence-is-decided-after-the-run-that-recorded-it`
+  and B7's `worker-spend-counts-against-the-budget`, and F445 filed for the in-workspace link that
+  lists an outside file.
 
 ### 2026-09-24 — the daily review of the twelve bundles
 
