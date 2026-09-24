@@ -32993,3 +32993,14 @@ whose second character is `:` as a drive and drops everything before it, so the 
 is refused. A false refusal, not an escape. Change 1 (`the-shell-judge-reads-a-word-whole`) avoids the
 same misreading in its new whole-value pass by splitting at colons, since a Windows name cannot hold
 one; the same split in rule 5 is the likely repair shape.
+
+## F447 (B) — `--tools ""` leaves the account's claude.ai connector tools on the worker and titler
+
+**Status:** open. Filed 2026-09-24 (Round 6), measured by the F420 fix. With `--tools ""` (now on
+both the checkpoint/probe worker, `hub/hub/worker.py` `build_worker_command`, and the titler,
+`hub/hub/conversation_titles.py` `build_title_command`), a live Haiku `claude -p` turn named no built-in
+tool but did list the account's claude.ai connector tools (`mcp__claude_ai_Claude_Docs__*`, including
+create, update and delete). Both runs read untrusted transcript text, so a prompt injection could
+still reach a connector that writes outside the machine. Candidate repair: add
+`--strict-mcp-config` (with no `--mcp-config`) to both argvs and pin it in the argv tests; not yet
+measured, because the worktree sandbox refused the probe. Sibling of F420.
