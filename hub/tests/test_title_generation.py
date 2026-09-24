@@ -501,6 +501,67 @@ async def test_a_first_reply_arriving_later_is_worth_one_more_title(
 
 
 @pytest.mark.asyncio
+async def test_a_later_runs_text_does_not_become_the_first_reply(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    """`sequence` restarts at 0 on every run, as both run paths in `agent_trigger` stream it. A
+    second run whose text lands on a lower sequence than the first run's used to become the
+    "first reply", so the excerpt changed and the conversation was titled again."""
+    from datetime import timedelta
+
+    from hub.output_recording import record_agent_output
+
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    prompts = []
+
+    def _run(cmd, cwd):
+        prompts.append(cmd[-1])
+        return f"Title {len(prompts)}"
+
+    monkeypatch.setattr(conversation_titles, "_run_titler", _run)
+
+    async with async_session_factory() as session:
+        first = await record_agent_output(
+            session,
+            "proj-test",
+            "offline",
+            content="First run: the flake is a race in the payment mock.",
+            session_id=None,
+            conversation_id=conversation_id,
+            kind="text",
+            sequence=7,
+        )
+        await session.commit()
+        first_at = first.timestamp
+    await conversation_titles.maybe_generate_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+
+    async with async_session_factory() as session:
+        second = await record_agent_output(
+            session,
+            "proj-test",
+            "offline",
+            content="Second run: I added a retry.",
+            session_id=None,
+            conversation_id=conversation_id,
+            kind="text",
+            sequence=0,
+        )
+        second.timestamp = first_at + timedelta(seconds=30)
+        await session.commit()
+    await conversation_titles.maybe_generate_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+
+    assert len(prompts) == 1, "the second run's text must not re-title the conversation"
+    assert "race in the payment mock" in prompts[0]
+    assert (await _title(conversation_id))[0] == "Title 1"
+
+
+@pytest.mark.asyncio
 async def test_a_failed_generation_is_retried_on_the_next_turn(
     app, auth_headers, bind_runner, monkeypatch
 ) -> None:

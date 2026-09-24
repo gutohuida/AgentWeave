@@ -32880,6 +32880,12 @@ evidence, requirements, task integration/release, or the MCP surface
 `test_task_release.py`, `test_the_evidence_names_the_author.py`, `test_mcp_server.py`,
 `test_mcp_adapter_online.py`), all green.
 
+**Review addendum 2026-09-24 (Round 6 Opus review):** the MCP tool's docstring
+(`hub/hub/mcp_server.py` `list_evidence`, "Only needed when the same identifier exists in more than
+one document") is now stale, since `document` alone narrows the list. Left for when `mcp_server.py`
+edits are allowed again, after `an-agents-tool-server-is-the-one-its-hub-loaded` lands and `:8000`
+restarts.
+
 ## F417 (B) — the Compact and New-session requests are saved but never reach the agent
 
 **Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B10 rounds
@@ -32987,6 +32993,16 @@ calls, one spawn), `test_a_first_reply_arriving_later_is_worth_one_more_title`,
 `test_a_failed_generation_is_retried_on_the_next_turn`,
 `test_another_conversations_title_does_not_count_as_this_ones`; the first, second and fourth fail on
 the pre-fix code.
+
+**Review addendum 2026-09-24 (Round 6 Opus review):** the digest guard alone did not hold,
+because `_excerpt` ordered the first reply by `AgentOutput.sequence`, which restarts at 0 on every run
+(measured read-only on `:8000`: 73 of 85 multi-run conversations had a later run's text sorting
+first, so 114 of 307 text turns would still have paid). Fixed in the same round: the reply is ordered
+by `timestamp`, then `sequence`, then `id`, and
+`test_a_later_runs_text_does_not_become_the_first_reply` fails on the previous ordering. Residuals, LOW:
+two turns finishing within one titling spawn can both pass the check before the event is written and
+pay twice; the lookup scans the project's event log through `ix_event_logs_project_ts` (about 16k
+rows on `:8000`, roughly 1 ms today, and growing).
 
 ## F423 (C) — a declined handover's note never reaches that task's reviewer
 

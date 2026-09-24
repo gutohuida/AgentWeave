@@ -150,7 +150,10 @@ async def _excerpt(db, conversation: Conversation) -> str:
                 AgentOutput.conversation_id == conversation.id,
                 AgentOutput.kind == "text",
             )
-            .order_by(AgentOutput.sequence, AgentOutput.id)
+            # Time first: `sequence` restarts at 0 on every run, so ordering by it alone let a
+            # later run's text become the "first reply", changing the excerpt and paying for a
+            # new title from a later turn (Round 6 review of F422, measured on `:8000`).
+            .order_by(AgentOutput.timestamp, AgentOutput.sequence, AgentOutput.id)
             .limit(1)
         )
     ).scalar_one_or_none() or ""

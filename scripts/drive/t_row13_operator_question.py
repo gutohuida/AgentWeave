@@ -20,6 +20,9 @@ and `_asking_run_has_ended` (`questions.py:42-43`) returns **False** whenever
 presumed to still be waiting. For an operator-route question that presumption is knowably false:
 nothing was ever waiting, because no run created it.
 
+Historical: F146 is fixed (Round 6, 2026-09-24) -- the operator route now refuses
+`blocking: true` with a 422, and the blocking half below checks that refusal instead.
+
 So the prediction under test, stated before the drive:
 
     blocking=True  posted by the operator -> answering delivers NOTHING and wakes nobody
@@ -184,7 +187,23 @@ def main():
                 break
             time.sleep(4)
         print(f"  agent back to {agent_row().get('status')!r} before the second half")
-        created.append(drive(blocking=True, expect_delivery=False))
+        # Since F146's fix (Round 6, 2026-09-24) the operator route refuses `blocking: true`, so
+        # the half that measured the dropped answer now checks the refusal instead.
+        step("BLOCKING — the operator route refuses it (F146)")
+        c, body = api(
+            "POST",
+            f"/projects/{P}/questions",
+            {
+                "from_agent": AGENT,
+                "question": f"[{RUN}] Operator-posted blocking: which colour?",
+                "header": "Colour (blocking)",
+                "multi_select": False,
+                "blocking": True,
+                "options": [{"label": "red", "description": "Red"}],
+            },
+        )
+        check("a blocking operator question is refused 422", c == 422, f"{c} {str(body)[:200]}")
+        check("the refusal names `blocking`", "blocking" in str(body), str(body)[:200])
     finally:
         step("Z. Leave nothing open")
         for qid in [x for x in created if x]:
