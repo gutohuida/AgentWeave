@@ -28,8 +28,9 @@ remove, else `None`:
 |---|---|---|
 | `unaccepted` (`_check_unaccepted`, `:493-541`) | `ACCEPT_OR_GRANT` (`:77-80`) | yes, unless `candidate` holds `can_accept_evidence` (`requirement_evidence.may_accept`, `:659-674`) |
 | `blocking` in state `awaiting_review` | *"accept or reject it"* (`REMEDY`, `:53-55`) | same as above |
+| `blocking` in state `drifting` | *"resolve the drift candidate"* (`REMEDY`) | **yes, always** — no grant reaches it: `requirement_evidence.resolve_drift` refuses every non-operator actor (`:1203-1207`, `resolution_is_the_operators`), the route stamps the operator (`api/v1/spec.py:1061-1078`), and no MCP tool resolves drift (R2) |
 | `diagnostics` | the requirement is broken as written | yes (the document is the operator's) |
-| `blocking` in any other state | record or re-record evidence: the author's | no — a reviewer can record `revision_needed` |
+| `blocking` in any other state (`unverified`, `rejected`, `stale`) | record or re-record evidence: the author's | no — a reviewer can record `revision_needed` |
 | `unmergeable` | resolve the conflict on a branch: an agent's | no |
 | `unfinished` (`_check_live_turn`, `:544`) | wait | no — it clears itself |
 
@@ -53,6 +54,20 @@ instead would need a column or an event read, and would still miss that case.
 checks go through `_merge_situation` (`:393-419`), whose docstring treats every unknown as *"a reason
 to not know, never a reason to refuse"*. R2 should confirm no write on any path
 (`task_integration.awaiting_targets`, `merge_targets`, `requirement_coverage.requirement_coverage`).
+
+**A DB-only short-circuit before any git** (R2, from D3's cost). `evaluate` spawns git
+synchronously on the event loop: `_merge_situation` runs `rev-parse --is-inside-work-tree` and
+`rev-parse --verify <main>` (`task_integration.py:148-169`), a branch-tip task adds a `rev-parse`,
+and `_check_mergeable` one `merge-tree` per commit that would merge (`:427-447`). Timed on this
+machine, three such spawns take ~75 ms. The operator-only categories need none of that except the
+situation guard: `unaccepted` needs `task_integration.awaiting_targets` (a pure database query,
+`:289`) to be non-empty, and `blocking`/`diagnostics` exist only where `_enforced_requirements`
+finds a `gate`-rigor document. So the predicate answers `None` **without calling `evaluate`** when
+`awaiting_targets(task)` is empty **and** no linked document is at `gate` rigor — the ordinary
+wedged review — and pays `evaluate`'s git cost only for a task that can actually be held. Where it
+does, the cost is two spawns (the unaccepted case has nothing that would merge, so no
+`merge-tree`), ~50 ms per such task per board read. No caching: such tasks are rare, each is a
+stall already being reported, and a cache would be a second copy of the gate's answer to keep true.
 
 **A raise is "not held".** The predicate catches any exception from the evaluation, logs it, and
 answers `None`. Its callers then behave exactly as today. That is the answer to *what does each
@@ -101,10 +116,12 @@ evidence"* for the evidence categories and *"a requirement it serves cannot be s
 correct the document"* for `diagnostics`. Fitted to `JOB_RUN_ERROR_SUMMARY_CHARS` (500) by trimming
 `pieces`, then the title: never the remedy.
 
-**Cost.** `evaluate` now runs inside `decide_firing` once per unattended `under_review` task per
-walk, and `decide_firing` is also the board's read (`jobs.py:380`). Such tasks are rare and each is
-already a stall the operator is being told about. R2 should measure one board read with one such
-task on a project with a `gate`-rigor document, and say whether it needs caching.
+**Cost** (R2, by reading and one timing). `decide_firing` is called once per flow job by the jobs
+list (`api/v1/jobs.py:380`), by `run_job` (`:1335`) and by the firing. The predicate now runs once
+per unattended `under_review` task per walk. With D1's short-circuit, a wedged review with no
+evidence waiting and no `gate` document costs two small database reads and no git. A held one costs
+`evaluate`: two synchronous git spawns (~50 ms on this machine) plus `requirement_coverage` per
+linked document. Not cached (D1).
 
 ## D4 — The divergence sentence
 
@@ -125,3 +142,10 @@ task on a project with a `gate`-rigor document, and say whether it needs caching
 
 - **R1, 2026-09-24** (bundle B1): wrote this change from the code at `404c7d5` and the recorded
   `F374-fix` verdict.
+- **R2, 2026-09-24** (bundle B1): re-derived against the code. `F374-fix` wording confirmed
+  verbatim (`DECISIONS.md:985-991`). Two corrections: D1's table missed `blocking` in `drifting`,
+  which is operator-only whatever the grant (`resolve_drift` refuses every non-operator); D1 now
+  short-circuits on database facts before `evaluate`'s git spawns, which answers D3's cost question
+  (measured: ~25 ms per git spawn here, synchronous on the event loop). Read-only confirmed: no
+  `add`/`flush`/`commit` in `requirement_gate.py` or `requirement_coverage.py`; `task_integration`'s
+  writers (`record`, `integrate_what_was_waiting_for_this_evidence`) are not on `evaluate`'s path.

@@ -44,7 +44,7 @@ task no agent completed — which this capability already forbids for the first 
 second one surfaces its reason to the same operator through the same event. The two resolutions
 SHALL NOT come to different accounts of one task.
 
-**Where approval of the task is refused for a reason only the operator can remove, a review that gave no verdict SHALL NOT be answered by resolving a second reviewer**, whether the reviewer that failed was declared or selected by availability. The Hub SHALL surface the review instead, as *A review no reviewer can approve is handed to the operator* states. A reason only the operator can remove is one whose remedy is a decision on evidence, where the agent the resolution would select has not been granted that decision, or a requirement that cannot be satisfied as written. A second reviewer meets the identical refusal, so resolving one spends a review turn on a conclusion that has nowhere to go and tells the operator about staffing instead of about the decision waiting for them. Where the agent the resolution selects has been granted the decision on evidence, it can remove the reason itself, and the resolution SHALL proceed as above.
+**Where approval of the task is refused for a reason only the operator can remove, a review that gave no verdict SHALL NOT be answered by resolving a second reviewer**, whether the reviewer that failed was declared or selected by availability. The Hub SHALL surface the review instead, as *A review no reviewer can approve is handed to the operator* states. A reason only the operator can remove is one whose remedy is a decision on evidence, where the agent the resolution would select has not been granted that decision; a drift candidate, which only the operator resolves whatever an agent is granted; or a requirement that cannot be satisfied as written. A second reviewer meets the identical refusal, so resolving one spends a review turn on a conclusion that has nowhere to go and tells the operator about staffing instead of about the decision waiting for them. Where the agent the resolution selects has been granted the decision on evidence, it can remove the reason itself, and the resolution SHALL proceed as above.
 
 **The Hub SHALL NOT resolve, as a task's reviewer, an agent that could not record a verdict on it.**
 An agent is barred from judging work it completed, so naming it would produce a review refused on
@@ -169,6 +169,13 @@ is answered as before.
 - **WHEN** a review turn ends without a verdict, and approving the task is refused because evidence naming a commit is waiting to be decided
 - **THEN** the review is surfaced with the approval refusal's own sentence
 - **AND** the surfaced reason does not state that no agent is free, and does not list which agents were excluded
+
+#### Scenario: A drift only the operator resolves is not given to a second reviewer
+
+- **WHEN** a review selected on availability ends without a verdict, and approving the task is refused because a requirement it serves has an unresolved drift candidate
+- **AND** the agent the resolution would select has been granted the decision on evidence
+- **THEN** no second reviewer is resolved
+- **AND** the review is surfaced with the approval refusal's own sentence
 
 #### Scenario: A later firing names the same reason
 

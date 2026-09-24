@@ -56,7 +56,8 @@ refusal found it.
 
 Staffing SHALL NOT be performed when the request to review is recorded. It SHALL be performed when
 the turn is dispatched, so that a request that is never delivered leaves no task held by a reviewer
-that never ran.
+that never ran. Staging at the dispatch does not change whose move the recorded transition is: a
+review a scheduled firing requested remains that firing's move when its dispatch stages it.
 
 #### Scenario: A review started by hand leaves the reviewer able to record a verdict
 

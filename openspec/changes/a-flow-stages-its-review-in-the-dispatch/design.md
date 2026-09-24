@@ -86,7 +86,10 @@ second review while the first waits (the agent is not running because its turn h
 that is exactly when the review waits).
 
 `_roster_availability` (`scheduler.py:1128-1198`) adds, for each review pair from `task_attendance`
-whose agent is not the task's assignee, a `Holding(task_id, status, loop_id, reachable=True)`.
+whose agent is not the task's assignee **and whose task is in `REVIEWABLE_LOOP_TASK_STATUSES` or
+`WITH_REVIEWER_LOOP_TASK_STATUSES`**, a `Holding(task_id, status, loop_id, reachable=True)`. The
+status filter is R2's: a decided task's review entry stays queued (see Residuals), and without the
+filter it would book its reviewer on an `approved` task until the entry is given up.
 Refused review pairs count too, as D5 of change 1 counts refused input: the entry is still queued.
 The rung-3 sentence then names the agent as booked on that task (`_rung_3_booked_clause`,
 `:1319-1327`), which is true. One extra query loads status and `loop_id` for those task ids.
@@ -133,12 +136,22 @@ check replaces an author holder at both sites (route and dispatch), judged by th
 guard applies, called rather than restated. This changes no answer the operator gets today except
 the one the F70 recovery never reaches.
 
+**Where the exemption's read sits, and what a raise returns** (R2, task 0.2(c)). Inside the holder
+check, which already precedes `enter_selected_task` (`agent_trigger.py:886-898`), so nothing is
+staged when it runs. The entries it reads are the ones being delivered, which the dispatch already
+reads (`_review_task_from_entries`, `:431-461`). A database error there propagates out of
+`trigger_agent_directly` as any read there does today: it is not a `TriggerAgentError`, so
+`_attempt_turn` does not catch it, the session is not committed, and nothing staged survives. No new
+raise path.
+
 ## D6 — The review briefing says the status the reviewer will find
 
 `_briefing_verdict_lines` writes *"The task is `{task.status}`: set it to `approved` … or
 `revision_needed`"* (`scheduler.py:2569-2571`). Composed at the firing, that is now `completed`, from
 which neither verdict is a legal edge. The dispatch moves it to `under_review` before the turn starts
-or the turn does not start, so the line states `under_review` for a review briefing. The turn
+or the turn does not start, so the line states `under_review` for a review briefing. (The
+briefing's queue-count line, `select(Task.status, func.count())` at `scheduler.py:2766`, will count
+the task as `completed`; that line describes the queue as it is, and stays.) The turn
 context channel (`api/v1/agents.py`) is built at spawn and already reads the staged status.
 
 ## D7 — Comments that become false
@@ -151,6 +164,28 @@ context channel (`api/v1/agents.py`) is built at spawn and already reads the sta
   (`:470-474`).
 
 ## D8 — Existing tests that move, deliberately
+
+**R2's list, by reading** (the brief allowed reading instead of a full-suite prototype). Six sites
+assert what a firing or a restaff leaves before its dispatch. Whether each moves depends on whether
+the real dispatch runs inside that test (it does where `schedule_agent` reaches
+`trigger_agent_directly` and the delivery commits the staging before a spawn fails), so each is named
+with the rule that moves it; IMPL task 1.15 settles each by running it:
+
+| Site | Asserts | Moved by |
+|---|---|---|
+| `test_reviewer_is_not_the_author.py:238-241` | a firing leaves `('under_review', REVIEWER)` | D1 — holds only if the dispatch runs in the test |
+| `test_reviewer_is_not_the_author.py:286-292` | F70's wedged row restaffed to `REVIEWER`, no edge | D1 and D5's author-holder replacement |
+| `test_review_divergence.py:346-348` | after `evaluate_run_end`, `assignee == "auditor"` | D5 (the restaff stops writing it) |
+| `test_a_loop_staffs_the_agent_it_names.py:399-403` | after `evaluate_run_end`, `assignee == "auditor"` | D5 |
+| `test_flow_chain_end_to_end.py:342-352` | the flow's `("task-chain-a", "under_review")` row is operator-attributed | D1 moves where the row is written; B3's `a-flows-own-moves-are-recorded-as-the-flows` rewrites the same pin (see Collisions) |
+
+Not moved, checked: `test_review_leaves_the_pool.py:157-231`, `test_a_flow_names_what_it_cannot_staff.py:652-665`
+and `:833-843` call `enter_selected_task` directly, which the dispatch still calls;
+`test_run_divergence.py:259` is the `escalate` policy, untouched here;
+`test_the_evidence_names_the_author.py:667` and `test_review_divergence.py:710` assert a surfaced,
+not restaffed, review.
+
+R1's text, kept:
 
 Every assertion that a flow firing **alone** (with `schedule_agent` mocked, so no dispatch runs)
 leaves a review task `under_review` with the reviewer as assignee now sees `completed` with the
@@ -183,11 +218,49 @@ closed), or let the real dispatch run. None may be deleted.
   different reviewer is refused *"Let the review in flight finish"* — no review is in flight. The
   refusal is required (the operator did not decide otherwise); its wording is not. Candidate
   finding.
-- **An operator's "Land it" on a `completed` task with a flow review waiting.** The waiting entry
-  is released by `release_bindings_to` when the task is decided (`run_task_binding.py:605-650`); R2
-  should confirm that path runs from `land_task`.
+- **A decided task's waiting review entry is not released** (R2, answering R1's question; R1's
+  premise was wrong). `land_task` does call `release_bindings_to` (`api/v1/tasks.py:1608`; the PATCH
+  route at `:1407`), but `_release_queued_entries_bound_to` clears `task_id` only and keeps
+  `review_task_id` on purpose (`run_task_binding.py:620-640`), leaving the entry `queued`. So a review
+  entry waiting when its task is landed or approved is later delivered, and its dispatch refuses
+  *"Task … is 'approved', which is not a status a review starts from"* (`agent_trigger.py:874`): a
+  request-level, non-transient refusal, counted to `DELIVERY_ATTEMPT_LIMIT` (3,
+  `inbound_queue.py:222`) and then withdrawn with a `queue_entry_abandoned` warning. Pre-existing for
+  the PATCH route and for an operator's own queued request; D1 widens it to a flow's queued review.
+  Bounded, costs no turn, and D4's status filter keeps it from booking the reviewer. Candidate finding
+  (R2): the release should withdraw a queued entry whose `review_task_id` names the task just decided.
+
+## Collisions with other changes (R2)
+
+- **B3 `a-flows-own-moves-are-recorded-as-the-flows`** adds `inbound_queue_entries.job_id` and reads
+  the cause of the `-> under_review` move from the delivered entries at the dispatch's
+  `enter_selected_task` call (`agent_trigger.py:898`), through `_review_task_from_entries`
+  (`:431-461`). After D1 that call is the flow's only review staging. So this change keeps
+  `_review_task_from_entries` and the cause it returns; places D5's holder exemption above that call
+  without changing its arguments; and its governance delta says staging at the dispatch does not
+  change whose move it is (one sentence, compatible with B3's ADDED cause requirement in either
+  order). B3's tests 1.1 and 1.3a then exercise this change's path; B3 rewrites
+  `test_flow_chain_end_to_end.py:342-352`, and this change only moves where that row is written.
+  **Build order: B3's change first**, and this change rebases onto its
+  `enter_selected_task(..., origin, job_id)` signature.
+- **`pressing-run-names-the-reason-that-held`** (unarchived): its busy guard reads
+  `_agents_a_loop_may_staff` → `_roster_availability`, which D4 edits. Net availability is preserved
+  (a reviewer with a waiting review turn held the `under_review` task before, and holds D4's holding
+  after), so its answers do not move. No textual overlap.
+- **Within B1:** built after `a-task-is-attended-only-by-a-turn-that-will-reach-it` (whose `review`
+  flag is now an OR over a pair's entries, R2) and after
+  `a-review-no-reviewer-can-approve-goes-to-the-operator` (both edit `_answer_failed_review`).
 
 ## Round log
 
 - **R1, 2026-09-24** (bundle B1): wrote this change from the code at `404c7d5`, on the operator's
   (b).
+- **R2, 2026-09-24** (bundle B1): re-derived against the code. Corrections: `land_task` does not
+  release a waiting review entry (R1's residual premise was wrong), so D4 now filters review-pair
+  holdings by status; D5's exemption read placement and raise behaviour decided; D8's movers listed
+  by reading (five sites, each conditional on whether the real dispatch runs in the test); B3's
+  `job_id` collision settled, B3 first; D6 notes the queue-count line. Held on re-reading:
+  `enter_selected_task`'s three callers (`scheduler.py:3336`, `:3709`, `agent_trigger.py:898`); the
+  holder check at `:886-897` and `review_dispatch_refusal` at `:497-507`; a `completed` task never
+  meets the holder check, so D1 collides only on F70's wedge and the restaff; the restaff's assignee
+  write at `run_divergence.py:469-474`; `_briefing_verdict_lines` at `:2569`.

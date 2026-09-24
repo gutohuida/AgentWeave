@@ -58,6 +58,24 @@ into a checkout an agent is writing in — the property F159's paragraph defends
 route. `task-dependencies` *A dependency that regresses after a dependent has started does not halt
 it* is untouched: a prerequisite leaving `approved` contributes nothing further and removes nothing.
 
+**The cost R1 did not weigh (R2): a refusal locks out the agent that could resolve it.** At
+creation a conflict leaves no checkout and nothing is lost. On an existing branch, D2's refusal
+repeats on **every** task-bound turn for that task until someone merges by hand in the checkout —
+including the turn of the agent that owns the work and is best placed to resolve it — and each
+delivery counts towards abandonment. The alternative for the conflict case only (D2'): abort, start
+the turn anyway, and name the missing prerequisite commit and the merge command in the turn context,
+so the agent merges it (the next turn's `merge-base` check then finds it present). D2' keeps (B)'s
+enforcement for every clean case and uses (C)'s mechanism only where enforcing would strand the
+task. It departs from `task-dependencies`' rule that a checkout that cannot carry its prerequisites
+is refused, for an existing checkout only. **Recommendation stays D2 (refuse), for one rule across
+new and existing checkouts; D2' is put to the operator** as a sub-question of Q-F158 (Open for the
+operator in the bundle record).
+
+**One pass, not two (R2).** `_prerequisite_commits` already walks the prerequisites and calls
+`task_integration.merge_targets` (which spawns `rev-parse` on the branch-tip route) for each. The
+`approved` subset is computed in the same loop and returned beside it, not by a sibling that walks
+them again.
+
 ## What each route returns when this raises
 
 `ensure_task_worktree` is reached only from `trigger_agent_directly`, through
@@ -70,3 +88,12 @@ creation-time failure, and a queued delivery is counted as it already is. Nothin
 
 - **R1, 2026-09-24** (bundle B1): re-verified F158 at `404c7d5`; wrote this change with (B)
   recommended.
+- **R2, 2026-09-24** (bundle B1): re-derived against the code. Shape 1 confirmed by reading rather
+  than a throwaway test: `takes_own_checkout` refuses only no task, a grandfathered scheme and an id
+  that cannot be a ref (`task_workspace.py:58-90`), never by status, and `_prerequisite_commits`'
+  own docstring records the branch cut at dispatch before the gate (`:209-216`). Held: both
+  existing-branch returns (`worktrees.py:561-591`, `:604-610`); `_merge_prerequisites`' two
+  sentences (`:459-535`); a task-checkout `IsolationUnavailableError` becomes a counted,
+  non-agent-wide refusal (`agent_trigger.py:1012-1023`). Added: the lockout cost of refusing on an
+  existing branch, with D2' as an operator sub-question; the approved subset computed in the same
+  pass.

@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
 - [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design, deltas, tasks, test guide; F361 and F289 re-verified by reading at `404c7d5`, F289's changed shape (F288 fixed 2026-09-23) recorded
-- [ ] 0.2 R2: re-derive against `hub/hub/api/v1/messages.py`, `agent_actions.py:201-224`, `schemas/messages.py`, `mcp_server.py:203-244` (and `ask_user`: D1's open check), `api/v1/inbound_queue.py:97-205`, `agent_trigger.py:960-1005`, `run_task_binding.resolve_bound_task`. Check that no consumer of `MessageResponse` (the UI's `api/messages.ts` and the SSE `message_created` payload, `_msg_dict`) breaks on two added optional fields
+- [x] 0.2 R2 (2026-09-24): done — design.md round log and Collisions. Original brief: re-derive against `hub/hub/api/v1/messages.py`, `agent_actions.py:201-224`, `schemas/messages.py`, `mcp_server.py:203-244` (and `ask_user`: D1's open check), `api/v1/inbound_queue.py:97-205`, `agent_trigger.py:960-1005`, `run_task_binding.resolve_bound_task`. Check that no consumer of `MessageResponse` (the UI's `api/messages.ts` and the SSE `message_created` payload, `_msg_dict`) breaks on two added optional fields
 - [ ] 0.3 R3: second independent re-derivation; `openspec validate why-queued-input-waits-is-told-truthfully --strict` passes
 - [ ] 0.4 Operator approval (APPROVALS.md), including D2's departure from ROUNDS.md's sketch
 
@@ -17,10 +17,12 @@ New file `hub/tests/test_why_queued_input_waits_is_told_truthfully.py`.
 - [ ] 1.6 (D3, F289) `test_task_turn_collision.py`'s F97 staging, then end the holder's run **without** re-draining (patch the run-end re-drain out). `GET /queue/{challenger}/status` does not contain `is already running a turn`; it starts with `the last delivery attempt was refused:`. FAILS today (the stored sentence is returned bare)
 - [ ] 1.7 (D3) Control: the F97 test (`test_task_turn_collision.py:495-550`) passes unchanged: holder still running → reason names the holder and the task
 - [ ] 1.8 (D4) An entry with a stored non-D8 refusal (e.g. the review-commit sentence) and nothing live → reason is `the last delivery attempt was refused: <sentence>`. FAILS today
+- [ ] 1.8b (D3, R2) The controlling entry is a **review** entry and a stored D8 sentence exists from an earlier work entry: the route does not run the holder check and answers D4's labelled fallback
 - [ ] 1.9 (D3) `takes_task_workspace` patched to raise → the route answers 200 with D4's reason, not 500
 
 ## 2. Implementation
 
+- [ ] 2.0 (R2) Precondition: B11's F133 shared turn-selection function exists (`controlling`, `selected`, `initiator` from entries, budget and cap). If it does not, stop: it lands first
 - [ ] 2.1 (D1) `messages.py`: `create_message_for_actor` returns `(msg, held)`; one `held_note(...)` builder; both routes build `MessageResponse` with the two fields
 - [ ] 2.2 (D1) `schemas/messages.py`: the two optional fields
 - [ ] 2.3 (D1) `mcp_server.send_message`: add both keys when held. Read `.claude/rules/mcp-server.md` first; no import added

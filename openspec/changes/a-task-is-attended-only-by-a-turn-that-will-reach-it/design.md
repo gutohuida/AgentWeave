@@ -45,7 +45,8 @@ class TaskAttendance:
 
     def attends(self, task_id, agent) -> bool       # running or queued
     def attended(self, task_id) -> bool             # attends(task_id, a) for some a
-    def has_turn(self, task_id, agent) -> bool      # any of the three: D5's question
+    def has_turn(self, task_id, agent) -> bool      # input queued within budget, refused or
+                                                    # not, IGNORING running pairs: D5's question
     def refusal(self, task_id, agent) -> Optional[str]
 
 async def task_attendance(session, project_id) -> TaskAttendance
@@ -57,9 +58,19 @@ async def task_attendance(session, project_id) -> TaskAttendance
   `hop_depth <= hop_budget` (budget from `inbound_queue.project_limits`, the reader
   `turn_scheduler._attempt_turn` uses at `:337`, so the two cannot disagree), each entry contributing
   a pair for `task_id` and for `review_task_id` (both columns, as today, `:302-306`).
+- **`review` is an OR over the pair's contributing entries** (R2): a pair with both a work entry and
+  a review entry for one task is a review turn. S13 reads this flag to close the pool, and letting
+  the strongest entry's flag win would drop a review turn behind a work entry.
 - **Strongest wins per pair**: running > queued > refused. One un-refused entry makes the pair
   queued even if an older entry for the same pair was refused, because that entry is a turn that
   will be tried.
+- **But `has_turn` is kept apart from that collapse** (R2). It answers from the queued rows alone
+  (a separate `queued_pairs` set inside `TaskAttendance`, refused or not), never from a running
+  pair. Folding a running pair into it would change availability: a running agent's task on a
+  non-live loop with nothing queued would become a *reachable* holding, and rung 3 then names that
+  agent by the `booked` clause instead of `running` (`_rung_3_clause_kind`, `scheduler.py:1305-1316`,
+  checks `booked` before `running`). D5 promises byte-identical availability, so the running half
+  must not reach it.
 - **Refused** (D3): the entry's `delivery_attempts > 0` **and** `waiting_reason IS NOT NULL`. Both,
   because each alone means something else: `return_run_entries` raises `delivery_attempts` for a
   run that crashed and leaves `waiting_reason` cleared (`inbound_queue.py:225-297`; the delivery
@@ -123,8 +134,9 @@ head as described. The scenarios naming a refused delivery leave both deltas.
 
 - `_wedged_review_reason` (`scheduler.py:2195-2225`) says *"no turn is running on that task and none
   is queued"* (`:2216`). After D2 that can be false: a third agent's message, or suspended or
-  refused input, may be queued. It becomes *"no turn of theirs is running on that task and nothing
-  is waiting to be delivered to them"*. The title-shortening fit (`:2220-2224`) is unchanged.
+  refused input, may be queued. It becomes *"no turn of theirs is running on that task and none
+  queued for them will start on its own"*. (R2: R1's *"nothing is waiting to be delivered to
+  them"* was false in F371's own hop-99 leg, where the reviewer's suspended entry is exactly that.) The title-shortening fit (`:2220-2224`) is unchanged.
 - A new `_refused_review_reason(task, reviewer, refusal)`: *"{reviewer} is named on {task.id}
   ({title!r}) as its reviewer, and delivering the review to them was refused: {refusal} Fix what it
   names, review it yourself, or send it back with revision_needed."* Fitted to
@@ -166,7 +178,35 @@ at the same point. Nothing here adds a new raise, and no route's status changes.
 - **In flight does not say why the turn has not started.** A task in flight on a queued turn that
   the token budget stops reads the same as one about to start. The queue status route answers why.
 
+## Collisions with other changes (R2)
+
+- **`pressing-run-names-the-reason-that-held`** (unarchived) and `run_job`'s in-flight answer.
+  `run_job` re-asks `decide_firing` (`jobs.py:1318-1337`) and, for `DECISION_IN_FLIGHT`, answers
+  *"Every task on this loop's queue is already being worked … nothing is wrong"* (`jobs.py:1494`),
+  qualified only for **held** agents (`_held_in_flight_reasons`, `:1339-1357`). D2 makes an idle,
+  unheld assignee whose briefing is queued but blocked (token budget, conversation unavailable) in
+  flight, so a Run press on F368's staging would now read *"already being worked"* where today it
+  re-briefs. The pile-up stops; the press's sentence is then false for that row. No textual overlap
+  with that change (it edits `_loop_flow_busy_reason` and `run_job`'s `not success` branch). Build
+  that change first; this one adds task 1.14 pinning the press's answer on F368's staging and
+  recording what it says. Whether the press should name the queue's reason is a candidate finding
+  (R2), not fixed here.
+- **B3 `an-agent-can-be-paused-and-keeps-its-input`** puts paused agents into `agents_held`. D2
+  removes `agent in held_agents and` from the resume arm only; `held_agents` stays read by the
+  default-agent branch and by `_roster_availability`'s free list, which is what the pause relies on.
+  A paused assignee whose briefing is queued within the budget reads in flight and is not re-briefed,
+  as that change wants, without a pause branch here. No textual overlap.
+- **B1's `a-flow-stages-its-review-in-the-dispatch`** reads `Attending.review`; see D1's OR rule.
+
 ## Round log
 
 - **R1, 2026-09-24** (bundle B1): wrote this change. Re-measured F370, F371 (both legs) and F368 at
   `404c7d5`.
+- **R2, 2026-09-24** (bundle B1): re-derived against the code. Two corrections: `has_turn` excludes
+  running pairs (D1, else rung 3's `booked`/`running` clause precedence moves and D5 is not
+  byte-identical); D4's new sentence no longer claims nothing is waiting for the reviewer (false in
+  the hop-99 leg). Noted under D3: a non-transient **agent-wide** refusal (no runner bound, CLI
+  missing) writes `waiting_reason` but never counts (`turn_scheduler.py:506-508`), so such input
+  stays `queued` — attended — by D3's criterion. Deliberate: it is F96's wait-for-the-repair input,
+  and the resume arm should not pile briefings on it; for a hand-staffed reviewer whose runner was
+  unbound, the review reads in flight until the repair. Kept as a residual, not a D3 change.

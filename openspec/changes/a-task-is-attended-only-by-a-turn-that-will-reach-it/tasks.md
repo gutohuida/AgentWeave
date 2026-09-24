@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
 - [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design, delta, tasks, test guide; F370, F371 (two legs) and F368 re-measured at `404c7d5`
-- [ ] 0.2 R2: an independent re-derivation against `hub/hub/run_task_binding.py:268-392`, `hub/hub/scheduler.py:1128-1200` and `:1617-2112`, `hub/hub/turn_scheduler.py:313-690`, `hub/hub/inbound_queue.py:141-297`, and the three requirements in the delta. Check in particular: D3's refused criterion (`delivery_attempts > 0 and waiting_reason is not null`) against every writer of both columns; that no reader of `on_it` was missed (`grep -n on_it hub/hub`); that D5's availability answer is byte-identical to `task_agent_pairs_with_a_turn_queued` for every staging in `test_a_task_nothing_will_move_holds_nobody.py`
+- [x] 0.2 R2 (2026-09-24): done — see design.md round log. Original brief: an independent re-derivation against `hub/hub/run_task_binding.py:268-392`, `hub/hub/scheduler.py:1128-1200` and `:1617-2112`, `hub/hub/turn_scheduler.py:313-690`, `hub/hub/inbound_queue.py:141-297`, and the three requirements in the delta. Check in particular: D3's refused criterion (`delivery_attempts > 0 and waiting_reason is not null`) against every writer of both columns; that no reader of `on_it` was missed (`grep -n on_it hub/hub`); that D5's availability answer is byte-identical to `task_agent_pairs_with_a_turn_queued` for every staging in `test_a_task_nothing_will_move_holds_nobody.py`
 - [ ] 0.3 R3: a second independent re-derivation; `openspec validate a-task-is-attended-only-by-a-turn-that-will-reach-it --strict` passes
 - [ ] 0.4 The operator approves (APPROVALS.md), including D3
 
@@ -18,10 +18,12 @@ New file `hub/tests/test_a_task_is_attended_only_by_a_turn_that_will_reach_it.py
 - [ ] 1.7 (D3, D4) The same with the only entry for `beta` a review entry at hop 0 with `delivery_attempts=1` and `waiting_reason="commit abc is not present in this repository"`. `DECISION_STALLED`; the reason contains the refusal's text and `beta`, does **not** contain `Ask beta again`, and fits `JOB_RUN_ERROR_SUMMARY_CHARS`. FAILS today (`in_flight`)
 - [ ] 1.8 Control, PASSES today and must keep passing: `beta`'s own review entry at hop 0 with no refusal → `DECISION_IN_FLIGHT`, no stall (`agent-loops` *A staffed review still waiting in the queue is still attended*)
 - [ ] 1.9 Control: a running run bound to the task by `beta` → `DECISION_IN_FLIGHT`
-- [ ] 1.10 (D4) `_wedged_review_reason`'s sentence no longer contains `none is queued`. FAILS today
+- [ ] 1.10 (D4) `_wedged_review_reason`'s sentence no longer contains `none is queued`, and in 1.6's staging (the reviewer's own entry suspended) does not claim nothing is waiting for them. FAILS today
 - [ ] 1.11 (D1) `task_attendance` unit cases: a crashed run's returned entry (`delivery_attempts=1`, `waiting_reason=None`) is `queued`, not `refused`; a pair with one refused and one fresh entry is `queued`; a running pair wins over a queued one; an entry with no agent contributes nothing; both `task_id` and `review_task_id` contribute
-- [ ] 1.12 (D5) Availability is unchanged: for each staging in `test_a_task_nothing_will_move_holds_nobody.py`, `_agents_that_are_free` answers the same before and after. Add one case the old helper never had: the assignee's only entry refused (`delivery_attempts=1`, reason set) still holds it (not free)
+- [ ] 1.12 (D5) Availability is unchanged: for each staging in `test_a_task_nothing_will_move_holds_nobody.py`, `_agents_that_are_free` answers the same before and after. Add one case the old helper never had: the assignee's only entry refused (`delivery_attempts=1`, reason set) still holds it (not free). Add one R2 case: an agent running a turn bound to a task on a non-live loop, nothing queued, is named by rung 3's `running` clause, not `booked` (fails if `has_turn` counts running pairs)
 - [ ] 1.13 (D6) Rewrite `test_a_review_nobody_is_doing.py:448-501` against `task_attendance` (same five facts as pairs) and drop the old-helper premise at `test_a_task_nothing_will_move_holds_nobody.py:318-322`, keeping its `DEV not in await _free()` assertion
+
+- [ ] 1.14 (R2, collision with `pressing-run-names-the-reason-that-held`) On 1.3's staging, `POST /jobs/{id}/run`: record the status and sentence it answers after this change (expected: the in-flight answer, no new entry queued). Pins the interaction so a later change to the press's wording has to meet it
 
 ## 2. Implementation
 

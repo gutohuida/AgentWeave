@@ -57,12 +57,17 @@ The D8 refusal is raised in `trigger_agent_directly` when
 status route can ask both: it already resolves the project workspace (`inbound_queue.py:159-172`) and
 the agent's config (`:146`).
 
-- **Which task:** the controlling entry, as `_attempt_turn` picks it — the first queued entry
-  within the budget (`turn_scheduler.py:340`, `controlling`) — and its task by `run_task_binding.task_named_by`.
-  Where it names no task, the conversation's bound task decides the trigger's workspace
-  (`binding_for_conversation`, `run_task_binding.py:559`). R2 should confirm that this is the order
-  `resolve_bound_task` uses, and use that function rather than restating it if it reads nothing it
-  should not.
+- **Which task** (R2, corrected). The trigger does not read the controlling entry's task: it binds
+  the turn by `resolve_bound_task(conversation=…, queue_entry_ids=<the selected entries>)`
+  (`run_task_binding.py:402-440`, which reads only), then asks `resolve_turn_workspace_inputs`
+  (`task_workspace.py:123-160`) for the checkout's `task_id` — `None` for a grandfathered task or an
+  id that cannot become a ref — and only then `takes_task_workspace` and the holder
+  (`agent_trigger.py:985-1001`). The route calls the same three, in that order, on the same
+  **selected** set `_attempt_turn` would deliver (`turn_scheduler.py:340-367`: the controlling
+  entry's conversation, within the budget, of a compatible kind). That selection is exactly what
+  B11's F133 factors out of `_attempt_turn` into a shared read-only function; **this change is built
+  on it** (see Collisions). A **review** controlling entry skips D3: a review turn never reaches the
+  D8 check (the `elif review_context is not None` branch at `agent_trigger.py:948` pre-empts it).
 - **Where:** after the provider-hold and token-budget checks and the launchability probe, as one
   more live check before the fallback. The sentence is the trigger's own, moved into a shared
   function (`checkout_held_sentence(holder, task_id)`) so the two cannot drift.
@@ -89,6 +94,26 @@ is what the operator reads, with the old holder's name inside a sentence that sa
   fall through to D4 rather than raise: the status route is a diagnostic and must not 500 because
   one of its checks failed.
 
+## Collisions with other changes (R2)
+
+- **B11's F133** (no-spec, *queue status recomputes the reason*): the status route's token-budget
+  branch reads every queued entry where the scheduler reads the selected turn. B11 recommends one
+  shared read-only selection used by both. D3 needs exactly that selection. **Build order: F133's
+  shared function lands strictly before this change** (as B11's no-spec fix); this change's task 2.0
+  checks it exists and stops if it does not. F133 is carried by B11 only, not here.
+- **B3 `an-agent-can-be-paused-and-keeps-its-input`** edits `get_queue_status` too (the pause
+  reason). Order in the route: running → hop budget → pause/provider hold → token budget →
+  launchability → workspace → **D3's holder check** → D4's labelled fallback → attempt count. D3 is
+  placed after the pause, as B3's record asks.
+- **B2 `stop-clears-a-run-an-earlier-hub-left-running`** rewrites the *"agent is already running"*
+  sentence at the top of the same route (`inbound_queue.py:129`). Text only, a different branch;
+  whichever lands second keeps the other's sentence.
+- **B2 `a-retried-firing-records-how-its-work-ended`** edits the withdrawal route in the same file
+  (`inbound_queue.py:259-272`) and the scheduler's refusal bookkeeping, not `get_queue_status` and
+  not `waiting_reason`'s storage. No overlap; noted because the prompt listed it.
+- **B11 `input-the-hub-accepted-is-answered-as-accepted`** (F349): `messages.py:318`, as recorded in
+  the proposal.
+
 ## Residual
 
 - No later briefing tells the sender what became of a held message (F361's second clause). The
@@ -98,3 +123,14 @@ is what the operator reads, with the old holder's name inside a sentence that sa
 ## Round log
 
 - **R1, 2026-09-24** (bundle B1): wrote this change from the code at `404c7d5`.
+- **R2, 2026-09-24** (bundle B1): re-derived against the code. D3's "which task" corrected: the
+  trigger binds through `resolve_bound_task` over the **selected** entries and asks
+  `resolve_turn_workspace_inputs` before `takes_task_workspace`; the route must do the same, on the
+  selection B11's F133 factors out (build F133 first); a review controlling entry skips D3. D1's open
+  check answered: `ask_user` is not bounded by the hop budget — its answer is queued at hop 0
+  (`api/v1/questions.py:168`, `:203`) and `agent_actions.py` reads no `turn_depth`. `MessageResponse`
+  consumers: the SSE `message_created` payload is `_msg_dict` (`messages.py:418`), independent of the
+  schema; the schema is `from_attributes`, so the routes must build the response with the two fields
+  set rather than return the ORM row. Held on re-reading: `messages.py:57-77`, `:299-319`;
+  `agent_actions.py:201-224`; `mcp_server.py:236-244` posts to `/api/v1/agent-actions/messages`; the
+  status route's fallback at `inbound_queue.py:178`.

@@ -1,9 +1,9 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
 - [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design (Q-F158 with (B) recommended), delta, tasks, test guide; F158 re-verified at `404c7d5`
-- [ ] 0.2 R2: re-derive against `hub/hub/worktrees.py:459-625` and `:776-900`, `hub/hub/task_workspace.py`, `hub/hub/api/v1/agent_trigger.py:960-1030`, `hub/hub/turn_scheduler.py:506-560`, and the delta. Confirm by a throwaway test that a turn bound to a `pending` task with an unapproved prerequisite really cuts the branch today (F158's shape 1 was read, not driven), and that `takes_own_checkout` does not exclude it
+- [x] 0.2 R2 (2026-09-24): done by reading (shape 1 confirmed from `takes_own_checkout` and `_prerequisite_commits`' docstring; no throwaway test) — design.md round log. Original brief: re-derive against `hub/hub/worktrees.py:459-625` and `:776-900`, `hub/hub/task_workspace.py`, `hub/hub/api/v1/agent_trigger.py:960-1030`, `hub/hub/turn_scheduler.py:506-560`, and the delta. Confirm by a throwaway test that a turn bound to a `pending` task with an unapproved prerequisite really cuts the branch today (F158's shape 1 was read, not driven), and that `takes_own_checkout` does not exclude it
 - [ ] 0.3 R3: second independent re-derivation; `openspec validate a-task-checkout-catches-up-with-its-approved-prerequisites --strict` passes
-- [ ] 0.4 The operator answers Q-F158 and approves (DECISIONS.md, APPROVALS.md)
+- [ ] 0.4 The operator answers Q-F158, including D2 vs D2' for a conflict on an existing branch, and approves (DECISIONS.md, APPROVALS.md)
 
 ## 1. Tests first — each fails on today's code unless marked as a control
 
