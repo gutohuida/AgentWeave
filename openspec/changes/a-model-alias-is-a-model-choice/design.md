@@ -51,7 +51,7 @@ match `m.id === value` only, and both would misreport an alias-stored runner:
 
 | Reader | Today on `opus` | After |
 |---|---|---|
-| The composer's `ModelPicker` (`ModelPicker.tsx:55`; fed `runner.model` by `AgentOutputPanel.tsx:1323` and `NewConversationSurface.tsx:211`) | `find` misses, so it falls back to the provider **default** and shows *Sonnet 5* for an agent running Opus. The same wrong-model display F268 is about | `current` also matches `m.aliases.includes(effectiveModel)`, and the button reads `opus — latest (now Opus 5.5)` |
+| The composer's `ModelPicker` (`ModelPicker.tsx:55`; fed `runner.model` by `AgentOutputPanel.tsx:1323` and `NewConversationSurface.tsx:211`) | `find` misses, so it falls back to the provider **default** and shows *Sonnet 5* for an agent running Opus. The same wrong-model display F268 is about | `current` also matches `m.aliases.includes(effectiveModel)`, and the button reads `opus — latest (now Opus 5.5)`. The list's active mark (`:197`, `model.id === (effectiveModel ?? current?.id)`) compares the raw value too, so an alias marks no row; it becomes `model.id === current?.id` (R3) |
 | Project settings, checkpoint model (`ProjectSettingsPanel.tsx:290-297`, and the window lookup at `:91-93`) | offers ids only; a stored alias shows as a blank select, and the threshold preview has no window | offers the `Latest` group too; the window lookup resolves aliases |
 
 One shared helper, `resolveCatalogModel(provider, value)` in `hub/ui/src/api/modelCatalog.ts`,
@@ -95,8 +95,8 @@ All in `hub/tests/test_a_model_alias_is_a_model_choice.py` (new) unless stated.
    (`test_a_refusal_says_what_would_work.py:56`) is **deleted**, and its intent moves to test 1.
    Record this deliberately in the commit.
 7. UI: `hub/ui/src/__tests__/composerModelControls.test.tsx` (extend): `ModelPicker` with
-   `effectiveModel="opus"` shows the Opus label, not the provider default. **Fails today** (shows
-   *Sonnet 5*).
+   `effectiveModel="opus"` shows the Opus label, not the provider default, and marks the Opus row
+   active. **Fails today** (shows *Sonnet 5*, and marks no row).
 6. UI: `hub/ui/src/__tests__/runnerForm*.test.tsx` (or the existing RunnersPage test) with
    `GET /model-catalog` served in catalog order. The `Latest` group lists `opus, sonnet, haiku,
    fable` in that order, each labelled with its current target. Opening a runner stored as `opus`
@@ -110,3 +110,13 @@ All in `hub/tests/test_a_model_alias_is_a_model_choice.py` (new) unless stated.
   `model_catalog.py:312/394`; `model_context_window` resolves through it too). Added the composer
   `ModelPicker` and the checkpoint-model select, which would have shown the wrong model for an
   alias, and test 7. Noted `checkpoint_model` as an unvalidated door.
+- R3 (2026-09-24): D1's five backend callers re-confirmed by grep; `context_window_for_model` already
+  resolves aliases (`model_catalog.py:330-333`). One more UI comparison found: `ModelPicker.tsx:197`'s
+  active mark compares `model.id` to the raw stored value; added to D2 and test 7. No collision with
+  B8 (`a-checkpoint-is-handed-over-once-…` touches `cut_over`, `consider` and
+  `checkpointOperationStore`, not the model selects) or B11 (`the-app-window-keeps-…` names
+  `ModelPicker.tsx:29` only as a `localStorage` writer; it changes the window profile, not the
+  picker). File overlap only, compatible: `the-permissions-pill-shows-the-posture-the-run-gets`
+  edits Claude's control default in `model_catalog.py` and `AgentSettingsControls.tsx:199`;
+  `a-runner-choice-names-its-model` edits `:253` and `ProjectSettingsPanel.tsx:171,279`, beside
+  this change's checkpoint-model select (`:290-297`).

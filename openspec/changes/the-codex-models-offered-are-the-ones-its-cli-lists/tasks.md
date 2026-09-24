@@ -1,7 +1,7 @@
 ## 0. Rounds and decision
 
 - [x] 0.1 R2: re-derive the proposal independently. Grep every read of `CATALOG` and every caller of `get_provider`, `providers` and `context_window_for_model`, including `scripts/` and `tests/`. Re-measure `scripts/check_model_catalog.py` and the real cache's shape (`priority`, `visibility`, encoding). Check whether anything in Docker mode (`AW_WORKSPACE_ROOT`) spawns Codex from a different home than the Hub process's. Record the result in `design.md`'s round log
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate the-codex-models-offered-are-the-ones-its-cli-lists --strict` passes
+- [x] 0.2 R3: a second independent re-derivation. `openspec validate the-codex-models-offered-are-the-ones-its-cli-lists --strict` passes
 - [ ] 0.3 The operator answers D2's source question (runtime read / regenerate at release), recorded in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first

@@ -80,11 +80,17 @@ start.
 - **AND** no checkpoint is created, so no later checkpoint anchors on one without a body
 - **AND** the operator is told a checkpoint is due, as when checkpoints are not automatic
 
+#### Scenario: At exhaustion an automatic conversation's warning behaves as an offered one
+
+- **WHEN** checkpoints are automatic, the budget is exhausted, and the operator has dismissed the checkpoint-due warning
+- **THEN** a later reading below the final-warning level does not raise the warning again
+- **AND** a reading at the final-warning level raises the final warning
+
 #### Scenario: A handover at exhaustion keeps the author's notes
 
 - **WHEN** a flow handover with notes for the reviewer completes while the budget is exhausted
 - **THEN** no model is invoked and no checkpoint is created
-- **AND** the notes remain pending for the next handover
+- **AND** the notes remain pending and unconsumed, so no checkpoint without a body is recorded against that task
 
 #### Scenario: A title is not generated at exhaustion
 

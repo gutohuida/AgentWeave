@@ -1,7 +1,7 @@
 ## 0. Rounds and decision
 
 - [x] 0.1 R2: re-derive the proposal independently. Grep every caller of `ProviderDescriptor.model`, `get_provider` and `model_is_declared`, and every place a stored `Runner.model` is compared or rendered (including `hub/ui/src`). Confirm design D1's table is complete. Record the result in `design.md`'s round log
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate a-model-alias-is-a-model-choice --strict` passes
+- [x] 0.2 R3: a second independent re-derivation. `openspec validate a-model-alias-is-a-model-choice --strict` passes
 - [ ] 0.3 The operator answers D2's alias question (accept as written / accept and normalise / refuse), recorded in `spec-queue/DECISIONS.md`. If the answer is "refuse", withdraw this change and close F221 as fixed by `568f868`
 
 ## 1. Tests first — each fails on today's code
@@ -19,7 +19,7 @@
 - [ ] 2.1 `ProviderDescriptor.model` resolves aliases (design D1). Rewrite `undeclared_model_reason` without the alias branch, listing aliases among the accepted values
 - [ ] 2.2 `agents.py` find-or-create names an alias runner `"<provider label> — <alias> (latest)"`
 - [ ] 2.3 Rewrite `worker.model_is_declared`'s docstring (the two gates stay equal, now including aliases)
-- [ ] 2.4 UI: `resolveCatalogModel` in `api/modelCatalog.ts`; `RunnerForm`, `AgentCreateDialog` and the checkpoint-model select offer the `Latest` group; `ModelPicker.tsx:55` resolves aliases; `storedIsDeclared` counts an alias; `runnerOptionLabel` renders an alias, if it exists
+- [ ] 2.4 UI: `resolveCatalogModel` in `api/modelCatalog.ts`; `RunnerForm`, `AgentCreateDialog` and the checkpoint-model select offer the `Latest` group; `ModelPicker.tsx:55` resolves aliases and `:197`'s active mark compares `current?.id`; `storedIsDeclared` counts an alias; `runnerOptionLabel` renders an alias, if it exists
 - [ ] 2.5 Run `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH, then the CLAUDE.md lint block, then `make ui`. Commit `hub/ui/src` and `hub/hub/static/ui` together
 
 ## 3. Drive

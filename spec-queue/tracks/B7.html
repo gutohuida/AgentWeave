@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B7 -- Models and budget</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B7.md, tracked</p>
+  <h1>B7 &mdash; Models and budget</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F174, F267, F268, F221, F240, F62</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D2, D7</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/a-runner-choice-names-its-model/</code>, <code>openspec/changes/a-model-alias-is-a-model-choice/</code>, <code>openspec/changes/the-codex-models-offered-are-the-ones-its-cli-lists/</code>, <code>openspec/changes/an-estimate-that-misses-turns-says-so/</code>, <code>openspec/changes/worker-spend-counts-against-the-budget/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R3 done — parked for operator</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><a class="toc-item" href="#R2">R2</a><a class="toc-item" href="#R3">R3</a><a class="toc-item toc-final" href="#Final">Final</a></nav>
+  </div>
+  <section class="sec-final" id="Final"><h2>Final -- what the bundle reached, and why</h2><div class="md-body"><p>Bundle B7 answers two questions: which models the Hub offers and accepts (D2), and what the token budget counts (D7). It reached four recommendations and five independent changes. Each change can ship alone. <strong>IMPL has not started. The bundle is parked until the operator approves it.</strong></p>
+<h5>Decisions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Recommended answer</th><th>Why</th></tr></thead><tbody><tr><td>D2.1</td><td>Where should Codex&#x27;s model list come from: a hand-kept literal, a literal regenerated at release, or the Codex CLI&#x27;s own cache read at runtime?</td><td><strong>Read it at runtime</strong> from <code>$CODEX_HOME/models_cache.json</code> (as UTF-8). Keep the literal as the fallback, and show which one is in use on <code>GET /model-catalog</code></td><td>The server sends each Codex client version its own list, so no literal can be right for two installed CLIs. The check script is red today by design: EXIT 1, because <code>gpt-6-luna</code> and <code>gpt-6-sol</code> are declared but absent from CLI 0.146.0. Codex is undrivable here, so under a literal nobody would notice drift. On Windows the real cache does not decode without <code>encoding=&quot;utf-8&quot;</code>; a test pins this</td></tr><tr><td>D2.2</td><td>Should model aliases (<code>opus</code>, <code>sonnet</code>, <code>haiku</code>, <code>fable</code>) be accepted?</td><td><strong>Yes, stored as written</strong>, so a runner on <code>opus</code> follows the provider&#x27;s latest model</td><td>Claude publishes no machine-readable model list, so an alias is the only way a Claude runner stays current without a catalog edit. Every door already goes through <code>ProviderDescriptor.model</code>, so one change there makes all of them agree. Today&#x27;s refusal is truthful (<code>568f868</code>), but the catalog still publishes words that no door accepts</td></tr><tr><td>D7.1</td><td>Does the token budget cover worker spend (checkpoints, probes, conversation titles)?</td><td><strong>Count it and gate it like turns.</strong> Autonomous worker calls pause at exhaustion <em>without creating a checkpoint</em>. The operator&#x27;s <em>Checkpoint</em> button always runs and is counted</td><td>The budget reads turns only (<code>usage_accounting.py:207-219</code>). F240 saw a checkpoint spend after the screen said &quot;Autonomous turns are paused&quot;. Turns already follow this rule. The titler writes no record today, and that part ships whatever the answer</td></tr><tr><td>D7.2</td><td>Codex turns report no cost. Should they be priced from tokens, or should totals be marked partial?</td><td><strong>Mark totals partial, and price nothing</strong></td><td>The spec forbids inventing money from a price table. A price table would be a second hand-kept literal, which is F267&#x27;s failure applied to money. Codex is undrivable here, so a price could never be checked. &quot;Partial&quot; also covers unavailable telemetry and Claude results that lack <code>total_cost_usd</code></td></tr></tbody></table></div>
+<h5>Changes</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>a-runner-choice-names-its-model</code></td><td>F268</td><td>One label helper, <code>name · provider · model</code>, used by the three runner selects: agent settings, title runner and checkpoint runner</td><td>S, UI only</td></tr><tr><td><code>an-estimate-that-misses-turns-says-so</code></td><td>F62</td><td>Adds <code>unpriced_turns</code> to every accounting summary. The cost label says <em>&quot;excludes N turns&quot;</em></td><td>S, no migration</td></tr><tr><td><code>worker-spend-counts-against-the-budget</code></td><td>F240</td><td>Adds <code>worker_invocations.total_tokens</code> (a migration, with backfill). One <code>used_tokens</code> feeds the budget, the snapshot and PATCH, with separate <code>workers</code> lines. <code>run_worker</code> gets a required <code>initiator</code> and a fail-closed gate. Both automatic triggers check the budget first. At exhaustion, the context trigger behaves as manual mode (warning, dismissal, final warning), and the handover declines but keeps its note. The titler records a row</td><td>L, migration</td></tr><tr><td><code>a-model-alias-is-a-model-choice</code></td><td>F221</td><td><code>ProviderDescriptor.model</code> accepts aliases, and runners store them as written. The pickers gain a <code>Latest</code> group. One UI resolver serves five readers, including the composer&#x27;s <code>ModelPicker</code></td><td>M</td></tr><tr><td><code>the-codex-models-offered-are-the-ones-its-cli-lists</code></td><td>F267, F174</td><td>Reads the cache at runtime (memoised on mtime, UTF-8, filtered by visibility then sorted by priority), with the literal as fallback. The catalog route reports <code>source</code>, and the test suite is pinned to the literal</td><td>M</td></tr></tbody></table></div>
+<p>Suggested order: the first two need no decision. Then worker spend, then the alias change, then Codex.</p>
+<h5>Open for the operator</h5>
+<ol>
+<li><strong>Answer D2.1, D2.2, D7.1 and D7.2</strong> (recommended answers above). Each change&#x27;s <code>design.md</code> opens</li>
+</ol>
+<p>with what happens under the other answers:</p>
+<ul>
+<ul>
+<li>Refuse aliases: withdraw the alias change, and close F221 as fixed by <code>568f868</code>.</li>
+<li>Normalise aliases: store the model id, and offer no <code>Latest</code> group.</li>
+<li>Worker spend on its own line only: drop the gate and D3a, and keep the lines and the titler row.</li>
+<li>Worker spend counted but never refused: drop the gate only.</li>
+<li>Price Codex: the estimate change still ships.</li>
+</ul>
+<li><strong>Migration <code>0106</code> ordering.</strong> Four unarchived changes name <code>0106</code>:</li>
+</ul>
+<p><code>worker-spend-counts-against-the-budget</code> (this bundle), <code>a-checkpoint-is-handed-over-once-and-says-where-it-went</code> (B8), <code>a-footprint-names-the-line-of-work-its-commit-is-on</code> and <code>an-ask-me-card-says-what-workspace-only-would-decide</code>. <code>agents-no-longer-register-themselves</code> (B3) says &quot;next free number&quot;. <strong>Recommended:</strong> whichever change is built first takes <code>0106</code>, and each later one renumbers at IMPL. Renumbering covers the file name, <code>down_revision</code>, <code>HEAD_REVISION</code> in <code>hub/tests/test_migrations.py:40</code>, <code>test_project_persistence.py:227</code>, and the test names. Nothing is renumbered now.</p>
+<ol>
+<li><strong>Expect a jump on <code>:8000</code>.</strong> Read <code>mode=ro</code> today: the head is <code>0105</code>. There are 32 <code>ok</code> Claude</li>
+</ol>
+<p>worker rows, all on LoopEngine: 16 checkpoints (490,179 tokens) and 16 probes (472,420). <strong>That is 962,599 tokens and $1.168</strong>, which join LoopEngine&#x27;s total on the restart that runs the migration. None of the 3 projects has a <code>token_budget</code>, so nothing pauses. LoopEngine generates titles, but that spend was never recorded, so it cannot be backfilled.</p>
+<ol>
+<li><strong>Should the Add-agent default model change from <code>claude-sonnet-5</code> to <code>sonnet</code>?</strong></li>
+</ol>
+<p><strong>Recommended: no</strong>, keep it out of the alias change. It is a product call, and F221 does not need it.</p>
+<ol>
+<li><strong>Candidate findings for the ledger.</strong> No round has filed these:</li>
+</ol>
+<div class="scroll"><table class="md"><thead><tr><th>Candidate</th><th>Evidence</th><th>Severity guess</th></tr></thead><tbody><tr><td>The checkpoint and probe worker runs <code>claude -p</code> with every default tool enabled, on untrusted transcript text. F195 closed this same gap for the titler</td><td><code>build_worker_command</code> (<code>worker.py:122-148</code>) gives Claude <code>--output-format json [--model] -p</code>, with no <code>--tools &quot;&quot;</code>. Codex gets <code>--sandbox read-only</code>. The likely fix is <code>--tools &quot;&quot;</code> for Claude there</td><td>B</td></tr><tr><td>An <code>unwritten</code> checkpoint becomes the next checkpoint&#x27;s anchor</td><td><code>latest_checkpoint</code> (<code>checkpoints.py:95-108</code>) orders by <code>sequence</code> with no status filter. The next transcript starts at the unwritten checkpoint&#x27;s <code>created_at</code> with no predecessor body, so the failed span drops out of the chain. <code>latest_checkpoint_for_loop</code> also briefs from it. Any worker timeout or failure does this today</td><td>B</td></tr><tr><td>The titler pays again for the same title after every turn</td><td><code>generate_conversation_title</code> checks only <code>title_set_by_operator</code> and the mode (<code>conversation_titles.py:175-233</code>). It is called at <code>agent_trigger.py:2630</code> and <code>:3219</code>, on the same excerpt each time</td><td>C</td></tr><tr><td>(R3) A declined handover&#x27;s note never reaches that task&#x27;s reviewer</td><td><code>_briefing_checkpoint</code> falls back to the loop&#x27;s latest checkpoint. Later, <code>_authors_pending_note</code> carries only the author&#x27;s newest note, possibly into a later task&#x27;s checkpoint. Today this happens when no checkpoint runner is set; with D7.1 it also happens at exhaustion</td><td>C</td></tr></tbody></table></div>
+<h5>Findings that did not need a change</h5>
+<ul>
+<li><strong>F174</strong>: its original drift (<code>gpt-5.6-sol</code>, <code>gpt-5.4</code>, a stale default) was fixed by <code>b661766</code></li>
+</ul>
+<p>and <code>b8d30f2</code>. The opposite drift that replaced it is handled by the Codex change, together with F267.</p>
+<ul>
+<li><strong>F221</strong>: <code>568f868</code> fixed the untrue refusal sentence (4 tests pass). What remains is D2.2,</li>
+</ul>
+<p>handled by the alias change.</p>
+<ul>
+<li><strong>F62</strong>: its <code>runner_parsing.py:641</code> citation points at OpenCode&#x27;s <code>step_finish</code>, not Codex. The</li>
+</ul>
+<p>conclusion holds and is handled by the estimate change.</p></div></section><section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>Re-verified against HEAD <code>404c7d5</code> (worktree <code>ce086b6</code>, which touches no product code).</p>
+<h5>Each finding, re-verified</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>Verdict</th><th>Evidence</th></tr></thead><tbody><tr><td><strong>F174</strong></td><td><strong>Changed shape.</strong> The drift it names is fixed; a new drift in the opposite direction replaced it</td><td><code>b661766</code> and <code>b8d30f2</code> (2026-09-23) removed <code>gpt-5.6-sol</code> and <code>gpt-5.4</code>, and moved the default to <code>gpt-5.6-terra</code>, which the cache lists (priority 7). The same edits declared <code>gpt-6-luna</code> and <code>gpt-6-sol</code> from the Codex 0.156.1 changelog. This machine&#x27;s CLI is 0.146.0. <code>py -3.11 scripts/check_model_catalog.py</code> gives <strong>EXIT 1, 2 drifts, both &quot;declared but gone&quot; (<code>gpt-6-luna</code>, <code>gpt-6-sol</code>)</strong>. The docstring says so itself (<code>model_catalog.py:42-53</code>): the server sends each client version its own list. So no literal can be right for two installed clients at once</td></tr><tr><td><strong>F267</strong></td><td><strong>Still open</strong></td><td>The Codex half is still a literal (<code>model_catalog.py:236-247</code>). Nothing in <code>hub/hub</code> reads <code>models_cache.json</code> (grep: only the docstring at <code>:36</code> and <code>scripts/check_model_catalog.py</code>). All four doors still refuse anything undeclared: <code>runners.py:40</code>, <code>agents.py:695</code>, <code>validate_overrides</code> (<code>model_catalog.py:395</code>), and the worker gate <code>worker.py:165</code></td></tr><tr><td><strong>F268</strong></td><td><strong>Still open, and wider than filed</strong></td><td><code>AgentSettingsControls.tsx:253</code> still renders <code>{runner.name} ({runner.cli})</code>. F268 did not name two more selects, which omit even the provider: <code>ProjectSettingsPanel.tsx:171</code> (title runner) and <code>:279</code> (checkpoint runner) render <code>{runner.name}</code>. The runner-name index is non-unique (<code>db/models.py:341</code>)</td></tr><tr><td><strong>F221</strong></td><td><strong>Changed shape.</strong> The untrue sentence is fixed; the question is D2&#x27;s</td><td><code>568f868</code> (Round 4b, 2026-09-23) made <code>undeclared_model_reason</code> answer an alias with <em>&quot;&#x27;opus&#x27; is the alias &#x27;claude&#x27; publishes for &#x27;claude-opus-5-5&#x27;; a runner stores the model id, so use …&quot;</em> (<code>model_catalog.py:287-305</code>). Measured: <code>test_a_refusal_says_what_would_work.py -k &quot;alias or undeclared&quot;</code> gives 4 passed. <code>ProviderDescriptor.model</code> is still id-only (<code>:128-132</code>), so the alias is still refused, now truthfully</td></tr><tr><td><strong>F240</strong></td><td><strong>Still open, all three halves</strong></td><td><code>project_budget_state</code> and <code>accounting_snapshot</code> read <code>TurnUsage</code> only (<code>usage_accounting.py:110-129</code>, <code>:207-219</code>). <code>project_budget_state</code> has two callers, both about turns (<code>turn_scheduler.py:393</code>, <code>inbound_queue.py:142</code>). <code>run_worker</code> has no budget check (<code>worker.py:414-486</code>). The titler (<code>conversation_titles.py:61-121</code>) spawns in plain-text mode and writes no row. Checkpoints spend autonomously on two of three triggers: <code>context_pressure</code> (<code>checkpoint_trigger.py:302</code>) and <code>task_completion</code> (<code>checkpoint_handover.py:262-265</code>)</td></tr><tr><td><strong>F62</strong></td><td><strong>Still open; one citation wrong</strong></td><td><code>func.sum(api_equivalent_usd_micros)</code> skips NULLs (<code>usage_accounting.py:95</code>), and the display shows it as complete (<code>accountingDisplay.ts:42-43</code>). Neither Codex path sets a cost: exec gives <code>runner_parsing.py:578-583</code>, and app-server gives <code>codex_appserver.py:353-368</code>. <strong>F62 cites <code>runner_parsing.py:641</code> as Codex&#x27;s <code>cost</code>, but that line is OpenCode&#x27;s <code>step_finish</code></strong> (<code>:620-642</code>). The conclusion holds; the citation does not</td></tr></tbody></table></div>
+<p><strong>Measured on the operator&#x27;s <code>:8000</code> database, <code>mode=ro</code>:</strong> no project has a <code>token_budget</code>. LoopEngine has 32 worker invocations, all Claude (≈962k normalised tokens, <code>$1.17</code> reported), against 348 turns (<code>$418</code>). There are no Codex turns, so F62&#x27;s gap is invisible there today.</p>
+<h5>D2 — the model catalog</h5>
+<p><strong>Question 1: read the CLI&#x27;s cache at runtime, or regenerate the literal at release?</strong></p>
+<div class="scroll"><table class="md"><thead><tr><th>Option</th><th>Releases</th><th>Breaks or costs</th></tr></thead><tbody><tr><td>A. Literal + check script (today, R-3.4)</td><td>nothing to build</td><td>Wrong for at least one client version at any time. The check is red today <em>by design</em> (the catalog deliberately declares ahead of the installed CLI), so red no longer means &quot;act&quot;</td></tr><tr><td>B. Regenerate the literal at release</td><td>CI independent of the machine</td><td>Right only for the releasing machine&#x27;s client version. It needs the Codex CLI run first to refresh the cache, and Codex is undrivable here. The operator&#x27;s <code>:8000</code> runs this checkout, so &quot;release&quot; means whatever was last committed</td></tr><tr><td><strong>C. Runtime read, literal as fallback</strong></td><td>Correct for exactly the CLI the Hub spawns. Nobody has to maintain a provider nobody here drives</td><td>The list is per-machine, so the test suite must be pinned to the literal (an autouse conftest fixture). Docker without a Codex home falls back</td></tr></tbody></table></div>
+<p><strong>Recommended: C.</strong> Codex being undrivable argues <em>for</em> C. Under A and B someone must notice a drift, and on this machine nobody will. What C needs verified (read a file, offer its list, refuse the rest) needs no Codex spawn. One concrete trap was found while measuring: the real cache is not decodable with Windows&#x27; default codec (<code>UnicodeDecodeError: &#x27;charmap&#x27; … byte 0x9d in position 11902</code>). A reader without <code>encoding=&quot;utf-8&quot;</code> would silently fall back on this machine forever and pass in CI. The design pins this with a test.</p>
+<p><strong>Question 2: are aliases accepted?</strong></p>
+<div class="scroll"><table class="md"><thead><tr><th>Option</th><th>Releases</th><th>Breaks or costs</th></tr></thead><tbody><tr><td>A. Refuse (today; truthful since <code>568f868</code>)</td><td>nothing</td><td>The catalog publishes a vocabulary no door accepts. Claude has no machine-readable upstream, so a Claude runner can follow a new model only through a catalog edit</td></tr><tr><td>B. Accept, store the id</td><td>API convenience</td><td>Nothing for F267. The alias→id map becomes load-bearing, and it already moved once (<code>b661766</code>: <code>opus</code> → <code>claude-opus-5-5</code>)</td></tr><tr><td><strong>C. Accept, store as written</strong></td><td>A runner that follows the provider&#x27;s latest model with no catalog edit. This is the Claude half of F267&#x27;s answer, because the cache read only covers Codex</td><td>Two strings can name one model on a given day. An alias&#x27;s context window is its current target&#x27;s (the live meter reads the CLI&#x27;s own <code>contextWindow</code>, so it follows regardless)</td></tr></tbody></table></div>
+<p><strong>Recommended: C.</strong> The two halves of D2 are consistent: Codex follows its CLI through the cache, and Claude follows its CLI through the alias. Neither needs a release to stay current.</p>
+<h5>D7 — the budget</h5>
+<p><strong>Question 1: does the budget cover worker spend?</strong> Options: A, outside everything (today). B, its own line but not budgeted. C, counted and gated like turns. D, counted and never refused. <strong>Recommended: C.</strong> The rule <code>usage-accounting</code> already states for turns applies unchanged: autonomous spend pauses at exhaustion, and operator spend runs and is counted. A checkpoint is autonomous unless its trigger is <code>operator</code>, its probe inherits that, and the titler is always autonomous. The gate <strong>fails closed</strong> when the budget cannot be read. A skipped automatic checkpoint still produces an <code>unwritten</code> checkpoint with its zero-cost envelope and no cutover, which is today&#x27;s path for an unwritten checkpoint (<code>checkpoint_trigger.py:338-342</code>). The titler&#x27;s invocation row is <em>not</em> a decision (F240 says so): it ships under every answer.</p>
+<p><strong>Question 2: is Codex priced from tokens, or are totals marked partial?</strong> <strong>Recommended: marked partial, and nothing priced.</strong></p>
+<ul>
+<li><code>usage-accounting</code> already says *&quot;The system MUST NOT invent a monetary figure from a model</li>
+</ul>
+<p>price catalog.&quot;*</p>
+<ul>
+<li>A price table would be a second hand-kept literal with F267&#x27;s exact failure, and for money.</li>
+<li>Codex is undrivable, so a priced Codex turn could never be checked.</li>
+<li>Marking partial also covers the two other causes of a missing cost: unavailable telemetry, and a</li>
+</ul>
+<p>Claude result without <code>total_cost_usd</code>.</p>
+<p><strong>How the two decisions fit together.</strong> Pricing would have depended on the catalog. The recommendation keeps the catalog free of prices, so D2&#x27;s runtime Codex list needs no price data. Workers&#x27; tokens are normalised by the same function turns use (<code>runner_parsing._accounting_from_dimensions</code>, with Claude cache counted as input). If both budget changes ship, worker calls with no cost are counted in the partial marker too.</p>
+<h5>What was written — five changes, each shippable alone</h5>
+<p>Recommended order, so that stopping anywhere leaves complete work:</p>
+<ol>
+<li><code>a-runner-choice-names-its-model</code> (F268). UI only; one label helper for three selects. No</li>
+</ol>
+<p>decision needed.</p>
+<ol>
+<li><code>an-estimate-that-misses-turns-says-so</code> (F62). <code>unpriced_turns</code> on every summary and on the</li>
+</ol>
+<p>display. No migration.</p>
+<ol>
+<li><code>worker-spend-counts-against-the-budget</code> (F240). Migration <code>0106</code> adds</li>
+</ol>
+<p><code>worker_invocations.total_tokens</code> (backfilled) and admits a <code>budget_exhausted</code> outcome. One <code>used_tokens</code> for the budget, the snapshot and PATCH. <code>workers</code> lines. A required <code>initiator</code> on <code>run_worker</code>. The titler records a row in JSON mode and keeps F195&#x27;s <code>--tools &quot;&quot;</code>.</p>
+<ol>
+<li><code>a-model-alias-is-a-model-choice</code> (F221). <code>ProviderDescriptor.model</code> resolves aliases, and</li>
+</ol>
+<p>runners store them as written. One existing test is deleted on purpose.</p>
+<ol>
+<li><code>the-codex-models-offered-are-the-ones-its-cli-lists</code> (F267, F174). Runtime read with an mtime</li>
+</ol>
+<p>memo, the literal as fallback, and <code>source</code> on <code>GET /model-catalog</code>. The conftest pins the suite to the literal.</p>
+<p>All five pass <code>openspec validate --strict</code>. Each <code>design.md</code> opens with the decision it assumes and what changes if the operator answers otherwise.</p>
+<h5>Routes, when what they call raises</h5>
+<ul>
+<li><code>GET /model-catalog</code> and every model door: the cache reader never raises, and a malformed cache</li>
+</ul>
+<p>gives <code>built_in</code> plus a reason.</p>
+<ul>
+<li><code>GET /accounting</code>: one more aggregate, on <code>worker_invocations</code>, which has existed since <code>0042</code>.</li>
+<li><code>PATCH /accounting/budget</code>: it answers from the same total <code>GET</code> reports (design D2 of change 3</li>
+</ul>
+<p>pins this with a test, because today they would diverge once workers count).</p>
+<ul>
+<li><code>POST …/checkpoints</code> (operator) is never gated, and <code>run_worker</code> never raises.</li>
+</ul>
+<h5>Left for R2 and R3 to check hardest</h5>
+<ul>
+<li><strong>Change 3&#x27;s snapshot shape.</strong> <code>project.total_tokens</code> now includes workers while</li>
+</ul>
+<p><code>measured_turns</code> stays turns-only. Is that coherent on screen, or should workers stay out of <code>project</code> and appear only in <code>budget.used_tokens</code>?</p>
+<ul>
+<li><strong>Change 3, the titler not routed through <code>run_worker</code>.</strong> It keeps its own command for F195.</li>
+</ul>
+<p>Adjacent observation, not filed: the checkpoint worker spawns <code>claude -p</code> <strong>without</strong> <code>--tools &quot;&quot;</code> on a transcript excerpt, which is untrusted text (<code>worker.py:122-131</code>). This is the same exposure F195 closed for the titler. R2 should decide whether to file it.</p>
+<ul>
+<li><strong>Change 5, Docker mode.</strong> Does a Docker Hub spawn Codex from the Hub process&#x27;s <code>CODEX_HOME</code>?</li>
+</ul>
+<p>Not checked.</p>
+<ul>
+<li><strong>Change 4.</strong> Should the Add-agent default move from <code>claude-sonnet-5</code> to <code>sonnet</code>? Left out as a</li>
+</ul>
+<p>product call.</p>
+<ul>
+<li><strong>Backfill on <code>:8000</code>.</strong> About 962k tokens join LoopEngine&#x27;s total on restart. Nothing pauses (no</li>
+</ul>
+<p>budgets), but the operator should expect the jump.</p></div></section><section class="sec-round" id="R2"><h2>R2 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>34 load-bearing claims re-derived from the code. 29 held; 5 disagreed or were incomplete, all fixed in place. All five changes pass <code>openspec validate --strict</code>.</p>
+<h5>Claims that disagreed with the code, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Change</th><th>R1&#x27;s claim</th><th>What the code shows</th><th>Fixed</th></tr></thead><tbody><tr><td>1</td><td><code>worker-spend-counts-against-the-budget</code></td><td>An automatic checkpoint at exhaustion can safely become an <code>unwritten</code> checkpoint (<em>&quot;today&#x27;s path&quot;</em>)</td><td>It strands work. <code>latest_checkpoint</code> (<code>checkpoints.py:95-108</code>) orders by <code>sequence</code> with <strong>no status filter</strong>, so the unwritten one becomes the next checkpoint&#x27;s anchor; <code>_transcript_since</code> starts at <code>anchor.created_at</code> (<code>checkpoint_generation.py:181-197</code>) and <code>anchor.body</code> is <code>None</code>, so the gated span drops out of every later checkpoint. Under <code>automatic</code>, <code>_nothing_new_since_last_checkpoint</code> is false after each operator turn, so one unwritten checkpoint + <code>checkpoint_ready</code> per turn. On a handover, <code>consume_note</code> runs regardless (<code>checkpoint_handover.py:273</code>), so the author&#x27;s reviewer notes would be consumed into an empty checkpoint the next firing briefs from</td><td>New design <strong>D3a</strong>: both automatic triggers read the budget <strong>before</strong> <code>generate_checkpoint</code> and create nothing. <code>context_pressure</code> takes the existing manual-mode warn path (<code>checkpoint_trigger.py:263-291</code>: <code>checkpoint_warning = &quot;due&quot;</code>, <code>checkpoint_due</code>); the handover declines and leaves the note pending. <code>run_worker</code>&#x27;s <code>initiator</code> gate stays as a backstop (titler; the read-to-spawn race). Proposal table, spec scenarios (one replaced, one added), tests 10/10b/10c and task 2.3a rewritten</td></tr><tr><td>2</td><td>same</td><td>Titler rows use <code>TITLE_PROMPT_VERSION</code></td><td>No such constant exists (<code>grep PROMPT_VERSION</code>: only the checkpoint and probe ones), and <code>worker_invocations.prompt_version</code> is NOT NULL</td><td>Named as a new constant, <code>&quot;conversation-title/1&quot;</code></td></tr><tr><td>3</td><td>same</td><td>(R1 left open) Is <code>project.total_tokens</code> including workers coherent on screen?</td><td><code>AccountingPanel.tsx:76-78</code> puts the total over <em>&quot;N measured · M usage unavailable&quot;</em>, turn counts only</td><td>Kept R1&#x27;s choice (the headline must equal <code>budget.used_tokens</code>); the caption gains <em>&quot;K worker calls&quot;</em></td></tr><tr><td>4</td><td><code>a-model-alias-is-a-model-choice</code></td><td>D1/D2 list every reader of a stored model</td><td>Two UI readers match <code>m.id</code> only: the composer&#x27;s <code>ModelPicker.tsx:55</code> falls back to the provider <strong>default</strong>, so an agent on <code>opus</code> would show <em>Sonnet 5</em> (F268&#x27;s own failure, reintroduced); the checkpoint-model select and its window lookup (<code>ProjectSettingsPanel.tsx:91-93</code>, <code>:290-297</code>)</td><td>Both added, behind one <code>resolveCatalogModel</code> helper; test 7 added. Noted <code>PATCH /projects</code> accepts any <code>checkpoint_model</code> (<code>projects.py:102</code>)</td></tr><tr><td>5</td><td><code>the-codex-models-offered-are-the-ones-its-cli-lists</code></td><td>Docker without a Codex home falls back (not checked)</td><td>Confirmed and sharper: the image (<code>hub/Dockerfile</code>, <code>python:3.11-slim</code>) ships <strong>no Codex CLI</strong>, and <code>docker-compose.yml</code> sets no <code>CODEX_HOME</code> and mounts no Codex home, so <code>built_in</code> is the right answer there. New limit found: an agent&#x27;s <code>config.env_vars</code> can set its own <code>CODEX_HOME</code> (<code>launchability.py:143-175</code>, honoured at <code>agent_trigger.py:2380</code>), and the catalog reads only the Hub process&#x27;s. The real cache has a <strong>hidden</strong> model at priority 3, below every listed one, so sort must follow the visibility filter</td><td>D3a added; test 1&#x27;s hidden model given the lowest priority</td></tr></tbody></table></div>
+<h5>R1&#x27;s open checks, answered</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Check</th><th>Answer</th></tr></thead><tbody><tr><td>Docker-mode <code>CODEX_HOME</code></td><td>Row 5. No Codex CLI in the image; the reader returns <code>built_in</code> with <em>&quot;no Codex model cache at /root/.codex/models_cache.json&quot;</em>, never raises</td></tr><tr><td>Can gating worker spend strand something? What does each refused call return?</td><td>Yes, as R1 designed it (row 1). After R2: <code>context_pressure</code> returns <code>None</code> with the conversation marked due; the handover returns <code>None</code> with the note unconsumed; the operator route is never gated; the backstop race returns an <code>unwritten</code> checkpoint (today&#x27;s worker-failure path); the titler returns <code>None</code> and records <code>budget_exhausted</code>. Nothing raises</td></tr><tr><td>~962k tokens on <code>:8000</code> (<code>mode=ro</code>)</td><td><strong>Confirmed: 962,599</strong> (320 in + 564,480 cache-read + 330,296 cache-write + 67,503 out), 32 <code>ok</code> Claude rows on LoopEngine (16 checkpoint, 16 probe), <code>$1.168</code>. 0 of 3 projects have a <code>token_budget</code>; head is <code>0105</code>. LoopEngine has <code>conversation_title_mode = generate</code>, so it has titler spend that was never recorded and cannot be backfilled (test guide updated)</td></tr><tr><td>Migration number</td><td>Four changes name <code>0106</code> (this one, <code>a-checkpoint-is-handed-over-once-and-says-where-it-went</code>, and others). Noted, not renumbered</td></tr></tbody></table></div>
+<h5>Candidate findings (for the ledger; not filed by this round)</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Candidate</th><th>Evidence</th><th>Severity guess</th></tr></thead><tbody><tr><td><strong>The checkpoint worker runs <code>claude -p</code> with every default tool on untrusted text (the F195 gap) — confirmed</strong></td><td><code>build_worker_command</code> gives <code>[&quot;claude&quot;, &quot;--output-format&quot;, &quot;json&quot;, (--model), &quot;-p&quot;, prompt]</code> with no <code>--tools &quot;&quot;</code> (<code>worker.py:136-139</code>); the prompt is the conversation transcript and inbound peer messages (<code>_transcript_since</code>). It runs in a temp dir (no <code>cwd</code> from <code>checkpoint_generation.py:552</code>, <code>:641</code>), but user-level settings, allowlists and MCP servers still load. The titler closed exactly this (<code>conversation_titles.py:69-81</code>). Codex&#x27;s worker has <code>--sandbox read-only</code>. Fix is likely <code>--tools &quot;&quot;</code> in <code>build_worker_command</code> for Claude, which also covers the probe</td><td>B</td></tr><tr><td><strong>An <code>unwritten</code> checkpoint becomes the next checkpoint&#x27;s anchor</strong></td><td>Row 1&#x27;s mechanism, independent of budgets: any worker failure today (timeout, nonzero exit) makes the next written checkpoint start after it with no predecessor body</td><td>B</td></tr><tr><td><strong>The titler re-runs after every completed turn</strong></td><td>No &quot;already generated&quot; guard in <code>generate_conversation_title</code> (only <code>title_set_by_operator</code> and the mode); called at <code>agent_trigger.py:2630</code>, <code>:3219</code>, on the same excerpt (first message and first reply). Same title, paid each turn. <code>worker-spend-counts-against-the-budget</code> will make it visible as one row per turn</td><td>C</td></tr></tbody></table></div>
+<h5>What stands</h5>
+<ul>
+<li><strong>F174, F267, F268, F221, F240, F62 verdicts</strong> — all six re-verified as R1 states (including F62&#x27;s</li>
+</ul>
+<p>wrong <code>:641</code> citation: that line is OpenCode&#x27;s <code>step_finish</code>).</p>
+<ul>
+<li><strong>D2 recommendations (runtime cache read; alias accepted and stored as written)</strong> and **D7</li>
+</ul>
+<p>recommendations (counted and gated like turns; marked partial, nothing priced)** — unchanged. D7&#x27;s first answer now reads &quot;autonomous worker spend pauses <em>without creating a checkpoint</em>&quot;.</p>
+<ul>
+<li><code>a-runner-choice-names-its-model</code>: exactly three runner choosers exist. File overlap with</li>
+</ul>
+<p><code>a-runner-that-cannot-collaborate-says-so-where-it-is-bound</code> (same <code>RunnerPicker</code>), not finding overlap.</p>
+<ul>
+<li><code>an-estimate-that-misses-turns-says-so</code>: every <code>AccountingSample</code> builder checked; only Claude&#x27;s</li>
+</ul>
+<p>result and OpenCode&#x27;s <code>step_finish</code> carry a cost.</p>
+<ul>
+<li><code>the-codex-models-offered-…</code>: <code>CATALOG</code> has exactly the four readers D1 names; the real cache</li>
+</ul>
+<p>decodes with <code>encoding=&quot;utf-8&quot;</code> (dict: <code>fetched_at</code>, <code>etag</code>, <code>client_version</code> 0.146.0, <code>models</code>).</p>
+<ul>
+<li>Changes 4 and 5 both edit <code>model_catalog.py</code> (<code>model()</code> and the effective catalog) and are</li>
+</ul>
+<p>compatible in either order: the Codex cache declares no aliases.</p></div></section><section class="sec-round" id="R3"><h2>R3 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Re-derived from the real entry points, not from R2: <code>output_recording.py:238</code> → <code>consider_from_reading</code> → <code>consider</code>; <code>agent_trigger.py:2566</code>, <code>:3178</code> → <code>consider_handover_from_run_end</code> → <code>consider_handover</code>; <code>api/v1/checkpoints.py:176</code> (operator). 27 claims checked. 24 held and 3 changed. All five changes pass <code>openspec validate --strict</code>.</p>
+<h5>What disagreed, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Change</th><th>Claim</th><th>What the code shows</th><th>Fixed</th></tr></thead><tbody><tr><td>1</td><td><code>worker-spend-counts-against-the-budget</code></td><td>D3a: at exhaustion, <code>consider</code> takes the manual-mode branch at <code>:263</code></td><td><code>consider</code> tests <code>not policy.automatic</code> <strong>twice</strong>: the dismissed/final backstop at <code>:192</code>, and the warn path at <code>:263</code>. If only <code>:263</code> changes, then under <code>automatic</code> at exhaustion two things go wrong. (a) <em>Dismiss</em> is undone at the next reading, because <code>dismissed != &quot;due&quot;</code> sets <code>due</code> again and broadcasts again. Yet the banner is the one that promises dismissal is final (<code>AgentOutputPanel.tsx:641-653</code>, not gated on policy). (b) The final warning near the window never fires, so the conversation can reach the CLI&#x27;s compaction with only a <em>due</em> banner</td><td>Both tests become <code>not policy.automatic or await budget_blocked()</code>, a lazy memoised read that runs only under <code>automatic</code>, at most once per reading. Added test 10d (dismissal honoured, final warning fires; fails under R2&#x27;s D3a), test 10e (the read is lazy) and one spec scenario</td></tr><tr><td>2</td><td>same</td><td>Handover: <em>&quot;the note stays pending, so the next handover after the budget is raised carries it&quot;</em></td><td>Only partly true. The task&#x27;s reviewer is autonomous, so it waits for the budget. When it runs, it briefs through <code>_briefing_checkpoint</code> (<code>scheduler.py:2485-2505</code>), which finds no author checkpoint and falls back to the loop&#x27;s latest. So the note never reaches <strong>this</strong> reviewer. Later, <code>_authors_pending_note</code> carries only the author&#x27;s <strong>newest</strong> pending note. A newer note replaces it; if there is none, it is carried into a checkpoint for a later task. A handover declined today for any other reason ends the same way (no runner, <code>checkpoint_handover.py:249-255</code>). It is still strictly better than R1&#x27;s design: <code>checkpoint_by_task_author</code> would have found R1&#x27;s <code>unwritten</code> checkpoint and briefed it as the author&#x27;s account, with no body</td><td>Corrected the proposal row, the spec scenario (now <em>&quot;remain pending and unconsumed&quot;</em>, with no claim about the next handover) and design D3a. Listed below as a candidate</td></tr><tr><td>3</td><td><code>a-model-alias-is-a-model-choice</code></td><td>D2 lists every UI reader of a stored model</td><td><code>ModelPicker.tsx:197</code> marks the active row with <code>model.id === (effectiveModel ?? current?.id)</code>, which is the raw stored value. So an alias-stored runner marks no row, even after <code>:55</code> is fixed</td><td>Added to D2, test 7 and task 2.4</td></tr></tbody></table></div>
+<h5>D3a re-derived: on that path nothing else consumes the note or makes an empty checkpoint</h5>
+<ul>
+<li><code>generate_checkpoint</code> has exactly three callers: the route, <code>checkpoint_trigger.py:302</code> and</li>
+</ul>
+<p><code>checkpoint_handover.py:262</code>. Both automatic callers sit after the new read. At exhaustion, neither reaches <code>create_checkpoint</code>.</p>
+<ul>
+<li><code>consume_note</code> has two callers: <code>checkpoint_generation.py:603</code> (inside <code>generate_checkpoint</code>) and</li>
+</ul>
+<p><code>checkpoint_handover.py:275</code> (after it). Neither is reached.</p>
+<ul>
+<li>The notes request (<code>should_request_notes</code>) still enqueues an <code>origin_type=&quot;checkpoint&quot;</code> entry.</li>
+</ul>
+<p>That entry is autonomous, so the turn scheduler holds it (<code>turn_scheduler.py:393-395</code>), and <code>_notes_already_in_hand</code> prevents duplicates. Nothing is spent and nothing is consumed.</p>
+<ul>
+<li>At exhaustion, the only remaining way to an <code>unwritten</code> checkpoint is the race between the</li>
+</ul>
+<p>trigger&#x27;s read and the spawn. There, <code>run_worker</code>&#x27;s backstop returns <code>budget_exhausted</code>, the same as any worker failure today.</p>
+<ul>
+<li>The completing turn&#x27;s usage is recorded before the handover fires (<code>agent_trigger.py:2472</code> comes</li>
+</ul>
+<p>before <code>:2566</code>), so the read includes it.</p>
+<h5>Collisions with B8 and B11</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Other change</th><th>What it touches</th><th>Verdict</th></tr></thead><tbody><tr><td>B8 <code>a-checkpoint-is-handed-over-once-and-says-where-it-went</code></td><td><code>cut_over</code>; a D6 decline in <code>consider</code> after <code>:187-190</code>; <code>checkpointOperationStore</code>; migration <code>0106</code></td><td>Same function as D3a, in an earlier branch: a conversation already handed over declines before any budget read. Compatible in either order. <strong>The migration number collides</strong> (see Final). It touches no model screen</td></tr><tr><td>B11 <code>the-app-window-keeps-the-operators-preferences</code></td><td>The window profile. It cites <code>ModelPicker.tsx:29</code> only as a <code>localStorage</code> writer</td><td>No collision with the alias change</td></tr><tr><td>B11&#x27;s other seven changes</td><td>None touches <code>ModelPicker</code>, <code>ProjectSettingsPanel</code>, <code>RunnersPage</code> or <code>model_catalog</code> (grep)</td><td>None</td></tr><tr><td>Not in B8 or B11: <code>the-permissions-pill-shows-the-posture-the-run-gets</code>, <code>the-checkpoint-grant-says-it-reaches-every-checkpoint</code>, <code>a-runner-that-cannot-collaborate-says-so-where-it-is-bound</code></td><td><code>model_catalog.py</code> controls, <code>AgentSettingsControls.tsx:199</code> and <code>:417</code>, <code>RunnerPicker</code></td><td>Same files as B7&#x27;s changes but different lines. Only the merge order is affected</td></tr></tbody></table></div>
+<h5>What stands</h5>
+<ul>
+<li>The verdicts on F174, F267, F268, F221, F240 and F62.</li>
+<li>All four decision recommendations.</li>
+<li>The Codex change&#x27;s four <code>CATALOG</code> readers (<code>model_catalog.py:280, 284, 330, 358</code>). Nothing outside</li>
+</ul>
+<p>the module reads <code>CATALOG</code>.</p>
+<ul>
+<li>The alias change&#x27;s five backend callers of <code>ProviderDescriptor.model</code>.</li>
+<li>The three runner selects (<code>AgentSettingsControls.tsx:253</code>, <code>ProjectSettingsPanel.tsx:171, 279</code>).</li>
+<li>The <code>:8000</code> figure, re-measured (see Final).</li>
+</ul></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B7.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

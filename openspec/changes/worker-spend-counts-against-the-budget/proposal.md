@@ -73,8 +73,8 @@ on `:8000`.
 | Trigger | At exhaustion, after this change |
 |---|---|
 | Operator presses *Checkpoint* | Runs, and is counted (operator control is retained, as for turns) |
-| `context_pressure`, automatic | No checkpoint and no model call. The trigger takes the manual-mode path: `checkpoint_warning = "due"` and `checkpoint_due` are sent (`checkpoint_trigger.py:263-291`), so the operator sees a checkpoint is due and can press *Checkpoint*, which runs. No cutover happens |
-| `task_completion` (flow handover) | No checkpoint and no model call. The handover declines, and the author's note stays pending, so the next handover after the budget is raised carries it (`_authors_pending_note`) |
+| `context_pressure`, automatic | No checkpoint and no model call. For that reading the policy behaves as `offered` (R3: at both of `consider`'s `not policy.automatic` tests, `checkpoint_trigger.py:192` and `:263`): `checkpoint_warning = "due"` and `checkpoint_due` are sent, a dismissal is honoured, and the final warning still fires near the window. The operator can press *Checkpoint*, which runs. No cutover happens until the budget is raised |
+| `task_completion` (flow handover) | No checkpoint and no model call. The handover declines and the author's note stays unconsumed. It does not reach this task's reviewer (whose briefing falls back to the loop's latest checkpoint, as for any declined handover today); design D3a states where it can go later |
 | Probe | Runs only when its checkpoint is `ready`; an exhausted autonomous trigger never makes one |
 | Titler | No spawn; the truncated title stays |
 

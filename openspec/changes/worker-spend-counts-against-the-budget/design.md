@@ -123,8 +123,37 @@ So both triggers read `project_budget_state` **before** `generate_checkpoint`:
 
 | Trigger | Where | At exhaustion (or an unreadable budget, fail-closed) |
 |---|---|---|
-| `checkpoint_trigger.consider` | at `:263`, the `if not policy.automatic:` branch becomes `if not policy.automatic or budget_blocked:` | the existing warn-don't-spend path: `checkpoint_warning = "due"`, one `checkpoint_due` broadcast (it is idempotent on `"due"`), return `None`. No record, no anchor moves. The operator's *Checkpoint* button runs as `operator` |
-| `checkpoint_handover.consider_handover` | after `resolve_policy(...).enabled` (`:244-246`), before `_resolve_runner` | `_declined(run_id, "the project's token budget is exhausted")`, return `None`. The note is not consumed, so `_authors_pending_note` offers it to the next handover |
+| `checkpoint_trigger.consider` | **both** places that test `not policy.automatic` (R3): the dismissed/final backstop at `:192` and the warn path at `:263`. Each becomes `not policy.automatic or await budget_blocked()`, a small memoised helper that reads `project_budget_state` at most once per reading and only when `policy.automatic` (so an `offered` conversation, and every automatic reading that returns before `:192`'s test or below threshold, pays no read) | the automatic policy behaves as `offered` for that reading: the warn-don't-spend path (`checkpoint_warning = "due"`, one `checkpoint_due` broadcast, idempotent on `"due"`, return `None`), **and** the dismissed/final backstop (a dismissal is honoured; the final warning still fires near the window). No record, no anchor moves. The operator's *Checkpoint* button runs as `operator` |
+| `checkpoint_handover.consider_handover` | after `resolve_policy(...).enabled` (`:244-246`), before `_resolve_runner` | `_declined(run_id, "the project's token budget is exhausted")`, return `None`. The note is not consumed |
+
+**Why both `:192` and `:263` (R3).** R2 changed only `:263`. Under `automatic`, `:192`'s branch is
+skipped, so with only `:263` changed: (a) a *Dismiss* at exhaustion is undone at the next reading,
+because `dismissed != "due"` re-sets `due` and broadcasts again, contradicting the banner's promise
+that dismissal is final (`AgentOutputPanel.tsx:641-647`, which renders the same banner whatever the
+policy); and (b) the final-warning backstop (`needs_final_warning`, `FINAL_WARNING_PERCENT`) never
+fires, so an exhausted automatic conversation can run into the CLI's own compaction with only a
+*due* banner, which is the loss the backstop exists to announce. Treating the reading as `offered`
+at both tests gives the operator exactly the manual-mode experience, which is what the proposal
+promises. Once the budget is raised, the next reading is automatic again and generates and cuts
+over as today, whatever the warning says.
+
+**What the handover's pending note does and does not reach (R3).** Declining keeps the note
+unconsumed, which is strictly better than R1's design: an `unwritten` checkpoint in the completing
+run's conversation would have been found by `checkpoint_by_task_author` (`checkpoints.py:475-520`)
+and briefed to the reviewer as the author's account, with no body. But the note does **not** reach
+this task's reviewer either. That reviewer's firing is autonomous, so it waits for the budget; when
+it runs, `_briefing_checkpoint` (`scheduler.py:2485-2505`) finds no author checkpoint and falls back
+to `latest_checkpoint_for_loop`. The note waits for the same author's next handover, where
+`_authors_pending_note` returns only the author's **newest** pending note in the loop: if the author
+wrote a newer one, this one is not carried; if not, it is carried into a checkpoint recorded against
+the later task. That is the same fate as a handover declined today for any other reason (no
+checkpoint runner, `:249-255`), so it is not new here, and re-running declined handovers when the
+budget is raised is a separate feature. Recorded as a candidate finding in B7's R3 section.
+
+**Interaction with B8.** `a-checkpoint-is-handed-over-once-and-says-where-it-went` (design D6)
+adds a decline to `consider` right after the lifecycle check (`:187-190`), for a conversation
+already handed over. It runs before both tests above, so a handed-over conversation never reads the
+budget. The two edits are in the same function and compatible in either order.
 
 `run_worker`'s gate (D3) stays, as a backstop for the titler and for the race in which a turn
 crosses the budget between the trigger's read and the spawn. In that race the result is an
@@ -212,6 +241,15 @@ New file `hub/tests/test_worker_spend_counts_against_the_budget.py` unless state
     consumes that same note. **Fails today** (generated and consumed).
 10c. With `project_budget_state` patched to raise, both triggers behave as at exhaustion
     (fail-closed) and neither raises.
+10d. (R3) Automatic policy, budget exhausted, `checkpoint_warning == "dismissed"`: a reading above
+    the threshold but below `FINAL_WARNING_PERCENT` leaves the warning `dismissed` and broadcasts
+    nothing; a reading at `FINAL_WARNING_PERCENT` sets `"final"` and broadcasts one `checkpoint_due`
+    with `final: true`. **Fails under R2's D3a** (which re-set `"due"` and never reached the final
+    warning). A control: under `offered` with no budget, the same readings give the same results
+    today.
+10e. (R3) Automatic policy, **no** budget set, a reading below threshold: `project_budget_state`
+    is patched to raise and the reading still declines normally (the helper did not read). Pins the
+    lazy read.
 11. Titler (`hub/tests/test_conversation_titles.py`, extend): with `_run_titler` patched to return a
     Claude JSON envelope, one `conversation_title` row with `total_tokens`, and the title set.
     **Fails today** (no row). At exhaustion: no spawn, title unchanged, row `budget_exhausted`.
@@ -238,3 +276,13 @@ New file `hub/tests/test_worker_spend_counts_against_the_budget.py` unless state
   `conversation_title_mode = generate`, so its titler spend exists and is **not** backfillable (no
   row was ever written). Only spenders outside a turn: `run_worker` (checkpoint, probe) and
   `_run_titler`.
+- R3 (2026-09-24): D3a now changes **both** `not policy.automatic` tests in `consider` (`:192` and
+  `:263`), with a lazy memoised budget read; with only `:263`, a dismissal at exhaustion was undone
+  at the next reading and the final-warning backstop never fired. Tests 10d/10e added; one spec
+  scenario added. The handover's claim *"the next handover carries it"* corrected: the note does not
+  reach this task's reviewer (`_briefing_checkpoint` falls back), and only the author's newest note
+  is ever carried; same as any declined handover today. Confirmed no other consumer: the three
+  `generate_checkpoint` callers are the route and the two triggers; `consume_note` is called only
+  from `generate_checkpoint:603` and `consider_handover:275`. Re-measured `:8000` `mode=ro`: head
+  `0105`, 32 rows (16 checkpoint 490,179 + 16 probe 472,420 = **962,599**, `$1.168`), 0 of 3
+  projects budgeted.

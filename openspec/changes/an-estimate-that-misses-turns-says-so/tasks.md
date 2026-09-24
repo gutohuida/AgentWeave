@@ -1,7 +1,7 @@
 ## 0. Rounds and decision
 
 - [x] 0.1 R2: re-derive the proposal independently. Check every path that builds an `AccountingSample` (grep `AccountingSample(` and `_accounting_from_dimensions(`) and say which can carry a cost. Check every consumer of `api_equivalent_usd_micros` in `hub/` and `hub/ui/src`. Record the result in `design.md`'s round log
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate an-estimate-that-misses-turns-says-so --strict` passes
+- [x] 0.2 R3: a second independent re-derivation. `openspec validate an-estimate-that-misses-turns-says-so --strict` passes
 - [ ] 0.3 The operator answers D7's Codex question (mark partial / price from tokens), recorded in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — each fails on today's code
