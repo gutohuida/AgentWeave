@@ -1648,3 +1648,26 @@ disappears is indistinguishable from one that was forgotten.
   `~/.agentweave/hub/data/agentweave.backup-YYYYMMDD-HHMM.db`, then `py -3.11 -m agentweave stop`
   from `C:\Users\huida`, then `Start-Process C:\Users\huida\Desktop\AgentWeave.lnk`, then
   `/health` 200 and `alembic_version`. *(2026-09-24)*
+
+## 2026-09-24 (afternoon) — security REVISING rounds, rounds page
+
+- **A safety classifier stopped an Opus subagent partway** when its brief asked it to *brainstorm
+  ways to escape* the shell judge (a list of evasion techniques: `-EncodedCommand`, `eval`, IFS
+  tricks…). It had only read code; nothing was lost. The replacement brief, framed as a design-vs-code
+  verification (does each step fire, do the listed cases get refused, what does a raise return),
+  ran to completion and still found seven defects. Frame shell-judge rounds that way; leave the
+  open-ended attack to the pre-approval review, which ran fine. *(2026-09-24)*
+- **Republishing an existing Artifact is refused until this session has read the live page AND
+  every published file it will overwrite.** `action: read` with `paths: [...]` into the default
+  scratchpad works; the same read with `out_dir` inside the repo was denied by the auto-mode
+  classifier. Compare the saved copies with `git show <prev>:<file>` before republishing.
+  *(2026-09-24)*
+- **A bash heredoc feeding `py -3.11 -` a script full of backticks and quotes failed with
+  "unexpected EOF while looking for matching `''"**, writing nothing. Write such scripts to
+  `$CLAUDE_JOB_DIR/tmp/*.py` with the Write tool and run the file. *(2026-09-24)*
+- **`git push` got a transient GitHub `Internal Server Error`**; an immediate retry succeeded.
+  *(2026-09-24)*
+- **RESOLVED 2026-09-24:** `scripts/backlog_page.py` `classify` read a `**Status:** closed
+  YYYY-MM-DD …` line as `other`, so `ROUNDS.html` counted operator-closed findings (F42, F65,
+  F276, F281) as open. It now returns `closed`, and the rounds page counts `closed` as done
+  (`b7d976a`).
