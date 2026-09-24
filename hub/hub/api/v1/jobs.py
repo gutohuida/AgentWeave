@@ -1412,6 +1412,11 @@ async def run_job(
         # into an earlier row, so after any of them the newest row is an earlier firing's.
         earlier_run = await _newest_job_run(session, job_id)
         earlier_run_id = earlier_run.id if earlier_run is not None else None
+        # An `int` copy, not `earlier_run.tick_count` read later: `earlier_run` is the session's
+        # identity-mapped row, so after the firing it is the *same object* as `latest_run` and a
+        # later read compares the row's count with itself (design D3 of
+        # `pressing-run-names-the-reason-that-held`).
+        earlier_ticks = earlier_run.tick_count if earlier_run is not None else None
 
         # Pass the session to avoid duplicate work
         success = await scheduler._fire_job_internal(job, trigger="manual", session=session)
@@ -1430,33 +1435,62 @@ async def run_job(
             # job_run_failed) and set the JobRun's own status/error_summary — this branch
             # only translates that into the right HTTP response, it must not persist a
             # second, duplicate event on top of what was already recorded.
-            loop = await _job_loop(session, job) if not wrote_row else None
+            #
+            # A row is this press's answer only where it wrote the row or counted into it (a
+            # continuing stall bumps `tick_count` on an earlier row). Any other newest row is an
+            # earlier firing's, and reading it answered F373's press with a stale stall reason.
+            counted = (
+                not wrote_row
+                and latest_run is not None
+                and latest_run.id == earlier_run_id
+                and latest_run.tick_count != earlier_ticks
+            )
+            answered_by_row = wrote_row or counted
+            if answered_by_row and latest_run.status == "skipped":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=latest_run.error_summary or "Job was skipped.",
+                )
+            if answered_by_row and latest_run.status == "failed":
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=latest_run.error_summary or "Failed to fire job",
+                )
+            # Below here the press wrote nothing and counted into nothing (or the row is not a
+            # decline's: a concurrent tick's `in_progress` row is not this press's failure).
+            loop = await _job_loop(session, job)
             if loop is not None:
                 # The first question the firing asked, asked again (F127's own shape of the fix).
                 # Its refusal writes nothing, so without this the branches below re-derived a
                 # decision the firing never reached: *"already being worked … nothing is wrong"*
                 # for an agent the provider is refusing, and 500 for one merely mid-turn.
-                from ...scheduler import _loop_flow_busy_reason, _loop_has_open_task
+                from ...scheduler import (
+                    BUSY_EMPTY_QUEUE,
+                    BUSY_LOOP_SCOPE,
+                    _loop_flow_busy_refusal,
+                )
 
-                busy_reason = await _loop_flow_busy_reason(session, loop, job.agent)
-                if busy_reason:
-                    # Name the half that refused (design D8). Telling the operator nobody else is
-                    # free when somebody is would send them to free an agent, which changes nothing:
-                    # what an empty loop lacks is work.
-                    why = (
-                        "no other agent is free to take this loop's work"
-                        if await _loop_has_open_task(session, loop)
-                        else "this loop's queue holds no open task for another agent to take"
-                    )
+                refusal = await _loop_flow_busy_refusal(session, loop, job.agent)
+                if refusal is not None:
+                    # Name the condition that held (design D2), and only that one. Telling the
+                    # operator nobody else is free when somebody is would send them to free an
+                    # agent, which changes nothing: what an empty loop lacks is work, and a loop
+                    # without a document gives its work to one agent whoever is free.
+                    documentless = loop.spec_document_id is None
+                    if refusal.condition == BUSY_EMPTY_QUEUE:
+                        why = (
+                            "this loop's queue holds no open task"
+                            if documentless
+                            else "this loop's queue holds no open task for another agent to take"
+                        )
+                    elif refusal.condition == BUSY_LOOP_SCOPE:
+                        why = f"this loop's work goes only to {job.agent}, the agent its job names"
+                    else:
+                        why = "no other agent is free to take this loop's work"
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail=f"{busy_reason}, and {why}. Nothing was started.",
+                        detail=f"{refusal.reason}, and {why}. Nothing was started.",
                     )
-            if latest_run and latest_run.status == "skipped":
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=latest_run.error_summary or "Job was skipped.",
-                )
             # Finding F48. A firing that declined because every candidate is already being worked
             # (`DECISION_IN_FLIGHT`) deliberately records **nothing** — that is F23's own reasoning,
             # since the agents' running rows already carry the fact. So there is no fresh `JobRun`
@@ -1470,11 +1504,8 @@ async def run_job(
             if in_flight is None:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=(
-                        latest_run.error_summary
-                        if latest_run and wrote_row and latest_run.error_summary
-                        else "Failed to fire job"
-                    ),
+                    # Also reached where an in-flight firing's work finished before the re-ask.
+                    detail="Failed to fire job",
                 )
             held = await _held_in_flight_reasons(session, project_id, in_flight)
             if held:

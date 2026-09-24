@@ -382,7 +382,10 @@ async def test_running_a_loop_whose_agent_is_mid_turn_answers_409_not_500(
     assert res.status_code == 409, res.text
     detail = res.json()["detail"]
     assert "f127-agent is already running a turn" in detail
-    assert "no other agent is free" in detail
+    # A documentless loop's work goes only to its named agent, so freeing another agent changes
+    # nothing and the answer must not say it would (`pressing-run-names-the-reason-that-held`, D2).
+    assert "this loop's work goes only to" in detail
+    assert "no other agent is free" not in detail
     assert "Nothing was started" in detail
     assert await _job_runs(job.id) == []
 
@@ -417,7 +420,10 @@ async def test_running_a_loop_whose_agent_is_held_names_the_hold(app, auth_heade
     assert res.status_code == 409, res.text
     detail = res.json()["detail"]
     assert _clock(await _the_hold(agent)) in detail
-    assert "no other agent is free" in detail
+    # A documentless loop's work goes only to its named agent, so freeing another agent changes
+    # nothing and the answer must not say it would (`pressing-run-names-the-reason-that-held`, D2).
+    assert "this loop's work goes only to" in detail
+    assert "no other agent is free" not in detail
     assert "already being worked" not in detail
     assert "nothing is wrong" not in detail
 

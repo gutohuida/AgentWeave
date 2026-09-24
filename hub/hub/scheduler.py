@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Mapping, Optional, Sequence, Set
+from typing import Any, Dict, Mapping, NamedTuple, Optional, Sequence, Set
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -332,7 +332,29 @@ async def _loop_has_open_task(session: AsyncSession, loop: Loop) -> bool:
     return found.first() is not None
 
 
+#: Which half of the busy guard's second condition held (`pressing-run-names-the-reason-that-held`,
+#: design D1). Asked in this order; the answer names only the first that holds.
+BUSY_EMPTY_QUEUE = "empty_queue"
+BUSY_LOOP_SCOPE = "loop_scope"  # the loop declares no document: its work goes to one agent
+BUSY_NO_FREE_AGENT = "no_free_agent"  # a flow whose pool is empty
+
+
+class LoopBusyRefusal(NamedTuple):
+    """`reason` is `_loop_agent_busy_reason`'s sentence, unchanged; `condition` is a `BUSY_*`."""
+
+    reason: str
+    condition: str
+
+
 async def _loop_flow_busy_reason(session: AsyncSession, loop: Loop, agent: str) -> Optional[str]:
+    """`_loop_flow_busy_refusal`'s sentence alone, for the callers that want only that."""
+    refusal = await _loop_flow_busy_refusal(session, loop, agent)
+    return refusal.reason if refusal is not None else None
+
+
+async def _loop_flow_busy_refusal(
+    session: AsyncSession, loop: Loop, agent: str
+) -> Optional[LoopBusyRefusal]:
     """Why a firing should be refused outright, recording nothing — or `None` to proceed.
 
     **This is `_loop_agent_busy_reason` narrowed for a flow (design D12).** That guard refuses the
@@ -369,10 +391,12 @@ async def _loop_flow_busy_reason(session: AsyncSession, loop: Loop, agent: str) 
     if busy_reason is None:
         return None
     if not await _loop_has_open_task(session, loop):
-        return busy_reason
+        return LoopBusyRefusal(busy_reason, BUSY_EMPTY_QUEUE)
     if await _agents_a_loop_may_staff(session, loop):
         return None
-    return busy_reason
+    # The same predicate `_agents_a_loop_may_staff` uses for its own empty answer.
+    condition = BUSY_LOOP_SCOPE if loop.spec_document_id is None else BUSY_NO_FREE_AGENT
+    return LoopBusyRefusal(busy_reason, condition)
 
 
 async def _loop_stop_reason(session: AsyncSession, job: AIJob) -> Optional[str]:

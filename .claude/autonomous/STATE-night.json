@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "8a5d0ed",
     "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 3,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-24-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "pressing-run-impl",
-    "next_action": "Do queue item pressing-run-impl (see its detail in queue). First read CI verdict for the previous push sha via gh run list, write it on the log entry's first line. Run tests/ before commit. Full hub suite takes ~37 min; run it with run_in_background and a relevant subset in the foreground.",
+    "current": "checkpoint-handover-impl",
+    "next_action": "Do queue item checkpoint-handover-impl (see its detail in queue). First read CI verdict for the previous push sha via gh run list, write it on the log entry's first line. Also check the previous iteration's full hub suite result: read /tmp/hubsuite.txt if it still exists (else treat 2.5 of pressing-run as unverified) and tick tasks.md 2.5 if green. Run tests/ before commit. Full hub suite takes ~37 min; run it with run_in_background and a relevant subset in the foreground.",
     "queue": [
         {
             "id": "compose",
@@ -35,9 +35,9 @@
         },
         {
             "id": "pressing-run-impl",
-            "status": "open",
+            "status": "done",
             "title": "pressing-run-names-the-reason-that-held",
-            "detail": "Build per tasks.md (28 tasks). B1's prerequisite. F392 rules 1-2."
+            "detail": "Done iteration 4: code + 13 tests built, groups 1 and 2.1-2.4, 2.6 ticked; 2.5 (full hub suite) was running in background at commit, 3.x (drive) deferred to night-drive."
         },
         {
             "id": "checkpoint-handover-impl",
