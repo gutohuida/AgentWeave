@@ -16,10 +16,13 @@ under that name can never be read at its own address. R1 listed every such pair 
 | `GET /queue/{agent}` | `GET /queue/settings` | `inbound_queue.py:80` before `:199` | the same; accepts `settings` |
 | `GET /tasks/{task_id}` | `GET /tasks/board`, `GET /tasks/boards` | `tasks.py:943`, `:1009` before `:1234` | a task creator: `TaskCreate.id` accepts `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$` (`schemas/tasks.py:17`, `:72-79`) |
 
-The other literal-beside-parameter pairs the script found are under Hub-minted ids (`runner-…`,
-`charter-…`, `job-…`), which cannot collide. F248 measured the first row (`GET
+The only other literal-beside-parameter pairs are `GET /runners/launchability` and
+`/runners/launchability-by-provider` beside `GET /runners/{runner_id}`, a Hub-minted id (`runner-…`,
+`runners.py:56`), which cannot collide (R2, rebuilt from the built app's `app.routes`). F248 measured the first row (`GET
 /worktrees/conflicts` answers `200 []` for an agent named `conflicts`,
-`t_sweep_row15_worktrees.py` leg 2). The other two are read from declaration order, not measured.
+`t_sweep_row15_worktrees.py` leg 2). The other two are confirmed from the built app's route order (R2 walked `app.routes`:
+`/queue/settings` and `/tasks/board(s)` are registered before their parameter routes); a request
+against them is task 1.1.
 
 The UI calls both `/queue/${agent}` (`hub/ui/src/api/queue.ts:40`) and `/worktrees/${agent}`
 (`api/workspace.ts:84`), so an agent named `settings` has an unreadable queue panel and one named
@@ -54,6 +57,7 @@ None.
 ## Impact
 
 - `hub/hub/worktrees.py` (`_RESERVED_AGENT_NAMES`), `src/agentweave/constants.py`
-  (`RESERVED_AGENT_NAMES`), `hub/hub/schemas/tasks.py` (the id validator).
+  (`RESERVED_AGENT_NAMES`), `hub/hub/schemas/tasks.py` (the id validator), and
+  `hub/hub/api/v1/agent_actions.py` (`AgentTaskCreate.validate_id`, which has its own copy; R2).
 - `hub/tests/`: a new `test_a_chosen_name_is_not_a_route.py`; `tests/` for the CLI constant if a test
   pins the set.

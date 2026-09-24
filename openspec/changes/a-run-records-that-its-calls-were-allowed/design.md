@@ -76,3 +76,8 @@ The Codex callback in `agent_trigger.py` calls `permission_tally.note`. Codex is
 ## Round log
 
 - R1 2026-09-24: written.
+- R2 2026-09-24: `record_permission_decision` persists refusals only (`agent_actions.py:991-1009`)
+  and the approver reports allows too (`mcp_server.py:1589-1605`, `allowed: decision["allow"]`), so a
+  count has a source. **Clarified:** `note()` must run **before** the `_operator_already_refused` early
+  return (`agent_actions.py:989-990`), or operator-answered refusals are never counted, which D1
+  promises they are. No other claim disagreed.

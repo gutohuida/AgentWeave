@@ -27,16 +27,23 @@ _RESERVED_AGENT_NAMES = {
 }
 ```
 
-`RESERVED_AGENT_NAMES` in the CLI gains the same two. Task ids: the `TaskCreate.id` validator refuses
+`RESERVED_AGENT_NAMES` in the CLI gains the same two. Task ids: one shared function in
+`schemas/tasks.py` (beside `_TASK_ID_RE`), called by **both** `TaskCreate._validate_id_shape` and
+`AgentTaskCreate.validate_id` (`agent_actions.py:127-132`, the agent door MCP `create_task` posts
+through), refuses
 `board` and `boards` (case-insensitively, since the route match is exact but the reserved-name check
 is not, and consistency with agents costs nothing) with *"'board' is a route under /tasks; choose
 another id"*.
 
 ## D2 — The route table is the source of the words
 
-`hub/tests/test_a_chosen_name_is_not_a_route.py` builds the app, walks `app.routes`, and for each
-route whose last segment is `{agent}` or `{task_id}` collects the literal routes with the same
-method and prefix. It asserts `validate_agent_name(word)` or the task-id validator raises for each
+`hub/tests/test_a_chosen_name_is_not_a_route.py` builds the app, walks `app.routes`, and for **every**
+route with a `{param}` segment collects the literal routes registered before it, with a shared
+method, that match it segment for segment (R2: keyed on the match, not on the names `{agent}` /
+`{task_id}`, so a new route spelling its parameter `{agent_name}` is caught too). A pair whose
+parameter is Hub-minted sits in an explicit allowlist in the test (today only `{runner_id}`:
+`launchability`, `launchability-by-provider`); every other pair must have its word refused by the
+validator for that parameter's resource. It asserts `validate_agent_name(word)` or the task-id validator raises for each
 literal found. Today that list is exactly `conflicts`, `settings`, `board`, `boards`.
 
 This is what makes the fix durable. F248 was filed on 2026-09-01; the queue collision next to it
@@ -59,7 +66,14 @@ checked rather than remembered.
 
 `validate_agent_name` already raises `ValueError`, and every agent-create door already turns that
 into a 400 or 409 (the `user`/`operator` path, F415). The task-id validator is a Pydantic validator,
-so a reserved id answers 422 naming `id`. No new exception path.
+so a reserved id answers 422 naming `id` **at each door's own request model**.
+
+**R2 correction: the agent door.** `POST /agent/tasks` parses `AgentTaskCreate` (its own id
+validator) and then builds `TaskCreate(**body.model_dump(), …)` *inside* the handler
+(`agent_actions.py:233`). If only `TaskCreate` refused `board`, the agent door would accept the body
+and then raise a Pydantic `ValidationError` from handler code, which FastAPI answers **500**, not 422.
+Hence one shared check called by both models (D1); task 1.4 covers both doors. `create_job`'s
+`initial_tasks` builds `TaskCreate` inside a `try` that already answers 422 (`jobs.py:661-669`).
 
 ## Open questions
 
@@ -68,3 +82,14 @@ None beyond the decision this is built on.
 ## Round log
 
 - R1 2026-09-24: written.
+- R2 2026-09-24: collision table rebuilt independently from the built app's `app.routes` (not
+  R1's source scan), both orders checked: literal-before-parameter pairs are exactly
+  `worktrees/conflicts`, `queue/settings`, `tasks/board`, `tasks/boards` (caller-chosen) and two
+  `runners/launchability*` (Hub-minted `runner_id`); no parameter route hides a later literal. R1's
+  `charter-…`/`job-…` pairs do not exist; corrected. Every agent-create door reaches
+  `validate_agent_name` (`agents.py:666, 2153, 2278`, `agent_roster.py:36`, `agent_trigger.py:654,
+  1416`, `session_sync.py:84`). **Disagreed:** the agent task door has its own id validator
+  (`AgentTaskCreate`, `agent_actions.py:127-132`) and re-validates through `TaskCreate` inside the
+  handler, so a `TaskCreate`-only fix answers 500 there; D1, D4 and tasks 1.4, 2.2 now use one
+  shared check. D2's walk re-keyed on segment match plus a minted-parameter allowlist. `:8000`
+  (`mode=ro`, 2026-09-24): no agent `conflicts`/`settings`, no task `board`/`boards`.

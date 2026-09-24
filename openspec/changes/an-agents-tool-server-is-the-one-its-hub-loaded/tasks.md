@@ -17,7 +17,7 @@
 ## 2. The fix
 
 - [ ] 2.1 Add `hub/hub/tool_server.py` per design D1 and D2 (atomic write via a sibling temp file and `os.replace`)
-- [ ] 2.2 `agent_trigger.py`: replace `:1141-1144` with design D3's block. Import `pinned_server_path` at module top so the pin is taken at Hub start
+- [ ] 2.2 `agent_trigger.py`: replace `:1141-1144` with design D3's block. Import the **module** at top (`from ... import tool_server`) and call `tool_server.pinned_server_path()`, so the pin is taken at Hub start (agent_trigger is imported when `main` builds its routers) **and** task 1.6's patch of `hub.tool_server.pinned_server_path` reaches the call (R2: a `from … import pinned_server_path` binding would not see the patch, and 1.6 would fail against a correct fix)
 - [ ] 2.3 `main.py` lifespan: call `pinned_server_path()` once and log the path; catch `OSError` and log it (not fatal, D1)
 - [ ] 2.4 Run group 1 and record counts inline; then `py -3.11 -m pytest hub/tests/ -q` and record the full count inline, or do not tick. Name any moved assertion
 - [ ] 2.5 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`

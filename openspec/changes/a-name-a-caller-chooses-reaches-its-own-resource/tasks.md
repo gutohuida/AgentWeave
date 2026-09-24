@@ -9,13 +9,13 @@
 - [ ] 1.1 Measure the two unmeasured rows first: with an agent named `settings` inserted directly, `GET /queue/settings` answers the settings body, not that agent's entries; with a task id `board` inserted directly, `GET /tasks/board` does not answer that task. Record both results in the round log (they justify rows 2 and 3)
 - [ ] 1.2 New `hub/tests/test_a_chosen_name_is_not_a_route.py`: D2's route walk. Record that it FAILS today, naming `conflicts`, `settings`, `board`, `boards`
 - [ ] 1.3 Same file: `POST /agents {"name": "conflicts"}` and `{"name": "Settings"}` are refused, and the detail names the route. Record that both FAIL today (201)
-- [ ] 1.4 Same file: `POST /tasks {"id": "board", ...}` answers 422 naming `id`. Record that it FAILS today
+- [ ] 1.4 Same file: `POST /tasks {"id": "board", ...}` (operator door) **and** `POST /agent/tasks {"id": "boards", ...}` (agent door, run-token auth) each answer 422 naming `id`, never 500. Record that both FAIL today (201). The agent-door case fails if only `TaskCreate` gains the check (R2: it would 500 from `agent_actions.py:233`)
 - [ ] 1.5 Control: `user` and `operator` are still refused with their existing reasons; an agent named `conflict` (singular) is accepted
 - [ ] 1.6 `tests/`: the CLI's `is_valid_agent_name("settings")` is False. Record that it FAILS today
 
 ## 2. The fix
 
 - [ ] 2.1 `hub/hub/worktrees.py` and `src/agentweave/constants.py`: D1's two names, together
-- [ ] 2.2 `hub/hub/schemas/tasks.py`: refuse `board` and `boards` as ids
+- [ ] 2.2 `hub/hub/schemas/tasks.py`: one shared reserved-id check beside `_TASK_ID_RE`, called from `TaskCreate._validate_id_shape` and from `AgentTaskCreate.validate_id` (`hub/hub/api/v1/agent_actions.py`)
 - [ ] 2.3 Group 1, then `py -3.11 -m pytest hub/tests/ -q` and `py -3.11 -m pytest tests/ -q`; record counts inline or do not tick
 - [ ] 2.4 `ruff check src/ hub/ tests/`, `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`, `mypy src/`

@@ -96,3 +96,8 @@ needed for tests that synthesize a database from an earlier revision.
 ## Round log
 
 - R1 2026-09-24: written.
+- R2 2026-09-24: schema, both doors and the index re-read (`schemas/charters.py:11-18`,
+  `charters.py:10-70`, `models.py:366`). The two seed paths (`db/engine.py:265-291`,
+  `project_lifecycle.py:311-321`) insert the manifest's names only into a project with no charters,
+  and the manifest's names are distinct, so the unique index cannot make seeding raise. No claim
+  disagreed.

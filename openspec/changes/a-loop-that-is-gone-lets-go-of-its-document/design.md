@@ -117,3 +117,14 @@ raw API caller that sent one was getting a job that silently did not do what it 
 ## Round log
 
 - R1 2026-09-24: written.
+- R2 2026-09-24: re-read adoption (`jobs.py:239-270`, calls `:762`, `:1027`), the create order
+  (job committed at `:734` before `_check_spec_document_conflict`, so D4 must sit before `:734`, as
+  written), materialise (`spec_tasks.py:176-180`, no `archived_at`/project filter), the partial index
+  (`ux_loops_spec_document_live`, migration `0090`) and the staffing gate (`scheduler.py:1162-1180`).
+  Use the canonical `task_transitions.TERMINAL_STATUSES` (same set as `task_transition_service.py:736`).
+  **Interactions checked:** B10's `a-loop-is-stopped-archived-and-delegated-from-its-own-tab` adds
+  events and a tab over the same two archive doors and changes no ownership, so D1 (adopt on claim)
+  and D3 (materialise stamps only a live loop) compose with it; B2's firing changes touch neither
+  materialise nor `loop_id`. B1's `a-task-is-attended-only-by-a-turn-that-will-reach-it` changes the
+  `queued` half of the staffing gate's `reachable` test; D1 changes the `loop_id in live` half:
+  independent, no text collision. No claim disagreed.

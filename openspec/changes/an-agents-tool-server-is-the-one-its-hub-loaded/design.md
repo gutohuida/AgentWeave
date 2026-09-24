@@ -121,3 +121,13 @@ None for the operator beyond the decision this design is built on.
 ## Round log
 
 - R1 2026-09-24: written.
+- R2 2026-09-24: re-read the spawn (`agent_trigger.py:1141-1144`), the context-file refusal
+  (`:1110-1118`), the only spawn sites (`grep "mcp_server"` in `hub/hub` and `src/`), and
+  `mcp_server.py`'s self-containment (no `__file__`/`sys.path`). **Disagreed (1):** task 2.2's
+  `from … import pinned_server_path` would make task 1.6's patch miss; now a module import. **Nuance
+  (no edit to D1's logic):** "every other file is fixed at start" holds for module-level imports; the
+  Hub also imports some modules lazily inside functions, which load on first call. The pin's own
+  guarantee needs only that `tool_server` is imported at module top by `agent_trigger` (task 2.2)
+  and called in the lifespan (2.3). **Residual, out of scope:** `src/agentweave/mcp/server.py` imports
+  `hub.mcp_server` for a non-Hub-spawned client; the pin covers Hub-spawned runs only. Checked
+  against B12 (F363) and B4: both order against this pin as a preference, not a gate; consistent.

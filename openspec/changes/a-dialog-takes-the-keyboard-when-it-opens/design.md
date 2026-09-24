@@ -59,9 +59,14 @@ runs after the commit. So for `AgentCreateDialog`, `DeleteProjectDialog` and `Pr
 close, the cleanup focuses it (`:81`) after it has unmounted, which does nothing, and the keyboard is
 left on `<body>`.
 
-**This is inferred from React's ordering and not measured.** Task 1.6 measures it first. If it does
-not reproduce, D3 shrinks to "replace `autoFocus` with the mark anyway", because two mechanisms
-deciding initial focus is the F309 shape that `TaskDetailDrawer` already removed once.
+**Confirmed from source by R2, not yet by a run.** React DOM 18.3.1 (`hub/ui/package.json`) focuses
+an `autoFocus` host element in `commitMount` (`react-dom.development.js:11029-11030`), which runs in
+the layout phase; `useEffect` callbacks run after it, so `returnFocusTo` is the input. On close,
+`AgentCreateDialog` returns `null` (`if (!open) return null`), the input is removed in the mutation
+phase (the browser moves focus to `<body>`), and the passive cleanup's `returnFocusTo?.focus()`
+targets a detached node. Task 1.6 stays as the failing test. If it somehow does not reproduce in
+jsdom, D3 shrinks to "replace `autoFocus` with the mark anyway", because two mechanisms deciding
+initial focus is the F309 shape that `TaskDetailDrawer` already removed once.
 
 The three `autoFocus` attributes become `data-dialog-initial-focus`, so D1 is the only focus move on
 open and it runs after `returnFocusTo` is captured.
@@ -82,3 +87,9 @@ None beyond the decision this is built on.
 ## Round log
 
 - R1 2026-09-24: written.
+- R2 2026-09-24: call sites re-derived by `grep "useDialogFocus("`: seven (`AgentCreateDialog`,
+  `DeleteCharterDialog`, `DeleteProjectDialog`, `ClearInstructionsDialog`, `ProjectManagerModal`,
+  `ArchiveConfirmDialog`, `TaskDetailDrawer`); `DirectoryPicker` and `InstructionsPage` only mention
+  the hook. `DirectoryPicker` keeps its own focus and restore (`DirectoryPicker.tsx:48-49`) and is out
+  of scope. `autoFocus` sites match (`:204`, `:67`, `:140`). D3's restore defect confirmed from React
+  18.3.1's commit ordering (see D3); task 1.6 still measures it. No claim disagreed.

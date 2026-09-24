@@ -69,6 +69,15 @@ At `agent_trigger.py:1595-1600`:
 
 - `persist_event` and the broadcast move inside a `try` that logs and continues. The broadcast still
   runs if the persist raised, since the panel is what tells the operator their input is queued.
+- **(R2) The request's session after a failed persist.** `persist_event` commits on the route's own
+  `session` (`utils.py:72`). A failed commit leaves that session needing a rollback, and the refusal
+  branch below reuses it (`withdraw_refused_entry(session, …)`, `:1625`): a `PendingRollbackError`,
+  the very 500 this change removes. And a rollback expires every loaded row whatever
+  `expire_on_commit` says (the trap `turn_scheduler.py:402-405` documents), so reading
+  `conversation.id`, `conversation.provider_session_id` or `entry.id` afterwards is a lazy load in
+  async code (`MissingGreenlet`). So: capture `entry_id`, `conversation_id` and
+  `provider_session_id` as plain values right after the entry commit (`:1587`); in the `except`,
+  `await session.rollback()`; every later line reads the captured values.
 - `scheduled = await schedule_accepted(project_id, body.agent)`.
 
 Everything after `:1600` already reads `scheduled` and answers `running` or `queued` with a reason.
@@ -94,7 +103,17 @@ succeeded, so "accepted" is the one thing known to be true.
 ## D4 — The other four routes
 
 Each calls `schedule_accepted` in place of `schedule_agent` and ignores the result, as it already
-ignores `schedule_agent`'s. Their answers (the message, the answer, the released entry) describe
+ignores `schedule_agent`'s.
+
+**(R2) Two more post-commit sites of the same shape**, from `grep -rn "schedule_agent(" hub/hub`:
+the token-budget `PUT` (`accounting.py:78`, a loop over every agent with queued input after the
+budget commit at `:62`, where one raise also skips every later agent) and the runner rebind in the
+agent PATCH (`agents.py:2693`, after the commit at `:2676`). Both switch to `schedule_accepted`, so
+the routes beside the trigger are **six**, not four. **Not in scope:** `checkpoints.py:334` ("run
+now": nothing is committed before it and scheduling *is* its answer, so a failure there is truthfully
+a failure), and the non-route callers (`scheduler.py:3471, 3605`, `run_divergence.py:874`,
+`checkpoint_cutover.py:156`, `turn_scheduler.py:713`), which run in background passes with their
+own handling. Their answers (the message, the answer, the released entry) describe
 what they committed, and are already true once the call cannot raise.
 
 ## D5 — The options
@@ -115,3 +134,10 @@ what they committed, and are already true once the call cannot raise.
 ## Round log
 
 - R1 2026-09-24: written.
+- R2 2026-09-24: line claims re-read (`agent_trigger.py:1587/1595/1600`,
+  `run_reconciliation.py:184-187, 205`, `turn_scheduler.py:283, 424`). **Disagreed (2):** (1) D3
+  missed that `persist_event` commits on the route's session, so a failed persist poisons the refusal
+  branch and a rollback expires the rows the answer reads; D3 now captures plain values and rolls
+  back; task 1.9 added. (2) Two further post-commit routes (`accounting.py:78`, `agents.py:2693`);
+  D4 widened, `checkpoints.py:334` excluded with its reason. D1/D2 stand: `schedule_agent` opens its
+  own session (`turn_scheduler.py:283`), so its raise cannot poison the route's.
