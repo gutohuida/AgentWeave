@@ -13,7 +13,7 @@ unrecoverable"*). If they answer *"counts, but is never refused"*, drop D3 only.
 |---|---|---|
 | **A. Outside everything (today)** | Nothing | Money leaves, unseen, in the state the operator set specifically to stop it (F240, driven) |
 | **B. Shown as its own line, not budgeted** | Visibility | The budget still does not bound spend. An operator who sets a budget to cap spending keeps spending at exhaustion, which is F240's defect |
-| **C. Counted and gated like turns (recommended)** | One meaning for "budget": every model call the Hub makes for a project, autonomous ones paused at exhaustion, operator ones always available. That is the rule `usage-accounting` already states for turns | A migration. An automatic checkpoint at exhaustion is written without its model half (see the proposal's table) |
+| **C. Counted and gated like turns (recommended)** | One meaning for "budget": every model call the Hub makes for a project, autonomous ones paused at exhaustion, operator ones always available. That is the rule `usage-accounting` already states for turns | A migration. An automatic checkpoint at exhaustion is not taken; the operator is told one is due (D3a, and the proposal's table) |
 | **D. Counted, never refused** | Totals are honest | Same defect as B at exhaustion |
 
 C is the only option where *"Autonomous turns are paused; operator messages can still run"*
@@ -64,6 +64,13 @@ are neither. They cost nothing and are not counted. `project.total_tokens`, `inp
 and `unavailable_turns` stay turn counts. If `an-estimate-that-misses-turns-says-so` has shipped,
 each worker line also carries `unpriced_calls`, and the display counts them next to its turns.
 
+**The headline caption.** `AccountingPanel.tsx:76-78` renders `project.total_tokens` over
+*"N measured · M usage unavailable"*. Once the total includes workers, that caption reads as if N
+turns made the whole total. It becomes *"N measured turns · K worker calls · M usage
+unavailable"*, K being the sum of the worker lines' `measured_calls`. `project` keeps including
+workers (R1's choice stands): the headline must equal `budget.used_tokens`, or the Budgets section
+would show a spend the headline does not.
+
 **Not changed:** `conversation_usage` (`GET /accounting/conversations/{id}`). A worker invocation
 carries a `conversation_id`, but that rollup is *"this conversation's turns"*, and nothing in the
 spec asks it to carry out-of-band calls. Recorded as a follow-up question, not built.
@@ -93,6 +100,38 @@ exactly that spend, and the operator path is never gated, so control is kept.
 and passes it to `run_worker` and to `probe_checkpoint` (new parameter). The three triggers are
 `operator`, `context_pressure` and `task_completion` (grep `trigger=` in `hub/hub`).
 
+## D3a — the automatic triggers check first (R2)
+
+R1 let an exhausted autonomous checkpoint fall through to `generate_checkpoint`, producing an
+`unwritten` checkpoint. R2 found that this strands work, from the code:
+
+- `generate_checkpoint` anchors on `latest_checkpoint` (`checkpoints.py:95-108`), which orders by
+  `sequence` and **does not filter by status**. `_transcript_since` bounds the next transcript at
+  `anchor.created_at` (`checkpoint_generation.py:181-197`) and the prompt carries `anchor.body`,
+  which is `None` for an unwritten one. So the first written checkpoint after the budget is raised
+  would cover only the turns since the last *gated* one, with no predecessor body: every span a
+  gated checkpoint "covered" drops out of the chain.
+- Under `automatic`, every operator turn at exhaustion is a new run, so `_nothing_new_since_last_checkpoint`
+  (`checkpoint_trigger.py:111-136`) is false each time. One unwritten checkpoint, and one
+  `checkpoint_ready` broadcast, per operator turn.
+- On a handover, `consume_note` runs whatever the outcome (`checkpoint_handover.py:273`,
+  `checkpoint_generation.py:600-603`), so the author's notes for its reviewer would be consumed
+  into a checkpoint with no body. The loop's next firing briefs from `latest_checkpoint_for_loop`,
+  which is that empty checkpoint.
+
+So both triggers read `project_budget_state` **before** `generate_checkpoint`:
+
+| Trigger | Where | At exhaustion (or an unreadable budget, fail-closed) |
+|---|---|---|
+| `checkpoint_trigger.consider` | at `:263`, the `if not policy.automatic:` branch becomes `if not policy.automatic or budget_blocked:` | the existing warn-don't-spend path: `checkpoint_warning = "due"`, one `checkpoint_due` broadcast (it is idempotent on `"due"`), return `None`. No record, no anchor moves. The operator's *Checkpoint* button runs as `operator` |
+| `checkpoint_handover.consider_handover` | after `resolve_policy(...).enabled` (`:244-246`), before `_resolve_runner` | `_declined(run_id, "the project's token budget is exhausted")`, return `None`. The note is not consumed, so `_authors_pending_note` offers it to the next handover |
+
+`run_worker`'s gate (D3) stays, as a backstop for the titler and for the race in which a turn
+crosses the budget between the trigger's read and the spawn. In that race the result is an
+unwritten checkpoint, which is today's behaviour for any worker failure; it is rare, and the
+anchoring hazard it shares with every other unwritten checkpoint is recorded as a candidate
+finding in B7's R2 section, not fixed here.
+
 ## D4 — the titler
 
 `build_title_command` (`conversation_titles.py:61-84`) keeps `--tools ""`, the project directory,
@@ -106,7 +145,15 @@ and `--sandbox read-only` (F195), and adds `--output-format json` for Claude and
    prompt_version=TITLE_PROMPT_VERSION, runner_id=runner.id, cli, model, conversation_id, result)`
    on every exit after the runner is resolved. `_run_titler`'s `""`-on-failure contract becomes a
    small result carrying the outcome (`spawn_failed`, `nonzero_exit` or `timeout`) so the row can
-   say which.
+   say which. `TITLE_PROMPT_VERSION` is a new constant in `conversation_titles.py`
+   (`"conversation-title/1"`): none exists today, and `worker_invocations.prompt_version` is
+   NOT NULL (`db/models.py`).
+
+**Adjacent, not changed here (R2).** `generate_conversation_title` has no "already generated"
+guard: it re-runs after every completed turn (`agent_trigger.py:2630`, `:3219`) on the same
+excerpt (the first message and first reply, `_excerpt`), so it pays for the same title each turn.
+Once this change records it, that repetition becomes visible as one `conversation_title` row per
+turn. Recorded as a candidate finding in B7's R2 section.
 
 **Why not route the titler through `run_worker`.** `run_worker` builds its own command without
 `--tools ""` (`worker.py:122-146`) and validates the answer against a Pydantic schema. Routing the
@@ -122,8 +169,9 @@ checkpoints too. The accounting is what F240 asks for, and it is shared. The com
 - `POST /conversations/{id}/checkpoints` (operator): never gated. `run_worker` never raises, so the
   route still answers with a checkpoint (`ready` or `unwritten`).
 - The automatic triggers (`checkpoint_trigger.consider_from_reading`, `checkpoint_handover`) are
-  fire-and-forget. A `budget_exhausted` worker result produces an `unwritten` checkpoint, never an
-  exception.
+  fire-and-forget. At exhaustion they now return `None` before generating (D3a); their budget read
+  raising is caught and treated as exhausted, so neither raises. Only the backstop race yields a
+  `budget_exhausted` worker result, and that produces an `unwritten` checkpoint, never an exception.
 - `GET /queue` status (`inbound_queue.py:142`): the reason is still `token budget exhausted`,
   derived from the same `project_budget_state`, which now includes workers.
 
@@ -153,9 +201,17 @@ New file `hub/tests/test_worker_spend_counts_against_the_budget.py` unless state
 9. `generate_checkpoint` with each of the three triggers: a patched `run_worker` records `initiator`
    as `operator`, `autonomous`, `autonomous`. The probe gets the same value. (Extends the
    `watchful_run_worker` pattern at `test_checkpoint_generation.py:659`.)
-10. An automatic `context_pressure` checkpoint at exhaustion is `unwritten`, no cutover happens,
-    and its invocation outcome is `budget_exhausted` (in `hub/tests/test_checkpoint_cutover.py`,
-    beside the automatic cutover tests).
+10. An automatic `context_pressure` reading at exhaustion creates **no checkpoint** (the count of
+    `checkpoints` rows is unchanged), sets `checkpoint_warning == "due"`, broadcasts one
+    `checkpoint_due`, does no cutover, and never calls `run_worker` (patched to raise). A second
+    reading after another turn broadcasts nothing new. In `hub/tests/test_checkpoint_cutover.py`,
+    beside the automatic cutover tests. **Fails today** (a checkpoint is generated). It also fails
+    under R1's design, which made an `unwritten` one.
+10b. A flow handover at exhaustion creates no checkpoint and leaves the author's `CheckpointNote`
+    with `consumed_by_checkpoint_id IS NULL`. Raising the budget and running the next handover
+    consumes that same note. **Fails today** (generated and consumed).
+10c. With `project_budget_state` patched to raise, both triggers behave as at exhaustion
+    (fail-closed) and neither raises.
 11. Titler (`hub/tests/test_conversation_titles.py`, extend): with `_run_titler` patched to return a
     Claude JSON envelope, one `conversation_title` row with `total_tokens`, and the title set.
     **Fails today** (no row). At exhaustion: no spawn, title unchanged, row `budget_exhausted`.
@@ -173,3 +229,12 @@ New file `hub/tests/test_worker_spend_counts_against_the_budget.py` unless state
 ## Round log
 
 - R1 (2026-09-24): written.
+- R2 (2026-09-24): added D3a (the automatic triggers check the budget first and create nothing;
+  R1's `unwritten`-at-exhaustion would have become the next checkpoint's anchor and consumed a
+  handover's notes). Tests 10/10b/10c rewritten. `TITLE_PROMPT_VERSION` is new. The headline
+  caption names worker calls. Re-measured `:8000` `mode=ro`: 32 `ok` Claude rows, all
+  LoopEngine, backfill total **962,599** (320 in + 564,480 cache-read + 330,296 cache-write +
+  67,503 out), `$1.168`; 0 of 3 projects have a budget; head is `0105`. LoopEngine runs
+  `conversation_title_mode = generate`, so its titler spend exists and is **not** backfillable (no
+  row was ever written). Only spenders outside a turn: `run_worker` (checkpoint, probe) and
+  `_run_titler`.

@@ -48,3 +48,11 @@ falls back to the raw id (D1's last row) rather than rendering nothing.
 ## Round log
 
 - R1 (2026-09-24): written.
+- R2 (2026-09-24): confirmed. `hub/ui/src` renders runner options in exactly the three places
+  named (grep `runners.map`/`runner.name`, outside `RunnersPage`), `list_runners` orders by
+  `created_at` (`runners.py:82`), `RunnerResponse.model_unrecognised` uses the same
+  `get_provider().model()` lookup (`schemas/runners.py:50-58`), `useModelCatalog` is at
+  `modelCatalog.ts:46`, and `agents.py:713` names Hub-made runners `label — model label`. **File
+  overlap, not finding overlap:** `a-runner-that-cannot-collaborate-says-so-where-it-is-bound`
+  (another bundle) edits the same `RunnerPicker` (`AgentSettingsControls.tsx:225-275`); whichever
+  lands second rebases its option text onto the other's.

@@ -73,11 +73,18 @@ start.
 - **THEN** the budget is exhausted
 - **AND** autonomous turns remain queued
 
-#### Scenario: An automatic checkpoint at exhaustion makes no model call
+#### Scenario: An automatic checkpoint at exhaustion is not taken, and is reported due
 
 - **WHEN** a conversation crosses its automatic checkpoint threshold while the budget is exhausted
 - **THEN** no model is invoked
-- **AND** the recorded call states that the budget is exhausted
+- **AND** no checkpoint is created, so no later checkpoint anchors on one without a body
+- **AND** the operator is told a checkpoint is due, as when checkpoints are not automatic
+
+#### Scenario: A handover at exhaustion keeps the author's notes
+
+- **WHEN** a flow handover with notes for the reviewer completes while the budget is exhausted
+- **THEN** no model is invoked and no checkpoint is created
+- **AND** the notes remain pending for the next handover
 
 #### Scenario: A title is not generated at exhaustion
 

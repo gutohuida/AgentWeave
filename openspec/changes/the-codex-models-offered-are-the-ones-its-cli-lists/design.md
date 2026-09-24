@@ -64,6 +64,21 @@ Codex CLI (0.146.0, fetched 23 Sep)"*, or *"Built-in list: no Codex model cache 
 - Stored runners. A runner on `gpt-6-sol` on a 0.146.0 machine is kept, readable, and marked
   unrecognised (`runner-registry`, *"Existing runners keep working"*).
 
+## D3a — whose cache it is (R2)
+
+- **Docker.** The image is `python:3.11-slim` with only the Hub installed (`hub/Dockerfile`); it
+  ships no Codex CLI, and `docker-compose.yml` mounts no Codex home and sets no `CODEX_HOME`. So a
+  Docker Hub reads `/root/.codex/models_cache.json`, finds nothing, and answers `built_in` with
+  *"no Codex model cache at /root/.codex/models_cache.json"*. That is the right answer there: no
+  Codex CLI in the container means no list the Hub could follow. An operator who mounts a Codex home
+  and sets `CODEX_HOME` gets the runtime read with no further change.
+- **An agent's own `CODEX_HOME`.** An agent's `config.env_vars` is merged into its spawn
+  environment (`launchability.resolve_agent_env`, `launchability.py:143-175`), and the rollout
+  reader already honours a per-run `CODEX_HOME` (`agent_trigger.py:2380`). The catalog is per Hub,
+  not per agent: it reads the Hub process's `CODEX_HOME`. An agent pointed at another Codex home
+  may be offered a list its CLI was not sent. This is a known limit, stated in the docstring
+  rewrite (task 2.1), not a reason to make the catalog per agent.
+
 ## D4 — the test suite must not read the developer's cache
 
 An autouse fixture in `hub/tests/conftest.py` monkeypatches `model_catalog._codex_cache_path` to a
@@ -86,7 +101,8 @@ machine-specific reason): without the fixture, the suite on this machine would a
 New file `hub/tests/test_codex_models_from_the_cli_cache.py`. Build caches with the shape
 `tests/test_model_catalog_drift.py:74-94` writes, plus `priority`.
 
-1. A cache listing `m-b` (priority 2), `m-a` (priority 1) and a hidden `m-h` gives
+1. A cache listing `m-b` (priority 2), `m-a` (priority 1) and a hidden `m-h` (priority 0, the
+   lowest, as `gpt-reserve` is in the real cache) gives
    `get_provider("codex").models` ids `["m-a", "m-b"]`, `m-a` as the default, and the cache's labels
    and windows. **Fails today** (the literal). **Fails if the sort is dropped**, because the file
    order is `m-b` first.
@@ -112,3 +128,11 @@ New file `hub/tests/test_codex_models_from_the_cli_cache.py`. Build caches with 
 ## Round log
 
 - R1 (2026-09-24): written.
+- R2 (2026-09-24): re-measured the real cache, `mode` read-only, `encoding="utf-8"`: a dict with
+  `fetched_at` (2026-09-23T10:10:51Z), `etag`, `client_version` 0.146.0 and five `models`; three
+  have `visibility: "list"` (`gpt-5.6-terra` p7, `gpt-5.6-luna` p8, `gpt-5.5` p12), two `hide`
+  (`gpt-reserve` p3, `codex-auto-review` p43). So the priority sort must run *after* the
+  visibility filter, or a hidden p3 model would be first and become the default; test 1 already
+  includes a hidden model and now gives it the lowest priority to pin this. `CATALOG` has exactly
+  the four readers D1 names (`model_catalog.py:280, 284, 330, 358`); `:296` uses it only for
+  provider names. Added D3a (Docker ships no Codex CLI; the catalog is per Hub, not per agent).

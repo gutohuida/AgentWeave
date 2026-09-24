@@ -63,7 +63,8 @@ A runner stored as `claude-opus-5` did not.
 
 - `hub/hub/model_catalog.py` (alias resolution in `model()`, `undeclared_model_reason`),
   `hub/hub/worker.py` docstring. The UI pickers are `RunnersPage.tsx` (the `RunnerForm` model
-  select) and `AgentCreateDialog.tsx:222`, plus `runnerOptionLabel` if
+  select), `AgentCreateDialog.tsx:222`, the checkpoint-model select
+  (`ProjectSettingsPanel.tsx:290-297`) and the composer's `ModelPicker.tsx:55` (R2), plus `runnerOptionLabel` if
   `a-runner-choice-names-its-model` shipped first.
 - One existing test inverts: `test_a_published_alias_is_refused_naming_the_id_it_stands_for`
   (`hub/tests/test_a_refusal_says_what_would_work.py:56`).

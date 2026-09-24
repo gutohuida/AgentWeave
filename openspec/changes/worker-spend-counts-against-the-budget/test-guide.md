@@ -18,5 +18,9 @@
    the agent chips, without knowing what a "worker" is?
 2. With the budget exhausted, the notice still reads *"Autonomous turns are paused; operator
    messages can still run."* Is that now true of everything you see spending?
-3. After your `:8000` restarts on this migration, your LoopEngine total rises by about 962k tokens,
-   which is the backfilled checkpoint spend. Is that surprising, or expected?
+3. After your `:8000` restarts on this migration, your LoopEngine total rises by 962,599 tokens
+   (`$1.17`), which is the backfilled checkpoint and probe spend (measured `mode=ro`, 2026-09-24).
+   Your titler spend on LoopEngine (`conversation_title_mode = generate`) was never recorded and is
+   not in that number. Is that surprising, or expected?
+4. With automatic checkpoints on and the budget exhausted, a conversation that crosses its
+   threshold shows *checkpoint due* rather than cutting over. Is that the signal you would want?

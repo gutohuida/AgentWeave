@@ -47,12 +47,22 @@ on `:8000`.
   read by `project_budget_state`, `accounting_snapshot` and `PATCH /accounting/budget`. The
   accounting API gains `workers`: one line per worker kind (`checkpoint`, `checkpoint_probe`,
   `conversation_title`), beside `agents`. `project` totals include them.
-- **An autonomous worker call is refused at exhaustion, and says so.** `run_worker` takes a
-  required `initiator` (`"operator"` or `"autonomous"`). An autonomous call on an exhausted budget
-  does not spawn. It is recorded with a new outcome, `budget_exhausted`, as every non-spawning exit
-  already is (*"Every exit records an invocation, including the ones that never spawn"*,
+- **An automatic checkpoint at exhaustion is not taken, and the operator is told one is due.**
+  (R2.) Both automatic triggers read the budget *before* `generate_checkpoint`. At exhaustion,
+  `checkpoint_trigger.consider` takes its existing manual-mode branch (sets
+  `checkpoint_warning = "due"`, broadcasts `checkpoint_due`, spends nothing, creates no record), and
+  `checkpoint_handover.consider_handover` declines and **leaves the author's note pending**. Neither
+  creates a checkpoint. An `unwritten` checkpoint made here would become the next checkpoint's
+  anchor (`checkpoints.latest_checkpoint` orders by `sequence` with no status filter), so every
+  later checkpoint would begin after it, with no anchor body: the span it covered would drop out of
+  the checkpoint chain for good, and a handover's consumed notes would be gone with it.
+- **Every worker call is also gated at the spawn, as a backstop.** `run_worker` takes a required
+  `initiator` (`"operator"` or `"autonomous"`). An autonomous call on an exhausted budget does not
+  spawn. It is recorded with a new outcome, `budget_exhausted`, as every non-spawning exit already
+  is (*"Every exit records an invocation, including the ones that never spawn"*,
   `worker.py:430-432`). A checkpoint's initiator is `operator` only for the `operator` trigger, and
-  its probe inherits it.
+  its probe inherits it. The backstop matters for the titler (which has no trigger-level check to
+  lean on) and for the race where a turn crosses the budget between a trigger's read and the spawn.
 - **The titler is accounted like every other worker.** It keeps its own command (tools off,
   project directory: F195) but runs it in JSON mode, reads usage with the worker's envelope parser,
   writes a `conversation_title` invocation, and is always `autonomous`. At exhaustion it does not
@@ -63,9 +73,9 @@ on `:8000`.
 | Trigger | At exhaustion, after this change |
 |---|---|
 | Operator presses *Checkpoint* | Runs, and is counted (operator control is retained, as for turns) |
-| `context_pressure`, automatic | No model call. The checkpoint is created `unwritten`, with its Hub-computed envelope and citations (these cost nothing), no cutover happens, and `checkpoint_ready` is broadcast. This is today's path for an unwritten checkpoint (`checkpoint_trigger.py:338-342`), with the reason on its invocation |
-| `task_completion` (flow handover) | Same: an `unwritten` checkpoint with the envelope, and the notes are consumed as today (`checkpoint_generation.py:600-603`) |
-| Probe | Runs only when its checkpoint is `ready`, which an exhausted autonomous checkpoint never is |
+| `context_pressure`, automatic | No checkpoint and no model call. The trigger takes the manual-mode path: `checkpoint_warning = "due"` and `checkpoint_due` are sent (`checkpoint_trigger.py:263-291`), so the operator sees a checkpoint is due and can press *Checkpoint*, which runs. No cutover happens |
+| `task_completion` (flow handover) | No checkpoint and no model call. The handover declines, and the author's note stays pending, so the next handover after the budget is raised carries it (`_authors_pending_note`) |
+| Probe | Runs only when its checkpoint is `ready`; an exhausted autonomous trigger never makes one |
 | Titler | No spawn; the truncated title stays |
 
 ## Capabilities
@@ -83,5 +93,6 @@ on `:8000`.
   `api/v1/accounting.py`, `db/models.py`.
 - The UI shows worker lines in the Budgets section (`AccountingPanel.tsx:88-101`), so the bundle
   is refreshed.
+- `checkpoint_trigger.py` and `checkpoint_handover.py` gain one budget read each, before `generate_checkpoint`.
 - Every `run_worker` caller must pass `initiator`. That is two call sites
   (`checkpoint_generation.py:552`, `:641`) and the test helper at `hub/tests/test_worker.py:267`.

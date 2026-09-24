@@ -1,6 +1,6 @@
 ## 0. Rounds
 
-- [ ] 0.1 R2: re-derive the proposal independently against `AgentSettingsControls.tsx`, `ProjectSettingsPanel.tsx`, `RunnersPage.tsx` and `schemas/runners.py`. Grep `hub/ui/src` for every other `<option>` rendered from a runner and add any it finds to design D2. Record the result in `design.md`'s round log
+- [x] 0.1 R2: re-derive the proposal independently against `AgentSettingsControls.tsx`, `ProjectSettingsPanel.tsx`, `RunnersPage.tsx` and `schemas/runners.py`. Grep `hub/ui/src` for every other `<option>` rendered from a runner and add any it finds to design D2. Record the result in `design.md`'s round log
 - [ ] 0.2 R3: a second independent re-derivation. `openspec validate a-runner-choice-names-its-model --strict` passes
 
 ## 1. Tests first — each fails on today's code

@@ -46,6 +46,23 @@ runner stored as `opus` would show it as unrecognised.
 If `a-runner-choice-names-its-model` has shipped, `runnerOptionLabel` renders an alias-stored
 runner's model part the same way.
 
+**Two more readers of a stored model, found by R2** (grep `models.find` in `hub/ui/src`). Both
+match `m.id === value` only, and both would misreport an alias-stored runner:
+
+| Reader | Today on `opus` | After |
+|---|---|---|
+| The composer's `ModelPicker` (`ModelPicker.tsx:55`; fed `runner.model` by `AgentOutputPanel.tsx:1323` and `NewConversationSurface.tsx:211`) | `find` misses, so it falls back to the provider **default** and shows *Sonnet 5* for an agent running Opus. The same wrong-model display F268 is about | `current` also matches `m.aliases.includes(effectiveModel)`, and the button reads `opus — latest (now Opus 5.5)` |
+| Project settings, checkpoint model (`ProjectSettingsPanel.tsx:290-297`, and the window lookup at `:91-93`) | offers ids only; a stored alias shows as a blank select, and the threshold preview has no window | offers the `Latest` group too; the window lookup resolves aliases |
+
+One shared helper, `resolveCatalogModel(provider, value)` in `hub/ui/src/api/modelCatalog.ts`,
+serves all five UI readers (the two pickers, `storedIsDeclared`, `ModelPicker`, the checkpoint
+select), so the UI's rule is the Hub's D1 rule stated once.
+
+**An unvalidated door, noted.** `PATCH /projects/{id}` accepts any `checkpoint_model` string
+(`api/v1/projects.py:102`, `max_length` only); it is checked only at spawn, by the worker gate.
+This change does not add validation there. With D1, an alias passes the worker gate, so the
+checkpoint select's `Latest` group works end to end.
+
 ## D3 — the context window of an alias
 
 The alias's window is its current target's (`context_window_for_model`). This is right today: every
@@ -77,6 +94,9 @@ All in `hub/tests/test_a_model_alias_is_a_model_choice.py` (new) unless stated.
 5. `test_a_published_alias_is_refused_naming_the_id_it_stands_for`
    (`test_a_refusal_says_what_would_work.py:56`) is **deleted**, and its intent moves to test 1.
    Record this deliberately in the commit.
+7. UI: `hub/ui/src/__tests__/composerModelControls.test.tsx` (extend): `ModelPicker` with
+   `effectiveModel="opus"` shows the Opus label, not the provider default. **Fails today** (shows
+   *Sonnet 5*).
 6. UI: `hub/ui/src/__tests__/runnerForm*.test.tsx` (or the existing RunnersPage test) with
    `GET /model-catalog` served in catalog order. The `Latest` group lists `opus, sonnet, haiku,
    fable` in that order, each labelled with its current target. Opening a runner stored as `opus`
@@ -85,3 +105,8 @@ All in `hub/tests/test_a_model_alias_is_a_model_choice.py` (new) unless stated.
 ## Round log
 
 - R1 (2026-09-24): written.
+- R2 (2026-09-24): D1's backend door table confirmed complete (`ProviderDescriptor.model` has five
+  callers: `runners.py:40`, `agents.py:695`, `schemas/runners.py:55`, `worker.py:165`,
+  `model_catalog.py:312/394`; `model_context_window` resolves through it too). Added the composer
+  `ModelPicker` and the checkpoint-model select, which would have shown the wrong model for an
+  alias, and test 7. Noted `checkpoint_model` as an unvalidated door.

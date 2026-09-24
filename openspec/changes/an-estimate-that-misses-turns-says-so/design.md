@@ -65,3 +65,13 @@ project before it runs, so the case is unreachable, and this change leaves it as
 ## Round log
 
 - R1 (2026-09-24): written.
+- R2 (2026-09-24): confirmed. `_aggregate_columns` (`usage_accounting.py:86-96`) sums
+  `api_equivalent_usd_micros` with no filter; `_accounting_from_token_usage`
+  (`codex_appserver.py:353-368`) builds a sample with no cost; Codex exec passes none
+  (`runner_parsing.py:582`); `accountingDisplayLabel` (`accountingDisplay.ts:42-43`) is the only
+  UI reader of a money figure. The conversation rollup renders tokens only
+  (`AgentOutputPanel.tsx:1113-1120`), so its `unpriced_turns` has no display to change yet.
+  `PATCH /accounting/budget` reads only `total_tokens`. Every `AccountingSample` builder checked:
+  only Claude's result (`runner_parsing.py:335`, `:132-161`) and OpenCode's `step_finish` (`:637`)
+  can carry a cost; every Codex builder (`:582`, `:596`, `:707`, `codex_appserver.py:360`) cannot;
+  `runner_events.py:318` merges and adds none. No change.
