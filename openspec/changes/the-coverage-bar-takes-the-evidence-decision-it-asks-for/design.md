@@ -36,10 +36,15 @@ Recommended **(a)**, because it answers the sentence where it is said. (c) is Op
 The component, `EvidencePieces`, takes `{path, identifier}` and owns its query and mutation, so a
 second mount (the drawer) needs no refactor.
 
-Rendering, per piece, in **the route's order (oldest first)**, with the last piece marked
-*newest* — the review turn and the merge both use the newest piece
-(`commit_for_task_review`, `requirement_evidence.py:785-844`; `integration_targets`' oldest-first
-reduction), so that label is what tells the operator which one a merge would take.
+Rendering, per piece, in **the route's order (oldest first, `produced_at` then id —
+`requirement_evidence.for_requirement`, `:845-851`)**, with the last piece marked *latest* — meaning
+**most recently recorded**, and nothing more (R2). R1 said the label tells the operator which piece a
+merge would take; it cannot. The merge reduces per **task**, across every requirement the task
+serves, per **branch**, by footprint `observed_at` (`task_integration._targets` `:240-266`,
+`integration_targets` `:270-287`) — and this bundle's footprint change replaces that reduction with
+the descendant commit per line of work. This list is per **requirement**, across tasks, by
+`produced_at`. The newest piece here can belong to another task, or lose to a descendant on its
+branch. So the label claims only the order the route returns.
 
 - `summary` (or *"no summary"*), `actor` (`operator` / agent name), `locator` when present.
 - The footprint: `commit_sha[:12]` on `branch`, or *"no commit"* (a `paths` footprint), and — when
@@ -62,11 +67,16 @@ recorded by run <id>; decide once it ends"*.
   (`agent_actions.py:1224-1228`). `useSpecEvents` (`api/spec.ts:152-178`) already invalidates
   `specCoverage` on `spec_updated`, filtered by the trusted `project_id` the SSE manager stamps.
 - Frontend: the mutation's `onSuccess` invalidates `['project', pid, 'specCoverage']`,
-  `['project', pid, 'specEvidence', path, identifier]`, and `['project', pid, 'task']` /
-  `['project', pid, 'tasks']` (the drawer's integration and preview queries live under `task`).
-  R2 should list the exact task keys from `api/tasks.ts`.
+  `['project', pid, 'specEvidence', path, identifier]`, and `['project', pid, 'task']` and
+  `['project', pid, 'tasks']`. R2 listed `api/tasks.ts`: the prefix `task` covers
+  `[…, 'task', id, 'integrations']` (`:162`), `'transitions'` (`:194`) and `'integration-preview'`
+  (`:229`); the prefix `tasks` covers the lists and boards (`:277`, `:298`, `:333`, `:353`). No other
+  task-scoped key moves when evidence is decided.
 - `useSpecEvents` also invalidates `['project', pid, 'specEvidence']` on `spec_updated`, so a piece an
   agent records while the row is open appears.
+- The broadcast carries no `path`. Both `spec_updated` consumers tolerate that
+  (`api/spec.ts:158-178` guards `d?.path`; the rename follower returns early without one, `:195-196`)
+  — checked by R2, and the same property B6's drift change relies on for `path: null`.
 
 ## What each route returns when what it calls raises
 
@@ -95,12 +105,18 @@ recorded by run <id>; decide once it ends"*.
    gate's awaiting entry and to `verdict_evidence_sentence`'s pieces, then mount it; (b) a
    `GET /spec/evidence/{id}` route; (c) leave the drawer pointing at the document. Recommended (a) as
    a follow-up change, because F357's `ask_user` question would then name where to go.
-2. **Reject reason required.** R1 requires one in the UI; the route accepts `""`. A rejection
-   without a reason reaches the author as *"rejected"* with nothing to act on. Recommended: required
-   in the UI only.
+2. **Reject reason required** — **decided by R2: required in the UI only.** A rejection without a
+   reason reaches the author as *"rejected"* with nothing to act on; an API client (and a granted
+   agent through `decide_evidence`) keeps today's contract, so no route or test changes for it.
 
 ## Round log
 
 - **R1, 2026-09-24.** Re-verified F215 (no `spec/evidence` caller in source or bundle); read the
   list and decision routes' real order and failure answers; measured the decision route under a
   raising integration.
+- **R2, 2026-09-24.** Route order, both routes' missing broadcast, the integration wrap
+  (`task_integration.py:672-707`) and the query keys re-derived — hold. One claim disagreed: the
+  *newest* label does not say which piece a merge takes (different grouping, key and — after change
+  4 — rule); relabelled *latest* = most recently recorded. Open Question 2 answered. B6's edits to
+  `SpecCoverageBar.tsx` (one *Drifting* string; a panel mounted beneath) and `SpecPhaseBar.tsx`
+  (rigor select and history) touch no region this change edits.

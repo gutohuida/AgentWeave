@@ -29,9 +29,11 @@ if evidence.run_id and run_liveness.run_is_live(evidence.run_id):
     )
 ```
 
-Placed **after** the value check and **before** the grant check: a malformed value is still 422,
-and an ungranted agent is still told about the grant first (the grant does not clear with time; the
-run does).
+Placed **after all three existing refusals** — value (422), grant (403), self-acceptance (403) —
+immediately before the `EvidenceReview` is built (R2: R1 wrote "before the grant check", which would
+answer an ungranted agent 409 and contradict R1's own reason and test 1.5). A malformed value is
+still 422, and an ungranted or self-deciding agent is told the refusal that does not clear with time
+first; only an otherwise-valid decision meets the wait.
 
 **Why refuse rather than accept and re-open.** The alternative is to let the decision stand and
 reset it to `awaiting` if the re-point moves the commit. That rewrites a decision the append-only
@@ -57,7 +59,11 @@ or 500 the decision. Unchanged by this change.
 
 In `record`, when `duplicate_of` returns a row `already` with `already.run_id == actor.run_id` and
 `already.review_state == AWAITING`, update `already.kind`, `already.locator`, `already.summary`,
-re-apply the footprint just taken (`_apply_footprint(session, already, taken, existing_footprint)`),
+re-apply the footprint just taken — `_apply_footprint(session, already, taken, existing_footprint,
+outside_writes=await outside_writes_for_run(session, already.run_id))`. The `outside_writes`
+argument is not optional here (R2): `_apply_footprint` writes the column on every mapping and `None`
+means *not observed* (`requirement_evidence.py:392-429`), so omitting it would erase what
+`capture_footprint` recorded at the first record (`:433-472`),
 and return `already` with a `revised` marker for the route. Otherwise the refusal stands.
 
 - Same run means same checkout, same task, same actor — and under D1 nobody can have decided it
@@ -66,18 +72,45 @@ and return `already` with a `revised` marker for the route. Otherwise the refusa
 - `digest` is **not** revised. If the requirement was reworded mid-turn, `duplicate_of` does not key
   on digest, so the row would move to a wording it was not recorded against. Instead: if
   `already.digest != requirement.digest`, do not revise — record a new row (the old one goes stale
-  through the existing mechanism). R2 should check this against `requirement_coverage`'s staleness.
-- Routes: `POST /agent-actions/spec/evidence` answers **200** (not 201) with the same body plus
+  through the existing mechanism). R2 checked this against `requirement_coverage`: staleness is
+exactly `item.digest == requirement.digest` (`requirement_coverage.py:192`, `:310`), so a revised row
+keeping its old digest would still read stale, and one moved to the new digest would claim a wording
+it was not recorded against — the guard is right.
+- Routes: `POST /agent-actions/spec/evidence` (declared `status_code=201`, `agent_actions.py:1184`,
+  so the revise branch returns a `JSONResponse(status_code=200)` explicitly) answers **200** (not 201) with the same body plus
   `"revised": true`. `POST /spec/evidence` (operator) never has a run, so never revises.
 
 ## D3 — the cross-run refusal names what clears it for an agent
 
 For `actor.kind == "agent"` the last sentence becomes: *"If the work has changed since, record again
 once it has: the Hub commits your changed checkout when this turn ends, and evidence recorded after a
-change names the new commit."* Checked against the code, this is incomplete: a changed checkout still footprints
-the turn-start commit **mid-turn**, so the second record in a *new* turn with uncommitted changes is
-still a duplicate at record time. R1 does not have a clean answer for that sub-case; see Open
-Question 2. The operator's sentence keeps *"commit it first"* — for them it is true.
+change names the new commit."* R1 found this incomplete on its own: a changed checkout still footprints the turn-start commit
+**mid-turn**, so a record in a *new* turn with uncommitted changes would still be a duplicate at
+record time. **D5 closes that sub-case (R2)**, which makes the sentence true as written. The
+operator's sentence keeps *"commit it first"* — for them it is true.
+
+## D5 — an agent's changed checkout is not a duplicate of its committed state (R2, Open Question 2)
+
+When `duplicate_of` finds a row and D2 does not revise it, and the actor is an agent, `record` asks
+the footprint root once whether the checkout has uncommitted changes (`_git(root, "status",
+"--porcelain")`, this module's own `_git`, 15 s timeout, `None` on failure). Changes present → no
+refusal: the new row is recorded, and `restamp_run_footprints` re-points it at the snapshot the Hub
+commits when the turn ends, which is a different commit from the earlier row's. Clean, or the
+question fails → the refusal stands, as today.
+
+- The git call runs **only on the duplicate path**, so an ordinary record costs nothing new.
+- `requirement_evidence`'s own `_git` rather than a `task_integration` helper: `task_integration`
+  imports this module, and the check is one command.
+- **Only where the turn will be snapshotted.** `_execute_run` commits a dirty tree only for a run
+  given an isolated workspace that is not a review checkout (`agent_trigger.py:1033`, `:1341`: a
+  review turn and a turn in the project's own checkout pass `worktree=None`). Anywhere else the new
+  row is never re-pointed and would be a real duplicate at the same commit — a reviewer's checkout
+  dirtied by `.pyc` files is the observed case. So D5 applies only when the footprint root lies
+  under `worktrees.task_root` or `worktrees.worktree_root` (`worktrees.py:153-188`), never
+  `review_root` (`:207`) or the project root.
+- Agents only. An operator's footprint may be a named commit (`_take_footprint`, F71), and their
+  sentence still says to commit.
+- Test 1.8 (the cross-run control) must stage a **clean** checkout; test 1.12 stages a dirty one.
 
 ## D4 — `recording_run_live` on the evidence view
 
@@ -85,7 +118,15 @@ Question 2. The operator's sentence keeps *"commit it first"* — for them it is
 run_liveness.run_is_live(evidence.run_id))`. Registry lookup, no query. The operator routes that
 return `_evidence_view` (requirement detail, list, record, decide) carry it. The agent-plane record
 response (`agent_actions.py:1238-1245`) is its own dict and gains the same key; the agent-plane
-list (`agent_actions.py:1247`) R2 should check.
+list (`agent_actions.py:1248-1305`) spreads `_evidence_view` and inherits it.
+
+## Risks
+
+- **A reviewer that records its own evidence and then asks the operator to decide it** waits on
+  `ask_user` while its own run is live, and the operator meets `recording_run_live` until the turn
+  ends. The review briefing names only rows that exist when the turn starts
+  (`review_turn.verdict_evidence_sentence`, `:178-235`), which were recorded by ended runs, so the
+  product does not route anyone into this; D4's field lets a screen say why the decision is held.
 
 ## Open questions
 
@@ -93,14 +134,15 @@ list (`agent_actions.py:1247`) R2 should check.
    that appends a review with decision `withdrawn`, which coverage treats like `rejected` minus the
    "Rejected" wording; (b) leave it — the reviewer's rejection is the retire path. Recommended: (b)
    for this change; (a) as its own change if the operator sees it recur.
-2. **The new-turn duplicate** (D3). A second turn with uncommitted changes meets the duplicate check
-   at the turn-start commit, which the prior turn's evidence was re-pointed to. Options: (a) skip the
-   duplicate check when the recording run's checkout is dirty (`task_integration.has_uncommitted_changes`
-   on the footprint root) — the row will be re-pointed to a new commit anyway; (b) leave it. R1
-   recommends (a), but has not checked whether a dirty checkout can be observed reliably from the
-   record path on Windows (`_git` with a 15 s timeout per call). R2 decides.
+2. **The new-turn duplicate** — **decided by R2: (a), written as D5.** One `git status --porcelain`
+   on the duplicate path only; a failed call keeps today's refusal, so the fallback is the safe one.
 
 ## Round log
 
 - **R1, 2026-09-24.** Re-verified F358 against `404c7d5`; measured the decide route's answer when
   integration raises (200, decision stands). Wrote D1-D4.
+- **R2, 2026-09-24.** Re-derived: the registry entry is popped after the restamp on both transports
+  (`agent_trigger.py:2461` then `finally` `:2706`; `:3134` then `finally` `:3250`) — holds. Fixed D1's
+  placement (after all three existing refusals), D2's footprint re-apply (must pass
+  `outside_writes`), and answered Open Question 2 as D5. The agent-plane list already spreads
+  `_evidence_view` (`agent_actions.py:1296`), so D4 reaches it with no extra edit.

@@ -10,7 +10,8 @@ decision to a direct HTTP client, and accepted evidence is what approval merges.
 Each piece SHALL be shown with what the operator needs to judge it: its summary, who recorded it,
 its locator, the commit and branch its footprint names, the task it came from, its state, and for a
 decided piece the latest decision's reason. Pieces SHALL be listed in the order the Hub records
-them, with the newest marked, because the newest is the one a review and a merge take.
+them, with the most recently recorded marked. The mark SHALL NOT claim that piece is the one a
+merge takes, because a merge is decided per task and per line of work, not per requirement.
 
 A rejection SHALL carry a reason.
 

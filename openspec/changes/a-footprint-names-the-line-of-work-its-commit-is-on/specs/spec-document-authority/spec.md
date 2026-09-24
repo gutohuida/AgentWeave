@@ -142,3 +142,8 @@ footprints were recorded.
 
 - **WHEN** two accepted footprints on the same line of work name commits neither of which contains the other
 - **THEN** approval integrates the one recorded later
+
+#### Scenario: The approval preview names the commit approval would merge
+
+- **WHEN** the operator opens the approval preview for a task in that situation
+- **THEN** the preview lists the author's commit, not its parent

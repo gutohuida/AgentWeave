@@ -53,10 +53,12 @@ than was done.
   falling back to the per-agent checkout or the project checkout, a task-bound agent's footprint is
   read at the tip of `agentweave/task/<id>` — where release snapshotted the work — with that branch
   named.
-- **Within one line of work, a descendant commit wins** (D4). The per-branch reduction keeps the
-  target whose commit descends from the others, and uses observation order only between commits
-  neither of which contains the other. Needs a repository root, which `merge_targets` has; the
-  preview's governed path passes one where it can resolve the workspace.
+- **Within one line of work, a descendant commit wins** (D4). `merge_targets` — what approval, the
+  gate and prerequisite provisioning already call — keeps, per branch, the target whose commit
+  descends from the others, and uses observation order only between commits neither of which
+  contains the other. `integration_targets` stays the pure database query `merge_targets`' docstring
+  says it is. The preview's governed path switches to `merge_targets`, so the drawer lists what
+  approval merges.
 
 ## Out of scope
 
@@ -68,8 +70,8 @@ than was done.
 
 - `hub/hub/requirement_evidence.py` (`read_footprint`, `_branch_at` → `line_of_work`,
   `_take_footprint`, `footprint_root`, `capture_footprint`, `restamp_run_footprints`)
-- `hub/hub/task_integration.py` (`integration_targets` gains an optional root; `merge_targets`
-  passes it)
+- `hub/hub/task_integration.py` (`merge_targets`' governed path reduces by ancestry;
+  `integration_targets` unchanged), `hub/hub/api/v1/tasks.py` (the preview's governed path)
 - A data-only migration (`.claude/rules/db-migrations.md`: it reaches `:8000`'s real database on
   its next restart; it is an idempotent `UPDATE`)
 - Tests that pin today's behaviour as a non-guarantee flip on purpose:

@@ -12,7 +12,9 @@ marker remains.
 
 The Hub SHALL apply the same checks to a transition to `approved`. A proposed document can still be
 written, and a document can be adopted at `proposed` without having been checked, so having been
-proposed does not establish that a document is complete when it is approved.
+proposed does not establish that a document is complete when it is approved. The one exception is
+an import naming a document that is no longer approved: at approval it SHALL be preserved and
+reported by materialisation, as task-dependencies requires, rather than refuse the approval.
 
 The checks SHALL apply on every operation that moves a document to `proposed` or `approved`. A
 second operation that moves the document without them is a way around them, whichever surface
@@ -64,3 +66,9 @@ reported as incompleteness.
 
 - **WHEN** a transition the phase map does not allow is attempted on an incomplete document
 - **THEN** it is refused as an illegal transition
+
+#### Scenario: An import reopened after the proposal does not block approval
+
+- **WHEN** a complete document is proposed while the document it imports from is approved, that document is then reopened, and the operator approves the first
+- **THEN** approval succeeds
+- **AND** the import is preserved and reported as naming a document that is not approved

@@ -30,7 +30,8 @@ It has become sharper since F215 was filed:
   detail already lists each requirement; a row whose `evidence_count` is above zero gains an
   *Evidence* toggle that fetches `GET /spec/evidence?identifier=<FR-n>&document=<path>` and lists each
   piece: summary, who recorded it, locator, the commit and branch its footprint names, the task, its
-  state and the latest review's reason. A piece that is `awaiting` has **Accept** and **Reject**; Reject
+  state and the latest review's reason, in the route's order with the most recently recorded
+  marked *latest*. A piece that is `awaiting` has **Accept** and **Reject**; Reject
   requires a reason.
 - **A refusal is shown, not swallowed** (D2). The Hub's sentence is rendered beside the piece — the
   grant refusal, and `recording_run_live` once `evidence-is-decided-after-the-run-that-recorded-it`

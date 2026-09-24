@@ -35,8 +35,18 @@ today (the two `SaveRefusedError` raises move here, so the phase route answers t
 422), then `spec_completeness.check` with `board_served` and `approved_document_paths` as today. For
 `PROPOSED`, append — **first** — `{"code": "explore_not_closed", "where": "exploration", "message":
 "exploration has not been closed; the operator decides when it is complete"}` when
-`document.explore_closed_at is None`. The sentence is `transition`'s own; R2 decides whether to
-extract it as a constant both use.
+`document.explore_closed_at is None`. The sentence is `transition`'s own; extract it as one module constant both use (R2: two copies of a
+refusal sentence drift).
+
+**At `APPROVED`, `import_not_approved` is left out (R2).** It is the one completeness finding about
+another document's state rather than this document's shape, and the settled contract already answers
+it at approval: `task-dependencies` *"An unresolvable import is preserved and reported"*, decided for
+exactly this race (the imported document reopened between propose and approve —
+`archive/2026-08-21-task-dependencies/design.md:215-224`) and pinned by
+`test_spec_task_dependencies.py::test_an_unresolvable_import_is_preserved_and_reported_not_raised`
+(`:267-330`), which proposes a complete document, reopens its import source, approves, and asserts
+**200** with the reference recorded as `document_not_approved`. Gating approval on the finding would
+reverse that decision and fail that test. It is still reported at `proposed`, as today.
 
 `propose` becomes: `blocking = await phase_blockers(...)`; if non-empty, return it; else
 `transition(...)`; `rerender_phase`. `transition` keeps its `explore_not_closed` refusal, so the
@@ -96,6 +106,13 @@ unhandled.
 
 ## Open questions
 
+0. **(R2) Should approval also refuse an import whose document was reopened after the proposal?**
+   Recommended **no** (as written in D1): the task-dependencies contract preserves and reports it, and
+   materialisation records the dangling reference. Answering yes flips
+   `test_an_unresolvable_import_is_preserved_and_reported_not_raised` and modifies the
+   `task-dependencies` requirement *"An imported entry … SHALL be preserved and reported"* in this
+   change's deltas.
+
 1. **Does the approval check apply to documents approved before this ships?** No: it runs only on
    the transition. An already-approved document is not re-checked. Recommended as written.
 2. **Adoption at `proposed`** — see proposal *Out of scope*; B6.
@@ -104,3 +121,13 @@ unhandled.
 
 - **R1, 2026-09-24.** Re-verified F207 and F113 against `404c7d5`; found the approval-time hole
   (proposed documents stay writable; adoption places documents at `proposed`); wrote D1-D4.
+- **R2, 2026-09-24.** Re-derived every route and function claim; all hold. One disagreement: D3's
+  "same checks at approval" would refuse `import_not_approved`, reversing the settled
+  task-dependencies race answer and failing
+  `test_spec_task_dependencies.py:267-330` — D1 now leaves that finding out at `APPROVED`. The only
+  helpers that walk `phase` to `proposed`/`approved` are incomplete by the checks — none states
+  `scope.non_goals` and four carry no criteria — in `test_spec_declared_tasks.py:87`,
+  `test_spec_task_dependencies.py:67,302`, `test_task_spec_document_context.py:152`,
+  `test_spec_criteria_reach_the_task.py:207`; task 2.3 completes them. No agent-plane route reaches `proposed` or `approved` (`transition` has two callers,
+  `spec.py:1607` and `spec_service.py:781`, both operator-credentialed). F205 is already fixed
+  (`SpecPhaseBar.tsx:146-160`), so the out-of-scope line about it is removed.

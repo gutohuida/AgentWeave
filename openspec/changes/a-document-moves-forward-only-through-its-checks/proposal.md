@@ -40,7 +40,10 @@ measured the round trip it causes.
   yet" (`illegal_transition`, `phase_unchanged`).
 - **The phase route runs the same checks** (D3, F207). `POST /documents/phase` with `to=proposed` or
   `to=approved` refuses with `409 {"code": "document_incomplete", "message": …, "blocking": [...]}`
-  when `phase_blockers` is non-empty. Reopen and archive are unchanged.
+  when `phase_blockers` is non-empty. Reopen and archive are unchanged. At approval the one
+  finding about another document — `import_not_approved`, an import whose document was reopened
+  after this one was proposed — is not a blocker: the task-dependencies contract already preserves
+  and reports it at materialisation (R2).
 - **The app shows an approval refusal** (D4). The Approve button in `SpecPhaseBar.tsx:136-145` calls
   `setPhase.mutate` with no error handler, so today any refusal vanishes. It renders the `blocking`
   list the same way a blocked proposal does.
@@ -50,18 +53,19 @@ measured the round trip it causes.
 - Adoption placing a document at `proposed` or `approved` from its metadata (a third door). D3 makes
   an adopted-at-`proposed` incomplete document unapprovable, which closes its consequence; whether
   adoption itself should refuse is B6's corpus-writes slice (F206/F205's neighbourhood).
-- F205's dead `proposed → archived` edge — B6.
 
 ## Impact
 
 - `hub/hub/spec_service.py`, `hub/hub/api/v1/spec.py` (`propose_document`, `set_phase`)
 - `hub/ui/src/components/spec/SpecPhaseBar.tsx`; the committed bundle
 - `hub/tests/test_spec_documents_api.py:323-335` flips from `409` to `200 + blocking` on purpose
-- Seven test helpers step through `/documents/phase?to=proposed` then `approved`
-  (`test_spec_board_task_convergence.py`, `test_spec_capability_kind.py`,
-  `test_spec_criteria_reach_the_task.py:207`, `test_spec_declared_tasks.py:87`,
-  `test_spec_task_dependencies.py:67`, `test_task_spec_document_context.py:152`, and
-  `test_spec_documents_api.py`); each passes after only if its fixture document is complete
+- Five test files step through `/documents/phase` for `proposed` then `approved` with an
+  **incomplete** fixture — none of them states `scope.non_goals`, and four carry no acceptance
+  criteria (R2, by reading each fixture against `spec_completeness.check`, `:177-196`):
+  `test_spec_declared_tasks.py:87`, `test_spec_task_dependencies.py:67` and `:302-307`,
+  `test_task_spec_document_context.py:152`, `test_spec_criteria_reach_the_task.py:207`. Each needs a
+  complete fixture (task 2.3). `test_spec_board_task_convergence.py` proposes through `propose` with
+  a complete fixture already
 - Drive harnesses under `scripts/drive/` that use the phase route (ten files) may need complete
   fixtures; they are not CI
 - `openspec/specs/spec-document-authority` (MODIFIED: *Document validity is checked by the Hub, not

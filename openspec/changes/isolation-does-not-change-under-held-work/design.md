@@ -44,9 +44,16 @@ async def _isolation_change_refusal(session, project_id, agent_row, new_config) 
   checkout from the base and does not see them.
 - **Assigned, not provisioned.** A pending or assigned task may have no checkout yet, and counting it
   is stricter than necessary. It is also what the operator can see and act on without reading the
-  disk, and the remedy is the same. R2 may narrow it to `provisioned` (`_task_checkouts`,
-  `api/v1/worktrees.py:233-290`, computes it from pure path functions) if it argues the strictness
-  costs something real.
+  disk, and the remedy is the same. **R2 keeps "assigned" — narrowing to "provisioned" would miss a
+  real case.** Isolation turned **on** for a read-only agent is exactly the direction where no task
+  checkout exists: its earlier task-bound turns ran in the operator's checkout
+  (`resolve_turn_workspace` → `resolve_agent_workspace`, `worktrees.py:776-822`), their edits are
+  uncommitted there (nothing snapshots a turn without an isolated workspace,
+  `agent_trigger.py:1033`, `:1341`), and the next turn would provision a fresh task checkout that
+  cannot see them. "Provisioned" answers no there; "assigned and not terminal" answers yes. And in the
+  other direction the flip's harm does not depend on a live edit either: a task checkout's work is
+  committed at each turn end (`snapshot_worktree`), so what is stranded is the task branch the next
+  turn no longer runs on.
 - **The per-agent worktree** needs no separate check. Its uncommitted work exists only during a turn
   — `snapshot_worktree` commits it when each turn ends — so the live-run check covers it.
 - **A review is not held work.** A reviewer is not the task's assignee, and its review checkout is
@@ -78,9 +85,16 @@ deletes the guard with the route. B3's design already records this (its *Cross-b
    task checkout even for a read-only agent (reverses task 4.7); (c) snapshot the project checkout
    after a read-only agent's task-bound turn — writes a commit onto the operator's branch; (d) file it
    and leave it. R1 recommends (d) now — nothing in the app sets `read_only` — and (a) if the app ever
-   offers it.
+   offers it. **R2 agrees with (d)**, and routes it to the orchestrator as a candidate finding (the
+   bundle record's *Noticed* list, item 1): it is the same harm as F242's consequences 2-3 reached
+   without any flip, and only (a) closes it.
 
 ## Round log
 
 - **R1, 2026-09-24.** Re-verified F242 against `404c7d5`; found the second door (`POST /register`)
   and the flip-independent residual; wrote D1 and the options.
+- **R2, 2026-09-24.** Re-derived both doors (`agents.py:2300-2308`, `:2648-2659`); the only other
+  writers of `Agent.config` are row creation (`:737`, `:2205`) and the posture's `yolo` mirror
+  (`:2489`), none of which touches `read_only`. Kept "assigned" over "provisioned" (the turn-on
+  direction has no checkout to count). Open Question 1: (d), routed as a candidate finding. No
+  claim disagreed with the code.

@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
 - [x] 0.1 R1: explore and propose (2026-09-24, bundle B5)
-- [ ] 0.2 R2: independent re-derivation against `spec_service.propose`, `spec_lifecycle.transition`, `spec.py` `propose_document`/`set_phase`, `spec_adoption`, `SpecPhaseBar.tsx`. In particular: run the seven helpers listed in the proposal and record which fixtures are incomplete (a scratch copy that calls `spec_completeness.check` on each fixture payload is enough); confirm no agent-plane path reaches `proposed`/`approved`
+- [x] 0.2 R2: independent re-derivation against `spec_service.propose`, `spec_lifecycle.transition`, `spec.py` `propose_document`/`set_phase`, `spec_adoption`, `SpecPhaseBar.tsx`. In particular: run the seven helpers listed in the proposal and record which fixtures are incomplete (a scratch copy that calls `spec_completeness.check` on each fixture payload is enough); confirm no agent-plane path reaches `proposed`/`approved`
 - [ ] 0.3 R3: second independent re-derivation; `openspec validate a-document-moves-forward-only-through-its-checks --strict` passes
 - [ ] 0.4 The operator approves (APPROVALS.md), including the F113 status change
 
@@ -16,13 +16,14 @@ New file `hub/tests/test_a_document_moves_forward_only_through_its_checks.py`, r
 - [ ] 1.5 (D3) Control: `test_spec_capability_kind.py` unchanged and passing (illegal moves stay `illegal_transition`)
 - [ ] 1.6 (D3) Control: a complete document goes `propose` → `phase?to=approved` → 200 with `tasks_created`, as `test_the_full_operator_path_reaches_approved` does today
 - [ ] 1.7 (D3) `phase?to=approved` on a proposed document whose payload was hand-corrupted on disk → 422 `payload_invalid`, phase unchanged
+- [ ] 1.7a (D1, R2) Control: `test_spec_task_dependencies.py::test_an_unresolvable_import_is_preserved_and_reported_not_raised` unchanged and passing — approval of a document whose import source was reopened after it was proposed still answers 200. FAILS if `import_not_approved` is kept among the approval blockers
 - [ ] 1.8 (D4, UI) `specPhaseBar.test.tsx`: Approve answered 409 with `detail.blocking` renders each finding's `where` and message; a bare 409 message renders via `readableApiError`. FAILS today (nothing rendered)
 
 ## 2. The fix
 
 - [ ] 2.1 (D1) `spec_service.phase_blockers`; `propose` rewritten on it
 - [ ] 2.2 (D3) `set_phase`: the gated call before `transition`
-- [ ] 2.3 Run the seven helpers; make any incomplete fixture complete without weakening an assertion, and list each in the round log
+- [ ] 2.3 Complete the fixtures R2 found incomplete (add `scope.non_goals` and one criterion per requirement; weaken no assertion): `test_spec_declared_tasks.py` `submit`, `test_spec_task_dependencies.py` `make_document`, `test_task_spec_document_context.py` (helper at `:152`), `test_spec_criteria_reach_the_task.py` (helper at `:207`). Then run every spec-document test file; any other new failure is a finding, not a fixture to patch
 - [ ] 2.4 (D4) `SpecPhaseBar.tsx`; `npm run lint`, `npm test`, build, `py -3.11 scripts/refresh_ui_bundle.py`; commit source and bundle together
 - [ ] 2.5 Full `hub/tests/` count recorded; ruff; black `--target-version py311`
 

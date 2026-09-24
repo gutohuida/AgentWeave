@@ -22,7 +22,9 @@ second. The revision SHALL keep the piece's identity and SHALL say it was a revi
 recorded against an earlier wording of the requirement SHALL NOT be revised onto the current one.
 
 A refusal of a duplicate recorded by an agent SHALL NOT tell the agent to commit its work, because
-the agent is told the Hub commits it.
+the agent is told the Hub commits it. Where the agent's checkout is one the Hub commits when the run ends and holds uncommitted changes, a piece
+matching an earlier run's piece at the same commit SHALL be recorded rather than refused, because the
+Hub re-points it at the commit holding those changes when the run ends.
 
 #### Scenario: A decision during the recording run is refused
 
@@ -55,3 +57,8 @@ the agent is told the Hub commits it.
 
 - **WHEN** an agent's evidence is refused as a duplicate of a piece an earlier run recorded
 - **THEN** the refusal does not tell the agent to commit its work
+
+#### Scenario: A changed checkout re-records across runs
+
+- **WHEN** an agent's new run records evidence matching a piece its earlier run recorded at the same commit, in a task or agent checkout the Hub commits at the end of the run, and that checkout holds uncommitted changes
+- **THEN** the new piece is recorded and not refused
