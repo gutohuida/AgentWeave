@@ -32893,6 +32893,16 @@ build-or-delete as B10 did. Either queue the request as an inbound entry (and gi
 delete both routes and their hooks. After B10's F259 change they no longer inflate `/status`
 `pending`, but the request still goes nowhere.
 
+**Re-verified 2026-09-24 (Round 6), handed on as a spec track, not fixed.** `POST
+/agents/{name}/compact` and `/new-session` (`hub/hub/api/v1/agents.py`) add a `sender="hub"`
+message but no inbound-queue entry, so nothing delivers them; `hub/ui/src/api/context.ts` has no
+importers. The only consumer ever specified was the deleted watchdog, and
+`agent-conversation-handoff` retires the Compact/Reset controls for Handoff and start-fresh.
+Queuing them would not work either (a headless run cannot `/compact`). Recommendation: a small
+change that deletes both routes, `context.ts` and the `compact_request`/`new_session_request`
+events; mind `every-event-the-hub-sends-reaches-the-app` and
+`an-event-is-announced-only-once-its-write-is-committed`, which name `new_session_request`.
+
 ## F418 (C) — the loop tab fetches the loop's event history and shows none of it
 
 **Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B10 rounds.
@@ -33008,6 +33018,17 @@ Nothing in the app sets `read_only` today, so it is reachable through the API an
 /agents/register` only. Recommended repair: refuse to assign a writing task to a read-only agent (or
 refuse the setting when the app ever offers it). B5's `isolation-does-not-change-under-held-work`
 covers only the setting *changing* under held work, not this case.
+
+**Re-verified 2026-09-24 (Round 6), handed on as a spec track, not fixed.** The launch path
+(`agent_trigger.py` → `worktrees.resolve_turn_workspace`; `takes_task_workspace` requires
+`is_writing_agent`) gives a `read_only` agent's task-bound turn the project directory, and
+`read_only` drives no runner flag or sandbox, so the finding stands. But
+`agent-run-sandboxing` already names a read-only agent's run as working in the project
+directory, and `operator-agent-creation` scopes the checkout promise to a writing agent, so no
+spec is violated. The recommended repair is a new `run-task-binding` requirement, "A read-only
+agent does not hold a task's work": refuse a work assignment or binding to a `read_only` agent
+in one service function every assigning door calls; keep review bindings; grandfather held work.
+Collides with `isolation-does-not-change-under-held-work`, which touches `read_only`.
 
 ## F426 (B) — an evidence decision whose merge then fails answers a bare 500 after the decision is saved
 

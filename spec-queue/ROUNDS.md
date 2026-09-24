@@ -340,6 +340,12 @@ is that failure.*)*
 
 ## Round 6 — backend no-spec fixes from the 2026-09-24 review (~1 day)
 
+**Status:** done 2026-09-24 evening, on `master` (`8cffcd1`..`2b0c863`). 7 of 9 closed: F410, F420,
+F422, F20, F305, F146, F416; plus two found on the way, F447 (connector tools survive `--tools ""`)
+and F448 (F416's operator twin), both fixed. **F425 and F417 re-verified as real and handed on as
+spec tracks**; the fix would change a spec promise (see their entries). F305's follow-up also fixed
+`arm-cycle.ps1`'s dirty-tree refusal, which threw instead of logging.
+
 Added 2026-09-24 afternoon, at the operator's request (*"expand the round file to add more rounds"*).
 The daily review of the twelve bundles decided some findings as no-spec fix rounds and filed new
 ones (F416–F443). These are the ones no approved or REVISING change carries, and that tonight's
@@ -355,8 +361,8 @@ F305 edits the windows' own playbooks, so it lands before 22:55 or not that day.
 | Finding | Sev | Fix |
 |---|---|---|
 | F420 | B | `build_worker_command` (`worker.py`) runs the checkpoint and probe worker's `claude -p` with every default tool enabled, on untrusted transcript text. Pass `--tools ""` as the titler has since Round 4, and pin the argv in a test. Check first that tonight's B8 build has not touched `worker.py`. |
-| F425 | B | A read-only agent assigned a writing task writes into the operator's checkout (`takes_task_workspace`). Re-verify first. If the repair changes what `workspace-isolation` promises, it leaves this round for a spec track. |
-| F417 | B | Compact and New-session requests are saved but never reach the agent. Re-verify, and find the consumer that should drain them. If none was ever specified, it becomes a spec. |
+| F425 | B | **Handed on to a spec track** (Round 6: `agent-run-sandboxing` already names a read-only agent's run as working in the project directory; the repair is a new refusal that must tell a work binding from a review binding). A read-only agent assigned a writing task writes into the operator's checkout (`takes_task_workspace`). Re-verify first. If the repair changes what `workspace-isolation` promises, it leaves this round for a spec track. |
+| F417 | B | **Handed on to a spec track** (Round 6: only the deleted watchdog ever consumed them, and `agent-conversation-handoff` retires the controls; the recommendation is to delete the routes and events). Compact and New-session requests are saved but never reach the agent. Re-verify, and find the consumer that should drain them. If none was ever specified, it becomes a spec. |
 | F146 | B | Decided 2026-09-24 (B11): `POST /questions` refuses `blocking: true` (422 naming `blocking`); update `_asking_run_has_ended`'s docstring; drop `blocking` from the dead `HttpTransport.ask_question`. |
 | F305 | B | Decided 2026-09-24 (B11), harness: `decisions_for_user` carries only ids of `OPEN` rows in `DECISIONS.md`. Edit `day-window.md`, `night-window.md`, `arm-cycle.ps1` and the two autonomous skills; at compose a window drops and logs any inherited id that is not `OPEN`. |
 | F422 | C | The titler pays again for the same title after every turn (`generate_conversation_title`). **The operator ruled it is fixed before `worker-spend-counts-against-the-budget`** (B7). |
