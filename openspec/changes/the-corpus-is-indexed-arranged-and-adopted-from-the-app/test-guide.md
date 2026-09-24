@@ -3,7 +3,9 @@
 ## Agent-verifiable
 
 1. **Reindex announces itself.** Task 1.1 fails before and passes after.
-2. **No route's behaviour moved.** Control 1.2.
+1a. **A disk error is reported, not a bare 500 (F434).** Tasks 1.12–1.14 fail before and pass after;
+   1.15 shows the strip's sentence.
+2. **No other route behaviour moved.** Control 1.2.
 3. **The home is asked for, not guessed.** Task 1.4, using the diagnostics in the order
    `build_index` emits them.
 4. **Adopt and place show the Hub's own reasons.** Tasks 1.6–1.9.

@@ -1,5 +1,19 @@
 # Design — a document's rigor history and retired requirements are on screen
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B6-2026-09-24.md` §4) approved this change;
+the operator approved it with the review's fixes applied ("What the operator decided").
+
+- **No SHALL is contradicted.** *"Demotion is always available"* still holds, with a reason
+  required in the app only (D2).
+- **LOW, applied.** The rigor mutation also invalidates `specRigorHistory` on success (D4, test
+  1.10). Today `useSetSpecRigor` goes through `useSpecMutation`, whose `onSuccess` invalidates only
+  `specDocuments` and `specs` (`api/spec.ts:244-256`). So the pressing tab's history would wait for
+  the SSE round-trip.
+- The change closes **F211** and **F429** (the app records every rigor change with an empty reason,
+  D2).
+
 **Built on the recommended answer to this change's one product question: a demotion made in the app
 requires a reason** (D2). If the operator prefers the reason optional everywhere, D2 keeps the
 reason field and drops the empty-reason block; the history still shows *"no reason given"*.
@@ -72,6 +86,11 @@ Always passing `document` means the 422 ambiguity is unreachable from this scree
 `spec_updated`. The rigor route broadcasts it; a save that retires a requirement broadcasts it
 (`spec.py:514-516`, `agent_actions.py:1669`).
 
+The pressing tab does not wait for that broadcast (operator review, LOW). `useSetSpecRigor` adds its
+own `onSuccess` that invalidates `['project', pid, 'specRigorHistory', path]` for the path it
+changed, alongside what `useSpecMutation` already invalidates. The shared helper is left as it is,
+so no other mutation changes.
+
 ### D5 — What the routes answer when what they call raises
 
 All three are reads; an unknown document or identifier is 404 before any work, and a database error
@@ -101,6 +120,11 @@ statements (the index stores no statement, `SpecRequirement` columns).
 1. **Demotion requires a reason in the app?** Recommended yes (D2).
 
 ## Round log
+
+### Operator review fixes — 2026-09-24
+
+Applied the review's §4 LOW at HEAD `d2b9c32`: D4's own-tab invalidation and test 1.10. Re-read
+`useSpecMutation` (`api/spec.ts:244-256`) and `useSetSpecRigor` (`:298-309`).
 
 ### Round 3 — 2026-09-24 (B6 R3)
 

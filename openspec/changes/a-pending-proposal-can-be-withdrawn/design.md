@@ -1,5 +1,30 @@
 # Design — a pending proposal can be withdrawn
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B6-2026-09-24.md` §5) approved this change
+with fixes, and the operator approved it with the fixes applied ("What the operator decided"):
+
+- **HIGH — an existing SHALL was contradicted with no MODIFIED delta.** *"A document at contract or
+  gate rigor gates edits behind an operator-accepted proposal"* requires *"one pending, individually
+  addressable proposal per changed unit"*, and D1 records nothing for a repeat. That requirement is
+  now MODIFIED: *"… unless an identical proposal from the same proposer is already pending against
+  the same document digest"*, with a scenario.
+- **MEDIUM — a retraction left the retracted proposal pending.** A unit the proposer's newest
+  submission leaves as stored goes to `unchanged` (`spec_service.py:357-358`; the metadata unit at
+  `:394-395`), and nothing supersedes. So v1's `remove FR-3` stayed pending after v2 restored FR-3,
+  and accepting it would delete a requirement its proposer had brought back. **D2 is extended**
+  (retraction), with tests 1.14 and 1.15.
+- **MEDIUM — an update could be lost between supersede and accept.** Status is written as a plain
+  attribute, so the later commit wins whatever it read. **New D7:** every move out of `pending` is a
+  conditional `UPDATE … WHERE id = :id AND status = 'pending'` with its row count checked, the shape
+  `questions.py:444-457` already uses. Tests 1.16 and 1.17.
+- **LOW — the twin marker could point at the wrong row.** It compared without `expected_digest`.
+  `_proposal_view` now sends `expected_digest`, and among twins made against different digests the
+  row with the **older** digest is marked (D4, test 1.10b).
+- The change closes **F213**, **F428** (a reject leaves the row on screen) and **F431** (an accept
+  refused as stale leaves the row on screen).
+
 **Built on R1's recommended shape for F213, which ROUNDS.md titles "a pending proposal can be
 withdrawn" without choosing the mechanism:** stop the repeat at its source, let a revision supersede,
 and give the operator a withdraw that records no judgement (option W3 below). If the operator
@@ -59,6 +84,24 @@ becomes `superseded`: `resolved_at` now, `resolved_by_actor_name` the proposer's
 `resolution_reason` *"superseded by <new id>"*. A proposal from another proposer is untouched — two
 agents proposing different wordings are alternatives, and the operator chooses.
 
+**A retraction supersedes too (operator review, MEDIUM).** A submission is the proposer's whole
+document (`propose_edit` diffs every unit of it against stored), so it is that proposer's current
+word on every unit. After the units are compared, every pending proposal on the document from the
+same proposer is superseded **unless** the submission just created it or reported it in
+`already_pending`. That covers three cases:
+
+- a revision (a new proposal for the unit, above);
+- a unit the submission leaves equal to stored. Today it only reaches `unchanged`
+  (`spec_service.py:357-358`, and the metadata unit at `:394-395`). Example: v1 omitted FR-3 and
+  created `remove FR-3`, and v2 restores FR-3;
+- a unit the submission no longer mentions: v1 added `FR-new`, which is not stored, and v2 drops it.
+
+A proposal superseded by a revision reads `resolution_reason` *"superseded by <new id>"*. One
+superseded by a retraction reads *"superseded: the proposer's latest submission leaves this unit as
+stored"*. Both are `superseded`, not `withdrawn`. The proposer took the edit back, and the operator
+made no decision. The pending-proposals read of D1 already has every row this needs, so the rule adds
+no query.
+
 This does not violate *"Accepting or rejecting one proposal SHALL NOT alter the status of any other
 pending proposal"* (`spec-document-authority/spec.md:1082-1086`): supersession happens at
 submission, not at accept or reject.
@@ -87,6 +130,16 @@ action. The comparison is in the route's order on purpose — "above" means earl
 compared by a key-sorted serialisation, not `JSON.stringify` as returned: the column is JSON, and
 two equal objects need not arrive with the same key order (R2).
 
+**Which twin is marked depends on the digest (operator review, LOW).** `_proposal_view`
+(`spec.py:562-578`) gains `expected_digest`, and the TypeScript `SpecEditProposal` type gains it too.
+Twins with the **same** `expected_digest` are true duplicates, and the later row is marked *"same as
+the one above"*. Twins with **different** digests were made against different versions of the
+document. The one with the older digest is refused as stale when accepted (`spec_service.py:521-528`),
+so **it** is marked: *"same as the one below, which was made against a newer version — this one
+would be refused as stale"*. A proposal's `expected_digest` is the document's digest when it was
+created, and the list is `created_at` ascending, so the older digest is the earlier row. Marking the
+later row would steer the operator to withdraw the live proposal and keep the dead one.
+
 `SpecEditProposal['status']` gains `'withdrawn' | 'superseded'`.
 
 ### D5 — Reject, withdraw and a stale accept refresh every view
@@ -101,8 +154,42 @@ pending-only, so that row should leave; today it stays, with live buttons, in th
 (`useSpecMutation` invalidates on success only) and in every other tab. So the accept route also
 broadcasts `spec_updated {path}` after that commit, and the mutations invalidate on settled. The comment at `api/spec.ts:164-166` is then true.
 
+### D7 — A proposal leaves `pending` once (operator review, MEDIUM)
+
+Today every status move is an attribute write on a row loaded earlier in the request: the stale
+mark (`spec_service.py:521-524`), accept (`:552`), reject (`:582`), and D2's supersede and D3's
+withdraw as first designed. So a supersede committed after an accept of the same proposal turns
+`accepted` into `superseded`, and withdraw and accept race the same way.
+
+One helper, `_leave_pending(session, proposal, *, status, resolved_by, reason) -> bool`, issues
+
+```
+update(SpecEditProposal)
+  .where(SpecEditProposal.id == proposal.id, SpecEditProposal.status == "pending")
+  .values(status=…, resolved_at=now, resolved_by_actor_name=…, resolution_reason=…)
+  .execution_options(synchronize_session=False)
+```
+
+then refreshes `proposal`, and answers `rowcount == 1`. This is the shape `questions.py:444-457`
+already uses for the same race.
+
+- **reject, withdraw, the stale mark**: `False` → `ProposalRefusedError(proposal_not_pending)`, naming
+  the status the refreshed row now has. The accept route's refusal branch still commits (it now
+  commits nothing new) and answers 409.
+- **accept**: the claim to `accepted` is made **after** `validate_payload` and **before**
+  `_apply_and_write`, so a lost race writes no file. A `SaveRefusedError` from `_apply_and_write`
+  is answered 422 without a commit, as today, and the claim is discarded with the rest of the
+  transaction. `resolution_reason` goes in the same `UPDATE`.
+- **supersede (D2)**: `False` means someone decided the proposal in between. It is skipped silently:
+  the decision stands, and the submission still succeeds.
+
+On SQLite a request that loses the race can also fail with `database is locked` when it tries to
+upgrade its read to a write. That is a 500 before its commit, and it too overwrites nothing. It is
+not made worse here.
+
 ### D6 — What each route answers when what it calls raises
 
+- Every decision route: losing D7's race → 409 `proposal_not_pending`, having written nothing.
 - `withdraw`: refusal → 409 before any write; unknown → 404; database error → 500 before commit, no
   broadcast.
 - Submissions (agent route, `PUT …/content`, `merge`): the extra pending-proposals read happens inside
@@ -129,6 +216,14 @@ withdraw; showing withdrawn/superseded history in the panel (the list route retu
 1. **W3 (recommended), W1 or W2?**
 
 ## Round log
+
+### Operator review fixes — 2026-09-24
+
+Applied the review's §5 at HEAD `d2b9c32`: the MODIFIED delta, D2's retraction, D7, and D4's digest
+rule. The review cited `unchanged` at `:354-356` and `:376-378`; at HEAD those lines are
+`spec_service.py:357-358` and `:394-395`, and are cited that way here. Also re-read: the stale mark
+and the status writes (`:521-524`, `:552`, `:582`), `_proposal_view` (`spec.py:562-578`, no
+`expected_digest` today), and the conditional-claim precedent (`questions.py:444-457`).
 
 ### Round 3 — 2026-09-24 (B6 R3)
 

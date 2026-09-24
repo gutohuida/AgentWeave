@@ -7,6 +7,7 @@
 3. **A demotion carries a reason; a promotion may not.** Tasks 1.3–1.5.
 4. **Retired requirements and their work are reachable.** Tasks 1.6–1.7.
 5. **A failed read says so.** Task 1.8.
+5a. **The tab that changed rigor refreshes its own history.** Task 1.10, with a real query client.
 6. **Bundle matches source** (`AW_CHECK_UI_BUNDLE=1`, `test_ui_build_stamp.py`).
 7. **Drive** (3.1), with screenshots.
 

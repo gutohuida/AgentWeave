@@ -1,6 +1,6 @@
 # Proposal — a document's rigor history and retired requirements are on screen
 
-**Round 1, 2026-09-24** (bundle B6, slice S5d). Finding: **F211 (C)**. The slice's other finding,
+**Round 1, 2026-09-24** (bundle B6, slice S5d). Findings: **F211 (C)**, and **F429 (C)** (the app records every rigor change with an empty reason, found in R1 and filed at the 2026-09-24 daily review). The slice's other finding,
 **F169**, is already fixed (`58477dc` + `f473510`, UI-1: `TaskDetailDrawer` renders the approving
 response's `approval_report`, test `taskApprovalReportAndPending.test.tsx`). **Nothing here is
 implemented yet.**
@@ -43,7 +43,9 @@ hub/ui/src` → nothing):
   expands to the tasks and evidence that still point at it, read from
   `GET /spec/requirements/{identifier}?document=<path>`, with its coverage (`retired`, since F214).
 - **The views refresh**: `useSpecEvents` invalidates the new query keys on `spec_updated`, which the
-  rigor route already broadcasts (`spec.py:464-466`).
+  rigor route already broadcasts (`spec.py:464-466`). The rigor mutation also invalidates the
+  history itself on success, so the tab that made the change does not wait for the broadcast
+  (operator review, `spec-queue/tracks/reviews/B6-2026-09-24.md` §4).
 
 ## Capabilities
 

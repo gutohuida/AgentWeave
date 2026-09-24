@@ -3,6 +3,7 @@
 - [x] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/spec.py` (`rigor_history`, `list_requirements`, `requirement_detail`, `set_document_rigor`), `hub/hub/spec_rigor.py` (`history_for`, `set_rigor`), `hub/hub/requirement_coverage.py` (`include_retired`, `_state`), `SpecPhaseBar.tsx`, `SpecDocumentPanel.tsx`, `api/spec.ts`. Check the preamble's scope call on F211's second route against bundle B5's `the-coverage-bar-takes-the-evidence-decision-it-asks-for` as it then stands
 - [x] 0.2 R3: a second independent re-derivation (design round log). `openspec validate a-documents-rigor-history-and-retired-requirements-are-on-screen --strict` passes
 - [ ] 0.3 The operator answers Open Question 1 (demotion requires a reason, recommended yes)
+- [x] 0.3a Operator review fixes applied (`spec-queue/tracks/reviews/B6-2026-09-24.md` §4 LOW): the rigor mutation invalidates `specRigorHistory` on success (D4, test 1.10)
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -18,6 +19,7 @@ UI, extend `hub/ui/src/__tests__/specPhaseBar.test.tsx`; new `specRetiredRequire
 - [ ] 1.7 (D3) Expanding `FR-2` calls `useSpecRequirement('FR-2', path)`; with a detail fixture carrying one task and one evidence piece, both are shown, and clicking the task calls `onOpenTasks([taskId])`; the coverage line reads `retired`
 - [ ] 1.8 (D5) A detail query in error state shows `Could not load` and the error body, not a skeleton
 - [ ] 1.9 (D4) `useSpecEvents` invalidates the three new keys on `spec_updated`
+- [ ] 1.10 (D4, review LOW) With a real `QueryClient` (mock only `postJson`/`getJson`), a successful `useSetSpecRigor` call for `path` invalidates `['project', <id>, 'specRigorHistory', path]` with no SSE event, so the history query refetches. FAILS today (the mutation invalidates only `specDocuments` and `specs`)
 
 ## 2. The fix
 

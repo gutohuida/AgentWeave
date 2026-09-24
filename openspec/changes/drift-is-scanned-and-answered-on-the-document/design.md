@@ -1,5 +1,24 @@
 # Design — drift is scanned and answered on the document
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B6-2026-09-24.md` §2) approved this change
+with fixes, and the operator decided (same file, "What the operator decided"):
+
+- **This change carries F436** (operator: carry it). *Code corrected* stores no silencing
+  fingerprint — new **D8**, a MODIFIED delta on `requirement-traceability`'s *"A changed
+  implementation raises a candidate, never an edit"*, tests 1.13–1.14, and the drive (3.1) no
+  longer reverts the file before pressing *Code corrected*.
+- **Order ties (LOW).** `list_drift` orders by `created_at` only (`spec.py:988`), so candidates
+  raised by one scan can tie. It becomes `order_by(created_at, id)`, pinned by a backend test
+  (new **D9**, test 1.15). Until now only the UI fixture pinned the order.
+- **It still does not ship without `drift-watches-the-files-its-evidence-is-about`**, which the
+  operator set back to REVISING. The preamble below stands.
+- It closes **F430** (a candidate answered twice, D4) and **F436** (D8), besides F129 and F132.
+- **Collision.** The review (§1, third HIGH) also asks the first change for a MODIFIED delta on the
+  same requirement. Whichever archives second restates the whole requirement over the first's text
+  (task 0.4).
+
 **Built on the recommended answer to F217's basis decision (option C) and on
 `drift-watches-the-files-its-evidence-is-about` having shipped.** If the operator answers F217 with
 A, this change is unchanged except that the unwatched line also names *"agent evidence is watched
@@ -53,7 +72,7 @@ Each row, oldest first (the order the route returns — the component does not r
 | Button | Sends | Tooltip |
 |---|---|---|
 | **Spec updated** | `specification_updated` | The implementation is right; the specification has been changed to match it. |
-| **Code corrected** | `implementation_corrected` | The implementation was wrong and has been put back. |
+| **Code corrected** | `implementation_corrected` | The implementation was wrong and is being put back. The next scan asks again while the change is still there. |
 | **No change** | `no_change_required` | The change does not affect what this requirement says. |
 
 A refusal from resolve is shown on the row (the `describeError` shape `SpecProposalsPanel.tsx:165-176`
@@ -74,7 +93,7 @@ files — record it again to have it watched"*; `no_footprint` (added by the fir
 *"the Hub could not read the workspace when it was recorded — record it again"*. `unwatched` gains the same `document` filter as
 `drift`.
 
-### D4 — A candidate is answered once
+### D4 — A candidate is answered once (F430)
 
 `resolve_drift` refuses when `candidate.state != "candidate"`:
 `EvidenceRefusedError("this candidate was already answered: <resolution>, by <resolved_by>",
@@ -97,6 +116,37 @@ safe there.
 the drift candidate on the document, saying whether the specification or the implementation was
 wrong; an agent cannot answer it, so ask"*. `resolution_is_the_operators` already makes the last
 clause true (`requirement_evidence.py:1202-1207`).
+
+### D8 — *Code corrected* does not silence the change it says was undone (F436, operator review)
+
+Today `resolve_drift` stores `resolved_fingerprint = candidate.observed` for every resolution
+(`requirement_evidence.py:1221`), and `detect_drift` skips a later change equal to the latest
+resolution's fingerprint (`:1161-1162`, through `_resolved_for`, `:1181-1187`). So any answer
+silences that exact change for good, true or not.
+
+The fix is one line in `resolve_drift`: `resolved_fingerprint` is `None` when
+`resolution == "implementation_corrected"`, and `candidate.observed` otherwise. The column is already
+nullable (`models.py:2651`). The claim of *Code corrected* is that the code went back. If it did,
+`_changed` finds nothing and nothing is raised. If it did not, or the same change comes back later,
+the next scan raises a new candidate, which is the truth. `resolved_digest` is still recorded.
+
+`_resolved_for` reads only the **latest** resolution for the evidence (`order_by(resolved_at.desc())`,
+`.first()`). So after *Code corrected* the scan no longer compares against any earlier fingerprint
+either. That is intended: the latest answer is the operator's current word on this evidence.
+
+The other two answers keep their fingerprint. *No change* means "this change is fine", and must stay
+silent. *Spec updated* is followed by a rewording, and a reworded requirement is skipped before any
+comparison (`evidence.digest != requirement.digest`, `:1136`). The residual is *Spec updated*
+pressed and the specification then never changed: that change stays silenced. The operator's
+decision carries only *Code corrected*, and this is recorded in Risks.
+
+### D9 — The route's order has a tiebreak, and a backend test pins it
+
+`list_drift` orders `RequirementDrift.created_at` only (`spec.py:988`). One scan adds all its
+candidates in one transaction, so their `created_at` values can be equal, and their order is then
+the database's choice. The route becomes `.order_by(RequirementDrift.created_at, RequirementDrift.id)`.
+Test 1.15 pins ascending order on the route itself (the F190 rule). Before this, only the UI fixture
+(1.7) stated the order, and reversing the route would fail no test.
 
 ### D7 — What each route answers when what it calls raises
 
@@ -123,14 +173,20 @@ reworded (noted in the first change's design).
   change lands second rebases it. B5's `the-coverage-bar-takes-the-evidence-decision-it-asks-for`
   also adds one `invalidateQueries` line (`specEvidence`) to `useSpecEvents`, as D5 here does
   (`specDrift`); both are additive lines in one block (R2).
-- **An answer silences that exact change, whatever the answer says (R3).** `resolve_drift` stores
-  `resolved_fingerprint = observed` for all three resolutions (`requirement_evidence.py:1221`), and
-  `detect_drift` skips a later change equal to it (`:1160-1163`). So *Code corrected* pressed before
-  the code is put back, or *Spec updated* pressed for a specification that is never changed, silences
-  the candidate for good. Not changed here (it is `resolve_drift`'s existing contract); the tooltips
-  are worded in the past tense (*"has been put back"*, *"has been changed"*) so the button asserts a
-  fact, and the drive (3.1) reverts the file before pressing *Code corrected*. Recorded as a
-  candidate finding in the bundle record.
+- **An answer used to silence that exact change, whatever the answer said (R3; F436, now carried).**
+  R3 found that `resolve_drift` stores `resolved_fingerprint = observed` for all three resolutions
+  (`requirement_evidence.py:1221`), and `detect_drift` skips a later change equal to it
+  (`:1161-1162`). R3 left that contract alone and made the drive revert the file first. The
+  operator's review decided to carry F436 instead (D8): *Code corrected* stores no fingerprint, so a
+  premature or mistaken *Code corrected* is asked again on the next scan. **Residual:** *Spec updated*
+  pressed for a specification that is then never changed still silences that change, because it
+  keeps its fingerprint. A real rewording makes the evidence stale and skipped anyway (`:1136`). The
+  operator's decision covers *Code corrected* only; the *Spec updated* tooltip stays in the past tense
+  so the button states a fact.
+- **Re-raise after *Code corrected* is repeated by design.** Pressing *Code corrected* on a change
+  that stays in the tree gives a new candidate on every scan until the code goes back or the
+  operator answers otherwise. That is the point of D8. Scans are manual, so it does not repeat on
+  its own.
 - **A project-wide scan from a document** may raise candidates elsewhere. The sentence in D2 says
   how many, and the rail's coverage bars refresh through the broadcast.
 
@@ -141,6 +197,14 @@ reworded (noted in the first change's design).
    ships both, so the finding closes instead. Record that on the finding at IMPL.
 
 ## Round log
+
+### Operator review fixes — 2026-09-24
+
+Applied the review's §2 at HEAD `d2b9c32` (see the top section). Re-read `resolve_drift`
+(`requirement_evidence.py:1190-1222`), `_resolved_for` (`:1181-1187`), the fingerprint skip
+(`:1161-1162`), `RequirementDrift.resolved_fingerprint` (nullable, `models.py:2651`), and
+`list_drift`'s `order_by` (`spec.py:988`). Added D8, D9, the MODIFIED delta, tests 1.13–1.15 and
+task 0.4. Changed the drive.
 
 ### Round 3 — 2026-09-24 (B6 R3)
 

@@ -1,5 +1,23 @@
 # Design — the corpus is indexed, arranged and adopted from the app
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B6-2026-09-24.md` §3) approved this change
+with one HIGH fix, and the operator decided that **this change carries F434** (operator: carry it):
+
+- **F434.** Reindex and arrange write files before the database commit, so an `OSError` gives a bare
+  500 with files written and digests rolled back (`spec.py:1255-1265`, `:1375-1379`). That already
+  breaks an existing SHALL: *"When the document index cannot be written, the requirement index SHALL
+  still be rebuilt, and the reason … reported"* (`spec-document-authority`, *"A failure to write the
+  index does not abandon the requirement index"*). R1–R3 recorded this as a candidate and did not
+  carry it. The strip's promise to "show the 500 body" was empty, because an unhandled 500's body is
+  plain `Internal Server Error`. **D6 is rewritten.** `reindex` catches the index write's `OSError`,
+  answers `written: null` with an `index_write_failed` diagnostic, and still commits the requirement
+  index. `rerender_corpus` catches each document's write into `skipped`. `arrange` refuses with a
+  sentence. `write_index` replaces the file atomically, so a failed write leaves the previous index.
+  There is a MODIFIED delta on that requirement, and tests 1.12–1.15.
+- The merge decision (M1) and the rest of the change stand as reviewed.
+
 **Built on the recommended answer to the merge decision: merge stays out of this change** (option M1
 below). If the operator answers M2 or M3, the merge surface is a separate change after this one; this
 change is unchanged.
@@ -66,7 +84,9 @@ entries with a `document_id`), preselecting none — and **Rebuild with this hom
 R2 corrected R1's source (`useSpecDocuments`): `build_index` files only documents that are on disk
 *and* known (`spec_documents.py:259-269`), so a tracked row whose file is gone would answer
 `home_missing` plus `index_home_required` again and loop the question. When `written == null` and
-there is no home diagnostic (no tracked document is on disk, `:318-319`), the strip says *"Nothing
+the diagnostics carry `index_write_failed` (D6, F434), the strip says the index could not be written
+and why, and that the requirements were rebuilt. When `written == null` and there is neither that nor
+a home diagnostic (no tracked document is on disk, `:318-319`), the strip says *"Nothing
 to index: no tracked document is on disk"* and points at Adopt. Otherwise it shows the summary: documents indexed
 (`written.documents`), totals of `created` / `reworded` / `retired` across `documents`,
 `corpus.rerendered.length` re-rendered, and each `corpus.skipped` entry with its reason. Every
@@ -109,20 +129,50 @@ list is stale).
 open document's content (`['project', pid, 'spec']`, prefix), because arrange and reindex re-render
 files.
 
-### D6 — What each route answers when what it calls raises
+### D6 — What each route answers when what it calls raises (rewritten for F434, operator review)
 
-- `reindex`: `spec_documents.write_index` and `rerender_corpus`'s file writes can raise `OSError`
-  (disk, permissions). That is an unhandled **500 after files may already be written** and before
-  the database commit — `spec/index.json` or a re-rendered document can be on disk while the
-  digests recorded for them are rolled back. This change does not alter it (a pre-existing
-  ordering, shared by `arrange`, `spec.py:1375-1379`); the strip shows the 500 body and says
-  *"the index may be partly written — rebuild again"*. **R2 confirmed it from the code**:
-  `write_index` is a plain `write_text` (`spec_documents.py:345`), `rerender_corpus` calls
-  `write_document` unwrapped (`spec_service.py:881`), and both routes commit only afterwards
-  (`spec.py:1265`, `:1379`). Not carried: the orchestrator decides whether to file it (see the
-  bundle record's candidates).
-- `arrange`, `adopt`, `spec/adopt`: every refusal is before any write. `spec/adopt` never fails as a
-  whole by design.
+Today both writers put files on disk before the commit and let an `OSError` escape. `write_index` is
+a plain `write_text` (`spec_documents.py:341-346`). `rerender_corpus` calls `write_document` with no
+`try` (`spec_service.py:881`). `reindex` commits only afterwards (`spec.py:1265`), and so does
+`arrange` (`:1375-1379`). A full disk or a locked file therefore gives a bare 500. The requirement
+index is rolled back, and `spec/index.json` or a re-rendered document can stay on disk. After this
+change:
+
+- **`write_index` replaces the file atomically.** It writes a temporary file beside
+  `spec/index.json` and `os.replace`s it over the index, removing the temporary file if the write
+  fails. A failed write leaves the previous index byte-identical. Both callers (`spec.py:1255`,
+  `:1375`) rely on this.
+- **`reindex`.** An `OSError` from `write_index` is caught. The response is **200**, with
+  `index.written: null` and one diagnostic appended after the others:
+  `_diag("index_write_failed", path="spec/index.json", actual=<str(exc)>)` (the shape
+  `spec_documents._diag`, `:62-72`, gives every index diagnostic). `rerender_corpus` is **not** run,
+  because it would render navigation from a manifest that is not on disk, the same as when no home
+  is recorded today. The requirement index is still committed. That is the existing SHALL, now also
+  true for a failure outside the Hub.
+- **`rerender_corpus`** (shared by both routes). An `OSError` from one document's `write_document` is
+  caught. That document goes into `skipped` as `{path, reason: "write_failed", message: str(exc)}`,
+  and the loop continues. Its `content_digest` is not advanced and no `rerendered` event is
+  recorded, because nothing new was written. If the failed write left a partial file, the stored
+  digest disagrees with it, and that is reported as the outside edit it is (*"A genuine outside
+  edit is still reported"*). `spec-corpus-map`'s *"Regeneration is bounded to the documents the
+  arrangement changed"* names which documents are re-rendered, not what happens when a write fails.
+  The MODIFIED requirement states the failure case, and the skip is reported the way that
+  capability already reports a document with no payload.
+- **`arrange`.** An `OSError` from `write_index` is caught **before** any re-render and any database
+  change. The response is **500** with
+  `detail: {message: "the index could not be written: <reason>; nothing was placed", code: "index_write_failed"}`.
+  That is a sentence, not a bare 500, and the previous index stays in place (atomic replace). A
+  re-render failure after a successful index write is a `skipped` entry, as above, and the
+  placement is committed.
+- **The strip (D2) and Place under… (D4)** show the `index_write_failed` diagnostic or refusal as
+  *"The index could not be written: <reason>. The requirements were rebuilt."* (reindex) or the
+  refusal's `message` (arrange), with **Rebuild index** offered again. A `write_failed` skip is
+  listed with the other skips.
+- **Any other exception** (a database error) is still an unhandled 500 before the commit and before
+  any broadcast. The index file may already have been replaced by then. That is the same ordering
+  as today, and it is narrower than F434, which is about the file writes.
+- `adopt` and `spec/adopt`: every refusal is before any write. `spec/adopt` never fails as a whole,
+  by design.
 
 ## Goals / Non-Goals
 
@@ -146,6 +196,14 @@ documents' own navigation — a separate question).
 1. **Merge: M1, M2 or M3?** Recommended M1 now; M3 as its own exploration.
 
 ## Round log
+
+### Operator review fixes — 2026-09-24
+
+Applied the review's §3 at HEAD `d2b9c32`: F434 carried (D6 rewritten, the MODIFIED delta on
+`spec-document-authority`, tests 1.12–1.15, tasks 2.1a–2.1c). Re-read `reindex` (`spec.py:1213-1290`),
+`arrange` (`:1375-1385`), `write_index` (`spec_documents.py:341-346`), `_diag` (`:62-72`),
+`rerender_corpus` (`spec_service.py:816-896`) and the existing requirement
+(`openspec/specs/spec-document-authority/spec.md:1579-1600`).
 
 ### Round 3 — 2026-09-24 (B6 R3)
 

@@ -7,7 +7,10 @@
 3. **Withdraw records no judgement, and only the operator can.** Tasks 1.5–1.6.
 4. **Deciding refreshes every view.** Tasks 1.7 and 1.11 — 1.11 uses a real query client, which is
    how the defect escaped the mocked panel test.
-5. **Twins are marked in the route's order.** Task 1.10.
+5. **Twins are marked in the route's order, and by digest.** Tasks 1.10, 1.10b and 1.10c.
+5a. **A take-back is superseded** (review). Tasks 1.14 and 1.15 fail before and pass after.
+5b. **A decided proposal is not decided again** (review). Task 1.16 fails before; 1.17 guards the
+   supersede and accept paths.
 6. **Nothing else moved.** Control 1.8 and the full-suite count.
 7. **Drive** (3.1), with screenshots.
 

@@ -4,7 +4,10 @@
 re-verified on `404c7d5`: `propose_edit` diffs a submission against the **stored** document only
 (`spec_service.py:290-399`), never against pending proposals, and there is no route that takes a
 proposal out of the queue except accept and reject (`spec.py:590-694`). R1 also found a stale-row
-defect on the same list, carried here because it shares the fix. **Nothing here is implemented yet.**
+defect on the same list, carried here because it shares the fix. It is filed as **F428** (reject), and
+R2's twin as **F431** (an accept refused as stale). The operator's review of 2026-09-24
+(`spec-queue/tracks/reviews/B6-2026-09-24.md` §5) added a MODIFIED delta, a retraction rule, a
+guard against lost updates, and a digest-aware twin marker. **Nothing here is implemented yet.**
 
 ## Why
 
@@ -40,6 +43,13 @@ reject route emits `spec_updated` (`api/spec.ts:163-166`); it does not.
   new proposal and marks the proposer's earlier pending ones for that unit **`superseded`**, naming
   the proposal that replaced them. Proposals from different proposers are never superseded by each
   other: they are alternatives, and choosing between them is the operator's.
+- **A unit the proposer takes back is superseded too** (operator review). A submission is the
+  proposer's whole document, so a unit it leaves as stored, or no longer mentions, supersedes that
+  proposer's pending proposal for it. Without this, v1's `remove FR-3` stays pending after v2 restores
+  FR-3, and accepting it deletes a requirement its proposer brought back.
+- **A proposal leaves `pending` once** (operator review). Accept, reject, withdraw, supersede and the
+  stale mark each move the row with a conditional `UPDATE … WHERE status = 'pending'` and check the
+  row count, so of two racing decisions exactly one lands.
 - **The operator can withdraw.** `POST /documents/{path}/proposals/{id}/withdraw` marks a pending
   proposal **`withdrawn`**, with an optional note, recording no judgement about its content. The
   proposals panel gains **Withdraw** beside Accept and Reject, and marks a pending proposal that is
@@ -58,12 +68,15 @@ None.
 ### Modified Capabilities
 
 - `spec-document-authority` — adds *"A proposal leaves the queue without a judgement when it is
-  repeated, revised or withdrawn"*.
+  repeated, revised or withdrawn"*; modifies *"A document at contract or gate rigor gates edits
+  behind an operator-accepted proposal"* (a repeat of a pending proposal from the same proposer is
+  not recorded again).
 
 ## Impact
 
-- `hub/hub/spec_service.py` — `propose_edit`/`_create_proposal` (repeat and supersede),
-  `ProposeResult.already_pending`, new `withdraw_proposal`.
+- `hub/hub/spec_service.py` — `propose_edit`/`_create_proposal` (repeat, supersede, retraction),
+  `ProposeResult.already_pending`, new `withdraw_proposal`, and `_leave_pending` for every move out
+  of `pending`.
 - `hub/hub/api/v1/spec.py` — the withdraw route; reject broadcasts; `write_document_content` and
   `merge_document` return `already_pending` beside `proposals`.
 - `hub/hub/api/v1/agent_actions.py:1671-1680` — the agent's submission response carries

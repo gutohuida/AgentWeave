@@ -4,6 +4,9 @@
 
 1. **Filters, once-only answers, broadcasts, remedy.** Tasks 1.1–1.5 fail before and pass after.
 2. **Coverage precedence did not move.** Control 1.6.
+2a. ***Code corrected* asks again when the code did not go back (F436).** Task 1.13 fails before and
+   passes after; control 1.14 shows the other two answers still silence the change.
+2b. **The route's own order is pinned** (F190). Task 1.15, with a tie on `created_at`.
 3. **The strip reads the route's order** (F190). Task 1.7's fixture is `created_at` ascending, as
    `list_drift` orders it; a component that re-sorts fails it.
 4. **Buttons send the right enum; refusals are shown.** Tasks 1.8–1.11.
@@ -24,3 +27,5 @@ On the operator's own app, after the bundle reaches it:
    resolution's meaning is the product's, and the label is the only place it is stated.
 4. With the document open in two windows, answer in one; the other should stop showing it without a
    reload.
+5. Press **Code corrected** on a candidate without changing the code, then **Scan for drift**. The
+   candidate should come back. Does the tooltip make that outcome unsurprising?

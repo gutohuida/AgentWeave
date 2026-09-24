@@ -1,7 +1,9 @@
 # Proposal — drift is scanned and answered on the document
 
 **Round 1, 2026-09-24** (bundle B6, slice S5b, part 2 of 2). Findings: **F129 (B)** and **F132
-(C)**. F216 (the drift row names nothing its reader has seen) was fixed in Round 4c (`a7b2df1`,
+(C)**, plus **F430 (B)** (a candidate answered twice) and, by the operator's review of 2026-09-24
+(`spec-queue/tracks/reviews/B6-2026-09-24.md` §2), **F436 (B)** (any answer silences the change for
+good). F216 (the drift row names nothing its reader has seen) was fixed in Round 4c (`a7b2df1`,
 `spec.py:1000-1058` now carries `requirement: {identifier, document}` and `evidence: {summary,
 locator, actor, actor_kind}`); this change is the surface that reads those fields. **Depends on
 `drift-watches-the-files-its-evidence-is-about`**, which must ship first: this change makes drift
@@ -39,6 +41,12 @@ neither has an agent route or MCP tool (`agent_actions.py`, `mcp_server.py`: no 
 - **A candidate is answered once.** `resolve` on a candidate that is no longer open is refused
   **409 `drift_not_open`**, naming how and by whom it was answered. Today a second answer silently
   overwrites the first (`resolve_drift`, `requirement_evidence.py:1190-1222`, has no state check).
+- **"Code corrected" does not silence the change it says was undone (F436).** That answer stores no
+  resolution fingerprint, so if the change is still there, or comes back, the next scan asks again.
+  *Spec updated* and *No change* keep their fingerprint. This is a MODIFIED delta on
+  *"A changed implementation raises a candidate, never an edit"*.
+- **The drift list has a stable order.** `GET /spec/drift` orders by `created_at, id`, so candidates
+  from one scan do not tie, and a backend test pins the order.
 - **Scanning and answering tell every open screen.** `detect` and `resolve` broadcast
   `spec_updated`; the UI invalidates drift and coverage on it. Today neither broadcasts, so a second
   tab keeps showing *Drifting* after the question is answered.
@@ -55,13 +63,15 @@ None.
 ### Modified Capabilities
 
 - `requirement-traceability` — adds *"Drift is raised and answered where the operator reads the
-  requirement"*.
+  requirement"*; modifies *"A changed implementation raises a candidate, never an edit"* (an
+  *implementation corrected* resolution records no fingerprint).
 
 ## Impact
 
-- `hub/hub/api/v1/spec.py` — `list_drift` (filters), `detect_drift` and `resolve_drift` routes
+- `hub/hub/api/v1/spec.py` — `list_drift` (filters; `created_at, id` order), `detect_drift` and `resolve_drift` routes
   (broadcast; 409 mapping).
-- `hub/hub/requirement_evidence.py` — `resolve_drift` refuses a non-open candidate.
+- `hub/hub/requirement_evidence.py` — `resolve_drift` refuses a non-open candidate, and stores no
+  fingerprint for `implementation_corrected`.
 - `hub/hub/requirement_gate.py` — `REMEDY[DRIFTING]`.
 - `hub/ui/src/api/spec.ts` — `useSpecDrift`, `useDetectDrift`, `useResolveDrift`; `useSpecEvents`
   invalidates `specDrift`.
@@ -71,3 +81,7 @@ None.
 
 Cross-bundle: **B5** (F215, evidence decision + coverage bar) also edits `SpecCoverageBar.tsx`. This
 change touches one string there; whichever lands second rebases that line.
+
+**Still does not ship without `drift-watches-the-files-its-evidence-is-about`** (operator, 2026-09-24,
+which set that change back to REVISING). That change is also to MODIFY *"A changed implementation
+raises a candidate, never an edit"*; whichever archives second restates it over the first (task 0.4).

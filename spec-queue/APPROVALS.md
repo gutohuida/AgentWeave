@@ -56,6 +56,10 @@ with `## Operator review, 2026-09-24`). The 2026-09-23 rows below remain undecid
 - APPROVED  a-footprint-names-the-line-of-work-its-commit-is-on   B5 (F165, F166). D12-3: one spelling `""`; the data migration is a no-op on `:8000` (0 `HEAD` rows). Review fix: the `""` bucket drops only proper ancestors; a MODIFIED delta on `task-lifecycle-governance`. **Before** B6's `drift-watches-the-files-its-evidence-is-about`.
 - APPROVED  isolation-does-not-change-under-held-work   B5 (F242). D12-1: refused under held work. Review fix: compares the merged (effective) config. Operator: **`/session/sync` is guarded too**.
 - APPROVED  the-approval-preview-asks-the-gates-merge-question   B5 (F141). D12-2: a live probe, nothing stored. Review fix: the fallback is wrapped too (a git failure gives a sentence, never a 500), and the real commit count is used. Does not fix F424.
+- APPROVED  drift-is-scanned-and-answered-on-the-document   B6 (F129, F132, F430). **Must not ship without `drift-watches-the-files-its-evidence-is-about` (REVISING), so it waits for it.** Operator: carries F436 (*Code corrected* stores no silencing fingerprint, D8); order ties broken by `id`.
+- APPROVED  the-corpus-is-indexed-arranged-and-adopted-from-the-app   B6 (F206). M1: merge stays API-only (R9 queues M3). Operator: carries F434 (a failed index write still commits the requirement index, answering 200 `written: null`; arrange refuses with a sentence).
+- APPROVED  a-documents-rigor-history-and-retired-requirements-are-on-screen   B6 (F211, F429). Lowering rigor needs a reason; the history refreshes on success.
+- APPROVED  a-pending-proposal-can-be-withdrawn   B6 (F213, F428, F431). W3. Review fixes: a MODIFIED delta on the gating requirement; a retraction supersedes; a row-count-checked `UPDATE … WHERE status='pending'` for every status change.
 
 ## 2026-09-23
 
