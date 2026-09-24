@@ -148,7 +148,11 @@ pytest hub/tests/ -v      # Hub
 - Agent names match `AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,32}$")` (`src/agentweave/constants.py`)
   — any match accepted except `RESERVED_AGENT_NAMES` (`user`, `operator`) — and the Hub restates
   both as `_AGENT_NAME_RE` (`hub/hub/api/v1/agents.py`, `hub/hub/worktrees.py`) and
-  `_RESERVED_AGENT_NAMES` (`hub/hub/worktrees.py`); change them together. `VALID_MODES = ["hierarchical", "peer", "review"]`.
+  `_RESERVED_AGENT_NAMES` (`hub/hub/worktrees.py`); change them together. That set is checked at
+  every use site, so never add a word to it that an existing agent could already hold. Words that
+  only shadow a Hub route (`conflicts`, `settings`, `sessions`, and the task ids `board`, `boards`)
+  are refused at creation only, by the Hub-only `validate_new_agent_name` (F248; decided 2026-09-24,
+  still being revised). They are not part of the shared set. `VALID_MODES = ["hierarchical", "peer", "review"]`.
 - **Stage paths explicitly; `git add -A` sweeps in scratch.** NEVER commit `kimichanges.md`,
   `kimiwork.md`.
 - A test for code that consumes an API payload uses **the ordering that route actually returns**,
