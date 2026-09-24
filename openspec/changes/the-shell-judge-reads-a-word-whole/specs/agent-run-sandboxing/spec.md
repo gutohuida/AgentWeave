@@ -1,5 +1,185 @@
 ## MODIFIED Requirements
 
+### Requirement: A posture exists in which the workspace boundary is enforced per tool call
+
+The Hub SHALL offer a permission posture under which each of a run's tool calls is decided against
+the run's own workspace, rather than permitted in advance.
+
+Under that posture a tool call confined to the run's workspace is allowed, and one reaching outside
+it is refused with a reason stating what was refused and why. The comparison SHALL be made on fully
+resolved paths, so that a relative traversal or a symbolic link cannot escape a boundary that an
+unresolved comparison would have accepted.
+
+For a shell command, the paths compared are the ones its text names as the shell that runs it will
+read them (see *A path in a shell command is judged by where it resolves*). A glob pattern among
+them SHALL be judged by the entries it matches in the filesystem as well as by its text, so that a
+link it matches cannot carry the command outside, and a pattern that would need more entries
+examined than the check allows SHALL be refused. A path the command computes only when it runs is
+not one its text names, and this requirement does not claim that such a path is judged.
+
+The boundary enforced SHALL be the same one the agent is told it is working in. A boundary that is
+described in one place and enforced from another can disagree, and the agent is given no way to tell
+which is real.
+
+Where the boundary cannot be established, the posture SHALL refuse rather than permit. An
+unknown boundary is not an absent one.
+
+#### Scenario: Work inside the workspace proceeds
+
+- **WHEN** a run under this posture acts on a path inside its own workspace
+- **THEN** the action is allowed
+
+#### Scenario: Work outside the workspace is refused with a reason
+
+- **WHEN** a run under this posture acts on a path outside its own workspace
+- **THEN** the action is refused
+- **AND** the refusal states what was refused and why
+
+#### Scenario: Traversal and links cannot escape
+
+- **WHEN** a path reaches outside the workspace only after relative traversal or link resolution
+- **THEN** it is refused
+
+#### Scenario: A glob that matches a link out of the workspace is refused
+
+- **WHEN** a shell command names a glob pattern that the shell would expand to an entry of the
+  workspace that is a link resolving outside it, although the pattern's text names nothing outside
+- **THEN** the command is refused
+- **AND** the reason names where the matched entry resolves
+
+#### Scenario: A glob too large to examine is refused
+
+- **WHEN** a shell command names a glob pattern whose matching needs more directory entries examined
+  than the check allows
+- **THEN** the command is refused as uncheckable
+- **AND** the permission request is answered
+
+#### Scenario: An unestablished boundary refuses
+
+- **WHEN** the run's workspace cannot be determined
+- **THEN** actions under this posture are refused
+
+#### Scenario: Collaboration is not a filesystem decision
+
+- **WHEN** a run under this posture uses the Hub's own tools
+- **THEN** those calls are allowed
+
+---
+
+### Requirement: A network address in a shell command is decided as a network address
+
+Under the posture in which the Hub decides each tool call against the run's workspace, a shell command that names a network address SHALL be allowed only when that address is the run's own Hub, and SHALL otherwise be refused with a reason that names network access rather than the workspace or the filesystem.
+
+A network address is not a path, and reading one as a path produces a refusal for a false reason.
+Until this requirement, the posture read `https://example.com/x` as the Windows drive path
+`s://example.com/x`, and read the path after `$HUB_URL` as a path at the root of the drive. Both
+were refused as *outside your workspace*. That sent the model and the operator to debug a filesystem
+about a request that never touched one, and it refused the one request the Hub itself instructs a
+run to make.
+
+The run's own Hub is the address the Hub placed in the run's environment. A command may name it
+literally, where scheme, host and port all match and no user information is present, or by
+reference to the environment variable that holds it. A reference is trusted only when the command
+names that variable nowhere else. A command that assigns the variable and then uses it names
+whatever it assigned. Two host names that may resolve to the same machine are not treated as the
+same address.
+
+Allowing the run's own Hub as an address does not allow it as a path. The shell does not know that
+a word is an address, and a command can write to one as a relative path. That path's `..`
+segments can climb out of the workspace. So a word accepted as the run's own Hub is still judged as
+the path it spells. A request to the Hub has no need of such a segment.
+
+A network address need not carry a scheme. A word written as a user at a host followed by a colon,
+where the host is a domain name, an IP address or `localhost`, and a word written as a host, a
+colon, a port and a path, SHALL be decided as network addresses, whether or not the word also holds
+a path separator or an expansion. Any other word that contains a colon and no scheme, such as a
+name, a colon and a relative path, or a name at a single-word alias and a colon, SHALL be judged as
+the paths it spells: the same text names a revision and a path, or a package and its version, and
+this posture cannot tell a host from either. A copy to a remote host written that way is therefore
+not refused by this requirement, and allowing it SHALL NOT be read as a statement that the command
+names no network address.
+
+**This is a rule about what a shell command's text names. It is not containment of network
+access, and the refusal SHALL NOT claim that it is.** A command can reach a network without writing
+an address down, and tools whose input is an address are decided separately. A refusal that says
+the network is unavailable would be false. The reason says what this rule does: which address a
+shell command may name.
+
+The refusal SHALL name the way out: asking the operator. An agent refused with nothing it can do,
+that still has a task to finish, is left to find another route, and at this layer another route is
+one line long.
+
+This requirement governs the decision the Hub makes by reading a shell command's text. A runner
+whose command approvals the Hub decides by working directory alone is not brought under it by this
+requirement.
+
+#### Scenario: The run's own Hub is reachable from a shell command
+
+- **WHEN** a run under this posture runs a shell command that names its own Hub's address, either
+  literally or by the environment variable that holds it
+- **THEN** the command is allowed
+
+#### Scenario: The run's own Hub address does not carry a path out of the workspace
+
+- **WHEN** a shell command names the run's own Hub address followed by enough `..` segments that,
+  read as a relative path, it resolves outside the workspace
+- **THEN** the command is refused
+
+#### Scenario: An address that only resembles the run's own Hub is refused
+
+- **WHEN** a shell command names an address that differs from the run's own Hub in scheme, host or
+  port, or that carries user information
+- **THEN** the command is refused as a network address
+
+#### Scenario: A reassigned reference is not trusted
+
+- **WHEN** a shell command refers to the variable holding the Hub's address and also names that
+  variable in any other way
+- **THEN** the reference is not treated as the run's own Hub
+
+#### Scenario: Another network address is refused for a network reason
+
+- **WHEN** a run under this posture runs a shell command naming any other network address
+- **THEN** the command is refused
+- **AND** the reason states that the refused word is a network address
+- **AND** the reason does not state that it is outside the workspace
+- **AND** the reason names asking the operator as the way to proceed
+
+#### Scenario: The refusal does not claim containment
+
+- **WHEN** a shell command is refused as a network address
+- **THEN** the reason does not state that network access is unavailable to the run
+
+#### Scenario: A file URL is a path
+
+- **WHEN** a shell command names a URL whose scheme addresses the local filesystem
+- **THEN** it is judged as the path it names, not as a network address
+
+#### Scenario: A user at a host is a network address without a scheme
+
+- **WHEN** a shell command names a word written as a user at a host whose name is a domain name, an
+  IP address or `localhost`, followed by a colon, with or without a path separator after it
+- **THEN** the command is refused
+- **AND** the reason states that the word is a network address
+
+#### Scenario: A host and port with a path is a network address without a scheme
+
+- **WHEN** a shell command names a word written as a host, a colon, a port and a path
+- **THEN** the command is refused
+- **AND** the reason states that the word is a network address
+
+#### Scenario: A name, a colon and a relative path is read as a path
+
+- **WHEN** a shell command names a word written as a name, a colon and a relative path, with no
+  user and no port, such as a revision and a file or a remote copy's relative destination
+- **THEN** the word is judged as the paths it spells, not as a network address
+
+#### Scenario: A package or image reference is not a network address
+
+- **WHEN** a shell command names a word written as a name at a single-word qualifier followed by a
+  colon, such as an image digest or a package-manager protocol
+- **THEN** the word is not refused as a network address
+
 ### Requirement: A path in a shell command is judged by where it resolves
 
 Under the posture in which the Hub decides each tool call against the run's workspace, each path in a shell command SHALL be judged by where it resolves against the run's workspace, as the shell that runs the command will read it, and a refusal SHALL name the whole path, not a fragment of it.
@@ -43,8 +223,10 @@ a revision or a field name, or after a leading short option. A separator that co
 not the start of a path, and the part of a relative word after such a separator SHALL NOT be judged
 as a path of its own. Each piece read this way SHALL be judged as the path it spells, resolved
 against the workspace, and so SHALL the word with the quotes an inner shell would remove taken out.
-Because an inner shell also removes a backslash before any character, every word holding a
-backslash SHALL also be judged with those escapes removed, whether or not it reads as a plain path.
+Because an inner shell also removes a backslash before any character, and a shell between the
+command and that one may remove a level first, every word holding a backslash SHALL also be judged
+with one level of those escapes removed, and again with each further level removed until none is
+left, each as a word in its own right, whether or not it reads as a plain path.
 On a platform with drive letters, a letter and a colon that begin a word or a piece name that drive
 in every dialect, because a program the shell starts reads them so; that colon SHALL NOT divide
 them. A piece that begins with the home-directory shorthand, or a drive whose path begins with it,
@@ -53,11 +235,16 @@ assignment-shaped word. A word holding a provider qualifier (`Provider::path`) S
 a plain relative path; the path after the qualifier is judged.
 
 A glob pattern in a path is judged as the names it can match. A component that can match the parent
-directory SHALL be judged as the parent directory.
+directory SHALL be judged as the parent directory, and so SHALL a component holding an extended
+pattern group one of whose alternatives begins with a dot. The characters inside such a group SHALL
+NOT divide the word. A glob SHALL also be judged by the entries it matches in the filesystem, so that
+a match that is a link is judged by where the link resolves, and this holds for a pattern an inner
+shell would expand as much as for one the outer shell expands.
 
 In the dialect whose shell provides them, the null device and the standard streams are not
-filesystem destinations, and naming them SHALL NOT refuse a command. No other device path is
-exempted.
+filesystem destinations, and naming them SHALL NOT refuse a command. On a platform with drive
+letters only that shell maps them, so there this holds only for a whole word or a redirect target,
+and a script's own text naming them is judged as a path. No other device path is exempted.
 
 Where the platform accepts more than one path separator, each is a separator in the path the shell
 passes on.
@@ -182,6 +369,31 @@ answered. An error in place of an answer is not a decision.
   `../x`
 - **THEN** the command is refused
 
+#### Scenario: A glob an inner shell expands through a link is refused
+
+- **WHEN** a command hands an inner shell a quoted glob pattern that shell would expand to an entry
+  of the workspace that is a link resolving outside it
+- **THEN** the command is refused
+
+#### Scenario: An extended pattern group that can match the parent directory is refused
+
+- **WHEN** a shell command names an extended pattern group, such as `@(..)/x`, one of whose
+  alternatives begins with a dot, and the parent directory it can match is outside the workspace
+- **THEN** the command is refused
+- **AND** the reason names the word as written
+
+#### Scenario: A backslash removed by two shells in turn is judged as removed
+
+- **WHEN** a command hands one inner shell a word that a second inner shell reads as a traversal
+  only after each has removed a level of backslash escapes, such as `.\\./x`
+- **THEN** the command is refused
+
+#### Scenario: The null device inside a script's text is a path on a platform with drive letters
+
+- **WHEN** on a platform with drive letters, a bash command's word holds the null device's name
+  inside a quoted script, not as a whole word or a redirect target
+- **THEN** that name is judged as a path
+
 #### Scenario: A provider-qualified path is judged by the path it names
 
 - **WHEN** a PowerShell command names `Microsoft.PowerShell.Core\FileSystem::` followed by a path
@@ -236,27 +448,3 @@ refusal of either reading refuses the command.
 - **WHEN** a bash command names a brace pattern that expands to more words than the judge examines
 - **THEN** the command is refused
 - **AND** the permission request is answered
-
-### Requirement: A remote address written without a scheme is decided as a network address
-
-Under the posture in which the Hub decides each tool call against the run's workspace, a shell word written as a user at a host followed by a colon, or as a host followed by a colon, a port and a path, SHALL be refused as a network address and SHALL NOT be judged as a path.
-
-These two forms are what a program reads as a remote location: the first is how a copy over a
-secure shell and a repository clone name their source, the second is a host and port. Read as
-paths they are relative words inside the workspace, and a judge that reads words whole would allow
-them for a false reason, as the earlier reading refused them for one.
-
-A host and port with nothing after them, and any other word with a colon, are not covered by this
-requirement.
-
-#### Scenario: A user-at-host remote is a network address
-
-- **WHEN** a shell command names a word written as a user at a host followed by a colon
-- **THEN** the command is refused
-- **AND** the reason states that the word is a network address
-
-#### Scenario: A host and port with a path is a network address
-
-- **WHEN** a shell command names a word written as a host, a colon, a port and a path
-- **THEN** the command is refused
-- **AND** the reason states that the word is a network address

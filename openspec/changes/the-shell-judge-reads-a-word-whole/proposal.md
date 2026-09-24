@@ -4,6 +4,11 @@
 **Nothing here is implemented.** R2 and R3 must re-derive it before any task starts, and the
 operator must approve it (`spec-queue/APPROVALS.md`).
 
+**R4, 2026-09-24 (revise round, after the operator's review).** The Opus review found that R3's
+piece reading let a glob reach outside through a link (`cp n u*/`, measured writing outside in Git
+Bash). The operator sent the change back. Steps 9 to 12 below are R4's, and steps 4, 6 and 8 are
+revised. See `design.md`, "Operator review, 2026-09-24". An independent R5 comes next.
+
 ## Why
 
 Under the default posture every shell command an agent runs is read by `mcp_server._decide`, and
@@ -62,13 +67,18 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
    judged as `..`, so `ls .*/x` and `rm -rf ../*` stay refused and `ls src/*.py` is allowed.
 4. **In bash, the null device and the standard streams may be named** (`/dev/null`, `/dev/stdin`,
    `/dev/stdout`, `/dev/stderr`), as whole words or as a piece. `/dev/tcp/…` and every other
-   `/dev` path stay refused.
+   `/dev` path stay refused. **(R4)** On a Windows host, a piece only as a redirect target: see
+   step 11.
 5. **(R2) An approver whose judge raises denies with a reason** instead of failing the tool call
    silently (design D6).
 6. **A schemeless address in the two forms a program reads as remote is refused as a network
-   address**, not as a path: `user@host:path` (scp, git over ssh) and `host:port/…`. Today both are
-   refused only by the backstop's false filesystem reason (`a-url-is-not-a-path` D3 named this a
-   residual). Without this step the whole-word reading would allow them.
+   address**, not as a path: `user@host:path` (scp, git over ssh) and `host:port/…`. Today, with a
+   separator, both are refused only by the backstop's false filesystem reason. Without one
+   (`git clone git@github.com:repo`) they are allowed. **(R4)** The check runs on the whole word
+   before rule 3, so the separator-less form is caught too. The host must be a domain name, an IP
+   address or `localhost`, so that `alpine@sha256:…`, `x@npm:y` and `x@workspace:*` are not
+   addresses. `host:x/y` stays a path (operator, 2026-09-24). The existing network requirement is
+   **modified** to say which schemeless forms it covers.
 
 7. **(R3) Two regressions R2's rules would have let through are closed in step 2:** on a Windows
    host a drive letter's colon is not a break in *either* reading (the Bash tool hands
@@ -78,25 +88,50 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 8. **(R3) Two escapes allowed today are closed** (design D7): a word holding a backslash is also
    judged with an inner shell's escapes removed (`bash -c 'cp n .\./x'` writes `../x`), and a
    PowerShell provider-qualified path (`…\FileSystem::C:\Windows\x`) is not read as a plain
-   relative path.
+   relative path. **(R4)** The escapes are removed **level by level, until none is left**, and each
+   level is judged as a whole word. `bash -c 'bash -c "cp n .\\./x"'` writes `../x` (measured), is
+   allowed today, and is still allowed after one level.
+
+9. **(R4) A glob is also judged by the links it matches** (design D8). Each piece holding `*`, `?`,
+   `[` or an extglob group is expanded against the filesystem one directory at a time. A matched
+   entry that is a link (a junction included) is judged by where it resolves. This is bounded at
+   8192 directory entries per call and refused past the bound. It closes the regression R3
+   introduced: `cp n u*/`, `u?/x` and `[u]p/x`, with `up` a link pointing outside, are refused today
+   only by the tail and were allowed under R3.
+10. **(R4) An extglob group is one glob unit** (design D3). `@(..)/x` is judged as `../x`, not as the
+    piece `..)/x`.
+11. **(R4) On Windows, the device exemption covers only a whole word or a redirect target**
+    (design D4). `python -c "open('/dev/null','w')"` opens `C:\dev\null` and stays refused.
+12. **(R4) The bounds are per call, with a memo** (design, "The bounds"), and **the Windows rules run
+    in a Windows CI job** (design D9).
 
 ## What does not change
 
-- Rules 1 to 5, the lexer's quote and ANSI-C handling, `_where`, `_judge_path` and the
-  refusal-length bound.
-- Every separator-less word (rule 4); `..` alone, `~` and option-joined values stay as F375 left
-  them. `a-drive-or-a-home-variable-names-a-directory-by-itself` changes rule 4 separately.
+- Rules 1, 2, 4 and 5, the lexer's quote and ANSI-C handling, `_where`, `_judge_path` and the
+  refusal-length bound. **(R4)** One step is inserted between rules 2 and 3: the schemeless-address
+  check (step 6).
+- Every separator-less word (rule 4): `..` alone, `~` and option-joined values stay as F375 left
+  them. `a-drive-or-a-home-variable-names-a-directory-by-itself` changes rule 4 separately and
+  **(R4) builds after this change**, because it reuses step 9's `_glob_links`.
 - A word with a separator and an expansion is still refused as uncheckable (rule 3).
 
 ## Residuals, kept on purpose
 
 - (R3) A quoted JSON array of nine or more objects with commas (`curl -d '[{"a":1,"b":2},…]'`) is
-  refused as too many brace alternatives, spaces or not: the one new refusal of ordinary work.
+  refused as too many brace alternatives, spaces or not.
+- (R4) A glob over a directory of more than 8192 entries is refused as too many to check.
 - (R3) An inner shell's ANSI-C string spelling `..` with no separator
   (`bash -c "cp n \$'\\x2e\\x2e'"`) is allowed, today and after: rule 4 reads the literal `$'…'`.
-- (R3) `cp x ..*` (separator-less, `..`-capable glob) is rule 4's; carried to
-  `a-drive-or-a-home-variable-names-a-directory-by-itself` D4.
-
+- (R4) An inner shell's `case` arm executing a path straight after `)`
+  (`sh -c 'case 1 in 1)../../evil.sh;;esac'`) is refused today and allowed after, because `)` is
+  not a break (regex back-references keep that allowed). It executes and cannot write. Design Open
+  Question 1.
+- (R4) `**` is matched as `*` unless the command names `globstar`, so a program's own recursive
+  glob through a link two or more levels down is not seen.
+- (R4) `host:x/y` and `user@alias:path` (a dotless host) are read as paths (operator, 2026-09-24).
+- Pre-existing, as the review named them: a directory change the text does not name
+  as a path; `CDPATH=.:..`; cmd's caret escape (`echo "copy n .^.\x" | cmd`); `cmd /v:on` with `!X!`;
+  paths computed inside code (`python -c`, PowerShell `(Split-Path (pwd))`); and a hard link.
 - `cp n '.{,.}'/x` (a file literally named `.{,.}` in a directory): refused, because an inner shell
   would expand the pattern (R2).
 - `grep -c '</script>' a.html`: the trimmed word is `/script`, refused by rule 5. `<` before `/` is
@@ -107,25 +142,38 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 - `awk -F/`, `cut -d/`: the glued value `/` is the root directory, refused as it would be alone.
 - `grep -rn "import .*/utils" src`: `.*` is judged as `..`; a regex spelled like a glob is refused.
 - `awk '{print $1/2}'`: rule 3 (a separator and a `$`), unchanged.
-- A glob that matches a symbolic link inside the workspace pointing outside is judged by its
-  literal text, not by its matches. A named link is still resolved (`_where`).
+- (R4, replacing R3's line) A glob that matches a link inside the workspace pointing outside is
+  **refused** (step 9). In a worktree whose `node_modules`, `.venv` or `venv` is the Hub's shared
+  link to the project checkout, every path through it is refused today already. Globs through it now
+  are too. See design Risks and Open Question 3.
 
 ## Findings
 
-- **F362** — fixed by steps 2 to 4 and 6; step 5 (R2) makes the judge fail closed visibly.
-- **F403** — fixed by step 1.
-- The changes are in one file, `hub/hub/mcp_server.py`, plus its tests. No migration, no UI bundle,
-  no Hub restart. **An edit reaches the operator's `:8000` agents on their next run, committed or
-  not** (`.claude/rules/mcp-server.md`), so the implementing session tells the operator first.
+- **F362**: fixed by steps 2 to 4, 6 and 9 to 11. Step 5 (R2) makes the judge fail closed visibly.
+- **F403**: fixed by step 1.
+- The change touches `hub/hub/mcp_server.py` and its tests, plus one CI job
+  (`.github/workflows/ci.yml`). No migration, no UI bundle, no Hub restart. **An edit reaches the
+  operator's `:8000` agents on their next run, committed or not** (`.claude/rules/mcp-server.md`),
+  so the implementing session tells the operator first.
 
 ## Impact
 
-- **Code:** `hub/hub/mcp_server.py` — `_lex`, `_read_command`, `_judge_word` rule 6, three new
-  patterns beside `_ABSOLUTE_PATH_RE`.
+- **Code:** `hub/hub/mcp_server.py`:
+  - `_lex`, `_read_command`, `_decide` (the per-call budget and memo);
+  - `_judge_word` (rule 6, and the address step before rule 3);
+  - new `_expand_braces` and `_glob_links`;
+  - patterns beside `_ABSOLUTE_PATH_RE`, and `_DRIVE_LETTERS`;
+  - `approve_tool_call` (D6).
+- **CI:** a `hub-judge-windows` job on `windows-latest` runs the judge's two test files (design D9).
 - **Tests:** `hub/tests/test_permission_approver.py` (rows X4, X5 and X6 flip to allowed; N5, N6, G3,
   E11, Z1 and Z2 keep refused with a truer reason); a new
-  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`.
-- **Spec:** `agent-run-sandboxing` — the shell-path requirement is modified; brace expansion and
-  schemeless addresses are added.
-- **Order:** independent of the other three B4 changes. It must ship before, or with, any change
-  that loosens rule 6 further.
+  `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, with a link fixture (`os.symlink` on
+  POSIX, `_winapi.CreateJunction` on Windows).
+- **Spec:** `agent-run-sandboxing`. **Modified:** the shell-path requirement; (R4) "A posture exists
+  in which the workspace boundary is enforced per tool call" (globs are judged by their matches;
+  the shell scope stated), and "A network address in a shell command is decided as a network
+  address" (which schemeless forms are addresses, and that other colon forms are read as paths).
+  **Added:** brace expansion. R3's added schemeless-address requirement is folded into the modified
+  network one.
+- **Order:** it must ship before, or with, any change that loosens rule 6 further. It also ships
+  before `a-drive-or-a-home-variable-names-a-directory-by-itself`, which uses `_glob_links`.
