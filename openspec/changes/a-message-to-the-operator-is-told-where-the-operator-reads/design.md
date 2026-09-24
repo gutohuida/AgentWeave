@@ -51,3 +51,4 @@ out unchanged.
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
+- R2 (2026-09-24): `messages.py:94-117` refusal re-read; reserved names `worktrees.py:73-80`, case-insensitive at `:148`. `grep -rln unasked hub/hub src` finds only migrations `0032/0036/0037/0082` and unrelated prose (`models.py:136`, `repo_hygiene.py`) — nothing implements the two requirements removed here. No agent on `:8000` holds a reserved name (read `mode=ro`), so checking before the lookup strands no existing row.

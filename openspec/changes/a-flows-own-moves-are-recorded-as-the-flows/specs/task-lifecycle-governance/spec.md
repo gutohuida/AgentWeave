@@ -28,6 +28,13 @@ to be recorded as the operator's request.
 - **WHEN** a flow's firing moves a completed task to under review for a reviewer
 - **THEN** the recorded transition's cause names that flow's job
 
+#### Scenario: A flow's review delivered after its task came back
+
+- **GIVEN** a flow queued a review of a task and staged it under review
+- **AND** before the review was delivered the task left review and was completed again
+- **WHEN** the queued review is delivered and moves the task to under review
+- **THEN** the recorded transition's cause names that flow's job
+
 #### Scenario: The operator's own dispatch is still the operator's
 
 - **WHEN** the operator dispatches a review by hand and the task moves to under review

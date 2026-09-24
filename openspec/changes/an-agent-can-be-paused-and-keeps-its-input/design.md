@@ -19,6 +19,13 @@ which still loses the race against a peer that messages between the steps.
   coalesce), `api/v1/jobs.py:1354` (the Run button's in-flight answer, `_held_in_flight_reasons`), and
   `provider_allowance.agents_held` → `scheduler._roster_availability` `:1148` (the free pool and the
   reviewer ladder).
+- **R2: seven, not six.** `agents_held` has a second caller, `scheduler.py:1705`, in the loop's candidate
+  walk (it keeps a loop from briefing a held agent's assigned task again). And `agents_held` only
+  enumerates agents that have a `TurnUsage` row (`provider_allowance.py:171-189`), so *"`agents_held`
+  includes paused agents"* needs a second query — `Agent.paused_at IS NOT NULL` for the project — unioned
+  in; an agent paused before its first turn has no usage row and would otherwise be missed at both
+  callers. `trigger_agent_directly`'s only caller is `turn_scheduler._attempt_turn` (`:408`), so the
+  `:388` read does gate every spawn.
 
 ## D1 — What a paused agent does with input (the F15 question)
 
@@ -37,7 +44,7 @@ async def agent_hold(db, project_id, agent) -> Optional[Hold]:
     """Why this agent's queue is held: the operator's pause if set, else the provider's."""
 ```
 
-returning a small union (`PauseHold(since)` | `ProviderHold`). Each of the six sites calls it and
+returning a small union (`PauseHold(since)` | `ProviderHold`). Each of the seven sites calls it and
 branches on the kind only for its sentence. Two deliberate differences from a provider hold:
 
 1. **Operator input does not probe a pause.** `operator_would_probe` exists because only the operator
@@ -59,8 +66,10 @@ its queue every tick — the F368 shape.
   (archive already stops everything). Pausing a paused agent: 200, unchanged (idempotent).
 - `POST /projects/{p}/agents/{name}/resume`: clears `paused_at`, commits, calls `schedule_agent`;
   answers `200 {agent, status}` with the scheduler's result. If `schedule_agent` raises after the
-  commit, the route still answers 200 (the agent is resumed; the next scheduling pass delivers) and
-  logs — the same reasoning as `request_agent`'s D4 in this bundle.
+  commit, the route still answers 200 with `status: "resumed"` and a `waiting_reason` saying delivery
+  did not start, and logs. (R2: this is a new pattern — no other `api/v1` caller of `schedule_agent`
+  catches — and nothing sweeps a queue later; the input waits until the agent is next scheduled by new
+  input, the Run button or a Hub start. The answer must say so rather than imply delivery.)
 - Both operator-only (`get_project`); neither is added to the agent plane.
 - If the stop in `pause` raises, the pause stands (it was committed first) and the route answers 500
   naming the stop failure; the operator's next step — pressing Stop — is the existing route.
@@ -86,3 +95,4 @@ its queue every tick — the F368 shape.
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
+- R2 (2026-09-24): hold sites re-derived by `grep`: seven, including `scheduler.py:1705`; `agents_held` needs paused agents added by a separate query. The resume route's raise path reworded (no precedent, no sweep). Remaining claims (`stop_agent_run` touches only the run; `archivable` refuses on live run or queued input; operator input probes only a provider hold, `provider_allowance.py:192-202`) hold. `jobs.py:1354` is also edited by `pressing-run-names-the-reason-that-held`, whose text does not mention this change.

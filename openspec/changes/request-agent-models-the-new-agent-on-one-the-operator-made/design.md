@@ -34,13 +34,27 @@ assert "every call 400s today" still stand as the regression for whichever is ch
 |---|---|---|
 | `runner_id` | yes | without it the agent cannot run; the operator chose this runner for this kind of agent |
 | `charter_id` | yes | the charter is how the operator told this kind of agent how to behave |
-| `config` | yes (minus `principal`, as today) | carries runner options the runner row does not |
+| `config` | yes, **minus `principal` and `yolo`** | carries runner options the runner row does not (`env_vars`, `read_only`, `hub_client`). `yolo` is not an option: it is the older spelling of the permission posture, written by `_apply_default_permission_mode` (`agents.py:2474-2492`) and read by the spawn (`agent_trigger.py:805` → `--dangerously-skip-permissions`) — see below |
 | `can_accept_evidence`, `can_read_checkpoints`, `can_recall` | **no** | these are authority the operator grants one agent at a time (`agent-configuration`, *"The operator can grant an agent the authority to accept evidence"*); an agent must not be able to mint a second holder of it |
 | `description`, `default_permission_mode`, waiting and checkpoint overrides | no | per-agent settings the operator writes on the agent itself; defaults apply |
 
-`default_permission_mode` is the one R2 should argue: copying it would let a `full access` template
-produce more `full access` agents without the operator touching them; not copying means the new
-agent runs under the project default. Recommended: not copied (least authority).
+**`default_permission_mode` (argued by R2): not copied, and `config["yolo"]` is not copied either.**
+The posture is authority in the same sense as the three grants: it decides what the agent may do
+*unattended*, which is exactly the case for an agent created by a peer (`agent_trigger.py:762-768`
+applies it to runs with no composer — peer- and job-triggered ones). Copying it would let one
+full-access agent mint more without the operator touching them. Not copying means the new agent
+runs under the catalog default, and the operator raises it on the agent if they want.
+
+R1's table would **not** have achieved that. It copied `config` whole, and `_apply_default_permission_mode`
+keeps `config["yolo"] = (posture == full access)` in step with the column (`agents.py:2489-2492`);
+the spawn reads `yolo` from config, not the column (`agent_trigger.py:805`), and a `yolo` run is
+built with `--dangerously-skip-permissions` (`runner_commands.py:21`). So a full-access template
+would have produced an agent that *runs* at full access while its settings row says "default" —
+the incoherence `_apply_default_permission_mode`'s docstring exists to prevent, in its worst
+direction. The copy therefore drops `yolo` with `principal`.
+
+The alternative — copy both together, through `_apply_default_permission_mode` — is coherent too; it
+is rejected on the least-authority argument above, not on correctness.
 
 ## D3 — Refusals
 
@@ -62,11 +76,21 @@ and the reserved names; this change does not touch the three restatements.
 - `persist_event` / `sse_manager.broadcast` / `schedule_agent` after the commit: today any raise
   becomes a 500 after the agent and its queue entry already exist, so the caller retries and gets
   *"already exists"* for an agent it was told was not created. The route will catch an exception from
-  `schedule_agent` only, log it, and still answer `201` with `status: "queued"` — the entry is durable
-  and the next scheduling pass delivers it (the same reasoning the trigger route applies to queued
-  input). `persist_event`/`broadcast` are left as they are; they do not raise in practice and the
+  `schedule_agent` only, log it, and still answer `201` with `status: "queued"` — the entry is durable.
+  `persist_event`/`broadcast` are left as they are; they do not raise in practice and the
   pattern is the same in every route.
+- **R2 corrections.** (1) There is no precedent: `trigger_agent` (`agent_trigger.py:1600`) and every
+  other `schedule_agent` caller in `api/v1/` let a raise propagate; this is a deliberate first. (2)
+  *"The next scheduling pass delivers it"* overstated it: there is no periodic sweep. A queued entry
+  whose scheduling raised waits until something next schedules that agent — further input to it, the
+  Run button, or a Hub start's re-drain (`run_reconciliation.py:184-195`). For a brand-new agent that
+  may be only the restart. The 201 is still true (the entry is queued), and the log line is what tells
+  the operator; the answer must not claim delivery is imminent. (3) The route ignores the
+  `ScheduleResult` it gets back (unlike `trigger_agent`, F108). With a runner now inherited, the
+  refusals it could carry for the new entry (runner CLI missing, provider hold, budget) all leave the
+  entry queued, so `201 queued` stays true; no change.
 
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
+- R2 (2026-09-24): route re-read (`agents.py:2140-2258`); every R1 claim about it holds. Argued `default_permission_mode` (not copied) and found the `config["yolo"]` leak that R1's copy would have created; D2 and D4 corrected; spec and tasks follow.

@@ -19,14 +19,29 @@ The staging function has **three** callers, not two (`grep -n "enter_selected_ta
 `api/v1/agent_trigger.py:898` (a review dispatched by the operator by hand — F76's repair). Only the
 first two are a scheduled firing.
 
-**Can the third caller travel an edge on a flow's behalf?** The flow writes its reviewer and stages
-`under_review` before the turn is scheduled (the design-D9 comment just above `agent_trigger.py:889`), so by the time a
-flow-queued review entry reaches `:898` the task is already in `WITH_REVIEWER_LOOP_TASK_STATUSES`
-and the function's `pass` branch runs — no transition. The divergence restaff
-(`run_divergence.py:~470-485`) likewise re-queues a review for a task already under review. So a
-transition at `:898` is the operator's own dispatch, and `operator()` with `origin="actor"` is true
-there. **R2 should re-derive this**: if any entry origin other than the operator's reaches `:898`
-with the task still `completed`, that caller needs the entry's cause too.
+**Can the third caller travel an edge on a flow's behalf? Yes — R1's "operator only" was wrong (R2).**
+`trigger_agent_directly` does not take `review_task_id` only from the operator's request: when none is
+passed it reads it off the entries being delivered (`agent_trigger.py:823-824`,
+`_review_task_from_entries` `:431-461`). Three producers write `InboundQueueEntry.review_task_id`: the
+operator's trigger (`:1582`), a flow's review selection (`scheduler.py:3417-3419` and `:3747`,
+`origin_type="job"`) and a divergence restaff of a failed review (`run_divergence.py:483`,
+`origin_type="divergence"`). On `:8000`, read `mode=ro`: 17 job-origin and 3 divergence-origin entries
+carry one. All of them reach `:898`. Whether an edge is travelled there depends only on the task's
+status at delivery: the flow staged `under_review` when it queued the entry, so normally the `pass`
+branch runs — but nothing withdraws a queued review entry when its task leaves review, and
+`under_review → revision_needed → in_progress → completed` is legal for either actor
+(`task_transitions.py:134-146`). A flow-queued review that waited (agent busy, provider hold) while
+that happened travels `completed → under_review` at `:898` with `operator()` and `origin="actor"` —
+the defect this change fixes, through the one caller it left alone. And after S13 (below) this is the
+flow's **only** staging path, so fixing it here is not a corner case but the change's durable half.
+
+**So the cause travels with the entry.** `InboundQueueEntry` gains `job_id` (nullable `String(64)`, no
+FK, same migration); `new_entry` takes it; the two scheduler `new_entry` calls (`:3404`, `:3736`) pass
+`job.id`. At `:898` the cause is read from the delivered entries that name the review task: if any has
+`origin_type == "operator"`, the operator asked (`origin="actor"`, as today); otherwise, if one has a
+`job_id`, the move is that job's (`origin="job"`). A divergence-origin entry keeps today's recording —
+the restaff is the Hub acting on the operator's divergence policy, a cause this change does not name
+(see Interaction).
 
 ## D1 — Options for D8
 
@@ -48,6 +63,8 @@ with the task still `completed`, that caller needs the entry's cause too.
 - `TaskTransition.job_id: Optional[str]`, `String(64)`, nullable, indexed not required, **not a
   ForeignKey** (the same SQLite drop trap `models.py:708-712` records). Jobs are never deleted
   (`jobs.py:1174-1187` refuses), so the id stays resolvable.
+- `InboundQueueEntry.job_id`, same shape (R2; see Context) — the only way the cause survives from the
+  firing that queued a review to the dispatch that stages it.
 - `apply_transition(..., origin, job_id=None)`: raises `ValueError` unless
   `(origin == ORIGIN_JOB) == (job_id is not None)`, and unless `origin != ORIGIN_JOB or
   actor.is_operator`. Programming errors, not refusals — same class as the existing `origin` check at
@@ -62,12 +79,15 @@ append-only record must not name something that will disappear. The job is durab
 
 ## D3 — What the history says
 
-`_transition_view` (`tasks.py:1617-1637`) adds `job_id` and `job_name` (one `AIJob` lookup per
-distinct id in the response; `None` if not found). `TaskTransitionHistory.tsx`:
+`_transition_view` (`tasks.py:1616-1638`) adds `job_id`, `job_name` and `job_kind` (`"flow"` or
+`"loop"`; one `AIJob` + `Loop` lookup per distinct id in the response; `None` if not found). Both
+staging callers are loop firings (`_do_fire_job` and `_stage_selection` both hold a `Loop`), and a
+flow is a loop with a `spec_document_id` (`mcp_server.py:761` `create_flow` vs `:676` `create_loop`),
+so labelling every row "Flow" would misname a plain loop's moves (R2). `TaskTransitionHistory.tsx`:
 
 | origin | who | verb |
 |---|---|---|
-| `job` | `Flow <job_name>` (or `A flow` when the name is missing) | `moved` |
+| `job` | `Flow <job_name>` when the job's loop has a `spec_document_id`, else `Loop <job_name>` (or `A scheduled job` when the job is not found) | `moved` |
 | `runtime` | unchanged | `was moved for` |
 | `actor` | unchanged (`You` / agent / `A run`) | `moved` |
 
@@ -87,13 +107,17 @@ exercised by a unit test rather than discovered in a live firing.
   flow stages `under_review` (into the dispatch). Whichever of those lands first, the staging call it
   leaves must still pass `job_id`; the source scan in task 1.5 fails if a scheduler-side staging call
   drops it.
-- **S13 is the sharp one.** It moves the flow's `completed → under_review` *into the dispatch* — that
-  is, into the `agent_trigger.py:898` path this design argues is the operator's alone. After S13 that
-  caller would travel the edge for flow-queued entries too, and must take its cause from the entry
-  (`origin_type == "job"`) and a job reference the entry does not carry today
-  (`InboundQueueEntry` has no job column; `new_entry` at `scheduler.py:3404`/`:3736` passes none).
-  Whichever of the two changes lands second must add that; R2/R3 of both should check it.
+- **S13 is the sharp one** (`a-flow-stages-its-review-in-the-dispatch`, B1, R1 only). It stops the
+  firing staging a review and leaves `:898` as the only place a flow's review is staged. R1 of this
+  change recorded that whichever landed second must carry the job cause through the queue entry; R2
+  moved that work **into this change** (Context, above), because the entry-delivered path already
+  exists today. After R2, S13 needs nothing from this change beyond keeping `:898`'s cause read; S13's
+  own text does not mention this change yet, and its R2/R3 should.
+- **Divergence restaffs** are left recorded as the operator's request. The spec's cause clause arguably
+  reaches them too (the Hub acting on the operator's divergence policy); naming that cause is a
+  separate question, noted for the operator, not decided here.
 
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
+- R2 (2026-09-24): R1's claim that `agent_trigger.py:898` only transitions on an operator dispatch is false — the review task id is read from delivered entries, and flow- and divergence-queued entries carry one. The job cause now travels on `InboundQueueEntry.job_id`. Loop vs flow labelling corrected. Every other claim (`ORIGINS` at `task_transition_service.py:563-565`, divergence resolution at `:701`, the three callers, the pin at `test_flow_chain_end_to_end.py:342-352`, jobs never deleted `jobs.py:1174`, `TaskTransitionHistory.tsx:40-44`) re-read and holds.

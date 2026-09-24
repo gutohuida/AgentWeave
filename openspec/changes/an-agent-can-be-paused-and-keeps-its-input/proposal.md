@@ -33,8 +33,8 @@ firings (`scheduler.py:1008-1030`), and keeps it out of a flow's free pool (`sch
 - **`Agent.paused_at`** (nullable timestamp; one migration). Separate from `lifecycle`: a paused
   agent stays on the roster and in its conversations; archiving is a different act.
 - **One hold read.** A new `agent_hold(db, project_id, agent)` returns the pause if set, else the
-  provider hold; the six sites that read `provider_hold` read it instead, and
-  `agents_held` includes paused agents. Unlike the provider hold, **operator input does not probe a
+  provider hold; the seven sites that read `provider_hold`/`agents_held` read it instead, and
+  `agents_held` includes paused agents (a separate query: it enumerates only agents with usage rows). Unlike the provider hold, **operator input does not probe a
   pause** — the operator said stop; their own new message waits with the rest.
 - **What input does while paused: it is queued and kept** (the decision F15 asked for). A trigger or
   a peer message answers `queued` with the waiting reason *"<agent> is paused. Resume it to deliver

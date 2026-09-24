@@ -1,6 +1,6 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: independent re-derivation against `agents.py:1460-1560` and `:1612-1700`, `agent_trigger.py:720-1090`, `runner_commands.py:120-270`; count every other bare tool name in rendered context and argue design D2's last paragraph
+- [x] 0.1 R2: independent re-derivation against `agents.py:1460-1560` and `:1612-1700`, `agent_trigger.py:720-1090`, `runner_commands.py:120-270`; count every other bare tool name in rendered context and argue design D2's last paragraph
 - [ ] 0.2 R3: second independent re-derivation; `openspec validate a-claude-run-is-told-its-agentweave-tools-by-their-full-names --strict` passes
 - [ ] 0.3 The operator answers F139 (full names / disable the host tool); recorded in `spec-queue/DECISIONS.md`
 
@@ -10,6 +10,8 @@
 - [ ] 1.2 Same file, control: `runner="codex"` renders bare names with today's preamble. PASSES today once the parameter exists
 - [ ] 1.3 Same file: `GET /agents/agent-context?agent=x` renders bare names (no run, no runner). Control
 - [ ] 1.4 `trigger_agent_directly` for a `claude` runner writes a context file containing `mcp__agentweave__send_message` (capture the file as `test_agent_trigger.py` captures the command). FAILS today
+- [ ] 1.4a `launchability.access_path_notice("mcp", tool_prefix="mcp__agentweave__")` names `mcp__agentweave__send_message` and does not contain a bare ` send_message `; and the context file written by 1.4's trigger contains the prefixed notice. FAILS today (no parameter; notice is bare)
+- [ ] 1.4b The prefixed preamble contains the "call it by the full name listed here" clause. FAILS today
 - [ ] 1.5 `test_tool_surface_matches_server.py` passes against both renderings (strip the prefix before comparing)
 - [ ] 1.6 Unit: `build_command` routes exactly `CLAUDE_FAMILY_RUNNERS` to `_build_claude_command` (so the prefix set and the command builder cannot drift)
 
@@ -18,6 +20,7 @@
 - [ ] 2.1 `CLAUDE_FAMILY_RUNNERS` in `runner_commands.py`, used at `:179`
 - [ ] 2.2 `tool_prefix` through `_tool_surface_lines`/`_mcp_lines`; the new preamble sentence for prefixed renderings
 - [ ] 2.3 `runner` parameter on `_render_hub_agent_context`, passed from `trigger_agent_directly`
+- [ ] 2.4 `access_path_notice(access_path, tool_prefix="")` (`launchability.py:383-393`); `agent_trigger.py:1123` passes the prefix for Claude-family runs
 
 ## 3. Verify
 

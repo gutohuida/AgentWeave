@@ -1,6 +1,6 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: independent re-derivation against `messages.py:40-140`, `worktrees.py:70-150`, `mcp_server.py:204-244`, the `_operations()` `send_message` row (`agents.py:1029`), and a `grep -rn "unasked" hub/ src/` confirming nothing implements the two removed requirements
+- [x] 0.1 R2: independent re-derivation against `messages.py:40-140`, `worktrees.py:70-150`, `mcp_server.py:204-244`, the `_operations()` `send_message` row (`agents.py:1029`), and a `grep -rn "unasked" hub/ src/` confirming nothing implements the two removed requirements
 - [ ] 0.2 R3: second independent re-derivation; `openspec validate a-message-to-the-operator-is-told-where-the-operator-reads --strict` passes
 - [ ] 0.3 The operator answers F77 (refusal only / a `notify_operator` tool later) and whether the REMOVED half ships here; recorded in `spec-queue/DECISIONS.md`
 

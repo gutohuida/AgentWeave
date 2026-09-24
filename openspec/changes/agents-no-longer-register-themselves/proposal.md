@@ -7,7 +7,11 @@ vocabulary around it. All three re-verified on HEAD `404c7d5`. **Nothing here is
 ## Why
 
 The operator decided on 2026-08-29 that self-registration leaves the product (FINDINGS F111,
-*"The decision, 2026-08-29"*). The deletion was queued as a spec loop and never built, so all three
+*"The decision, 2026-08-29"*; the operator's words are quoted in the untracked handoff
+`handoff-0099-2026-08-29-1250-merged-decided-drove-and-armed.md`, decision 2: *"No it does not belong
+in the product … I think it's a legacy thing"*, and the roadmap
+`openspec/explorations/2026-08-30-release-roadmap.md:78` lists it *"Decided 2026-08-29, queued"*).
+`spec-queue/DECISIONS.md` has no entry for it. The deletion was queued as a spec loop and never built, so all three
 findings still reproduce from source:
 
 - **F111 / F136 — an unbound self-registered agent is told to install a binary named after
@@ -75,6 +79,6 @@ named as a follow-on in design Open Question 2.
   meaningfully (measured above).
 - **Response shape:** four agent fields disappear from three responses. The UI declares them and
   renders one of them in a component nothing mounts.
-- **Harnesses:** 8 `scripts/drive/` files, `.claude/skills/e2e-loop/e2e.py`, and
+- **Harnesses:** 9 `scripts/drive/` files, `.claude/skills/e2e-loop/e2e.py`, and
   `docs/reference/hub-api.md` call or document the route. Drive harnesses are updated or marked
   retired; the docs row is deleted.

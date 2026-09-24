@@ -1,6 +1,6 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: independent re-derivation against `agent_actions.py:279-292`, `tasks.py:1270-1460`, `schemas/tasks.py:120-170`, `mcp_server.py:337-351`, `_operations()` `update_task` row; confirm D2a's rollback question
+- [x] 0.1 R2: independent re-derivation against `agent_actions.py:279-292`, `tasks.py:1270-1460`, `schemas/tasks.py:120-170`, `mcp_server.py:337-351`, `_operations()` `update_task` row; confirm D2a's rollback question
 - [ ] 0.2 R3: second independent re-derivation; `openspec validate an-agent-updates-a-task-with-what-its-tool-carries --strict` passes
 - [ ] 0.3 The operator answers F366 (agents may not set the holder / may); recorded in `spec-queue/DECISIONS.md`
 

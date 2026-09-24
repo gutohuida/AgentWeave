@@ -38,7 +38,7 @@ they are today for the review edge, but not for unassigning another agent's `in_
 | Field | Agent | Reason |
 |---|---|---|
 | `status`, `notes` | yes (unchanged) | the tool's purpose |
-| `requirement_ids`, `spec_document` | **yes — added to the tool** | the service already records the link as the agent's (`SpecActor(kind="agent")`, `tasks.py:1441-1445`); linking work to requirements is agent work in the spec flow |
+| `requirement_ids`, `spec_document` (R2: `spec_document` is not written to the task; it only tells `resolve_identifiers` which document to resolve the ids in, `tasks.py:1431-1433`) | **yes — added to the tool** | the service already records the link as the agent's (`SpecActor(kind="agent")`, `tasks.py:1441-1445`); linking work to requirements is agent work in the spec flow |
 | `assignee` | no | staffing is the operator's or a flow's; self-assignment to a review is the bypass F366 names |
 | `priority`, `description` | no | the operator's words about the task; an agent's account goes in `notes` |
 | `divergence_policy`, `escalation_agent`, `blocked_reason`, `loop_id` | no (unchanged) | existing refusals and sentences kept |
@@ -50,9 +50,13 @@ the body (`model_fields_set`), so a caller sending two learns both at once.
 
 Unchanged paths: `apply_transition` refusals become their existing 4xx; `resolve_identifiers` raises
 `LinkRefusedError` → 422. The new check raises before anything else, so it cannot leave a half-applied
-update. The divergence-policy check's placement is not moved (out of scope), but R2 should confirm the
-session is rolled back on that 403 (i.e. the dependency does not commit on exception).
+update. The divergence-policy check's placement is not moved (out of scope). **R2 confirmed the rollback:**
+`get_session` (`db/engine.py:166-169`) only yields inside `async with async_session_factory()`, never
+commits, and nothing between the assignee write (`tasks.py:1312`) and that 403 (`:1417`) commits —
+`apply_transition` only stages (the comment at `tasks.py:~1377` already relies on this). So a refused
+update leaves the row unchanged today; the new check, placed before any write, does not depend on it.
 
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
+- R2 (2026-09-24): route, service and tool re-read; the field table matches `tasks.py:1286-1446` exactly. No existing test or drive script sends `assignee`/`priority`/`description` on the agent plane (grep). D2a's rollback question answered (it rolls back).

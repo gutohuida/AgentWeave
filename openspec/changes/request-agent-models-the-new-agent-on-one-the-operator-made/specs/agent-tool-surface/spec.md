@@ -9,8 +9,9 @@ approves nothing, and a tool whose only input has no producer refuses every call
 described to agents as available.
 
 The new agent SHALL NOT inherit authority the operator grants one agent at a time — the grants to
-accept evidence, to read other agents' checkpoints and to recall observations — nor that agent's
-description or per-agent overrides. An agent MUST NOT be able to create a second holder of a grant
+accept evidence, to read other agents' checkpoints and to recall observations — nor its default
+permission posture, in any spelling the spawn reads, nor that agent's description or per-agent
+overrides. A new agent runs under the built-in default posture until the operator sets one. An agent MUST NOT be able to create a second holder of a grant
 the operator gave to one.
 
 A request naming no such agent SHALL be refused with the names of the project's open agents it could
@@ -29,6 +30,13 @@ saying so. The agent budget SHALL be counted over the project's agents alone.
 - **GIVEN** a template agent the operator granted authority to accept evidence
 - **WHEN** an agent is requested from it
 - **THEN** the new agent holds no such grant
+
+#### Scenario: A full-access template does not produce a full-access agent
+
+- **GIVEN** a template agent the operator set to run with full access
+- **WHEN** an agent is requested from it
+- **THEN** the new agent's first turn is not started with full access
+- **AND** its settings show the built-in default posture
 
 #### Scenario: An unknown template names what would work
 

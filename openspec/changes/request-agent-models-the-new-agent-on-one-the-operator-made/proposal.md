@@ -34,9 +34,10 @@ Even where a template was found, the new agent was created with **no runner boun
 ## What Changes
 
 - **A template is an existing, open agent of the project, named exactly.** The new agent copies that
-  agent's `runner_id`, `charter_id` and `config`; it does **not** copy the per-agent grants
-  (`can_accept_evidence`, `can_read_checkpoints`, `can_recall` start closed), its description, or its
-  checkpoint and waiting overrides. The operator approved the template by creating it; the agent
+  agent's `runner_id`, `charter_id` and `config` (less `principal` and `yolo`); it does **not** copy the
+  per-agent grants (`can_accept_evidence`, `can_read_checkpoints`, `can_recall` start closed), its
+  permission posture (`default_permission_mode`, nor its legacy mirror `config["yolo"]`, which the
+  spawn reads — R2), its description, or its checkpoint and waiting overrides. The operator approved the template by creating it; the agent
   budget (`Project.agent_budget`) remains the ceiling, exactly as `agent-tool-surface` requires.
 - **The refusal names what would work**: an unknown template answers 400 listing the project's open
   agents (bounded), an archived one says it is archived.
@@ -44,7 +45,8 @@ Even where a template was found, the new agent was created with **no runner boun
   rows (the `set(templates)` term at `:2181` goes).
 - The tool's description and the `_operations()` row say what `template` means.
 - The route no longer answers 500 for a turn it did queue: a raise from `schedule_agent` after the
-  commit is logged and the answer stays `201 queued` (design D4).
+  commit is logged and the answer stays `201 queued` (design D4). The entry then waits until the agent
+  is next scheduled; no sweep picks it up sooner.
 
 ## Capabilities
 

@@ -40,9 +40,27 @@ and loses subagent continuation for every Hub run.
 `access_path == "mcp"`. `CLAUDE_FAMILY_RUNNERS` is declared once, in `runner_commands.py`, and the
 `build_command` branch at `:179` reads it, so the two cannot drift. The HTTP rendering is unchanged.
 
-Other bare mentions elsewhere in the context (e.g. `ask_user` inside `SPEC_PHASE_DUTIES`,
-`agents.py:1560-1575`) are **not** rewritten in this change; R2 should count them and say whether the
-list alone is enough, given the list is where the agent looks a tool up.
+**Bare mentions outside the list (counted by R2).** A single-line-string grep for the 27 served tool
+names, outside `_operations()` and `mcp_server.py`, finds **at least 35** mentions in text that reaches
+a turn: ~19 in `agents.py`'s context builders (review verdict `:1749`, spec-document duties
+`:1848-1958`, evidence grants `:2011-2032`, checkpoint and recall grants `:2062-2078`, checkpoint
+notes `:2991`, `:3027`), 8 in `launchability.py` (phase duties `:353-377`, evidence `:445`, and the
+**access-path notice** `:390-393`), 3 in `review_turn.py:230-236`, 2 in `scheduler.py` briefings
+(`:2542`, `:2569`) and 1 in `checkpoint_generation.py:365` — a lower bound, since multi-line strings
+split across literals are missed. Several are produced where no runner is known (scheduler briefings,
+review prompts), so threading a prefix through all of them is a wide change for little gain.
+
+**Recommendation: the list plus the one notice that names `send_message`, not the rest.**
+
+- The **access-path notice** (`launchability.access_path_notice`, `:389-393`) is rendered for every MCP
+  run (`agent_trigger.py:1123`) and says *"call send_message / create_task / update_task / ask_user
+  directly"* — it names the colliding tool bare, in the one sentence whose purpose is to say how to
+  call the tools. It is qualified too: it takes the same `tool_prefix` and, for a Claude-family run,
+  names `mcp__agentweave__send_message` etc. Its caller already holds `runner`.
+- The prefixed list's preamble gains one clause: *"Elsewhere in these instructions a tool may be named
+  by its short name (`ask_user`); call it by the full name listed here."* That makes every other
+  mention a reference into the list, which is where an agent looks a tool up, and the collision is
+  only with `send_message`, which is covered twice.
 
 ## D3 — What the route returns when what it calls raises
 
@@ -51,3 +69,4 @@ No route changes. `GET /agents/agent-context` passes no runner and renders as to
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
+- R2 (2026-09-24): claims re-read (`agents.py:1533-1537` preamble, `_mcp_lines` `:1468-1473`, `build_command` `runner_commands.py:179`, server key `agentweave` `:252-253`, `access_path` resolved at `agent_trigger.py:1057`). Counted the bare mentions outside the list (≥35 in 7 modules) and found the access-path notice names `send_message` bare on every MCP run; added it to scope, plus one preamble clause for the rest.

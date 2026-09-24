@@ -34,6 +34,10 @@ agent, and it is a legitimate tool for a run to have — which rules out disabli
   one sentence: *"These are AgentWeave's tools. Your host also has tools with similar names —
   `SendMessage` continues a subagent you started — which cannot reach AgentWeave agents or the
   operator."*
+- The **access-path notice** every MCP run receives (`launchability.py:389-393`, *"call send_message /
+  create_task / update_task / ask_user directly"*) is qualified the same way, and the preamble says
+  that a tool named elsewhere by its short name is called by the full name in the list (R2: at least 35
+  such mentions across 7 modules, several built where no runner is known).
 - Other runners keep today's rendering (their MCP naming is not the same, and Codex is not driveable
   here to measure it).
 - The runner is passed into `_render_hub_agent_context` from `trigger_agent_directly`, which already
@@ -47,6 +51,6 @@ agent, and it is a legitimate tool for a run to have — which rules out disabli
 
 ## Impact
 
-Backend text only (`agents.py`, `agent_trigger.py`); the agent-facing text tests
+Backend text only (`agents.py`, `agent_trigger.py`, `launchability.py`); the agent-facing text tests
 (`hub/tests/test_agent_facing_text.py`, `test_tool_surface_matches_server.py`) are updated. No
 migration, no UI. `GET /agents/agent-context` (no run, no runner) keeps the unprefixed rendering.

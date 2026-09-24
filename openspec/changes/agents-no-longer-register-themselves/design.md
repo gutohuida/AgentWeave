@@ -112,3 +112,15 @@ does not touch.
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
+- R2 (2026-09-24): every site in D3's table re-derived by `grep` and confirmed (`scheduler.py:250`
+  is the only behavioural reader; `_job_agent_skip_reason`'s one call is `:3078`). Test footprint
+  confirmed at 31 sites in 19 files plus the 24 in `test_agents_self_registered.py`; drive callers
+  are **9**, not 8. The 2026-08-29 decision is sourced (proposal *Why*). Task 1.3 corrected: after the
+  migration it cannot set `self_registered`, so it is a control, and the guard's return is prevented by
+  the column's absence (1.6) plus a source assertion. B5's final text
+  (`isolation-does-not-change-under-held-work` design *Cross-bundle*) agrees with the interaction
+  recorded here; B10's final text deletes `AgentCard.tsx`, so task 2.9's badge edit is moot if B10
+  lands first. **Follow-on noted, not in scope:** `jobs._check_agent_exists` (`jobs.py:181-200`)
+  exempts a project with an empty roster on the argument that a job may be created *"before the
+  watchdog first syncs"*; with self-registration gone that bootstrap order no longer exists, and that
+  exemption is the last producer of F276's no-such-agent firing.

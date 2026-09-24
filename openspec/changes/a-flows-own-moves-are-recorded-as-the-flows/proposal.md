@@ -35,12 +35,16 @@ is the axis the spec already provides for exactly this distinction.
   authority"*, plus a nullable `task_transitions.job_id` naming the job. The actor stays `operator`
   — the authority the gate needs is unchanged, so no legality or separation rule moves.
 - `enter_selected_task` takes the firing's `job_id`; its two scheduler callers (`scheduler.py:3336`,
-  `:3709`) pass `job.id`; its hand-dispatched-review caller (`agent_trigger.py:898`) passes none and
-  stays the operator's own act.
+  `:3709`) pass `job.id`. Its third caller (`agent_trigger.py:898`) is reached by **every** delivered
+  review entry, not only the operator's (R2): a flow's queued review that is delivered after its task
+  came back to `completed` travels the edge there. So a queued entry carries the job too
+  (`inbound_queue_entries.job_id`), and `:898` records `job` when the delivered review entries are a
+  job's and no operator entry is among them.
 - `apply_transition` accepts `origin="job"` only with a `job_id` and an operator actor; divergence
   resolution keeps firing for it (`origin != "runtime"` instead of `== "actor"`).
-- `GET /tasks/{id}/transitions` and the MCP `task_history` carry `job_id` and the job's name; the
-  history drawer reads **"Flow *<name>* moved …"** instead of "You moved …".
+- `GET /tasks/{id}/transitions` and the MCP `task_history` carry `job_id`, the job's name and whether
+  it is a flow or a plain loop; the history drawer reads **"Flow *<name>* moved …"** (or "Loop *<name>*
+  moved …") instead of "You moved …".
 - A source scan (beside `test_only_the_binding_module_may_record_a_runtime_transition`) holds that
   only `scheduler.py` records `origin="job"`.
 
@@ -52,8 +56,8 @@ is the axis the spec already provides for exactly this distinction.
 
 ## Impact
 
-- **Migration** (next free number at IMPL time): one nullable `String(64)` column, **not** a foreign
-  key (the SQLite drop trap recorded at `db/models.py:708-712`). Existing rows are not rewritten —
+- **Migration** (next free number at IMPL time): two nullable `String(64)` columns (`task_transitions.job_id`, `inbound_queue_entries.job_id`), **not** foreign keys
+  (the SQLite drop trap recorded at `db/models.py:708-712`). Existing rows are not rewritten —
   history is append-only (`TaskTransition` docstring) and a backfill would invent a cause nobody
   observed; the 38 existing operator rows keep saying what they say.
 - **UI:** `TaskTransitionHistory.tsx` and the `TaskTransition` type; one bundle refresh.
