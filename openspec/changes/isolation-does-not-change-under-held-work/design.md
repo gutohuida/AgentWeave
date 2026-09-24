@@ -1,5 +1,33 @@
 # Design — isolation does not change under held work
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B5-2026-09-24.md`, section 5: *approve with
+fixes*) and the operator's decisions recorded there. What changed, and why:
+
+- **D12-1 answered as recommended: refuse under held work.** D1 stands.
+- **The helper compares the effective config, not `Agent.config` (review, MEDIUM).** Where an agent
+  works is decided by `get_agent_config`'s merged dict, `{**agent_row.config, **session_meta}`, in
+  which the synced session entry **wins** (`hub/hub/launchability.py:485-486`); every
+  `is_writing_agent` caller that picks a workspace reads that dict (`agent_trigger.py:689`, `:718`,
+  `:1442`; `api/v1/worktrees.py:316-317`). A helper comparing `Agent.config` alone refuses a PATCH
+  that changes nothing effective (session meta pins `read_only`) and could miss one that does. D1
+  now compares `is_writing_agent` over the effective config before and after, and the merge rule is
+  extracted once (`effective_agent_config`) so the helper and `get_agent_config` cannot disagree.
+  Tests 1.9 and 1.10.
+- **A third door, `POST /session/sync`, is guarded (review, MEDIUM; operator decision 4: guard it).**
+  The route replaces `ProjectSession.data` wholesale (`hub/hub/api/v1/session_sync.py:61-75`), and
+  its `agents.<name>.read_only` outranks `Agent.config`. It now runs the same refusal for every agent
+  in the new payload before it assigns `row.data`. Tests 1.11-1.13; spec delta widened from "stored
+  configuration" to "the configuration the Hub reads for the agent, including synced session state".
+  R2's round-log claim that `PATCH` and `register` are the only writers of `read_only` was wrong about
+  this door.
+- **B3's interaction stands**: `agents-no-longer-register-themselves` deletes `POST /agents/register`,
+  and with it this change's guard there (task 1.4). B3 keeps `/session/sync` on purpose (its `design.md:107`) and leaves `PATCH` alone.
+- No spec SHALL is contradicted: `openspec/specs/` states nothing about `/session/sync` or
+  `read_only` (grep), so the delta stays one ADDED requirement.
+
+
 **Built on the recommended answer to D12's first question** (F242: *may `read_only` flip
 mid-task?*): **no — refused while the agent holds work, allowed otherwise.** If the operator answers
 otherwise:
@@ -26,11 +54,19 @@ read-only agent's evidence is footprinted at its recorded directory, the project
 
 ## D1 — the rule
 
+The setting that decides where a turn runs is the **effective** config: `get_agent_config` merges
+the synced session entry over `Agent.config`, the session entry winning
+(`launchability.py:485-486` — note its docstring at `:453-456` states the opposite order; the code is
+what runs, and the build corrects the docstring). The rule compares that, before and after:
+
 ```python
-async def _isolation_change_refusal(session, project_id, agent_row, new_config) -> Optional[dict]:
-    before = worktrees.is_writing_agent(agent_row.config or {})
-    after = worktrees.is_writing_agent(new_config)
-    if before == after:
+# launchability.py — the merge rule, stated once; get_agent_config uses it too
+def effective_agent_config(agent_config, session_meta) -> dict:
+    return {**(agent_config or {}), **(session_meta or {})}
+
+async def isolation_change_refusal(session, project_id, agent_name, before, after) -> Optional[dict]:
+    # before/after: effective configs (effective_agent_config over the stored and the proposed state)
+    if worktrees.is_writing_agent(before) == worktrees.is_writing_agent(after):
         return None
     live = [run for run in <agent's Run rows whose id is in run_liveness.live_run_ids()>]
     held = [task for task in <Task where project_id, assignee == agent, status not in TERMINAL_STATUSES>]
@@ -38,6 +74,9 @@ async def _isolation_change_refusal(session, project_id, agent_row, new_config) 
         return None
     return {"code": "isolation_change_under_held_work", "message": …, "held": {...}}
 ```
+
+It lives beside `get_agent_config` in `launchability.py` (which already imports models lazily,
+`:267`, `:469`) because two routers call it and neither should import the other.
 
 - **Both directions.** Turning isolation **on** mid-task strands the other way: the previous turns'
   uncommitted edits sit in the operator's checkout while the next turn provisions a fresh task
@@ -59,24 +98,37 @@ async def _isolation_change_refusal(session, project_id, agent_row, new_config) 
 - **A review is not held work.** A reviewer is not the task's assignee, and its review checkout is
   detached and per-agent; a live review is covered by the live-run check.
 
-Where it runs: `patch_agent`, after the config merge is computed and before it is assigned
-(`agents.py:2648-2659`), so `config: null` (which clears `read_only`) is covered; and
-`register_agent`'s re-registration branch (`:2300-2308`).
+Where it runs — three doors, each computing `before` from the stored state and `after` from the
+state it is about to write, and refusing before it mutates anything:
+
+- `patch_agent`, before the config merge is assigned (`agents.py:2648-2659`): `after` is the merged
+  or cleared `Agent.config` under the **current** session entry, so `config: null` (which clears
+  `read_only`) is covered, and a PATCH that the session entry overrides is not a change.
+- `register_agent`'s re-registration branch (`:2300-2308`), the same way.
+- `sync_session` (`api/v1/session_sync.py:46-75`), before `row.data = body.data` (`:67`): for each
+  agent named in the new payload that has an `Agent` row, `before` is its effective config under the
+  old session data and `after` is `effective_agent_config(row.config, body.data["agents"][name])`.
+  The first refusal raises 409; the payload is refused whole. An agent the payload **omits** is
+  deleted, not re-isolated — removal keeps today's behaviour (its own checkout released, its task
+  checkouts left alone, `session_sync.py:117-127`), and is not this rule's question.
 
 ## What the routes return when what they call raises
 
-The helper reads the registry (in-memory) and one `Task` query. A database error propagates as
-today's 500 from either route, with nothing assigned — the check runs before the row is mutated.
-The refusal is raised before `session.commit()`, so a refused body changes **no** field, not only
-`config` — the same "refused whole" rule the route already states for unknown fields
-(`agents.py:2548-2553`).
+The helper reads the registry (in-memory) and one `Task` and one `Run` query. A database error
+propagates as today's 500 from any of the three routes, with nothing assigned — the check runs before
+the row is mutated. The refusal is raised before `session.commit()` (`session_sync.py:115` for the
+sync route), and `get_session` never commits on exit (`db/engine.py:166-169`), so a refused body
+changes **no** field — not only `config`: on `PATCH` the same "refused whole" rule the route already
+states for unknown fields (`agents.py:2548-2553`); on `/session/sync` neither `ProjectSession.data`
+nor any roster row (no agent added, none deleted, no worktree released — the release runs after the
+commit).
 
 ## Cross-bundle
 
 `agents-no-longer-register-themselves` (bundle B3) deletes `POST /agents/register`. If it lands
 first, this change's guard on that route and its task 1.4 are dropped; if this lands first, B3
 deletes the guard with the route. B3's design already records this (its *Cross-bundle* list). The
-`PATCH` door is untouched by B3.
+`PATCH` and `/session/sync` doors are untouched by B3.
 
 ## Open questions
 
@@ -104,3 +156,10 @@ deletes the guard with the route. B3's design already records this (its *Cross-b
   (`worktrees.py:226-230`), `run_liveness.live_run_ids` (`:64`) and `TERMINAL_STATUSES`
   (`task_transition_service.py:736`) exist as the helper assumes; `takes_task_workspace` gives
   `read_only` precedence over the task (`worktrees.py:763-773`). No claim disagreed; nothing changed.
+- **Operator review, 2026-09-24.** Two fixes from `spec-queue/tracks/reviews/B5-2026-09-24.md` §5,
+  re-verified at HEAD `d0da83d`: the effective-config merge (`launchability.py:485-486`; workspace
+  callers read it via `get_agent_config`, `agent_trigger.py:689`, `:718`, `:1442`,
+  `api/v1/worktrees.py:316-317`) and the third door, `POST /session/sync`
+  (`session_sync.py:46-75`, commit `:115`), guarded per operator decision 4. Seeding fixtures that
+  sync `read_only` (`test_agent_trigger.py:488`, `test_project_scoped_runtime.py:103`) seed the roster
+  at setup, which holds no work; control 1.14 runs every suite that calls `/session/sync` to prove it.

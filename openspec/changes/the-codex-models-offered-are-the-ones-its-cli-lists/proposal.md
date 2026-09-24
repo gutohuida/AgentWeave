@@ -45,8 +45,9 @@ it fixable, because there is nothing left to fix by hand.
   `read_codex_rollout_accounting` uses (`runner_parsing.py:677`). The models are the entries with
   `visibility: "list"`, in the cache's `priority` order. Each takes the cache's `display_name` as
   its label and its `context_window` as its window. The first becomes the default. The read is
-  memoised on the file's modification time, so the Codex CLI refreshing its cache reaches the Hub
-  without a restart.
+  memoised on the file's modification time and size, only when it succeeds, so the Codex CLI
+  refreshing its cache reaches the Hub without a restart and a failed read is retried. A run on a
+  model the cache no longer lists keeps the built-in list's context window for it.
 - **The literal stays, as the fallback.** It is used when the cache is absent, unreadable,
   malformed, or lists no model. That covers CI, a machine without Codex, and a Docker Hub whose
   container has no Codex home. `scripts/check_model_catalog.py` keeps its job of telling whoever

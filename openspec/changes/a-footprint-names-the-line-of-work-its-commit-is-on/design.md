@@ -1,5 +1,37 @@
 # Design — a footprint names the line of work its commit is on
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B5-2026-09-24.md`, section 4) returned
+**approve with fixes**, and the operator answered D12's third question as recommended (one
+spelling `""`, resolved, with the data migration). What changed, and why:
+
+- **The `""` bucket is no longer reduced as a line of work (review MEDIUM).** `integration_targets`
+  keys `""` like any branch (`task_integration.py:283-285`), and R3's D4 kept "later observation
+  wins" for two commits where neither contains the other. But `""` means *no known line of work*:
+  two such commits share nothing but a missing name, so the observation-order rule would drop an
+  unrelated piece of accepted work from the merge. D4 gains a second arm (below): among unnamed
+  footprints, only a **proper ancestor** of another kept commit is dropped; every commit where
+  neither contains the other is kept, and an unanswerable probe keeps both. New tests 1.5d and 1.5e;
+  new spec scenarios.
+- **The MODIFIED requirement stated two absolute fallbacks side by side (review LOW).** "Where no
+  checkout for the agent exists … SHALL fall back to the project's own directory" stood next to the
+  new task-branch-tip rule. The delta now states the order: the task-branch tip first, *otherwise*
+  the project's own directory, and the two fallback scenarios say they are the no-task-branch case.
+- **An existing SHALL this change contradicted without a delta (found while applying the review).**
+  `task-lifecycle-governance`, *Approval integrates the approved work*, says what is merged is
+  "the newest such commit per distinct branch" (`openspec/specs/task-lifecycle-governance/spec.md:881`).
+  D4 (descendant wins) and the new `""` arm both change that sentence, so the change now carries a
+  MODIFIED delta for that requirement (`specs/task-lifecycle-governance/spec.md`). The refusal
+  requirement's explanatory "keeping the most recently recorded accepted evidence for each"
+  (`:965-967`) is descriptive, not a SHALL, and every SHALL around it still holds: a conflict
+  resolution committed on the branch is a descendant of the judged commit (D4 keeps it) or, after a
+  rewrite, neither contains the other (the later recording wins, as today). Not modified.
+- **The migration is a no-op on real data (review, measured read-only).** `:8000` at head `0105`:
+  zero rows with `'HEAD'`, zero with `''`, 9 `NULL`, 89 named. The trial DB: 2 rows, both task
+  branches. The idempotent `UPDATE` is kept for rows written between now and deploy, and is safe to
+  re-run. Recorded under D1.
+
 **Built on the recommended answer to D12's third question** (F165: the unknown-branch spelling):
 *one spelling, `""`, and the branch resolved wherever git can say which line of work a commit is on*.
 If the operator answers otherwise:
@@ -55,6 +87,11 @@ implemented (`0105` is head at `404c7d5`, and four other parked changes also nam
 Data-only; no head-assertion bump is needed unless `test_migrations.py` asserts the head id (it
 does — bump it per `.claude/rules/db-migrations.md`). `detect_drift`'s `ref == "HEAD"` clause stays
 one release as a guard for rows written between deploy and migration, then goes.
+
+**Measured on real data (operator review, read-only `mode=ro`).** `:8000` at head `0105` holds
+zero footprints with `branch = 'HEAD'`, zero with `''`, 9 `NULL` and 89 named; the trial DB holds 2,
+both on task branches. So the `UPDATE` changes nothing today; it exists for rows written between now
+and deploy. The 9 `NULL` rows are left as they are; D4's unnamed arm treats `NULL` as `""`.
 
 ## D2 — `line_of_work(root, commit, *, task_branch=None) -> str`
 
@@ -144,6 +181,22 @@ path (`api/v1/tasks.py:1122`). So:
   observation wins — changing which `evidence_id` the gate's `unmergeable` entry names, `requirement_gate.py:448-452`; the third argument accepts a sha, since it is `rev-parse --verify`'d
   then passed to `merge-base --is-ancestor`, `:587-612`); where neither contains the other (a
   rebase), the newer observation wins as today. `None` from the probe is "not an ancestor".
+  This arm applies to **named** lines of work only.
+- **Unnamed footprints (operator review).** A footprint whose branch is `""` — or `NULL`, which
+  `_targets` passes through as `None` and today forms its own key (`task_integration.py:283`,
+  `EvidenceFootprint.branch` is nullable, `db/models.py:2591`) — names *no* line of work, so the
+  unnamed footprints are not one bucket. They are reduced as a set, oldest observation first: an
+  incoming commit equal to a kept one **replaces** it (the later row's `evidence_id`, as 1.5c pins for
+  named lines); an incoming commit that is a proper ancestor of any kept commit is **dropped**;
+  otherwise every kept commit that is a proper ancestor of the incoming one is removed and the
+  incoming one is **kept**. Where the probe answers `None`, the two are treated as unrelated and
+  **both kept** — the opposite default to the named arm, because there observation order is a
+  real rule about one line of work, while here dropping on an unknown answer loses accepted work.
+  Every kept unnamed commit becomes its own `Target` (branch `""`).
+- **Consequence for merging, stated.** Two kept unnamed commits are merged one after the other, as
+  two named branches already are; each is probed against main by the gate separately
+  (`requirement_gate._check_mergeable`), so a conflict *between* them surfaces at the merge, not the
+  gate. That is the existing multi-branch behaviour, not new to this change.
 - `integration_targets` keeps its observation-order reduction and its pure-database contract, for
   any caller without a repository.
 - **It fires from the real approval path (R3, traced).** `PATCH /tasks/{id} {"status":"approved"}` →
@@ -165,8 +218,8 @@ observation it would displace the author's newer one and approval would merge le
 Today the `"HEAD"` bucket hides that. The awaiting list (`awaiting_targets`) is unreduced by design
 (`:289-304`) and is unaffected.
 
-**Cost.** One `merge-base --is-ancestor` per same-branch collision, bounded by the accepted rows of
-one task; `refresh_reachability` already caps a similar loop at 200 (`MAX_REACHABILITY_CHECKS`).
+**Cost.** One `merge-base --is-ancestor` per same-branch collision, and for unnamed footprints up to
+one per pair (kept × incoming), all bounded by the accepted rows of one task; `refresh_reachability` already caps a similar loop at 200 (`MAX_REACHABILITY_CHECKS`).
 
 ## What the routes return when what they call raises
 
@@ -214,3 +267,9 @@ what `branch` means), then B6's.
   at stake. `is_reachable_from` is wrapped (`None` on failure), so D4 adds no raise to the gate.
   D1-D3, `line_of_work`, `read_footprint`'s signature and the `read_evidence_footprint` seam are
   **unchanged** (B6 builds on them).
+- **Operator review, 2026-09-24** (`spec-queue/tracks/reviews/B5-2026-09-24.md` §4). D4 gains the
+  unnamed arm (only proper ancestors dropped; tests 1.5d, 1.5e); the MODIFIED footprint requirement
+  orders its fallbacks with "otherwise"; a MODIFIED delta for `task-lifecycle-governance`'s *Approval
+  integrates the approved work* replaces "the newest such commit per distinct branch"; the migration's
+  no-op on real data recorded. D1-D3 and the B6 seam are **unchanged**; D4's edit stays inside
+  `merge_targets`.

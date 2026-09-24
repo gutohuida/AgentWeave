@@ -6,7 +6,7 @@
 
 ## 1. Tests first — each fails on today's code
 
-- [ ] 1.1 Design test 1: every door accepts `opus`, and the routes store `"opus"`
+- [ ] 1.1 Design test 1: every door accepts `opus`, and the routes store `"opus"`: `POST /runners`, `POST /agents`, **and `PATCH /runners/{id}`** on an existing runner (operator review), plus `validate_overrides` and `worker.model_is_declared`
 - [ ] 1.2 Design test 2: `build_command` passes `--model opus` as written
 - [ ] 1.3 Design test 3: `model_unrecognised` is false for an alias
 - [ ] 1.4 Design test 4: an unknown model's refusal lists the aliases
@@ -19,7 +19,7 @@
 - [ ] 2.1 `ProviderDescriptor.model` resolves aliases (design D1). Rewrite `undeclared_model_reason` without the alias branch, listing aliases among the accepted values
 - [ ] 2.2 `agents.py` find-or-create names an alias runner `"<provider label> — <alias> (latest)"`
 - [ ] 2.3 Rewrite `worker.model_is_declared`'s docstring (the two gates stay equal, now including aliases)
-- [ ] 2.4 UI: `resolveCatalogModel` in `api/modelCatalog.ts`; `RunnerForm`, `AgentCreateDialog` and the checkpoint-model select offer the `Latest` group; `ModelPicker.tsx:55` resolves aliases and `:197`'s active mark compares `current?.id`; `storedIsDeclared` counts an alias; `runnerOptionLabel` renders an alias, if it exists
+- [ ] 2.4 UI: `resolveCatalogModel` in `api/modelCatalog.ts`; `RunnerForm`, `AgentCreateDialog` and the checkpoint-model select offer the `Latest` group; `ModelPicker.tsx:55` resolves aliases and `:197`'s active mark compares `current?.id`; `storedIsDeclared` counts an alias; `runnerOptionLabel` renders an alias's model part as `{alias} (latest)`, if it exists (design D2; a Hub-created alias runner then reads `Claude Code — opus (latest) (claude)`, with a test)
 - [ ] 2.5 Run `py -3.11 -m pytest hub/tests/ -q` with `claude` stripped from PATH, then the CLAUDE.md lint block, then `make ui`. Commit `hub/ui/src` and `hub/hub/static/ui` together
 
 ## 3. Drive

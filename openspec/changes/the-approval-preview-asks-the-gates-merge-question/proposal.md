@@ -34,6 +34,12 @@ preview is fetched only when the drawer is open and approval is reachable
   `would_conflict` — the function the gate uses — and says in `reason` whether approval will merge
   cleanly or be refused, naming the paths. Where it cannot ask (no workspace, not a repository, no
   such main branch), `conflicts` is `null` and today's hedge is the reason.
+- **A git failure is an answer, not a 500** (D1 steps 2-5, operator review 2026-09-24). The
+  listing used when the probe cannot run is wrapped too — today's ungoverned `merge_targets` call
+  (`tasks.py:1131`) is outside its wrap and can raise — git is not asked twice, and the reason says
+  the Hub could not ask git (`GIT_UNANSWERED`). The reason keeps today's order (no main branch →
+  nothing to merge → conflicts), so "nothing to merge" never reads as "merges cleanly", and it
+  states the real commit count.
 - **Nothing is persisted** (D12). A refused approval writes no row. The answer is recomputed from
   the repository each time, so it cannot go stale after a rebase or new evidence, and there is no
   new outcome value for `task_integrations`' readers to learn.
@@ -41,6 +47,10 @@ preview is fetched only when the drawer is open and approval is reachable
   in the refusal's tone when `conflicts` is non-empty.
 
 ## Out of scope
+
+- **F424** — the approval gate's own git calls answering a bare 500 on every approval surface. Named
+  in design ("What the route returns when what it calls raises"); this change fixes only the
+  preview's 500.
 
 - `GET /worktrees/conflicts` reporting branch-versus-main (F141's third repair). Largest, and the
   preview now answers the same question where the operator is about to act.

@@ -1,5 +1,20 @@
 # Design — the Codex models offered are the ones its CLI lists
 
+## Operator review, 2026-09-24
+
+Opus adversarial review, recorded in `spec-queue/tracks/reviews/B7-2026-09-24.md` §5: APPROVE WITH
+FIXES. The real `C:\Users\huida\.codex\models_cache.json` matches every assumption (keys
+`fetched_at`, `etag`, `client_version`, `models`; each entry has `slug`, `display_name`, `visibility`,
+`priority`, `context_window`). Three LOW fixes applied to D1:
+
+- **Parse with `json.loads(path.read_bytes())`**, which detects UTF-8 on any platform, instead of a
+  text-mode open with an explicit encoding (D1.3).
+- **Do not memoise a failed read keyed on mtime alone.** The memo key is `(path, mtime_ns, size)`
+  and only a successful reading is memoised, so a failure is re-read on the next call (D1.2, test
+  5b).
+- **Window lookups fall back to the literal.** A Codex run on a model the cache no longer lists
+  keeps its context window (`runner_parsing.py:402`); validation does not fall back (D1, test 5c).
+
 **Built on the recommended answer to D2 (first question): read the CLI's cache at runtime, with
 the literal as the fallback.** If the operator answers *"regenerate the literal at release"*
 instead, withdraw this change and open a smaller one. It would add a `--write` mode to
@@ -26,12 +41,17 @@ offer its list, refuse the rest) is checkable without spawning Codex at all.
 
 1. Path: `Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")) / "models_cache.json"`,
    through a module-level `_codex_cache_path()` so tests can pin it.
-2. Memoised on `(path, st_mtime_ns)`. A changed file is re-read on the next call. An absent file
-   costs one `stat`.
-3. Read with `encoding="utf-8"` **explicitly**. The real cache on this machine contains bytes that
-   the Windows default codec cannot decode. Measured while writing this change: `json.load(open(p))`
-   raised `UnicodeDecodeError: 'charmap' codec can't decode byte 0x9d in position 11902`. A reader
-   using the default encoding would *always* fall back on this machine and look correct in CI.
+2. Memoised on `(path, st_mtime_ns, st_size)`, and **only a successful reading is memoised**
+   (operator review). A failed reading (a half-written file, a decode error) is re-attempted on the
+   next call, so a cache the CLI was still writing when the Hub first read it is not stuck on the
+   fallback until its mtime happens to move again. A changed file is re-read on the next call. An
+   absent file costs one `stat`.
+3. Read as `json.loads(path.read_bytes())` (operator review). `json.loads` on `bytes` detects
+   UTF-8/16/32 itself (RFC 8259), so no platform codec is ever involved. The real cache on this
+   machine contains bytes that the Windows default codec cannot decode. Measured while writing this
+   change: `json.load(open(p))` raised `UnicodeDecodeError: 'charmap' codec can't decode byte 0x9d
+   in position 11902`. A reader using the default encoding would *always* fall back on this machine
+   and look correct in CI.
 4. Keep `models[*]` whose `visibility == "list"` and whose `slug` is a non-empty string. Sort by
    `priority` ascending (a missing priority sorts last, and ties keep file order).
    `ModelDescriptor(id=slug, label=display_name or slug, context_window=int(context_window) or None,
@@ -40,7 +60,16 @@ offer its list, refuse the rest) is checkable without spawning Codex at all.
    `None` plus a reason string. It **never raises**.
 
 `_effective_catalog()` returns `CATALOG` with the `codex` entry's `models` replaced when a reading
-exists, and with `controls` untouched. `providers()`, `get_provider()`, `context_window_for_model()`
+exists, and with `controls` untouched.
+
+**Window lookups fall back to the literal (operator review).** A run records the model the CLI
+actually used, and a Codex run on a model the cache no longer lists (the CLI moved on; a runner
+kept from an older client) would otherwise lose its context window: `runner_parsing.py:402` calls
+`model_context_window("codex", model)`, which misses, and the sample becomes `unavailable`.
+So `model_context_window` (`model_catalog.py:307`) and `context_window_for_model` (`:316`), and only
+they, consult the effective catalog first and, on a miss, the literal `CATALOG` with the same
+matching rules. Validation, the offered list and the default never fall back: a model the cache does
+not list is still refused where it is newly set. The window is a reading aid, not an acceptance. `providers()`, `get_provider()`, `context_window_for_model()`
 and `permission_mode_values()` read it instead of `CATALOG`. `CATALOG` stays importable as the
 fallback, and `scripts/check_model_catalog.py` keeps loading it by path.
 
@@ -109,12 +138,20 @@ New file `hub/tests/test_codex_models_from_the_cli_cache.py`. Build caches with 
 2. No cache gives exactly the literal's ids, and `source.kind == "built_in"` with a reason naming the
    path.
 3. A cache whose `description` field contains `”` (U+201D, UTF-8 `E2 80 9D`) is read. This is the
-   reading this machine's real cache needs. On Windows it fails if the reader opens without
-   `encoding="utf-8"`. On Linux CI the default is UTF-8, so the assertion is recorded as
+   reading this machine's real cache needs. On Windows it fails if the reader opens the file in text
+   mode with the platform's default codec, rather than `json.loads(read_bytes())`. On Linux CI the default is UTF-8, so the assertion is recorded as
    Windows-meaningful in the test's docstring.
 4. A JSON array, `{}`, and a cache with zero listed models each fall back, each with its own
    reason.
 5. Rewrite the cache (a new mtime) and the next `get_provider` reflects it with no reload.
+5b. (operator review) Write a truncated cache (invalid JSON): `get_provider("codex")` falls back.
+   Then complete the file **with its `st_mtime_ns` forced back to the truncated file's value**
+   (`os.utime(..., ns=...)`) and a different size: the next call reads the cache. Fails if a failed
+   reading is memoised, or if the key is mtime alone.
+5c. (operator review) With a cache listing only `m-a`, `model_context_window("codex",
+   "gpt-5.5")` and `context_window_for_model("gpt-5.5")` still return the literal's window for
+   `gpt-5.5`, while `POST /runners {"cli":"codex","model":"gpt-5.5"}` is 400. Fails today only
+   on the 400 half; fails after the build if the window lookups read the effective catalog alone.
 6. Through the route: with a cache listing only `m-a`, `POST /runners {"cli":"codex","model":"m-a"}`
    is 201, and `{"model":"gpt-6-sol"}` (literal-only) is 400. **Both fail today.**
 7. `GET /model-catalog` gives `providers[1].source.kind == "cli_cache"`, with `client_version`

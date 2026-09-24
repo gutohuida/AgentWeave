@@ -32,7 +32,8 @@ It has become sharper since F215 was filed:
   piece: summary, who recorded it, locator, the commit and branch its footprint names, the task, its
   state and the latest review's reason, in the route's order with the most recently recorded
   marked *latest*. A piece that is `awaiting` has **Accept** and **Reject**; Reject
-  requires a reason.
+  requires a reason. Beside Accept, a piece that names a commit says that accepting may merge that
+  commit into main (operator review 2026-09-24, decision 3).
 - **A refusal is shown, not swallowed** (D2). The Hub's sentence is rendered beside the piece — the
   grant refusal, and `recording_run_live` once `evidence-is-decided-after-the-run-that-recorded-it`
   ships. Where the view carries `recording_run_live: true`, the buttons are held with that sentence.
@@ -40,6 +41,9 @@ It has become sharper since F215 was filed:
   (neither does today: `spec.py:892-926`, `agent_actions.py:1309-1349`), and the mutation also
   invalidates the task queries, because accepting can merge approved work
   (`integrate_what_was_waiting_for_this_evidence`).
+- **A row greyed while its run records un-greys when the run ends** (D4, operator review
+  2026-09-24). A run that recorded evidence broadcasts `spec_updated` once it has left the liveness
+  registry.
 
 ## Out of scope
 
@@ -58,5 +62,8 @@ It has become sharper since F215 was filed:
 - `hub/ui/src/api/spec.ts` (two hooks), `hub/ui/src/components/spec/SpecCoverageBar.tsx`, a new
   `hub/ui/src/components/spec/EvidencePieces.tsx`; the committed bundle (`hub/hub/static/ui`) —
   `.claude/rules/hub-ui.md` applies, and a committed bundle reaches `:8000` on reload
-- `hub/hub/api/v1/spec.py` and `hub/hub/api/v1/agent_actions.py` (a broadcast after each decision)
+- `hub/hub/api/v1/spec.py` and `hub/hub/api/v1/agent_actions.py` (a broadcast after each decision;
+  the record route marks its run as having recorded evidence)
+- `hub/hub/run_liveness.py` and `hub/hub/api/v1/agent_trigger.py` (a `spec_updated` after a run that
+  recorded evidence leaves the liveness registry — operator review 2026-09-24, D4)
 - `openspec/specs/requirement-traceability` (one ADDED requirement)

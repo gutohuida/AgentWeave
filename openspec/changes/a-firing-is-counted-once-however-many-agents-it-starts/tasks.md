@@ -43,6 +43,11 @@
       test -- --run` with counts recorded inline. Any other moved assertion is named and explained
 - [ ] 2.6 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, `cd hub/ui
       && npm run lint`, clean
+- [ ] 2.7 `scripts/drive/t_row11_loop.py:231` and `:312`: re-point both verdicts from
+      `run_count == len(hist)` to `run_count == len({h.get("fired_at") for h in hist})`, and reword
+      their labels to "run_count matches the number of firings (distinct `fired_at`)". A comment names
+      this change: a row is a dispatch, so equality with the row count holds only for a one-agent loop
+      (operator review 2026-09-24)
 
 ## 3. Drive it
 

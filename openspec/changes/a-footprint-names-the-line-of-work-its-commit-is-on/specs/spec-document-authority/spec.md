@@ -16,8 +16,15 @@ would otherwise produce the project's own commit while appearing to have been ch
 
 Establishing the footprint SHALL NOT create a checkout that does not already exist.
 
-Where no checkout for the agent exists, or the project is not under version control, the footprint
-SHALL fall back to the project's own directory rather than failing.
+Where the checkout an agent's run worked in no longer exists, and the evidence belongs to a task
+whose branch exists, the footprint SHALL be taken at that branch's tip and SHALL name that branch.
+A released task checkout is removed after its work is committed to the task's branch; falling back
+to the project's own checkout instead names a commit that does not contain the work.
+
+Otherwise — where no checkout for the agent exists and no task branch applies as above, or the
+project is not under version control — the footprint SHALL fall back to the project's own directory
+rather than failing. The task branch's tip is tried first because it is the one fallback that still
+names the work; the project's own directory is the last answer, not a parallel one.
 
 Where the system commits an agent's work after the turn that produced it, the footprints that turn
 recorded SHALL be re-pointed at the resulting commit. Evidence is recorded while the work is still
@@ -45,11 +52,6 @@ one branch that contains it. Where none of these is a single answer, the branch 
 branch SHALL NOT be the literal name of a detached checkout, nor any text version control prints
 about one. Two footprints that both name no line of work SHALL carry the same value.
 
-Where the checkout an agent's run worked in no longer exists, and the evidence belongs to a task
-whose branch exists, the footprint SHALL be taken at that branch's tip and SHALL name that branch.
-A released task checkout is removed after its work is committed to the task's branch; falling back
-to the project's own checkout instead names a commit that does not contain the work.
-
 #### Scenario: An agent's evidence names the agent's own commit
 
 - **WHEN** an agent records evidence while its checkout holds work not present in the project's
@@ -64,14 +66,16 @@ to the project's own checkout instead names a commit that does not contain the w
 
 #### Scenario: A directory that is not a tracked checkout is not treated as one
 
-- **WHEN** an agent records evidence and a directory exists at the agent's checkout location that
-  version control does not track as that agent's checkout
+- **WHEN** an agent records evidence that belongs to no task whose branch exists, and a directory
+  exists at the agent's checkout location that version control does not track as that agent's
+  checkout
 - **THEN** the footprint falls back to the project's own directory
 - **AND** no error is raised
 
 #### Scenario: Recording evidence creates no checkout
 
-- **WHEN** an agent with no provisioned checkout records evidence
+- **WHEN** an agent with no provisioned checkout records evidence that belongs to no task whose
+  branch exists
 - **THEN** the footprint falls back to the project's own directory
 - **AND** no checkout is created
 
@@ -133,6 +137,14 @@ rewritten line of work replaces the one it rewrote.
 Where the Hub cannot tell whether one commit contains the other, it SHALL fall back to the order the
 footprints were recorded.
 
+**Footprints that name no line of work are not one line of work.** A footprint whose branch is empty
+says only that no line of work could be named, so two such footprints share nothing but that
+absence. Among accepted footprints that name no line of work, the Hub SHALL NOT integrate a commit
+that another of them contains, SHALL integrate every commit where neither contains the other, and
+SHALL integrate a commit named by two of them once. Where the Hub cannot tell whether one such commit
+contains another, it SHALL integrate both. Reducing them by the order they were recorded would drop
+accepted work that nothing shows to be redundant.
+
 #### Scenario: A later footprint of an earlier commit does not displace the newer work
 
 - **WHEN** an author's accepted footprint names a commit and a reviewer's accepted footprint, recorded later on the same line of work, names that commit's parent
@@ -143,7 +155,18 @@ footprints were recorded.
 - **WHEN** two accepted footprints on the same line of work name commits neither of which contains the other
 - **THEN** approval integrates the one recorded later
 
+#### Scenario: Unrelated commits that name no line of work are both integrated
+
+- **WHEN** two accepted footprints that name no line of work name commits neither of which contains the other
+- **THEN** approval integrates both commits
+- **AND** neither is dropped because the other was recorded later
+
+#### Scenario: An unnamed commit contained in another unnamed commit is not merged twice
+
+- **WHEN** two accepted footprints that name no line of work name a commit and its descendant, the ancestor recorded later
+- **THEN** approval integrates the descendant only
+
 #### Scenario: The approval preview names the commit approval would merge
 
-- **WHEN** the operator opens the approval preview for a task in that situation
+- **WHEN** the operator opens the approval preview for a task whose accepted footprints are an author's commit and a later-recorded reviewer's footprint of its parent, on the same line of work
 - **THEN** the preview lists the author's commit, not its parent

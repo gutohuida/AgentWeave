@@ -38,7 +38,9 @@ measured the round trip it causes.
   with `blocking` that includes `explore_not_closed` where it applies. `transition()` keeps its
   refusal as the authority behind the list. The route's `409` remains for moves that are not "not
   yet" (`illegal_transition`, `phase_unchanged`).
-- **The phase route runs the same checks** (D3, F207). `POST /documents/phase` with `to=proposed` or
+- **The phase transition itself runs the checks** (D3, F207; operator review 2026-09-24, decision 1:
+  inside `transition()`, so every caller, present or future, meets them). As a result
+  `POST /documents/phase` with `to=proposed` or
   `to=approved` refuses with `409 {"code": "document_incomplete", "message": …, "blocking": [...]}`
   when `phase_blockers` is non-empty. Reopen and archive are unchanged. At approval the one
   finding about another document — `import_not_approved`, an import whose document was reopened

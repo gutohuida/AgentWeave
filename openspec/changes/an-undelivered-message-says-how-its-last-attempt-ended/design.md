@@ -1,5 +1,17 @@
 # Design — an undelivered message says how its last attempt ended
 
+## Operator review, 2026-09-24
+
+Opus adversarial review, recorded in `spec-queue/tracks/reviews/B2-2026-09-24.md` §4: APPROVE WITH
+FIXES. Two LOW fixes applied here:
+
+- **D2's `interrupted` line** no longer names the cause. It read *"interrupted by a Hub restart"*,
+  which becomes false if `stop-clears-a-run-an-earlier-hub-left-running` (REVISING) lands and lets
+  Stop record `interrupted`. It now reads *"Last attempt was interrupted"*, true under either cause.
+- **The comment above `RUN_TERMINAL_EVENT_TYPES`** (`hub/ui/src/api/agentChat.ts:311-315`) says
+  `run_interrupted` can never reach a live client. That change broadcasts `run_interrupted` from a
+  Stop request, after startup, so the comment would become false. Task 2.3 now rewrites it (D3).
+
 **Built on the recommended answers to D11 for F291 and F273**, and consistent with D1: a `Run` row is
 the record of one attempt, and the conversation reads an attempt's outcome from it (the run facts
 map), never from the output stream alone. If the operator answers otherwise:
@@ -60,7 +72,7 @@ In `AgentTimeline`'s abandoned branch, look up `runs[entry.run_id]` and pass it 
 |---|---|
 | `failed`, error | *Last attempt failed: {error}* |
 | `failed`, no error | *Last attempt failed (exit {exit_code})* where there is one, else *Last attempt failed* |
-| `interrupted` | *Last attempt was interrupted by a Hub restart* |
+| `interrupted` | *Last attempt was interrupted* (no cause named: a Hub restart records it today, and a Stop may record it later) |
 | any other status | nothing |
 
 *No "before it started".* R1 considered saying so and dropped it: the only server-side signal would
@@ -80,6 +92,14 @@ at all: `queue_entry_abandoned` is already in `useSSE`'s dispatch allowlist (`us
 the one-line addition fires in production without B9's change. Its payload carries `agent`
 (`turn_scheduler.py:641-647`, and `_report_abandoned_entries` on the run path), which is what
 `eventTargetsAgent` matches (`:334-335`).
+
+The same edit corrects the comment above `RUN_TERMINAL_EVENT_TYPES` (`agentChat.ts:311-315`). It
+states as a permanent fact that `run_interrupted` cannot reach a subscribed client, because startup
+reconciliation broadcasts before uvicorn serves. That holds only for the startup path. Rewrite it to
+say that the startup broadcast is unseen (the reconnect handler's invalidate-all serves it), and that
+any `run_interrupted` broadcast while clients are connected (for example from a Stop, should
+`stop-clears-a-run-an-earlier-hub-left-running` land) settles the `runs` map through this set.
+Comment only; the set already contains `run_interrupted`.
 
 ### D4 — F273 needs no product change
 

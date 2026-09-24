@@ -34,6 +34,13 @@ still be asked.
 - **THEN** the request states that the workspace posture would allow it
 - **AND** does not state that the command stays inside the workspace
 
+#### Scenario: A decision checked by working directory only says so
+
+- **WHEN** the provider's workspace check for a command reads only the working directory it would
+  run in, not the command
+- **THEN** the request's stated reason says the call was checked by working directory only
+- **AND** does not say the command was read
+
 #### Scenario: No decision, no claim
 
 - **WHEN** a request was opened without a workspace decision

@@ -16,7 +16,7 @@
 1. On the trial Hub `:8010`, set an agent to "Ask me" and ask it to write `notes.txt` in its own
    workspace, then `../notes.txt`. **Expect:** two cards; the second says *Outside this agent's
    workspace — Workspace only would refuse this* and names the path; the first says *Workspace only
-   would allow this*.
+   would allow this: inside your workspace*.
 2. Ask it to run `cp notes.txt $DEST`. **Expect:** the card does not claim the command stays inside
    ("A shell command is read, not sandboxed").
 3. Allow the outside write. **Expect:** it lands, and the activity log records it as a write outside

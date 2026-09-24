@@ -1,5 +1,29 @@
 # Design — the approval preview asks the gate's merge question
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B5-2026-09-24.md`, section 6) approved this
+change with fixes, and the operator answered D12's second question as recommended (*not persisted;
+the preview asks live*). What changed:
+
+- **The fallback is wrapped too (MEDIUM).** R2's D1 fell back to "today's computation" after the
+  wrap caught, but for a task evidence does not govern that computation is `merge_targets` →
+  `task_branch_tip` → `task_integration._git`, which is unwrapped today (`tasks.py:1126-1131`: the
+  `try` covers only workspace resolution). A `TimeoutExpired` there repeats after another 60 s and
+  becomes a bare 500. D1 now wraps the fallback, never re-asks git after a git failure, and degrades
+  to `targets = []` with a stated "could not ask git" sentence (`GIT_UNANSWERED`, D1 step 3). New
+  test 1.5b on the ungoverned fixture fails today.
+- **The sentence cannot claim a merge that will not happen (MEDIUM).** D1 step 3 chose the sentence
+  from `conflicts` alone, so a merge situation with `will_merge == []` gave `conflicts == []` and
+  read "approval will merge one commit … cleanly". The order is now today's (no main branch → no
+  targets → conflicts), and every sentence uses the real count. Control 1.7 and test 1.8.
+- **"SHALL NOT change the repository" was false (LOW).** `merge-tree --write-tree` writes tree
+  objects. The requirement now says no branch, working tree or index is changed.
+- **F424 named.** The gate's own git calls answering a bare 500 on every approval surface, traced by
+  R2 and left as a candidate finding, is now filed as **F424** (`scripts/drive/FINDINGS.md:32786`).
+  This change fixes the *preview's* 500 only; it does not fix F424 (see "What the route returns when
+  what it calls raises").
+
 **Built on the recommended answer to D12's second question** (F141: *is the approval gate's
 conflict result persisted?*): **no — the preview asks the same question live instead.** If the
 operator answers otherwise:
@@ -29,22 +53,45 @@ touch integration.
 
 ## D1 — the probe in the preview
 
-Today (`tasks.py:1110-1157`): governed tasks read `integration_targets` without resolving the
-workspace; ungoverned ones resolve it for `merge_targets`. New shape:
+Today (`tasks.py:1120-1131`): governed tasks read `integration_targets` without resolving the
+workspace; ungoverned ones resolve it (wrapped, `:1126-1129`) and then call `merge_targets`
+**outside** the wrap (`:1131`), which reaches `task_branch_tip` → `task_integration._git`
+(`task_integration.py:307-323`, `:136-145`) and can raise. New shape:
 
-1. Resolve the workspace **for both** (wrapped as today: any exception → not known,
-   `tasks.py:1126-1129`). Governed → `merge_targets(session, task, root)` (which returns
-   `integration_targets` for a governed task, `task_integration.py:385-408`).
-2. If `main_branch` is set, the root is a repository and the branch exists — the same three
-   preconditions `requirement_gate._merge_situation` checks (`:393-418`) — run `would_conflict(root,
-   target.commit_sha, main_branch)` per target and build `conflicts`. Otherwise `conflicts = None`.
-3. `reason`:
+1. **Ask the gate's question, wrapped.** `situation = await requirement_gate.merge_situation(session,
+   task)` and, if present, `would_conflict(situation.root, target.commit_sha, situation.main_branch)`
+   per target in `situation.will_merge` (the gate's own preconditions, `requirement_gate.py:393-418`).
+   Present → `targets = situation.will_merge`, `conflicts` built from the probe. Any exception in
+   this block → `git_failed = True`, `conflicts = None`.
+2. **Otherwise, the listing without the probe — wrapped too.** Where step 1 answered `None` (no main
+   branch, no workspace, not a repository, no such branch) or raised: `conflicts = None` and
+   - governed → `integration_targets(session, task)`, a pure database query
+     (`task_integration.py:270`), safe even after a git failure;
+   - ungoverned and `git_failed` → **no second git call**: `targets = []`. Re-asking git after it
+     has just failed would cost another 60 s on a timeout and, unwrapped, raise into a bare 500;
+   - ungoverned otherwise → resolve the workspace and call `merge_targets` **inside one `try`**;
+     any exception → `targets = []`, `git_failed = True`.
+3. **`reason`, in today's order** (`tasks.py:1133-1145`), with `count` the real number of targets
+   ("one commit" / "`N` commits") in every sentence that names one:
+   - no `main_branch` → `NO_MAIN_BRANCH` (unchanged);
+   - `targets == []` and `git_failed` → `GIT_UNANSWERED`, a new constant in `task_integration`:
+     *"the Hub could not ask git what approval would merge; approval asks again when pressed"*. Not
+     `NO_TASK_BRANCH`: the task may well have a branch, and saying it has none is exactly the kind of
+     false statement this change removes;
+   - `targets == []` → `empty_reason` (unchanged: `NOTHING_TO_MERGE` / `NO_TASK_BRANCH`). This is
+     the case R2's D1 got wrong: a merge situation with `will_merge == []` has `conflicts == []` and
+     must **not** read "merges cleanly";
    - `conflicts` non-empty → *"approval will be refused: `<paths>` in commit `<sha12>` conflict with
      `<main>`"* (one clause per conflicting target);
-   - `conflicts == []` → *"approval will merge one commit into `<main>`; it merges cleanly as of
+   - `conflicts == []` → *"approval will merge `<count>` into `<main>`; it merges cleanly as of
      now"*;
-   - `conflicts is None` → today's F156 sentence, unchanged.
-4. `will_attempt_merge` keeps its meaning (a merge will be tried if approval is accepted).
+   - `conflicts is None` → today's F156 sentence, unchanged (it already uses the real count,
+     `tasks.py:1141`).
+4. `will_attempt_merge` keeps its meaning and formula, `bool(main_branch and targets)`
+   (`tasks.py:1147`). Under `GIT_UNANSWERED` it is `false`, and the reason says the answer is
+   unknown rather than "no".
+5. The route therefore **answers 200 whatever git does**; the only calls outside a wrap are
+   database reads.
 
 **Sharing with the gate — decided by R2: call it, renamed public.** `requirement_gate._merge_situation`
 (`:393-418`) is already the one statement of the preconditions and returns `None` exactly where the
@@ -56,9 +103,10 @@ preview must say "not checked". A second module calling it makes it public API, 
   built on `task_integration._git`, which raises;
 - situation present → `targets = situation.will_merge`, probe each;
 - `None` (no main branch, no workspace, not a repository, no such branch) or the wrap caught →
-  today's target computation, `conflicts: null`. That keeps test 1.4's no-repository control
-  byte-identical: today it lists the fake commit with the F156 sentence, and `merge_situation` would
-  answer `None` there (`is_repository` false), so the fallback is what keeps the listing.
+  step 2's listing, `conflicts: null`. That keeps test 1.4's no-repository control byte-identical:
+  today it lists the fake commit with the F156 sentence, and `merge_situation` would answer `None`
+  there (`is_repository` false), so the governed listing is what keeps it. *(Operator review: the
+  ungoverned listing is wrapped as well, and skipped after a git failure — step 2.)*
 
 With `a-footprint-names-the-line-of-work-its-commit-is-on` (D4), the governed path's switch to
 `merge_targets` is one step of this D1; whichever change lands first makes it.
@@ -79,19 +127,23 @@ Otherwise unchanged.
 - Workspace resolution raising → caught; `conflicts: null`, today's reason. Unchanged posture.
 - `would_conflict` is built on `task_integration._git` (`:136-145`), a bare `subprocess.run(...,
   timeout=60, check=False)` with no `try`: it **raises** `subprocess.TimeoutExpired` or `OSError`.
-  So `merge_situation` and the probe loop are wrapped together: any exception → `conflicts: null`
-  and the hedge, never a 500 — the preview's docstring already states that posture ("not knowing is
-  an answer here, a 500 is not").
-- **Noted, not carried — traced by R2.** The gate's own git calls are unwrapped: `_merge_situation`'s
-  `is_repository`/`branch_exists` (`task_integration.py:149`, `:169`), `merge_targets`'
-  `task_branch_tip` (`:320`) and `_check_mergeable`'s `would_conflict` (`requirement_gate.py:434-436`)
-  all reach `task_integration._git`. A `TimeoutExpired` (after 60 s) or `OSError` leaves `evaluate`
-  (`task_transition_service.py:667`), then `transition()`; the app registers handlers only for
-  `TransitionRefusedError` and `TaskBindingError` (`main.py:532-553`), so **every approval surface
-  (operator `PATCH /tasks/{id}`, the agent plane, MCP) answers a bare 500** after up to a minute per
-  call, with nothing committed. Not carried here, because what approval should do when the question
-  cannot be answered (refuse as unknown, or approve and let the merge fail and record itself) is a
-  decision; candidate finding for the orchestrator.
+  So `merge_situation` and the probe loop are wrapped together (step 1), and the ungoverned listing
+  is wrapped separately (step 2): any exception → `conflicts: null` and a stated reason, never a
+  500 — the posture the preview already states ("not knowing is an answer here, a 500 is not",
+  `tasks.py:1128`). **This also closes a 500 the preview has today:** the ungoverned `merge_targets`
+  call at `tasks.py:1131` sits outside the existing wrap (review §6 and its second candidate
+  finding; test 1.5b).
+- **F424 — named, not carried.** The gate's own git calls are unwrapped: `_merge_situation`'s
+  `is_repository`/`branch_exists` (`task_integration.py:148-150`, `:168-169`), `merge_targets`'
+  `task_branch_tip` (`:307-323`) and `_check_mergeable`'s `would_conflict` (`requirement_gate.py:421`
+  onward) all reach `task_integration._git`. A `TimeoutExpired` (after 60 s) or `OSError` leaves
+  `evaluate`, then `transition()`; the app registers handlers only for `TransitionRefusedError` and
+  `TaskBindingError` (`main.py:532`, `:544`), so **every approval surface answers a bare 500**. Filed
+  as **F424** (`scripts/drive/FINDINGS.md:32786`); its recommended repair is a stated "could not ask
+  git" refusal. **This change does not fix F424**: after it, the preview can say `GIT_UNANSWERED`
+  while pressing Approve still answers 500 until F424 lands. Because this change makes
+  `merge_situation` shared, F424's repair belongs in the gate's checks (to refuse), not inside
+  `merge_situation` (where answering `None` would turn "unknown" into "not checked — approve").
 - A non-zero exit with no parsed path returns `["(unknown path)"]` (`:445-447`) and is rendered as
   such, as the gate renders it.
 
@@ -101,7 +153,8 @@ Otherwise unchanged.
    tracked files, Windows, git 2.49): `git merge-tree --write-tree --name-only master <tip>` took
    **0.03 s** against a near branch and **0.16 s** against a base from seven weeks earlier. One probe
    per target per drawer open is negligible. (It does write tree objects into the object database —
-   loose objects `git gc` collects; never the checkout or index.)
+   loose objects `git gc` collects; never a branch, the checkout or the index. Since the operator
+   review, the requirement says exactly that.)
 
 ## Round log
 
@@ -117,3 +170,10 @@ Otherwise unchanged.
   approval-surface 500 stands as traced. With the footprint change's D4 in `merge_targets`, the
   preview (through `merge_situation`) probes the list approval merges; `is_reachable_from` is
   wrapped, so D4 adds no raise inside the preview's wrap. No claim disagreed; nothing changed.
+- **Operator review, 2026-09-24** (`spec-queue/tracks/reviews/B5-2026-09-24.md` §6). Verified at
+  HEAD: the ungoverned `merge_targets` at `tasks.py:1131` is outside the wrap at `:1126-1129`;
+  `task_branch_tip` calls `_git` unwrapped (`task_integration.py:307-323`); `integration_targets` and
+  `evidence_governs` are database-only (`:270`, `:347`). D1 rewritten in five steps (wrapped
+  fallback, no repeat git call, `GIT_UNANSWERED`, today's sentence order, real count); requirement
+  reworded (branch, working tree, index) and extended (no false merge claim; a git failure is
+  answered); tests 1.5b, 1.7, 1.8 added; F424 named.

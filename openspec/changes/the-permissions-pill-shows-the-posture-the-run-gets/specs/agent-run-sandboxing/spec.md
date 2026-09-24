@@ -33,3 +33,37 @@ mechanism answering them is present.
 
 - **WHEN** the enforced posture is selected but no mechanism is present to answer its requests
 - **THEN** the command does not claim enforcement it cannot perform
+
+### Requirement: The default posture lets an agent work inside its own workspace
+
+The permission posture the Hub imposes by default SHALL permit an agent to do work within its own
+workspace without further configuration.
+
+The Hub MUST NOT impose by default a posture whose decisions can only be resolved by an operator
+prompt, unless a surface exists through which an operator can actually answer that prompt. A posture
+that defers every decision to an absent answerer denies everything and is indistinguishable from a
+broken run.
+
+Isolation SHALL continue to be carried by the agent's workspace boundary, not by withholding
+permission inside it. The default posture SHALL NOT widen what an agent can affect outside its own
+workspace. Where the default posture is the one in which the Hub decides each tool call against the
+workspace, it narrows it: a call the Hub judges to reach outside the workspace is refused.
+
+#### Scenario: A newly created agent can edit files in its own workspace
+
+- **WHEN** the Hub spawns a non-yolo agent that has been given no permission configuration
+- **AND** that agent writes a file inside its own workspace
+- **THEN** the write succeeds
+- **AND** no approval was required from an operator
+
+#### Scenario: A posture requiring an answer is not imposed by default
+
+- **WHEN** no operator-facing approval surface exists for a provider
+- **THEN** the Hub does not default that provider's runs to a posture that asks for approval
+
+#### Scenario: The default posture never widens the workspace boundary
+
+- **WHEN** an agent acts under the default posture
+- **THEN** its ability to affect anything outside its own workspace is not widened by that posture
+- **AND** where the default is the posture in which the Hub decides each tool call, a call the Hub
+  judges to reach outside the workspace is refused

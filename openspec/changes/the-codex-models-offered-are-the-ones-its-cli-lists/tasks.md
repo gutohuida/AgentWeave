@@ -7,12 +7,12 @@
 ## 1. Tests first
 
 - [ ] 1.1 Add the conftest guard (design D4) and design test 8. Confirm it passes with the guard and fails on this machine without it (remove the guard, run it, restore the guard)
-- [ ] 1.2 Design tests 1–7 in `hub/tests/test_codex_models_from_the_cli_cache.py`. Record which fail today (1, 6 and 7 must; 2 must pass as a control once `source` exists)
+- [ ] 1.2 Design tests 1–7, 5b and 5c in `hub/tests/test_codex_models_from_the_cli_cache.py`. Record which fail today (1, 6, 7 and 5c's 400 half must; 2 must pass as a control once `source` exists; 5b must fail against a build that memoises a failure or keys on mtime alone)
 - [ ] 1.3 Design test 9 (UI)
 
 ## 2. The fix
 
-- [ ] 2.1 `model_catalog.py`: `_codex_cache_path`, `_codex_models_from_cache` and `_effective_catalog`, and route the four readers through them (design D1). Rewrite the docstring's Codex paragraph so it describes the runtime read and the fallback
+- [ ] 2.1 `model_catalog.py`: `_codex_cache_path`, `_codex_models_from_cache` and `_effective_catalog`, and route the four readers through them (design D1): read with `json.loads(path.read_bytes())`, memoise only a successful reading on `(path, mtime_ns, size)`, and let `model_context_window` and `context_window_for_model` fall back to the literal `CATALOG` on a miss (operator review). Rewrite the docstring's Codex paragraph so it describes the runtime read and the fallback
 - [ ] 2.2 `schemas/model_catalog.py`: add `source`, filled by `api/v1/model_catalog.py`
 - [ ] 2.3 `scripts/check_model_catalog.py`: add a docstring paragraph (design D3)
 - [ ] 2.4 UI: the source line in the runner form. Refresh the bundle and commit `hub/ui/src` and `hub/hub/static/ui` together

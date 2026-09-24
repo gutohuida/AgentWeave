@@ -1,5 +1,21 @@
 # Design — a model alias is a model choice
 
+## Operator review, 2026-09-24
+
+Opus adversarial review, recorded in `spec-queue/tracks/reviews/B7-2026-09-24.md` §4: APPROVE WITH
+FIXES. Every door that accepts a model goes through `ProviderDescriptor.model`, the readers that
+resolve an id already handle aliases, and there is no price table. Two LOW fixes applied:
+
+- **A runner-registry MODIFIED.** *A runner's model is drawn from the catalog* says a runner's model
+  SHALL be "a model the catalog declares", which a stored alias contradicts. The delta now MODIFIES
+  it to "a declared model **or a declared alias**", restating the whole requirement.
+- **Test 1 names its doors.** The existing parametrisation covers two routes (`/runners`,
+  `/agents`), not three; `PATCH /runners/{id}` is added explicitly.
+
+Also, to keep this change consistent with `a-runner-choice-names-its-model` (whose review pinned
+the chooser's label format), D2 pins how `runnerOptionLabel` renders an alias so a Hub-created alias
+runner does not print the alias twice.
+
 **Built on the recommended answer to D2 (second question): aliases are accepted and stored as
 written.** If the operator answers *"accepted, but normalised to the id"*, D1 below changes. Every
 door would store `m.id` instead of the submitted string, and the picker would offer no alias
@@ -44,7 +60,12 @@ comes one group, `Latest`, with one option per alias. Its value is the alias, an
 runner stored as `opus` would show it as unrecognised.
 
 If `a-runner-choice-names-its-model` has shipped, `runnerOptionLabel` renders an alias-stored
-runner's model part the same way.
+runner's model part as `{alias} (latest)`, e.g. `opus (latest)`: exactly the suffix task 2.2 gives
+the runners the Hub creates for an alias (`Claude Code — opus (latest)`), so that change's
+no-doubling rule (the model part is omitted when the name already ends with ` — {model part}`)
+applies and a Hub-created alias runner reads `Claude Code — opus (latest) (claude)`, not the alias
+twice. The option label does not add *"now Opus 5.5"*: the choosers name what the runner records,
+and the model pickers (above) are where the current target is shown.
 
 **Two more readers of a stored model, found by R2** (grep `models.find` in `hub/ui/src`). Both
 match `m.id === value` only, and both would misreport an alias-stored runner:
@@ -82,8 +103,11 @@ gains a new failure path. `POST /runners` with an unknown string still answers 4
 
 All in `hub/tests/test_a_model_alias_is_a_model_choice.py` (new) unless stated.
 
-1. For each door (the three routes already parametrised in
-   `test_a_refusal_says_what_would_work.py:29-35`, plus `validate_overrides` and
+1. For each door (the two routes already parametrised in
+   `test_a_refusal_says_what_would_work.py:29-35`, `POST /runners` and `POST /agents`; **plus
+   `PATCH /runners/{id}` explicitly**, on a runner created with a declared id, since the operator
+   review found only two routes in that parametrisation and the PATCH door, `runners.py:134`, shares
+   `_reject_undeclared_model` at `:40` but is a separate request; plus `validate_overrides` and
    `worker.model_is_declared`), `opus` is accepted. For the routes, the stored runner's `model` reads
    back `"opus"`. **Fails today** with 400. It **also fails if a later edit normalises to the id**
    (it asserts `"opus"`, not `claude-opus-5-5`).

@@ -31,7 +31,10 @@ runners it names itself: `f"{provider_entry.label} — {model_entry.label}"`
 - One helper, `runnerOptionLabel(runner, catalog)`, renders a runner as a choice. It gives the
   runner's name, then its model as the operator reads it, then the provider. The model is the
   catalog's label for a declared id, `Provider default` when the runner records no model, or the
-  raw id marked `unrecognised` when the catalog does not declare it. All three selects use it.
+  raw id marked `unrecognised` when the catalog does not declare it. All three selects use it. One format, `{name} — {model part} ({cli})`, and the model part is
+  not repeated when the name already ends with it, as the names the Hub gives its own runners do
+  (`agents.py:713`). The checkpoint-runner select names the project's checkpoint model when one is
+  set, since that model is the one that runs (operator review 2026-09-24).
 - No uniqueness constraint on runner names. Duplicate names are legitimate after this change,
   because the option text now tells them apart. A unique index would also need a migration that
   fails on the operator's existing duplicates (F268 recorded `D1 Seed` twice).

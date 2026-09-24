@@ -1,5 +1,22 @@
 # Design — the checkpoint grant says it reaches every checkpoint
 
+## Operator review, 2026-09-24
+
+Opus adversarial review, recorded in `spec-queue/tracks/reviews/B2-2026-09-24.md` §6: APPROVE WITH
+FIXES. Its throwaway probe confirmed D3's save-and-restore (every named constraint, the non-partial
+index and a partial index survive upgrade and downgrade byte-identical, in either order with B8).
+Two fixes applied here:
+
+- **The downgrade does not restore "exactly" what `0097` left.** `0097` rewrote row values only; the
+  column's server default stayed `'private'` (`0044_add_checkpoints.py:67`), and `'project'` has only
+  ever been the ORM-side `default=` (`db/models.py:1723`). The downgrade keeps server default
+  `'project'` (the value every row holds and the one the model writes), and D3, Risks and task 1.4
+  now say it restores the column, its values and its check, with a server default that deliberately
+  differs from `0097`'s.
+- **A drive script breaks after group 2.** `scripts/drive/t_sweep_row13_checkpoints.py:473-481`
+  asserts `visibility` is present and equals `"project"`; task 1.3 uses that script's F235 leg as a
+  control. New task 2.6 inverts those two assertions.
+
 **Built on the recommended answer to D11 for F235** (the grant is all-or-nothing; delete the claim and
 the unreachable concept). If the operator answers otherwise:
 
@@ -65,8 +82,11 @@ A new migration drops `checkpoints.visibility` and `ck_checkpoints_visibility` (
 `batch_alter_table`), guarded to return early when the table is missing (as `0097` is) **or the
 column is already gone** (a database whose `checkpoints` table `create_all` built from the new
 model before alembic ran, which is exactly the F329 parity test's reference build). Downgrade re-adds
-the column with server default `'project'` and the check over the three values, which is the state
-`0097` left.
+the column with server default `'project'` and the check over the three values. That is not
+byte-for-byte the state `0097` left: `0097` rewrote row values only, so its column still carried
+`0044`'s server default `'private'` (`0044_add_checkpoints.py:67`); `'project'` was only ever the
+ORM default (`db/models.py:1723`). The downgrade chooses `'project'` on purpose, so a row written by
+raw SQL after a downgrade is born readable, as every row the model writes is.
 
 **Why a rebuild, and how it keeps every index exactly (R3).** A plain `ALTER TABLE checkpoints DROP
 COLUMN visibility` fails on SQLite while `ck_checkpoints_visibility` names the column (measured R3:
@@ -100,7 +120,9 @@ already lists exactly what the removal touches.
 ## Risks / Trade-offs
 
 - **A migration on the operator's real data.** It removes a column whose every value is `project` and
-  which nothing reads after group 2. Downgrade restores it exactly.
+  which nothing reads after group 2. Downgrade restores the column, every row's `project` value and
+the check; its server default is `'project'`, not the `'private'` that `0044` set and `0097` left
+(D3).
 - **An external reader of `CheckpointSummary.visibility`.** None in the repo (`grep` above); MCP's
   `list_checkpoints`/`read_checkpoint` go through the same routes and an agent reading the field
   would have read `project` every time.

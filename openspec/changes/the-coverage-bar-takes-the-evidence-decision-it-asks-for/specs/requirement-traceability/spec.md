@@ -13,12 +13,18 @@ decided piece the latest decision's reason. Pieces SHALL be listed in the order 
 them, with the most recently recorded marked. The mark SHALL NOT claim that piece is the one a
 merge takes, because a merge is decided per task and per line of work, not per requirement.
 
+Where accepting a piece can merge its commit into the main branch, the piece SHALL say so beside the
+accept action, before the operator takes it: accepting evidence merges the work of an approved task
+that was waiting for it, and a decision that can change the main branch must not look like a label.
+
 A rejection SHALL carry a reason.
 
 A refusal from the Hub SHALL be shown beside the piece it refused, in the Hub's words.
 
 A decision SHALL be announced to every open view of the project, so coverage and the task board
-reflect it without a reload.
+reflect it without a reload. When a run that recorded evidence ends, that SHALL be announced too,
+after the Hub has stopped counting the run as live, so a piece shown as still being recorded
+becomes decidable without a reload.
 
 #### Scenario: An awaiting piece can be accepted from the coverage view
 
@@ -40,3 +46,13 @@ reflect it without a reload.
 
 - **WHEN** a piece of evidence is decided by the operator or by a granted agent
 - **THEN** every open view of that project's coverage refreshes
+
+#### Scenario: Accept says it may merge into main
+
+- **WHEN** a piece awaiting a decision names a commit
+- **THEN** the view states beside Accept that accepting may merge that commit into the main branch for an approved task waiting on it
+
+#### Scenario: A piece still being recorded becomes decidable when its run ends
+
+- **WHEN** the operator is viewing a piece shown as still being recorded, and the run that recorded it ends
+- **THEN** the view refreshes without a reload and the piece can be decided

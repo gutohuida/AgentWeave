@@ -49,7 +49,12 @@ F358 names two more costs, both from the same window:
   an agent whose run's own task or agent checkout holds uncommitted changes records a new row, which
   the end-of-turn snapshot re-points at a new commit. Review checkouts and the project checkout keep
   the refusal.
-- **A decision is answered as recorded when the merge after it fails** (design D6, R3). Both decision
+- **An agent held from a decision is woken when the run ends** (design D7, operator review
+  2026-09-24, decision 2). `decide` remembers each agent it refuses `recording_run_live`; right after
+  the run's registry entry is popped, the Hub queues each one a short note (new queue origin
+  `evidence`, one migration) in the conversation it was refused in. The refusal also names stopping
+  the run as a remedy, and a same-run revision bumps `produced_at`.
+- **A decision is answered as recorded when the merge after it fails** (design D6, R3; **F426**). Both decision
   routes answer **500** today when integration waiting on the evidence raises — the wrapper's
   rollback expires the rows the response is built from (measured). They build the response first.
 
@@ -67,5 +72,9 @@ F358 names two more costs, both from the same window:
 - `hub/hub/api/v1/spec.py` (`_evidence_view`), `hub/hub/api/v1/agent_actions.py` (record response)
 - `hub/hub/mcp_server.py` (`record_evidence` and `decide_evidence` docstrings) — loads
   `.claude/rules/mcp-server.md`
-- `openspec/specs/requirement-traceability` (one ADDED requirement)
-- No migration. No UI change in this change.
+- `hub/hub/run_liveness.py` (the waiter notes), `hub/hub/api/v1/agent_trigger.py` (the wake after
+  both registry releases), `hub/hub/inbound_queue.py` (the `evidence` origin)
+- `hub/hub/db/models.py` and one migration at the next free revision (`evidence` in both queue-origin
+  CHECK constraints) — loads `.claude/rules/db-migrations.md`
+- `openspec/specs/requirement-traceability` (three ADDED requirements, one of them D7's)
+- No UI change in this change.

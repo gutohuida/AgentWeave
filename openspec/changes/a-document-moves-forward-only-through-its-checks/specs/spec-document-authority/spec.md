@@ -16,9 +16,11 @@ proposed does not establish that a document is complete when it is approved. The
 an import naming a document that is no longer approved: at approval it SHALL be preserved and
 reported by materialisation, as task-dependencies requires, rather than refuse the approval.
 
-The checks SHALL apply on every operation that moves a document to `proposed` or `approved`. A
-second operation that moves the document without them is a way around them, whichever surface
-offers it.
+The checks SHALL apply on every operation that moves a document to `proposed` or `approved`, and
+SHALL be enforced at the point the Hub actually changes a document's phase, not at whichever surface
+a caller reaches it through. A second operation that moves the document without them is a way around
+them, whichever surface offers it, and a check made per surface only survives until another surface
+is added.
 
 An operation that reports what blocks a document from `proposed` SHALL report every blocker in one
 answer, including that exploration has not been closed. A caller told of some blockers and then
@@ -55,6 +57,11 @@ reported as incompleteness.
 - **WHEN** a proposed document is edited so that a requirement has no task, and the operator approves it
 - **THEN** approval is refused with the finding named
 - **AND** no task is created from the document
+
+#### Scenario: The checks hold regardless of caller
+
+- **WHEN** any code path calls the Hub's phase transition operation to move an incomplete document to `proposed` or `approved`
+- **THEN** the move is refused with every finding named, because the checks are made there and not duplicated per caller
 
 #### Scenario: Proposing lists an open exploration with the other blockers
 

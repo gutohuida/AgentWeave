@@ -21,7 +21,8 @@
       `scripts/drive/t_sweep_row13_checkpoints.py` read as a unit expectation (a granted peer reads a
       checkpoint from a conversation it never joined)
 - [ ] 1.4 (Hub, group 3) Migration: upgrade to head leaves `checkpoints` with no `visibility` column;
-      downgrade one step restores it with every row `project`. A bare alembic run has no
+      downgrade one step restores it with every row `project` and server default `'project'` (not
+      `0044`'s `'private'`, which `0097` left in place; design D3). A bare alembic run has no
       `checkpoints` table (`0044` creates it only beside `projects` and `conversations`), so stand the
       table up by hand at the prior revision, as `test_migrations.py:3058-3086` does for `0097`,
       **with a partial unique index on it** (B8's own DDL if B8 has landed, else
@@ -42,7 +43,12 @@
 - [ ] 2.4 Delete `test_a_granted_peer_still_cannot_read_a_private_checkpoint`; remove `visibility=` from
       the helper and its callers
 - [ ] 2.5 `make ui`; commit `hub/ui/src` and `hub/hub/static/ui` together
-- [ ] 2.6 Run 1.1-1.3; full `py -3.11 -m pytest hub/tests/ -q` and `cd hub/ui && npm test -- --run`,
+- [ ] 2.6 `scripts/drive/t_sweep_row13_checkpoints.py:473-481`: invert the two leg-4 assertions that
+      read `cp["visibility"]` (born `project`; present in the response) into one that asserts
+      `"visibility" not in cp`, reworded to say the grant, not the checkpoint, decides who reads it.
+      Leave the F235 leg (task 1.3's control) as it is
+- [ ] 2.7 Run 1.1-1.3 (after 2.6, so the drive-script control reads the new response); full
+      `py -3.11 -m pytest hub/tests/ -q` and `cd hub/ui && npm test -- --run`,
       counts inline
 
 ## 3. Drop the column (design D3; stopping before this group leaves a complete change)

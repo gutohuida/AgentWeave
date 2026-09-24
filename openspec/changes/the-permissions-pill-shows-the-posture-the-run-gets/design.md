@@ -1,5 +1,24 @@
 # Design — the Permissions pill shows the posture the run gets
 
+## Operator review, 2026-09-24
+
+Opus adversarial review, recorded in `spec-queue/tracks/reviews/B4-2026-09-24.md` (Change 3):
+APPROVE WITH FIXES. The one-helper audit holds (the spawn via `mcp_command`,
+`agent_trigger.py:1141-1144`; `AgentOutputPanel.tsx:393`; `NewConversationSurface.tsx:201`;
+`AgentSettingsControls.tsx:199`; `ComposerModelControls.tsx:140`), and `DEFAULT_PERMISSION_MODE`
+(`model_catalog.py:344`) is dead. Two fixes applied:
+
+- **MEDIUM: an existing SHALL was contradicted with no delta.** `agent-run-sandboxing`, *The default
+  posture lets an agent work inside its own workspace*, scenario *The workspace boundary is
+  unchanged*, says the default posture leaves the ability to affect the outside unchanged. Under
+  `workspace` (the default for a Claude run the Hub can answer, since `72afb3c`, and the posture this
+  change makes visible) the Hub refuses a call that reaches outside. The spec delta now MODIFIES
+  that requirement: the default posture never widens the boundary, and where it is the enforced
+  posture it narrows it. Task 1.6 pins the scenario.
+- **LOW: the "Built-in default (…)" label is computed with `yolo=False`** (D3, below): a new
+  `permission_mode_built_in` field, so an agent whose default is Full access does not label the blank
+  option "Full access".
+
 **Built on the recommended answer to D4's first half** (*"one built-in default: `acceptEdits` vs
 `workspace`?"*): **`workspace` for a Claude run the Hub can answer, stated in one function that the
 spawn and every display read; Codex keeps its own truthful default.** If the operator answers
@@ -82,7 +101,18 @@ unaffected.
 `default_permission_mode ?? permission_mode_at_rest` (today: `default_permission_mode` only,
 `:393-395`). The Composer keeps sending only `pendingOverrides`, so showing the value records
 nothing (the existing requirement's second half). `PermissionDefaultSetting`
-(`AgentSettingsControls.tsx:178-214`) labels its blank option from the same field.
+(`AgentSettingsControls.tsx:178-214`) labels its blank option from a sibling field,
+`permission_mode_built_in` (operator review, below).
+
+**Operator review: the blank option's label is computed with `yolo=False`.** Choosing Full access as
+an agent's default sets its autonomy flag (`agent-configuration`, *The autonomy flag follows the
+posture*), so for such an agent `permission_mode_at_rest` is `bypassPermissions`, and a label read
+from it would say "Built-in default (Full access)". But selecting the blank option clears the
+posture **and** the flag, so what it would actually give the run is the non-yolo posture. The list
+route therefore serves two values from the one function: `permission_mode_at_rest =
+posture_at_rest(provider, access_path, yolo)`, which the pills read (it is what the next run gets),
+and `permission_mode_built_in = posture_at_rest(provider, access_path, False)`, which only the blank
+option's label reads (it is what clearing gives). Both are `null` for an unbound agent.
 
 **R3: there is a third place, and it disagrees today even for an agent that states a default.**
 `NewConversationSurface.tsx:201-218` renders a second `<Composer>` and passes **no**

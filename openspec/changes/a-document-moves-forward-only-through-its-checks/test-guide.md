@@ -5,6 +5,9 @@
 1. **The back door is shut.** 1.1: the phase route refuses to propose an empty document. It fails today.
 2. **Approval re-checks.** 1.2: a proposed document edited into incompleteness cannot be approved,
    and no tasks are created. It fails today.
+2a. **The check lives in the transition, not the route** (operator decision 1). 1.9: calling
+   `spec_lifecycle.transition()` directly on an incomplete document is refused with the full list.
+   It fails today.
 3. **One list.** 1.3/1.4: `propose` names the open exploration beside the other blockers.
 4. **Illegal moves still read as illegal.** 1.5.
 5. **The happy path is unchanged.** 1.6.

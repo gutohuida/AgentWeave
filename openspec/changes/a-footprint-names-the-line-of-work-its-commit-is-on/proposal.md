@@ -73,8 +73,12 @@ than was done.
 - `hub/hub/task_integration.py` (`merge_targets`' governed path reduces by ancestry;
   `integration_targets` unchanged), `hub/hub/api/v1/tasks.py` (the preview's governed path)
 - A data-only migration (`.claude/rules/db-migrations.md`: it reaches `:8000`'s real database on
-  its next restart; it is an idempotent `UPDATE`)
+  its next restart; it is an idempotent `UPDATE`; measured a no-op on `:8000` today — zero `'HEAD'` rows)
 - Tests that pin today's behaviour as a non-guarantee flip on purpose:
   `test_an_operator_naming_the_resolved_sha_does_not_supersede` (asserts `branch == ""`)
 - `openspec/specs/spec-document-authority` (MODIFIED: *Evidence is footprinted against the work it
   describes*; ADDED: one requirement on the reduction)
+- `openspec/specs/task-lifecycle-governance` (MODIFIED: *Approval integrates the approved work* —
+  "the newest such commit per distinct branch" becomes the descendant per line of work, and every
+  uncontained commit among footprints that name no line of work; added by the operator review,
+  2026-09-24)

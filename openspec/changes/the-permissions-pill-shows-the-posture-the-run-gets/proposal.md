@@ -42,10 +42,12 @@ existed"* has been false since `72afb3c` (2026-08-13) moved the Claude default t
    instead of the two constants, so the spawn and the display cannot drift.
 2. **The agents list states it per agent**: `AgentSummary` gains `permission_mode_at_rest`, computed
    from the bound runner's cli, the agent's `hub_client` and `yolo`, by that function. It is `null`
-   for an agent with no runner bound (there is no run to describe).
+   for an agent with no runner bound (there is no run to describe). Beside it,
+   `permission_mode_built_in` is the same function with `yolo=False`: what clearing the agent's
+   default would give (operator review 2026-09-24; clearing the posture clears the flag).
 3. **Both composers' pills and the settings select read it** (R3: the new-conversation surface's composer, `NewConversationSurface.tsx:201`, passes no agent value today and shows the catalog default even for an agent with a stated default), through one UI helper. At rest the pill shows
    `default_permission_mode ?? permission_mode_at_rest ?? control.default`; the select's blank option
-   reads "Built-in default (<label of permission_mode_at_rest>)", or "Built-in default (depends on
+   reads "Built-in default (<label of permission_mode_built_in>)", or "Built-in default (depends on
    the runner)" when none is bound. Nothing is recorded as a choice.
 4. **The catalog's declared default matches**: Claude's control default becomes `workspace`;
    Codex's stays `acceptEdits`. `DEFAULT_PERMISSION_MODE` is deleted. A test asserts each catalog

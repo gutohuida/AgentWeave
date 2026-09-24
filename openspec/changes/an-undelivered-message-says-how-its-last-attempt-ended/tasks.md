@@ -33,6 +33,9 @@
       arrival order (F190 rule). Record that the forward case FAILS today (no error text anywhere)
 - [ ] 1.6 (UI) An abandoned entry with `run_id: null` (the scheduler's give-up) renders the reason and
       no *Last attempt* line. Control, PASSES today
+- [ ] 1.6b (UI) An abandoned entry whose run is `interrupted` renders exactly *Last attempt was
+      interrupted*, and no text naming a Hub restart (design D2, operator review 2026-09-24). Record
+      that it FAILS today (no line)
 - [ ] 1.7 (UI) `hub/ui/src/__tests__/agentChat.test.tsx`: `eventTargetsAgent('queue_entry_abandoned',
       { agent: 'a' }, 'a')` is true. Record that it FAILS today
 - [ ] 1.8 (Hub, F273 pin) Patch `record_agent_output` so the status-line write raises
@@ -47,7 +50,9 @@
 - [ ] 2.1 `hub/hub/schemas/agents.py`: `RunFacts.error` and its bound (design D1)
 - [ ] 2.2 `hub/hub/api/v1/agent_chat.py:341`, `hub/hub/api/v1/agents.py:894`: fill it, fitted
 - [ ] 2.3 `hub/ui/src/api/agents.ts`: `AgentRunFacts.error`; `hub/ui/src/api/agentChat.ts`:
-      `queue_entry_abandoned` in `QUEUE_EVENT_TYPES`, and its comment
+      `queue_entry_abandoned` in `QUEUE_EVENT_TYPES`, and its comment; rewrite the comment above
+      `RUN_TERMINAL_EVENT_TYPES` (`:311-315`) so it no longer says `run_interrupted` can never reach a
+      live client (design D3; only the startup broadcast is unseen)
 - [ ] 2.4 `hub/ui/src/components/agents/AgentTimeline.tsx`: the abandoned branch passes
       `runs[entry.run_id]`; `MessageEntry` renders design D2's line
 - [ ] 2.5 `make ui`; commit `hub/ui/src` and `hub/hub/static/ui` together

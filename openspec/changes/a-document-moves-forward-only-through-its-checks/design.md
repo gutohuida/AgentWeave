@@ -1,5 +1,29 @@
 # Design — a document moves forward only through its checks
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B5-2026-09-24.md`, section 1: APPROVE WITH
+FIXES) and the operator's decision 1 on it changed this design:
+
+- **The checks run inside `spec_lifecycle.transition()`, not at the two routes (operator decision
+  1).** R1-R3 put `phase_blockers` in `set_phase` and `propose`. The existing requirement *"Approval
+  is the operator's decision and no agent can express it"* (`spec-document-authority/spec.md:159-180`)
+  already says a phase rule is enforced where the Hub changes the phase, because "a rule checked in
+  one place only survives until a second caller of that place is added" — and F207 is that failure.
+  R3's "two callers" claim holds at HEAD (`spec.py:1607`, `spec_service.py:781`; the one `.phase =`
+  writer is `spec_lifecycle.py:339`), but nothing pinned it. **D3 is rewritten**: `transition()` takes
+  a required `workspace` and calls `phase_blockers` itself; `PhaseError` carries the `blocking` list;
+  `propose` turns that refusal into its `200` list; `set_phase` answers it as `409` and newly maps
+  `SaveRefusedError` to `422`. The requirement's MODIFIED text and a new scenario say the checks hold
+  whatever the caller, and test 1.9 calls `transition()` directly.
+- **Recorded, no change needed:** no loop, flow or MCP tool moves a document's phase; adoption needs
+  a payload (`spec_adoption.py:190-207`); `create_document` writes a stub payload
+  (`spec.py:1453-1466`), so test 1.1 answers `409 document_incomplete`, not `422 no_payload`.
+- **New test churn named:** `test_spec_archive.py::test_first_approved_at_is_set_once_and_survives_a_reopen`
+  (`:281-320`) calls `transition()` to `proposed`/`approved` on a document with no file; it now needs a
+  workspace and a complete payload (task 2.3). `test_spec_archive.py:270` only passes the new
+  argument.
+
 **Built on the recommended answer to F113's status-code question** (ROUNDS S6: "`propose` lists every
 blocker"): the open exploration becomes an entry in `propose`'s `200` `blocking` list. If the operator
 answers otherwise — keep `409 explore_not_closed` on `propose` — D2 is dropped, D1's function still
@@ -64,9 +88,14 @@ only targets `proposed`) and nothing else assigns `SpecDocument.phase` (grep `\.
 (`materialise_quietly` has one caller, `spec.py:1624`), so it is B6's registration question, not a
 bypass of the gate that makes tasks.
 
-`propose` becomes: `blocking = await phase_blockers(...)`; if non-empty, return it; else
-`transition(...)`; `rerender_phase`. `transition` keeps its `explore_not_closed` refusal, so the
-state can never be reached by a caller that skips `phase_blockers`.
+**Who calls it (operator review).** `transition()` does, and nothing else needs to (D3). `propose`
+becomes: `transition(...)`; on `PhaseError` with `code == "document_incomplete"` return
+`exc.blocking` (the `200` list); any other `PhaseError` propagates as today; then `rerender_phase`.
+The list is computed once, by the function that moves the phase, so no caller can reach `proposed`
+or `approved` without it. `phase_blockers` stays in `spec_service` beside the payload reading it
+reuses (`SaveRefusedError` is that module's); `transition()` imports it at call time, because
+`spec_service` imports `spec_lifecycle` at module scope (`spec_service.py:18-28`) — the same
+call-time import `transition()` already uses for `SpecRequirement`/`Task` (`spec_lifecycle.py:317`).
 
 ## D2 — `propose` answers "not yet" in one shape (F113)
 
@@ -78,23 +107,51 @@ old status (`test_spec_documents_api.py:323-335`) flips, deliberately.
 The UI is unaffected: it never shows Propose with exploration open. An API client gets one branch
 for "not yet".
 
-## D3 — the phase route runs the same checks (F207)
+## D3 — `transition()` runs the checks, so every caller does (F207; operator decision 1)
 
-In `set_phase`, **after** confirming the move is in the phase map and before `transition`:
+*Rewritten after the operator review. R1-R3 placed the call in `set_phase`, before `transition`;
+the operator chose the transition itself, as the existing approval requirement already does for
+the actor rule.*
+
+`transition(session, document, *, to_phase, actor, workspace, reason="")` — `workspace:
+ProjectWorkspace` is a **required** keyword. A caller that has no workspace cannot move a document
+at all, rather than moving it unchecked; a default of `None` would reopen the second-caller hole this
+exists to close. After the existing phase-map, actor and archive checks (so every
+`unknown_phase`, `phase_unchanged`, `illegal_transition`, `approval_is_the_operators` and
+`archive_*` answer is unchanged, and precedes any file read), and **in place of** today's standalone
+`explore_not_closed` check (`spec_lifecycle.py:332-336`):
 
 ```python
-if to in (PROPOSED, APPROVED) and (document.phase, to) in spec_lifecycle.TRANSITIONS:
-    blocking = await spec_service.phase_blockers(session, workspace, document, to)
+if to_phase in (PROPOSED, APPROVED):
+    from . import spec_service  # call-time: spec_service imports this module
+    blocking = await spec_service.phase_blockers(session, workspace, document, to_phase)
     if blocking:
-        raise HTTPException(409, detail={"code": "document_incomplete",
-            "message": f"this document cannot move to {to} yet: " + "; ".join(...codes...),
-            "blocking": blocking})
+        raise PhaseError(
+            f"this document cannot move to {to_phase} yet: " + ", ".join(b["code"] for b in blocking),
+            code="document_incomplete",
+            blocking=blocking,
+        )
 ```
 
-Ordering matters. `test_spec_capability_kind.py:80` walks a `current` document through every target
-expecting `illegal_transition`; running the checks first would answer `document_incomplete` for a
-move that is illegal whatever the content. Gating on the phase map keeps every existing
-`illegal_transition`, `unknown_phase` and `phase_unchanged` answer.
+`PhaseError.__init__` gains `blocking: Optional[List[Dict[str, Any]]] = None`, stored as a list
+(`[]` for every other refusal). The open exploration is the first entry of that list (D1), so the
+explore refusal is not lost, only folded into the one answer: the phase route on a complete document
+with exploration open answers `409 document_incomplete` with `blocking == [explore_not_closed]`
+instead of `409 explore_not_closed`. Nothing reads that code from the phase route (grep:
+`explore_not_closed` appears only in `spec_lifecycle.py:335` and the propose test
+`test_spec_documents_api.py:335`, which D2 flips).
+
+**The routes.** `set_phase` (`spec.py:1586-1635`) passes `workspace=workspace` (it already has one,
+`:1604`) and its `PhaseError` handler adds `"blocking": exc.blocking` to the detail when non-empty.
+It gains an `except spec_service.SaveRefusedError` → `422 {message, code}`, the mapping
+`propose_document` already uses (`spec.py:1565-1569`); today the phase route never meets that
+exception, so without the clause a payload-less or corrupt document would answer a bare 500.
+`propose_document` is unchanged: `propose` now returns the list from the refusal (D1).
+
+**Ordering still matters.** `test_spec_capability_kind.py:80` walks a `current` document through
+every target expecting `illegal_transition`; the checks sit after the phase map, so a move that is
+illegal whatever the content is still answered as illegal, and an agent asking to approve is still
+told approval is the operator's before any file is read.
 
 **Why the phase route answers 409 while `propose` answers 200.** Each route keeps one shape for
 "not yet": `propose` has always reported blockers with `200` and the UI reads that body; the phase
@@ -107,10 +164,13 @@ refuses only `approved`), and adoption registers documents at whatever phase the
 (`spec_tasks.materialise_quietly`, `spec.py:1618-1624`), so it is the last point where completeness
 is a gate rather than a report.
 
-**What the route returns when a called function raises.** `phase_blockers` → `SaveRefusedError` →
-422 with `{message, code}` (the mapping `propose_document` uses, `spec.py:1564-1568`). Nothing is
-written before it runs. `transition` → `PhaseError` → 409 as today. `materialise_quietly` and
-`rerender_phase` are unchanged.
+**What the route returns when a called function raises.** `transition` → `phase_blockers` →
+`SaveRefusedError` → 422 with `{message, code}` on both routes (the phase route's new clause above).
+Nothing is written before it runs: the refusal is raised before `document.phase` is assigned
+(`spec_lifecycle.py:339`). `transition` → `PhaseError` → 409 as today, now with `blocking` when the
+code is `document_incomplete`. `materialise_quietly` and `rerender_phase` are unchanged. A
+`read_document` `OSError` inside `phase_blockers` is not new: `propose` reads the same file the same
+way today.
 
 ## D4 — the app shows an approval refusal
 
@@ -154,3 +214,12 @@ unhandled.
   recorded as `document_not_approved`). Confirmed nothing else reaches `approved` unchecked: two
   `transition` callers, one `.phase =` writer, and adoption-at-`approved` materialises nothing. No
   test changed.
+- **Operator review, 2026-09-24** (`spec-queue/tracks/reviews/B5-2026-09-24.md` §1, operator
+  decision 1). The checks moved from the two routes into `spec_lifecycle.transition()` (D3
+  rewritten; D1's caller paragraph added): required `workspace` argument, `PhaseError.blocking`,
+  `propose` reads the refusal, `set_phase` maps `SaveRefusedError` to 422. Re-verified at HEAD
+  `d0da83d`: `transition` `:270`, the explore refusal `:332-336`, the one `.phase =` writer `:339`,
+  the call-time import precedent `:317`; `set_phase` `spec.py:1586`, its `transition` call `:1607`;
+  `propose` `spec_service.py:747`, its `transition` call `:781`. Test 1.9 (a direct `transition()`
+  call) added; 1.7 now also pins the phase route's new 422 clause; `test_spec_archive.py`'s two
+  direct callers added to task 2.3.

@@ -12,10 +12,13 @@ control for it, and says why in writing (`hub/ui/src/components/agents/AgentSett
 work somewhere the agent no longer looks. That belongs in its own change, with a decision about what
 happens to the existing worktree."*
 
-The API does not keep that promise. Two routes change an existing agent's config with no check:
+The API does not keep that promise. Three routes change an existing agent's config with no check:
 
 - `PATCH /agents/{name}` merges `config` as an RFC 7396 patch (`hub/hub/api/v1/agents.py:2648-2659`).
 - `POST /agents/register` on an existing name merges `config` too (`agents.py:2300-2308`).
+- `POST /session/sync` replaces the synced session state wholesale (`hub/hub/api/v1/session_sync.py:61-75`),
+  and its `agents.<name>.read_only` **outranks** `Agent.config` in the config every turn reads
+  (`hub/hub/launchability.py:485-486`). Added at the operator review, 2026-09-24 (decision 4).
 
 F242 drove the first, with an agent holding a provisioned task checkout:
 
@@ -28,9 +31,10 @@ F242 drove the first, with an agent holding a provisioned task checkout:
 
 ## What Changes
 
-- **A change to isolation is refused while the agent holds work** (design D1). Both routes refuse,
+- **A change to isolation is refused while the agent holds work** (design D1). All three routes refuse,
   with `409 {"code": "isolation_change_under_held_work", "message": …, "held": [...]}`, a body that
-  would change `is_writing_agent(config)` while the agent:
+  would change `is_writing_agent` over the agent's **effective** config (the synced session entry
+  merged over `Agent.config`, as `get_agent_config` reads it) while the agent:
   - has a turn this Hub is executing (`run_liveness.live_run_ids()` ∩ the agent's runs), or
   - is the assignee of a task not in `approved`/`rejected` (the statuses at which a task checkout is
     released, `task_transition_service.TERMINAL_STATUSES`, `:736`).
@@ -50,7 +54,9 @@ for the operator to file or decide.
 
 ## Impact
 
-- `hub/hub/api/v1/agents.py` (`patch_agent`, `register_agent`, one shared helper)
+- `hub/hub/launchability.py` (`effective_agent_config`, `isolation_change_refusal`; `get_agent_config` uses the first)
+- `hub/hub/api/v1/agents.py` (`patch_agent`, `register_agent`)
+- `hub/hub/api/v1/session_sync.py` (`sync_session`)
 - `hub/ui/src/components/agents/AgentSettingsPage.tsx` (comment only; no bundle change needed — R2
   confirms comments do not alter the build)
 - `openspec/specs/workspace-isolation` (one ADDED requirement)

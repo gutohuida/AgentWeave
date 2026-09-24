@@ -8,9 +8,15 @@ Changing it moves where the agent's next turn runs. Work already in the old loca
 checkout, or uncommitted edits in the project's own checkout — stays where the agent no longer
 looks, and a task-bound turn in the project's checkout is not committed onto the task's branch.
 
-The refusal SHALL apply on every operation that changes an agent's stored configuration, and SHALL
-name each turn and task that holds it and what would clear it. A refused request SHALL change
-nothing about the agent.
+Whether an agent works in its own checkout SHALL be judged on the configuration the Hub actually
+reads when it chooses the agent's workspace — the agent's stored configuration with the project's
+synced session state for that agent applied over it — before and after the request. A request whose
+effect that configuration overrides is not a change.
+
+The refusal SHALL apply on every operation that changes that configuration, including one that
+replaces the project's synced session state, and SHALL name each turn and task that holds it and
+what would clear it. A refused request SHALL change nothing — neither the agent nor, for a session
+replacement, the session state or the roster.
 
 A request that leaves the setting as it was SHALL NOT be refused on these grounds.
 
@@ -29,6 +35,17 @@ A request that leaves the setting as it was SHALL NOT be refused on these ground
 
 - **WHEN** an agent re-registers with a configuration that changes whether it works in its own checkout while it holds an open task
 - **THEN** the registration is refused and nothing about the agent changes
+
+#### Scenario: Replacing the synced session state is held to the same rule
+
+- **WHEN** the synced session state is replaced with an entry that changes whether an agent holding an open task works in its own checkout
+- **THEN** the replacement is refused, naming the agent and the task
+- **AND** the session state and the roster are unchanged
+
+#### Scenario: A change the session state overrides is not a change
+
+- **WHEN** the synced session state fixes whether an agent works in its own checkout and a request changes only the agent's stored value for it, while the agent holds an open task
+- **THEN** the request is accepted, because where the agent works does not change
 
 #### Scenario: An idle agent can be changed
 

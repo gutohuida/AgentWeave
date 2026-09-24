@@ -1,5 +1,25 @@
 # Design — the coverage bar takes the evidence decision it asks for
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B5-2026-09-24.md`, section 3: APPROVE WITH
+FIXES) and the operator's decision 3 on it changed this design:
+
+- **A row greyed as "still being recorded" is refreshed when the run ends (new D4).** Nothing
+  broadcasts when a run ends or its footprints are re-pointed: `_restamp_evidence_footprints`
+  (`agent_trigger.py:1769-1801`) broadcasts nothing, and `refetchOnWindowFocus` is `false`
+  (`ui/src/main.tsx:11`), so a greyed row stayed grey until the operator reopened it. D4 broadcasts
+  `spec_updated` after the liveness registry is cleared in each transport's `finally`
+  (`agent_trigger.py:2706-2713`, `:3250-3254`) — not at `run_completed`, which fires before the
+  clear and would race it. Test 1.9.
+- **Accept says on the row that it may merge into main (operator decision 3; D1).** Accepting runs
+  `integrate_what_was_waiting_for_this_evidence` (`task_integration.py:672-707`), which merges the
+  commit for every approved task serving the requirement that has not merged it
+  (`tasks_awaiting_this_commit`, `:618-669`). The row now says so beside Accept, for every awaiting
+  piece whose footprint names a commit. Test 1.3a.
+- **Verified, unchanged:** the list route's order (`for_requirement`, oldest first), the query keys,
+  and the broadcast using the id captured before integration.
+
 No operator decision governs this change. It is S5 slice (a). It reads better after
 `evidence-is-decided-after-the-run-that-recorded-it` ships (it renders that change's refusal and
 field), but it does not depend on it: without it, the field is absent and treated as `false`, and a
@@ -55,6 +75,14 @@ branch. So the label claims only the order the route returns.
   `outside_workspace_writes` is a non-empty list — *"this run also wrote outside this tree"*.
 - `task_id` when present. `review_state`; for a decided piece, the latest review's actor and reason.
 - For `awaiting`: **Accept**; **Reject** opens a one-line reason input and is disabled while empty.
+- **Beside Accept, when the footprint is `git` with a `commit_sha` (operator decision 3):** *"Accepting
+  may merge commit `<sha[:12]>` into main for an approved task that serves this requirement and is
+  waiting on it."* It says *may* because the row cannot know, and should not claim, whether such a
+  task exists: `tasks_awaiting_this_commit` (`task_integration.py:618-669`) selects **approved tasks
+  linked to the requirement** that have no `merged` row for that commit — not the piece's own
+  `task_id` — and `integrate` itself asks git whether the commit is already in main. A piece with no
+  commit (a `paths` footprint, or none) can merge nothing (`:642-643` returns `[]`), so it carries no
+  such sentence. Rejecting never merges (`:693-695`).
 
 ## D2 — refusals
 
@@ -81,6 +109,38 @@ recorded by run <id>; decide once it ends"*.
 - The broadcast carries no `path`. Both `spec_updated` consumers tolerate that
   (`api/spec.ts:158-178` guards `d?.path`; the rename follower returns early without one, `:195-196`)
   — checked by R2, and the same property B6's drift change relies on for `path: null`.
+
+## D4 — the row un-greys when the recording run ends (operator review)
+
+`recording_run_live` (the F358 change) is true while `run_liveness.run_is_live(run_id)`
+(`run_liveness.py:69-71`). The run leaves the registry in each transport's `finally`:
+`run_liveness.active_ptys.pop(run_id, None)` (`agent_trigger.py:2707`) and
+`run_liveness.active_app_server_runs.discard(run_id)` (`:3251`). Nothing tells an open view that
+happened, so the greyed row never refreshes on its own.
+
+- **Which runs.** `run_liveness` gains `runs_that_recorded_evidence: Set[str]`. The agent-plane
+  record route adds `actor.run_id` to it after its commit, beside its existing broadcast
+  (`agent_actions.py:1222-1227`). The operator's record route has no run and adds nothing. Only
+  those runs can have greyed a row, so no other run end broadcasts anything.
+- **Where.** In both `finally` blocks, **synchronously**, next to the registry clear:
+  `recorded = run_id in runs_that_recorded_evidence; runs_that_recorded_evidence.discard(run_id)`.
+  Then, **after** `await outside_writes.flush()`, if `recorded`: `await sse_manager.broadcast(project_id,
+  "spec_updated", {"run_ended": run_id})`, wrapped in `try/except Exception` with a warning. The
+  block's comment (`:2708-2713`) says the flush is its only `await` so nothing that must happen is
+  skipped when the task is cancelled. This broadcast is placed after the flush on purpose. If a
+  cancellation skips it, a row stays grey until the next `spec_updated` or a reopen, which is
+  today's behaviour. The flush keeps its guarantee.
+- **Why not at `run_completed`.** That event is chosen inside the run's `try` (`:2419`, `:3113`) and emitted before the
+  `finally` clears the registry. A view refetching on it can read `recording_run_live: true` again,
+  and then nothing refreshes it a second time.
+- **The payload carries no `path` and no `evidence`.** Both `spec_updated` consumers tolerate that
+  (`api/spec.ts`, `d?.path` guarded; see D3). `useSpecEvents` invalidates `specCoverage` and, with
+  this change, `specEvidence`, which is what un-greys the row.
+- **Shared seam with the F358 change.** `evidence-is-decided-after-the-run-that-recorded-it` re-queues
+  agents refused `recording_run_live` at the same point, after the registry clear. Whichever change
+  lands second adds its step beside the first one's, in the same place.
+- A Hub restart empties the set, and also every live run, so nothing is left greyed. The next
+  fetch reads `recording_run_live: false`.
 
 ## What each route returns when what it calls raises
 
@@ -132,3 +192,11 @@ recorded by run <id>; decide once it ends"*.
   integration with a task waiting: **500**, decision stored (R1's 200 did not reach the raise). The
   fix is carried by the F358 change (D6); this change's broadcast is told to use the captured id, and
   task 1.1a pins it.
+- **Operator review, 2026-09-24** (`spec-queue/tracks/reviews/B5-2026-09-24.md` §3, operator
+  decision 3). Added D4 (a `spec_updated` after the run leaves the liveness registry, only for runs
+  that recorded evidence) and the *may merge into main* sentence beside Accept. Re-verified at HEAD
+  `d0da83d`: `_restamp_evidence_footprints` `agent_trigger.py:1769-1801` (no broadcast); the two
+  `finally` blocks `:2706-2713`, `:3250-3254`; `refetchOnWindowFocus: false` `ui/src/main.tsx:11`;
+  `integrate_what_was_waiting_for_this_evidence` `task_integration.py:672-707`;
+  `tasks_awaiting_this_commit` `:618-669`; the record route's broadcast `agent_actions.py:1222-1227`.
+  Tests 1.3a, 1.9, 1.9a added.

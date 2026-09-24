@@ -21,6 +21,10 @@ produce the built-in list and a stated reason.
 
 The provider's runtime controls SHALL remain as the Hub declares them.
 
+Where a run used a model the provider's catalog does not list but the built-in list declares, the
+Hub SHALL still read that model's context window from the built-in list. This applies to reading a
+run's usage only; it SHALL NOT make such a model acceptable where a model is newly set.
+
 #### Scenario: The installed client's list is offered
 
 - **WHEN** the provider's catalog is readable and lists models
@@ -38,6 +42,13 @@ The provider's runtime controls SHALL remain as the Hub declares them.
 
 - **WHEN** the provider's catalog file changes while the Hub is running
 - **THEN** the next read of the catalog reflects the change
+
+#### Scenario: A model the provider no longer lists keeps its window
+
+- **WHEN** the provider's catalog is readable and does not list a model the built-in list declares
+- **AND** a run reports usage on that model
+- **THEN** the run's context window is the built-in list's window for it
+- **AND** a runner newly set to that model is still refused
 
 #### Scenario: A malformed provider catalog fails nothing
 

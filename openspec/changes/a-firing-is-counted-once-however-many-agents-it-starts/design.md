@@ -1,5 +1,14 @@
 # Design — a firing is counted once, however many agents it starts
 
+## Operator review, 2026-09-24
+
+Opus adversarial review, recorded in `spec-queue/tracks/reviews/B2-2026-09-24.md` §2: APPROVE, with
+one LOW note applied here. `scripts/drive/t_row11_loop.py:231` and `:312` assert
+`run_count == len(history)`. That holds for a single-agent loop, so the script keeps passing, but it
+reads the counter the way F121 did (one per row). New task 2.7 re-points both verdicts at the number
+of distinct `fired_at` values in the history (the script already reads `fired_at`, `:224`, `:304`),
+so the drive states this change's meaning and would catch a multi-agent regression.
+
 **Built on the recommended answer to D1** (a `JobRun` row is a *dispatch*: one agent's share of one
 firing; a *firing* is the rows sharing `(job_id, fired_at)`; a *run* is one attempt, a `Run` row).
 If the operator answers D1 otherwise:

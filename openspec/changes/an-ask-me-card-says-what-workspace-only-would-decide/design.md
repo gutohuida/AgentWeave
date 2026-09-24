@@ -1,5 +1,21 @@
 # Design — an "Ask me" card says what "Workspace only" would decide
 
+## Operator review, 2026-09-24
+
+Opus adversarial review, recorded in `spec-queue/tracks/reviews/B4-2026-09-24.md` (Change 4):
+APPROVE WITH FIXES. The 422 retry is sound and idempotent (`extra="forbid"`; the row is added only
+after validation; only a 422 is retried), a verdict failure becomes `None`, and the migration is a
+nullable JSON column. Two LOW fixes applied:
+
+- **The Codex wording.** A Codex verdict is `_within(cwd or grantRoot, workspace)` alone
+  (`codex_appserver.py:280-283`): the command is never read. The card's "A shell command is read,
+  not sandboxed" was false for it; a Codex verdict now says *"checked by working directory only"*
+  (D3).
+- **D4's allow reason never reached the card**, because D3 showed no reason on an allow. The review
+  offered showing it or dropping the claim; showing it is one interpolation, so the card now shows
+  the reason on an allow as on a refusal, and the qualification lives in the reason, written by
+  whichever check made it (D3). Tasks 1.1, 1.5 and 1.6 assert the texts.
+
 **Built on the recommended answer to D4's second half: yes, the card shows the verdict, as advice.**
 If the operator answers no, F230 and F284 close as "by design" with a line in the posture
 documentation, and this change is dropped whole. **Built also on D5's recommended answer** (bare
@@ -41,7 +57,7 @@ path's answer on a judge failure is "ask anyway", not "deny".
 For Codex, `_await_operator_permission` gains `workspace: Optional[str]` (the lambda at
 `agent_trigger.py:3021` has `work_dir` in scope) and computes
 `codex_appserver.workspace_verdict(subject, workspace)`, a new helper that returns
-`{"allow": _within(cwd or grantRoot, workspace), "reason": …}` — the check `decide_approval` applies
+`{"allow": _within(cwd or grantRoot, workspace), "reason": …}` (reason texts in D3) — the check `decide_approval` applies
 under "Workspace only" (`codex_appserver.py:280-283`). **R2:** `decide_approval`'s workspace branch
 is rewritten to call the same helper, so the card's verdict and the posture's answer cannot drift
 (two restatements of one check is the shape `outside_write_record.py` rejects). Only the sandbox
@@ -90,9 +106,23 @@ record that carries it"*). The response model adds `workspace_verdict: dict | No
 Card (`PermissionRequestCard.tsx`, after the `<code>` at `:112-117`):
 - `allow === false` → `data-testid="permission-verdict-<id>"`, warning colour: "Outside this agent's
   workspace — Workspace only would refuse this:" + reason.
-- `allow === true` → muted: "Workspace only would allow this." For a command, append "A shell
-  command is read, not sandboxed."
+- `allow === true` → muted: "Workspace only would allow this:" + reason (operator review: the
+  allow reason is shown, so D4's qualified reason reaches the card).
 - `null` → nothing.
+
+**The reason carries the qualification, not the card** (operator review). The card does not know
+which provider's check produced a verdict, and the two checks differ, so the text that says how far
+the check went is written where the check is made:
+
+- **Claude** (`_ask_operator`): the verdict is `_decide`'s answer; when it allows and `tool_input`
+  carries a `command`, the approver appends *"; a shell command is read, not sandboxed"* to the
+  reason (`_decide`'s own reason, `:1586`, is unchanged apart from D4).
+- **Codex** (`workspace_verdict`): its check is `_within(cwd or grantRoot, workspace)` and nothing
+  else (`codex_appserver.py:280-283`, `_within` `:199-211`); it never reads the command. So it
+  allows with *"its working directory is inside your workspace; checked by working directory only"*
+  and refuses with *"its working directory is outside your workspace, or it names none; checked by
+  working directory only"*. R1's *"A shell command is read, not sandboxed"* was wrong for Codex:
+  its command is not read at all.
 `requestKind` is unchanged.
 
 ### D4 — An allow reason stops overclaiming
