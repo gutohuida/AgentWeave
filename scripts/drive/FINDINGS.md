@@ -32782,3 +32782,36 @@ later task's checkpoint. So the note written for a declined handover can land be
 nowhere. Today this happens when no checkpoint runner is set; with B7's
 `worker-spend-counts-against-the-budget` (D7.1) it also happens at budget exhaustion. Repair shape:
 key the pending note to its task and deliver it with that task's review briefing.
+
+## F424 (B) — when the approval gate's git calls raise, every approval surface answers a bare 500
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); re-checked in session. `task_integration._git`
+(`hub/hub/task_integration.py:136-145`) is a bare `subprocess.run(..., timeout=60, check=False)`, and
+`is_repository`, `branch_exists`, `task_branch_tip` and `would_conflict` all call it from the gate's
+`evaluate`. A `TimeoutExpired` or `OSError` is not a `TransitionRefusedError` or `TaskBindingError`,
+the only kinds the app maps (`main.py:532-553`). So operator `PATCH /tasks/{id}`, the agent plane and
+MCP answer 500 after up to a minute per call, with nothing committed. **Recommended repair (operator,
+2026-09-24): refuse the approval with a stated "could not ask git: <reason>" refusal.** The gate
+exists so that nothing is approved that might not merge, and the operator can retry. Add a test that
+patches `_git` to raise `TimeoutExpired` and asserts a refusal, not a 500, on each surface.
+
+## F425 (B) — a read-only agent assigned a writing task writes into the operator's checkout
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); re-checked in session. `takes_task_workspace`
+(`hub/hub/worktrees.py:763-773`) returns True only for a writing agent, so a `read_only` agent's turn
+on a task runs in the shared (operator's) checkout, and nothing snapshots a turn that is not isolated.
+Nothing in the app sets `read_only` today, so it is reachable through the API and `POST
+/agents/register` only. Recommended repair: refuse to assign a writing task to a read-only agent (or
+refuse the setting when the app ever offers it). B5's `isolation-does-not-change-under-held-work`
+covers only the setting *changing* under held work, not this case.
+
+## F426 (B) — an evidence decision whose merge then fails answers a bare 500 after the decision is saved
+
+**Status:** open; **carried by B5's `evidence-is-decided-after-the-run-that-recorded-it` (its D6),
+approved 2026-09-24.** Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); measured by R3. With an approved task waiting and `retry_integration`
+raising, the wrapper rolls back (`task_integration.py:702-707`), which expires every loaded row. The
+route then reads `evidence`/`review` to build its answer and raises `MissingGreenlet` (`spec.py:926`
+→ `:1110`): a bare 500, with the decision already committed (`accepted`). The agent plane
+(`agent_actions.py:1354-1357`) fails the same way. The repair is to build both routes' responses
+before integrating. The test's stub must load the task through the session, or it opens no transaction
+and passes today.
