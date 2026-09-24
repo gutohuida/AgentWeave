@@ -1228,7 +1228,7 @@ board, but the operator has to already suspect there is something to look for.
 
 ## F20 (C) — Deep links use query parameters, and nothing says so
 
-**Status:** open (no commit references it)
+**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** canonicalise the address to `/` plus the resolved destination's query (compare the pathname too) and change `cli.py:306`'s `view=overview` to `tab=overview`; a **no-spec fix round** (tests in `useWorkspaceNavigation.test.tsx` and `tests/test_cli.py`). Was: open (no commit references it)
 
 `/projects/{id}/tasks` silently renders Overview. The app has no router dependency; destinations
 are query parameters read from `window.location.search` (`navigation.ts:327-375`), so the working
@@ -1238,7 +1238,7 @@ Overview without comment rather than 404ing or correcting itself.
 
 ## F21 (B) — A Haiku agent cannot reach `record_evidence`, and burns a whole turn trying
 
-**Status:** open — investigated 2026-08-25, the proposed remedy was already shipped and the cause is not here; left open with the cause named
+**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **not retired yet: run one probe first.** Six Haiku turns on a trial Hub (never `:8000`), with three arms: today's argv, `--strict-mcp-config`, and `ENABLE_TOOL_SEARCH=false`. Decision rule and read-outs are in `B11.md` "F21's probe". Was: open — investigated 2026-08-25, the proposed remedy was already shipped and the cause is not here; left open with the cause named
 
 **Observed live 2026-08-24**, during the review-checkout drive (`run-1515a942defc`), not while
 looking for it.
@@ -10303,7 +10303,7 @@ Not proposed here — this wants a spec loop, and the clock ended this session b
 `hub/hub/api/v1/spec.py:921,942,974`.
 
 ## F133 (B) — the operator's own message erases the reason their agent is stalled
-**Status:** open (filed per decision D5: two defensible fixes -- mirror the selection logic in the endpoint, or refactor `schedule_agent` so both callers share one predicate; neither chosen)
+**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **no-spec fix round, before B1's `why-queued-input-waits-is-told-truthfully`**: move `select_turn(entries, hop_budget, cap)` and `_entry_kind` into `hub/hub/inbound_queue.py`, called by both `_attempt_turn` and `get_queue_status`. Failing test: autonomous entry in A, then operator entry in B, budget spent → `token budget exhausted`; the reverse order is the control. Was: open (filed per decision D5: two defensible fixes -- mirror the selection logic in the endpoint, or refactor `schedule_agent` so both callers share one predicate; neither chosen)
 
 **Driven 2026-08-30, iteration 11, full-surface sweep. Reproduced live on the 8011 Hub against
 `proj-1964cdedffe2` (`drive-0830-sweep`), two Haiku agents, real turns.
@@ -11859,7 +11859,7 @@ Haiku turns, about 90 seconds, and it leaves the Hub running.
 
 ## F146 (B) — the operator's own question route accepts `blocking`, tells the panel an agent is waiting, and throws the answer away
 
-**Status:** open, filed not fixed under D5 — the clean repair changes what a public route accepts,
+**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **no-spec fix round**: `POST /questions` refuses `blocking: true` (422 naming `blocking`); update `_asking_run_has_ended`'s docstring; drop `blocking` from the dead `HttpTransport.ask_question`. Was: open, filed not fixed under D5 — the clean repair changes what a public route accepts,
 which is the operator's call. Reproduced live by `scripts/drive/t_row13_operator_question.py`,
 **7/8**, the eighth being the file's own wrong expectation (corrected in place, see the end).
 
@@ -14509,7 +14509,7 @@ renamed.
 
 ## F177 (C) — the runner list's "order by creation" silently becomes "order by name" about half the time
 
-**Status:** open. Verified 2026-09-09: `hub/hub/api/v1/runners.py:82` still orders by
+**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **no-spec fix round**: creation order via `order_by(created_at, rowid)` at `runners.py:82` and `charters.py:44`, failing test "insert `ZB` then `ZA` with one `created_at`, expect `ZB, ZA`". Note: rowid is stable only while nothing rebuilds the table (VACUUM may renumber a table without an INTEGER PRIMARY KEY); B11's charters migration must not rebuild. Was: open. Verified 2026-09-09: `hub/hub/api/v1/runners.py:82` still orders by
 `Runner.created_at` alone, with no sequence column and no tiebreaker, so the coin flip this entry
 measured 10-of-20 is unchanged. [classified 2026-09-09, D-3]
 
@@ -21783,7 +21783,7 @@ already there; nothing pointed out that the sentence covered both. Worth a sweep
 shipped requirements phrased around "the response" are implemented on the operator plane only?
 
 ## F281 (B) - a shell command's writes are never recorded, in any posture, and the boundary that refuses some of them is the only thing that ever sees one
-**Status:** open (filed as explicitly out-of-scope for the archived a-write-outside-the-workspace-is-recorded change, 46b8e3e; not fixed by it)
+**Status:** closed 2026-09-24 — **decided by design** (operator, daily review, B11): `agent-run-sandboxing` (`spec.md:413-418`) says the record is not a complete account and a shell command is out of scope. Remaining step (no-spec): reword `models.py:1214` to "no file tool wrote outside this run's boundary". Was: open (filed as explicitly out-of-scope for the archived a-write-outside-the-workspace-is-recorded change, 46b8e3e; not fixed by it)
 
 **Found 2026-09-04 (night N-21)** doing task 8.1 of
 `a-write-outside-the-workspace-is-recorded`. **Filed, not fixed** - it is named out of scope in that
@@ -25724,7 +25724,7 @@ wants its own look.
 
 ## F305 (B, harness) — a decision the operator has answered is re-asked, because the authority file is not what the windows read
 
-**Status:** open — filed 2026-09-09, measured, not fixed.
+**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **no-spec fix round (harness)**: one channel, where `decisions_for_user` carries only ids of `OPEN` rows in `DECISIONS.md`. Edit `day-window.md`, `night-window.md`, `arm-cycle.ps1` and the two autonomous skills; at compose, a window drops and logs any inherited id that is not `OPEN`. Was: open — filed 2026-09-09, measured, not fixed.
 
 **Measured today, end to end.** The operator answered the `F299` posture question in session and the
 verdict was committed to `spec-queue/DECISIONS.md` at **`0ecfc38`, 08:51**. The day window composed
@@ -26020,7 +26020,7 @@ fail that file loudly, which is the right moment to revisit it.
 
 ## F308 (B) — pinning CI to the resolution buys agreement by spending the drift alarm, and nothing replaced it
 
-**Status:** fixed (this commit) [Round 1, 2026-09-22] — the operator chose a weekly unpinned job; see FIXED at the end of this entry. Filed 2026-09-10 (night window, iteration 13), by the iteration that *created* it.
+**Status:** fixed (this commit) [Round 1, 2026-09-22] — the operator chose a weekly unpinned job; see FIXED at the end of this entry. Filed 2026-09-10 (night window, iteration 13), by the iteration that *created* it. **Remaining step decided 2026-09-24 (B11):** add the drift workflow's latest run to `check-build` as its own row ("not fired yet" / stale after 8 days); first firing 2026-09-28.
 Not a defect in `constraints-dev.txt`, which does exactly what the `DAY-1` verdict asked for. It is
 the cost side of that verdict, measured, so that it is a known trade rather than a surprise later.
 
@@ -28192,7 +28192,7 @@ on the pre-follow-up code the error escapes `schedule_agent`.
 
 ## F339 (B) — `acceptEdits` is path-confined by Claude Code on a headless run, and four places in the repository, one of them a binding verdict's reason, say it checks nothing
 
-**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows. **2026-09-24 (B11):** stays parked for the approver-less question; its docs row is split out as a no-spec fix: reword `permission-postures.md:33` ("Not checked") to "checked by Claude Code, not by the Hub", with the version, after one Haiku re-measure with F339's script.
 **Ready:** parked
 
 **Original status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
@@ -30450,7 +30450,7 @@ not waiting).
 
 ## F382 (C) — `pytest hub/tests/ -q` stalled indefinitely overnight with no error, and a same-morning rerun could not reproduce the stall
 
-**Status:** open, narrowed to one test but not diagnosed (2026-09-22, see the foot); watch-only proposed in D13. Was: open, undiagnosed; the rerun that motivated it concluded clean (addendum below).
+**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **watch-only, with two tripwires (no-spec fix round)**: bound `released.wait()` (`timeout=30`, then fail) at `test_agent_trigger.py:1935` and `:2089`, and give the windows' local full-suite run CI's `--timeout=300 --timeout-method=thread`. Close after two clean weeks. Was: open, narrowed to one test but not diagnosed (2026-09-22, see the foot); watch-only proposed in D13. Was: open, undiagnosed; the rerun that motivated it concluded clean (addendum below).
 Filed 2026-09-18 by the day window's D-6 unit, from reading a background run's own log rather than
 from a drive.
 
