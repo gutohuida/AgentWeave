@@ -319,6 +319,16 @@ another reason (grant revoked), that refusal is ordinary.
 2. **The new-turn duplicate** — **decided by R2: (a), written as D5.** One `git status --porcelain`
    on the duplicate path only; a failed call keeps today's refusal, so the fallback is the safe one.
 
+## Note from an-at-mention-an-agent-wrote-reads-no-file, 2026-09-24
+
+That change (F409, approved `F409-approve`) neutralises every `@` in queued content whose origin is
+not `operator`, in `format_turn_prompt`, as **one `origin_type != "operator"` test outside the
+per-origin label branches** (its D3, default-deny). This change's new `evidence` origin relies on
+that form: an `evidence` entry is neutralised without any code of its own. D7's new label branch for
+`evidence` MUST therefore be added beside the other label branches and must not move or split that
+test. Whichever of the two changes lands second adds an `evidence` row to F409's test 1.1
+parametrisation (`hub/tests/test_inbound_queue.py`), which pins the neutralisation per origin.
+
 ## Round log
 
 - **R1, 2026-09-24.** Re-verified F358 against `404c7d5`; measured the decide route's answer when

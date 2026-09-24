@@ -18,6 +18,14 @@ result, in the Round log's R4 entry:
 - The requirement's contradiction with Q1 is fixed.
 - Three MODIFIED deltas were added (`agent-flows`, `agent-composer`, `conversation-side-panel`).
 
+**Second review, 2026-09-24** (`spec-queue/tracks/reviews/F409-2026-09-24-second.md`): **APPROVE
+WITH FIXES**. Its seven fixes are applied: the tokeniser gate and the "before" d3 run moved to a new
+task 1.0; cross-change notes written into B5's and B7's design.md, and task 2.2 adds an `evidence`
+row to 1.1 if B5 has landed; the link residual named in D10 and Risks (F445), with the requirement's
+picker sentence narrowed to what D10 guarantees; `npm run build` in 2.3e; a Composer insert-guard
+row in 1.13; 2.3d's filter applied to the inserted value before the slice; and a through-the-route
+row, 1.6 (g). **Approved** (`spec-queue/DECISIONS.md` `F409-approve`).
+
 Q1 to Q3 stand as answered. **Q4 (D10) is new**, and was answered on 2026-09-24 afternoon
 (`spec-queue/DECISIONS.md` `F409-Q4`): D10 stays in this change.
 
@@ -507,6 +515,18 @@ would hide a strangely named file from the operator, which is the opposite of wh
 
 This is a UI change, in the same bundle refresh as D8.
 
+**What D10 does not decide: where a listed path resolves (second review, M2; finding F445).** D10
+guarantees that an offered value carries no second mention. It does not guarantee that the one file
+a value names is inside the workspace. A link inside the workspace that points outside it (measured:
+a junction `docs` to `../outside`, which `mklink /J` makes without administrator rights on Windows)
+makes `git ls-files --cached --others --exclude-standard` list `docs/secret.txt`. `isSafeMentionValue`
+accepts it, since it has no at-sign, and a Haiku `claude -p` turn given `@docs/secret.txt` attached
+the outside file. The Hub's own `workspace_file.read_workspace_file` already refuses that path as not
+in the workspace, so the picker and the file tab disagree. This is not text, so its fix belongs in the
+listing (drop members whose resolved path leaves the root, as the reader does), not in this change.
+It is filed as **F445** (`scripts/drive/FINDINGS.md`), a sibling of F444. The requirement's picker
+sentence is worded to match: it requires no second mention, and says it does not decide resolution.
+
 ## Risks
 
 - **An agent copies `\@` into a file.** A peer's message with a decorator or an email reaches the
@@ -527,6 +547,12 @@ This is a UI change, in the same bundle refresh as D8.
   file preview, and pastes into the composer is sent as the operator's own. It is not neutralised.
   The `@<path>` is visible in the composer before it is sent. That is not true of the D10 picker
   case, where the mention looks like a workspace file. This is accepted, not closed.
+- **A link inside the workspace that points outside it (second review, M2; F445).** The picker
+  offers `docs/secret.txt` when `docs` is a junction to a directory outside the workspace, and the
+  harness attaches the outside file. The operator sees what looks like a workspace file. It is not a
+  bypass of this change on its own: creating the link needs a shell call that names the outside path,
+  which the "Workspace only" posture judges, and an agent with no posture can read the file itself.
+  Accepted here as a residual and filed as F445, whose fix belongs in the workspace listing (see D10).
 - **Tool results.** Text an agent reads back through a tool (`read_checkpoint`, `get_answer`,
   `list_tasks`) is a tool result, not prompt input, and never reaches argv. R4 did not measure
   whether the harness scans tool results for mentions. Every measured expansion is of `-p` text, and

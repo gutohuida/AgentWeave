@@ -36,8 +36,10 @@ to start work on a task an agent titled, SHALL carry that text neutralised. Text
 turn that names something an agent can name, such as the path of the document open in a
 specification turn, SHALL be neutralised in the same way and SHALL carry the same statement.
 
-A mention the operator inserts by choosing from a list the system offers SHALL attach only the file it
-names. A listed value that would carry a second mention of its own SHALL NOT be offered.
+A mention the operator inserts by choosing from a list the system offers SHALL carry no second
+mention of its own: a listed value that would carry one SHALL NOT be offered. This requirement does
+not decide which file a listed path resolves to. A link inside the workspace that points outside it
+is listed, and attaches its target, like any other path; that is tracked separately.
 
 A one-shot worker, such as the one that writes a checkpoint or titles a conversation, SHALL have
 every mention in its prompt neutralised, including the operator's. No worker attaches files that

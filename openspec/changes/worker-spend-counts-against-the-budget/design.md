@@ -264,6 +264,16 @@ New file `hub/tests/test_worker_spend_counts_against_the_budget.py` unless state
 15. UI (`hub/ui/src/__tests__/accountingPresentation.test.tsx` or the panel test): with `workers`
     served in `kind` order, the Budgets section renders one line per kind after the agent chips.
 
+## Note from an-at-mention-an-agent-wrote-reads-no-file, 2026-09-24
+
+That change (F409, approved `F409-approve`) neutralises every `@` in the prompt argument of both
+`build_worker_command` and `build_title_command`, in both CLI branches, and restores it in
+`worker._interpret` with `restore_file_mentions`, applied recursively to the payload's strings
+**before** `model_validate` (its D7). Whichever of the two changes lands second keeps
+`restore_file_mentions` ahead of `model_validate` in `_interpret`, and keeps the prompt
+neutralisation in both builders when adding flags or accounting to them. F409's test 1.7 asserts on
+the prompt element only, so a flag this change adds does not disturb it.
+
 ## Round log
 
 - R1 (2026-09-24): written.
