@@ -717,6 +717,31 @@ were decided earlier and were missing from this file. The B3 and B1 bundle round
   of 2026-09-12** below. It is carried out by the parked change `a-flow-stages-its-review-in-the-dispatch`
   (B1), which is not yet approved.
 
+### 2026-09-24 afternoon — the security REVISING rounds (B4, F409)
+
+**DECIDED 2026-09-24, by the operator, in an interactive session** (AskUserQuestion), after R4 and
+R5 on `the-shell-judge-reads-a-word-whole`, `a-drive-or-a-home-variable-names-a-directory-by-itself`
+(`spec-queue/tracks/B4.md` `## R4`, `## R5`) and `an-at-mention-an-agent-wrote-reads-no-file`
+(its design.md `## Round log`). All three stay REVISING until the Opus pre-approval review.
+
+- DECIDED   B4-drive-exists  **On Windows, a one-letter-plus-colon word is judged as a drive only
+  when that drive exists** (a wrapped `os.path.exists`). R5 measured the unconditional rule refusing
+  873 of 42,860 of this repo's transcript commands (2.0%: `as e:`, jq `{a: .x}`, `Plan A:`).
+  Rejected: keep the rule and accept 2%; drop the bash drive reading (reopens `c:$HOMEPATH`).
+- DECIDED   B4-dep-links  **Build as written and file a finding** (F444) for globs and bare names
+  through a worktree's shared dependency links (`node_modules`, `.venv`, `venv`), which point outside
+  the workspace. The finding must be fixed before a JavaScript project is registered. Rejected:
+  folding a read-through exemption into change 1 now.
+- DECIDED   B4-residuals  **R4's and R5's three recommendations are accepted**: the `case`-arm
+  residual stays (it can run a file outside, not write one; closing it refuses regex
+  back-references); all four device names stay exempt (`/dev/null`, `/dev/stdin`, `/dev/stdout`,
+  `/dev/stderr`), accepting the inner-PowerShell `> /dev/null` residual; change 2 builds after
+  change 1, both in one night window.
+- DECIDED   F409-Q4  **The composer-picker fix (D10) stays in `an-at-mention-an-agent-wrote-reads-no-file`.**
+  It is the same F409 route and the only way agent text reaches what the operator types; the
+  typed-answer exemption depends on it. Rejected: splitting it out, which would leave a measured
+  bypass open until the split landed.
+
 ### 2026-09-24 — the daily review of the twelve bundles
 
 **DECIDED 2026-09-24, by the operator, in an interactive session** (DECIDE). Each bundle's

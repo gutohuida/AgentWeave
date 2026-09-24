@@ -32904,3 +32904,15 @@ makes holder, priority and description the operator's fields on *update* (403 fo
 statement", unless creation-time delegation is intended. Decide whether an agent creating a task may
 name its holder (delegation), then either document the exception in `task-lifecycle-governance` or
 refuse those fields at create for run actors.
+
+
+## F444 (B) — a worktree's shared dependency links make ordinary reads through them refused
+
+**Status:** open. Filed 2026-09-24 (operator decision `B4-dep-links`), surfaced by B4's R4 and R5.
+Task and agent worktrees link `node_modules`, `.venv` and `venv` to the project checkout, which is
+outside the workspace. Paths through those links are refused by the shell judge today; B4's two
+changes extend that to globs and bare names, so in a JavaScript worktree `ls *`, `grep foo *` and
+`grep --exclude-dir=node_modules` would be refused. No worktree on this machine holds such a link
+today. **Must be fixed before a JavaScript project is registered.** The repair shape (a read-through
+exemption for the known shared-dependency links, or not linking them) is open.
+
