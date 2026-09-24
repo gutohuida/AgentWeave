@@ -1,7 +1,7 @@
 ## 0. Rounds and decision
 
 - [x] 0.1 R2: independent re-derivation against `schemas/tasks.py`, `tasks.py:update_task_for_actor`, `TaskDetailDrawer.tsx`, `api/tasks.ts:useUpdateTask`
-- [ ] 0.2 R3: second independent re-derivation; `openspec validate the-operator-can-rename-a-task --strict` passes
+- [x] 0.2 R3: second independent re-derivation; `openspec validate the-operator-can-rename-a-task --strict` passes
 - [ ] 0.3 The operator answers F125 (operator may rename / nobody may); recorded in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — `hub/tests/test_the_operator_can_rename_a_task.py`

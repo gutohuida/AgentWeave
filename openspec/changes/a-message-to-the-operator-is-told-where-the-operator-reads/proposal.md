@@ -37,8 +37,10 @@ reading the spec as authority could rebuild it.
 
 ## What Changes
 
-- `POST /messages` (both planes) answers a recipient that is a reserved name with a refusal that says
-  what works: *"The operator is not a message recipient. What you write in your reply is what they
+- A message **an agent's run** sends to a recipient that is a reserved name is answered with a
+  refusal that says what works (R3: the check sits in `create_message_for_actor`, which the agent and
+  operator routes share; the operator's own sends, `by_operator` at `messages.py:62`, keep today's
+  answer): *"The operator is not a message recipient. What you write in your reply is what they
   read in this conversation; record a result on a task with update_task's notes; if you need their
   answer before you can continue, call ask_user."* Status stays 404 (the recipient does not exist), and
   the `agent_action_rejected` event records `reason: "operator_not_a_recipient"`.

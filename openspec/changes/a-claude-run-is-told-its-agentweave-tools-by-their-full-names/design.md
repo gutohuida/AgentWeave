@@ -37,7 +37,7 @@ and loses subagent continuation for every Hub run.
 `_tool_surface_lines(..., tool_prefix: str = "")`; `_mcp_lines` renders
 `f"{tool_prefix}{operation.tool}({operation.args})"`. `_render_hub_agent_context` takes an optional
 `runner` and passes `tool_prefix="mcp__agentweave__"` when `runner in CLAUDE_FAMILY_RUNNERS` and
-`access_path == "mcp"`. `CLAUDE_FAMILY_RUNNERS` is declared once, in `runner_commands.py`, and the
+the path it renders (`described_path`, R3) is `"mcp"`. `CLAUDE_FAMILY_RUNNERS` is declared once, in `runner_commands.py`, and the
 `build_command` branch at `:179` reads it, so the two cannot drift. The HTTP rendering is unchanged.
 
 **Bare mentions outside the list (counted by R2).** A single-line-string grep for the 27 served tool
@@ -62,6 +62,17 @@ review prompts), so threading a prefix through all of them is a wide change for 
   mention a reference into the list, which is where an agent looks a tool up, and the collision is
   only with `send_message`, which is covered twice.
 
+**R3 — the prefix is keyed on the *described* path, and a first run is described as HTTP.**
+`_render_hub_agent_context` and `access_path_notice` both receive `described_path`, not
+`access_path` (`agent_trigger.py:1057-1062`, `:1080`, `:1123`). `described_access_path` answers `mcp`
+only where the operator set `hub_client: "mcp"` or a previous run of this agent reported its adapter
+online (`launchability.py:281-311`), so a fresh agent's first run is described in the HTTP form while
+the server is injected. The prefix applies where the list is rendered in its MCP form
+(`described_path == "mcp"`) on a Claude-family runner, the only rendering that names MCP tools at
+all; the first-run case names no MCP tool, bare or prefixed, and is outside this change. Task 1.4's
+trigger test must establish the grounds (`hub_client: "mcp"` in the agent's config, or a prior `Run`
+with `mcp_adapter_online_at` set), or it fails for a reason unrelated to the fix.
+
 ## D3 — What the route returns when what it calls raises
 
 No route changes. `GET /agents/agent-context` passes no runner and renders as today.
@@ -70,3 +81,4 @@ No route changes. `GET /agents/agent-context` passes no runner and renders as to
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): claims re-read (`agents.py:1533-1537` preamble, `_mcp_lines` `:1468-1473`, `build_command` `runner_commands.py:179`, server key `agentweave` `:252-253`, `access_path` resolved at `agent_trigger.py:1057`). Counted the bare mentions outside the list (≥35 in 7 modules) and found the access-path notice names `send_message` bare on every MCP run; added it to scope, plus one preamble clause for the rest.
+- R3 (2026-09-24): the context and the notice are rendered from `described_path`, which a fresh agent's first run has as HTTP; the prefix is keyed on it and task 1.4 now seeds the grounds. Other claims re-read and hold.

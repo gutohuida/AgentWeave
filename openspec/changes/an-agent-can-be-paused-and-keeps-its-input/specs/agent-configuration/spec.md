@@ -11,7 +11,8 @@ be brought to rest.
 A pause SHALL NOT withdraw, refuse or count a delivery attempt against any input, whoever sent it,
 including the operator. Every surface that reports why an agent's input is waiting SHALL say the agent
 is paused. While paused, the agent SHALL NOT be selected by a flow to take work or to review, and a
-loop whose agent is paused SHALL NOT queue further briefings for it.
+loop SHALL NOT queue a second briefing for a task while one already waits in the paused agent's
+queue.
 
 Pausing SHALL NOT change the agent's lifecycle: a paused agent remains on the roster with its
 conversations. Pausing MAY stop the agent's running turn in the same action, and where it does, the

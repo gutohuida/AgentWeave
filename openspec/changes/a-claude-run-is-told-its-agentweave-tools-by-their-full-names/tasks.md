@@ -1,7 +1,7 @@
 ## 0. Rounds and decision
 
 - [x] 0.1 R2: independent re-derivation against `agents.py:1460-1560` and `:1612-1700`, `agent_trigger.py:720-1090`, `runner_commands.py:120-270`; count every other bare tool name in rendered context and argue design D2's last paragraph
-- [ ] 0.2 R3: second independent re-derivation; `openspec validate a-claude-run-is-told-its-agentweave-tools-by-their-full-names --strict` passes
+- [x] 0.2 R3: second independent re-derivation; `openspec validate a-claude-run-is-told-its-agentweave-tools-by-their-full-names --strict` passes
 - [ ] 0.3 The operator answers F139 (full names / disable the host tool); recorded in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first
@@ -9,7 +9,7 @@
 - [ ] 1.1 `hub/tests/test_agent_facing_text.py`: `_render_hub_agent_context(..., runner="claude", access_path="mcp")` contains `` `mcp__agentweave__send_message( `` and `` `mcp__agentweave__record_evidence( ``, contains `SendMessage` in the disambiguating sentence, and does not contain `Names below are as injected`. FAILS today (no `runner` parameter; bare names)
 - [ ] 1.2 Same file, control: `runner="codex"` renders bare names with today's preamble. PASSES today once the parameter exists
 - [ ] 1.3 Same file: `GET /agents/agent-context?agent=x` renders bare names (no run, no runner). Control
-- [ ] 1.4 `trigger_agent_directly` for a `claude` runner writes a context file containing `mcp__agentweave__send_message` (capture the file as `test_agent_trigger.py` captures the command). FAILS today
+- [ ] 1.4 `trigger_agent_directly` for a `claude` runner **whose run is described as MCP** (the agent's config has `hub_client: "mcp"`, or a prior `Run` of it has `mcp_adapter_online_at` set — design D2, R3) writes a context file containing `mcp__agentweave__send_message` (capture the file as `test_agent_trigger.py` captures the command). FAILS today. Control beside it: the same agent with no grounds (a first run) is written the HTTP form and no prefixed name
 - [ ] 1.4a `launchability.access_path_notice("mcp", tool_prefix="mcp__agentweave__")` names `mcp__agentweave__send_message` and does not contain a bare ` send_message `; and the context file written by 1.4's trigger contains the prefixed notice. FAILS today (no parameter; notice is bare)
 - [ ] 1.4b The prefixed preamble contains the "call it by the full name listed here" clause. FAILS today
 - [ ] 1.5 `test_tool_surface_matches_server.py` passes against both renderings (strip the prefix before comparing)

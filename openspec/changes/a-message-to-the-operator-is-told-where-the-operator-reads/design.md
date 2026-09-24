@@ -30,7 +30,8 @@ own surface design (there is no inbox today; F259/F260 under D6 are the dead Mes
 
 ## D2 — Placement and wording
 
-Checked **before** the recipient lookup, so the answer does not depend on whether a row exists (none
+Checked **before** the recipient lookup and **only when `not by_operator`** (R3: the branch is in
+`create_message_for_actor`, which both routes share, and the sentence is addressed to an agent), so the answer does not depend on whether a row exists (none
 can). A public `is_reserved_agent_name(name) -> bool` in `worktrees.py` wraps
 `_RESERVED_AGENT_NAMES.get(name.lower())`; `messages.py` calls it. The sentence names only tools the
 agent plane has (`update_task`, `ask_user`) and does not promise the operator will act. The operator's
@@ -52,3 +53,4 @@ out unchanged.
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): `messages.py:94-117` refusal re-read; reserved names `worktrees.py:73-80`, case-insensitive at `:148`. `grep -rln unasked hub/hub src` finds only migrations `0032/0036/0037/0082` and unrelated prose (`models.py:136`, `repo_hygiene.py`) — nothing implements the two requirements removed here. No agent on `:8000` holds a reserved name (read `mode=ro`), so checking before the lookup strands no existing row.
+- R3 (2026-09-24): the refusal branch is in the function both planes share (`messages.py:84-117`); R1's *"both planes"* contradicted D2's *"the operator's own sends are untouched"*. Scoped to run senders; control 1.2a added. Everything else re-read and holds.

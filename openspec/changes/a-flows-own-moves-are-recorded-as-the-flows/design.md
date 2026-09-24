@@ -101,6 +101,28 @@ The scheduler's staging runs inside the firing's transaction: a `ValueError` fro
 check would abort the firing exactly as a refused transition does today — which is why the check is
 exercised by a unit test rather than discovered in a live firing.
 
+## D5 — Does every path that queues a loop's review carry the job? (R3)
+
+- **Producers.** `InboundQueueEntry` has one constructor, `inbound_queue.new_entry`
+  (`inbound_queue.py:50`); no path copies an entry. `origin_type="job"` is written at exactly two
+  sites, `scheduler.py:3407` (`_do_fire_job`, plain jobs and loops alike) and `:3739`
+  (`_stage_selection`); both hold `job`, so task 2.2 covers every job-origin entry. The other writers
+  of `review_task_id` are the operator's trigger (`agent_trigger.py:1582`) and a divergence restaff
+  (`run_divergence.py:259-267`, `:483`), which are not a job's by construction. Checkpoint entries
+  (`checkpoint_cutover.py:133`, `checkpoint_trigger.py:239`) carry no review task. An entry returned
+  to the queue after a failed run is the same row, so its `job_id` survives the retry.
+- **The migration.** `inbound_queue_entries.job_id` and `task_transitions.job_id` go in one
+  migration, nullable `String(64)`, no FK, no backfill. `TaskTransition.origin` has no CHECK
+  constraint (`db/models.py:710` records why), so admitting `job` needs no table rebuild.
+- **Readers of `origin`.** Only `apply_transition`'s divergence resolution
+  (`task_transition_service.py:701`) and `run_task_binding.py:973` (`== ORIGIN_ACTOR`, filtered by
+  `run_id`, which a job row never has) branch on it; F167's wedged-review recovery reads
+  `actor_kind`, which stays `operator`.
+- **A manual Run press** fires `_do_fire_job` too, so the selection it stages is recorded as the
+  loop's (`origin="job"`), not "You". Deliberate: the loop chose the task; the operator chose only
+  *when*. The `JobRun.trigger` that would distinguish them is not durable (D2's reason for naming the
+  job).
+
 ## Interaction
 
 - **B1 / S1** rewrites the attending helpers the flow's selection reads, and **S13** moves where the
@@ -121,3 +143,4 @@ exercised by a unit test rather than discovered in a live firing.
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): R1's claim that `agent_trigger.py:898` only transitions on an operator dispatch is false — the review task id is read from delivered entries, and flow- and divergence-queued entries carry one. The job cause now travels on `InboundQueueEntry.job_id`. Loop vs flow labelling corrected. Every other claim (`ORIGINS` at `task_transition_service.py:563-565`, divergence resolution at `:701`, the three callers, the pin at `test_flow_chain_end_to_end.py:342-352`, jobs never deleted `jobs.py:1174`, `TaskTransitionHistory.tsx:40-44`) re-read and holds.
+- R3 (2026-09-24): every job-origin producer re-derived (two, both covered); no entry is copied; `origin` has no CHECK; its readers are unaffected. Added D5; recorded that a manual Run press is attributed to the loop. S13 still does not mention this change (B1 is at R1) — the B3 record's Final lists what B1's R2/R3 must check.

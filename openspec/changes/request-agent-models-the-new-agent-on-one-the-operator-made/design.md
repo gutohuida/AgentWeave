@@ -90,7 +90,39 @@ and the reserved names; this change does not touch the three restatements.
   refusals it could carry for the new entry (runner CLI missing, provider hold, budget) all leave the
   entry queued, so `201 queued` stays true; no change.
 
+## D5 — Every place a run's permission posture is read (R3)
+
+R3 re-derived the posture from the spawn outward, to check that dropping `yolo` and not copying the
+column leaves nothing else that grants the new agent more than its own row says.
+
+| Read | Where | For the new agent |
+|---|---|---|
+| `Agent.default_permission_mode` → the run's `permission_mode` control | `agent_trigger.py:767-768` | not copied → `None` → catalog default |
+| `config["yolo"]` | `agent_trigger.py:805` → `_build_claude_command` (`--dangerously-skip-permissions`, and no `--allowedTools`, `runner_commands.py:259-273`), Codex `_thread_policy` (`codex_appserver.py:955`), Codex collaboration readiness (`agents.py:252`) | dropped from the copy |
+| `Conversation.runtime_overrides` (the composer's per-run posture) | `agent_trigger.py:760-762` | the route builds a fresh conversation with none, and does not call `inherit_runtime_overrides`; that helper is keyed on the agent *name* (`conversations.py:84-90`), and the name must be new — the taken-name check counts archived rows too (`agents.py:2178-2183`) — so no earlier conversation can lend it one |
+| `Runner.flags`, appended raw as `extra_flags` | `agent_trigger.py:1150-1164`, `runner_commands.py:285-286` | **inherited, by design**: the new agent binds the same runner row, so it gets exactly what every agent on that runner gets. A runner whose flags carry a skip-permissions flag is the operator's choice on the runner, visible where the agent's runner is shown |
+| `config["read_only"]` | `worktrees.is_writing_agent` (`worktrees.py:230`) | copied. It is an isolation opt-out, not a tool restriction: the agent shares the project checkout, which is also the "Workspace only" boundary (`AW_WORKSPACE_DIR`, `agent_trigger.py:1192`). Copied because it is on the new row's own config and the roster shows it (`ROSTER_CONFIG_KEYS`, `agents.py:651`), so the row and the run agree |
+| `config["env_vars"]` | `launchability.resolve_agent_env` | copied (it carries the provider key indirection the runner needs). The spawn then overwrites every `AW_*` identity and workspace key; the one it sets only conditionally, `AW_PERMISSION_POSTURE` (`:1195-1196`), is honoured by the approval tool only as the *operator-answered* posture (`mcp_server.py:1699`), which is stricter, not wider |
+| `permission_timeout_seconds`, `question_timeout_seconds` | `agent_trigger.py:1200-1203` | not copied (waiting, not authority) |
+
+So the rule holds: after the copy, every posture the run gets is one its own row states. One visible
+consequence, not a defect: a **Codex** template that opted out of the app-server transport and relied
+on `yolo` to collaborate yields an agent the launchability surface reports as not collaboration-ready
+(`agents.py:252-261`), until the operator sets its posture.
+
+**Raise path (R3, D4 re-derived).** A raise out of `schedule_agent` means no turn started in that
+pass: `trigger_agent_directly` commits the `Run` and delivery together and then only schedules the
+process task (`agent_trigger.py:1314-1319`), catching everything after it (`:1365`), and
+`_attempt_turn` returns straight after a successful trigger (`turn_scheduler.py:692`). So `201 queued`
+is true whenever D4's `except` runs.
+
+**A paused template (with `an-agent-can-be-paused-and-keeps-its-input`).** If the pause lands, a
+peer could otherwise clone an agent the operator paused and get the same runner and charter running.
+Whichever of the two changes lands second adds a D3 row: template paused → 409 *"'<t>' is paused; the
+operator paused it, so it cannot be a model for a new agent."* Not in this change's tests until then.
+
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): route re-read (`agents.py:2140-2258`); every R1 claim about it holds. Argued `default_permission_mode` (not copied) and found the `config["yolo"]` leak that R1's copy would have created; D2 and D4 corrected; spec and tasks follow.
+- R3 (2026-09-24): re-derived every posture read (D5): column, `config.yolo`, conversation overrides, runner flags, `read_only`, `env_vars`, waiting settings. R2's drop of `yolo` is sufficient; nothing else copied grants more than the new row states. D4's raise path confirmed (a raise means no run started). Added the paused-template coordination with the pause change.

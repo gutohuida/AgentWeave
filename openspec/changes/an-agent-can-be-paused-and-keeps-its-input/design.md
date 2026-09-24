@@ -61,7 +61,8 @@ its queue every tick — the F368 shape.
 ## D3 — Routes
 
 - `POST /projects/{p}/agents/{name}/pause`, body `{"stop_running": false}` (optional). Sets
-  `paused_at` and commits **first**; then, if asked and a run is live, calls the same stop path as
+  `paused_at` and commits **first**, **while holding the scheduler's per-agent lock**
+  (`turn_scheduler._lock_for(project_id, agent)`, R3); then, if asked and a run is live, calls the same stop path as
   `stop_agent_run`. Answers `200 {agent, paused_at, stopped_run_id}`. Pausing an archived agent: 409
   (archive already stops everything). Pausing a paused agent: 200, unchanged (idempotent).
 - `POST /projects/{p}/agents/{name}/resume`: clears `paused_at`, commits, calls `schedule_agent`;
@@ -73,6 +74,25 @@ its queue every tick — the F368 shape.
 - Both operator-only (`get_project`); neither is added to the agent plane.
 - If the stop in `pause` raises, the pause stands (it was committed first) and the route answers 500
   naming the stop failure; the operator's next step — pressing Stop — is the existing route.
+
+**R3 — why the pause takes the scheduler's lock.** `schedule_agent` reads the hold inside
+`_lock_for(project_id, agent)` (`turn_scheduler.py:283`, hold at `:388`) and then triggers, which
+commits the `Run` before it returns (`agent_trigger.py:1314`). A pause committed without the lock can
+land between a pass's hold check and its `Run` commit: that pass starts a turn after the pause, and
+with `stop_running` the stop's run lookup (`agent_trigger.py:1689-1695`) can still find no running
+run, so it answers "nothing to stop" while a turn starts. Taking the same in-process lock for the
+write means any pass in flight has either committed its `Run` (which the stop then finds) or not yet
+read the hold (which then sees the pause). The lock is released before the stop is signalled; the
+stopped run's end schedules the agent later and waits on the lock normally.
+
+**R3 — the loop's resume arm, and S1.** A held assignee with nothing queued for its task is briefed
+once, and one with its briefing queued is recorded in flight (`scheduler.py:1848-1856`). A paused
+assignee gets the same: at most one briefing waits in its queue per task; no firing adds another.
+B1's `a-task-is-attended-only-by-a-turn-that-will-reach-it` removes the `agent in held_agents and`
+qualifier from that arm in favour of *"a queued turn attends the task"*, which keeps exactly this
+behaviour, and keeps `held_agents` in the default-agent branch (`:1869-1870`) and the free list
+(`:1148`) — the two places a pause must also be read. Tasks 1.6a/1.6b are phrased to hold before and
+after S1.
 
 ## D4 — What each surface says
 
@@ -86,6 +106,18 @@ its queue every tick — the F368 shape.
 
 ## Interaction
 
+- **`pressing-run-names-the-reason-that-held` (R3, correcting R2's "also edited").** It does not edit
+  `_held_in_flight_reasons`' body (`jobs.py:1339-1357`); it reshapes `run_job`'s in-flight answer
+  around it (the newest `skipped` row's reason first, F373) and splits `_loop_flow_busy_reason` into
+  `_loop_flow_busy_refusal`, which still calls `_agent_busy_reason` (`scheduler.py:292`, where the
+  pause is read). Textual adjacency in `run_job` and a sentence shape, not a semantic conflict: a
+  paused agent's refused firing records a `skipped` row whose reason names the pause, which is what
+  that change then answers. Task 1.7 asserts only `409` and `is paused`, not the sentence around it.
+- **`why-queued-input-waits-is-told-truthfully` (B1)** adds a live checkout-holder check to
+  `GET /queue/{agent}/status` *after* the provider-hold check (`inbound_queue.py:135-139`); this change
+  replaces that hold check with `agent_hold`. Whichever lands second keeps the order: pause/hold first.
+- **`request-agent-models-the-new-agent-on-one-the-operator-made`**: whichever lands second refuses a
+  paused agent as a template (that change's design D5).
 - **B1/S1** rewrites *what counts as attending a task* and the free-pool helpers
   (`_agents_that_are_free`, `on_it`). This change only adds paused agents to the `held` set those
   helpers already exclude; if S1 lands first, re-point task 2.3 at S1's single helper.
@@ -96,3 +128,4 @@ its queue every tick — the F368 shape.
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): hold sites re-derived by `grep`: seven, including `scheduler.py:1705`; `agents_held` needs paused agents added by a separate query. The resume route's raise path reworded (no precedent, no sweep). Remaining claims (`stop_agent_run` touches only the run; `archivable` refuses on live run or queued input; operator input probes only a provider hold, `provider_allowance.py:192-202`) hold. `jobs.py:1354` is also edited by `pressing-run-names-the-reason-that-held`, whose text does not mention this change.
+- R3 (2026-09-24): hold sites re-counted (seven; no reader outside `provider_allowance`'s importers). Found the pause/scheduler race (pause now written under `_lock_for`); corrected task 1.6a, which asserted against today's resume arm (a held assignee with nothing queued *is* briefed once), and the spec's "no further briefings" to "no second briefing"; corrected the `pressing-run` collision to adjacency; added the queue-status ordering with B1's `why-queued-input-waits-is-told-truthfully` and the paused-template refusal. The resume raise path is confirmed: a raise out of `schedule_agent` means no run started (`agent_trigger.py:1314-1365`, `turn_scheduler.py:692`).

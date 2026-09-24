@@ -1,7 +1,7 @@
 ## 0. Rounds and decision — nothing below starts until these are done
 
 - [x] 0.1 R2: independent re-derivation against `hub/hub/api/v1/agents.py` (register, create, request, PATCH, detail, list), `hub/hub/launchability.py:470-520`, `hub/hub/scheduler.py:229-252,3078`, `hub/hub/db/models.py:193-222`, and every `agents/register` caller under `hub/tests/`, `scripts/`, `.claude/skills/`, `docs/`. Rebuild design D3's table from `grep` before reading it
-- [ ] 0.2 R3: a second independent re-derivation; `openspec validate agents-no-longer-register-themselves --strict` passes
+- [x] 0.2 R3: a second independent re-derivation; `openspec validate agents-no-longer-register-themselves --strict` passes
 - [ ] 0.3 The operator confirms D3 (delete) and design Open Question 2; recorded in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — each must fail on today's code unless marked as a control

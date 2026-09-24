@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B1 -- Attending a task, and a flow&#x27;s review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B1.md, tracked</p>
+  <h1>B1 &mdash; Attending a task, and a flow&#x27;s review</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F370, F371, F368, F361, F289, F158, F327, F374</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D9 (F374) — already answered by the operator as <code>DECISIONS.md</code> <code>F374-fix</code> (2026-09-19); ROUNDS.md&#x27;s row is stale. <code>F327-scope</code> answered (b) by the operator 2026-09-23. New for the operator: Q-F158 (which repair), and the holder-check collision (recommended option (ii)). R1 design choices D3 (refused input is not attendance) and D2-of-the-queue-change (no stored <code>waiting_reason</code>) are recommendations the operator may overturn</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/a-task-is-attended-only-by-a-turn-that-will-reach-it/</code>, <code>openspec/changes/why-queued-input-waits-is-told-truthfully/</code>, <code>openspec/changes/a-review-no-reviewer-can-approve-goes-to-the-operator/</code>, <code>openspec/changes/a-flow-stages-its-review-in-the-dispatch/</code>, <code>openspec/changes/a-task-checkout-catches-up-with-its-approved-prerequisites/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R1 done</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><span class="toc-item toc-missing">R2</span><span class="toc-item toc-missing">R3</span><span class="toc-item toc-missing toc-final">Final</span></nav>
+  </div>
+  <section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><h5>What the code showed (HEAD <code>404c7d5</code>)</h5>
+<p>The &quot;is anybody on this task&quot; question is answered by <code>run_task_binding.tasks_with_a_turn_pending_or_running</code> (<code>hub/hub/run_task_binding.py:268-310</code>): a <code>task -&gt; one agent</code> map, built with <code>setdefault</code> over an unordered select (<code>:299-306</code>), counting queued input for <strong>any</strong> agent at <strong>any</strong> hop depth, overlaid with running turns. <code>decide_firing</code> reads it once as <code>on_it</code> (<code>hub/hub/scheduler.py:1699</code>) in three places: the F70 recovery guard (<code>:1792</code>), the F154 surfacing (<code>:1796</code>) and the held-resume arm (<code>:1848</code>). A sibling, <code>task_agent_pairs_with_a_turn_queued</code> (<code>:313-355</code>), already answers the correct pair-and-budget question, for <code>_roster_availability</code> only (<code>scheduler.py:1162</code>). The resume arm treats an assigned task as in flight only for a running assignee, or a <em>held</em> one whose task the map names.</p>
+<p>A flow firing stages its review before its dispatch: <code>enter_selected_task</code> (<code>scheduler.py:846-903</code>) from <code>_do_fire_job</code> (<code>:3336-3341</code>) and <code>_stage_selection</code> (<code>:3709</code>), in the commit that queues the review entry. The dispatch (<code>agent_trigger.py:840-910</code>) stages every review entry itself, behind the holder check (<code>:886-897</code>, and its route twin <code>:497-507</code>), and a refused dispatch is rolled back (<code>turn_scheduler.py:448</code>, F319) — but only the dispatch&#x27;s own staging. The divergence restaff writes the replacement reviewer&#x27;s assignee before its dispatch (<code>run_divergence.py:469-474</code>, committed <code>:827</code>, scheduled <code>:872-874</code>), and has no gate check at all (<code>:375-487</code>).</p>
+<h5>Each finding re-verified</h5>
+<ul>
+<li><strong>F370 — still open, measured.</strong> A throwaway test through the real firing (copied under</li>
+</ul>
+<p><code>hub/tests/</code>, run, deleted): held assignee <code>held-dev</code> with its <code>job</code> entry queued, and a peer entry naming the task for <code>aaa-peer</code>. The helper answered <code>{&#x27;task-width-f370&#x27;: &#x27;aaa-peer&#x27;}</code>; three firings left <strong>four</strong> <code>job</code> entries for <code>held-dev</code>.</p>
+<ul>
+<li><strong>F371 — still open, measured, both legs.</strong> A <code>_wedged</code> task under review, <code>beta</code> named, no run:</li>
+</ul>
+<p>with a peer entry naming it for <code>gamma</code>, <code>decide_firing</code> → <code>in_flight</code>, <code>stall_reason None</code>, <code>unstaffed ()</code>; with <code>beta</code>&#x27;s only entry at hop 99 → the same.</p>
+<ul>
+<li><strong>F368 — still open, measured.</strong> Not held, not running, <code>job</code> entry queued, <code>schedule_agent</code></li>
+</ul>
+<p>patched to answer <code>token budget exhausted</code>: three firings → four queued <code>job</code> entries.</p>
+<ul>
+<li><strong>F361 — still open, read.</strong> <code>create_message_for_actor</code> returns the message as usual</li>
+</ul>
+<p>(<code>api/v1/messages.py:299-319</code>); <code>send_peer_message</code> returns a plain <code>MessageResponse</code> (<code>agent_actions.py:201-224</code>); <code>mcp_server.send_message</code> replies <code>{&quot;success&quot;: True, &quot;message_id&quot;}</code> (<code>mcp_server.py:244</code>, unchanged since <code>c8cec11</code>). <strong>Changed shape, partly:</strong> the operator is not blind — the recipient&#x27;s timeline derives <code>hop_budget_exceeded</code> (<code>api/v1/agent_chat.py:218</code>) and shows an amber <em>&quot;Autonomous continuation paused … Continue&quot;</em> banner (<code>AgentTimeline.tsx:388-399</code>). The sender is the one left believing the message arrived.</p>
+<ul>
+<li><strong>F289 — still open, changed shape.</strong> The status route&#x27;s fallback still returns the stored</li>
+</ul>
+<p>refusal bare (<code>api/v1/inbound_queue.py:178</code>). F288 (fixed 2026-09-23, Round 3) now re-drains after a crash, which closes the measured window; any refusal whose cause clears without a re-drain still reads as present.</p>
+<ul>
+<li><strong>F158 — still open, read.</strong> <code>ensure_task_worktree</code> merges prerequisites only on branch creation</li>
+</ul>
+<p>(<code>worktrees.py:550-552</code>; the existing-branch arms <code>:561-591</code>, <code>:606-612</code> merge nothing); <code>agent_trigger</code> still asks no dependency gate (<code>grep</code> finds none). <strong>Misfiled under S1:</strong> it shares no function, file or question with attendance; written as its own independent change.</p>
+<ul>
+<li><strong>F327 — still open, read.</strong> Every row of its table rests on the firing&#x27;s early staging</li>
+</ul>
+<p>(<code>scheduler.py:3336</code>, <code>:3709</code>), unchanged; R3 of <code>a-refused-review-leaves-nothing-behind</code> measured the table unchanged on the F319-fixed tree. Its original harness is at <code>testbed/scratch/r2f319/test_zz_r2f319_flow.py</code> in the main checkout (not in this worktree).</p>
+<ul>
+<li><strong>F374 — still open, changed shape.</strong> <code>_answer_failed_review</code> still has no gate check (`git log -S</li>
+</ul>
+<p>F374 -- hub/<code> finds nothing). Its point 2 (the false staffing sentence) is <strong>fixed</strong> by </code>an-unstaffed-review-names-its-holders<code> (archived 2026-09-23): per-agent exclusion reasons (</code>run_divergence.py:448-455<code>) and per-agent rung-3 clauses (</code>scheduler.py:1373-1420<code>). F357 (Round 5) now tells an ungranted reviewer to </code>ask_user<code> (</code>review_turn.py:178-237`); a reviewer that ends without doing so still reaches the restaff. Points 1 and 3 remain.</p>
+<h5>The decisions</h5>
+<p><strong>D9 (F374) — already decided; ROUNDS.md is stale.</strong> <code>DECISIONS.md</code> <code>F374-fix</code> (2026-09-19, <code>:985-991</code>): <em>a gate-refused approval is not &quot;no verdict&quot;, and no operator-only refusal re-staffs; surface the gate&#x27;s own sentence.</em> Nothing built it. <code>a-review-no-reviewer-can-approve-goes-to-the-operator</code> builds it. One design refinement is flagged for the operator: the boundary <strong>re-derives</strong> the gate (<code>requirement_gate.evaluate</code>) instead of remembering a 409, because no refusal is recorded per run (<code>main.py:532-543</code>), and because a reviewer that read F357&#x27;s briefing and stopped without trying <code>approved</code> is the same case. A candidate holding <code>can_accept_evidence</code> is still restaffed (it can clear the gate itself). <strong>Recommendation:</strong> strike ROUNDS.md&#x27;s D9 row to <code>F374-fix</code>.</p>
+<p><strong>The &quot;D9 collision&quot; in S13 is a different D9.</strong> R3 of the F319 change meant the <strong>holder check</strong> (<code>agent_trigger.py:886-897</code>, commented <em>&quot;Design D9&quot;</em>): once the restaff stops writing the assignee, its dispatch finds the task held by the silent reviewer and refuses. Options:</p>
+<ul>
+<li>(i) keep the restaff&#x27;s early write — leaves F327 open on the restaff door;</li>
+<li><strong>(ii) exempt a recorded restaff</strong> — the dispatch replaces the holder where the entry being</li>
+</ul>
+<p>delivered is the divergence response to that holder&#x27;s failed review (<code>origin_type=&quot;divergence&quot;</code>, <code>divergence_source_run_id</code> → a run by the holder, an unresolved <code>RunDivergence</code> with <code>outcome=&quot;restaffed&quot;</code>). The handover is explained by that record, which is the holder check&#x27;s whole reason (<code>task-lifecycle-governance:1902-1905</code>);</p>
+<ul>
+<li>(iii) exempt any holder that is not attending — contradicts *&quot;A review already held by another</li>
+</ul>
+<p>reviewer is not silently taken&quot;* for every hand-staffed silent review.</p>
+<p><strong>Recommendation: (ii).</strong> R1 also found a <strong>second</strong> collision R3 did not name: F70&#x27;s recovery works only because the <em>firing&#x27;s</em> <code>enter_selected_task</code> replaced the author holder (<code>scheduler.py:896-904</code>, <em>&quot;The assignment above is the whole repair&quot;</em>). After S13 that write moves to the dispatch, which meets the same holder check. The requirement already refuses only a holder that is <em>&quot;a different reviewer&quot;</em>; an author is not one (<code>_guard_reviewer_is_not_the_author</code>), so the dispatch replaces an author holder by that guard&#x27;s rule — no decision needed, but the operator should see it.</p>
+<p><strong>Q-F158 — which repair</strong> (new; F158&#x27;s own entry says the repair is an open decision). (A) refuse a task-bound turn before its gate passes — breaks peer messages naming the task, misses a dependency declared later; <strong>(B) top up an existing checkout with approved prerequisites&#x27; commits, non-destructively</strong> — both shapes, at the cost of the conflict refusal the requirement already applies to a new checkout; (C) only report the missing commits. <strong>Recommendation: (B).</strong></p>
+<p><strong>R1 design choices the operator may overturn.</strong></p>
+<ul>
+<li><em>Refused input is not attendance</em> (<code>a-task-is-attended…</code> D3): for a review, a refused delivery</li>
+</ul>
+<p>is surfaced with its refusal instead of reading in flight until given up; for ordinary work, the firing keeps re-briefing, because that re-briefing is today the only thing that retries a refused head (there is no tick, <code>turn_scheduler.py:665</code>).</p>
+<ul>
+<li><em>No stored <code>waiting_reason</code> for a held message</em> (<code>why-queued-input-waits…</code> D2): ROUNDS.md&#x27;s S1</li>
+</ul>
+<p>sketch said &quot;a written <code>waiting_reason</code>&quot;. R1 writes the reason <strong>to the sender</strong> (the send&#x27;s response and the MCP reply) and keeps the entry derived, because a stored copy is stale the moment the operator raises the budget, and every surface already derives it.</p>
+<ul>
+<li><em>Suspended input never counts as attendance, even for the held arm.</em> F370&#x27;s sketch wanted the</li>
+</ul>
+<p>held arm to count suspended copies; every flow briefing and divergence response is queued at hop 0 (<code>scheduler.py:3409</code>, <code>:3741</code>; <code>run_divergence.py:257-262</code>), so excluding suspended input costs at most one briefing, once.</p>
+<h5>How the decisions interact</h5>
+<p>S13 is built on S1&#x27;s helper: the pool is excluded by a <em>review turn</em> on the task (a pair with a <code>review</code> flag), a <em>refused</em> one surfaces instead of re-staffing, and a waiting review turn holds its reviewer in <code>_roster_availability</code> (the reviewer is no longer the assignee until the dispatch). The F374 change and S13 both edit <code>_answer_failed_review</code> (an early gate branch; the dropped assignee write), and both add sentence branches at the F154 reason choice change 1 introduces. So the order is fixed: <strong>attendance → F374 → S13</strong>. The queue-reason change and the F158 change are independent of all three.</p>
+<h5>What was written</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Validate</th></tr></thead><tbody><tr><td><code>a-task-is-attended-only-by-a-turn-that-will-reach-it</code></td><td>F370, F371, F368</td><td>One pair-keyed <code>task_attendance</code> helper (running / queued within budget / refused) replaces both helpers; <code>decide_firing</code>&#x27;s three readers ask the pair question; the F154 sentence stops claiming &quot;none is queued&quot;; availability unchanged</td><td>passes <code>--strict</code></td></tr><tr><td><code>why-queued-input-waits-is-told-truthfully</code></td><td>F361, F289</td><td>A held send tells its sender (route fields + MCP reply); the status route checks the checkout holder live and labels a remembered refusal as the last attempt&#x27;s</td><td>passes <code>--strict</code></td></tr><tr><td><code>a-review-no-reviewer-can-approve-goes-to-the-operator</code></td><td>F374 (D9)</td><td><code>approval_held_for_operator</code> over <code>requirement_gate.evaluate</code>; the restaff surfaces the gate&#x27;s sentence instead of spending a second reviewer; the flow card names the evidence decision, remedy first</td><td>passes <code>--strict</code></td></tr><tr><td><code>a-flow-stages-its-review-in-the-dispatch</code></td><td>F327</td><td>The firing stops staging reviews; the pool is closed by the waiting review turn; a refused one is named, not re-staffed; the restaff is staffed at its dispatch via option (ii); author holders are replaced at dispatch; the review briefing states <code>under_review</code></td><td>passes <code>--strict</code></td></tr><tr><td><code>a-task-checkout-catches-up-with-its-approved-prerequisites</code></td><td>F158</td><td>Each task-bound turn tops up an existing checkout with approved prerequisites&#x27; commits, never destructively</td><td>passes <code>--strict</code></td></tr></tbody></table></div>
+<p><strong>Tests</strong> are planned in each <code>tasks.md</code> §1, each marked FAILS-today or control, with the reason it would fail if reversed. F370/F371/F368&#x27;s tests reproduce R1&#x27;s measurements; F327&#x27;s reuse F327&#x27;s own staging; the S13 change asks R2 to prototype D1 alone and run the full suite to produce the real list of existing assertions that move (D8).</p>
+<p><strong>Routes and raises</strong>, per change&#x27;s design: <code>task_attendance</code> adds no new raise to the firing, the board (<code>jobs.py:380</code>) or <code>run_job</code> (<code>jobs.py:1335</code>); <code>approval_held_for_operator</code> swallows an evaluation failure to &quot;not held&quot; so neither the run boundary nor the board can 500 on it; the queue status route&#x27;s new live check falls through to the labelled fallback on failure; the checkout top-up raises only <code>IsolationUnavailableError</code>, which the trigger already answers as a refusal.</p>
+<h5>Found by reading, not filed (for the orchestrator)</h5>
+<ul>
+<li>An operator&#x27;s review request queued for a busy reviewer leaves a <strong>flow&#x27;s</strong> <code>completed</code> task in</li>
+</ul>
+<p>the reviewable pool, so the ladder can staff a second review beside it; on a documentless loop the card says <em>land it</em> while a review is queued. S13&#x27;s D2 answers both.</p>
+<ul>
+<li>The holder check&#x27;s sentence <em>&quot;Let the review in flight finish&quot;</em> is false for a silent holder whose</li>
+</ul>
+<p>review ended without a verdict (surfaced, declared or nobody left).</p>
+<ul>
+<li>Input in a closed conversation counts as queued: <code>_attempt_turn</code> answers *&quot;conversation is</li>
+</ul>
+<p>unavailable&quot;* for the controlling entry and the agent&#x27;s whole queue waits (<code>turn_scheduler.py:344-350</code>). Pre-existing; after S1 such a task reads in flight.</p>
+<h5>Neighbours in other bundles</h5>
+<ul>
+<li>B11&#x27;s <code>input-the-hub-accepted-is-answered-as-accepted</code> edits the <code>schedule_agent</code> call at the end of</li>
+</ul>
+<p><code>create_message_for_actor</code> (<code>messages.py:318</code>), two lines from where <code>why-queued-input-waits…</code> changes its return value. Textual only; whichever is built second rebases.</p>
+<ul>
+<li>B3&#x27;s <code>an-agent-can-be-paused-and-keeps-its-input</code> keeps a paused agent&#x27;s input queued and cites</li>
+</ul>
+<p>the F368 shape as what it must not produce. After <code>a-task-is-attended…</code>, a paused assignee whose briefing is queued within the budget reads in flight and is not re-briefed, which is what that change wants without a pause-specific branch in <code>decide_firing</code>.</p>
+<h5>Could not resolve in R1</h5>
+<ul>
+<li>S13&#x27;s full set of existing assertions that move (D8): needs a prototype run, assigned to R2.</li>
+<li>D3&#x27;s cost of <code>requirement_gate.evaluate</code> inside a board read: needs a measurement, assigned to R2.</li>
+<li>Whether <code>land_task</code> releases a waiting flow review entry (S13 residual): read, not confirmed.</li>
+</ul></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B1.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

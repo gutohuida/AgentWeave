@@ -60,3 +60,4 @@ update leaves the row unchanged today; the new check, placed before any write, d
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): route, service and tool re-read; the field table matches `tasks.py:1286-1446` exactly. No existing test or drive script sends `assignee`/`priority`/`description` on the agent plane (grep). D2a's rollback question answered (it rolls back).
+- R3 (2026-09-24): field table re-derived from `update_task_for_actor` (`tasks.py:1270-1450`) and holds. Note for IMPL: the new check reads `model_fields_set`, so an agent's `"priority": null` (a no-op write today, `:1408`) is refused too — intended, the field is not the agent's. `the-operator-can-rename-a-task` adds `title` to `TaskUpdate`, which this route also takes: whichever lands second adds `title` to this list (both changes say so).

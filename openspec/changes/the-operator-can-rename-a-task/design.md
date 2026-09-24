@@ -39,3 +39,4 @@ append-only"*). A rename is not one. Recording renames would need a new record t
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): `TaskUpdate` (`schemas/tasks.py:120-151`) has no `title`; `Task.title` is `String(256)` (`db/models.py:684`) matching `TaskCreate`; the drawer's `<h2>` is static (`TaskDetailDrawer.tsx:298-300`); no code reads a task title as an identity (no `title ==` comparisons in `hub/hub`). Holds. Shares `update_task_for_actor`'s run-actor refusal with `an-agent-updates-a-task-with-what-its-tool-carries`; whichever lands second extends the other's list.
+- R3 (2026-09-24): re-read; holds. The agent route takes the same `TaskUpdate` (`agent_actions.py:279-292`), so without the run-actor refusal a `title` field would be writable by agents the moment it is added — task 2.1's refusal is load-bearing, not optional, whichever of the two changes lands first.

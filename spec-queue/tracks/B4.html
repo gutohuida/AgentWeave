@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B4 -- Permission judging</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B4.md, tracked</p>
+  <h1>B4 &mdash; Permission judging</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F362, F403, F402, F401, F283, F230, F284</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D4, D5</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/the-shell-judge-reads-a-word-whole/</code>, <code>openspec/changes/a-drive-or-a-home-variable-names-a-directory-by-itself/</code>, <code>openspec/changes/the-permissions-pill-shows-the-posture-the-run-gets/</code>, <code>openspec/changes/an-ask-me-card-says-what-workspace-only-would-decide/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R1 done</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><span class="toc-item toc-missing">R2</span><span class="toc-item toc-missing">R3</span><span class="toc-item toc-missing toc-final">Final</span></nav>
+  </div>
+  <section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p><strong>Method.</strong> Read <code>CLAUDE.md</code>, <code>spec-queue/tracks/README.md</code>, ROUNDS.md&#x27;s D4/D5/S3/S10 rows, every finding&#x27;s full entry in <code>scripts/drive/FINDINGS.md</code>, <code>DECISIONS.md</code> f375-* (2026-09-21 late evening), the archived <code>2026-09-22-a-word-without-a-separator-can-still-leave</code> (the F375 precedent) and <code>2026-09-13-a-url-is-not-a-path</code> (whose D3, D8 and D10 decided or left open most of the rows moved here), the <code>agent-run-sandboxing</code> and <code>agent-configuration</code> main specs, <code>.claude/rules/mcp-server.md</code> and <code>db-migrations.md</code>, and the code at <code>ce086b6</code> (HEAD <code>404c7d5</code> plus the bundle-opening commit, no product change). The two unarchived changes (<code>an-at-mention-an-agent-wrote-reads-no-file</code>, <code>pressing-run-names-the-reason-that-held</code>) touch none of this.</p>
+<p>Measured three ways: <code>hub.mcp_server._decide</code> in-process with <code>AW_WORKSPACE_DIR</code> a scratch <code>…/Temp/b4ws</code> (Windows, <code>py -3.11</code>); real Git Bash 5.2.37 (<code>globskipdots on</code>); and a <strong>prototype</strong> of the new rule 6 as an out-of-repo pytest plugin swapping <code>_judge_word</code> after collection (session scratch, <code>/tmp/b4proto/b4plugin.py</code>; nothing in the repo edited), run over the eight test files that reach the judge and over a 76-command sweep.</p>
+<h5>Findings re-verified</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>State at <code>ce086b6</code></th><th>Evidence</th></tr></thead><tbody><tr><td><strong>F362 (B)</strong></td><td><strong>open, changed shape</strong></td><td>Still refuses <code>ls test/<em>.test.js</code> (<code>&#x27;/</em>.test.js&#x27;</code>), <code>2&gt;/dev/null</code>, <code>npm install @types/node</code> (<code>&#x27;/node&#x27;</code>), <code>git show HEAD:src/a.py</code>, <code>sed -E &#x27;s/(foo)/\1/&#x27;</code>, <code>python -c &#x27;print(1/2)&#x27;</code>, <code>mkdir -p src/{a,b}</code>, PowerShell <code>Get-ChildItem src\*.py</code>. Cited lines moved: <code>_PLAIN_RELATIVE_RE</code> is <code>mcp_server.py:1038-1042</code> (was <code>:966</code>), <code>_ABSOLUTE_PATH_RE</code> <code>:1023-1026</code> (was <code>:957-960</code>), rule 6 <code>:1261-1267</code>. <strong>Not Windows-only</strong>: the POSIX branch of the regex also opens a candidate at every <code>/</code>. The <code>&#x27;/script&#x27;</code> item (<code>grep &#x27;&lt;/script&gt;&#x27;</code>) has a different mechanism (the <code>&lt;</code> trim then rule 5) and stays refused on purpose</td></tr><tr><td><strong>F403 (B)</strong></td><td><strong>open</strong></td><td><code>cp notes.md .{,.}</code> and <code>{.,.}.</code> allowed; Git Bash expands them to <code>. ..</code> / <code>.. ..</code>, and <code>cp notes.md .{,.}/</code> put the file in the parent. <code>_lex</code> (<code>:1397-1481</code>) has no brace handling. <strong>New:</strong> <code>.{,.}/x</code> and <code>src/{a,..}/../y</code> are refused today only by rule 6&#x27;s false tail reading; the F362 fix alone would let them through (prototype: both flip to allow). So F403 must ship with or before F362</td></tr><tr><td><strong>F402 (B)</strong></td><td><strong>open</strong></td><td><code>Copy-Item notes.md Z:</code> allowed: <code>_words</code> (<code>:1484-1499</code>) trims <code>:</code> (<code>_WORD_TRIM</code>, <code>:1054</code>), judged word <code>Z</code>. Also <code>Z:foo</code> and <code>-Destination:Z:</code> (value trimmed to <code>Z</code>). <code>_where(&quot;Z:&quot;)</code> → outside; <code>_where(&quot;C:&quot;)</code>, <code>_where(&quot;C:foo&quot;)</code> → inside for a C: workspace, which is PowerShell&#x27;s meaning</td></tr><tr><td><strong>F401 (B)</strong></td><td><strong>open</strong></td><td><code>cp notes.md $HOME</code>, <code>&quot;$HOME&quot;</code>, <code>${HOME}</code> (reaches the judge as <code>${HOME</code>), <code>--target-directory=$HOME</code>, PowerShell <code>$env:TEMP</code>, <code>-Destination:$HOME</code>, and <code>..$x</code> all allowed; rule 3 is gated on a separator (<code>:1241</code>). <code>git commit -m &quot;$(cat &lt;&lt;&#x27;EOF&#x27; …)&quot;</code> lexes to the single word <code>$(…</code> — the fact that rules out refusing every bare expansion</td></tr><tr><td><strong>F283 (B)</strong></td><td><strong>open</strong></td><td>Catalog <code>default=&quot;acceptEdits&quot;</code> on both providers (<code>model_catalog.py:231</code>, <code>:271</code>); <code>DEFAULT_PERMISSION_MODE = &quot;acceptEdits&quot;</code> (<code>:344</code>) imported nowhere; spawn default <code>workspace</code> (<code>runner_commands.py:74</code>, <code>:238-242</code>). Pill falls to <code>control.default</code> (<code>ComposerModelControls.tsx:140</code>, <code>AgentOutputPanel.tsx:393-395</code>). <strong>Also</strong> the settings select hard-codes &quot;Built-in default (Edit files)&quot; (<code>AgentSettingsControls.tsx:199</code>), and two tests pin the wrong display (<code>test_permission_approver.py:1051-1052</code>; <code>composerPermissionDefault.test.tsx:132-136</code>). The main spec&#x27;s <em>&quot;The default is unchanged&quot;</em> scenario (<code>agent-run-sandboxing</code>) has been false since <code>72afb3c</code></td></tr><tr><td><strong>F230 (C)</strong></td><td><strong>open</strong></td><td><code>approve_tool_call</code> routes <code>manual</code> to <code>_ask_operator</code> without <code>_decide</code> (<code>:1700-1707</code>); <code>PermissionRequestResponse</code> (<code>permissions.py:31-45</code>) and the row (<code>models.py:1592-1626</code>) carry no boundary</td></tr><tr><td><strong>F284 (C)</strong></td><td><strong>open</strong></td><td>Same card; <code>describe</code>/<code>requestKind</code> (<code>PermissionRequestCard.tsx:21-59</code>) show only tool and path</td></tr></tbody></table></div>
+<p>None already fixed; none retired.</p>
+<h5>Decisions</h5>
+<p><strong>How D4 and D5 interact.</strong> D4&#x27;s first half decides who the shell judge serves. With the default at <code>workspace</code> (as the spawn already is) the judge decides <strong>every</strong> unattended Claude command, so its false refusals cost every agent (F362&#x27;s 262), and a stricter D5 would cost every agent too. D4&#x27;s second half puts the judge&#x27;s answer on the &quot;Ask me&quot; card, so the judge must not <em>overclaim</em> either: an allow over <code>cp x $DEST</code> must not read &quot;inside&quot;. The three recommendations below are built to be one position: <strong>default <code>workspace</code>; fix the judge&#x27;s false refusals first; refuse only bare expansions that name a directory by themselves; show the judge&#x27;s answer on the card as advice, with an allow reason that admits what it did not check.</strong></p>
+<p><strong>D4 (first half) — one built-in default.</strong> Options: (a) <code>workspace</code> for Claude, the display derived from the spawn; (b) <code>acceptEdits</code> — Bash then prompts headlessly with nobody to answer, so unattended runs edit but cannot execute (<code>runner_commands.py:22-28, 62-73</code>; 14/14 tests under <code>workspace</code> vs none, 2026-08-13); (c) <code>workspace</code> for Codex too — would accept a Codex sandbox escalation whose <code>cwd</code> is inside (<code>codex_appserver.py:280-283</code>) where today the default declines it (<code>:291</code>), unmeasurable since Codex is undrivable. <strong>Recommended (a)</strong>, Codex&#x27;s display kept truthful at &quot;Edit files&quot;. Built as <code>the-permissions-pill-shows-the-posture-the-run-gets</code>: one <code>posture_at_rest</code> function read by <code>build_command</code> and served per agent as <code>permission_mode_at_rest</code>.</p>
+<p><strong>D4 (second half) — does the manual card show the workspace verdict?</strong> Options: (a) no; (b) yes, the approver&#x27;s own <code>_decide</code> answer, advisory; (c) &quot;Ask me&quot; auto-refuses outside calls (a new posture, contradicts <em>&quot;the operator is the boundary where no posture is checking&quot;</em>); (d) Hub-side classification from <code>Run.workspace_dir</code> (cannot read shell; a second opinion). <strong>Recommended (b).</strong> Built as <code>an-ask-me-card-says-what-workspace-only-would-decide</code>. It found a real hazard: <code>PermissionRequestCreate</code> is <code>extra=&quot;forbid&quot;</code> (<code>schemas/common.py:32</code>), and <code>:8000</code> spawns the new approver before its Hub restarts, so a new field would 422 and deny <strong>every</strong> &quot;Ask me&quot; card until the restart. The design retries once without the field on a 422 (no row exists after a validation 422, so no duplicate card).</p>
+<p><strong>D5 — how strict about bare <code>$VAR</code> / <code>$(…)</code>?</strong> Options: (a) accept the disclaimer; (b) refuse every separator-less expansion — refuses <code>echo $x</code>, loops, and every Claude Code commit (the heredoc&#x27;s <code>$(…</code> word); (c) command-aware destination positions — a new layer in a word-based judge, defeated by <code>bash -c</code>; (d) refuse a bare reference to the variables that name a home, working or temp directory (<code>HOME</code>, <code>PWD</code>, <code>OLDPWD</code>, <code>USERPROFILE</code>, <code>TMPDIR</code>, <code>TMP</code>, <code>TEMP</code>, <code>APPDATA</code>, <code>LOCALAPPDATA</code>; bash <code>$N</code>/<code>${N}</code>, PowerShell <code>$HOME</code>/<code>$PWD</code>/<code>$env:N</code>, <code>%N%</code>) and a <code>..</code> directly before an expansion, as uncheckable, leaving everything else allowed and stated as unjudged. <strong>Recommended (d)</strong>: it is F375&#x27;s <code>~</code> rule applied to the shorthand&#x27;s other spellings (<code>$HOME</code> = <code>~</code>, <code>$PWD</code> = <code>~+</code>, <code>$OLDPWD</code> = <code>~-</code>), and it costs nothing an agent needs. Built in <code>a-drive-or-a-home-variable-names-a-directory-by-itself</code> together with F402 (same rule 4, same requirement).</p>
+<h5>What was written</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th></tr></thead><tbody><tr><td><code>the-shell-judge-reads-a-word-whole</code></td><td>F362, F403</td><td>Bash brace expansion modelled in the lexer (bounded, refused as uncheckable past 256); rule 6 judges pieces split at shell metacharacters, quotes, <code>@</code>, <code>:</code>, <code>(</code> and a leading glued option, plus the quote-removed word — never a name&#x27;s tail; a glob component that can match <code>..</code> is judged as <code>..</code>; <code>/dev/null</code> and the std streams allowed in bash; <code>user@host:</code> and <code>host:port/</code> refused as network. Prototype (without the brace step): exactly 9 rows move in 455 tests — X4/X5/X6 to allowed, N5/N6/G3/E11/Z1/Z2 refused with a truer reason; H11 (F301&#x27;s <code>python -c</code>) needed the quote break, E11 the quote-removed reading. Modifies the shell-path requirement (its &quot;reading from the middle&quot; sentence) and adds two</td></tr><tr><td><code>a-drive-or-a-home-variable-names-a-directory-by-itself</code></td><td>F402, F401</td><td>PowerShell keeps a drive word&#x27;s colon and judges <code>Z:</code>, <code>Z:foo</code>, <code>-Destination:Z:</code>, <code>Temp:</code>; D5 (d) in rule 4. Modifies the separator-less requirement</td></tr><tr><td><code>the-permissions-pill-shows-the-posture-the-run-gets</code></td><td>F283</td><td><code>posture_at_rest</code>; <code>permission_mode_at_rest</code> on the agents list; pill and settings read it; Claude catalog default <code>workspace</code>; dead constant deleted. Modifies <code>agent-configuration</code>&#x27;s default-posture requirement and restates <code>agent-run-sandboxing</code>&#x27;s stale default requirement. UI bundle</td></tr><tr><td><code>an-ask-me-card-says-what-workspace-only-would-decide</code></td><td>F230, F284</td><td>Approver sends <code>_decide</code>&#x27;s verdict (Codex: <code>_within</code>), stored in a new column (migration 0106), shown on the card as advice; the allow reason admits unchecked expansions; 422 retry for an un-restarted Hub. Adds one requirement</td></tr></tbody></table></div>
+<p>All four pass <code>openspec validate --strict</code>. Each is independent except the first, which must not be split (its brace step prevents a regression of its rule-6 step). Tests planned in each <code>tasks.md</code> name the files and why each fails today; the card&#x27;s UI test uses the list route&#x27;s newest-first order (<code>permissions.py:73</code>) and asserts DOM order.</p>
+<p><strong>Every changed route, when what it calls raises:</strong> <code>approve_tool_call</code> has no <code>try</code> around <code>_decide</code> (<code>:1708</code>), so every judge addition is string work, <code>fnmatch</code> and <code>_judge_path</code> (total) — with a totality test (brace/bracket bombs). The agents list&#x27;s new field is a pure mapping (unknown → <code>null</code>). <code>open_permission_request</code> stores the verdict; a malformed one is a 422, which the approver retries without the field.</p>
+<h5>Unresolved, for R2/R3</h5>
+<ul>
+<li><code>fnmatch.fnmatchcase</code> and the brace expander must be confirmed total on pathological input</li>
+</ul>
+<p>(recursion depth on <code>{{{{…</code>).</p>
+<ul>
+<li>Change 1&#x27;s D5 widening: <code>scp a host:x/y</code> becomes allowed (consistent with <code>a-url-is-not-a-path</code>&#x27;s</li>
+</ul>
+<p>N3); R2 should weigh refusing <code>name:relative/path</code>.</p>
+<ul>
+<li>Change 1&#x27;s device set: four names, or <code>/dev/null</code> only (the only one F362 measured).</li>
+<li>Change 3 keeps the requirement name *&quot;Introducing an enforced posture does not change existing</li>
+</ul>
+<p>runs&quot;* while its text now states the default; a RENAMED delta may be cleaner.</p>
+<ul>
+<li>Migration number <code>0106</code> is also claimed by three other bundles&#x27; changes</li>
+</ul>
+<p>(<code>a-checkpoint-is-handed-over-once-and-says-where-it-went</code>, <code>a-footprint-names-the-line-of-work-its-commit-is-on</code>, <code>worker-spend-counts-against-the-budget</code>); renumber at build.</p>
+<ul>
+<li>B11&#x27;s <code>an-agents-tool-server-is-the-one-its-hub-loaded</code> (F354) would make a run&#x27;s MCP server the</li>
+</ul>
+<p>copy its Hub loaded. If it ships first, the card change&#x27;s 422 retry (the un-restarted-Hub window) is no longer needed, and every &quot;reaches <code>:8000</code> on edit&quot; note in all four changes becomes &quot;on restart&quot;. R2 should check the order.</p>
+<ul>
+<li><code>hub_client</code> is read from agent config in the list route by the same key the trigger uses</li>
+</ul>
+<p>(<code>agent_trigger.py:1056</code>) — R2 should confirm <code>agent_meta</code> carries it for runner-bound agents (<code>agents.py:534</code>).</p>
+<ul>
+<li>F362&#x27;s &quot;68 <code>/</code>-rooted fragments&quot; were not re-derived individually (the <code>:8000</code> transcripts were</li>
+</ul>
+<p>not reopened); the sweep covers the shapes the finding names.</p></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B4.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

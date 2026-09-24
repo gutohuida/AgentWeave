@@ -124,3 +124,4 @@ does not touch.
   exempts a project with an empty roster on the argument that a job may be created *"before the
   watchdog first syncs"*; with self-registration gone that bootstrap order no longer exists, and that
   exemption is the last producer of F276's no-such-agent firing.
+- R3 (2026-09-24): every reader of the four columns re-derived by `grep` over `hub/hub`, `src/` and `hub/ui/src` (matches D3's table and task 2.x's sites exactly); `get_agent_registration` and `CONTACT_MODES` have no caller. Launchability's `"runner" in meta` also reads `Agent.config` (merged at `launchability.py:485-486`), so the unbound verdict after the change is "no runner row and no `runner` key anywhere" — as D3 says. Migration number: see the B3 record (three B3 changes and four others name or need `0106`). No change to the proposal.

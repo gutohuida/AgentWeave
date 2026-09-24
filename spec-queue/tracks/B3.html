@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B3 -- Agent identity, control and actors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B3.md, tracked</p>
+  <h1>B3 &mdash; Agent identity, control and actors</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F111, F136, F3, F378 · F15, F77, F139, F276, F366, F125 · F47, F120</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D3 (with S9), D10 (less F193, answered 2026-09-23), D8</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/agents-no-longer-register-themselves/</code>, <code>openspec/changes/request-agent-models-the-new-agent-on-one-the-operator-made/</code>, <code>openspec/changes/a-flows-own-moves-are-recorded-as-the-flows/</code>, <code>openspec/changes/an-agent-can-be-paused-and-keeps-its-input/</code>, <code>openspec/changes/a-message-to-the-operator-is-told-where-the-operator-reads/</code>, <code>openspec/changes/a-claude-run-is-told-its-agentweave-tools-by-their-full-names/</code>, <code>openspec/changes/an-agent-updates-a-task-with-what-its-tool-carries/</code>, <code>openspec/changes/the-operator-can-rename-a-task/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R3 done — parked for operator</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><a class="toc-item" href="#R2">R2</a><a class="toc-item" href="#R3">R3</a><a class="toc-item toc-final" href="#Final">Final</a></nav>
+  </div>
+  <section class="sec-final" id="Final"><h2>Final -- what the bundle reached, and why</h2><div class="md-body"><p>The bundle is <strong>parked, awaiting the operator&#x27;s approval. IMPL has not started.</strong> Every answer below is a recommendation until it is recorded in <code>DECISIONS.md</code>.</p>
+<h5>Decisions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Recommended answer</th><th>Why</th></tr></thead><tbody><tr><td>D3</td><td>Does self-registration stay, and what is an agent with no runner told?</td><td><strong>Delete it</strong>: the <code>POST /agents/register</code> route and four watchdog-era columns (<code>contact_mode</code>, <code>self_registered</code>, <code>mcp_endpoint</code>, <code>spawn_cmd</code>). Every agent with no runner is then told <em>no runner is bound</em></td><td><strong>You already decided this on 2026-08-29.</strong> Handoff-0099, decision 2: <em>&quot;No it does not belong in the product … I think it&#x27;s a legacy thing&quot;</em>; the roadmap (<code>openspec/explorations/2026-08-30-release-roadmap.md:78</code>) says <em>&quot;Decided 2026-08-29, queued&quot;</em>. <strong>There is no <code>DECISIONS.md</code> entry for it yet; one is needed.</strong> No client calls the route, and both Hubs hold 0 self-registered agents and 0 <code>project_sessions</code> rows (read-only). F111/F136/F3 all come from this population</td></tr><tr><td>S9</td><td>Where do <code>request_agent</code> templates come from?</td><td><strong>An existing open agent, named exactly.</strong> The new agent copies its runner, charter and config, minus <code>principal</code> and <code>yolo</code>. It does <strong>not</strong> copy the three grants or the permission posture</td><td>Today every call answers 400: the template source (<code>project_sessions</code>) has no writer. Even a found template made an agent with no runner. The only use seen (2026-09-17) was &quot;another one like Developer&quot;. R3 traced every posture read (above). After the copy, the new agent runs at nothing its own settings row does not state</td></tr><tr><td>D8</td><td>Who is recorded when a loop or flow moves a task?</td><td><strong>Actor stays <code>operator</code>, with a new cause <code>origin=&quot;job&quot;</code> plus a <code>job_id</code>.</strong> No third actor kind. The history shows &quot;Flow/Loop <em>name</em> moved&quot;. Old rows are not rewritten</td><td>The shipped <code>task-lifecycle-governance</code> spec forbids a third actor kind and requires the cause to be told apart. Today&#x27;s rows break that requirement (38 on your real database). The cause travels on the queue entry, so a review delivered late is still recorded as the flow&#x27;s</td></tr><tr><td>D10/F15</td><td>Should agents be pausable, and what happens to input that arrives while one is paused?</td><td><strong>Build a pause that queues and keeps input</strong>, uncounted, and delivers it in order on resume. Your own messages wait too</td><td>Stop alone loses the race F15 measured: a peer&#x27;s message starts the next turn moments later. The pause is modelled on the existing provider hold, so the scheduler, loops, flows and the Run button all agree without new logic</td></tr><tr><td>D10/F77</td><td>Can an agent address the operator by message?</td><td><strong>No new channel.</strong> The refusal says the reply, the task notes and <code>ask_user</code> are the ways to reach you. The two stale &quot;unasked question&quot; requirements come out of the main spec</td><td>Nothing may read an agent&#x27;s text for questions (CLAUDE.md, no backstop). A <code>notify_operator</code> tool has nowhere to land until D6 settles the Messages screen</td></tr><tr><td>D10/F139</td><td>How does a Claude run tell AgentWeave&#x27;s <code>send_message</code> from the host&#x27;s <code>SendMessage</code>?</td><td><strong>Name AgentWeave&#x27;s tools by their full callable names</strong> (<code>mcp__agentweave__…</code>) for Claude-family runs, plus one sentence about the host tool. Do not disable <code>SendMessage</code></td><td>The shipped spec requires exact callable names. The host <code>SendMessage</code> continues a subagent (seen in your transcripts), so disabling it costs a real capability</td></tr><tr><td>D10/F276</td><td>Should &quot;no such agent&quot; hold queued input?</td><td><strong>No change; close F276 as decided</strong></td><td>Its only remaining producer is a job created in a project with an empty roster. A job regenerates its input every firing, so nothing is lost. With D3 done, the empty-roster exemption in <code>jobs._check_agent_exists</code> has lost its reason, which makes it a candidate follow-on</td></tr><tr><td>D10/F366, F125</td><td>Which task fields may an agent write? May titles change?</td><td><strong>Agents: status, notes, requirement links. The operator: holder, priority, description, title.</strong> The operator may rename a task</td><td>Today the agent&#x27;s HTTP route takes the operator&#x27;s whole schema, while its tool carries two fields. The shipped spec says both paths must have equal capability. Refusing at the service gives a named 403, the way <code>divergence_policy</code> already does</td></tr></tbody></table></div>
+<h5>Changes</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>agents-no-longer-register-themselves</code></td><td>F111, F136, F3</td><td>Deletes the register route and four columns (<strong>migration</strong>) and the launchability exemption. Adds a shared <code>add_agent</code> test fixture. Removes CLI dead code and one UI type</td><td>L (19 test files re-fixtured, 9 drive scripts)</td></tr><tr><td><code>request-agent-models-the-new-agent-on-one-the-operator-made</code></td><td>F378</td><td>Template = an open agent. Copies runner, charter and config (not <code>yolo</code>), and no grants or posture. Refusals name the agents it could have named. A raise from the scheduler after the commit no longer answers 500</td><td>S</td></tr><tr><td><code>a-flows-own-moves-are-recorded-as-the-flows</code></td><td>F47, F120</td><td>Adds <code>origin=&quot;job&quot;</code> and <code>job_id</code> on <code>task_transitions</code> and <code>inbound_queue_entries</code> (<strong>migration</strong>). The dispatch reads the cause from the delivered entries. The history names the flow or loop</td><td>M</td></tr><tr><td><code>an-agent-can-be-paused-and-keeps-its-input</code></td><td>F15</td><td>Adds <code>Agent.paused_at</code> (<strong>migration</strong>), and pause/resume routes (the pause is written under the scheduler&#x27;s lock). The pause is read as a hold at seven sites. UI control</td><td>M</td></tr><tr><td><code>a-message-to-the-operator-is-told-where-the-operator-reads</code></td><td>F77</td><td>Named refusal when an agent&#x27;s run messages a reserved name. Removes two retired requirements from the main spec</td><td>S</td></tr><tr><td><code>a-claude-run-is-told-its-agentweave-tools-by-their-full-names</code></td><td>F139</td><td>Full tool names in the tool list and the access-path notice, for Claude-family runs described as MCP</td><td>S</td></tr><tr><td><code>an-agent-updates-a-task-with-what-its-tool-carries</code></td><td>F366</td><td>A 403 for run actors sending holder, priority or description. Requirement links are added to MCP <code>update_task</code></td><td>S</td></tr><tr><td><code>the-operator-can-rename-a-task</code></td><td>F125</td><td>Adds an operator-only <code>TaskUpdate.title</code>, and the drawer edits the title in place</td><td>S</td></tr></tbody></table></div>
+<h5>Open for the operator</h5>
+<ol>
+<li><strong>Record the 2026-08-29 decision (D3) in <code>DECISIONS.md</code>.</strong> Recommended: *delete self-registration</li>
+</ol>
+<p>and its four columns.* It lives today only in FINDINGS F111, handoff-0099 (untracked) and roadmap line 78. If you now want to keep it, the D3 change is withdrawn. It would be replaced by one that keeps the route, drops only <code>watchdog-spawn</code>, and adds a <code>contact_mode</code>-keyed launchability sentence.</p>
+<ol>
+<li><strong>F378: templates.</strong> Recommended: an existing open agent, with no grants and no posture copied.</li>
+<ul>
+<li><em>Copy the posture too</em>: also coherent, but one full-access agent could create more without you.</li>
+<li><em>A template registry</em>: a new table and screen.</li>
+<li><em>Delete the tool</em>: F378 closes, and a project can no longer grow from inside.</li>
+</ul>
+<li><strong>D8.</strong> Recommended: <code>origin=&quot;job&quot;</code>, and a manual Run press is attributed to the loop. A third actor</li>
+</ol>
+<p>kind would first need the shipped spec changed, and every transition edge redeclared.</p>
+<ol>
+<li><strong>F15.</strong> Recommended: queue-and-keep, and your own messages wait while an agent is paused.</li>
+<ul>
+<li><em>Your messages deliver</em>: they would probe the pause, as they probe a provider hold today.</li>
+<li><em>No pause</em>: the documented remedy is stop → withdraw each entry → archive, which still loses the</li>
+</ul>
+</ol>
+<p>race.</p>
+<ol>
+<li><strong>F77.</strong> Recommended: the refusal only, with the stale backstop requirements removed here. The</li>
+</ol>
+<p>removal can split into its own change unchanged.</p>
+<ol>
+<li><strong>F139.</strong> Recommended: full names, keep the host tool. <em>Disable <code>SendMessage</code></em> instead means a</li>
+</ol>
+<p><code>--disallowedTools</code> flag, and no subagent continuation for any Hub run.</p>
+<ol>
+<li><strong>F276.</strong> Recommended: close as decided, no change.</li>
+<li><strong>F366 / F125.</strong> Recommended: the field split above. <em>Agents may set the holder</em> flips F366&#x27;s fix</li>
+</ol>
+<p>to widening the tool; only the author/reviewer guards would then protect another agent&#x27;s <code>in_progress</code> work.</p>
+<ol>
+<li><strong>Migration numbering, decided at IMPL.</strong> Head is <code>0105</code>. Three B3 changes add a migration:</li>
+<ul>
+<li>D3 drops four <code>agents</code> columns.</li>
+<li>F15 adds <code>agents.paused_at</code>.</li>
+<li>D8 adds two <code>job_id</code> columns.</li>
+</ul>
+</ol>
+<p>Four other parked changes already name <code>0106</code>: <code>a-checkpoint-is-handed-over-once-…</code>, <code>a-footprint-names-the-line-of-work-…</code>, <code>an-ask-me-card-says-what-workspace-only-would-decide</code> and <code>worker-spend-counts-against-the-budget</code>. D3&#x27;s proposal also says <em>&quot;0106 today&quot;</em>. Each change takes the next free number when it is built, and bumps both head assertions. D3 and F15 both batch-alter <code>agents</code>, so they must be separate migrations in build order. <strong>Every one reaches <code>:8000</code> on its next restart.</strong></p>
+<ol>
+<li><strong>Collisions B1 has not yet acknowledged</strong> (B1 is at R1; its R2/R3 must check these):</li>
+<ul>
+<li><strong><code>a-flow-stages-its-review-in-the-dispatch</code> (S13).</strong> After S13, the dispatch</li>
+</ul>
+</ol>
+<p>(<code>agent_trigger.py:898</code>) is the flow&#x27;s <em>only</em> review staging. The cause D8 reads from the delivered entries&#x27; <code>job_id</code> then becomes the only thing recording a flow&#x27;s review as the flow&#x27;s. S13 must:</p>
+<ul>
+<ul>
+<ul>
+<li>keep <code>_review_task_from_entries</code>, which D8 extends to return the cause;</li>
+<li>word its MODIFIED requirement *&quot;Dispatching a review staffs the task, whichever path</li>
+</ul>
+</ul>
+</ul>
+<p>dispatched it&quot;* so it does not contradict D8&#x27;s ADDED cause requirement;</p>
+<ul>
+<ul>
+<ul>
+<li>know that D8&#x27;s tests 1.1 and 1.3a then exercise S13&#x27;s path.</li>
+</ul>
+</ul>
+</ul>
+<p>S13&#x27;s text mentions none of this.</p>
+<ul>
+<ul>
+<li><strong><code>a-task-is-attended-only-by-a-turn-that-will-reach-it</code> (S1)</strong> removes the held qualifier from</li>
+</ul>
+</ul>
+<p><code>decide_firing</code>&#x27;s resume arm. The pause relies on <code>held_agents</code> staying in the default-agent branch and <code>_roster_availability</code>. S1 keeps both, but its text does not know that paused agents join <code>agents_held</code>.</p>
+<ul>
+<ul>
+<li><strong><code>why-queued-input-waits-is-told-truthfully</code></strong> adds a check to the same queue-status route the</li>
+</ul>
+</ul>
+<p>pause edits. The order must stay: pause/hold first, then its checkout-holder check. It also edits <code>create_message_for_actor</code>, where F77&#x27;s branch goes, before the recipient lookup (adjacent; no semantic conflict).</p>
+<ul>
+<ul>
+<li><strong><code>pressing-run-names-the-reason-that-held</code></strong> (not B1): adjacency in <code>run_job</code> and around</li>
+</ul>
+</ul>
+<p><code>_agent_busy_reason</code> only. Pause test 1.7 is written to survive it.</p>
+<ul>
+<ul>
+<li><strong>Within B3:</strong> <code>request_agent</code> refuses a paused template, added by whichever of those two</li>
+</ul>
+</ul>
+<p>changes lands second. <code>title</code> joins F366&#x27;s refused list, whichever of F366/F125 lands second.</p>
+<h5>Findings that did not need a change</h5>
+<ul>
+<li><strong>F276</strong>: no change recommended (D10). The no-such-agent refusal stays request-level. Its only</li>
+</ul>
+<p>producer is a job in an empty-roster project, and that job regenerates its input every firing. Close as decided. The empty-roster exemption (<code>jobs.py:181-200</code>) is a follow-on candidate once D3 lands.</p>
+<ul>
+<li><strong>F120</strong> is F47&#x27;s defect seen from the other end. It is carried by the D8 change, not separately.</li>
+<li><strong>F136</strong> shares F111&#x27;s root and is closed by the same change.</li>
+<li>None of the bundle&#x27;s findings was already fixed on <code>404c7d5</code>.</li>
+</ul></div></section><section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>Every finding was re-read against HEAD <code>404c7d5</code> (the worktree&#x27;s <code>ce086b6</code> adds only the bundle files). Two read-only measurements were taken from the operator&#x27;s real database (<code>~/.agentweave/hub/data/agentweave.db</code>) and the trial Hub&#x27;s, both opened <code>mode=ro</code>:</p>
+<div class="scroll"><table class="md"><thead><tr><th></th><th><code>:8000</code></th><th>trial</th></tr></thead><tbody><tr><td>agents</td><td>8, all <code>self_registered=0</code>, all <code>contact_mode=&#x27;watchdog-spawn&#x27;</code></td><td>3, the same</td></tr><tr><td><code>project_sessions</code> rows</td><td><strong>0</strong></td><td><strong>0</strong></td></tr><tr><td><code>task_transitions</code> by (kind, origin)</td><td>operator/actor 38 · run/actor 62 · run/runtime 44</td><td>2 · 2 · 2</td></tr><tr><td>alembic head</td><td><code>0105</code></td><td><code>0105</code></td></tr></tbody></table></div>
+<p>No finding in the bundle is fixed. Three changed shape (line numbers moved, or the defect is wider than filed).</p>
+<h5>Findings, re-verified</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>State</th><th>Evidence</th></tr></thead><tbody><tr><td><strong>F111</strong> (B)</td><td>open</td><td><code>POST /agents/register</code> live at <code>hub/hub/api/v1/agents.py:2261</code>; <code>launchability.py:507</code> still <code>elif not agent_row.self_registered and &quot;runner&quot; not in meta</code></td></tr><tr><td><strong>F136</strong> (B)</td><td>open, same root as F111</td><td>the same clause; its defending comment (<code>launchability.py:508-514</code>) still cites a <code>collaboration_ready</code> verdict F136 measured as <code>null</code></td></tr><tr><td><strong>F3</strong> (C)</td><td>open</td><td><code>contact_mode=&quot;watchdog-spawn&quot;</code> literal at <code>agents.py:735</code> and <code>:2203</code>; <code>_CONTACT_MODES</code> at <code>:84</code>; only behavioural reader <code>scheduler.py:250</code> inside <code>_job_agent_skip_reason</code> (<code>:229-252</code>), which requires <code>self_registered</code></td></tr><tr><td><strong>F378</strong> (B)</td><td>open, <strong>wider than filed</strong></td><td>the route reads <code>_get_session_data</code> (<code>agents.py:2169-2176</code>), 0 rows on both Hubs; and even a found template creates an agent with <strong>no <code>runner_id</code></strong> (<code>:2199-2208</code>), so it could not have run. The route&#x27;s only passing test hand-seeds a <code>ProjectSession</code> (<code>test_agent_actions_governed.py:43-55</code>) — state no product surface produces</td></tr><tr><td><strong>F15</strong> (C)</td><td>open, undecided</td><td>no pause exists; <code>stop_agent_run</code> (<code>agent_trigger.py:1681</code>) stops one run; <code>archivable</code> (<code>agent_lifecycle.py:25-60</code>) refuses while a run is live or input is queued. <code>a2424d9</code> recorded it as needing a decision, not as decided</td></tr><tr><td><strong>F77</strong> (C)</td><td>open</td><td><code>messages.py:94-117</code> answers <code>Unknown recipient &#x27;Operator&#x27;</code>; reserved names (<code>worktrees.py:73-80</code>, case-insensitive <code>:148</code>) are never special-cased on the recipient side</td></tr><tr><td><strong>F139</strong> (B)</td><td>open</td><td><code>agents.py:1533-1537</code> still says <em>&quot;Names below are as injected; … prefixed <code>mcp__agentweave__</code>&quot;</em> and renders bare names (<code>_mcp_lines</code>, <code>:1468-1473</code>). <strong>New fact:</strong> in the operator&#x27;s own transcripts the host&#x27;s <code>SendMessage</code> is Claude Code&#x27;s <em>continue-a-subagent</em> tool (<em>&quot;use SendMessage with to: &#x27;&lt;agentId&gt;&#x27; … to continue this agent&quot;</em>), so disabling it would cost a real capability</td></tr><tr><td><strong>F276</strong> (C)</td><td>open, narrow</td><td>the no-such-agent raise (<code>agent_trigger.py:680-687</code>) still passes <code>request_level=True</code> only. Reachability measured by reading: agents are never deleted (no <code>@router.delete</code> on agents), messages to unknown names are refused (<code>messages.py:112</code>), jobs naming an unknown agent are refused when the roster is non-empty (<code>jobs.py:181-200</code>). The only producer left is <strong>a job created in a project with no known agents</strong></td></tr><tr><td><strong>F366</strong> (C)</td><td>open, <strong>wider than filed</strong></td><td>the agent PATCH (<code>agent_actions.py:279-292</code>) takes the operator&#x27;s <code>TaskUpdate</code>; <code>assignee</code>, <code>priority</code>, <code>description</code>, <code>requirement_ids</code>, <code>spec_document</code> all reach <code>update_task_for_actor</code> for a run actor (<code>tasks.py:1301-1318, 1408-1411, 1430-1446</code>); MCP <code>update_task</code> carries <code>status</code>, <code>notes</code> only (<code>mcp_server.py:337-351</code>)</td></tr><tr><td><strong>F125</strong> (C)</td><td>open</td><td><code>TaskUpdate</code> (<code>schemas/tasks.py:120-151</code>) has no <code>title</code>; <code>TaskDetailDrawer.tsx:298-300</code> a static <code>&lt;h2&gt;</code>; no code writes <code>task.title</code> after creation</td></tr><tr><td><strong>F47</strong> (C)</td><td>open, lines moved</td><td><code>enter_selected_task</code> passes <code>operator()</code> at <code>scheduler.py:906</code> and <code>:908</code> (F47 cited <code>:828/:830</code>). UI renders these as <strong>&quot;You moved …&quot;</strong> (<code>TaskTransitionHistory.tsx:40-44</code>)</td></tr><tr><td><strong>F120</strong> (C)</td><td>open, same defect as F47</td><td>—</td></tr></tbody></table></div>
+<h5>Decisions</h5>
+<p><strong>D3 — what an unbound self-registered agent is told, and whether <code>contact_mode=&quot;watchdog-spawn&quot;</code> goes.</strong> Options: (1) delete self-registration; (2) keep it and key a third launchability sentence on <code>contact_mode</code>; (3) drop only the <code>self_registered</code> guard. The operator already chose (1) on 2026-08-29, but the verdict lives only inside FINDINGS F111 — <code>DECISIONS.md</code> has no entry (<code>grep</code> finds the route only in a route inventory at <code>:326</code>). The measurements settle it: no client calls the route, no real row is self-registered, and none of the three <code>contact_mode</code> values is true of an agent the Hub spawns (F3&#x27;s own gate). <strong>Recommended: (1) — delete the route and drop <code>contact_mode</code>, <code>self_registered</code>, <code>mcp_endpoint</code>, <code>spawn_cmd</code>.</strong> There is then no third sentence to write: every agent with no runner is told <em>no runner is bound</em>. F3 asked the design question first — <em>how does a test make an agent when no runner CLI is on PATH?</em> — and the answer is a shared <code>add_agent</code> fixture that inserts the row directly, a pattern two test files already use locally. The fixture cost is 31 call sites in 19 files, besides <code>test_agents_self_registered.py</code> (24 sites), which is deleted with the route (F3&#x27;s own count on 2026-09-06 was 42 sites in 16 files; the suite has moved since).</p>
+<p><strong>S9 / F378 — where <code>request_agent</code> templates come from.</strong> Options: (1) a template is an existing open agent of the project; (2) a template registry with its own table and screen; (3) delete the tool. <strong>Recommended: (1).</strong> The operator approves a kind of agent by creating one; the new agent takes its runner, charter and runner config, and <strong>not</strong> its grants (<code>can_accept_evidence</code>, <code>can_read_checkpoints</code>, <code>can_recall</code>) — an agent must not mint a second holder of authority the operator gives one agent at a time. It serves the one observed use (the Architect asking for a second developer, 2026-09-17), and the agent it creates can actually run. <code>default_permission_mode</code> is left un-copied (least authority); R2 is asked to argue it.</p>
+<p><strong>D8 — who the actor is when a loop or flow moves a task.</strong> Options: (1) keep the actor <code>operator</code> (the authority the gate needs) and record a new <strong>cause</strong>, <code>origin=&quot;job&quot;</code>, with a <code>job_id</code>; (2) a third actor kind; (3) relabel in the UI. <code>task-lifecycle-governance</code> settles most of it: <em>&quot;There SHALL NOT be a third actor kind for the system&quot;</em> forbids (2), and <em>&quot;The recorded cause SHALL distinguish a transition an actor asked for from one the system made on that actor&#x27;s behalf&quot;</em> is <strong>violated today</strong> by the flow&#x27;s staging — so (1) is not a new rule but the shipped one, met. (3) is impossible: the row carries nothing to tell the two apart. <strong>Recommended: (1).</strong> No guard moves (<code>is_allowed</code> reads the kind; the separation guards read <code>actor.agent</code>, <code>None</code> either way); the 38 existing operator rows are not rewritten, because history is append-only.</p>
+<p><strong>D10 — agent control and addressing</strong> (six items; F193 already answered).</p>
+<div class="scroll"><table class="md"><thead><tr><th>Item</th><th>Options</th><th>Recommended</th></tr></thead><tbody><tr><td>F15 pause</td><td>(a) no pause — stop, withdraw, archive; (b) pause that <strong>queues and keeps</strong> input; (c) pause that refuses; (d) pause that drops</td><td><strong>(b)</strong>, expressed as the <strong>hold</strong> the Hub already has for a spent provider allowance: the six sites that read <code>provider_hold</code> read <code>agent_hold</code> instead, so the queue, the loop busy guard, the plain-job coalesce, the Run-button answer and the flow&#x27;s free pool all agree without new logic. Unlike the provider hold, the operator&#x27;s own input does not probe a pause. (a) loses the race F15 measured</td></tr><tr><td>F77 addressing the operator</td><td>(a) the refusal names what works; (b) a <code>notify_operator</code> tool; (c) route the message into the conversation</td><td><strong>(a)</strong>. No channel reads an agent&#x27;s text (the no-backstop rule), and a new channel has no surface to land on until D6 decides the Messages screen. Reply, task notes and <code>ask_user</code> already reach the operator</td></tr><tr><td>F139 host <code>SendMessage</code></td><td>(a) full callable names for Claude-family runs + one sentence naming the host tool; (b) disable the host tool; (c) full names for every runner</td><td><strong>(a)</strong>. <code>agent-tool-surface</code> already requires <em>&quot;exact callable names&quot;</em>; (b) removes subagent continuation; (c) guesses Codex&#x27;s naming, which cannot be measured here</td></tr><tr><td>F276 <code>agent_wide</code> for &quot;no such agent&quot;</td><td>(a) mark it <code>agent_wide</code> (hold input for the missing name); (b) leave it request-level</td><td><strong>(b), no change.</strong> The only producer is a job in a project with an empty roster, and a job regenerates its input on every firing, so withdrawing it loses nothing; holding it would keep input for a name no screen lists. The flag&#x27;s docstring already states the measurement (<code>agent_trigger.py:~335-345</code>). Close F276 as decided</td></tr><tr><td>F366 assignee over HTTP</td><td>(a) refuse <code>assignee</code>/<code>priority</code>/<code>description</code> to run actors at the service, add <code>requirement_ids</code>/<code>spec_document</code> to the tool; (b) a narrow agent schema (422); (c) widen the tool</td><td><strong>(a)</strong>. Service-level like the <code>divergence_policy</code> precedent, so both adapters meet it and the refusal is named; (b) would also degrade three existing named refusals to bare 422s; (c) hands agents the harm F366 names</td></tr><tr><td>F125 titles</td><td>(a) operator may rename; (b) nobody; (c) anyone</td><td><strong>(a)</strong>, agents refused (same split as F366). Not a transition, not recorded in history</td></tr></tbody></table></div>
+<p>The decisions interact in three places, and the recommendations were made consistent: F366 and F125 share one field split (agent: status, notes, requirement links; operator: holder, priority, description, title). F15&#x27;s pause and D3&#x27;s deletion both touch <code>_job_agent_skip_reason</code>: D3 deletes it, and the pause does not need it because a hold is already consulted by the job paths. F77 and D8 both stay inside the no-backstop rule and the two-actor rule respectively — neither adds a detector or an actor.</p>
+<h5>What was written</h5>
+<p>Eight changes, each independent enough to ship alone; all pass <code>openspec validate &lt;name&gt; --strict</code>.</p>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>agents-no-longer-register-themselves</code></td><td>F111, F136, F3</td><td>deletes <code>POST /agents/register</code>, drops four columns (migration), removes the launchability exemption, a shared <code>add_agent</code> test fixture, CLI dead code, one UI type</td><td>L (19 test files re-fixtured)</td></tr><tr><td><code>request-agent-models-the-new-agent-on-one-the-operator-made</code></td><td>F378</td><td>template = an open agent; copies runner/charter/config, not grants; refusals name open agents; a post-commit scheduler raise no longer answers 500</td><td>S</td></tr><tr><td><code>a-flows-own-moves-are-recorded-as-the-flows</code></td><td>F47, F120</td><td><code>origin=&quot;job&quot;</code> + <code>task_transitions.job_id</code> (migration); drawer reads &quot;Flow &lt;name&gt; moved&quot;</td><td>M</td></tr><tr><td><code>an-agent-can-be-paused-and-keeps-its-input</code></td><td>F15</td><td><code>Agent.paused_at</code> (migration), pause/resume routes, pause read as a hold at six sites, UI control</td><td>M</td></tr><tr><td><code>a-message-to-the-operator-is-told-where-the-operator-reads</code></td><td>F77</td><td>named refusal for reserved recipients; <strong>removes two main-spec requirements for the retired unasked-question backstop</strong> (see below)</td><td>S</td></tr><tr><td><code>a-claude-run-is-told-its-agentweave-tools-by-their-full-names</code></td><td>F139</td><td><code>mcp__agentweave__&lt;tool&gt;</code> names for claude/claude_proxy/native runs; one sentence on the host tool</td><td>S</td></tr><tr><td><code>an-agent-updates-a-task-with-what-its-tool-carries</code></td><td>F366</td><td>403 for run actors on holder/priority/description; <code>requirement_ids</code>/<code>spec_document</code> added to MCP <code>update_task</code></td><td>S</td></tr><tr><td><code>the-operator-can-rename-a-task</code></td><td>F125</td><td><code>TaskUpdate.title</code> (operator only), drawer edits in place</td><td>S</td></tr></tbody></table></div>
+<p><strong>Tests that can fail.</strong> Every change&#x27;s <code>tasks.md</code> group 1 names the file, the assertion, and whether it fails today. The ones that guard against a fix that cannot fire: F136&#x27;s reproduction is written against a <code>self_registered=True</code> row <em>before</em> the migration so restoring the guard fails it; the pause race test stubs the stop to read <code>paused_at</code> at stop time, so reversing <em>pause-then-stop</em> fails it; the F47 pin in <code>test_flow_chain_end_to_end.py:342-352</code> is replaced by one that fails if any flow-staged row reverts to <code>origin=&quot;actor&quot;</code>, and a source scan fails if a scheduler staging call drops <code>job_id</code>; the transition-history UI test feeds the route&#x27;s real order (oldest first by <code>sequence</code>) and its reverse (F190).</p>
+<p><strong>What routes return when their callee raises</strong> is in each design (<code>D4</code>/<code>D5</code>/<code>D2a</code>). Two changes alter it deliberately: <code>request_agent</code> and <code>resume</code> stop answering 500 when <code>schedule_agent</code> raises <em>after</em> the commit that queued the work, since the work is durable and the next pass delivers it.</p>
+<h5>Found while doing this, not in the bundle&#x27;s findings</h5>
+<ol>
+<li><strong>Main-spec drift that contradicts CLAUDE.md.</strong> <code>agent-capability-plane</code> still requires *&quot;A turn</li>
+</ol>
+<p>that ends on an unasked question is surfaced to the operator&quot;<em> and </em>&quot;The operator can convert an unasked question into a real one&quot;* (<code>spec.md:323-384</code>). Migration <code>0082</code> deleted both on 2026-08-20. The F77 change removes them (design D4 there says how to split it out if preferred).</p>
+<ol>
+<li><strong>Collisions with other bundles&#x27; R1 changes.</strong></li>
+</ol>
+<p><code>isolation-does-not-change-under-held-work</code> (B5) plans a guard and a test on <code>POST /agents/register</code> (its task 1.4), which the D3 change deletes. <code>a-runner-that-cannot-collaborate-says-so-where-it-is-bound</code> (B10) deletes <code>AgentCard.tsx</code>, which the D3 change edits. <code>pressing-run-names-the-reason-that-held</code> edits <code>jobs.py</code> near <code>:1354</code>, one of the pause change&#x27;s six hold sites. <code>why-queued-input-waits-is-told-truthfully</code> (B1) edits the same queue-status route (<code>api/v1/inbound_queue.py</code>) the pause change reads from, and <code>messages.py</code>, which the F77 change also edits (different branch). <strong>S13</strong> moves the flow&#x27;s <code>under_review</code> staging into the dispatch (<code>agent_trigger.py:898</code>), which the D8 change argues is the operator&#x27;s alone; whichever lands second must carry the job cause through the queue entry, which has no job column today. Each is recorded in the relevant design&#x27;s Interaction section.</p>
+<ol>
+<li>The whole <code>project_sessions</code> / <code>POST /session/sync</code> layer has no producer in production (0 rows on</li>
+</ol>
+<p>both Hubs; only writer is the DEAD CLI <code>push_session</code>) but is still read by launchability and four <code>_get_session_data</code> callers. Left out of scope; named as a follow-on in the D3 change.</p>
+<h5>Open for the operator (recommended answer first)</h5>
+<ol>
+<li><strong>D3:</strong> delete self-registration and the four columns — and record the 2026-08-29 verdict in <code>DECISIONS.md</code>.</li>
+<li><strong>F378:</strong> templates are existing open agents; grants and <code>default_permission_mode</code> are not copied.</li>
+<li><strong>D8:</strong> <code>origin=&quot;job&quot;</code> with <code>job_id</code>, operator authority unchanged, no third actor kind; old rows not rewritten.</li>
+<li><strong>F15:</strong> build a pause that queues and keeps input; the operator&#x27;s own messages wait too.</li>
+<li><strong>F77:</strong> refusal only, no <code>notify_operator</code> tool for now; and ship the removal of the two stale backstop requirements with it.</li>
+<li><strong>F139:</strong> full names for Claude-family runs; do not disable the host&#x27;s <code>SendMessage</code>.</li>
+<li><strong>F276:</strong> no change; close as decided.</li>
+<li><strong>F366 / F125:</strong> agents may write status, notes and requirement links; holder, priority, description and title are the operator&#x27;s; the operator may rename a task.</li>
+</ol>
+<p>Nothing here was unresolvable. What R1 could not settle alone is left for R2 in the designs: whether <code>default_permission_mode</code> should be copied by <code>request_agent</code>, whether any non-operator entry can reach <code>agent_trigger.py:898</code> with a <code>completed</code> task today, and how many bare tool names outside the tool list the F139 change should also qualify.</p></div></section><section class="sec-round" id="R2"><h2>R2 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>About 45 load-bearing claims across the eight changes were re-opened in the code at <code>404c7d5</code>. Most hold. Five did not, and one of those changes a recommendation&#x27;s content (not its direction).</p>
+<h5>Claims that disagreed with the code</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>R1 claim</th><th>What the code shows</th><th>What R2 changed</th></tr></thead><tbody><tr><td><code>request-agent-…</code> (F378)</td><td>not copying <code>default_permission_mode</code> leaves the new agent at least authority</td><td><code>_apply_default_permission_mode</code> mirrors the posture into <code>config[&quot;yolo&quot;]</code> (<code>agents.py:2489-2492</code>); the spawn reads <code>yolo</code> from config (<code>agent_trigger.py:805</code>) and builds <code>--dangerously-skip-permissions</code> (<code>runner_commands.py:21</code>). R1 copied <code>config</code> whole, so a full-access template would have minted an agent that <strong>runs</strong> at full access while its settings say &quot;default&quot;</td><td>copy drops <code>yolo</code> with <code>principal</code>; new test 1.2a asserts no skip-permissions flag; spec gains a scenario. Recommendation (not copied) stands, now argued</td></tr><tr><td><code>request-agent-…</code> D4</td><td>catching <code>schedule_agent</code>&#x27;s raise is &quot;the same reasoning the trigger route applies&quot;; &quot;the next scheduling pass delivers it&quot;</td><td>no <code>api/v1</code> caller of <code>schedule_agent</code> catches (<code>agent_trigger.py:1600</code> included); there is no periodic sweep — a queued entry waits for new input, the Run button or a Hub start&#x27;s re-drain (<code>run_reconciliation.py:184-195</code>)</td><td>D4 reworded as a deliberate first; the answer must not imply imminent delivery. Same fix in the pause change&#x27;s <code>resume</code></td></tr><tr><td><code>a-flows-own-moves-…</code> (D8)</td><td><code>agent_trigger.py:898</code> transitions only on an operator dispatch</td><td><code>review_task_id</code> is read from <strong>delivered entries</strong> (<code>:823-824</code>, <code>_review_task_from_entries</code>); flows (<code>scheduler.py:3417</code>, <code>:3747</code>) and divergence restaffs (<code>run_divergence.py:483</code>) write it — 17 job and 3 divergence entries on <code>:8000</code>. Nothing withdraws a queued review when its task leaves review, and <code>under_review→revision_needed→in_progress→completed</code> is legal, so a delayed flow review travels <code>completed→under_review</code> at <code>:898</code> recorded as the operator&#x27;s request</td><td><code>inbound_queue_entries.job_id</code> added (same migration); scheduler <code>new_entry</code> calls pass it; <code>:898</code> reads the cause from the delivered entries. Tests 1.3a (fails today, and fails a fix that touched only the scheduler) and 1.3b (control). This also removes S13&#x27;s need to add it</td></tr><tr><td><code>a-flows-own-moves-…</code> UI</td><td>history reads &quot;Flow &lt;name&gt; moved&quot;</td><td>both staging callers are loop firings; a flow is a loop with <code>spec_document_id</code> (<code>create_flow</code> vs <code>create_loop</code>)</td><td>route returns <code>job_kind</code>; drawer says &quot;Flow&quot; or &quot;Loop&quot;</td></tr><tr><td><code>an-agent-can-be-paused-…</code> (F15)</td><td>the hold is read at six sites; <code>agents_held</code> gains paused agents</td><td>seven: <code>agents_held</code> also feeds the loop candidate walk (<code>scheduler.py:1705</code>). <code>agents_held</code> enumerates only agents with <code>TurnUsage</code> rows (<code>provider_allowance.py:171-189</code>), so an agent paused before its first turn would be missed</td><td>seven sites; <code>agents_held</code> unions <code>Agent.paused_at IS NOT NULL</code>; tests 1.6 (paused agent without usage rows) and 1.6a</td></tr><tr><td><code>a-claude-run-…</code> (F139)</td><td>the tool list is the fix; other bare names left for R2</td><td>≥35 bare mentions in 7 modules (lower bound). Among them <code>launchability.access_path_notice</code> (<code>:383-393</code>), rendered for every MCP run (<code>agent_trigger.py:1123</code>), says <em>&quot;call send_message / … directly&quot;</em> — the colliding name, bare, in the sentence about how to call tools</td><td>notice qualified too (its caller holds the runner); preamble gains <em>&quot;a tool named elsewhere by its short name is called by the full name here&quot;</em>; the other ~34 are left as references into the list</td></tr><tr><td><code>agents-no-longer-register-…</code> (D3)</td><td>test 1.3 would fail if the guard came back; 8 drive callers</td><td>after the migration the column is gone, so 1.3 can only be a control; 9 drive callers</td><td>1.3 split into a pre-fix reproduction plus a control and a source assertion; count fixed; two stale docstrings added to task 2.3</td></tr></tbody></table></div>
+<h5>R1&#x27;s questions, answered</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody><tr><td>Copy <code>default_permission_mode</code> in <code>request_agent</code>?</td><td><strong>No</strong>, and not its <code>config[&quot;yolo&quot;]</code> mirror either (above). Copying both together is coherent too; rejected on least authority — the posture governs peer- and job-triggered runs (<code>agent_trigger.py:762-768</code>), which is what a requested agent mostly gets</td></tr><tr><td>Does anything besides the operator reach <code>:898</code> with a <code>completed</code> task?</td><td><strong>Yes</strong> — a flow&#x27;s or a divergence restaff&#x27;s queued review delivered after the task returned to <code>completed</code>. Flow case fixed in D8&#x27;s change; the divergence case stays recorded as the operator&#x27;s (a cause this bundle does not name — noted for the operator)</td></tr><tr><td>How many bare tool names outside the list for F139?</td><td>≥35 across <code>agents.py</code> (~19), <code>launchability.py</code> (8), <code>review_turn.py</code> (3), <code>scheduler.py</code> (2), <code>checkpoint_generation.py</code> (1). Qualify the list and the access-path notice; one preamble clause covers the rest</td></tr><tr><td>Is D3&#x27;s &quot;operator decided 2026-08-29&quot; sourced?</td><td><strong>Yes.</strong> FINDINGS F111 <em>&quot;The decision, 2026-08-29&quot;</em>; the operator&#x27;s words in the untracked <code>handoff-0099-2026-08-29-1250-merged-decided-drove-and-armed.md</code>, decision 2 (<em>&quot;No it does not belong in the product … I think it&#x27;s a legacy thing&quot;</em>); the roadmap <code>openspec/explorations/2026-08-30-release-roadmap.md:78</code> (<em>&quot;Decided 2026-08-29, queued&quot;</em>). Not in <code>DECISIONS.md</code> — R1 is right that it should be recorded there</td></tr></tbody></table></div>
+<h5>Collisions, checked against final text</h5>
+<ul>
+<li><strong>B5</strong> (final): <code>isolation-does-not-change-under-held-work</code> design <em>Cross-bundle</em> already says its</li>
+</ul>
+<p>register guard and task 1.4 drop if D3 lands first. Consistent; nothing to change.</p>
+<ul>
+<li><strong>B10</strong> (final): deletes <code>AgentCard.tsx</code>; D3&#x27;s task 2.9 badge edit is moot if B10 lands first. Consistent.</li>
+<li><strong>S13 / B1</strong> (<code>a-flow-stages-its-review-in-the-dispatch</code>, R1 only): its text does not mention the job</li>
+</ul>
+<p>cause. After R2 the queue-entry <code>job_id</code> lives in D8&#x27;s change, so S13 needs only to keep <code>:898</code>&#x27;s cause read; B1&#x27;s R2/R3 should record that.</p>
+<ul>
+<li><strong><code>pressing-run-names-the-reason-that-held</code></strong>: edits <code>jobs.py:1354</code>, one of the pause&#x27;s seven sites; its</li>
+</ul>
+<p>text does not mention the pause. Whichever lands second re-points that site.</p>
+<ul>
+<li><strong>Migrations:</strong> three of B3&#x27;s changes add one (D3: drop four columns; D8: two <code>job_id</code> columns; F15:</li>
+</ul>
+<p><code>paused_at</code>), and D3&#x27;s proposal names <code>0106</code>, as do three other changes&#x27; texts. Noted, not renumbered.</p>
+<h5>What stands</h5>
+<p>Every other R1 claim was re-read and holds, including: <code>launchability.py:507</code>&#x27;s guard and <code>scheduler.py:250</code> as the only behavioural reader of <code>contact_mode</code>; 31 register call sites in 19 test files plus 24 in the deleted file; <code>_get_session_data</code> as <code>request_agent</code>&#x27;s only template source; the <code>origin</code> axis and <code>ORIGINS</code> (<code>task_transition_service.py:563-590</code>), divergence resolution at <code>:701</code>, jobs never deleted (<code>jobs.py:1174</code>); <code>trigger_agent_directly</code>&#x27;s only caller is <code>_attempt_turn</code>, so the pause gates every spawn; F77&#x27;s refusal and reserved names (no agent on <code>:8000</code> holds one); F366&#x27;s field table exactly as <code>tasks.py:1286-1446</code> has it, and the 403 path rolls back (<code>get_session</code> never commits); F125&#x27;s <code>TaskUpdate</code>/drawer facts. D10 and D8 recommendations unchanged. <strong>F276 follow-on noted:</strong> its last producer is <code>jobs._check_agent_exists</code>&#x27;s empty-roster exemption, justified by a <em>&quot;before the watchdog first syncs&quot;</em> order that D3 removes — a candidate to close with D3, not added to it.</p>
+<p>All eight changes pass <code>openspec validate --strict</code>.</p></div></section><section class="sec-round" id="R3"><h2>R3 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>About 40 load-bearing claims were re-opened in the code at <code>404c7d5</code>, not taken from R1/R2. The three the orchestrator named were re-derived first. Four claims disagreed with the code. None reverses a recommendation.</p>
+<h5>The three named questions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Question</th><th>What the code shows</th><th>Result</th></tr></thead><tbody><tr><td>Every place a run&#x27;s permission posture is read, for an agent <code>request_agent</code> creates</td><td>Seven reads: <code>Agent.default_permission_mode</code> → the run&#x27;s <code>permission_mode</code> control (<code>agent_trigger.py:767-768</code>); <code>config[&quot;yolo&quot;]</code> (<code>:805</code>) → <code>--dangerously-skip-permissions</code> with no <code>--allowedTools</code> (<code>runner_commands.py:259-273</code>), Codex <code>_thread_policy</code> (<code>codex_appserver.py:955</code>), Codex collaboration readiness (<code>agents.py:252</code>); <code>Conversation.runtime_overrides</code> (<code>agent_trigger.py:760-762</code>); <code>Runner.flags</code>, appended raw (<code>:1150-1164</code>, <code>runner_commands.py:285</code>); <code>config[&quot;read_only&quot;]</code> (<code>worktrees.py:230</code>, which sets the &quot;Workspace only&quot; boundary); <code>config[&quot;env_vars&quot;]</code> (<code>AW_PERMISSION_POSTURE</code> survives only when the spawn does not set it, and the approval tool honours only the stricter operator value, <code>mcp_server.py:1699</code>); the two waiting timeouts</td><td>R2&#x27;s fix (drop <code>yolo</code>, do not copy the column) is <strong>sufficient</strong>. The new conversation has no overrides, and <code>inherit_runtime_overrides</code> is keyed on the agent&#x27;s name, which must be new (the taken-name check counts archived rows, <code>agents.py:2178-2183</code>), so no earlier conversation lends one. Runner flags and <code>read_only</code> are inherited, and both are on the new agent&#x27;s own row. Added design D5 and test 1.2b</td></tr><tr><td>What <code>request_agent</code> and <code>resume</code> answer when <code>schedule_agent</code> raises</td><td>Nothing catches it. A raise does mean <strong>no run started</strong>: <code>trigger_agent_directly</code> commits the <code>Run</code> and the delivery together, then only schedules the process (<code>agent_trigger.py:1314-1319</code>), catching everything after that (<code>:1365</code>). <code>_attempt_turn</code> returns straight after a successful trigger (<code>turn_scheduler.py:692</code>)</td><td>R2&#x27;s answers stand: <code>201 queued</code> for the new agent, and <code>200</code> with &quot;delivery did not start&quot; for resume. Both statements are true whenever the <code>except</code> runs. The raise path is now written into both designs</td></tr><tr><td>D8&#x27;s <code>inbound_queue_entries.job_id</code>: does every path that queues a loop&#x27;s or flow&#x27;s review set it?</td><td>Entries are only built by <code>new_entry</code> (<code>inbound_queue.py:50</code>). Nothing copies an entry, and a retried entry is the same row. <code>origin_type=&quot;job&quot;</code> is written at exactly two sites, <code>scheduler.py:3407</code> and <code>:3739</code>, and both hold <code>job</code>. The other <code>review_task_id</code> writers are the operator&#x27;s trigger (<code>:1582</code>) and a divergence restaff (<code>run_divergence.py:259-267</code>, <code>:483</code>). <code>TaskTransition.origin</code> has no CHECK constraint (<code>models.py:710</code>), so no table rebuild is needed</td><td><strong>Yes, every such path sets it.</strong> Added design D5. Also found that a manual <strong>Run</strong> press fires through <code>_do_fire_job</code>, so its staging is recorded as the loop&#x27;s. That is deliberate (the loop chose the task) and pinned by new test 1.3c</td></tr></tbody></table></div>
+<h5>Claims that disagreed with the code</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Claim</th><th>What the code shows</th><th>What R3 changed</th></tr></thead><tbody><tr><td><code>an-agent-can-be-paused-…</code></td><td>Committing <code>paused_at</code> first means <em>&quot;the queue cannot start a turn in between&quot;</em></td><td><code>schedule_agent</code> reads the hold under <code>_lock_for(project, agent)</code> (<code>turn_scheduler.py:283</code>, <code>:388</code>), then triggers, and the trigger commits the <code>Run</code> (<code>agent_trigger.py:1314</code>). A pause committed without that lock can land after a pass&#x27;s hold check but before its <code>Run</code> commit. With <code>stop_running</code>, the stop&#x27;s lookup (<code>:1689-1695</code>) then finds no running run, and a turn still starts</td><td>The pause writes <code>paused_at</code> <strong>under the scheduler&#x27;s per-agent lock</strong>, then releases it before stopping. New test 1.5a would fail for a pause written without the lock</td></tr><tr><td><code>an-agent-can-be-paused-…</code></td><td>Test 1.6a: with nothing queued, a paused assignee is not briefed again</td><td>Today, a held assignee with nothing queued for its task <strong>is</strong> briefed once, and one whose briefing is already queued is in flight (<code>scheduler.py:1848-1856</code>). B1&#x27;s S1 keeps this behaviour through <em>&quot;a queued turn attends&quot;</em>. The spec&#x27;s <em>&quot;no further briefings&quot;</em> matched neither</td><td>1.6a rewritten: first firing queues one waiting briefing, second queues none. New 1.6b covers the default-agent branch, which S1 keeps. Spec sentence changed to <em>&quot;no second briefing while one waits&quot;</em></td></tr><tr><td><code>an-agent-can-be-paused-…</code> (R2 collision note)</td><td><code>pressing-run-names-the-reason-that-held</code> <em>edits</em> <code>jobs.py:1354</code></td><td>It reshapes <code>run_job</code>&#x27;s in-flight answer <strong>around</strong> <code>_held_in_flight_reasons</code> and splits <code>_loop_flow_busy_reason</code>. It does not touch the body where the pause is read</td><td>Recorded as adjacency, not a conflict. Test 1.7 asserts only <code>409</code> and <code>is paused</code></td></tr><tr><td><code>a-message-to-the-operator-…</code></td><td>The proposal said the refusal applies on &quot;both planes&quot;; the design said &quot;the operator&#x27;s own sends are untouched&quot;</td><td>The branch sits in <code>create_message_for_actor</code> (<code>messages.py:84-117</code>), which both routes share. As written, the operator sending to <code>operator</code> would get a sentence addressed to an agent</td><td>Scoped to <code>not by_operator</code>. New control 1.2a</td></tr><tr><td><code>a-claude-run-…</code></td><td>The prefix is keyed on <code>access_path == &quot;mcp&quot;</code>; test 1.4 triggers a claude run and expects prefixed names</td><td>The context and the access-path notice are rendered from <code>described_path</code> (<code>agent_trigger.py:1057-1062</code>, <code>:1123</code>). That value is <code>mcp</code> only with <code>hub_client: &quot;mcp&quot;</code> or a prior run whose adapter reported online (<code>launchability.py:281-311</code>). A fresh agent&#x27;s first run is described as HTTP</td><td>The prefix is keyed on <code>described_path</code>. Test 1.4 now seeds the grounds, and a first-run control was added. Without the seed, 1.4 would fail for a reason unrelated to the fix</td></tr></tbody></table></div>
+<h5>What stands, re-derived</h5>
+<ul>
+<li><strong>Self-registration.</strong> <code>grep</code> over <code>hub/hub</code>, <code>src/</code> and <code>hub/ui/src</code> for the four columns matches</li>
+</ul>
+<p>D3&#x27;s table and task 2.x exactly. <code>get_agent_registration</code> and <code>CONTACT_MODES</code> have no callers.</p>
+<ul>
+<li><strong><code>request_agent</code>.</strong> Every R1/R2 line reference in the route (<code>agents.py:2140-2258</code>) and the</li>
+</ul>
+<p>agent-plane wrapper (<code>agent_actions.py:829-840</code>) holds.</p>
+<ul>
+<li><strong>Pause.</strong> The seven hold sites hold. No other module reads the hold (<code>provider_allowance</code>&#x27;s</li>
+</ul>
+<p>importers). The hop-budget and conversation early returns in <code>_attempt_turn</code> (<code>:333-350</code>) count nothing, so a pause read at <code>:388</code> counts nothing either.</p>
+<ul>
+<li><strong>F366.</strong> The field table matches <code>tasks.py:1270-1450</code>. Note for IMPL: an agent&#x27;s</li>
+</ul>
+<p><code>&quot;priority&quot;: null</code> is also refused under <code>model_fields_set</code>, which is intended.</p>
+<ul>
+<li><strong>F125.</strong> Facts hold. The agent route takes the same <code>TaskUpdate</code>, so the rename&#x27;s run-actor refusal</li>
+</ul>
+<p>is load-bearing whichever change lands first.</p>
+<ul>
+<li><strong>Validation.</strong> All eight changes pass <code>openspec validate --strict</code>.</li>
+</ul></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B3.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

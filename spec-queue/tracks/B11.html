@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B11 -- The remainder decisions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B11.md, tracked</p>
+  <h1>B11 &mdash; The remainder decisions</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F308, F305, F354, F385, F20, F307, F349, F53, F281, F389, F146, F157, F134, F183, F177, F248, F133, F21, F382, F322, F339, F340</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D13 (less F217, which moved to B6), one recommendation per finding</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/an-agents-tool-server-is-the-one-its-hub-loaded/</code>, <code>openspec/changes/the-app-window-keeps-the-operators-preferences/</code>, <code>openspec/changes/a-dialog-takes-the-keyboard-when-it-opens/</code>, <code>openspec/changes/input-the-hub-accepted-is-answered-as-accepted/</code>, <code>openspec/changes/a-loop-that-is-gone-lets-go-of-its-document/</code>, <code>openspec/changes/charters-are-named-once-and-an-empty-one-says-so/</code>, <code>openspec/changes/a-name-a-caller-chooses-reaches-its-own-resource/</code>, <code>openspec/changes/a-run-records-that-its-calls-were-allowed/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R1 done</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><span class="toc-item toc-missing">R2</span><span class="toc-item toc-missing">R3</span><span class="toc-item toc-missing toc-final">Final</span></nav>
+  </div>
+  <section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>Read at worktree HEAD <code>ce086b6</code> (the bundle-opening commit on <code>404c7d5</code>; it touched no product code). Every finding&#x27;s full ledger entry, every <code>DECISIONS.md</code> row naming one, the specs each touches, and the unarchived changes (including the ones other bundles opened tonight) were read first. <code>:8000</code>&#x27;s database was read only through a <code>mode=ro</code> URI, for five counts cited below. No product code, test, ledger or decision file was edited.</p>
+<h5>Summary</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Finding</th><th>Re-verified</th><th>Recommended answer</th><th>Spec?</th></tr></thead><tbody><tr><td>1</td><td>F354 live agents run MCP from the working tree</td><td>open</td><td><strong>Pin the server the Hub loaded</strong></td><td>change 1</td></tr><tr><td>2</td><td>F385 pywebview private mode</td><td>open, both halves</td><td><strong>Persist the window profile, and let an unset theme follow the system</strong></td><td>change 2</td></tr><tr><td>3</td><td>F20 deep-link fallback</td><td>open; a second instance found</td><td><strong>Canonicalise the address; fix the CLI&#x27;s <code>view=</code> link</strong></td><td>no-spec (UI round)</td></tr><tr><td>4</td><td>F307 dialog initial focus</td><td>Tab half fixed (UI-1); this half open</td><td><strong>Focus moves in on open; a confirmation opens on Cancel</strong></td><td>change 3</td></tr><tr><td>5</td><td>F349 remainder</td><td>open (post-commit 500)</td><td><strong>Answer accepted as accepted, and retry the start in the Hub</strong></td><td>change 4</td></tr><tr><td>6</td><td>F133 queue status recomputes the reason</td><td>open</td><td><strong>One read-only selection shared by scheduler and status</strong></td><td>no-spec (Round-3 style), sequenced with B1</td></tr><tr><td>7</td><td>F146 operator-posted blocking question</td><td>open</td><td><strong>Refuse <code>blocking: true</code> on the operator route</strong></td><td>no-spec (Round-3 style)</td></tr><tr><td>8</td><td>F53 a loop&#x27;s archive releases adopted tasks?</td><td>tasks half open; a third defect found</td><td><strong>A successor adopts a gone loop&#x27;s unfinished tasks; archive stays pure</strong></td><td>change 5</td></tr><tr><td>9</td><td>F157 <code>spec_document_id</code> on non-loop jobs</td><td>open</td><td><strong>Refuse it on create, as PATCH does</strong></td><td>change 5 (shared)</td></tr><tr><td>10</td><td>F134 an empty charter</td><td>open</td><td><strong>Refuse blank content; render a legacy empty row honestly</strong></td><td>change 6</td></tr><tr><td>11</td><td>F183 charter name uniqueness</td><td>open</td><td><strong>409 at both doors, unique index, rename old duplicates</strong></td><td>change 6 (shared)</td></tr><tr><td>12</td><td>F177 runner sequence column</td><td>open; changed shape (ties are systematic)</td><td><strong>No migration: make the order total, <code>(created_at, name, id)</code></strong></td><td>no-spec</td></tr><tr><td>13</td><td>F248 <code>/worktrees/conflicts</code> shadows an agent</td><td>open; <strong>a class of three</strong></td><td><strong>Reserve the shadowed words + a route-table test</strong></td><td>change 7</td></tr><tr><td>14</td><td>F281 shell writes recorded how?</td><td>open; changed shape</td><td><strong>Not recorded; already specified as out of scope; fix one comment</strong></td><td>no-spec (comment)</td></tr><tr><td>15</td><td>F389 event per allow?</td><td>open</td><td><strong>No event per allow; a per-run count</strong></td><td>change 8 (lowest priority)</td></tr><tr><td>16</td><td>F305 windows re-ask decided questions</td><td>open</td><td><strong>One channel: <code>decisions_for_user</code> holds only <code>DECISIONS.md</code> ids</strong></td><td>no-spec (harness)</td></tr><tr><td>17</td><td>F308 CI drift alarm</td><td><strong>already fixed</strong> (<code>f7c732b</code>, on <code>master</code>)</td><td><strong>Close; add the job to <code>check-build</code></strong></td><td>no-spec (harness)</td></tr><tr><td>18</td><td>F21 retire?</td><td>open; <strong>the premise is challenged</strong></td><td><strong>Do not retire yet: one probe first</strong></td><td>decision + probe</td></tr><tr><td>19</td><td>F382 watch-only?</td><td>open, undiagnosed</td><td><strong>Watch-only, plus two tripwires</strong></td><td>no-spec</td></tr><tr><td>20</td><td>F322 park with F325?</td><td>unchanged</td><td><strong>Park with F325</strong></td><td>none</td></tr><tr><td>21</td><td>F339 stay parked?</td><td>unchanged</td><td><strong>Stay parked; but its doc row is reachable today, split it out</strong></td><td>none (+ a docs fix)</td></tr><tr><td>22</td><td>F340 stay parked?</td><td>unchanged</td><td><strong>Stay parked</strong></td><td>none</td></tr></tbody></table></div>
+<h5>How the items group, and how they interact</h5>
+<ul>
+<li><strong>What reaches a live agent or the live app from this checkout</strong> — F354, F385, F20, F307. F354&#x27;s</li>
+</ul>
+<p>answer decides when any <code>mcp_server.py</code> edit reaches <code>:8000</code>&#x27;s agents; this bundle&#x27;s own changes touch none of that file, but <strong>B1&#x27;s <code>why-queued-input-waits-is-told-truthfully</code> and B12&#x27;s <code>a-specification-is-read-in-results-that-fit</code> both edit it</strong> (each notes the hazard).</p>
+<ul>
+<li><strong>Answers that describe what happened</strong> — F349, F133, F146. All three are a route whose reply</li>
+</ul>
+<p>disagrees with the Hub&#x27;s state. F349 and F133 both sit on the queue; B1&#x27;s <code>why-queued-input-waits-is-told-truthfully</code> rewrites the same <code>get_queue_status</code> (its D3/D4), so F133 must land in that change or strictly before it. F349&#x27;s change edits <code>messages.py:318</code>, which B1&#x27;s change also edits (<code>create_message_for_actor</code>); different lines, sequence either way.</p>
+<ul>
+<li><strong>Who holds a document</strong> — F53, F157: one change.</li>
+<li><strong>What a charter or a name may be</strong> — F134, F183, F248, F177. F177&#x27;s order defect also applies</li>
+</ul>
+<p>to charters (measured below), and F183&#x27;s uniqueness gap also applies to runners (change 6, Open Question 1). F248&#x27;s reserved words change the agent-name rule CLAUDE.md says to change in three places.</p>
+<ul>
+<li><strong>What a record can prove</strong> — F281, F389, and the parked F339/F340. One consistent answer: record</li>
+</ul>
+<p>what the Hub observes (F389&#x27;s count), and label what it cannot observe as outside the record (F281, already a SHALL). F339&#x27;s measurement (Claude Code confines <code>acceptEdits</code>) narrows F281.</p>
+<ul>
+<li><strong>The loop&#x27;s own harness</strong> — F305, F308, F382. F305 is how every answer in this bundle gets</li>
+</ul>
+<p>recorded without being re-asked (ROUNDS.md item 6 routes D13 through <code>daily-review</code>).</p>
+<ul>
+<li><strong>Parked</strong> — F21, F322, F339, F340.</li>
+</ul>
+<h5>1. F354 — live agents run MCP from the working tree (open)</h5>
+<p><strong>Re-verified.</strong> <code>agent_trigger.py:1141-1144</code> still names <code>Path(__file__).resolve().parents[2] / &quot;mcp_server.py&quot;</code> on every spawn; it reaches Claude as <code>--mcp-config</code> (<code>runner_commands.py:250-259</code>) and Codex as <code>config.mcp_servers</code> (<code>codex_appserver.py:969-972</code>). <code>mcp_server.py</code> imports only the stdlib and <code>fastmcp</code> and never reads its own location (<code>grep</code>), so a copy is the same program. It is the only repository file spawned per turn (<code>grep -rn sys.executable hub/hub</code>).</p>
+<p><strong>Options.</strong> (a) pin the bytes at Hub start and spawn a content-addressed copy outside the repo; (b) a rule never to edit <code>mcp_server.py</code> in the checkout <code>:8000</code> runs (the status quo, which has blocked F363 since 2026-09-14); (c) run <code>:8000</code> from elsewhere (contradicts CLAUDE.md&#x27;s &quot;by intent&quot;); (d) <code>python -m hub.mcp_server</code> (still reads the working tree).</p>
+<p><strong>Recommended: (a).</strong> It is the only option under which the Hub&#x27;s routes and its tool server change on the same event, a restart. Written as <code>an-agents-tool-server-is-the-one-its-hub-loaded</code>. A pin that cannot be written refuses the turn through the context file&#x27;s existing <code>TriggerAgentError</code> 409 path (<code>agent_trigger.py:1110-1118</code>); it never falls back.</p>
+<p><strong>For B12 (F363), explicitly:</strong> B11 recommends pinning. Once that change is built <strong>and <code>:8000</code> has been restarted onto it</strong>, an edit to <code>mcp_server.py</code> in the checkout reaches <code>:8000</code>&#x27;s agents only at <code>:8000</code>&#x27;s next restart, together with the routes it calls, like every other Hub file. So F363 needs no version-skew analysis for the pinned case. Recommended order: this change&#x27;s IMPL → the operator&#x27;s <code>:8000</code> restart → F363&#x27;s <code>mcp_server.py</code> half. B12&#x27;s own D5 shows F363 degrades gracefully if it ships first, so this is a preference, not a gate. Until the restart, <code>:8000</code> still spawns the working tree&#x27;s file, so an uncommitted edit there still reaches live agents.</p>
+<h5>2. F385 — pywebview private mode (open)</h5>
+<p><strong>Re-verified.</strong> <code>cli.py:1025-1027</code> passes neither <code>private_mode</code> nor <code>storage_path</code>; pywebview 6.2.1&#x27;s <code>start()</code> defaults <code>private_mode=True</code> (measured with <code>inspect.signature</code>). The store holds far more than the theme: <code>grep localStorage.setItem hub/ui/src</code> finds the open project, the sidebar layout, model favourites, spec presentation, panel tabs and <strong>unsent composer drafts</strong>. <code>configStore.ts:49</code> still defaults to <code>&#x27;light&#x27;</code>; nothing reads <code>prefers-color-scheme</code>.</p>
+<p><strong>Options.</strong> Persistence only; system default only; both; neither. <strong>Recommended: both</strong>, as independent halves of <code>the-app-window-keeps-the-operators-preferences</code>. The profile goes under the CLI&#x27;s own <code>HUB_DIR / &quot;window&quot;</code> (<code>cli.py:242</code>), so a future reset (<code>R4</code>) can find it. The credential stays in <code>sessionStorage</code> (<code>configStore.ts:37-40</code>), and <code>index.html</code> is served without validators (<code>main.py:573-579</code>), so a persistent HTTP cache cannot pin a stale bundle.</p>
+<h5>3. F20 — deep-link fallback (open, no-spec)</h5>
+<p><strong>Re-verified.</strong> Navigation reads only <code>window.location.search</code> (<code>useWorkspaceNavigation.ts:11</code>); the SPA route serves <code>index.html</code> for any path (<code>main.py:573-579</code>); <code>replaceState</code> targets a bare <code>?…</code> so the unknown <strong>pathname survives</strong> in the address bar (<code>useWorkspaceNavigation.ts:37</code>). Unknown <code>tab</code> values coerce to Overview silently (<code>navigation.ts:372-374</code>). <strong>A second instance, in the product itself:</strong> the CLI builds its launch URL as <code>/?project=&lt;id&gt;&amp;view=overview</code> (<code>src/agentweave/cli.py:306</code>, since <code>ab53cf4</code>); no parser reads <code>view</code>, and it only works because Overview is the default.</p>
+<p><strong>Options.</strong> (a) alias <code>/projects/{id}/{tab}</code> paths; (b) canonicalise: replace the address with <code>/</code> plus the resolved destination&#x27;s own query, dropping what was not understood; (c) a notice for an unknown link; (d) retire as by-design. <strong>Recommended: (b), plus fixing <code>cli.py:306</code> to <code>tab=</code>.</strong> The app window has no address bar, so a notice would reach only browser users, and (b) makes the address state what is on screen. No spec: <em>&quot;Conversation navigation is URL-backed&quot;</em> already implies it. Tests: <code>useWorkspaceNavigation.test.tsx</code>, starting at <code>/projects/p/tasks?project=p&amp;tab=tasks&amp;x=1</code>, asserts <code>location.pathname === &#x27;/&#x27;</code> and <code>location.search === &#x27;?project=p&amp;tab=tasks&#x27;</code> after resolution (fails today: the pathname stays); <code>tests/test_cli.py</code> asserts <code>_hub_project_app_url</code> carries <code>tab=overview</code>.</p>
+<h5>4. F307 — dialog initial focus (Tab half fixed, this half open)</h5>
+<p><strong>Re-verified.</strong> UI-1 fixed the first Tab (<code>useDialogFocus.ts:58-68</code>) and left initial focus to D13 in its own comment. The effect records the opener (<code>:28</code>) and never moves focus. Seven components use the hook; three are confirm-only (Cancel first in the DOM), three <code>autoFocus</code> an input, one is the task drawer.</p>
+<p><strong>Options.</strong> Focus Cancel; focus the destructive button; focus the panel; leave it. <strong>Recommended: focus moves in; a confirmation opens on Cancel, chosen by an explicit mark, not DOM order.</strong> Written as <code>a-dialog-takes-the-keyboard-when-it-opens</code>. <strong>R1 also inferred a restore defect</strong>, not measured: React applies <code>autoFocus</code> in the commit, before the hook&#x27;s effect records <code>returnFocusTo</code>, so for the three <code>autoFocus</code> dialogs the recorded element is the input that unmounts, and closing leaves focus on <code>&lt;body&gt;</code>. The change&#x27;s task 1.6 measures it before D3 builds on it.</p>
+<h5>5. F349 remainder (open)</h5>
+<p><strong>Re-verified.</strong> After the entry commit (<code>agent_trigger.py:1587</code>), <code>persist_event</code> (<code>:1595</code>) and <code>schedule_agent</code> (<code>:1600</code>) are unguarded; <code>schedule_agent</code> catches only <code>TriggerAgentError</code> (<code>turn_scheduler.py:424</code>). Nothing retries a queued entry on a timer. Four more routes have the same post-commit shape: <code>messages.py:318</code>, <code>agents.py:2257</code>, <code>questions.py:212</code>, <code>inbound_queue.py:253</code> (read, not measured). And the existing deferred-drain backstop loses a pair whose drain raises (<code>run_reconciliation.py:184-187</code>, <code>:205</code>).</p>
+<p><strong>Options.</strong> (a) answer accepted and retry in the Hub; (b) answer accepted without a retry (still false in effect); (c) keep 500 and add a retry (invites duplicate sends); (d) schedule inside the transaction (a spawn cannot roll back). <strong>Recommended: (a)</strong>, written as <code>input-the-hub-accepted-is-answered-as-accepted</code>: one never-raising <code>schedule_accepted</code>, a bounded 1 s / 5 s / 30 s retry, then the existing deferred set as backstop.</p>
+<h5>6. F133 — queue status recomputes the reason (open, no-spec)</h5>
+<p><strong>Re-verified.</strong> The status route&#x27;s token-budget branch asks <code>all(entry.origin_type != &quot;operator&quot;)</code> over every queued entry (<code>inbound_queue.py:140-144</code>). The scheduler asks whether any operator entry is in the <strong>selected turn</strong>: the controlling entry&#x27;s conversation, within the hop budget, of a compatible kind (<code>turn_scheduler.py:340-376</code>). An operator entry in another conversation, behind an autonomous head, satisfies the route and not the scheduler, so the route stops saying why.</p>
+<p><strong>Options.</strong> Mirror the selection in the route (narrow; keeps two copies), or factor the pure part of the selection out of <code>_attempt_turn</code> (<code>controlling</code>, <code>selected</code>, <code>initiator</code> from entries, budget and cap; the conversation-lifecycle check stays in the scheduler) and have both call it. <strong>Recommended: the shared function</strong>, as a Round-3-style fix with no spec. <strong>Sequencing:</strong> B1&#x27;s <code>why-queued-input-waits-is-told-truthfully</code> rewrites <code>get_queue_status</code> (its D3, D4); land F133 as a task inside that change&#x27;s IMPL or strictly before it, never in parallel. Tests (in the route&#x27;s own order, <code>sequence</code> ascending): an autonomous entry in conversation A, then an operator entry in B, budget exhausted → <code>waiting_reason == &quot;token budget exhausted&quot;</code> (fails today: <code>null</code>); reversed (the operator&#x27;s entry first) → the reason is <strong>not</strong> the budget one, because the scheduler would start it. The reversed case is what fails if the test&#x27;s order were the one the route never returns.</p>
+<h5>7. F146 — an operator-posted blocking question (open, no-spec)</h5>
+<p><strong>Re-verified.</strong> <code>POST /questions</code> passes <code>created_by_run_id=None</code> (<code>questions.py:316</code>); <code>_asking_run_has_ended</code> returns False for an unset asker (<code>:51-52</code>), so a blocking operator-posted question is &quot;still waiting&quot; forever and its answer is never delivered. <strong>No product caller uses this route:</strong> no UI hook posts to it (<code>hub/ui/src/api/questions.ts</code> has none), the MCP server calls only <code>/questions/batch</code> and <code>/questions/{id}</code> (<code>mcp_server.py:396</code>, <code>:422</code>, <code>:488</code>, <code>:528</code>), and the CLI has none. Only tests and drive harnesses do.</p>
+<p><strong>Options.</strong> (1) refuse <code>blocking: true</code> (422); (2) deliver (needs a discriminator from legacy rows); (3) a sentinel asker (a migration). <strong>Recommended: (1).</strong> It is the only option that cannot recur, and it changes nothing any product surface sends. Round-3-style, no spec. Update <code>_asking_run_has_ended</code>&#x27;s docstring, which cites the operator route as a case it serves. Tests (<code>hub/tests/test_questions.py</code>): <code>blocking: true</code> → 422 naming <code>blocking</code> (fails today: 201); <code>blocking: false</code> still delivers on answer (control).</p>
+<h5>8–9. F53 and F157 — who holds a document (change 5)</h5>
+<p><strong>F53 re-verified:</strong> <code>2239f38</code> fixed the claim; <code>_adopt_document_tasks</code> still adopts only <code>loop_id IS NULL</code> (<code>jobs.py:266</code>) and neither archive door clears anything. <strong>R1 found a third defect:</strong> <code>spec_tasks.materialise</code> picks the owning loop by document alone, with no <code>archived_at</code> filter, no project filter and no ordering (<code>spec_tasks.py:176-180</code>), so since <code>2239f38</code> a later approval can stamp new tasks with an archived loop. Read, not measured (the change&#x27;s task 1.4).</p>
+<p><strong>F53 options.</strong> (a) done; (b) clear <code>loop_id</code> at archive for never-started tasks (needs a backfill for loops already archived, two doors, and erases the link when nobody takes the work); (b′) a successor claiming the document adopts every non-terminal task a <strong>gone</strong> loop owns; (c) an operator reassign control. <strong>Recommended: (b′)</strong>, which also releases LoopEngine-style held tasks from the staffing gate&#x27;s &quot;unreachable&quot; test (<code>scheduler.py:1165-1180</code>) and recovers tasks already stranded in real databases the first time the document is claimed again.</p>
+<p><strong>F157 re-verified:</strong> <code>create_job</code> reads <code>spec_document_id</code> only inside the opt-in branch (<code>jobs.py:746-763</code>); PATCH refuses it (<code>:989-1011</code>). No test asserts the silent drop: the ledger&#x27;s <code>test_jobs_crud.py:537</code> cite has moved, and only a docstring at <code>:602</code> mentions it. <strong>Recommended: refuse on create</strong>, with the <code>work_needs_evidence</code> wording (<code>:621-631</code>). The MCP loop tools always opt in (<code>purpose</code> defaults to <code>&quot;&quot;</code>, <code>mcp_server.py:681</code>), so no product surface changes behaviour.</p>
+<p>Written together as <code>a-loop-that-is-gone-lets-go-of-its-document</code>.</p>
+<h5>10–11. F134 and F183 — charters (change 6)</h5>
+<p><strong>Re-verified.</strong> <code>content: str</code> is unconstrained on create and update (<code>schemas/charters.py:13,18</code>); the renderer tests the row (<code>agents.py:2108-2118</code>). No name check at either door (<code>charters.py:18-34</code>, <code>:62-80</code>); <code>ix_charters_project_name</code> is plain (<code>models.py:366</code>). The agent precedent moved: the 409 is at <code>agents.py:682</code> now (the entry cites <code>:612-617</code>). <strong>Measured on <code>:8000</code></strong> (<code>mode=ro</code>): 0 blank-content charters, 0 duplicate charter names.</p>
+<p><strong>F134 options.</strong> Refuse at the API; render as &quot;no charter&quot; and count it missing; a third statement. <strong>Recommended: refuse at both doors, and render a pre-existing empty row with its own sentence and <code>missing: &quot;charter content&quot;</code></strong> (a guard for rows the schema never saw). <strong>F183 options.</strong> API check only; API check plus a unique index. <strong>Recommended: both</strong>, with the index migration renaming old duplicates (<code>X (2)</code>, oldest keeps the name), following migration <code>0063</code>&#x27;s reasoning for agents. Written as <code>charters-are-named-once-and-an-empty-one-says-so</code>. Open for the operator there: runner names have the same gap (<code>ix_runners_project_name</code> is plain; <code>runners.py</code> checks none).</p>
+<h5>12. F177 — a runner sequence column (open; changed shape; no-spec)</h5>
+<p><strong>Re-verified:</strong> <code>runners.py:82</code> still orders by <code>created_at</code> alone. <strong>Changed shape, measured on <code>:8000</code>:</strong> ties are not only a 15.6 ms coincidence. Every seeded project&#x27;s default runner pair shares one <code>created_at</code> exactly (3 of 3 projects), and <strong>all nine seeded charters share one</strong> (3 of 3), so both lists fall back to name order for every seeded row. <code>charters.py:44</code> orders by <code>created_at</code> alone too. No consumer reads &quot;the first runner&quot; (<code>grep -rn &quot;runners\[0\]&quot; hub/ui/src</code> finds none).</p>
+<p><strong>Options.</strong> (a) a <code>sequence</code> column (the precedent for <code>Conversation</code>, <code>Checkpoint</code>, <code>TaskTransition</code>; a table rebuild for a presentation list); (b) a total order with no migration: <code>order_by(created_at, name, id)</code>; (c) declare name order. <strong>Recommended: (b), for runners and charters,</strong> because no correctness decision reads either order; the ledger&#x27;s &quot;needs a migration&quot; premise does not hold. If a consumer ever reads the first row, (a) is the precedent to follow then. No spec. Tests (<code>hub/tests/test_runners_api.py</code>, <code>test_charters_api.py</code>): two rows with an identical <code>created_at</code> inserted in reverse-name order list by name; renaming one moves only that one.</p>
+<h5>13. F248 — a class of three (change 7)</h5>
+<p><strong>Re-verified, and widened.</strong> A scan of every <code>@router.&lt;method&gt;(&quot;…&quot;)</code> in <code>hub/hub/api/v1</code> for a literal declared beside a <code>{param}</code> at the same depth finds three pairs where the parameter is a caller-chosen name: <code>GET /worktrees/{agent}</code> vs <code>conflicts</code> (the finding), <code>GET /queue/{agent}</code> vs <code>settings</code> (<code>inbound_queue.py:80</code> before <code>:199</code>), and <code>GET /tasks/{task_id}</code> vs <code>board</code> and <code>boards</code> (<code>tasks.py:943</code>, <code>:1009</code> before <code>:1234</code>; <code>TaskCreate.id</code> accepts any <code>^[a-zA-Z][a-zA-Z0-9_-]{0,63}$</code>, <code>schemas/tasks.py:17</code>). The UI calls <code>/queue/${agent}</code> (<code>api/queue.ts:40</code>). Measured on <code>:8000</code>: no agent is named <code>conflicts</code> or <code>settings</code>, and no task id is <code>board</code> or <code>boards</code>.</p>
+<p><strong>Options.</strong> (a) reserve the words, plus a test that walks <code>app.routes</code> so the next collision fails the suite; (b) move the literal routes (UI callers, and a bundle/backend skew on <code>:8000</code>); (c) move the parameter routes (impossible for <code>/tasks/{task_id}</code> without moving the most-used route); (d) reorder (swaps the victim). <strong>Recommended: (a)</strong>, written as <code>a-name-a-caller-chooses-reaches-its-own-resource</code>.</p>
+<h5>14. F281 — shell writes recorded how? (open; changed shape; no-spec)</h5>
+<p><strong>Re-verified:</strong> <code>written_paths(&quot;Bash&quot;, …)</code> still returns <code>()</code>. <strong>Changed shape:</strong> (i) the corpus already decided it. <code>agent-run-sandboxing</code> (<code>spec.md:413</code> onward) says <em>&quot;Scope is part of the requirement … It SHALL NOT be described, labelled or surfaced as a complete account … a shell command … [is] out of scope&quot;</em>. (ii) F339 measured Claude Code refusing a shell redirect outside the workspace under <code>acceptEdits</code> (2.1.269), so &quot;an outside write is possible&quot; no longer holds for that posture. (iii) Operator-approved calls are rows in <code>permission_requests</code>, listable since F231 (UI-1). What remains uncovered is full access, by the operator&#x27;s choice.</p>
+<p><strong>Recommended: not recorded; close F281 as decided by the existing requirement.</strong> One residual: the column comment at <code>hub/hub/db/models.py:1214</code> says <em>&quot;Read an empty list as &#x27;nothing left this run&#x27;s boundary&#x27;&quot;</em>, which a shell write contradicts; reword to &quot;no file tool wrote outside this run&#x27;s boundary&quot;. A Round-0-style comment fix, no test.</p>
+<h5>15. F389 — event per allow? (change 8)</h5>
+<p><strong>Re-verified:</strong> <code>record_permission_decision</code> persists refusals only (<code>agent_actions.py:991-1009</code>); Codex reports refusals only (<code>codex_appserver.py:1083-1100</code>). <strong>Recommended: no event per allow (the spec&#x27;s refusal rule already forbids it as a refusal record), and instead a per-run count</strong>, written on first sight and flushed at the run&#x27;s end like <code>outside_write_record.py</code>, so the write load is at most three rows per run, which matters while <code>database is locked</code> is live (F349, F292). Written as <code>a-run-records-that-its-calls-were-allowed</code>, marked lowest priority in B11: nothing is broken today. If the operator prefers to accept the gap, close F389 and drop the change.</p>
+<h5>16. F305 — windows re-ask decided questions (open, no-spec harness)</h5>
+<p><strong>Re-verified:</strong> the day window still inherits the night&#x27;s <code>decisions_for_user</code> (<code>.claude/loops/day-window.md:175-178</code>, step 3), and nothing reconciles it with <code>DECISIONS.md</code>. <code>arm-cycle.ps1:249</code> resets the list at each arming, which shortens a stale entry&#x27;s life to one handoff but does not stop it crossing night → day. <code>STATE-night.json</code> carries one entry tonight.</p>
+<p><strong>Options.</strong> (a) the composing window clears an inherited entry whose question <code>DECISIONS.md</code> has decided (two channels, reconciled by judgement); (b) one channel: a window that raises a decision writes an <code>OPEN</code> row in <code>DECISIONS.md</code> (its contract already allows windows to add rows) and <code>decisions_for_user</code> carries only that row&#x27;s id; the review page lists <code>OPEN</code> rows read from the file. <strong>Recommended: (b)</strong>, F305&#x27;s own &quot;cleaner and larger&quot;. Harness work, no spec: edit <code>day-window.md</code> step 3 and D-5, <code>night-window.md</code>&#x27;s decision rule, <code>arm-cycle.ps1</code>&#x27;s limit line (<code>:256</code>), and the <code>autonomous-prep</code>/<code>autonomous-session</code> skills&#x27; description of the field. A check belongs with it: at compose, every id in an inherited <code>decisions_for_user</code> must name an <code>OPEN</code> row, and the window drops any that does not, saying so in its log.</p>
+<h5>17. F308 — CI drift alarm (already fixed)</h5>
+<p><strong>Fixed <code>f7c732b</code></strong> (2026-09-22), and <strong>armed</strong>: <code>.github/workflows/upstream-drift.yml</code> is on <code>master</code> and <code>origin/master</code> (<code>git branch -a --contains f7c732b</code>), so GitHub reads its schedule. It has not run yet (<code>gh run list --workflow upstream-drift.yml</code> returns nothing); its first scheduled firing is Monday 2026-09-28 07:00 UTC. <strong>D13&#x27;s row is stale.</strong> One residual the fix itself names: its result <em>&quot;is read when it fires&quot;</em>, and nothing reads it: the <code>check-build</code> skill covers <code>ci.yml</code>, <code>publish.yml</code> and <code>hub-image.yml</code> only (<code>grep -rn upstream-drift .claude/</code> finds nothing). <strong>Recommended: close F308; add the drift job to <code>check-build</code></strong> (no-spec harness line). Worth a <code>gh run list</code> check after 2026-09-28 to confirm the first run happened.</p>
+<h5>18. F21 — retire? (open; the premise is challenged)</h5>
+<p>The proposed answer was &quot;retire: not fixable inside AgentWeave&quot;, on the ground that whether Claude Code defers MCP tool schemas behind a search step is the harness&#x27;s behaviour. <strong>Two things R1 found weaken that:</strong></p>
+<ul>
+<li><strong>The harness has a setting for it.</strong> The installed <code>claude</code> (2.1.280) reads an</li>
+</ul>
+<p><code>ENABLE_TOOL_SEARCH</code> environment variable (strings in the binary: an unset or <code>auto</code> value means a 10%-of-context threshold, a number sets the percentage, and a <code>standard</code> mode logs <code>result=false</code>). The Hub already sets its own variables in the run&#x27;s environment (<code>agent_trigger.py:1184-1187</code>). Semantics <strong>unverified by a run</strong>.</p>
+<ul>
+<li><strong>The Hub does not isolate the run&#x27;s MCP configuration.</strong> <code>build_command</code> passes <code>--mcp-config</code></li>
+</ul>
+<p>without <code>--strict-mcp-config</code> (<code>runner_commands.py:250-259</code>; <code>grep strict-mcp hub/hub</code> finds nothing), so a run may also load servers from the operator&#x27;s own configuration, which count toward the threshold that triggers deferral. Whether any such servers reach a headless run on this machine is <strong>unverified</strong> (the user-level <code>mcpServers</code> in <code>~/.claude.json</code> is empty; account-level connectors were not checked).</p>
+<p>And <code>agent-tool-surface</code> <em>&quot;An invocable tool surface is the default, not an opt-in&quot;</em> already requires that a newly created agent&#x27;s runs have a tool surface <em>&quot;the agent can actually call&quot;</em>. So F21 may be a breach of a shipped requirement with a fix in <code>runner_commands.py</code>.</p>
+<p><strong>Recommended: do not retire yet.</strong> Run one probe (Haiku, per the cheap-model rule) with three arms: the default argv; <code>--strict-mcp-config</code>; <code>ENABLE_TOOL_SEARCH</code> set to disable deferral. For each, read the <code>system/init</code> line&#x27;s tool list for <code>mcp__agentweave__record_evidence</code> and whether a search tool is offered. If an arm makes the Hub&#x27;s tools directly callable at an acceptable context cost, F21 becomes a small spec change on <code>agent-tool-surface</code>. If none does, retire it as proposed. Also worth a separate finding whatever the probe shows: a Hub run may inherit the operator&#x27;s own MCP servers.</p>
+<h5>19. F382 — watch-only? (open, undiagnosed)</h5>
+<p><strong>Re-verified:</strong> narrowed to <code>test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped</code> (2026-09-22); candidate (a) is removed by <code>f9e6dee</code>; candidate (b) stands: <code>_stoppable_pty</code>&#x27;s fake read blocks in <code>released.wait()</code> with no timeout (<code>hub/tests/test_agent_trigger.py:1932-1935</code>). CI&#x27;s hub job runs <code>--timeout=300 --timeout-method=thread</code> (<code>.github/workflows/ci.yml:143</code>); the loop windows&#x27; local full-suite runs do not.</p>
+<p><strong>Recommended: watch-only, with two tripwires</strong> (no-spec): bound the fixture&#x27;s wait (<code>released.wait(timeout=30)</code>, then fail loudly), and have the windows&#x27; local full-suite command pass the same <code>--timeout=300 --timeout-method=thread</code> as CI, so a recurrence dumps a stack instead of freezing silently. Close F382 if the tripwired suite runs clean for two weeks.</p>
+<h5>20. F322 — park with F325 (unchanged)</h5>
+<p><code>codex_appserver.py:280-283</code> still decides a workspace-posture command by its <code>cwd</code> alone; <code>network</code> appears only in the full-access grant (<code>:118</code>). Codex is undrivable, and <code>DECISIONS.md</code> keeps F325 open by the operator&#x27;s choice (<code>f325</code>). <strong>Recommended: park with F325</strong>, reopening together.</p>
+<h5>21. F339 — stay parked (unchanged), with one split</h5>
+<p>The <code>DEFERRED</code> row (<code>DECISIONS.md</code> <code>f299-f301</code>, 2026-09-21) parks the 1b question until a non-MCP runner exists; <code>RUNNER_CLIS</code> is unchanged (<code>models.py:311</code>). <strong>But the doc half is reachable today:</strong> <code>docs/reference/permission-postures.md:33</code> says <code>acceptEdits</code> is <em>&quot;Not checked&quot;</em>, and <code>acceptEdits</code> is the &quot;Edit files&quot; posture any operator can pick for any Claude run (<code>model_catalog.py:215</code>). The parking reason (no runner reaches the approver-less path) covers <code>:39</code>, not <code>:33</code>. <strong>Recommended: stay parked for the 1b question; split the <code>:33</code> row into a no-spec docs fix</strong>, after re-measuring on the installed 2.1.280 with F339&#x27;s own script (one Haiku turn), worded as <em>&quot;checked by Claude Code, not by the Hub&quot;</em> with the version it was measured on.</p>
+<h5>22. F340 — stay parked (unchanged)</h5>
+<p><code>harness_has_honoured_mcp</code> is unchanged and <code>runner_parsing.py</code> still has no <code>system</code> branch. <strong>Recommended: stay parked</strong> per 2026-09-21. Note for its reopening: F354&#x27;s pin removes this checkout&#x27;s likeliest cause of the Hub&#x27;s own server failing to start (a half-written <code>mcp_server.py</code>), which is the case F340 says the Hub records nothing about.</p>
+<h5>Changes written (all <code>openspec validate --strict</code> pass)</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>an-agents-tool-server-is-the-one-its-hub-loaded</code></td><td>F354</td><td>Pin <code>mcp_server.py</code> at Hub start; spawn the pinned copy; refuse, never fall back</td><td>S, no migration, no UI</td></tr><tr><td><code>the-app-window-keeps-the-operators-preferences</code></td><td>F385</td><td>Persistent WebView profile under <code>~/.agentweave/hub/window</code>; unset theme follows the system</td><td>S, CLI + a UI bundle</td></tr><tr><td><code>a-dialog-takes-the-keyboard-when-it-opens</code></td><td>F307</td><td>Focus into the dialog on open, Cancel on confirmations by mark, opener recorded first</td><td>S, UI bundle</td></tr><tr><td><code>input-the-hub-accepted-is-answered-as-accepted</code></td><td>F349</td><td>Never-raising post-commit scheduling at five routes, with a bounded retry</td><td>M, no migration</td></tr><tr><td><code>a-loop-that-is-gone-lets-go-of-its-document</code></td><td>F53, F157 (+ materialise)</td><td>Successor adopts a gone loop&#x27;s unfinished tasks; materialise stamps only a live loop; create refuses a stray document</td><td>S–M, no migration</td></tr><tr><td><code>charters-are-named-once-and-an-empty-one-says-so</code></td><td>F134, F183</td><td>Blank content refused; empty row rendered honestly; name unique with an index</td><td>M, one migration</td></tr><tr><td><code>a-name-a-caller-chooses-reaches-its-own-resource</code></td><td>F248 (+ two instances)</td><td>Reserve <code>conflicts</code>, <code>settings</code>, <code>board</code>, <code>boards</code>; a route-table test</td><td>S, no migration</td></tr><tr><td><code>a-run-records-that-its-calls-were-allowed</code></td><td>F389</td><td>A per-run <code>{allowed, refused}</code> count, first sight + flush</td><td>M, one migration, lowest priority</td></tr></tbody></table></div>
+<p>Each change&#x27;s <code>tasks.md</code> names its failing-first tests and why each fails if the fix is reversed, and each <code>design.md</code> states what its route returns when the function it calls raises.</p>
+<h5>Found in passing, for the ledger (not filed here: R1 does not edit <code>FINDINGS.md</code>)</h5>
+<ol>
+<li><strong><code>spec_tasks.materialise</code> can stamp new tasks with an archived loop</strong> (<code>spec_tasks.py:176-180</code>).</li>
+</ol>
+<p>Carried by change 5.</p>
+<ol>
+<li><strong>F248&#x27;s class has two more instances</strong>: <code>GET /queue/settings</code> and <code>GET /tasks/board(s)</code>. Carried by</li>
+</ol>
+<p>change 7.</p>
+<ol>
+<li><strong>Seeded runners and charters tie on <code>created_at</code></strong> in every project (measured on <code>:8000</code>), so the</li>
+</ol>
+<p>charter list has F177&#x27;s defect too. Carried by F177&#x27;s no-spec fix.</p>
+<ol>
+<li><strong>The CLI&#x27;s launch URL carries <code>view=overview</code></strong>, a parameter nothing parses (<code>cli.py:306</code>).</li>
+</ol>
+<p>Carried by F20&#x27;s no-spec fix.</p>
+<ol>
+<li><strong>Closing an <code>autoFocus</code> dialog may leave focus on <code>&lt;body&gt;</code></strong> (inferred, not measured). Carried by</li>
+</ol>
+<p>change 3, task 1.6.</p>
+<ol>
+<li><strong>A Hub run may load the operator&#x27;s own MCP servers</strong> (<code>--mcp-config</code> without</li>
+</ol>
+<p><code>--strict-mcp-config</code>). Unverified whether any exist for a headless run here. See item 18.</p>
+<ol>
+<li><strong>Runner names have no uniqueness rule</strong>, the same gap as F183. Change 6, Open Question 1.</li>
+<li><strong>The drift alarm has no reader</strong> (<code>check-build</code> omits it). Item 17.</li>
+<li><strong>F339&#x27;s <code>:33</code> doc row is reachable today</strong> through the &quot;Edit files&quot; posture. Item 21.</li>
+</ol>
+<h5>Could not resolve</h5>
+<ul>
+<li><strong>F21&#x27;s probe</strong> needs a real <code>claude</code> turn and was not run (R1 starts no Hub and spends no turn).</li>
+</ul>
+<p>The recommendation depends on it.</p>
+<ul>
+<li><strong>F307&#x27;s restore defect and F248&#x27;s two new rows</strong> are read, not measured; both changes measure them</li>
+</ul>
+<p>first.</p>
+<ul>
+<li><strong>Migration numbering</strong>: changes 6 and 8 each need a migration, and other bundles also plan</li>
+</ul>
+<p><code>0106</code>. Both say &quot;the next free revision at IMPL time&quot;.</p></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B11.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

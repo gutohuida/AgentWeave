@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B2 -- Runs: what a row is, and how a run presents</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B2.md, tracked</p>
+  <h1>B2 &mdash; Runs: what a row is, and how a run presents</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F121, F123, F147, F149 · F291, F42, F168, F235, F273</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D1 (what a <code>JobRun</code> row is; is <code>run_id</code> in job events renamed), D11 (F291, F42, F168, F235, F273)</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/run-id-in-an-event-always-names-a-run/</code>, <code>openspec/changes/a-firing-is-counted-once-however-many-agents-it-starts/</code>, <code>openspec/changes/a-retried-firing-records-how-its-work-ended/</code>, <code>openspec/changes/an-undelivered-message-says-how-its-last-attempt-ended/</code>, <code>openspec/changes/stop-clears-a-run-an-earlier-hub-left-running/</code>, <code>openspec/changes/the-checkpoint-grant-says-it-reaches-every-checkpoint/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R1 done</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><span class="toc-item toc-missing">R2</span><span class="toc-item toc-missing">R3</span><span class="toc-item toc-missing toc-final">Final</span></nav>
+  </div>
+  <section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>HEAD <code>ce086b6</code> of <code>round/spec-tracks</code>. Its product code is identical to <code>404c7d5</code> (<code>git diff --stat 404c7d5 ce086b6</code> touches only <code>spec-queue/tracks/README.md</code>). Every finding below was re-read against the code; <code>git log -S</code> was run on the load-bearing snippet of each. Nothing was driven in R1. The one targeted question R1 would have run a test for (the unordered <code>.first()</code> in F147) is left to IMPL task 1.4 of <code>a-retried-firing-records-how-its-work-ended</code>, which records whether it fails deterministically.</p>
+<h5>The one answer both decisions rest on</h5>
+<p>D1 and D11 are the same question asked of two tables. R1&#x27;s recommended answer, used by every change below:</p>
+<div class="scroll"><table class="md"><thead><tr><th>Thing</th><th>Row</th><th>Meaning</th><th>Concludes when</th></tr></thead><tbody><tr><td><strong>Firing</strong></td><td>none of its own: the <code>JobRun</code> rows sharing <code>(job_id, fired_at)</code></td><td>the moment a job fired</td><td>—</td></tr><tr><td><strong>Dispatch</strong></td><td>one <code>JobRun</code></td><td>one agent&#x27;s share of one firing, correlated to its run through <strong>its own conversation</strong></td><td>its input has concluded: no job input still queued on the conversation and no run on it running</td></tr><tr><td><strong>Attempt</strong></td><td>one <code>Run</code></td><td>one process execution of one turn</td><td>the process ends; its row is the record of how that attempt ended</td></tr></tbody></table></div>
+<p>Why <em>dispatch</em> for <code>JobRun</code>, and not <em>firing</em> or <em>attempt</em>, from the code:</p>
+<ul>
+<li><strong>Not a firing.</strong> Six readers correlate a <code>JobRun</code> to exactly one conversation:</li>
+</ul>
+<p><code>scheduler.py:2282</code> (finalize), <code>run_reconciliation.py:236-268</code>, <code>api/v1/jobs.py:454-466</code> (<code>firing_active</code>), <code>checkpoints.py:150</code>, <code>checkpoint_handover.py:113</code>, <code>api/v1/agent_chat.py:373</code>. A wide flow firing has one conversation per agent (<code>_stage_selection</code>, <code>scheduler.py:3712-3716</code>, and its docstring at <code>:3645-3651</code>, which argues exactly this). A firing row would need a child table.</p>
+<ul>
+<li><strong>Not an attempt.</strong> <code>Run</code> already is the attempt. One <code>JobRun</code> per <code>Run</code> duplicates it and inflates</li>
+</ul>
+<p>every counter that reads rows (F123&#x27;s shape 2 names this cost; it is F121).</p>
+<ul>
+<li><strong>A dispatch is what the rows already are</strong> for every firing that dispatched. A skipped firing</li>
+</ul>
+<p>writes one row that dispatched nothing; that is consistent (a firing with zero dispatches records itself once).</p>
+<h5>Each finding re-verified</h5>
+<ul>
+<li><strong>F121 — still open, unchanged.</strong> <code>_stage_selection</code> still increments <code>job.run_count</code> per extra</li>
+</ul>
+<p>selection (<code>scheduler.py:3753-3756</code>, comment <em>&quot;One per row, so <code>run_count</code> keeps counting <code>JobRun</code>s&quot;</em>, added by <code>d34d782</code>); the card still reads <code>{job.run_count} runs</code> (<code>JobCard.tsx:435</code>) under the F25 definition <em>&quot;firings that actually ran&quot;</em> (<code>:436-442</code>). The &quot;strengthened&quot; half (skipped firings do not count) is consistent with F25 and is not a defect. <code>tasks.py:704</code> reads <code>run_count &gt; 0</code> as a boolean and is unaffected either way.</p>
+<ul>
+<li><strong>F123 / F147 — still open, and wider than filed.</strong> <code>finalize_job_run_for_conversation</code></li>
+</ul>
+<p>(<code>scheduler.py:2282-2303</code>) still selects only <code>in_progress</code>; the reaper still writes <code>failed</code> right after the first pass requeues the input (<code>main.py:466-467</code>, <code>run_reconciliation.py:258-281</code>). <code>git log -S &quot;Reconciled on Hub start: no live run behind this firing&quot;</code> last touches <code>264a299</code>. <strong>New in R1:</strong> the same shape without any crash. Every run-end site finalizes <code>failed</code> <em>before</em> <code>return_run_entries</code> hands the input back for retry (<code>agent_trigger.py:2050-2051</code>, <code>:2193-2194</code>, <code>:3065-3066</code>), so an ordinary failed attempt that is retried to success also leaves <code>failed</code>. The code already has the fix&#x27;s precedent for one case: the allowance refusal skips the conclusion because <em>&quot;the run that finally delivers it flips the row&quot;</em> (<code>agent_trigger.py:2515-2521</code>). F147&#x27;s latent unordered <code>.first()</code> is still at <code>run_reconciliation.py:265-268</code>. <strong>A third instance R1 found and did not carry</strong> (it would reverse an operator decision): a firing whose turn did not begin is concluded <code>failed</code> at once (<code>scheduler.py:3471-3477</code>), though its input stays queued and is delivered after the repair (F96). If it then completes, the history reads <code>failed</code>. Put to the operator as Open Question 1 of <code>a-retried-firing-records-how-its-work-ended</code>.</p>
+<ul>
+<li><strong>F149 — still open.</strong> Ten sites publish a <code>JobRun</code> id under <code>run_id</code> (<code>scheduler.py:3092</code>,</li>
+</ul>
+<p><code>:3134</code>, <code>:3169</code>, <code>:3318</code>, <code>:3488</code>, <code>:3501</code>, <code>:3530</code>, <code>:3777</code>, <code>:3787</code>; <code>api/v1/jobs.py:96</code>), plus <code>run_job</code>&#x27;s answer (<code>api/v1/jobs.py:1510</code>). F149 said the cost was only to a human reader. <strong>R1 found a code reader it misleads:</strong> the agent timeline collects <code>run_id</code> from every event and looks each up as a <code>Run</code> (<code>api/v1/agents.py:883-891</code>); a <code>job_fired</code> row&#x27;s id silently misses. <code>job_run_failed</code> carries the same key and was not in F149&#x27;s list.</p>
+<ul>
+<li><strong>F291 — changed shape, still open.</strong> Since filing: the chat response carries an abandoned entry&#x27;s</li>
+</ul>
+<p>run facts (<code>agent_chat.py:296-345</code>, F274); <code>run_failed</code> is in the chat hooks&#x27; predicate (<code>agentChat.ts:314-319</code>); an abandoned message is its own one-entry turn in place (<code>agentTimelineModel.ts:54-60</code>, F275). What remains: the abandoned turn is rendered with <code>runId: null</code> and nothing reads <code>runs[entry.run_id]</code>, and <code>RunFacts</code> carries no error (<code>schemas/agents.py:140-169</code>), so <em>why</em> the run failed (<code>Run.error</code>, <code>agent_trigger.py:2178</code>) never reaches the screen. <code>queue_entry_abandoned</code> is still absent from <code>QUEUE_EVENT_TYPES</code> (<code>agentChat.ts:284-290</code>); it matters on the scheduler&#x27;s give-up path, which has no run.</p>
+<ul>
+<li><strong>F42 — still open as recorded, and by its own text not a defect.</strong> <code>_guard_run_holds_the_task</code></li>
+</ul>
+<p>(<code>task_transition_service.py:475-535</code>) binds on <code>-&gt; in_progress</code> and requires the binding on <code>-&gt; completed</code>, exactly as the finding describes. Unchanged since 2026-08-25; not re-observed.</p>
+<ul>
+<li><strong>F168 — still open in its narrowed form.</strong> The stop route&#x27;s 409 for a <code>running</code> run with no</li>
+</ul>
+<p>registry handle is unchanged since <code>58fef98</code> (<code>agent_trigger.py:1718-1732</code>); <code>reconcile_interrupted_runs</code> is still called only from <code>main.py:466</code>. R1 named how the state arises while the Hub is up: startup <strong>skips a run whose pid is alive</strong> (<code>run_reconciliation.py:79-80</code>, pinned by <code>test_run_reconciliation.py:132</code>), so a Hub that dies while its agent&#x27;s process survives restarts into a <code>running</code> row nothing owns. <code>trigger_agent_directly</code> is the only creator of <code>Run</code> rows (<code>agent_trigger.py:1247</code>), so <em>&quot;started before this process&quot;</em> is exact.</p>
+<ul>
+<li><strong>F235 — still open.</strong> Hint unchanged (<code>AgentSettingsControls.tsx:417</code>; last touched <code>cb4ce21</code>).</li>
+</ul>
+<p><code>visibility</code> has no writer; <code>0097</code> rewrote every stored value to <code>project</code>; the model&#x27;s own comment marks it DEAD (<code>db/models.py:1653-1665</code>). The spec&#x27;s MAY is the only place it still means anything (<code>conversation-checkpoint/spec.md:255-256</code>).</p>
+<ul>
+<li><strong>F273 — premise obsolete; no code defect left.</strong> F273 held the persisted status line to be the</li>
+</ul>
+<p>only settled signal and the only carrier of the exit code. Since then the run row&#x27;s status and exit code are served in the run facts map (<code>RunFacts.status</code>, <code>.exit_code</code>) and <code>AgentTimeline</code> treats that map as authoritative and the status line as the fast signal (<code>AgentTimeline.tsx:130-161</code>). The write itself is now <code>_record_observation</code> on its own session (<code>agent_trigger.py:2610-2624</code>, F359): a lock is retried then dropped with a warning naming the run (<code>:1939-1956</code>); any other error reaches the catch-all, which logs it naming the run and does not relabel an ended run (<code>:2025-2031</code>). The spec still requires the line as though it were the record.</p>
+<h5>D1 — What is a <code>JobRun</code> row? Is <code>run_id</code> in job events renamed?</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Option</th><th>What it would break</th><th>What it would release</th></tr></thead><tbody><tr><td><strong>a. A firing</strong></td><td>the six conversation correlations above; needs a child table per agent</td><td>F121 trivially</td></tr><tr><td><strong>b. A dispatch</strong> <em>(recommended)</em></td><td>nothing read today; <code>run_count</code> stops moving per extra agent</td><td>F121 (a counter fix), F123 + F147 (a conclusion rule), F149 (a rename with a meaning)</td></tr><tr><td><strong>c. An attempt</strong></td><td>every counter and the last-ten view (one row per retry); duplicates <code>Run</code></td><td>F123 as &quot;history shows each try&quot;</td></tr></tbody></table></div>
+<p><strong>Rename:</strong> rename to <code>job_run_id</code>, outright, no dual emission, stored events not rewritten <em>(recommended)</em>. Alternatives: emit both for a period (protects readers that do not exist); keep and document (leaves the timeline reader wrong); a <code>jobrun-</code> id prefix (complementary, changes nothing a reader keys on). No reader of the key exists (<code>useSSE.ts:524-535</code> reads <code>id</code>; <code>eventSummary.ts:57-65</code> reads names and reasons; no Hub test pins it).</p>
+<h5>D11 — Run and turn presentation</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Item</th><th>Options</th><th>Recommendation</th></tr></thead><tbody><tr><td><strong>F291</strong> where a pre-spawn failure shows</td><td>(a) on the <em>not delivered</em> message, from the run&#x27;s own facts; (b) render failed runs as turns; (c) leave the banner</td><td><strong>(a).</strong> The entry already keeps the last run&#x27;s id; the response already carries its facts. Add <code>RunFacts.error</code>, read it in the abandoned branch. (b) has no entries to build a turn from and says the same failure three times</td></tr><tr><td><strong>F42</strong> binding without completion evidence</td><td>(a) accept and close as by-design; (b) require evidence at <code>-&gt; completed</code>; (c) flag a claim-and-complete in one run with no commit</td><td><strong>(a).</strong> (b) deadlocks the ordinary path (<code>requirement_gate</code>&#x27;s docstring; <code>task_transition_service.py:486-488</code>). The residue is one task per run, attributable, routed to a different reviewer by the flow. Nothing re-observed in a month. <strong>No change directory.</strong> The operator records it in <code>DECISIONS.md</code> so it is not re-filed</td></tr><tr><td><strong>F168</strong> a stale-run sweep trigger</td><td>(a) the operator&#x27;s Stop, for a run this process did not start; (b) a periodic sweep; (c) startup also kills pid-alive runs; (d) <code>GET /runs</code> + cancel</td><td><strong>(a).</strong> A boot instant makes <em>not started here</em> exact. (b) and (c) decide on their own to kill on a pid-only check; the 2026-08-21 operator decision rejected a periodic reaper for the same shape. (d) cannot clear the state (F168&#x27;s own bound)</td></tr><tr><td><strong>F235</strong> checkpoint visibility</td><td>(a) say the grant is project-wide and remove the dead concept, column included; (b) build settable visibility; (c) fix only the sentence</td><td><strong>(a).</strong> Nothing can set a restriction and nothing asks for one; the operator&#x27;s control is per reader. Column drop last and separable</td></tr><tr><td><strong>F273</strong> a failed terminal-status write</td><td>(a) amend the spec: the run row is the record, the line is the fast signal, a failure is logged naming the run; (b) an error row; (c) retry</td><td><strong>(a).</strong> No product change. (b) is a second write where writes are failing; (c) is refused by <code>_record_observation</code>&#x27;s own reasoning (<code>agent_trigger.py:1932-1934</code>)</td></tr></tbody></table></div>
+<p><strong>How D1 shapes D11.</strong> The table at the top is one statement: the attempt&#x27;s row says how the attempt ended (F273, F291: read it from the run facts, never only from the output stream); the dispatch&#x27;s row says how the work ended (F123, F147); the firing is counted once (F121); <code>run_id</code> names only an attempt (F149); a <code>running</code> attempt row that no process owns is a dead attempt, and Stop concludes it the way startup would (F168). F42 is about the attempt&#x27;s binding and needs no change. F235 is the one item unrelated to D1 and is carried here only because D11 grouped it.</p>
+<h5>What was written</h5>
+<p>Six changes, each validated <code>--strict</code>, ordered so stopping after any one leaves complete work:</p>
+<div class="scroll"><table class="md"><thead><tr><th>Order</th><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td>1</td><td><code>run-id-in-an-event-always-names-a-run</code></td><td>F149</td><td><code>job_run_id</code> in three job events and <code>run_job</code>&#x27;s answer; a stream-wide rule</td><td>S</td></tr><tr><td>2</td><td><code>a-firing-is-counted-once-however-many-agents-it-starts</code></td><td>F121</td><td><code>run_count</code> counts firings; the card says <em>fired</em></td><td>S, UI</td></tr><tr><td>3</td><td><code>a-retried-firing-records-how-its-work-ended</code></td><td>F123, F147</td><td>one conclusion rule for a dispatch; five run-end sites reordered; three withdrawal writers conclude; the reaper asks the same question</td><td>M</td></tr><tr><td>4</td><td><code>an-undelivered-message-says-how-its-last-attempt-ended</code></td><td>F291, F273</td><td><code>RunFacts.error</code>; the <em>not delivered</em> message names its last attempt&#x27;s error; <code>queue_entry_abandoned</code> refreshes the chat; the status-line requirement amended</td><td>M, UI</td></tr><tr><td>5</td><td><code>stop-clears-a-run-an-earlier-hub-left-running</code></td><td>F168</td><td>Stop reconciles a <code>running</code> run from an earlier process (killing its surviving process first); busy refusals name Stop</td><td>M</td></tr><tr><td>6</td><td><code>the-checkpoint-grant-says-it-reaches-every-checkpoint</code></td><td>F235</td><td>the hint and spec say project-wide; <code>visibility</code> removed from code, API and (last) the schema</td><td>S-M, UI, migration</td></tr></tbody></table></div>
+<p>Every route a change touches has its <em>what does it return when the callee raises</em> answer in its design: the queue withdrawal still answers 200 when the dispatch conclusion raises (change 3, D3); Stop answers 409 when the kill fails and 500 when the reconciliation fails, the run unchanged in both (change 5, D4); the others add no call that can raise.</p>
+<h5>Collisions checked</h5>
+<ul>
+<li><code>pressing-run-names-the-reason-that-held</code> (open) edits <code>run_job</code>&#x27;s decline branch</li>
+</ul>
+<p>(<code>api/v1/jobs.py:1419-1497</code>); change 1 edits only the success answer (<code>:1510</code>) and <code>_record_job_run_failure</code>. Either lands first; the other rebases.</p>
+<ul>
+<li>B8&#x27;s <code>a-checkpoint-is-handed-over-once-and-says-where-it-went</code> adds a column to <code>checkpoints</code> and</li>
+</ul>
+<p>explicitly leaves F235 to B2. Change 6&#x27;s migration and B8&#x27;s are numbered at IMPL in landing order.</p>
+<ul>
+<li>Changes 1 and 3 both edit <code>scheduler.py</code> (<code>_stage_selection</code> vs <code>finalize_job_run_for_conversation</code>);</li>
+</ul>
+<p>changes 3 and 5 both touch <code>run_reconciliation.py</code> (the stale-job reaper vs extracting <code>reconcile_run</code>). Change 5&#x27;s design says the dispatch conclusion belongs inside <code>reconcile_run</code> if 3 lands first.</p>
+<ul>
+<li>No other open change edits <code>stop_agent_run</code>, <code>RunFacts</code>, <code>JobCard</code>&#x27;s badge or <code>checkpoint_access.py</code></li>
+</ul>
+<p>(<code>grep</code> over <code>openspec/changes/*/</code> at R1).</p>
+<h5>Open for the operator (recommended answer first)</h5>
+<ol>
+<li><strong>D1:</strong> a <code>JobRun</code> row is a dispatch; rename <code>run_id</code> → <code>job_run_id</code> outright.</li>
+<li><strong>D11:</strong> F291 on the message; <strong>F42 accepted and closed as by-design</strong>; F168 by Stop; F235 said and</li>
+</ol>
+<p>removed; F273 closed by a spec amendment.</p>
+<ol>
+<li><code>a-retried-firing-records-how-its-work-ended</code> Open Question 1: should a firing whose turn did not</li>
+</ol>
+<p>begin also wait for its input rather than conclude <code>failed</code>? <em>Recommended: yes, in a follow-up change,</em> because it amends the operator&#x27;s 2026-08-21 requirement text.</p>
+<ol>
+<li>Same change, Open Question 2: an operator&#x27;s withdrawal concludes a dispatch as <code>stopped</code>.</li>
+</ol>
+<p><em>Recommended: yes.</em></p>
+<ol>
+<li><code>stop-clears-a-run-an-earlier-hub-left-running</code> Open Question 1: Stop kills the surviving process by</li>
+</ol>
+<p>pid. <em>Recommended: yes.</em></p>
+<ol>
+<li><code>the-checkpoint-grant-says-it-reaches-every-checkpoint</code> Open Question 1: drop the column.</li>
+</ol>
+<p><em>Recommended: yes.</em></p>
+<ol>
+<li><code>a-firing-is-counted-once-however-many-agents-it-starts</code> Open Question 1: history rows name their</li>
+</ol>
+<p>agent. <em>Recommended: yes, as a follow-up.</em></p>
+<h5>What R1 could not resolve</h5>
+<ul>
+<li>Whether F147&#x27;s <code>.first()</code> fails deterministically on SQLite with the older row inserted first. Left</li>
+</ul>
+<p>to IMPL task 1.4, which records either outcome.</p>
+<ul>
+<li>Whether the UI&#x27;s Stop button settles on <code>run_interrupted</code> as it does on <code>run_stopped</code></li>
+</ul>
+<p>(<code>AgentOutputPanel.tsx:822-840</code> waits for the agent to stop reading as running; <code>useSSE.ts:475</code> handles <code>run_interrupted</code>). Left to R2 as a named check (change 5, task 0.1).</p></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B2.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

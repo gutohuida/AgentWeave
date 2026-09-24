@@ -1,7 +1,7 @@
 ## 0. Rounds and decision
 
 - [x] 0.1 R2: independent re-derivation against `task_transition_service.py:555-720`, `scheduler.py:846-908,3336,3709`, `agent_trigger.py:860-905`, `run_divergence.py`, `tasks.py:_transition_view`, `TaskTransitionHistory.tsx`, `test_flow_chain_end_to_end.py:330-352`. Re-derive design's claim that `agent_trigger.py:898` only transitions on an operator dispatch
-- [ ] 0.2 R3: second independent re-derivation; `openspec validate a-flows-own-moves-are-recorded-as-the-flows --strict` passes
+- [x] 0.2 R3: second independent re-derivation (design D5); `openspec validate a-flows-own-moves-are-recorded-as-the-flows --strict` passes
 - [ ] 0.3 The operator answers D8 (recorded cause vs third actor kind); recorded in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first
@@ -11,6 +11,7 @@
 - [ ] 1.3 Same file, control: `POST /agent/trigger` with `review_task_id` for a `completed` task (operator dispatch) records `origin == "actor"`, `job_id is None`. PASSES today and must keep passing
 - [ ] 1.3a Same file (R2): a loop-queued review entry for task T (T staged `under_review` by the firing) is left queued while the reviewer is busy; the operator then moves T `under_review → revision_needed → in_progress → completed`; the entry is delivered. The `completed → under_review` row recorded at delivery has `origin == "job"` and `job_id == job.id`. FAILS today (`origin == "actor"`) — and would still fail under a fix that only touched the two scheduler callers
 - [ ] 1.3b Same file (R2), control: the same delivery where the operator's own review trigger for T is among the delivered entries records `origin == "actor"`
+- [ ] 1.3c Same file: pressing Run on the loop (`POST /jobs/{id}/run`) stages the `pending → assigned` row with `origin == "job"` and the job's id (design D5: the loop chose the task). FAILS today
 - [ ] 1.4 Same file, unit: `apply_transition(..., origin="job")` without `job_id` raises `ValueError`; with a run actor raises `ValueError`; `origin="actor"` with a `job_id` raises `ValueError`. FAILS today (unknown origin raises for a different reason — assert on the message)
 - [ ] 1.5 `hub/tests/test_task_transitions.py`: a source scan beside `test_only_the_binding_module_may_record_a_runtime_transition` — only `scheduler.py`, `api/v1/agent_trigger.py` and `task_transition_service.py` contain `ORIGIN_JOB`/`origin="job"`; every `enter_selected_task(` call in `scheduler.py` passes `job_id=`, and every `new_entry(` call in `scheduler.py` passes `job_id=`. FAILS today (no such constant)
 - [ ] 1.6 `GET /tasks/{id}/transitions` after 1.2's firing: rows in the route's own order (oldest first by `sequence`), the job row carries `job_id`, `job_name` equal to the job's name and `job_kind == "loop"`; the same for a flow gives `"flow"`. FAILS today
