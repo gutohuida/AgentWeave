@@ -1,5 +1,17 @@
 # Design — a loop's outstanding mail is mail not yet delivered
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review found one defect, in a test rather than in the design. The operator
+decided to fix it and approve the design otherwise unchanged.
+
+- **Task 1.4 now seeds explicit timestamps.** As written, it relied on
+  `order_by(Message.timestamp.desc())` (`scheduler.py:500`) without setting `timestamp`. The column
+  defaults to `_now()` at insert (`hub/hub/db/models.py:537`), so two rows seeded together can tie
+  or be ordered by accident, and the test would not prove the newest-first rule. The test now sets
+  each `timestamp` several seconds apart, and it adds a third, older `queued` message so the
+  assertion picks the newest qualifying message out of more than one candidate.
+
 **Built on the recommended answer to D6 for F259: retire the flag's authority. Neither delete the
 flag nor start setting it.** Product decisions derive "outstanding" from the delivery the inbound
 queue already records. The flag stays as the messages API's own bookkeeping, which

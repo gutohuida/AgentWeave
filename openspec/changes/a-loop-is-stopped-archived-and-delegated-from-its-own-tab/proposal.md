@@ -54,9 +54,12 @@ only `jobs` queries, so an open loop tab stays stale.
    `useSetLoopControl`. Each invalidates `['project', pid, 'loops']` and `['project', pid, 'jobs']`
    on settle (success or failure), so a refusal re-reads the truth instead of keeping a stale view.
 3. **An operator stop is recorded like a firing's stop.** `update_job` writes a `loop_stopped` event
-   against the loop (reason, `loop_id`, `job_id`, actor) and broadcasts it, **only when this call
-   ended the loop**. Editing the reason of a loop that has already ended adds no second stop. The event
-   is written in the same transaction as the ending. An operator stop always records
+   against the loop (reason, `loop_id`, `job_id`, actor) and broadcasts it. The event is written
+   in the same transaction as the ending. **A stop sent for a loop that has already ended is
+   refused** with 409 and a sentence naming how it ended, and the loop's `ending_state`,
+   `stop_reason` and `stopped_at` are left as they were (operator decision, 2026-09-24, after the
+   Opus review). Today the route rewrites the reason and time of an ended loop. `end_loop` itself
+   also becomes write-once, so no other caller can reword an ending either (design D2a). An operator stop always records
    `ending_state="stopped"`, whatever its reason's text: `end_loop` takes `completed` from its
    caller instead of comparing the reason to `loop queue is empty` (design D2, added by R2).
 4. **`archive_job` keeps retiring a running loop, and its docstring says why.** The 2026-09-23

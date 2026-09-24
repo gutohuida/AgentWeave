@@ -34,6 +34,14 @@
   messages, the newer one `delivered` and the older one `queued`. The payload's `reason` is the
   older one's subject. **Fails today**: the newer one is picked. This also pins the newest-first
   order among the candidates that qualify.
+  **Seed explicit timestamps** (operator review, 2026-09-24): both `Message` rows get
+  `timestamp=` set by the test, several seconds apart (e.g. `base` and `base + timedelta(seconds=
+  10)`), and the "newer" one is the later of the two. The column defaults to `_now()` at insert
+  (`hub/hub/db/models.py:537`, `:24-25`), so two rows added in one flush can carry equal or
+  microsecond-apart times, and `order_by(Message.timestamp.desc())` (`scheduler.py:500`) would then
+  pick either. A test that passes by insertion accident is not evidence of the order. Add a third
+  `queued` message older still, so the assertion names the newest *qualifying* one, not merely
+  the only one.
 - [ ] 1.4a `test_a_message_the_creator_is_still_reading_is_outstanding` (new): the entry is
   `delivered` with `delivered_in_run_id` naming a creator `Run` whose `status == "running"`. The
   payload names that message. It passes today as a control, because `read` is false. **It fails on

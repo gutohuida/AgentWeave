@@ -19445,7 +19445,7 @@ The second consumer is `scheduler.py:420`, and it is worse there: see F264.
 
 ## F260 (C) — row 17's whole operator surface is unreachable: three routes, three hooks, three components, none of them in the shipped app
 
-**Status:** open. Verified 2026-09-09: `MessagesFeed` is still named by no file outside
+**Status:** open — **decided 2026-09-24 (operator, daily review, bundle B10 D6.3): delete, as a no-spec round.** Delete `hub/ui/src/components/messages/` (`MessagesFeed`, `MessageCard`, `ConversationGroup`), `hub/ui/src/api/messages.ts` and the `@/api/messages` mock at `conversationShell.test.tsx:49`; remove `n11`'s three `DEAD` rows (`n11_query_error_surface.py:165-167`) and lower `MISREPORT_CEILING` and `UNHANDLED_SITE_CEILING` (`hub/tests/test_surface_ceilings.py`) by the drop `n11` measures; `CLIENTLESS_ROUTE_CEILING` does not move (the CLI transport still reaches the routes). Rebuild and commit the UI bundle with `hub/ui/src`. Full recipe: `spec-queue/tracks/B10.md` Final. Verified 2026-09-09: `MessagesFeed` is still named by no file outside
 its own, so the subtree is still tree-shaken out and the cross-agent view is still absent. The
 2026-09-02 reachability sweep found six more routes of this shape, and the note below records why six
 is a floor -- a depth-1 symbol grep cannot see a whole unreachable subtree, and the walk it asks for
@@ -32733,3 +32733,16 @@ delete both routes and their hooks. After B10's F259 change they no longer infla
 `a-loop-is-stopped-archived-and-delegated-from-its-own-tab` writes `loop_stopped` / `loop_archived`
 against the loop, those rows are readable only through the API. Repair shape: a short history list in
 the loop tab (newest first, from the field already fetched), or stop fetching it.
+
+## F419 (B) — the Overview tab's activity strip shows every project's events, and its warning dot never fires for the Hub's warnings
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B9 rounds
+(`spec-queue/tracks/B9.md` Final) and re-checked in session. `components/overview/OverviewPage.tsx:101`
+renders `getBufferedEvents().slice(-10)`, the instance-wide buffer the operator stream fills
+(`useSSE.ts`), with no `project_id` filter, on a single project's Overview tab. It is the only live
+consumer without `ActivityLog`'s filter, and `agent_output` chunks from any project will usually fill
+all ten pills. Its amber dot tests `event.severity === 'warning'` (`:209`), but the Hub writes
+`"warn"` (21 `severity="warn"` sites in `hub/hub`), so only `context_warning` ever shows amber. It gets
+more visible once B9's F251 lets 18 more event kinds through and F253 adds `stream_gap` (`"warn"`).
+Repair shape: filter by the page's project id (as `ActivityLog` does) and test `"warn"`, and add a test
+that fails if a foreign project's event reaches the strip.

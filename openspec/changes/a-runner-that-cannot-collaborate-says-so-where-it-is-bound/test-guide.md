@@ -6,6 +6,7 @@
 2. **No false warnings.** Controls 1.2 and 1.3 pass before and after.
 3. **The dead card is gone.** `grep -rn "AgentCard" hub/ui/src` finds nothing. `vitest` shows one
    test file fewer, and the removed tests are exactly `agentCardCollaboration.test.tsx`'s.
+3a. **Fixing the runner clears the warning.** Task 1.5 fails before and passes after.
 4. **No query surface moved.** `test_surface_ceilings.py` passes with no warning about a lowered
    count.
 
@@ -15,6 +16,8 @@
    Open the agent's settings, Execution. Below the runner picker, the line reads *"This agent will
    run, but cannot collaborate: This Codex agent's runner opted out …"*. Judge whether it reads as
    something to act on.
-2. Remove the flag, or enable yolo. The line disappears within the query's 30 s stale time, or on
-   reload. (Rebinding invalidates it at once. Editing the runner's flags may not: record which.)
+2. On the Runners page, remove the flag, or enable yolo, and save. Return to the agent's
+   Execution settings without reloading. The line is gone at once, well inside the 30 s stale
+   time (design D6). Then delete a runner that an agent is bound to: that agent's settings show the
+   cannot-run line without a reload.
 3. Bind a Claude runner. There is no collaboration line.

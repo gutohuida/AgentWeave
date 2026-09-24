@@ -41,9 +41,9 @@ The view SHALL state who currently decides additions to the loop's queue. Stoppi
 
 ### Requirement: An operator's stop is recorded in the loop's history as a firing's stop is
 
-A stop the operator makes, whether stated directly or by archiving the loop's job, SHALL be recorded against the loop as an event carrying its reason, the loop, the job, the actor and the time, in the same operation that ends the loop, and SHALL be announced to listening clients as a stop of that loop. An operation that changes the recorded reason of a loop that had already ended SHALL NOT record a second stop.
+A stop the operator makes, whether stated directly or by archiving the loop's job, SHALL be recorded against the loop as an event carrying its reason, the loop, the job, the actor and the time, in the same operation that ends the loop, and SHALL be announced to listening clients as a stop of that loop.
 
-A loop the operator stops SHALL record that it stopped, never that it completed, whatever the text of the reason given. Archiving a loop, directly or with its job, and each change of its control SHALL likewise be recorded against the loop in the same operation as the change, so that a change is never recorded without its event or its event without the change.
+A loop the operator stops SHALL record that it stopped, never that it completed, whatever the text of the reason given. A stop requested for a loop that has already ended SHALL be refused, with a statement naming how and when that loop ended, and SHALL leave the loop's recorded ending, reason and time exactly as they were; no caller SHALL change how, why or when a loop ended once that has been recorded. Archiving a loop, directly or with its job, and each change of its control SHALL likewise be recorded against the loop in the same operation as the change, so that a change is never recorded without its event or its event without the change.
 
 #### Scenario: The operator's stop appears in the loop's own history
 
@@ -56,11 +56,27 @@ A loop the operator stops SHALL record that it stopped, never that it completed,
 - **WHEN** recording the operator's stop fails
 - **THEN** the loop is not recorded as ended and its job is unchanged
 
-#### Scenario: Rewording an ended loop's reason is not a second stop
+#### Scenario: A stop sent for a loop that has already ended is refused and changes nothing
 
-- **GIVEN** a loop that has already ended
-- **WHEN** a caller supplies a new stop reason for it
-- **THEN** no further stop event is recorded against the loop
+- **GIVEN** a loop that has already ended, with a recorded ending, reason and time
+- **WHEN** a caller asks to stop it, giving a new reason
+- **THEN** the request is refused as a conflict, stating that the loop already ended and naming its recorded reason
+- **AND** the loop's recorded ending, reason and time are unchanged
+- **AND** no further stop event is recorded against the loop
+
+#### Scenario: The loop's view shows the real ending after a refused stop
+
+- **GIVEN** a loop's view that still offers stopping, for a loop that has meanwhile ended
+- **WHEN** the operator stops it from that view and the Hub refuses
+- **THEN** the view shows the refusal's text
+- **AND** the view then shows how the loop actually ended and no longer offers stopping
+
+#### Scenario: Archiving the job of a loop that has already ended still succeeds
+
+- **GIVEN** a loop that has already ended and whose job is not archived
+- **WHEN** the operator archives the loop's job
+- **THEN** the job and the loop are archived
+- **AND** the loop's recorded ending, reason and time are unchanged
 
 #### Scenario: An operator's stop is a stop whatever its reason says
 

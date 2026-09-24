@@ -1,5 +1,20 @@
 # Design — a runner that cannot collaborate says so where it is bound
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review found that the fix does not reach the operator in the one flow it
+exists for. The operator decided to fix it (D6 below) and approve the rest unchanged.
+
+- **The warning stayed up after the operator fixed the runner.** `useUpdateRunner` and
+  `useDeleteRunner` invalidate only `['project', pid, 'runners']` (`hub/ui/src/api/runners.ts:92`,
+  `:106`). The verdict this change renders is read under `['project', pid, 'agents',
+  'launchability']` with `staleTime: 30_000` (`hub/ui/src/api/agents.ts:379-387`), a different
+  prefix. So removing `--no-app-server` or enabling yolo on the runner left the line on screen, and
+  the test guide's step 2 said to "record which" instead of requiring the line to go. New design D6,
+  tasks 1.5 and 2.1a, and test-guide step 2 now require it to disappear without a reload. The
+  ADDED requirement gains one sentence and the scenario *"Fixing the runner clears the warning
+  without a reload"* so that this is part of the contract, not only of the tasks.
+
 **Built on the recommended answer to D6 for F178: build, by extending the mount F179 already made,
 and delete the dead card.** If the operator answers *delete*, this change is replaced by a smaller
 one. It would delete `AgentCard` and its test, remove `collaboration_ready`/`collaboration_reason`
@@ -72,3 +87,22 @@ comment says the indicator *"moved here — the place an operator looks"* while 
 - The picker can now show two `role="status"` lines, the cannot-run line and this one, though never
   both for one verdict (D3). Tests find each line by its text, not with a single
   `getByRole('status')`.
+
+## D6 — editing or deleting a runner re-reads the agents' verdict (operator review)
+
+The fix the line asks for is made on the runner, not on the binding: *"remove the flag or enable
+yolo"* is an edit on the Runners page, through `useUpdateRunner` (`hub/ui/src/api/runners.ts:86-94`).
+That hook, and `useDeleteRunner` (`:96-108`), invalidate `['project', pid, 'runners']` only. The
+per-agent verdict is `useAgentLaunchability`'s `['project', pid, 'agents', 'launchability']`
+(`hub/ui/src/api/agents.ts:379-387`), under the `agents` prefix, with a 30 s `staleTime`. Rebinding
+refreshes it (R3, via `useBindAgentRunner`'s `['project', pid, 'agents']`). Editing the runner
+does not. The operator would fix the runner, return to the agent, and still read *"cannot
+collaborate"*.
+
+So both hooks' `onSuccess` also invalidate `['project', pid, 'agents', 'launchability']`. The
+runner-side keys (`['project', pid, 'runners', 'launchability']` and `…, 'launchability-by-
+provider']`, `runners.ts:56`, `:69`) are already under the `runners` prefix and need nothing.
+`useCreateRunner` is left alone: a new runner is bound to no agent, so no agent's verdict can change.
+Deleting a bound runner does change one: the agent becomes `runnable: false`, and the cannot-run
+line must appear. `onSuccess`, not `onSettled`, matching the hooks' existing shape: a failed edit
+changes nothing a verdict depends on.

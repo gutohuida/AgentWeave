@@ -28,6 +28,9 @@ with `## Operator review, 2026-09-24`). The 2026-09-23 rows below remain undecid
 - APPROVED  a-specification-is-read-in-results-that-fit   B12 (F363). Hub-enforced 40,000-character budget; continuation by `identifiers` leaves out the preamble (operator); MODIFIED delta on `agent-capability-plane`. Preferably after B11's `an-agents-tool-server-is-the-one-its-hub-loaded`, but not blocked by it (its D5).
 - APPROVED  a-refused-first-send-leaves-no-exploration-behind   B12 (F330). A post-commit refusal archives the document and never deletes it; a creation failure refuses the send. **Two commits: the UI commit waits for the operator's `:8000` restart past the Python commit.**
 - REVISING  a-file-path-is-not-redacted-as-a-credential   B12 (F278). The Opus review found (a) a base64/uppercase-hex key segment still redacts the whole path, so the scenario overpromises, and (b) a 16-31-character token used as a path segment, redacted today, would survive. Re-derive the rule and re-measure both residuals (URLs carrying tokens, not only random base64).
+- APPROVED  a-loop-is-stopped-archived-and-delegated-from-its-own-tab   B10 (F225). Build Stop, Archive and delegation in the loop tab; `archive_job` still does not refuse a running loop (operator confirmed). Operator, after the Opus review: a stop on a loop that has already ended is **refused 409** and its record is left untouched (`end_loop` becomes write-once). Collides with B9's F335 guard; either order, per both designs.
+- APPROVED  a-runner-that-cannot-collaborate-says-so-where-it-is-bound   B10 (F178). The collaboration line under the runner picker, `AgentCard` deleted; runner update/delete now also refresh launchability (review fix). Overlaps `agents-no-longer-register-themselves` 2.9 (edits `AgentCard`), which is not yet approved.
+- APPROVED  a-loops-outstanding-mail-is-mail-not-yet-delivered   B10 (F259). Derived from inbound-queue delivery state, no migration.
 
 ## 2026-09-23
 

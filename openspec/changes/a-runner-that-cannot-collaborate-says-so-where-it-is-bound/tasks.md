@@ -29,10 +29,21 @@
   here too.
 - [ ] 1.4 Same file: `collaboration_reason: null` with `collaboration_ready: false` shows the
   fallback sentence (design D3).
+- [ ] 1.5 `hub/ui/src/__tests__/runnersApi.test.tsx` (new, following `tasksApi.test.tsx`: a real
+  `QueryClient`, `renderHook`, `globalThis.fetch` replaced, `useConfigStore.setState` with
+  `selectedProjectId: 'proj-1'`). Spy on `client.invalidateQueries`. `useUpdateRunner().mutateAsync(
+  {id: 'r1', updates: {flags: []}})` answered 200: the spy saw `{queryKey: ['project', 'proj-1',
+  'agents', 'launchability']}` as well as `['project', 'proj-1', 'runners']`. The same for
+  `useDeleteRunner().mutateAsync('r1')`. **Fails today** for both: only the `runners` key is
+  invalidated (design D6). A control in the same file: `useCreateRunner` does not invalidate the
+  agents' launchability key.
 
 ## 2. Implementation
 
 - [ ] 2.1 `RunnerPicker`: the line per design D3.
+- [ ] 2.1a `hub/ui/src/api/runners.ts`: `useUpdateRunner` (`:92`) and `useDeleteRunner` (`:106`)
+  `onSuccess` also invalidate `['project', projectId, 'agents', 'launchability']` (design D6).
+  `runnersUi.test.tsx` mocks these hooks, so it is unaffected.
 - [ ] 2.2 Delete `hub/ui/src/components/agents/AgentCard.tsx` and
   `hub/ui/src/__tests__/agentCardCollaboration.test.tsx`. Fix the comment at
   `hub/ui/src/lib/agentStatusConfig.ts:3` and the docstring of
