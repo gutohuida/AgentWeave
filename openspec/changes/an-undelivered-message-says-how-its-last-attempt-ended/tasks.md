@@ -8,8 +8,8 @@
       `hub/ui/src/api/agentChat.ts`. Check in particular that F273's premise is obsolete as design D4
       says: a run's facts carry `exit_code` from the row on both transports. Record in
       `spec-queue/tracks/B2.md`
-- [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate
-      an-undelivered-message-says-how-its-last-attempt-ended --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent re-derivation. `openspec validate
+      an-undelivered-message-says-how-its-last-attempt-ended --strict` passes. `RunFacts`' two constructions, the unredacted `run_failed.error` (`agent_trigger.py:1837`) and `QUEUE_EVENT_TYPES` confirmed; no change
 - [ ] 0.3 The operator records D11/F291 and D11/F273 in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — each must fail on today's code unless marked as a control

@@ -3,8 +3,9 @@
 - [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): an independent re-derivation. `grep -rn visibility` over `hub/hub`, `hub/ui/src`,
       `hub/tests`, `src/`; rebuild design's table before reading it. Check that no route or MCP tool
       writes the column and that no UI component reads the field. Record in `spec-queue/tracks/B2.md`
-- [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate
-      the-checkpoint-grant-says-it-reaches-every-checkpoint --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent
+      re-derivation. `openspec validate the-checkpoint-grant-says-it-reaches-every-checkpoint --strict`
+      passes. The rebuild now saves and restores every partial index (design D3); 1.4 is the check
 - [ ] 0.3 The operator records D11/F235 in `spec-queue/DECISIONS.md` and answers design Open
       Question 1
 
@@ -22,8 +23,14 @@
 - [ ] 1.4 (Hub, group 3) Migration: upgrade to head leaves `checkpoints` with no `visibility` column;
       downgrade one step restores it with every row `project`. A bare alembic run has no
       `checkpoints` table (`0044` creates it only beside `projects` and `conversations`), so stand the
-      table up by hand at the prior revision, as `test_migrations.py:3058-3086` does for `0097`. Add
-      the missing-table guard case beside it. Record that it FAILS today
+      table up by hand at the prior revision, as `test_migrations.py:3058-3086` does for `0097`,
+      **with a partial unique index on it** (B8's own DDL if B8 has landed, else
+      `CREATE UNIQUE INDEX ix_test_partial ON checkpoints (conversation_id) WHERE status = 'ready'`).
+      Assert that index's `sqlite_master.sql` is byte-identical after the upgrade and after the
+      downgrade, and that `pk_checkpoints`, `uq_checkpoints_id`, `ck_checkpoints_trigger`,
+      `ck_checkpoints_status` and `ck_checkpoints_ready_has_a_body` are still in the table's DDL
+      (R3: the F329 parity test does not reach this rebuild, so it cannot be the check). Add the
+      missing-table and column-already-gone guard cases beside it. Record that it FAILS today
 
 ## 2. Say it, and remove the concept from code
 
@@ -41,12 +48,14 @@
 ## 3. Drop the column (design D3; stopping before this group leaves a complete change)
 
 - [ ] 3.1 Read `.claude/rules/db-migrations.md`. New migration: drop `ck_checkpoints_visibility` and
-      `checkpoints.visibility` in `batch_alter_table`, guarded for a missing table; downgrade restores
-      both with server default `'project'`
+      `checkpoints.visibility` in `batch_alter_table`, guarded for a missing table and for a column
+      already gone; save every partial index's DDL from `sqlite_master` before the batch, drop it,
+      and re-execute it after (design D3); downgrade restores both with server default `'project'`,
+      around the same save-and-restore
 - [ ] 3.2 `db/models.py`: remove the column, `CHECKPOINT_VISIBILITIES`, the check and the DEAD comment;
-      drop `visibility="private"` from `hub/tests/test_checkpoint_record.py:541` and `:732`. If B8's
-      partial index exists by then, re-create it after the batch (design, Risks) and confirm the F329
-      parity test passes
+      drop `visibility="private"` from `hub/tests/test_checkpoint_record.py:541` and `:732`. Whether or
+      not B8's partial index exists by then, 1.4 is the check; the F329 parity test must still pass
+      but does not exercise the rebuild
 - [ ] 3.3 Bump the head assertions in `hub/tests/test_migrations.py` and
       `hub/tests/test_project_persistence.py`
 - [ ] 3.4 Run 1.4 and the full suite again, counts inline

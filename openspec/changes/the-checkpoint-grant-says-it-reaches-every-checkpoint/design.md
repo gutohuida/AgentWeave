@@ -62,8 +62,35 @@ assertion.
 ### D3 — Drop the column, last
 
 A new migration drops `checkpoints.visibility` and `ck_checkpoints_visibility` (SQLite:
-`batch_alter_table`), guarded for a missing table as `0097` is. Downgrade re-adds the column with
-server default `'project'` and the check over the three values, which is the state `0097` left.
+`batch_alter_table`), guarded to return early when the table is missing (as `0097` is) **or the
+column is already gone** (a database whose `checkpoints` table `create_all` built from the new
+model before alembic ran, which is exactly the F329 parity test's reference build). Downgrade re-adds
+the column with server default `'project'` and the check over the three values, which is the state
+`0097` left.
+
+**Why a rebuild, and how it keeps every index exactly (R3).** A plain `ALTER TABLE checkpoints DROP
+COLUMN visibility` fails on SQLite while `ck_checkpoints_visibility` names the column (measured R3:
+*"error in table checkpoints after drop column: no such column: visibility"*), so the table must be
+rebuilt. A rebuild re-creates indexes from reflection. On the installed SQLAlchemy (2.0.50) the
+reflection carries a partial index's `WHERE` and the rebuild kept it (measured R3 against a copy of
+the table with a partial unique index; it also kept `pk_checkpoints`, `uq_checkpoints_id` and every
+named `CHECK`, the names `0088`'s downgrade drops by). But `pyproject.toml` allows any
+`sqlalchemy>=2.0`, so the migration does not depend on reflection for this. It is safe in either
+build order with B8's `a-checkpoint-is-handed-over-once-and-says-where-it-went`:
+
+1. Before the batch, read `SELECT name, sql FROM sqlite_master WHERE type='index' AND
+   tbl_name='checkpoints' AND sql LIKE '%WHERE%'` (every partial index on the table, whoever made
+   it) and drop each.
+2. Run the batch (drop the check, drop the column).
+3. Re-execute each saved `sql` verbatim, if an index of that name does not already exist.
+
+Downgrade does the same around its own batch. **If B8 lands first**, its partial unique index
+`ix_checkpoints_one_handover_per_conversation` is saved and restored byte for byte. **If this lands
+first**, there is nothing to save, and B8's migration creates its index on the rebuilt table (it does
+no rebuild of its own: B8 design D1 chose a nullable column without a foreign key precisely to avoid
+one). Keyed on *every* partial index rather than on B8's name, so neither change needs to know the
+other's number or name. Non-partial indexes are left to reflection, which has always carried them
+(`0088` rebuilt this table the same way).
 
 Last, and separable: after groups 1-2 the column is inert (written by its default, read by nothing).
 Stopping there is a complete change; group 3 removes the inert column. It is kept in this change
@@ -78,14 +105,14 @@ already lists exactly what the removal touches.
   `list_checkpoints`/`read_checkpoint` go through the same routes and an agent reading the field
   would have read `project` every time.
 
-- **Recreating `checkpoints` under B8's index (R2).** SQLite cannot `DROP COLUMN` a column named in
-  a table-level `CHECK` (`ck_checkpoints_visibility`), so this migration must use
-  `batch_alter_table`, which rebuilds the table and re-creates its indexes from reflection. If B8's
-  `a-checkpoint-is-handed-over-once-and-says-where-it-went` lands first, its partial unique index
-  `ix_checkpoints_one_handover_per_conversation` (`... WHERE` clause) is on this table, and a rebuild
-  that lost the `WHERE` would turn it into a full unique index on `conversation_id`. The migration
-  re-creates that index explicitly after the batch if it existed, and the F329 parity test
-  (`test_migrations.py:3669`, DDL of `create_all`+alembic against alembic+`create_all`) is the check.
+- **Recreating `checkpoints` under B8's index (R2, corrected R3).** R2 named the F329 parity test
+  (`test_migrations.py:3669`) as the check that the rebuild keeps B8's `WHERE`. **It is not one:**
+  neither of its builds reaches the rebuild. The reference build runs `create_all` first, so the
+  table has no `visibility` and the guard returns; the alembic-only build has no `checkpoints` table
+  at all (`0044` creates it only beside `projects` and `conversations`). The check is task 1.4's
+  migration test, which stands the old table up by hand **with a partial unique index on it** and
+  asserts the index's `sqlite_master.sql` is byte-identical after upgrade and after downgrade. D3
+  gives the save-and-restore that makes it pass whatever the SQLAlchemy version.
 - **Same function as B7.** `worker-spend-counts-against-the-budget` (B7) adds parameters to
   `generate_checkpoint`, whose `visibility` parameter this change removes; whichever lands second
   rebases. B7 and B8 each also name migration `0106`; numbers are assigned at IMPL in landing order,

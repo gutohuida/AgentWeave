@@ -113,6 +113,21 @@ Otherwise all three keep today's text.
 | `reconcile_run` or its commit | **500** *"Could not record run {id} as interrupted: {error}"*, error fitted and redacted as `_safe_error_summary` does | the transaction rolls back; the run stays `running` (process already terminated, so a second press reaches `reconcile_run` again with the pid dead) |
 | post-commit scheduling | **200** as D2; the failure is logged | run `interrupted`; the queue is re-drained by the next run end or project open, as after any startup reconciliation that could not schedule |
 
+### D5 — The operator sees what Stop answered (R3)
+
+Traced from the button: `handleStop` (`AgentOutputPanel.tsx:823-842`) posts to this route, and on a
+non-OK answer throws, logs to the console, and clears `isStopping`. Nothing is shown. That is true of
+today's 409 as well, but D4 exists to say something specific (*could not stop the process {pid}…*,
+*could not record run {id}…*), and today the operator would press Stop, see the button flicker back,
+and read nothing. So on a non-OK answer `handleStop` reads the body's `detail` (falling back to
+*"Stop failed with status {n}"*) and sets it as `submissionError`, which the conversation already
+renders as its `run-failure` banner (`AgentOutputPanel.tsx:758`) and clears on the next send
+(`:295`, `:998`). A 200 needs nothing new: the success message is not shown today either, and the
+run's own *Turn interrupted* and the agent's status are the answer.
+
+*Rejected:* **a toast or a Stop-specific banner.** A second surface for the same kind of fact; the
+banner is where a turn that did not happen already explains itself.
+
 ## Risks / Trade-offs
 
 - **Pid reuse.** If the orphan exited and its pid was reused, Stop terminates an unrelated process

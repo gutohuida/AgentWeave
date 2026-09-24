@@ -11,9 +11,11 @@
 5. **The reaper asks about every attempt.** Task 1.4, seeded by `started_at` so that insertion order
    cannot make it pass (R2: today's `.first()` is always the earliest-started run).
 6. **Scope: job input only, every open row.** Tasks 1.9 and 1.10.
-7. **Nothing else moved, except on purpose.** Controls 1.8; 1.8a moves or stays by Open Question 3;
+7. **Nothing else moved, except on purpose.** Controls 1.8, 1.8a (an agent with no runner still
+   reads `failed` at startup; it inverts only if Open Question 3 is answered *yes* now) and 1.11;
    1.8b awaits the retries a spawn failure now gets. The full-suite count in 2.5 names any other move.
 8. **Live.** Task 3.1: `t_row19_crash_job.py` shows `completed` on the firing after the restart.
+9. **The loops view refreshes on a withdrawal or give-up.** Task 1.12.
 
 ## Human-only
 
@@ -23,3 +25,5 @@
    behind this firing"* in red.)
 2. While a firing's input waits to be retried, its row reads **in_progress** in grey, and the loop is
    not shown as firing. That is expected: the work is not done and not failed.
+3. Withdraw that waiting input from the agent's queue card with the Loops page open: the loop's
+   history row turns to **stopped** without a reload.

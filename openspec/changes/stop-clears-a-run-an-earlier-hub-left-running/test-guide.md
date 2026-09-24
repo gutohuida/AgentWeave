@@ -11,6 +11,8 @@
 6. **The busy reasons name Stop.** Task 1.8: the trigger's `waiting_reason`, the scheduler and the
    queue status route. **Nothing is announced that did not commit:** task 1.9.
 7. **Live.** Task 3.1 reproduces the state F168 described and clears it with the real button.
+8. **A refusal reaches the screen.** Task 1.10: a 409 or 500 from Stop is shown in the
+   conversation's banner, not only logged.
 
 ## Human-only
 

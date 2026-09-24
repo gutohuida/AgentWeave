@@ -79,6 +79,11 @@ Decision D11 (recommended, `spec-queue/tracks/B2.md`): the trigger for a stale-r
   meet the 409; whichever of the two lands second says so in its design.
   `why-queued-input-waits-is-told-truthfully` (B1) rewrites how the queue status route derives its
   reason; the sentence here goes into whichever derivation lands second.
-- No migration, no UI change: the conversation header's Stop already calls this route.
+- No migration. **One UI change (R3; R1 said none):** the conversation header's Stop already calls
+  this route and settles on its success (`run_interrupted` invalidates the agents query,
+  `useSSE.ts:474-487`; `AgentOutputPanel.tsx:315` clears the stopping state), but on any non-2xx
+  answer `handleStop` only writes `console.error` and re-enables the button
+  (`AgentOutputPanel.tsx:823-842`). The 409 and 500 sentences design D4 composes would never reach
+  the operator. Design D5 shows the answer's `detail` in the conversation's banner. A bundle refresh.
 - Not in scope, and deliberately: `GET /runs` and a per-run cancel route. F168's own bound shows
   neither would clear this state (a cancel hitting the same empty registries has the same 409).

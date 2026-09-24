@@ -19,9 +19,12 @@ attempt on it is running: by the attempt that ends it, whatever that attempt end
 the reason, where the Hub gives up on the input; and as stopped where the operator withdraws it.
 Input someone other than the firing added to the same conversation SHALL NOT hold the record open.
 
-Where the Hub starts and finds such a record open, it SHALL leave it open if its input is queued or
-any attempt on it is running, and SHALL conclude it as failed otherwise. Whether an attempt is
-running SHALL be asked of every attempt on the conversation, not of one chosen without an order.
+Where the Hub starts and finds such a record open, it SHALL leave it open if any attempt on it is
+running, or if its input is queued for an agent the Hub can still deliver to (one with a runner
+bound, or one whose delivery waits on its provider's usage reset), and SHALL conclude it as failed
+otherwise. Whether an attempt is running SHALL be asked of every attempt on the conversation, not
+of one chosen without an order. Input queued for an agent with no runner is concluded as failed, as
+it is when a firing's turn cannot begin while the Hub is running.
 
 #### Scenario: A retry after a crash completes, and the history says so
 
@@ -66,3 +69,47 @@ running SHALL be asked of every attempt on the conversation, not of one chosen w
   running attempt
 - **WHEN** the Hub starts
 - **THEN** that record reads failed
+
+#### Scenario: A firing whose agent has no runner is still concluded at startup
+
+- **GIVEN** a firing record in progress whose input is queued for an agent with no runner bound and
+  no provider refusal
+- **WHEN** the Hub starts
+- **THEN** that record reads failed
+
+## MODIFIED Requirements
+
+### Requirement: A stranded firing SHALL be recoverable without restarting the Hub
+
+The Hub SHALL clear firings left in progress with no live run behind them and none of their input
+still queued without requiring a restart. A restart SHALL remain sufficient, but SHALL NOT be
+necessary. A firing whose input is still queued is waiting to be delivered, not stranded.
+
+An unattended loop is the case this exists for, and it is the case where nobody restarts anything.
+Before this, a stranded firing was reconciled only at Hub start, so the loop card stayed wrong for as
+long as the Hub stayed up.
+
+A loop SHALL stop being reported as firing as soon as no run is live behind its firing, with no
+sweep and no restart. The firing's record SHALL be concluded by whatever settles its input: the
+attempt that ends it, the Hub giving the input up, or the operator withdrawing it; and a record that
+none of these reached SHALL be concluded at the next start.
+
+#### Scenario: A stranded firing is cleared while the Hub keeps running
+
+- **GIVEN** a firing recorded as in progress with no live run behind it and none of its input queued
+- **WHEN** the Hub continues running without being restarted
+- **THEN** the loop is not reported as firing
+- **AND** the firing's record is concluded no later than the next start
+
+#### Scenario: A firing waiting for its retry is not stranded
+
+- **GIVEN** a firing whose attempt failed and whose input went back to the queue
+- **WHEN** the Hub continues running
+- **THEN** the firing's record stays in progress
+- **AND** the loop is not reported as firing while no run is live
+
+#### Scenario: A live firing is never cleared out from under itself
+
+- **GIVEN** a firing whose run is still running
+- **WHEN** the Hub clears stranded firings
+- **THEN** that firing is left alone

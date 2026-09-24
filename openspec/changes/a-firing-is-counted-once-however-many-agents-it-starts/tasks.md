@@ -4,8 +4,8 @@
       `run_count` write; `_do_fire_job`, `_stage_additional_selections`, `_stage_selection`) and every
       reader of `run_count` in `hub/hub`, `hub/ui/src` and `src/`. Rebuild design's table from `grep`
       before reading it. Record in `spec-queue/tracks/B2.md`
-- [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate
-      a-firing-is-counted-once-however-many-agents-it-starts --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent re-derivation. `openspec validate
+      a-firing-is-counted-once-however-many-agents-it-starts --strict` passes. both increments (`scheduler.py:3443`, `:3756`) and the badge (`JobCard.tsx:435`) confirmed; no change
 - [ ] 0.3 The operator records D1 in `spec-queue/DECISIONS.md` (bundle B2). No task below starts
       before it, and none starts if D1 is answered otherwise than *a row is a dispatch*
 

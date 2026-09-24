@@ -7,8 +7,9 @@
       and `hub/hub/scheduler.py`. Rebuild design's two tables from `grep` before reading them. Check in
       particular: is there any other writer that moves a job-origin entry out of `queued`? Is autoflush
       really on for the session at each site? Record in `spec-queue/tracks/B2.md`
-- [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate
-      a-retried-firing-records-how-its-work-ended --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent re-derivation. `openspec validate
+      a-retried-firing-records-how-its-work-ended --strict` passes. Bounded D4 (the pinned case stays a
+      control), MODIFIED the stranded-firing requirement, added D6 (loops refresh) and tasks 1.11, 1.12, 2.7
 - [ ] 0.3 The operator records D1 in `spec-queue/DECISIONS.md` and answers design Open Questions 1,
       2 and 3. No task below starts before D1 is recorded as *a row is a dispatch*
 
@@ -18,7 +19,8 @@ New file `hub/tests/test_a_retried_firing_records_how_its_work_ended.py`. Reuse 
 `test_run_reconciliation.py`. Seed rows directly, as that file does; each case names the
 conversation `conv-<case>` and writes the job's queue entry with `origin_type="job"`.
 
-- [ ] 1.1 (F147, crash) `JobRun` `in_progress` on C; `Run` `running`, `pid=None`, on C; a job entry
+- [ ] 1.1 (F147, crash) The agent has a runner bound (R3: D4 keeps the row open only then, or under a
+      refusal); `JobRun` `in_progress` on C; `Run` `running`, `pid=None`, on C; a job entry
       `delivered` in that run at `delivery_attempts=0`. Call `reconcile_interrupted_runs()` then
       `reconcile_stale_job_runs()`. Assert the entry is `queued` and the `JobRun` is still
       `in_progress`. Then insert a second `Run` on C, deliver the entry to it, and call
@@ -54,10 +56,15 @@ conversation `conv-<case>` and writes the job's queue entry with `origin_type="j
       run → `in_progress`); and the two refusal cases in `test_a_held_agent_is_busy.py` that read
       `reconcile_stale_job_runs` (`test_a_held_firing_survives_a_restart`,
       `test_a_firing_whose_reset_passed_while_the_hub_was_down_survives_a_restart`)
-- [ ] 1.8a (Open Question 3) `test_a_held_agent_is_busy.py:732-739`,
-      `test_a_firing_for_an_agent_with_no_runner_and_no_refusal_still_fails`: if the operator answers
-      *yes*, invert it (the row stays `in_progress`) and rename it; record that the inverted form
-      FAILS today. If *no*, it stays a control and D4 takes the narrower exception
+- [ ] 1.8a Control (R3's bounded D4): `test_a_held_agent_is_busy.py:732-739`,
+      `test_a_firing_for_an_agent_with_no_runner_and_no_refusal_still_fails` keeps passing unchanged.
+      Only if the operator answers Open Question 3 *yes* now: invert and rename it instead, and record
+      that the inverted form FAILS today
+- [ ] 1.11 (D4 scope, control) 1.1's seed with the returned entry `origin_type="operator"` instead of
+      `"job"`: after the startup pair the row reads `failed` (an operator's input does not hold a
+      dispatch open). Passes today and must keep passing
+- [ ] 1.12 (D6, UI) In `useSSE`'s tests: a `queue_entry_withdrawn` frame and a `queue_entry_abandoned`
+      frame each invalidate `['project', pid, 'loops']`. Record that both FAIL today
 - [ ] 1.8b `test_scheduler.py:1289-1328` (spawn fails): await every background run until
       `agent_trigger._background_runs` is empty (the retries are scheduled by the re-drain after the
       first snapshot), then assert the entry `withdrawn` and the `JobRun` `failed` with the
@@ -89,11 +96,16 @@ conversation `conv-<case>` and writes the job's queue entry with `origin_type="j
       abandoned job entry) and the
       route at `api/v1/inbound_queue.py:259`. Each wraps the call so a raise is logged and does not
       change what the writer answers
-- [ ] 2.4 `hub/hub/run_reconciliation.py` `reconcile_stale_job_runs`: D1's two conditions per row;
-      delete `_waits_on_a_refusal`; rewrite the docstring's D10 paragraph (design D4)
+- [ ] 2.4 `hub/hub/run_reconciliation.py` `reconcile_stale_job_runs`: *any running run* as an `EXISTS`;
+      queued **job** input keeps the row open only where its agent has a runner bound or
+      `_waits_on_a_refusal` (narrowed to job-origin entries) holds; rewrite the docstring's D10
+      paragraph (design D4, bounded by R3)
 - [ ] 2.5 Run group 1; every row passes. `py -3.11 -m pytest hub/tests/ -q`, count recorded inline;
       any other moved assertion is named and explained
 - [ ] 2.6 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, clean
+- [ ] 2.7 `hub/ui/src/hooks/useSSE.ts`: invalidate the loops query on `queue_entry_withdrawn` and
+      `queue_entry_abandoned` (design D6). `cd hub/ui && npm test -- --run` and `npm run lint`; `make ui`;
+      commit `hub/ui/src` and `hub/hub/static/ui` together
 
 ## 3. Drive it
 

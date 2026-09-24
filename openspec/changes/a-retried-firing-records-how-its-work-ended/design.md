@@ -133,11 +133,20 @@ The scheduler give-up is not a route; it logs and continues, for the same reason
 `EXISTS` queries. That fixes F147's latent `.first()` (`run_reconciliation.py:265-268`) by
 construction: the question is *is any run on this conversation running*, which has no order.
 
-`_waits_on_a_refusal` (`:214-229`) is deleted. The job input it protects is queued, so D1 already
-leaves it alone.
+**R3 bounds the queued-input half the way the live path is bounded.** The reaper leaves a row open
+for its queued job input only where the Hub can still deliver that input: the input's agent has a
+runner bound (`Agent.runner_id is not None`, the test `trigger_agent_directly` refuses on,
+`agent_trigger.py:688`), or it waits on a provider refusal (today's `_waits_on_a_refusal`,
+`:214-229`, narrowed to `origin_type == "job"` entries). Otherwise it concludes `failed` as today.
+So `_waits_on_a_refusal` is **kept and widened**, not deleted, and the pinned case
+`test_a_held_agent_is_busy.py:732-739` (queued input, no runner, no refusal → `failed`) stays a
+control. The F123 crash is still fixed: the crashed run's agent had a runner, or it could not have
+run. Why bounded: the live path concludes a firing whose turn cannot begin `failed` at once
+(`scheduler.py:3471-3477`, D5, unchanged here). A reaper that left the same firing open when the
+Hub died a moment earlier (between the commit at `:3444` and `:3472`) would give one firing two
+verdicts according to when the Hub died. Both widen together if Open Question 1's follow-up lands.
 
-**One stance of the D10 comment is reversed. R2: this is a decided, pinned case, so it is Open
-Question 3, not taken here.** That comment
+**The unbounded form R2 described, kept for Open Question 3.** That comment
 (`run_reconciliation.py:251-257`) keeps failing a firing *"waiting for a runner to be bound"*
 because the Hub cannot promise that repair. With D1, a row whose **retried** input is queued for an
 agent that has since lost its runner stays `in_progress`. That is what the queue itself promises
@@ -147,7 +156,32 @@ a runner delivers it"*). The card does not show the loop as firing (`firing_acti
 concludes it `failed` at once, before any reaper. What is affected is a row left `in_progress` with
 queued input and no runner: after a retry (new with D2), or after a Hub that died between the
 firing's commit (`:3444`) and `:3472`. That second shape is exactly what
-`test_a_held_agent_is_busy.py:732-739` seeds, and it inverts.
+`test_a_held_agent_is_busy.py:732-739` seeds; it would invert under the unbounded form, and stays a
+control under the bounded one.
+
+**The main spec's stranded-firing requirement (R3).** `loop-firing-accountability`'s *"A stranded
+firing SHALL be recoverable without restarting the Hub"* has a scenario whose THEN reads *"that
+firing is eventually recorded as failed"* for any firing in progress with no live run while the Hub
+keeps running. This change makes such a row the normal state while a retry waits, so the delta
+MODIFIES it: a firing whose input is still queued is waiting, not stranded. The *"eventually
+recorded as failed"* clause is replaced by what the code does, because it never did what it says:
+the 2026-08-21 design D2 rejected a periodic sweep and fixed `firing_active`'s derivation instead
+(`api/v1/jobs.py:454-466`), and no test in `hub/tests` pins the clause (`grep` for the scenario's
+words finds none). The loop stops reading as firing at once; the record is concluded by whatever
+settles its input, or by the next start.
+
+### D6 — The loops view hears a conclusion that has no run event (R3)
+
+The loops list and detail (`api/v1/loops.py:60-100`, `history[].status`) are refetched on the
+terminal `run_*` events (`useSSE.ts:474-482`), because until now every conclusion happened just
+before one. D3 adds two that do not: the operator's withdrawal broadcasts `queue_entry_withdrawn`,
+and the scheduler's give-up broadcasts `queue_entry_abandoned` (`turn_scheduler.py:640-650`). Neither
+invalidates `['project', pid, 'loops']` today (`useSSE.ts:445-451`, `:501-510`), so the loop's
+history would keep reading `in_progress` until something else refetched it. Add that invalidation
+to both cases. Unconditional: the withdrawal payload is `{entry_id, agent}` and does not say whether
+the entry was a job's, and a refetch of one list is cheap. The Jobs page's history (`['project', pid,
+'jobs', id]`) is not refreshed by run events either, today; that is older than this change and is not
+carried here.
 
 ### D5 — The firing's own refusal is unchanged here
 
@@ -204,9 +238,13 @@ rows, which of them were later retried to completion without re-deriving F147's 
    `failed` and called it correct. `a-spent-allowance-holds-the-queue` D10 kept that verdict
    deliberately (*"a firing waiting for a runner to be bound waits on a repair the Hub cannot
    promise, so the existing rule stands for it"*), and `test_a_held_agent_is_busy.py:732-739` pins it.
-   *Recommended:* yes, answered together with Question 1, because it is the same principle (input
-   the queue still holds is not a failed dispatch; F96 promises its delivery on repair), and the loop
-   is not reported as firing either way. *If no:* D4 keeps a narrower exception: it leaves the row
-   open only when its queued job input's agent has a runner bound or a refusal hold (today's
-   `_waits_on_a_refusal`, widened), and fails it otherwise. The F123 crash is still fixed, the pinned
-   test stays a control, and a crashed firing for an unbound agent reads `failed` as today.
+   **R3's recommendation: not in this change; answer it with Question 1, in the same follow-up.**
+   D4 as written now takes the bounded form (a runner bound or a refusal hold keeps the row open;
+   no runner fails it), so the pinned test stays a control and the F123 crash is still fixed. The
+   principle R2 cited is right (input the queue still holds is not a failed dispatch; F96 promises
+   its delivery on repair), but it is the same principle as Question 1, and taking it for the
+   reaper alone would give one firing two verdicts by the moment the Hub died (D4). *If the
+   operator answers yes now:* D4 drops the runner half, 1.8a inverts, and the reaper and the live
+   path disagree until Question 1's follow-up lands. *If no for good:* D4 stands as written.
+   (R2 recommended *yes, answered together with Question 1*; R3 makes "together" explicit, since
+   Question 1 is recommended for a follow-up.)

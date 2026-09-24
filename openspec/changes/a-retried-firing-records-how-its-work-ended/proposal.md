@@ -72,11 +72,26 @@ when one attempt has.
   (`agent_trigger.py:1567-1571`), so it can never withdraw job input.) The operator's withdrawal
   strands a row **today** as well, not only after this change: withdraw a job's input while its
   agent is busy and the row stays `in_progress` until the next Hub start.
-- **The startup reaper uses the same rule** (design D4): it leaves a row whose conversation holds
-  queued job input, and asks whether *any* run on the conversation is running (an `EXISTS`), not
-  whichever `.first()` returns. `_waits_on_a_refusal` is deleted as a subset. **This reverses a
-  pinned, decided case** (a firing queued for an agent with no runner reads `failed` at restart;
-  `test_a_held_agent_is_busy.py:732-739`). Open Question 3 asks the operator.
+- **The startup reaper uses the same rule, bounded the way the live path is** (design D4): it
+  asks whether *any* run on the conversation is running (an `EXISTS`), not whichever `.first()`
+  returns, and it leaves a row open whose queued job input the Hub can still deliver: the agent has
+  a runner bound, or the input waits on a provider refusal (today's `_waits_on_a_refusal`, widened).
+  A row whose queued input waits on an agent with **no runner** still reads `failed` at restart, as
+  the 2026-08-21 decision and `test_a_held_agent_is_busy.py:732-739` pin. (R3: R2 had D4 leave
+  every row with queued input open, and asked the operator to reverse the pinned case. With Open
+  Question 1 recommended for a *follow-up*, that would make the reaper and the live path disagree
+  about the same firing: `failed` at once when its turn cannot begin, `in_progress` if the Hub
+  crashed a moment earlier. Open Question 3 now moves with Question 1.)
+- **The main spec's "stranded firing" requirement is restated** (R3). `loop-firing-accountability`
+  says a firing in progress with no live run behind it *"is eventually recorded as failed"* while the
+  Hub keeps running. This change makes such a row normal while a retry waits, so the requirement is
+  MODIFIED: a firing whose input is still queued is waiting, not stranded. The *"eventually recorded
+  as failed"* clause was never implemented as written (the 2026-08-21 design D2 fixed
+  `firing_active`'s derivation instead of adding a sweep, and no test pins the clause), and is
+  replaced by what the code does.
+- **The loops view refreshes when a withdrawal or give-up concludes a dispatch** (design D6, R3):
+  `useSSE.ts` invalidates the loops query on `queue_entry_withdrawn` and `queue_entry_abandoned`,
+  as it already does on the terminal `run_*` events (`useSSE.ts:474-482`).
 - A firing whose turn did not begin (`scheduler.py:3471-3477` for the primary selection,
   `:3611-3616` for each extra selection of a wide flow) is **unchanged**: it is concluded `failed` at
   once, as the operator decided on 2026-08-21. Whether that verdict should wait too is Open
@@ -87,23 +102,28 @@ when one attempt has.
 ### Modified Capabilities
 
 - `loop-firing-accountability`: adds a requirement stating when a firing's record for one agent
-  concludes, and that a retry that completes the work is what the record says.
+  concludes, and that a retry that completes the work is what the record says; modifies *"A
+  stranded firing SHALL be recoverable without restarting the Hub"* so a firing waiting for its
+  retry is not stranded.
 
 ## Impact
 
 - `hub/hub/scheduler.py` (`finalize_job_run_for_conversation` → `conclude_dispatches_for_conversation`),
   `hub/hub/api/v1/agent_trigger.py` (five run-end sites),
   `hub/hub/turn_scheduler.py` (give-up), `hub/hub/api/v1/inbound_queue.py` (operator withdrawal),
-  `hub/hub/run_reconciliation.py` (`reconcile_stale_job_runs`).
+  `hub/hub/run_reconciliation.py` (`reconcile_stale_job_runs`), `hub/ui/src/hooks/useSSE.ts`
+  (design D6).
 - Routes changed: `DELETE /queue/entries/{id}` gains a write. Its answer when that write raises is
   in design D3.
-- No migration. No new status. No UI change: `in_progress` already renders (`JobCard.tsx:91-102`,
-  neutral), and `firing_active` already requires a `running` `Run` (`api/v1/jobs.py:454-466`), so a
-  row waiting for its retry never shows the loop as firing.
+- No migration. No new status. `in_progress` already renders (`JobCard.tsx:91-102`, neutral), and
+  `firing_active` already requires a `running` `Run` (`api/v1/jobs.py:454-466`), so a row waiting
+  for its retry never shows the loop as firing. **One UI line** (R3; R1 said none): the loops-query
+  invalidation in design D6, so a bundle refresh.
 - **Existing tests that move (R2; R1 said none would):**
   - `test_a_held_agent_is_busy.py:732-739`, `test_a_firing_for_an_agent_with_no_runner_and_no_refusal_still_fails`
-    — seeds an `in_progress` row with queued job input and no refusal and asserts `failed` at
-    restart. D4 leaves it `in_progress`. It inverts, or stays, according to Open Question 3;
+    — seeds an `in_progress` row with queued job input, no runner and no refusal, and asserts
+    `failed` at restart. Under D4 as R3 bounds it, it **stays a control**. It inverts only if the
+    operator answers Open Question 3 *yes* now rather than with Question 1's follow-up;
   - `test_scheduler.py:1289-1328` (`test_loop_fire_whose_spawn_fails_leaves_the_job_run_failed_not_stuck_in_progress`) — asserts `failed` after awaiting only
     the background runs that existed before the retries were scheduled. After D2 the first failure
     requeues (attempt 1 of 3), so the row reads `in_progress` until the third attempt abandons the

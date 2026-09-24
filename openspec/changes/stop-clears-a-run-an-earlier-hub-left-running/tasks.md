@@ -8,8 +8,9 @@
       (`pid_alive`, `terminate_process_tree`). Check in particular: is `trigger_agent_directly` really
       the only creator of `Run` rows (grep `Run(`)? Does the UI's Stop (`AgentOutputPanel.tsx:822-840`)
       settle on `run_interrupted` as it does on `run_stopped`? Record in `spec-queue/tracks/B2.md`
-- [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate
-      stop-clears-a-run-an-earlier-hub-left-running --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent
+      re-derivation, traced from the Stop button. `openspec validate
+      stop-clears-a-run-an-earlier-hub-left-running --strict` passes. Added design D5 and tasks 1.10, 2.7
 - [ ] 0.3 The operator records D11/F168 in `spec-queue/DECISIONS.md` and answers design Open
       Question 1
 
@@ -49,6 +50,11 @@ and seed `started_at` either side of it.
       broadcast (capture `sse_manager.broadcast`), and the run reads `running`. Record that it FAILS
       today (the function does not exist; the startup loop broadcasts before its commit)
 
+- [ ] 1.10 (UI, design D5) In the `AgentOutputPanel` tests: with the agent `running`, mock the stop
+      route to answer **409** with `{"detail": "Could not stop the process 4242 …"}`; press Stop. The
+      conversation's banner shows that sentence, and the Stop button is enabled again. Same for a
+      **500**. Record that both FAIL today (nothing is rendered). A 200 answer shows no banner (control)
+
 ## 2. The fix
 
 - [ ] 2.1 `hub/hub/run_liveness.py`: `PROCESS_STARTED_AT`, and `started_by_an_earlier_process(run)`
@@ -60,6 +66,8 @@ and seed `started_at` either side of it.
 - [ ] 2.5 Run group 1; full `py -3.11 -m pytest hub/tests/ -q`, count inline; any moved assertion is
       named and explained
 - [ ] 2.6 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, clean
+- [ ] 2.7 `hub/ui/src/components/agents/AgentOutputPanel.tsx` `handleStop`: design D5. `cd hub/ui && npm
+      test -- --run` and `npm run lint`; `make ui`; commit `hub/ui/src` and `hub/hub/static/ui` together
 
 ## 3. Drive it
 

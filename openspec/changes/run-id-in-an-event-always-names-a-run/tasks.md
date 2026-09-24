@@ -4,8 +4,8 @@
       and every other persist or broadcast of a `JobRun` id; every reader of `run_id` out of event
       data in `hub/hub`, `hub/ui/src` and `scripts/drive`. Rebuild design's reader table before
       reading it. Record in `spec-queue/tracks/B2.md`
-- [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate
-      run-id-in-an-event-always-names-a-run --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent re-derivation. `openspec validate
+      run-id-in-an-event-always-names-a-run --strict` passes. the ten sites and `run_job`'s answer re-grepped; the one reader (`agents.py:883-891`) and the MCP pass-through confirmed; no change
 - [ ] 0.3 The operator records D1's second half in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — each must fail on today's code
