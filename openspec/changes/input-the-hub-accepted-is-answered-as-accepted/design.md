@@ -1,10 +1,33 @@
 # Design — input the Hub accepted is answered as accepted
 
+## Operator review, 2026-09-24
+
+Adversarial Opus review: `spec-queue/tracks/reviews/B11-2026-09-24.md` §4, APPROVE WITH FIXES. The
+operator's decisions (same file, head): **F349 absorbs the loop/flow/job firing path**, and
+**retries are for transient errors only**. Applied here:
+
+- **HIGH, the firing path** (`scheduler.py:3444`, `:3467`, `:3471`, `:3514`, `:3605`): folded in as
+  D6. Both scheduler sites use `schedule_accepted`, every post-commit event of a firing uses
+  `persist_accepted_event`, and a non-terminal `waiting_reason` leaves the `JobRun` in progress, not
+  `failed`. Tasks 1.10-1.13. That is a firing that has not started *yet*, so the two requirements that
+  say when a firing is failed get MODIFIED deltas that say so (`loop-firing-accountability`,
+  `runtime-diagnostics`).
+- **MEDIUM, the retry was not bounded**: D1 now classifies the error. Only a transient one
+  (`OperationalError`, or a message naming a locked database) is retried. Anything else is logged
+  once, is not retried or deferred, and leaves the entry queued. Tasks 1.14-1.15.
+- **LOW, restart**: D2 now says the pending retries and the deferred set live in memory, and names what
+  picks a queued entry up after a restart.
+- **LOW, the requirement text**: it said "whatever fails after the input was queued". It now carries
+  the exception D3's table already accepted: a withdrawal that fails after a refusal still answers 500.
+  Open question 1 is closed that way.
+
+Every line citation below was re-checked against `09127ba` (HEAD on 2026-09-24). None had drifted.
+
 **Built on the recommended answer to B11's F349 question** (ROUNDS.md D13, *"F349 remainder"*):
 **answer accepted input as accepted, and make that true by retrying the start in the Hub.** If the
 operator prefers to keep a 500 (option c in D5), this change is withdrawn and F349 stays open.
 
-## Context — measured on `ce086b6`
+## Context — measured on `ce086b6`, re-checked on `09127ba`
 
 | Fact | Where |
 |---|---|
@@ -28,13 +51,37 @@ async def schedule_accepted(project_id: str, agent: str) -> ScheduleResult:
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        logger.warning("Could not start a turn for %s/%s after accepting input: %r", project_id, agent, exc)
-        retry_schedule(project_id, agent)                       # D2
+        if is_transient(exc):
+            logger.warning("Could not start a turn for %s/%s after accepting input: %r", project_id, agent, exc)
+            retry_schedule(project_id, agent)                   # D2
+            return ScheduleResult(
+                waiting_reason="accepted; the Hub could not start a turn yet and will try again",
+                terminal_failure=False,
+            )
+        logger.exception("Could not start a turn for %s/%s after accepting input", project_id, agent)
         return ScheduleResult(
-            waiting_reason="accepted; the Hub could not start a turn yet and will try again",
+            waiting_reason="accepted; the Hub could not start a turn for it, and it stays queued",
             terminal_failure=False,
         )
+
+
+def is_transient(exc: BaseException) -> bool:
+    """A failure that can clear on its own: a busy or locked database."""
+    return isinstance(exc, (sqlalchemy.exc.OperationalError, sqlite3.OperationalError)) or (
+        "database is locked" in str(exc).lower()
+    )
 ```
+
+**(Operator review) Transient only.** A retry is honest only for a failure that can clear without
+anyone changing anything. On SQLite that is a busy or locked database, which reaches the Hub as
+SQLAlchemy's `OperationalError` wrapping `sqlite3.OperationalError("database is locked")`. Anything
+else (a bug, an integrity error, a missing row) fails the same way on every attempt. Retrying it
+forever surfaces nothing and hides the defect, which is the review's MEDIUM. Such an error is logged
+**once**, with its traceback, where `schedule_accepted` sees it. It is not retried and not deferred.
+The entry stays `queued`, so the answer "accepted" is still true. The next re-drain the Hub already
+runs (project open, settings save, relocate, another run's end) tries again. The answer's
+`waiting_reason` does not promise a retry that will not happen. If a retry in D2 meets a
+non-transient error, the same rule applies: it is logged once and the retry stops.
 
 The exception's own text is logged, not returned: a `database is locked` or a stack of SQL is not a
 sentence the operator can act on, and the message they need is that nothing is lost.
@@ -58,6 +105,18 @@ The drain itself calls `schedule_agent` unguarded today (`run_reconciliation._sc
 `schedule_accepted`, so a failed drain re-enters D2's retry rather than vanishing. Under a
 persistent failure that loops once per request served, which is the right amount of retrying for a
 Hub that is serving requests and cannot write.
+
+**(Operator review) Only transient errors reach this loop, and a restart forgets it.** A retry
+stops at the first call that does not raise *or* raises a non-transient error (logged once, D1). The
+"once per request served" loop above therefore needs a database that stays locked, and each cycle
+takes 36 s. The pending-retry dict and `_deferred_schedules` are both **in memory**. A restart
+drops them. The entries themselves are durable rows in `queued`, so nothing is lost, but nothing in
+this change re-arms them at start. What picks them up after a restart is what picks up any queued
+entry today: `redrain_queued_agents` on project open (`projects.py:316`), settings save (`:534`) and
+relocate (`:603`), or another run's end. `reconcile_interrupted_runs` re-drains only agents that had
+a run in flight (`run_reconciliation.py:178`). A `JobRun` left in progress by a pending retry (D6) is
+marked failed by `reconcile_stale_job_runs` at start (`run_reconciliation.py:276-277`), as any
+firing with no live run behind it is today.
 
 `schedule_agent` is idempotent for an agent with nothing queued (it answers "queue is empty") and
 refuses a busy agent, so a retry that races another drain does no harm. The per-agent lock at
@@ -115,12 +174,12 @@ which is F349's own defect (queued, never started) under the likeliest failure, 
 One helper, beside `persist_event` in `hub/hub/utils.py`:
 
 ```python
-async def persist_accepted_event(project_id, event_type, data, *, agent=None, severity="info") -> None:
+async def persist_accepted_event(project_id, event_type, data, *, agent=None, severity="info", loop_id=None) -> None:
     """Record an event about input already committed. Its own session: a failure here cannot
     poison the caller's, and nothing the caller loaded is expired."""
     try:
         async with async_session_factory() as own:
-            await persist_event(own, project_id, event_type, data, agent=agent, severity=severity)
+            await persist_event(own, project_id, event_type, data, agent=agent, severity=severity, loop_id=loop_id)
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -154,6 +213,51 @@ a failure), and the non-route callers (`scheduler.py:3471, 3605`, `run_divergenc
 own handling. Their answers (the message, the answer, the released entry) describe
 what they committed, and are already true once the call cannot raise.
 
+**(Operator review)** `scheduler.py:3471` and `:3605` have moved out of that list and into D6.
+`run_divergence.py:874`, `checkpoint_cutover.py:156` and `turn_scheduler.py:713` stay out.
+
+## D6 (operator review) — The loop, flow and job firing path
+
+`JobScheduler._do_fire_job` (`scheduler.py:2987`) has the trigger's shape, on the job's own
+`session`:
+
+| Line | What | What happens if it raises |
+|---|---|---|
+| `:3444` | `session.commit()` lands the entry, `run.status = "in_progress"` and the job's counters | nothing queued; the `except` records `failed`, and that is true |
+| `:3457` | `_emit_loop_edit_applied(session, …)`, a `persist_event` that commits | the `except` (`:3514`) marks the `JobRun` failed, and the entry, already committed, is queued and later runs |
+| `:3467` | `persist_event(session, …, "queue_entry_queued", …)` | same, and the `except`'s own `persist_event` (`:3521`) commits on the failed session: `PendingRollbackError`, which escapes `_do_fire_job` |
+| `:3471` | `schedule_agent` | the `JobRun` is marked `failed` while its entry is queued and runs later. Nothing retries it |
+| `:3492` | `persist_event(session, …, "job_fired", …)` | the `JobRun` is marked `failed` although its turn **did** start |
+| `:3605` | `_start_additional_turns` calls `schedule_agent` for each extra selection, and its `except` (`:3606`) logs and moves on | the selection's entry stays queued with nothing to retry it; its `JobRun` stays `in_progress` until a restart fails it |
+| `:3757`, `:3767`, `:3790` | `_stage_selection` commits the extra selection's rows, then two `persist_event`s on its session | `_stage_additional_selections` (`:3579`) logs and skips it, so its turn is never started though its entry is queued |
+
+The fix is the same two helpers:
+
+- Every post-commit event of a firing goes through `persist_accepted_event`: `:3467`, `:3492`,
+  `:3767`, `:3790`, and `_emit_loop_edit_applied` (`:2374`) at `:3457`. `persist_accepted_event`
+  therefore also takes `loop_id` and passes it through, since `loop_edit_applied` is recorded
+  against its loop (`:2385`). The SSE broadcasts beside them are unchanged.
+- `:3471` and `:3605` call `schedule_accepted`. D1's result has `terminal_failure=False`, so the
+  existing test at `:3472` (`waiting_reason and terminal_failure`) already leaves the `JobRun`
+  **in progress**. It is not marked `failed`. That is the operator's rule: a non-terminal
+  `waiting_reason` is a firing that has not started yet, not a failed one. The same holds for an
+  extra selection at `:3611`. A terminal refusal still records `failed` with its reason, as now.
+- **After `:3444` the `except` no longer records the firing as failed.** A local `accepted = True`
+  is set right after the commit. If anything later still raises (the terminal-refusal commit at
+  `:3478` is the one database write left on `session`), the `except` rolls `session` back, logs, and
+  leaves the `JobRun` as it stands, because the entry is queued and will run. Before `:3444` it
+  records `failed`, as now, after a rollback so that its own `persist_event` does not meet a failed
+  session.
+
+**Why in-progress is not a lie here.** `loop-firing-accountability` says a firing SHALL NOT be
+reported running once it is known that no agent was started for it. A firing whose start raised a
+transient error has a retry pending (D2). It is not known that no agent will start. A non-transient
+error leaves the entry queued for the next re-drain, with the same answer. The `JobRun` reaches a
+terminal state when its run ends (`finalize_job_run_for_conversation`) or, if no run ever starts,
+at the next start (`reconcile_stale_job_runs`), which is where any non-terminal wait already ends
+up today (a busy agent is the common one). The MODIFIED deltas in `loop-firing-accountability` and
+`runtime-diagnostics` say this, so neither SHALL is contradicted.
+
 ## D5 — The options
 
 | Option | What it would break | What it releases |
@@ -165,9 +269,10 @@ what they committed, and are already true once the call cannot raise.
 
 ## Open questions
 
-1. `withdraw_refused_entry`'s own failure (`:1625`) still answers 500 after a refusal has been
-   decided. Recommended: leave it; the caller is owed that refusal, and the failure leaves the entry
-   queued, which a retry will refuse again.
+None. Question 1 (`withdraw_refused_entry`'s own failure at `:1625` still answers 500 after a
+refusal) was closed at the operator review. It stays: the caller is owed that refusal, and the
+failure leaves the entry queued, which a retry will refuse again. The requirement now states it as
+an exception.
 
 ## Round log
 
@@ -190,3 +295,8 @@ what they committed, and are already true once the call cannot raise.
   the drain's loss on a raise (`run_reconciliation.py:184-187`, `:205`), `checkpoints.py:334`
   excluded. No collision with B9's `an-event-is-announced-only-once-its-write-is-committed`
   (that change is about `commit=False` events inside a caller's transaction).
+- Operator review 2026-09-24 (`spec-queue/tracks/reviews/B11-2026-09-24.md` §4): D6 added (the
+  firing path, `scheduler.py:3444-3605` plus `_stage_selection`'s `:3757-3790`, which the review did
+  not list but has the same shape); D1 retries transient errors only; D2 states the in-memory limit
+  and the restart path; the requirement names the withdrawal exception; MODIFIED deltas for
+  `loop-firing-accountability` and `runtime-diagnostics`. Every citation re-checked on `09127ba`.

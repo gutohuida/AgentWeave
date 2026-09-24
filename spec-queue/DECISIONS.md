@@ -740,6 +740,21 @@ recommended answers were taken as recommended unless noted below. The per-change
   fails `npm run build` (option B; `every-event-the-hub-sends-reaches-the-app`).
 - DECIDED   B9-Q2  **F251's UI bundle is committed only after the operator restarts `:8000` onto
   F335's fix** (task 0.5 of the same change).
+- DECIDED   B11-all  **B11's 22 answers are taken as recommended** (`spec-queue/tracks/B11.md` Final),
+  including: pin the tool server; F177 lists in creation order (`rowid`); run F21's six-turn Haiku probe;
+  an adopted in-progress task keeps its assignee; runner names join the uniqueness rule; build F389's
+  count; a failed refusal withdrawal still answers 500. After the review: charter and runner names are
+  unique by exact match; a find-or-create runner collision takes a suffixed name; one window profile
+  per `--profile`; the tool-server pin lives under `~/.agentweave/hub/tool-server/`; F349 also covers
+  the firing path and retries transient errors only; F248 is reserved at create time only (REVISING).
+- DECIDED   F307-initial-focus  **A confirmation dialog opens with focus on Cancel**, and other dialogs
+  focus the element with the explicit mark. The four hand-built dialogs that lacked the hook (Charters
+  form, JobForm, Runners form, SetupModal) join it in the same change.
+- DECIDED   B3-hub-client  **`request_agent` does not copy `hub_client`** from its template (least
+  authority: the new agent runs MCP plus workspace).
+- DECIDED   B3-D8  **A job's moves are recorded as `operator` with `origin="job"` and `job_id`**. A
+  divergence-restaffed review staged late stays "You moved"; a manual Run press reads "Loop X moved";
+  the 38 existing rows are not rewritten.
 - DECIDED   B12-F278-revise  **F278's change goes back for a round** (REVISING): base64 key segments
   and short tokens inside paths.
 

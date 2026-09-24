@@ -9,9 +9,14 @@
    row-order pick cannot pass by luck.
 4. **A document on a plain job is refused, not dropped** (F157). Task 1.6 fails today (201).
 5. **Every real way to make a flow still works.** Control 1.7.
-6. **Live** (3.1): F53's own three-call reproduction ends with a populated queue.
+6. **The old loop's history survives the move** (D6). Task 1.9: a `loop_tasks_adopted` event is on
+   both loops' records, and a rolled-back claim leaves none.
+7. **An archived holder is named, not briefed** (D7). Task 1.10.
+8. **An ended loop that is not archived still holds its document.** Control 1.11.
+9. **Live** (3.1): F53's own three-call reproduction ends with a populated queue.
 
 ## Human-only
 
 1. On the Loops screen, archive a flow that has unfinished tasks, create a new flow on the same
-   document, and confirm its queue shows them.
+   document, and confirm its queue shows them. Open the archived flow's detail and confirm that its
+   history names the new flow and the moved tasks.

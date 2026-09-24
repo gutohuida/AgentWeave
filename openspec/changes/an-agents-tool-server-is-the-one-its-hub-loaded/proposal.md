@@ -2,7 +2,9 @@
 
 **Round 1, 2026-09-24** (bundle B11, `spec-queue/tracks/B11.md`). Finding: **F354 (B)**. Re-verified
 on `ce086b6` (the bundle worktree's HEAD, one commit past `404c7d5`, which touched no code).
-**Nothing here is implemented yet.**
+**Nothing here is implemented yet.** Amended 2026-09-24 after the operator's review
+(`spec-queue/tracks/reviews/B11-2026-09-24.md` §1): the pin lives under the Hub user's home, and
+stale copies are pruned.
 
 ## Why
 
@@ -41,9 +43,13 @@ folder dialog's inline `-c` script, and a comment; nothing else spawns a reposit
 
 - **The Hub pins its tool server when it starts** (design D1). A new module,
   `hub/hub/tool_server.py`, reads `mcp_server.py`'s bytes once, at import, and writes them to a
-  content-addressed file outside the repository. Every spawn names that file.
+  content-addressed file outside the repository, under
+  `~/.agentweave/hub/tool-server/<digest>/` (design D1a): the Hub user's own directory, not the
+  shared temp directory another local user could pre-create. Every spawn names that file.
 - **A spawn checks the pinned file before naming it**, and rewrites it from the bytes held in memory
-  if it has gone or changed (design D2). A temp cleaner cannot change what a run gets.
+  if it has gone or changed (design D2). A cleaner or a manual delete cannot change what a run gets.
+- **Stale pinned copies are pruned at startup** once no Hub has spawned them for seven days
+  (design D7); a copy another running Hub is using is never removed.
 - **A pin that cannot be written refuses the turn with a sentence**, through the same path the
   canonical-context file already uses (`agent_trigger.py:1110-1118`, a `TriggerAgentError` 409).
   The input stays queued with that reason (`turn_scheduler.py:424` onward). It never falls back to
@@ -67,7 +73,9 @@ None.
 ## Impact
 
 - `hub/hub/tool_server.py` (new), `hub/hub/api/v1/agent_trigger.py` (`:1141-1144` only),
-  `hub/hub/main.py` (lifespan: pin at start, log where).
+  `hub/hub/main.py` (lifespan: pin at start, log where, prune stale copies).
+- `.claude/rules/mcp-server.md`: its line that `:8000` spawns this file fresh on every turn is
+  rewritten (task 4.1); the `DEAD-ENDS.md` entries naming `mcp_server.py` are checked (task 4.2).
 - `hub/tests/`: a new `test_tool_server_pin.py`; `test_agent_trigger.py:747` and `:972` gain an
   assertion; `test_mcp_server_stdio_surface.py:29` spawns the pinned path.
 - **Takes effect on a Hub only once that Hub restarts onto it.** For `:8000` that is the operator's

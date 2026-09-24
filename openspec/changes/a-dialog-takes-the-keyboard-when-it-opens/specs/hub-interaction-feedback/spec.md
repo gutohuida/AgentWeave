@@ -13,7 +13,11 @@ the order the choices are drawn in, so that restyling a dialog cannot move the k
 destructive choice.
 
 Where every control in a dialog is unavailable, the dialog itself SHALL hold focus, so that the
-keyboard is still inside the dialog and not behind it.
+keyboard is still inside the dialog and not behind it. Where the control holding focus becomes
+unavailable while the dialog waits on the action it started, the dialog itself SHALL take focus.
+
+This applies to every modal dialog the app draws, whether it asks a question, collects a form, or
+connects the app to a Hub.
 
 Where something inside a dialog is designed to take focus when the dialog opens, the dialog SHALL
 still record, before that happens, where focus was, so that closing the dialog returns it there.
@@ -38,3 +42,16 @@ still record, before that happens, where focus was, so that closing the dialog r
 
 - **WHEN** the operator closes a dialog they opened from a control
 - **THEN** keyboard focus is on that control
+
+#### Scenario: A form dialog puts the keyboard in its first field and gives it back
+
+- **WHEN** the operator opens a dialog that creates or edits a charter, a runner or a job, and then
+  closes it with Escape
+- **THEN** keyboard focus was in the dialog's first field while it was open
+- **AND** keyboard focus is on the control that opened the dialog once it has closed
+
+#### Scenario: A control disabled under the keyboard does not drop it behind the dialog
+
+- **WHEN** the operator confirms a dialog's action and the control they used becomes unavailable
+  while the action is pending
+- **THEN** keyboard focus is inside the dialog

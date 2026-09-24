@@ -1,5 +1,32 @@
 # Design — a loop that is gone lets go of its document
 
+## Operator review, 2026-09-24
+
+The adversarial Opus review is in `spec-queue/tracks/reviews/B11-2026-09-24.md`, §5 (REVISE, spec
+deltas only). The operator decided that **loop adoption gets its missing deltas and an adoption
+event, and is approved**, and that **an adopted `in_progress` task keeps its assignee** (Open
+Question 1 below is now closed). The fixes applied here:
+
+- **HIGH, three existing SHALLs contradicted.** The change now carries three MODIFIED deltas against
+  `openspec/specs/agent-loops/spec.md`:
+  - *A loop's queue is the tasks that name it…* (`:36`): "exactly two mechanisms" becomes three,
+    naming claim-time adoption.
+  - *A loop MAY declare one specification document…* (`:147`): "no other **live** loop" and "the
+    **live** declaring loop". The refusal text had been stale since `2239f38`.
+  - *A loop and a job are archivable, never deletable* (`:483`): the archived loop's queue history
+    survives adoption as a `loop_tasks_adopted` event (D6).
+- **MEDIUM, archived assignee:** D7 and tasks 1.10-1.11.
+- **LOW:** D1 now says that a loop that has ended but is not archived still blocks a successor. The
+  races the review checked hold: the partial unique index, and the rollback at `jobs.py:765-770`.
+  The review found no collision with B10.
+
+**Overlap with B1's `a-task-is-attended-only-by-a-turn-that-will-reach-it`:** its `agent-loops`
+delta MODIFIES only *A task reported as in flight is one an agent is actually working*. That is not
+one of the five requirements this change touches, so the two deltas do not collide. It changes the
+`queued` half of the staffing gate. D7 adds an archived-assignee branch in the walk's `task.assignee`
+arm (`scheduler.py:1839-1843`). That arm is a different line from the one it changes, but an
+implementer landing the second of the two should re-read the first.
+
 **Built on the recommended answers to B11's F53 and F157 questions** (ROUNDS.md D13, *"a loop's
 archive releases adopted tasks?"* and *"`spec_document_id` on non-loop jobs"*): **a successor loop
 adopts a gone loop's unfinished tasks (F53, option b′ below), and a create refuses a document on a
@@ -50,6 +77,50 @@ update(Task).where(
 - **A live loop's tasks are never taken**, as today: the partial unique index and
   `_check_spec_document_conflict` already allow only one live loop per document, and the `gone`
   subquery names archived loops only.
+- **Live means not archived.** A loop that has ended (`ending_state` set) but has not been archived
+  still holds its document. `_check_spec_document_conflict` filters on `archived_at IS NULL` only
+  (`jobs.py:166-170`), and so does the partial index. A successor is refused until the operator
+  archives the ended loop. That is deliberate: archiving is the operator's statement that the loop is
+  finished with its document, and adoption must not take tasks from a loop the operator can still
+  read as current.
+
+## D6 — The move is recorded against both loops
+
+Adoption changes `loop_id` on existing tasks, so after it `GET /tasks?loop_id=<archived loop>` no
+longer lists them. The spec's promise that an archived loop's queue history is *"still retrievable"*
+would then be false. `_adopt_document_tasks` therefore selects the ids it is about to move from an
+archived loop (grouped by their old `loop_id`, since several archived loops may have held tasks of
+the document). For each old loop it writes two `EventLog` rows with
+`persist_event(..., event_type="loop_tasks_adopted", data={"from_loop", "to_loop", "task_ids"},
+commit=False)` (`hub/hub/utils.py:32`):
+one with `loop_id=<from_loop>` and one with `loop_id=<to_loop>`. Two rows are needed because
+`EventLog.loop_id` is a single column (`hub/hub/db/models.py`, `class EventLog`, indexed by
+`ix_event_logs_loop_ts`), and `GET /loops/{id}` reads its events by `EventLog.loop_id == loop.id`
+(`hub/hub/api/v1/loops.py:78-83`).
+
+The rows go into the caller's transaction, before the commit at `jobs.py:764` (create) or the
+PATCH's own commit (`:1027`). An `IntegrityError` rollback (`jobs.py:765-770`) then discards the move
+and its events together. Tasks that were unowned (`loop_id IS NULL`) are adopted as today and write
+no event, because no loop's history loses anything. The detail view's event list is capped at ten
+(`loops.py:81`), so the durable record is the `event_logs` rows, not that view.
+
+## D7 — An adopted task whose assignee is archived is a stall, not a briefing
+
+Keeping the assignee (the operator's decision) means an adopted `in_progress` task can name an
+agent that has been archived since. On HEAD the walk's `if task.assignee:` arm
+(`scheduler.py:1839-1843`) takes `agent = task.assignee` without checking its lifecycle. The firing
+then selects the task for that agent, and the turn is refused at the trigger (`agent_trigger.py:696-707`:
+*"… is archived and cannot be triggered. Unarchive it first."*). Nothing on the loop says why its
+queue does not move. That is read, not measured; task 1.10 measures it.
+
+The fix is in that arm. When the assignee is archived, append
+`(task.id, f"{task.id} is held by {agent}, who is archived; unarchive {agent} or reassign the task")`
+to `unstaffed` and `continue`. The F64 rule promotes `unstaffed[0][1]` to `stall_reason`
+(`scheduler.py:1803`). Neither the task nor its assignee is changed: resetting either is a transition
+nobody performed. The archived names come from one query per walk,
+`select(Agent.name).where(Agent.project_id == project_id, Agent.lifecycle == "archived")`. That is
+the complement of the roster filter at `scheduler.py:1185`, which drops archived agents and so
+cannot answer this question.
 
 ## D2 — Why not release at archive (option b)
 
@@ -110,9 +181,8 @@ raw API caller that sent one was getting a job that silently did not do what it 
 
 ## Open questions
 
-1. Should an `in_progress` task adopted from a gone loop keep its assignee (D1), or return to
-   `pending` unassigned? Recommended: keep it. Resetting it is a transition nobody performed, and the
-   transition machine would have to be bypassed to do it.
+None. The former question 1 (does an adopted `in_progress` task keep its assignee?) was decided by
+the operator on 2026-09-24: keep it. D7 covers the case where that assignee is archived.
 
 ## Round log
 
@@ -128,3 +198,9 @@ raw API caller that sent one was getting a job that silently did not do what it 
   materialise nor `loop_id`. B1's `a-task-is-attended-only-by-a-turn-that-will-reach-it` changes the
   `queued` half of the staffing gate's `reachable` test; D1 changes the `loop_id in live` half:
   independent, no text collision. No claim disagreed.
+- Operator review 2026-09-24 (`spec-queue/tracks/reviews/B11-2026-09-24.md` §5), applied on
+  `09127ba`: three MODIFIED deltas, D6 (`loop_tasks_adopted`), D7 (archived assignee), the
+  ended-but-not-archived note in D1, and Open Question 1 closed. Citations re-checked on `09127ba`:
+  `jobs.py:166-170`, `:239-270` (filter `:266`), `:762`, `:765-770`, `:1027`, `:1275-1285`;
+  `loops.py:78-83`, `:152`; `scheduler.py:1803`, `:1839-1843`, `:1185`; `agent_trigger.py:696-707`;
+  `utils.py:32` (`persist_event(..., loop_id=, commit=)`).

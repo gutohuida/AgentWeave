@@ -7,8 +7,12 @@
 3. **A crash keeps the "ever" facts.** Task 1.3.
 4. **No event per allow; one per refusal.** Tasks 1.4 and 1.5.
 5. **Counting cannot fail a decision.** Task 1.6.
-6. **Codex feeds it too.** Task 1.7 (tested, not driven: Codex is undrivable).
-7. **Live** (3.1): two real runs, two counts.
+6. **Codex feeds it too, after answering.** Task 1.7 (tested, not driven: Codex is undrivable).
+7. **The answer does not wait for the count.** Task 1.9: the write is scheduled on
+   `BackgroundTasks`, never awaited by the handler; a failing write still answers 202.
+8. **No write lowers a count.** Task 1.10: a stale first-sight write after the flush leaves the
+   exact count; a note after the flush is dropped.
+9. **Live** (3.1): two real runs, two counts.
 
 ## Human-only
 

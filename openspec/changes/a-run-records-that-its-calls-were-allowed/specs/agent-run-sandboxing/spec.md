@@ -12,7 +12,10 @@ A run for which no decision reached the Hub SHALL be distinguishable from a run 
 all allowed. The record SHALL survive the Hub stopping during the run at least to the extent of
 whether any call was allowed and whether any was refused.
 
-Recording the count SHALL NOT alter or delay the decision it counts.
+Recording the count SHALL NOT alter or delay the decision it counts. The decision's answer SHALL NOT
+wait on a durable write of the count.
+
+A count once recorded SHALL NOT be lowered by a later, less complete write for the same run.
 
 #### Scenario: A run whose calls were all allowed says so
 
@@ -33,6 +36,18 @@ Recording the count SHALL NOT alter or delay the decision it counts.
 
 - **WHEN** the Hub stops during a run after at least one of its calls was allowed
 - **THEN** the run's record still states that at least one call was allowed
+
+#### Scenario: The decision's answer does not wait for the count
+
+- **WHEN** a run reports the first allowed decision it received
+- **THEN** the report is answered without waiting for the count to be written
+- **AND** the count is written afterwards
+
+#### Scenario: A late partial count does not lower the final one
+
+- **WHEN** a run's exact count has been recorded at its end
+- **AND** a write carrying an earlier, smaller count for the same run arrives afterwards
+- **THEN** the run's record still states the exact count
 
 #### Scenario: Failing to count changes nothing
 

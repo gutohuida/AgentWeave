@@ -46,6 +46,12 @@ refusal for `work_needs_evidence` on the same route (`:621-631`) is the preceden
 - **`POST /jobs` refuses a document on a job that is not a loop** (design D4), with the sentence the
   `PATCH` door and `work_needs_evidence` already use, before the job row is written.
 
+- **The move is recorded** (design D6): a `loop_tasks_adopted` event `{from_loop, to_loop,
+  task_ids}` is persisted against both loops in the claim's transaction, so the archived loop's
+  queue history survives.
+- **An adopted task whose assignee is archived is reported, not briefed** (design D7): the
+  successor's stall reason names the task and the archived agent.
+
 No migration, no UI. One API behaviour change: a create that silently dropped a field is now a 400.
 
 ## Capabilities
@@ -59,6 +65,10 @@ None.
 - `agent-loops`: *A recurring job may be named as a loop…* (the refusal covers creation as well as
   update) and *A flow adopts the tasks already materialised from the document it claims* (an
   archived loop's unfinished tasks are adoptable; tasks are only ever stamped with a live loop).
+  Added after the operator review of 2026-09-24: *A loop's queue is the tasks that name it…*
+  (claim-time adoption is the third writer of `loop_id`), *A loop MAY declare one specification
+  document…* (one **live** loop per document; the live declaring loop is stamped), and *A loop and a
+  job are archivable, never deletable* (history survives adoption as a `loop_tasks_adopted` event).
 
 ## Impact
 

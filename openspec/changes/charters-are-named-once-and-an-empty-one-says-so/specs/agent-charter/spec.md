@@ -35,6 +35,9 @@ Where a charter is chosen, it is chosen by its name. Two charters with one name 
 at the moment an operator binds one, and nothing in the Hub resolves a charter by name to rescue the
 choice afterwards.
 
+Names are compared exactly, as agent names are: two names that differ only in letter case are
+different names.
+
 Charters that already share a name when this rule arrives SHALL be kept, not deleted: the oldest
 keeps the name and each later one is given a distinguishing suffix, so that every agent stays bound
 to the charter it was bound to.
@@ -56,8 +59,14 @@ to the charter it was bound to.
 - **WHEN** two projects each have a charter with the same name
 - **THEN** both charters exist
 
+#### Scenario: Names differing only in case are different names
+
+- **WHEN** an operator creates a charter named `Coder` in a project that has a charter named `coder`
+- **THEN** the charter is created
+
 #### Scenario: Existing duplicates are renamed, not removed
 
 - **WHEN** a project already holds several charters with one name as this rule takes effect
-- **THEN** the oldest keeps the name and each later one carries a distinguishing suffix
+- **THEN** the oldest keeps the name and each later one carries a distinguishing suffix that no other charter in the project holds
 - **AND** every agent is still bound to the same charter as before
+- **AND** no renamed charter's name is longer than a charter name may be

@@ -23,12 +23,17 @@ question to D13 was *"event per allow?"*; the answer is no). A count per run doe
 
 - **Each run carries a count of the decisions it received** (design D1): a nullable JSON column
   `Run.permission_decisions`, `{"allowed": n, "refused": m}`. `NULL` means no decision reached the
-  Hub for this run (it had no approver, or it predates this), `{"allowed": 0, "refused": 0}` never
+  Hub for this run (it had no approver, every call was pre-allowed, or it predates this), `{"allowed": 0, "refused": 0}` never
   occurs, and any count means the approver was asked.
 - **Written on first sight, made exact at the end** (design D2), the pattern
   `outside_write_record.py` already uses: the first decision of each kind in a run writes the row
   once; later ones are counted in memory; the run's end flushes the exact counts. A Hub that dies
   mid-run keeps "at least one allowed" and "at least one refused".
+- **Off the decision path** (operator review 2026-09-24, `spec-queue/tracks/reviews/B11-2026-09-24.md`
+  §8): the approver waits for the route's answer (`mcp_server.py:1709`, `urlopen` `timeout=10` at
+  `:184`), so the route only counts in memory and the first-sight write runs in FastAPI
+  `BackgroundTasks` after the 202; Codex's in-process loop reports after it has responded. Every
+  write is monotonic (`max` per key), so a late first-sight write cannot lower the exact flush.
 - **Both runtimes feed it**: the Claude route above for every decision it reports, and Codex's
   approval loop through a new `on_decision` alongside its `on_refusal`.
 - **Nothing is shown in the UI yet.** The run detail API returns the field; a surface can come later.
