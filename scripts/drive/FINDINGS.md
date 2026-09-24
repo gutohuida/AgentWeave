@@ -2039,7 +2039,7 @@ every other property of the design intact — including the rule that the agent'
 
 ## F42 (C) — F27 bounds the blast radius but a run can still claim work it will not do
 
-**Status:** open (no fix commit references it)
+**Status:** closed 2026-09-24 — **by design** (operator, daily review, bundle B2 D11; `DECISIONS.md` `F42-by-design`). Requiring completion evidence at `-> completed` deadlocks the ordinary path (`task_transition_service.py:486-488`); the residue is one task per run, attributable, and reviewed by someone else. Do not re-file. Was: open (no fix commit references it)
 
 Noted 2026-08-25 during the same re-drive, and **not a defect in the fix** — it is the documented
 consequence of Key decision 1, recorded so it is not mistaken for an oversight later.

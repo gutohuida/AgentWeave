@@ -214,3 +214,26 @@ may write to the vault — the manager only, or any agent, which is the question
 **Related:** `R5` (the manager agent — same agent, decide together), `R4`,
 `openspec/explorations/2026-09-14-project-notes-inside-the-product.md`,
 `openspec/explorations/2026-08-16-a-corpus-at-scale.md`, `F354` (the MCP tool-surface blocker).
+
+## R7 — A firing whose turn never began waits for its input instead of reading failed
+**Asked:** 2026-09-24
+**Theme:** Flows & loops
+**Ready:** ready
+
+Queued in the 2026-09-24 daily review, from bundle B2 (`spec-queue/tracks/B2.md` Final, questions 3
+and 4; `a-retried-firing-records-how-its-work-ended` Open Question 1, R2's Open Question 3). This
+revisits the 2026-08-21 decision ("a firing whose selection did not start is `failed`, no new
+vocabulary"). That decision's objection, a loop *reported as firing*, no longer holds, because
+`firing_active` now needs a running `Run`. Decide together: (a) should a firing whose turn did not
+begin wait for its input rather than conclude `failed` at once, and (b) may the startup reaper leave
+open a row whose queued input waits on an agent with no runner? Needs its own spec loop (R1/R2/R3),
+after B2's changes land.
+
+## R8 — A job's history rows name the agent each one ran
+**Asked:** 2026-09-24
+**Theme:** Flows & loops
+**Ready:** ready
+
+A follow-up from B2's `a-firing-is-counted-once-however-many-agents-it-starts` (Open Question 1),
+queued in the 2026-09-24 daily review. Once a `JobRun` row is one agent's share of one firing, a wide
+firing shows several rows with nothing saying whose each one is. Show the agent on each history row.

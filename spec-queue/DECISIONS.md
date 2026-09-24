@@ -717,6 +717,27 @@ were decided earlier and were missing from this file. The B3 and B1 bundle round
   of 2026-09-12** below. It is carried out by the parked change `a-flow-stages-its-review-in-the-dispatch`
   (B1), which is not yet approved.
 
+### 2026-09-24 — the daily review of the twelve bundles
+
+**DECIDED 2026-09-24, by the operator, in an interactive session** (DECIDE). Each bundle's
+recommended answers were taken as recommended unless noted below. The per-change record is in
+`APPROVALS.md` `## 2026-09-24`, and each change's `design.md` opens with `## Operator review,
+2026-09-24`. Only the rows that are decisions rather than approvals are listed here.
+
+- DECIDED   F42-by-design  **F42 is closed as by design** (B2 D11). A run bound to a task at
+  `-> in_progress` may reach `completed` without completion evidence. Requiring evidence there
+  deadlocks the ordinary path, and the residue is one attributable task per run, reviewed by someone
+  else. Do not re-file.
+- DECIDED   B2-follow-ups  **The 2026-08-21 decision ("failed at once, no new vocabulary") stands for
+  now.** Revisiting it, together with the reaper's no-runner case, is queued as `REQUESTS.md` R7 for
+  its own spec loop. History rows naming their agent is R8.
+- DECIDED   B8-D6-final-warning  **A reopened, handed-over conversation keeps its free final
+  compaction warning.** Only the billed steps decline (amends B8's D6).
+- DECIDED   B10-stale-stop  **A stop on a loop that has already ended is refused (409)** and its
+  record is left as it was. `end_loop` is write-once.
+- DECIDED   B12-F278-revise  **F278's change goes back for a round** (REVISING): base64 key segments
+  and short tokens inside paths.
+
 ### 2026-09-22 afternoon — F119: `doctor`'s secret filter stays broad; R9-5 reconfirmed
 
 **DECIDED 2026-09-22, by the operator, in an interactive session.**
