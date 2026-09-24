@@ -37,7 +37,8 @@ ATTENDING_REFUSED = "refused"
 class Attending:
     how: str                 # one of the three above
     review: bool             # the input names the task as the one it reviews (review_task_id)
-    refusal: Optional[str]   # the stored refusal, only when how == ATTENDING_REFUSED
+    refusal: Optional[str]   # the agent's refused head's words, only when how == ATTENDING_REFUSED
+    refused_here: bool       # R3: that refused head is one of this pair's own entries
 
 @dataclass(frozen=True)
 class TaskAttendance:
@@ -61,9 +62,8 @@ async def task_attendance(session, project_id) -> TaskAttendance
 - **`review` is an OR over the pair's contributing entries** (R2): a pair with both a work entry and
   a review entry for one task is a review turn. S13 reads this flag to close the pool, and letting
   the strongest entry's flag win would drop a review turn behind a work entry.
-- **Strongest wins per pair**: running > queued > refused. One un-refused entry makes the pair
-  queued even if an older entry for the same pair was refused, because that entry is a turn that
-  will be tried.
+- **Strongest wins per pair**: running > queued > refused, where queued/refused is decided by the
+  agent's head (R3, below), not by the pair's own entries.
 - **But `has_turn` is kept apart from that collapse** (R2). It answers from the queued rows alone
   (a separate `queued_pairs` set inside `TaskAttendance`, refused or not), never from a running
   pair. Folding a running pair into it would change availability: a running agent's task on a
@@ -77,6 +77,21 @@ async def task_attendance(session, project_id) -> TaskAttendance
   that preceded it cleared it, `:191`, `:204`), and that input is redelivered by the run-end
   re-drain; a transient refusal writes `waiting_reason` (`turn_scheduler.py:474-475`) and counts
   nothing, and it clears on its own (`:660-667`).
+- **Read at the agent's head, not per entry** (R3). `_attempt_turn` tries one entry per agent: the
+  first queued entry within the budget by `sequence` (`turn_scheduler.py:333`, `:340`;
+  `queued_entries` orders by `sequence`, `inbound_queue.py:93`), and only entries in that entry's
+  conversation ride with it (`:361-371`). Nothing behind a refused head is delivered until the head
+  is delivered or given up. So where an agent's head is refused, **every** queued pair of that agent
+  is refused, carrying the head's words; where the head is not refused, every queued pair is queued,
+  whatever an older rider's row says. R2's per-entry rule with "one un-refused entry makes the pair
+  queued" was wrong exactly where D3 matters: the resume arm's one re-briefing is a **new
+  conversation** whenever the acting agent is not the job's own resumable one (`scheduler.py:3345-3384`),
+  so it does not ride with the refused head, is not refused itself, and would make the pair
+  `queued` on the next firing — in flight, no further briefing, no further pass, the head stuck at
+  its count and the briefing behind it forever. F368's shape, silent. `Attending` gains
+  `refused_here: bool` (the refused head is one of this pair's own entries), so a sentence can say
+  "delivering it was refused" only when it was, and otherwise "it waits behind input for {agent}
+  whose delivery was refused". `has_turn` is untouched by this (queued rows, refused or not).
 
 `tasks_held_by_a_running_turn` stays. Its caller in `agent_trigger.py:990` asks *may this turn
 start*, and its docstring (`:363-371`) warns against a third meaning on one query.
@@ -96,8 +111,16 @@ repeats.
 
 | Reader | After |
 |---|---|
-| F70 guard (`:1792`) | `attendance.attended(task.id)` — anyone running or queued, no suspended, no refused. A refused turn is not "a turn on the task" the recovery must wait for. |
-| F154 surfacing (`:1796`) | `not attendance.attends(task.id, task.assignee)` (F371). The reason is D4's refused sentence where `attendance.refusal(task.id, task.assignee)` is set, else `_wedged_review_reason`. |
+| F70/F167 guard (`:1792`, *"Never while a turn is on the task"*; made reachable by Round 5's evidence term, `6117d15`) | `attendance.attended(task.id)` — anyone running or queued, no suspended, no refused. A refused turn is not "a turn on the task" the recovery must wait for. Records `wedge_deferred = True` when it clears `wedged_review`. |
+| F154 surfacing (`:1796`) | `not wedge_deferred and not attendance.attends(task.id, task.assignee)` (F371). The reason is D4's refused sentence where `attendance.refusal(task.id, task.assignee)` is set, else `_wedged_review_reason`. |
+
+**Why `wedge_deferred` (R3).** Today both readers ask the same task-level question, so a wedge the
+guard defers is never surfaced: `task.id in on_it` holds, so `task.id not in on_it` does not. Once
+the surfacing asks the pair question and the guard keeps the task question, an **author** holder
+(F70/F142/F167's case) with a third agent's turn on the task would be deferred by the guard and then
+surfaced by F154 as *"{author} is named on … as its reviewer"* — the false sentence F167's comment
+says strands the task, and a second answer to a row the guard just said to wait on. A deferred
+wedge stays `in_flight` silently, as today, and the next firing decides.
 | Resume arm (`:1848`) | `agent in running or attendance.attends(task.id, agent)` (F370, F368). |
 | Availability (`:1162`, `:1179`) | `attendance.has_turn(task_id, assignee)` — D5. |
 
@@ -125,6 +148,13 @@ pass reaches that agent, and nothing schedules one on its own (`turn_scheduler.p
   agent, which counts the refused head and, at `DELIVERY_ATTEMPT_LIMIT`, gives up on it
   (`turn_scheduler.py:594-630`). Treating it as in flight would leave the head counted once and then
   never tried again, with the flow reporting in flight: F368's shape, silent instead of noisy.
+  (R3) That argument holds only with D1's head rule: a re-briefing that does not ride with the
+  refused head is still behind it, so the pair stays refused and the next firing drives the next
+  pass, until the head is given up at the limit and the pass moves on (F320). Cost kept from today:
+  where the refusal is about the task itself, each briefing behind the head meets it in turn, so
+  entries still accumulate faster than they are given up (one per firing, one given up per three
+  passes). That is today's behaviour for this row, not new; the alternative is the operator's (count
+  refused input as attendance, below, or surface it as the review arm does).
 
 *Alternative, if the operator rejects D3:* count refused input as attendance. The review arm then
 keeps F327's `in_flight` window until the entry is given up, and the resume arm strands a refused
@@ -143,6 +173,10 @@ head as described. The scenarios naming a refused delivery leave both deltas.
   `JOB_RUN_ERROR_SUMMARY_CHARS` (500, `models.py:1367`) by shortening the refusal first and then
   the title, so the remedy is never cut (the rule `_wedged_review_reason`'s docstring states for the
   title, `:2207-2211`). It does not say "ask them again": the same dispatch meets the same refusal.
+  Where `refused_here` is false (the refused head is another entry of theirs, R3), the middle clause
+  reads *"and the review is queued behind input for them whose delivery was refused: {refusal}"*,
+  and the remedy *"Fix what it names or withdraw that input, review it yourself, or send it back
+  with revision_needed."*
 
 ## D5 — Availability is unchanged
 
@@ -210,3 +244,12 @@ at the same point. Nothing here adds a new raise, and no route's status changes.
   stays `queued` — attended — by D3's criterion. Deliberate: it is F96's wait-for-the-repair input,
   and the resume arm should not pile briefings on it; for a hand-staffed reviewer whose runner was
   unbound, the review reads in flight until the repair. Kept as a residual, not a D3 change.
+- **R3, 2026-09-24** (bundle B1): re-derived against the code, including Round 5's F167 gate
+  (`6117d15`). Two corrections. (1) Refusal is read at the agent's **head** (D1): R2's per-entry
+  rule let the resume arm's one re-briefing, queued in a new conversation behind a refused head,
+  mark the pair `queued`, so the flow read in flight with nothing ever retried — the silent F368
+  D3 exists to prevent. (2) `wedge_deferred` (D2): once F154 asks the pair question and the F70/F167
+  guard keeps the task question, a deferred author wedge would be surfaced naming the author as
+  reviewer. Held on re-reading: `on_it`'s three readers and no fourth (`grep on_it hub/hub`); the one
+  writer of `waiting_reason` (`turn_scheduler.py:475`) and its one clearer (`inbound_queue.py:191`);
+  `has_turn` from queued rows only; `decide_firing`'s callers (`jobs.py:380`, `:1335`, the firing).

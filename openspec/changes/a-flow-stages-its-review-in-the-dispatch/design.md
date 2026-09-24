@@ -43,7 +43,9 @@ In `decide_firing`, after the `WITH_REVIEWER` arm and before the documentless br
 2. Only **refused** review turns → `unstaffed.append((task.id, <sentence>))`, `continue`, with no
    selection. The sentence: *"{agent}'s review of {task.id} ({title!r}) was queued and delivering it
    was refused: {refusal} Fix what it names, withdraw that input so the flow can staff the review
-   again, or land it yourself."* — fitted like D4 of the attendance change. Re-staffing here would
+   again, or land it yourself."* — fitted like D4 of the attendance change; where the refused head
+   is another entry of that agent's (`Attending.refused_here` false, the attendance change's R3 head
+   rule), *"was queued behind input for {agent} whose delivery was refused: {refusal}"*. Re-staffing here would
    queue a second review turn behind the refused one, delivered only after it, and usually refused
    the same way.
 3. Otherwise → today's code (documentless branch, attribution, commit check, ladder).
@@ -130,11 +132,28 @@ work (*"The assignment above is the whole repair"*, `enter_selected_task`, `sche
 the firing re-selected a wedged `under_review` task and the firing's own `enter_selected_task`
 replaced the author. Now the dispatch does it, and meets the holder check, because the author is a
 holder that is not the dispatched agent. The requirement already says the refusal is for a task
-*"held by a different reviewer"*, and an author is not a reviewer — `_guard_reviewer_is_not_the_author`
-refuses a task entering review with it as holder (`task_transition_service.py:390-440`). So the
-check replaces an author holder at both sites (route and dispatch), judged by the same rule that
-guard applies, called rather than restated. This changes no answer the operator gets today except
-the one the F70 recovery never reaches.
+*"held by a different reviewer"*, and an author is not a reviewer. So the check replaces an author
+holder at both sites (route and dispatch).
+
+**Judged by the rule that sent the task to the ladder, not the entry guard's (R3).** R1/R2 said "the
+same rule `_guard_reviewer_is_not_the_author` applies". That rule is narrower than the one that
+routes a wedge to recovery: the guard reads the recorded completer, or, where no agent completed the
+task, the evidence authors **alone** (`task_transition_service.py:416-433`); `decide_firing`'s wedge
+predicate reads the completer, or, where none, `agents_that_worked` **∪** the evidence authors
+(`scheduler.py:1777-1785`, F142 and Round 5's F167). The difference is F142's own measured case: the
+agent moved the task through `in_progress`, the operator recorded `completed`, and it recorded no
+evidence. The firing routes that row to the ladder, the ladder staffs a reviewer, and with the
+guard's rule the dispatch would find the holder "not an author" and refuse *"already under review by
+{author}. Let the review in flight finish"* — every time, since the refusal is request-level and
+counted; F142's recovery, which works today only because the firing's own write needs no check, would
+be lost. So the wedge predicate is lifted out of `decide_firing` into one function in
+`task_transition_service` (`assignee_produced_the_work(session, task)`: completer == assignee, else
+assignee ∈ `agents_that_worked` ∪ `agents_that_recorded_evidence_for`), called by `decide_firing` and
+by both holder-check sites. One statement of "this holder is the author", so the recovery and the
+dispatch it depends on cannot disagree. The entry guard is untouched: it answers a different
+question (may *this* agent be entered as holder), where refusing on `agents_that_worked` would refuse
+a staffed reviewer that was once assigned the work. This changes no answer the operator gets today
+except the ones the F70/F142/F167 recovery never reaches.
 
 **Where the exemption's read sits, and what a raise returns** (R2, task 0.2(c)). Inside the holder
 check, which already precedes `enter_selected_task` (`agent_trigger.py:886-898`), so nothing is
@@ -211,6 +230,27 @@ closed), or let the real dispatch run. None may be deleted.
 - `decide_firing`'s callers (firing, board `jobs.py:380`, `run_job` `jobs.py:1335`): D2–D4 add no
   query beyond D4's one status read.
 
+## What the operator sees when the dispatch is refused (R3, traced from a real firing)
+
+The firing queues the entry with `review_task_id` (`scheduler.py:3404-3429`), commits, and calls
+`schedule_agent` (`:3471`). `_attempt_turn` passes the selected ids to `trigger_agent_directly`
+(`turn_scheduler.py:408-423`), which reads the review task from them (`agent_trigger.py:823-824`),
+finds it `completed` (no holder check), and stages it (`:898`) before `prepare_review_turn`. So
+D1's staging does fire from a real flow firing, and a refusal is rolled back whole (`:448`).
+
+- **Refused at the firing** (reviewer idle): the refusal is request-level and not transient, so
+  `ScheduleResult.terminal_failure` is true (`turn_scheduler.py:683-687`) and the firing marks its
+  `JobRun` `failed` with the refusal as `error_summary` (`scheduler.py:3472-3478`) — the JobCard shows
+  the refusal's words. The task reads `completed`, held by its author, no transition. The next firing
+  meets D2 step 2: stalled, with the refusal sentence as `stall_reason` and one `review_unstaffed`.
+- **Refused later** (reviewer was running; the run-end re-drain dispatches it): no `Run` is created,
+  so the refusal does not finalize the firing's `JobRun`: its `finalize_job_run_for_conversation`
+  calls are all on run paths in `agent_trigger` (`:2050`, `:2193`, `:2522`, `:3065`, `:3159`), and
+  otherwise only startup reconciliation settles an `in_progress` row (`run_reconciliation.py:261`) —
+  confirm at IMPL which applies. The operator learns of it from the next firing's stall reason (D2 step
+  2) and the queue status route's stored refusal. Pre-existing for every deferred refusal (today the
+  same `JobRun` also stays `in_progress`); recorded, not fixed here. Test 1.5b pins it.
+
 ## Residuals, not fixed here
 
 - **The holder check's sentence is false for a silent holder.** A review that gave no verdict and
@@ -264,3 +304,13 @@ closed), or let the real dispatch run. None may be deleted.
   holder check at `:886-897` and `review_dispatch_refusal` at `:497-507`; a `completed` task never
   meets the holder check, so D1 collides only on F70's wedge and the restaff; the restaff's assignee
   write at `run_divergence.py:469-474`; `_briefing_verdict_lines` at `:2569`.
+- **R3, 2026-09-24** (bundle B1): re-derived against the code, including Round 5's F167 predicate
+  (`6117d15`). Correction: D5's author-holder replacement must use the **wedge predicate's** rule
+  (completer, else `agents_that_worked` ∪ evidence authors), lifted into one function shared with
+  `decide_firing`; the entry guard's narrower rule would refuse F142's measured row at every dispatch
+  and lose its recovery. Traced D1 from a real firing to the dispatch and recorded what the operator
+  sees for an immediate and a deferred refusal (new section; test 1.5b). D2's sentence gains the
+  behind-a-refused-head variant from the attendance change's R3 head rule. Held: the restaff entry
+  carries both `task_id` and `review_task_id` (`run_divergence.py:475-486`), which
+  `_review_task_from_entries` reads as a review, not a mixed batch (`agent_trigger.py:447-452`); the
+  `RunDivergence` row is committed with the entry (`:814-827`) before the dispatch can read it.

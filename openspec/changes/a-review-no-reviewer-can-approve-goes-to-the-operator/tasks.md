@@ -2,7 +2,7 @@
 
 - [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design, delta, tasks, test guide from `404c7d5` and `DECISIONS.md` `F374-fix`
 - [x] 0.2 R2 (2026-09-24): done — see design.md round log. Original brief: re-derive against `hub/hub/run_divergence.py:331-487` and `:685-876`, `hub/hub/requirement_gate.py:60-720`, `hub/hub/review_turn.py:178-237`, `hub/hub/scheduler.py` (`decide_firing`'s F154 branch as change 1 leaves it, `_wedged_review_reason`), and the delta. Check D1's category table against every writer of `GateRefusal`'s lists; D1's read-only claim; D3's cost on a board read (measure)
-- [ ] 0.3 R3: second independent re-derivation; `openspec validate a-review-no-reviewer-can-approve-goes-to-the-operator --strict` passes
+- [x] 0.3 R3 (2026-09-24): done — see design.md round log; `openspec validate a-review-no-reviewer-can-approve-goes-to-the-operator --strict` passes
 - [ ] 0.4 Operator approval (APPROVALS.md). Strike ROUNDS.md's D9 row to point at `F374-fix` and this change
 
 ## 1. Tests first — each fails on today's code unless marked as a control

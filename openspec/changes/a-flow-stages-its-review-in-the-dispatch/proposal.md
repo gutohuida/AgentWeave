@@ -51,7 +51,9 @@ reviewer into `assignee` (`run_divergence.py:469-474`) and commits (`:827`) befo
   it as a holding, since the reviewer is no longer the assignee until the dispatch.
 - **The restaff stops writing the assignee; the dispatch's holder check lets two holders be
   replaced** (design D5, the "D9 collision"): an author left as holder (F70's recovery, which also
-  loses its firing-time write), and the silent reviewer a recorded restaff replaced.
+  loses its firing-time write) — judged by the same predicate that routes the wedge to recovery,
+  shared, so F142's operator-completed row is not refused at its own dispatch (R3) — and the silent
+  reviewer a recorded restaff replaced.
 - **The review briefing names the status the reviewer will find** (design D6). It is composed before
   the dispatch now, when the task still reads `completed`.
 

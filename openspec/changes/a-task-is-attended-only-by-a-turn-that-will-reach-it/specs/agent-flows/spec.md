@@ -10,6 +10,8 @@ Input naming the task that is queued for some other agent SHALL NOT keep the rev
 
 The surfaced sentence SHALL NOT state that no input is queued, because input the flow does not count may be.
 
+Where the agent named on the task is the agent that produced its work, and some agent's turn on the task is running or waiting to be delivered, the flow's recovery of that task waits for the turn, and the task SHALL NOT be surfaced as a review that agent is not doing. Such an agent is not reviewing it, and a sentence naming it as the reviewer would be false while the recovery is only waiting.
+
 The flow SHALL NOT substitute another agent as part of this surfacing. Replacing a reviewer is governed by the resolution that already runs at a review turn's end, and a second path that also replaced one could reach a different answer than the first.
 
 #### Scenario: An operator-walked review with no run is surfaced
@@ -38,6 +40,12 @@ The flow SHALL NOT substitute another agent as part of this surfacing. Replacing
 - **WHEN** a task is under review with an agent named on it, and the review input queued for that agent was refused on its last delivery
 - **THEN** the flow surfaces that review
 - **AND** the sentence contains the refusal's own words
+
+#### Scenario: An author left holding a review, while another agent's turn is on the task, is not named as its reviewer
+
+- **WHEN** a task is under review with the agent that produced its work named on it, and a message naming the task is queued for a different agent
+- **THEN** the flow reports the task as in flight and does not surface it as a review nobody is doing
+- **AND** no sentence names the author as the task's reviewer
 
 #### Scenario: No substitution happens on this path
 

@@ -4,7 +4,7 @@
 
 A firing SHALL classify a task as in flight only where an agent is actually working it: a turn bound to that task is running, or input naming that task is waiting to be delivered to the agent whose name is on it. A name written in the task's assignee SHALL NOT by itself be sufficient.
 
-Input counts as waiting to be delivered to an agent only where all of these hold: it is queued for that agent, not for any other; it is within the project's hop budget; and its last delivery was not refused. Input queued for another agent is that agent's turn, not the named agent's, and SHALL NOT count however the Hub happens to read the rows. Input past the hop budget is delivered only if the operator releases it, so it is a turn nobody will take unless they act. Input whose last delivery was refused waits for an attempt that the same refusal may answer again, so it is not a turn being taken either; the refusal's own sentence is what the operator is owed instead.
+Input counts as waiting to be delivered to an agent only where all of these hold: it is queued for that agent, not for any other; it is within the project's hop budget; and the input that agent's next turn would start with was not refused on its last delivery. Input queued for another agent is that agent's turn, not the named agent's, and SHALL NOT count however the Hub happens to read the rows. Input past the hop budget is delivered only if the operator releases it, so it is a turn nobody will take unless they act. Input whose last delivery was refused waits for an attempt that the same refusal may answer again, so it is not a turn being taken either; the refusal's own sentence is what the operator is owed instead. Input queued behind it for the same agent is not delivered before it is, so it SHALL NOT count either, however recently it was queued.
 
 Where an assigned task is in flight by this definition, the firing SHALL NOT brief its agent on it again, whatever the reason the waiting input has not started. A second briefing does not start the first one; it queues one more copy that is delivered as a separate turn once a turn can start.
 
@@ -81,6 +81,12 @@ An assignee is a record of who holds a task, not evidence that a turn exists. Re
 
 - **WHEN** an assigned task's agent is running no turn, and the only input naming the task queued for it was refused on its last delivery
 - **THEN** the firing briefs the agent on the task, as it resumes any assigned task
+
+#### Scenario: A briefing queued behind a refused delivery does not make the task in flight
+
+- **WHEN** an assigned task's agent is running no turn, the first input queued for it was refused on its last delivery, and a later briefing naming the task is queued behind that input in another conversation
+- **THEN** the firing does not report the task as in flight
+- **AND** the firing briefs the agent on the task, as it resumes any assigned task
 
 #### Scenario: A busy flow is still not reported as stalled
 

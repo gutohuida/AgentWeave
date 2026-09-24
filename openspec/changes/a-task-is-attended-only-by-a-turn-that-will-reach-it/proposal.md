@@ -48,7 +48,8 @@ failing.
 - **One helper answers "who is on this task", by pair** (design D1). `task_attendance` replaces both
   `tasks_with_a_turn_pending_or_running` and `task_agent_pairs_with_a_turn_queued`. It returns
   `(task, agent)` pairs, each with how it is attended: a running turn bound to the task, input
-  queued within the hop budget, or input queued within the budget whose last delivery was refused.
+  queued within the hop budget, or input queued within the budget behind that agent's refused head
+  (refusal is read at the entry the agent's next turn would start with; design D1, R3).
   Suspended input (past the budget) is not a pair at all. `tasks_held_by_a_running_turn` stays: the
   trigger's *may this turn start* question is a different one (its own docstring, `:363-371`).
 - **The three `decide_firing` readers ask the pair question** (design D2):
@@ -62,6 +63,8 @@ failing.
   being taken. For a review, the surfaced sentence carries the refusal's own words. For ordinary
   work, the firing briefs the assignee as it does today, which is what retries a refused head today
   (there is no tick: `turn_scheduler.py:665`, `agent_trigger.py:2643`); removing that would strand it.
+  An F70/F167 author wedge whose recovery waits for another agent's turn is not surfaced as a
+  review the author is not doing (design D2, `wedge_deferred`, R3).
 - **The F154 sentence stops claiming "none is queued"** (design D4). Input the flow does not count
   may be queued.
 - **Availability is unchanged** (design D5). `_roster_availability` reads the same pairs through the

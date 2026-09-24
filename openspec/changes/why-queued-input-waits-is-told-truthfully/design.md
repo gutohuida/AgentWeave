@@ -134,3 +134,4 @@ is what the operator reads, with the old holder's name inside a sentence that sa
   set rather than return the ORM row. Held on re-reading: `messages.py:57-77`, `:299-319`;
   `agent_actions.py:201-224`; `mcp_server.py:236-244` posts to `/api/v1/agent-actions/messages`; the
   status route's fallback at `inbound_queue.py:178`.
+- **R3, 2026-09-24** (bundle B1): re-derived against the code. No correction. Held: `waiting_reason` has one writer (`turn_scheduler.py:475`, a refusal's words) and one clearer (`inbound_queue.py:191`), so D4's *"the last delivery attempt was refused"* is true of every stored value; the status route's order and fallback (`api/v1/inbound_queue.py:127-178`). Neighbour checked: B2's `an-undelivered-message-says-how-its-last-attempt-ended` is about a given-up entry's last **run** in the conversation view, not this route; no overlap.

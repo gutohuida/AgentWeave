@@ -149,3 +149,4 @@ linked document. Not cached (D1).
   (measured: ~25 ms per git spawn here, synchronous on the event loop). Read-only confirmed: no
   `add`/`flush`/`commit` in `requirement_gate.py` or `requirement_coverage.py`; `task_integration`'s
   writers (`record`, `integrate_what_was_waiting_for_this_evidence`) are not on `evaluate`'s path.
+- **R3, 2026-09-24** (bundle B1): re-derived against the code. No correction. Held: the short-circuit's premises (`unaccepted` needs `awaiting_targets` non-empty; `blocking`/`diagnostics` land only at `gate` rigor, `contract` goes to `reported`, `requirement_gate.py:639-700`); `may_accept` reads `Agent.can_accept_evidence` (`requirement_evidence.py:659-674`); `_answer_failed_review`'s declared/exclude/resolve/restaff order (`run_divergence.py:425-487`). D3's refused-delivery sentence now has a behind-a-refused-head variant (the attendance change's R3); the gate sentence's position after it is unchanged.

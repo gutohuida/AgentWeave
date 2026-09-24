@@ -97,3 +97,4 @@ creation-time failure, and a queued delivery is counted as it already is. Nothin
   non-agent-wide refusal (`agent_trigger.py:1012-1023`). Added: the lockout cost of refusing on an
   existing branch, with D2' as an operator sub-question; the approved subset computed in the same
   pass.
+- **R3, 2026-09-24** (bundle B1): re-derived against the code. No correction. Held: `_prerequisite_commits` filters by `approved` only on the branch-tip route and calls `merge_targets` per prerequisite (`task_workspace.py:237-245`), so D3's same-pass subset is a second list in that loop; `merge_targets` returns evidence targets regardless of status where evidence governs (`task_integration.py:400-401`), so an approved prerequisite contributes its commits. D2 vs D2' stays an operator sub-question.

@@ -2,7 +2,7 @@
 
 - [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design, deltas, tasks, test guide; F361 and F289 re-verified by reading at `404c7d5`, F289's changed shape (F288 fixed 2026-09-23) recorded
 - [x] 0.2 R2 (2026-09-24): done — design.md round log and Collisions. Original brief: re-derive against `hub/hub/api/v1/messages.py`, `agent_actions.py:201-224`, `schemas/messages.py`, `mcp_server.py:203-244` (and `ask_user`: D1's open check), `api/v1/inbound_queue.py:97-205`, `agent_trigger.py:960-1005`, `run_task_binding.resolve_bound_task`. Check that no consumer of `MessageResponse` (the UI's `api/messages.ts` and the SSE `message_created` payload, `_msg_dict`) breaks on two added optional fields
-- [ ] 0.3 R3: second independent re-derivation; `openspec validate why-queued-input-waits-is-told-truthfully --strict` passes
+- [x] 0.3 R3 (2026-09-24): done — see design.md round log; `openspec validate why-queued-input-waits-is-told-truthfully --strict` passes
 - [ ] 0.4 Operator approval (APPROVALS.md), including D2's departure from ROUNDS.md's sketch
 
 ## 1. Tests first — each fails on today's code unless marked as a control

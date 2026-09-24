@@ -38,8 +38,10 @@ task's recorded history unable to explain who holds it or why it changed. The re
 current holder.
 
 Two holders are not a different reviewer in that sense, and a dispatch SHALL replace them. One is an
-agent recorded as having produced the work, by the record that would refuse its verdict: it cannot
-be reviewing the task, and a task entering review may not name it as holder in the first place. The
+agent recorded as having produced the work: the agent recorded as completing it, or, where no agent
+is, an agent that moved the task or recorded evidence for it. It cannot be reviewing the task, and
+this SHALL be the same judgement by which a flow decides that such a task needs a reviewer at all,
+so that the flow never staffs a review its own dispatch then refuses. The
 other is a reviewer whose review ended without a verdict and whom the resolution of that failed review
 replaced by the reviewer being dispatched: the record of that failed review names the previous holder
 and the replacement, so the task's history explains the handover. In both cases no path records the
@@ -114,6 +116,13 @@ review a scheduled firing requested remains that firing's move when its dispatch
 - **AND** a review naming a different agent is dispatched
 - **THEN** the dispatched reviewer becomes the holder
 - **AND** the request is not refused on the ground that the task is already under review
+
+#### Scenario: An author the operator marked finished is replaced by the dispatched reviewer
+
+- **WHEN** a task is under review, held by an agent that moved it while working it, the operator recorded its completion, and that agent recorded no evidence for it
+- **AND** a flow's review naming a different agent is dispatched
+- **THEN** the dispatched reviewer becomes the holder
+- **AND** the dispatch is not refused on the ground that the task is already under review
 
 #### Scenario: A reviewer that recorded the task's evidence is refused before any turn begins
 
