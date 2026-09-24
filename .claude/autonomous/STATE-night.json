@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "8a5d0ed",
     "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-24-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "f133-impl",
-    "next_action": "Do queue item f133-impl (see its detail in queue). First read CI verdict for the previous push sha via gh run list, write it on the log entry's first line. Run tests/ before commit.",
+    "current": "tool-server-impl",
+    "next_action": "Do queue item tool-server-impl (see its detail in queue). First read CI verdict for the previous push sha via gh run list, write it on the log entry's first line. Run tests/ before commit. Note: a full hub suite takes ~37 min; run it with run_in_background and a relevant subset in the foreground.",
     "queue": [
         {
             "id": "compose",
@@ -23,9 +23,9 @@
         },
         {
             "id": "f133-impl",
-            "status": "open",
+            "status": "done",
             "title": "F133 no-spec fix: shared select_turn in hub/hub/inbound_queue.py",
-            "detail": "Move select_turn(entries, hop_budget, cap) and _entry_kind into inbound_queue.py, called by _attempt_turn and get_queue_status. Failing test first: autonomous entry then operator entry queued beside it; status must keep waiting_reason. Spec: FINDINGS.md F133 Decided block. Mutation-check. Then mark F133 fixed <sha>."
+            "detail": "Done iteration 2 (c418cb8): shared select_turn; driven by night-drive."
         },
         {
             "id": "tool-server-impl",
