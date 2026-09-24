@@ -56,7 +56,9 @@ This file is a **plan, not an authority** (same standing as `ROADMAP.md`). `APPR
 
 ## Priority, in one line
 
-**Round 0 → 1 → 2 → 3 → 4 → 5 this week**, with **D** put to the operator alongside, then the
+**Rounds 0–5 and UI-1 are done (2026-09-22/23). Next: Round 6 and UI-2 now, Round 7 as its
+changes land**, and the approved bundle changes through the night window's ORDER. The plan as
+first written: **Round 0 → 1 → 2 → 3 → 4 → 5 this week**, with **D** put to the operator alongside, then the
 **spec tracks from 2026-09-28 in the order listed**. Round 1 comes early because every later round
 depends on a CI that tells the truth. Round 5 was waiting on F352, which landed and was driven on
 the 2026-09-23 night window, so it is unblocked. Within a round, work B before C before D.
@@ -79,7 +81,10 @@ from this file and `FINDINGS.md`.
 | UI-1 | One bundle: controls that lie or do nothing | 22 (incl. F275, F156 from Round 3) | ~2 days | ui-bundle, browser check, `:8000` restarted past `c18a87b` |
 | 5 | Scheduler residuals | 2 (incl. F167 from Round 0; +3 moved: F327 → S13, F373 and F400 out of the plan) | ~1 day | nothing (F352 landed 2026-09-23) |
 | D | Operator decisions (13 questions) | 59 | ~2 DECIDE sessions | operator |
-| S1–S13 | Spec tracks, from 2026-09-28 | 34 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
+| 6 | Backend no-spec fixes from the 2026-09-24 review | 9 | ~1 day | nothing; finish by ~21:30 on armed nights |
+| UI-2 | Overview strip, Messages screen, narrow composer | 3 (incl. F350 from UI-1) | ~1 day | ui-bundle, browser check |
+| 7 | Residuals behind a change | 14 open (+10 carried by changes) | as each change lands | the change named in each group |
+| S1–S13 | Spec tracks, from 2026-09-28 (superseded by the bundles) | 34 + those D releases | ~1 change / 2–3 days | C/D tracks: the operator starts them |
 
 ---
 
@@ -299,7 +304,7 @@ that commit's `{tasks, total, has_more}` envelope (F202), and `:8000`'s backend,
 | F205 | C | The two `→ archived` edges get a button. |
 | F169 | C | Render the approval advisory. |
 | F315 | C | "Mark waiting" shows it is pending and refuses a second press. |
-| F350 | C | The composer send button stays on-panel below ~560 px. **Carried out of UI-1 (2026-09-23):** the repair is the narrow layout (the rail as a drawer or header control below 760px), a design change that has to be measured in a browser, not a CSS cap set blind. |
+| ~~F350~~ | C | **Moved to UI-2.** The composer send button stays on-panel below ~560 px. **Carried out of UI-1 (2026-09-23):** the repair is the narrow layout (the rail as a drawer or header control below 760px), a design change that has to be measured in a browser, not a CSS cap set blind. |
 | F252 + F255 | B | Logs show newest-first, with paging. The route and the view change together. F255's malformed `since` is the same query. |
 | F307 | B | The first Tab in a confirm-only dialog stays in the dialog. The operator named which control gets focus as a separate question, so it is in D13. |
 | F193 | B | An archived agent's open conversation shows one state in both rail views, with a remedy. Its product answer is in D10. |
@@ -333,9 +338,122 @@ is that failure.*)*
 | F167 | B | `agents_that_worked` cannot see an author whose history is all the operator's, so F70/F142 recovery never fires. |
 | ~~F327~~ | B | **Moved to spec track S13** (operator, 2026-09-23). A flow-staffed review whose dispatch is refused leaves the reviewer holding the task. Every repair modifies a main spec (`DECISIONS.md` `F327-scope`), so it is not a no-spec row. |
 
+## Round 6 — backend no-spec fixes from the 2026-09-24 review (~1 day)
+
+Added 2026-09-24 afternoon, at the operator's request (*"expand the round file to add more rounds"*).
+The daily review of the twelve bundles decided some findings as no-spec fix rounds and filed new
+ones (F416–F443). These are the ones no approved or REVISING change carries, and that tonight's
+ORDER does not touch. Worked in interactive sessions (C findings are operator-directed, per
+"Read this first" 1). B first.
+
+**Constraints while the night window is armed:** finish and push by ~21:30 with CI green, because
+the window reads CI on the previous push before anything else and a red run costs it the night. No
+`mcp_server.py` edit until `an-agents-tool-server-is-the-one-its-hub-loaded` lands and `:8000` is
+restarted: until then an edit there reaches the operator's live agents from the working tree.
+F305 edits the windows' own playbooks, so it lands before 22:55 or not that day.
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F420 | B | `build_worker_command` (`worker.py`) runs the checkpoint and probe worker's `claude -p` with every default tool enabled, on untrusted transcript text. Pass `--tools ""` as the titler has since Round 4, and pin the argv in a test. Check first that tonight's B8 build has not touched `worker.py`. |
+| F425 | B | A read-only agent assigned a writing task writes into the operator's checkout (`takes_task_workspace`). Re-verify first. If the repair changes what `workspace-isolation` promises, it leaves this round for a spec track. |
+| F417 | B | Compact and New-session requests are saved but never reach the agent. Re-verify, and find the consumer that should drain them. If none was ever specified, it becomes a spec. |
+| F146 | B | Decided 2026-09-24 (B11): `POST /questions` refuses `blocking: true` (422 naming `blocking`); update `_asking_run_has_ended`'s docstring; drop `blocking` from the dead `HttpTransport.ask_question`. |
+| F305 | B | Decided 2026-09-24 (B11), harness: `decisions_for_user` carries only ids of `OPEN` rows in `DECISIONS.md`. Edit `day-window.md`, `night-window.md`, `arm-cycle.ps1` and the two autonomous skills; at compose a window drops and logs any inherited id that is not `OPEN`. |
+| F422 | C | The titler pays again for the same title after every turn (`generate_conversation_title`). **The operator ruled it is fixed before `worker-spend-counts-against-the-budget`** (B7). |
+| F410 | C | A checkpoint or divergence delivery reaches the agent labelled `Agent "None"`. |
+| F416 | C | `list_evidence` ignores `document` when no `identifier` is given. |
+| F20 | C | Decided 2026-09-24 (B11): canonicalise the address to `/` plus the resolved destination's query (compare the pathname too), and change the CLI's `view=overview` to `tab=overview`. Tests in `useWorkspaceNavigation.test.tsx` and `tests/test_cli.py`. |
+
+## UI-2 — one bundle: the Overview strip, the Messages screen, the narrow composer (~1 day)
+
+One bundle and one browser check (on `:8010`), and it reaches `:8000` on the operator's next reload.
+F260 deletes code that two approved changes mention (B3's
+`a-message-to-the-operator-is-told-where-the-operator-reads`, B10's
+`a-loops-outstanding-mail-is-mail-not-yet-delivered`): read both before deleting, and build UI-2
+before them or rebase them onto it.
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F419 | B | The Overview tab's activity strip shows every project's events: filter by the project. Its warning dot tests `warning` where the Hub writes `warn`. |
+| F260 | C | Decided 2026-09-24 (B10 D6.3): delete the Messages screen (its three routes, three hooks and three components), and lower `MISREPORT_CEILING` and `UNHANDLED_SITE_CEILING` to match. |
+| F350 | C | *Carried from UI-1.* The composer's send button goes off-panel below ~560 px of height. The repair is the narrow layout (the rail as a drawer or header control below 760 px), measured in a browser session, not a CSS cap set blind. |
+
+## Round 7 — residuals that wait for a change to be built
+
+Each group names the change that must land first; nothing in a group starts before it. They were
+found by the bundle rounds and the Opus reviews, and none is carried by the change it follows.
+The last group lists findings an approved or REVISING change **does** carry: struck, so they are
+counted nowhere here, and closed when that change is archived.
+
+**After `pressing-run-names-the-reason-that-held` (tonight's ORDER). The operator kept these separate (`0923-changes`).**
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F411 | B | The Jobs page's Run button discards the Hub's answer, so a declined Run shows nothing. UI bundle. |
+| F412 | B | Pressing Run answers `200 {"success": true}` when no turn began (a `terminal_failure` firing). |
+| F413 | B | A firing that fails with no row left behind is invisible, and Run calls it "nothing is wrong". |
+
+**After the B1 chain: `a-flows-own-moves-are-recorded-as-the-flows`, `a-task-is-attended-only-by-a-turn-that-will-reach-it`, `a-review-no-reviewer-can-approve-goes-to-the-operator`, `a-flow-stages-its-review-in-the-dispatch`**
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F440 | B | A decided task's queued review entry is never released (`_release_queued_entries_bound_to` keeps entries carrying `review_task_id`); refused up to three times, then withdrawn. S13 widens the window. |
+| F424 | B | When the approval gate's git calls raise, every approval surface answers a bare 500. `a-review-no-reviewer-can-approve-goes-to-the-operator` counts "could not ask git" as held and B5's preview change wraps its own call; re-check what is left after both. |
+| F438 | C | The holder check's "Let the review in flight finish" is false for a silent holder whose review ended. Reword once S13's holder check is in. |
+| F439 | C | Input in a closed conversation counts as queued, so after the attended change such a task reads as in flight. |
+| F441 | C | After the attended change, Run can say "already being worked" for an idle assignee whose queued turn cannot start (a token-budget hold, a closed conversation). |
+| F442 | C | A flow review refused at a deferred dispatch (the run-end re-drain) does not finalise the firing's `JobRun`. Pinned by S13's test 1.5b. |
+
+**After `a-checkpoint-is-handed-over-once-and-says-where-it-went` (B8) and `worker-spend-counts-against-the-budget` (B7, REVISING)**
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F421 | B | An `unwritten` checkpoint becomes the next checkpoint's anchor (`latest_checkpoint`). |
+| F423 | C | A declined handover's note never reaches that task's reviewer (`_briefing_checkpoint` falls back to the loop's latest). |
+
+**After `a-loop-is-stopped-archived-and-delegated-from-its-own-tab` (B10), which rewrites the loop tab**
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F418 | C | The loop tab fetches the loop's event history and shows none of it. |
+
+**After `an-agent-updates-a-task-with-what-its-tool-carries` (B3)**
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F443 | C | An agent can still set a task's holder, priority and description when it creates the task: the create side of the same rule. May need a MODIFIED governance delta; re-verify. |
+
+**After `drift-watches-the-files-its-evidence-is-about` (REVISING) and `drift-is-scanned-and-answered-on-the-document` (B6)**
+
+| Finding | Sev | Fix |
+|---|---|---|
+| F435 | C | A drift candidate is never superseded when its requirement is reworded, although `models.py` documents that it is. |
+
+**Carried by a change: left the plan, closed when the change is archived**
+
+| Finding | Sev | Fix |
+|---|---|---|
+| ~~F426~~ | B | Carried by `evidence-is-decided-after-the-run-that-recorded-it` (B5, approved). |
+| ~~F427~~ | B | Carried by `drift-watches-the-files-its-evidence-is-about` (B6, REVISING). |
+| ~~F432~~ | C | Carried by `drift-watches-the-files-its-evidence-is-about` (B6, REVISING). |
+| ~~F430~~ | B | Carried by `drift-is-scanned-and-answered-on-the-document` (B6, approved). |
+| ~~F436~~ | B | Carried by `drift-is-scanned-and-answered-on-the-document` (B6, approved; D8). |
+| ~~F434~~ | B | Carried by `the-corpus-is-indexed-arranged-and-adopted-from-the-app` (B6, approved). |
+| ~~F428~~ | C | Carried by `a-pending-proposal-can-be-withdrawn` (B6, approved). |
+| ~~F431~~ | C | Carried by `a-pending-proposal-can-be-withdrawn` (B6, approved). |
+| ~~F429~~ | C | Carried by `a-documents-rigor-history-and-retired-requirements-are-on-screen` (B6, approved). |
+| ~~F437~~ | B | Answered by `a-flow-stages-its-review-in-the-dispatch` (B1 S13, its D2; REVISING). |
+
 ---
 
 ## D — operator decisions (13 questions; put them through `daily-review`)
+
+**Status:** answered 2026-09-24. All thirteen went through the daily review of the bundles
+(`DECISIONS.md` `2026-09-24 — the daily review of the twelve bundles`; `APPROVALS.md`
+`## 2026-09-24`). What each answer released is now an approved or REVISING change (Bundles section),
+a Round 6 or Round 7 row, or closed. Still open here: **F21** (a six-turn Haiku probe decides it),
+**F382** (watch-only), **F322** (with F325), **F339/F340** (parked), and the new **D14**. A finding
+here stays open until the change or round that fixes it lands.
 
 Each question below unblocks the findings in its row. They are grouped so that one answer closes
 several findings. **Recommended first**, because they unblock the most or the largest: **D1, D3, D6,
@@ -355,9 +473,15 @@ D4.**
 | D10 | Agent control and addressing. "Pause this agent" (F15). Addressing the operator without a question (F77). Collision with host `SendMessage` (F139). `agent_wide` for "no such agent" (F276). Is the assignee settable by agents over HTTP but not MCP (F366)? Are titles editable (F125)? What does an archived agent's conversation show (F193)? | F15, F77, F139, F276, F366, F125, F193 |
 | D11 | Run and turn presentation: where a pre-spawn failure shows (F291). Binding without completion evidence (F42). A stale-run sweep trigger (F168). Checkpoint visibility, which is really all-or-nothing (F235). What a run says when its own terminal-status write fails (F273). | F291, F42, F168, F235, F273 |
 | D12 | Isolation and merge truth: may `read_only` flip mid-task (F242)? Is the approval gate's conflict result persisted (F141)? Unknown-branch spelling (F165)? | F242, F141, F165 |
+| D14 | *Added 2026-09-24.* A multi-unit proposal: once one unit is accepted its siblings go stale. Should the siblings rebase, or be accepted together? Not carried by any change. | F433 |
 | D13 | The remainder, one line each | F308 (CI drift alarm), F305 (windows re-ask decided questions), F354 (live agents run MCP from the working tree), F385 (pywebview private mode), F20 (deep-link fallback), F307 (dialog initial focus), F349 remainder, F53 (a loop's archive releases adopted tasks?), F217 (drift branch basis), F281 (shell writes recorded how?), F389 (event per allow?), F146 (an operator-posted blocking question), F157 (`spec_document_id` on non-loop jobs), F134 (an empty charter), F183 (charter name uniqueness), F177 (a runner sequence column, needs a migration), F248 (`/worktrees/conflicts` shadows an agent named "conflicts"), F133 (queue status recomputes the reason), F21 (**retire**: not fixable inside AgentWeave), F382 (**watch-only**; narrowed 2026-09-22 to `test_stop_endpoint_marks_run_stopped_and_broadcasts_run_stopped`, not diagnosed), F322 (**park with F325**), F339 and F340 (**stay parked**, confirmed 09-21) |
 
 ## Spec tracks — from 2026-09-28, one at a time, R1 / R2 / R3 / IMPL
+
+**Superseded 2026-09-24 by the Bundles section below.** On the night of 2026-09-23 every track here
+was grouped into bundles B1–B12 and taken through R1–R3 ahead of the 2026-09-28 date, and the
+operator reviewed them on 2026-09-24. The table stays as the map from S-numbers to findings; the
+Bundles table says what became of each.
 
 In priority order. Tracks marked *(after Dn)* start only once that decision is recorded.
 
@@ -443,6 +567,11 @@ What the operator owed, all done on 2026-09-24:
 **Migration numbering:** HEAD is `0105`, and seven parked changes need a migration (B8's, B7's `worker-spend-counts-against-the-budget`, B5's footprint change, three of B3's, and others as noted in each Final). Several name `0106`; the first built keeps it and the rest renumber in build order.
 
 ## Honest arithmetic
+
+**Update 2026-09-24.** The bundles turned the spec tracks and decisions into 59 changes: 47 APPROVED
+(tonight's ORDER builds six of them plus F133; recent nights managed two to five changes each) and
+12 REVISING. Round 6 and UI-2 add 12 no-spec rows, and Round 7 14 more once their changes land.
+The figures below are the 2026-09-22 estimate, kept for comparison.
 
 - **No-spec (Rounds 0–5 + UI-1): ~100 findings** if every re-verification agrees. By
   today's pace (6 fixes in one afternoon, with tests), that is **~2 weeks of interactive sessions**,
