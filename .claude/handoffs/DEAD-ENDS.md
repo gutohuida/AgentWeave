@@ -1630,3 +1630,21 @@ disappears is indistinguishable from one that was forgotten.
   25 minutes.** Total tokens are the same run serially or in parallel; the problem is the burst
   inside one 5-hour window. An R1 bundle round cost 175k–440k subagent tokens; an R2/R3 with the
   narrow-reading rules cost 130k–280k. Run spec rounds at most one to four at a time. *(2026-09-24)*
+
+## 2026-09-24 (day) — the daily review of the twelve bundles
+
+- **The Artifact tool refuses a `root`/`file_path` outside the working directory**, including the
+  job's own `$CLAUDE_JOB_DIR/tmp`. Stage a multi-file artifact under `testbed/scratch/<name>/`
+  (gitignored by `testbed/.gitignore`) and publish from there. *(2026-09-24)*
+- **R1-R3 rounds repeatedly missed contradicted main-spec SHALLs.** The Opus pre-approval review
+  found a needed-but-missing MODIFIED delta in 9 of 14 reviews (B2, B3, B4, B5, B6, B7, B8, B11 and
+  the 09-23 F409 change). A round prompt or review prompt must ask explicitly: "grep openspec/specs/
+  for every requirement this change makes false; each needs a MODIFIED delta". *(2026-09-24)*
+- **Python `write_text` on Windows writes CRLF.** Several fix agents produced CRLF files under
+  `openspec/changes/`. Git normalises them on commit (`eol=lf`), so it's harmless, but use
+  `write_bytes(...encode())` or `newline="\n"` when a test compares bytes. *(2026-09-24)*
+- **Restarting `:8000` (operator's say-so) worked again exactly as the 2026-09-23 entry says**:
+  a `mode=ro` check that no run has `status='running'`, then a `.backup` to
+  `~/.agentweave/hub/data/agentweave.backup-YYYYMMDD-HHMM.db`, then `py -3.11 -m agentweave stop`
+  from `C:\Users\huida`, then `Start-Process C:\Users\huida\Desktop\AgentWeave.lnk`, then
+  `/health` 200 and `alembic_version`. *(2026-09-24)*
