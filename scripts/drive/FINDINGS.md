@@ -32864,3 +32864,32 @@ and passes today.
 ## F436 (B) — any drift answer silences that exact change forever, whether or not the answer was true
 
 **Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B6 rounds (`spec-queue/tracks/B6.md` Final, candidate 11). Found by R3. For example, pressing *Code corrected* before the code is actually reverted stops the candidate from ever returning (`requirement_evidence.py:1221`, `:1160-1163`). Not carried. B6's change 2 words its buttons as past-tense facts. Repair shape: re-check that the answer holds on the next scan, or scope the silence to the answered commit.
+
+## F437 (B) — an operator's review request queued for a busy reviewer leaves a flow's completed task in the pool, so a second review can be staffed
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. On a documentless loop the card also says *land it* while a review is still queued. **Answered by B1's `a-flow-stages-its-review-in-the-dispatch` (S13, its D2)**, approved 2026-09-24.
+
+
+## F438 (C) — the holder check's "Let the review in flight finish" is false for a silent holder whose review ended without a verdict
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. The sentence tells the operator to wait on a review that is no longer in flight. S13's option (ii) holder check changes who may be replaced; its wording should stop claiming a review is in flight when none is.
+
+
+## F439 (C) — input in a closed conversation counts as queued, so after the attended change such a task reads as in flight
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R1. `turn_scheduler.py:344-350` counts queued input in a closed conversation. Once `a-task-is-attended-only-by-a-turn-that-will-reach-it` lands, such a task would read as attended by a turn that can never reach it.
+
+
+## F440 (B) — a decided task's queued review entry is never released; it is refused up to three times, then withdrawn
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R2. `_release_queued_entries_bound_to` keeps entries carrying `review_task_id`, so a review queued for a task that has since been decided is delivered, refused (up to `DELIVERY_ATTEMPT_LIMIT = 3`), then withdrawn. S13 widens the window. Repair shape: release review entries for a task when it leaves `under_review`.
+
+
+## F441 (C) — after the attended change, Run can say "already being worked" for an idle assignee whose queued turn cannot start
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R2. Only a provider hold is qualified. A token-budget hold or a closed conversation also keeps the queued turn from starting, but the Run press would still report the task as being worked.
+
+
+## F442 (C) — a flow review refused at a deferred dispatch (the run-end re-drain) does not finalize the firing's JobRun
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R3. Pre-existing; pinned by S13's test 1.5b. The firing's `JobRun` stays open after its review was refused at the deferred dispatch.
