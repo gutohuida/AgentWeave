@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B9 -- SSE tells the client what it lost</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B9.md, tracked</p>
+  <h1>B9 &mdash; SSE tells the client what it lost</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F251, F253, F335</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">none from <code>DECISIONS.md</code>; two questions raised for the operator (B9-Q1, B9-Q2)</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/an-event-is-announced-only-once-its-write-is-committed/</code>, <code>openspec/changes/a-live-view-that-fell-behind-is-told-and-catches-up/</code>, <code>openspec/changes/every-event-the-hub-sends-reaches-the-app/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R3 done — parked for operator</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><a class="toc-item" href="#R2">R2</a><a class="toc-item" href="#R3">R3</a><a class="toc-item toc-final" href="#Final">Final</a></nav>
+  </div>
+  <section class="sec-final" id="Final"><h2>Final -- what the bundle reached, and why</h2><div class="md-body"><p>The Hub&#x27;s live event stream (SSE) has three defects that each make the app show something other than the truth: it announces a write that is then rolled back (F335), it silently drops events for a slow tab (F253), and the app throws away 18 of the 63 kinds the Hub sends (F251). Three small changes fix them. <strong>IMPL is not started; the bundle is parked awaiting approval.</strong></p>
+<h5>Decisions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Recommended answer</th><th>Why</th></tr></thead><tbody><tr><td>D-F335</td><td>How to stop announcing a write that may roll back</td><td>Defer the announcement to the session&#x27;s commit (<code>defer_broadcast</code>, published by an <code>after_commit</code> listener, cleared when the root transaction ends)</td><td>Measured on SQLAlchemy 2.0.50 by R1 and R2: rollback and close-without-commit both end the root transaction, so nothing leaks. The alternatives either spread the rule over every caller or lose a true live signal</td></tr><tr><td>D-F335-guard</td><td>How to keep the shape from coming back</td><td>Two AST rules: no direct broadcast in a function that stages with <code>commit=False</code>; no <code>defer_broadcast</code> after a function&#x27;s own last commit</td><td>Rule 2 closes the silent-drop trap R3 found in converting B10&#x27;s functions</td></tr><tr><td>D-F253</td><td>How a tab that fell behind is told</td><td>A <code>stream_gap</code> frame written by the stream (not queued by the next event), with no <code>project_id</code>; the app treats it like a reconnect</td><td>A gap queued behind a burst is never delivered; closing the stream loops a throttled tab; replay is out of proportion</td></tr><tr><td>B9-Q1</td><td>Keep a client allowlist, or not</td><td><strong>No runtime filter</strong>; the Hub&#x27;s vocabulary is generated into a TypeScript type (option B)</td><td>A generated allowlist re-drops every new kind whenever the committed bundle lags the Hub; with the type, a handler for a kind that is never sent fails <code>npm run build</code> (the <code>job_deleted</code> bug)</td></tr><tr><td>B9-Q2</td><td>May F251&#x27;s bundle reach <code>:8000</code> before <code>:8000</code> runs F335&#x27;s fix</td><td><strong>No</strong>: the bundle commit waits for the operator&#x27;s restart (task 0.5)</td><td>A bundle reaches <code>:8000</code> on reload, before a restart; until then a refused review shows a false &quot;divergence resolved&quot; line</td></tr></tbody></table></div>
+<h5>Changes</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>an-event-is-announced-only-once-its-write-is-committed</code></td><td>F335</td><td><code>SSEManager.publish</code> funnel, <code>defer_broadcast</code>, two commit listeners, one call site, AST guard</td><td>Small, Hub only</td></tr><tr><td><code>a-live-view-that-fell-behind-is-told-and-catches-up</code></td><td>F253</td><td>Per-subscriber drop count, one shared <code>stream_frames</code> generator that writes <code>stream_gap</code>, client catch-up and a feed line</td><td>Small–medium, Hub + UI</td></tr><tr><td><code>every-event-the-hub-sends-reaches-the-app</code></td><td>F251</td><td>Server registry <code>sse_events.py</code> with AST tests, generated TS vocabulary, no client filter, per-kind invalidations, <code>job_deleted</code> → <code>job_archived</code></td><td>Medium, Hub + UI</td></tr></tbody></table></div>
+<p>Build order <strong>F335 → F253 → F251</strong>; stopping after any one leaves complete work. F251 must not start its fix before F335 is in the tree (task 0.4) and must not commit its bundle before <code>:8000</code> runs F335 (task 0.5). F253 is independent and safe under either skew. B10&#x27;s loop change collides only through F335&#x27;s guard; whichever lands second converts four functions, and the guard&#x27;s message says how.</p>
+<h5>Open for the operator</h5>
+<ol>
+<li><strong>B9-Q1: drop the app&#x27;s event allowlist?</strong> Recommended: **yes, keep the vocabulary only as a</li>
+</ol>
+<p>generated type.** Answering &quot;keep a generated allowlist&quot; makes F251 tasks 2.4-2.5 keep the filter and 1.6 assert an unknown kind is dropped, and accepts that a Hub kind added without a bundle refresh is dropped again.</p>
+<ol>
+<li><strong>B9-Q2: gate F251&#x27;s bundle on a <code>:8000</code> restart?</strong> Recommended: <strong>yes</strong> (one restart you would</li>
+</ol>
+<p>make anyway to pick up F335, and one question from the builder). Answering &quot;accept the window&quot; drops task 0.5; until the next restart a review refused at delivery on <code>:8000</code> can put one false &quot;divergence resolved&quot; line in the Activity feed, while the task board stays correct.</p>
+<h5>Candidate finding for the operator (observed, not filed)</h5>
+<p><strong>The Overview tab&#x27;s activity strip shows every project&#x27;s events, and its warning colour never fires for the Hub&#x27;s warnings.</strong> <code>components/overview/OverviewPage.tsx:101</code> renders <code>getBufferedEvents().slice(-10)</code>, the instance-wide buffer fed by the operator stream (<code>useSSE.ts:186</code>), with no <code>project_id</code> filter, on a single project&#x27;s Overview tab (<code>App.tsx:388-391</code>). It is the one live consumer without <code>ActivityLog</code>&#x27;s filter, and <code>agent_output</code> chunks from any project will usually fill all ten pills. Its amber dot tests <code>severity === &#x27;warning&#x27;</code> (<code>:209</code>), but the Hub writes <code>&quot;warn&quot;</code> (21 <code>severity=&quot;warn&quot;</code> sites in <code>hub/hub</code>), so only <code>context_warning</code> shows amber. It grows more visible once F251 admits 18 kinds and F253 adds <code>stream_gap</code> (<code>&quot;warn&quot;</code>). Suggested as its own finding; no B9 change carries it.</p>
+<h5>Findings that did not need a change</h5>
+<p>None. F251, F253 and F335 are all still open, in the shape R1 described (F251 has grown by one kind, <code>queue_agent_held</code>, plus the dead <code>job_deleted</code> handler). Also noticed and left alone: <code>new_session_request</code> broadcasts before its event row commits (<code>agents.py:3039-3040</code>), but nothing rolls back on that path; <code>useDivergences</code> (<code>api/tasks.ts:447</code>) has no consumer.</p></div></section><section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>Read against the worktree&#x27;s HEAD <code>ce086b6</code>. <code>git diff --stat 404c7d5 HEAD -- hub/ src/</code> is empty, so every citation holds for <code>404c7d5</code> too. No verdict in <code>spec-queue/DECISIONS.md</code> names F251, F253 or F335. No other open change carries them. Of the other bundles&#x27; changes, only <code>a-loop-is-stopped-archived-and-delegated-from-its-own-tab</code> (B10) and <code>a-checkpoint-is-handed-over-once-and-says-where-it-went</code> (B8) touch broadcasts. Both broadcast already-allowlisted kinds after commit, or add a payload field, so neither collides with B9&#x27;s files. Once B9&#x27;s registry lands, a new kind either of them adds must be registered (the test makes that so).</p>
+<h5>Each finding re-verified</h5>
+<p><strong>F335 (D) is still open, unchanged in shape.</strong> <code>resolve_divergences_for_task</code> stages <code>resolved_at</code> (<code>hub/hub/run_divergence.py:93-94</code>) and an event row with <code>persist_event(..., commit=False)</code> (<code>:97-103</code>). It then calls <code>sse_manager.broadcast</code> at once (<code>:104</code>). Its only caller is <code>apply_transition</code> (<code>task_transition_service.py:711</code>), whose caller commits. The docstring&#x27;s argument that the broadcast &quot;needs no such care&quot; (<code>:82-83</code>) is the defect. An AST scan of every function that calls <code>persist_event(commit=False)</code> (<code>run_divergence.py:102</code>, <code>task_transition_service.py:776</code>, <code>:797</code>) finds this the <strong>only</strong> one that broadcasts. A second heuristic scan looked for broadcasts with no commit earlier in the same function. It flagged <code>projects.py:317/379/604/641</code>, <code>checkpoints.py:403</code> and <code>agent_chat.py:467</code>. Each of those runs after a service call that commits (read: <code>delete()</code> at <code>projects.py:628-641</code>, <code>cut_over</code> at <code>checkpoints.py:385-403</code>), so none is F335&#x27;s shape. Not found by the scan and noted: <code>new_session_request</code> (<code>agents.py:3039-3040</code>) broadcasts before its own <code>persist_event</code> commits. But nothing on that path rolls back (the message committed at <code>:3036</code>), so this is not F335&#x27;s shape and it was left alone.</p>
+<p><strong>F253 (B) is still open, unchanged.</strong> <code>asyncio.Queue(maxsize=256)</code> is at <code>sse.py:43</code> and <code>:63</code>. Both <code>except asyncio.QueueFull: pass</code> blocks are still there (<code>:91-94</code>, <code>:100-103</code>). Both stream generators (<code>api/v1/events.py:95-107</code>, <code>:144-153</code>) yield only queue items. The client&#x27;s only catch-up is <code>onSseReconnect</code> (<code>useSSE.ts:134</code>), used at <code>:411</code> (invalidate everything) and at <code>api/agents.ts:560</code> (the agent-output reconciliation poll). A drop never triggers it.</p>
+<p><strong>F251 (B) is still open, and has grown.</strong> A re-measurement by AST, not grep, found these numbers:</p>
+<ul>
+<li>The Hub broadcasts <strong>63</strong> kinds: 59 as literals, plus 4 through <code>_broadcast_run_lifecycle</code></li>
+</ul>
+<p>(<code>agent_trigger.py:1916</code>, bounded by <code>_RUN_LIFECYCLE_EVENTS</code>, <code>:1878</code>, asserted at <code>:1897</code>).</p>
+<ul>
+<li>The allowlist <code>useSSE.ts:21-68</code> has <strong>46</strong> names.</li>
+<li><strong>18</strong> kinds are dropped. That is the finding&#x27;s 17 plus <code>queue_agent_held</code></li>
+</ul>
+<p>(<code>agent_trigger.py:2547</code>), which is new since the finding was filed.</p>
+<ul>
+<li>The mirror defect, not in the finding: <strong><code>job_deleted</code> is allowlisted and handled</strong></li>
+</ul>
+<p>(<code>useSSE.ts:40</code>, <code>:523</code>), <strong>but nothing in <code>hub/hub</code> broadcasts it</strong>. Archiving a job broadcasts <code>job_archived</code> (<code>jobs.py:1290</code>), which is dropped, so the jobs list never refreshes on archive. <code>useSSE.test.tsx:128</code> tests the kind that is never sent. This is an F190-shaped fixture: an event the server never emits.</p>
+<ul>
+<li>The handlers that never run are unchanged: <code>api/checkpoints.ts:45-51</code>, <code>api/agentChat.ts:184-190</code>,</li>
+</ul>
+<p>and six sentences in <code>lib/eventSummary.ts</code>. The offer banner (<code>AgentOutputPanel.tsx:605-618</code>) still depends on <code>useCheckpoints</code>.</p>
+<ul>
+<li>The coupling to F335 is real. <code>eventSummary.ts:149</code> renders *&quot;{count} open divergence(s) on</li>
+</ul>
+<p>{task} resolved&quot;*.</p>
+<h5>The design questions, with options and recommendations</h5>
+<p><strong>F335: how to stop announcing a write that can roll back.</strong> The options were:</p>
+<ul>
+<li>(A) Defer the announcement to the commit of the session that staged it. Publish on the root</li>
+</ul>
+<p>transaction&#x27;s <code>after_commit</code>, and drop it on the root&#x27;s <code>after_transaction_end</code>.</p>
+<ul>
+<li>(B) Make every caller of <code>apply_transition</code> broadcast after committing.</li>
+<li>(C) Stop broadcasting the kind live.</li>
+<li>(D) <code>create_task</code> the async broadcast from the listener.</li>
+</ul>
+<p><strong>Recommended: A.</strong> B spreads the rule across callers, and the next <code>commit=False</code> announcement repeats the defect. C drops a true live signal. D reorders frames and makes tests depend on timing.</p>
+<p>R1 <strong>measured</strong> the SQLAlchemy event order on 2.0.50 with aiosqlite, rather than assume it:</p>
+<ul>
+<li>A close without commit fires no <code>after_rollback</code>.</li>
+<li>A savepoint release fires <code>after_commit</code> with <code>in_nested_transaction() == True</code>.</li>
+</ul>
+<p>So the listener must skip nested commits, and clearing must hang off <code>after_transaction_end</code>. The listener runs on the loop thread.</p>
+<p>Two traps are named in the design:</p>
+<ul>
+<li>The existing 1.8a spy is on <code>broadcast</code>, which the deferred path bypasses. The new tests spy on a</li>
+</ul>
+<p>single sync <code>SSEManager.publish</code> funnel, and a control proves the spy sees a true resolution.</p>
+<ul>
+<li>An exception in <code>after_commit</code> propagates out of a commit that has <strong>already landed</strong>. That would</li>
+</ul>
+<p>be a 500 for a write that happened (<code>JSONServerSentEvent</code> serialises in its constructor). So each publish is caught and logged.</p>
+<p>The operator&#x27;s PATCH route keeps the wire order <code>run_divergence_resolved</code> before <code>task_updated</code> (<code>tasks.py:1470</code> commit, <code>:1472</code> broadcast). A test pins that order from the real route.</p>
+<p><strong>F253: how to tell the client.</strong> The options were:</p>
+<ul>
+<li>(A) A <code>stream_gap</code> frame.</li>
+<li>(B) Close the slow subscriber so the client reconnects.</li>
+<li>(C) Event IDs and replay.</li>
+<li>(D) Block, or grow the queue.</li>
+</ul>
+<p><strong>Recommended: A</strong>, with one change from the finding&#x27;s sketch: <strong>the stream writes the gap, not the next put</strong>. A gap queued by the next broadcast is never delivered after a burst followed by silence, and it competes for a full queue. B loops a throttled tab through reconnects and puts nothing on screen. C is out of proportion. D stalls the broadcasters.</p>
+<p>The gap carries <strong>no <code>project_id</code></strong>. It is stream metadata, like <code>connected</code>, because the operator queue mixes projects. The client answers it instance-wide: <code>invalidateQueries()</code> plus the existing reconnect listeners. The Activity feed shows one line whatever project is selected. The two route generators are folded into one <code>stream_frames</code>, so the gap is written once and can be unit-tested without a stalled socket.</p>
+<p><strong>F251: what the app does with a kind (B9-Q1, for the operator).</strong> The options were:</p>
+<ul>
+<li>(A) A runtime allowlist generated from a server registry.</li>
+<li>(B) No runtime filter, with the generated vocabulary kept as a TypeScript union type.</li>
+<li>(C) No filter and no generation.</li>
+</ul>
+<p><strong>Recommended: B.</strong></p>
+<ul>
+<li>A reintroduces F251 whenever the committed bundle lags the Hub. It does lag: <code>/health</code>&#x27;s</li>
+</ul>
+<p><code>ui_stale</code> exists for exactly that.</p>
+<ul>
+<li>C lets a handler for a kind that is never sent (<code>job_deleted</code>) compile.</li>
+<li>B blocks both failure directions. Nothing is dropped by omission, and <code>tsc</code> (run by</li>
+</ul>
+<p><code>npm run build</code>) rejects a <code>case</code> or <code>===</code> against a kind that does not exist.</p>
+<p>The server side is the same under every option: <code>hub/hub/sse_events.py</code>, plus an AST test that each broadcast kind is registered and each registered kind is broadcast. At runtime an unregistered kind is warned about, never raised on, for the same after-commit reason as F335.</p>
+<p><strong>How the three interact.</strong> F335 must land first, or in the same commit as F251. F251&#x27;s tasks carry this as prerequisite 0.4, checked against F335&#x27;s test 1.1. F253 does not depend on the other two, because its client branch runs before the allowlist test. If F335 has landed, F253&#x27;s counter sits in F335&#x27;s <code>publish</code> funnel. If F253 has landed, F251&#x27;s registry lists <code>stream_gap</code> as a stream frame. Order to build: <strong>F335 → F253 → F251</strong>. Stopping after any one leaves complete work.</p>
+<h5>What was written</h5>
+<ul>
+<li><code>an-event-is-announced-only-once-its-write-is-committed</code> (F335). Backend only, small.</li>
+<li><code>a-live-view-that-fell-behind-is-told-and-catches-up</code> (F253). Backend and UI, small to medium.</li>
+<li><code>every-event-the-hub-sends-reaches-the-app</code> (F251). A registry, a generator, the UI dispatcher,</li>
+</ul>
+<p>and D4&#x27;s per-kind invalidation table. Medium.</p>
+<p>Each change has <code>proposal.md</code>, <code>design.md</code>, <code>tasks.md</code>, <code>test-guide.md</code>, and an ADDED delta to <code>local-project-workspace</code>. All three pass <code>openspec validate --strict</code>.</p>
+<p>Every planned test states why it fails on today&#x27;s code. Two are controls that make the others non-vacuous: F335 1.2 is a true resolution seen by the same spy, and F251 1.2 injects <code>job_deleted</code>.</p>
+<p>The UI tests follow the order the stream really emits: <code>connected</code>, events, then the gap. F253&#x27;s 1.7 also covers the other order its design permits.</p>
+<h5>Noticed, not in scope (for the ledger&#x27;s owner to file)</h5>
+<ul>
+<li><code>OverviewPage.tsx:101</code> shows the last ten buffered events of <strong>every</strong> project, with no filter</li>
+</ul>
+<p>for the selected project. It is the one live consumer without <code>ActivityLog</code>&#x27;s filter, and it becomes more visible once F251 admits 18 kinds.</p>
+<ul>
+<li><code>new_session_request</code> is broadcast before its event row commits (<code>agents.py:3039-3040</code>). Nothing</li>
+</ul>
+<p>rolls back there, so it is harmless today.</p>
+<h5>Not resolved in R1</h5>
+<ul>
+<li>D4&#x27;s per-kind invalidation table (F251) was derived from payloads and query keys, not driven. R2</li>
+</ul>
+<p>should check each row against the payload each route sends.</p>
+<ul>
+<li>Whether <code>checkpoint_due</code> and <code>agent_requested</code> read acceptably through <code>summaryForEvent</code>&#x27;s</li>
+</ul>
+<p>default branch is left to R2 and the human check.</p></div></section><section class="sec-round" id="R2"><h2>R2 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Read against the worktree at <code>8c54aa0</code>. There has been no <code>hub/</code> change since <code>404c7d5</code>. Each claim below was re-derived from the code, not from R1&#x27;s text. 31 load-bearing claims were checked: 27 stand and 4 changed the proposal. No decision recommendation was reversed.</p>
+<h5>Re-measured independently</h5>
+<div class="scroll"><table class="md"><thead><tr><th>What</th><th>R1 said</th><th>R2 measured</th><th>How</th></tr></thead><tbody><tr><td>Broadcast kinds</td><td>63 (59 literal + 4 via <code>_broadcast_run_lifecycle</code>)</td><td><strong>63</strong>: 59 literal, plus one non-literal site (<code>agent_trigger.py:1916</code>, bounded by <code>_RUN_LIFECYCLE_EVENTS</code> at <code>:1878</code> and asserted at <code>:1897</code>)</td><td>An AST walk of every <code>.broadcast(</code>/<code>.publish(</code> call in <code>hub/hub</code>, using R2&#x27;s own script outside the repo</td></tr><tr><td>Allowlist</td><td>46</td><td><strong>46</strong> (<code>useSSE.ts:21-68</code>)</td><td>Parsed from the array</td></tr><tr><td>Dropped</td><td>18, including <code>queue_agent_held</code></td><td><strong>18</strong>, the same names. <code>queue_agent_held</code> is at <code>agent_trigger.py:2547</code></td><td>Set difference</td></tr><tr><td>Allowlisted but never broadcast</td><td><code>job_deleted</code></td><td><strong><code>job_deleted</code> only.</strong> Archiving a job sends <code>job_archived</code> (<code>jobs.py:1290</code>, payload <code>{&quot;id&quot;}</code>)</td><td>Set difference</td></tr><tr><td>SQLAlchemy event order (F335 D1)</td><td>Measured on 2.0.50</td><td><strong>Re-run, same result.</strong> Commit fires <code>after_commit</code> then <code>ate(root)</code>. Rollback fires <code>after_rollback</code> then <code>ate(root)</code>. Close fires <code>ate(root)</code> only. A savepoint release fires <code>after_commit</code> with <code>in_nested_transaction()==True</code>, plus <code>ate(nested)</code>. A second <code>commit()</code> fires <code>after_commit</code> again, so popping the pending list is what stops a republish. A raise in <code>after_commit</code> <strong>does</strong> propagate out of <code>commit()</code>, so D2&#x27;s <code>try/except</code> is required, not just defensive</td><td>A scratch script: aiosqlite, <code>async_sessionmaker(expire_on_commit=False)</code></td></tr><tr><td>sse_starlette sends one frame at a time (the premise of F253 D2)</td><td>Assumed</td><td><strong>Confirmed</strong> in 3.3.2 <code>_stream_response</code>: <code>async for data in body_iterator: await send(...)</code>. The generator waits at <code>yield</code> while a send blocks. So drops pile up there, and the check after the yield sees them</td><td><code>inspect.getsource</code></td></tr></tbody></table></div>
+<h5>Claims that stand (checked at file:line)</h5>
+<p><strong>F335</strong></p>
+<ul>
+<li>The broadcast at <code>run_divergence.py:104</code> runs before the commit, after <code>persist_event(commit=False)</code> at <code>:97-103</code>.</li>
+<li>Its only caller is <code>task_transition_service.py:711</code>. That call runs only for <code>ORIGIN_ACTOR</code> transitions (<code>:700</code>).</li>
+<li>The three <code>commit=False</code> sites are as R1 listed.</li>
+<li>F319&#x27;s rollback runs on the same session (<code>turn_scheduler.py:448</code>). Its <code>ate(root)</code> clears a pending announcement before the refusal&#x27;s own commit at <code>:476</code>.</li>
+<li>D3&#x27;s order holds. <code>_commit_and_render</code> commits at <code>tasks.py:1470</code> and broadcasts <code>task_updated</code> at <code>:1472</code>. The listener fires inside the awaited commit, so it goes first.</li>
+<li>The old spy (<code>test_a_refused_review_leaves_nothing_behind.py:828-835</code>) is on <code>broadcast</code>.</li>
+</ul>
+<p><strong>F253</strong></p>
+<ul>
+<li>Both <code>QueueFull: pass</code> blocks are there (<code>sse.py:91-94</code>, <code>:100-103</code>).</li>
+<li>Both generators are there (<code>events.py:95-107</code>, <code>:144-153</code>).</li>
+<li>The app uses only the operator stream (<code>useSSE.ts:249</code>).</li>
+<li>The catch-ups are at <code>useSSE.ts:411</code> and <code>api/agents.ts:560</code>.</li>
+<li><code>test_reconnecting_gets_a_clean_queue_with_no_stale_events</code> exists (<code>test_operator_events.py:312</code>).</li>
+</ul>
+<p><strong>F251</strong></p>
+<ul>
+<li><code>npm run build</code> is <code>tsc &amp;&amp; vite build</code> (<code>package.json:8</code>).</li>
+<li><code>useCheckpoints</code>&#x27; listener (<code>api/checkpoints.ts:45-51</code>) never receives its kinds today, and it feeds the offer banner (<code>AgentOutputPanel.tsx:617</code>).</li>
+<li><code>useProjectConversations</code> (<code>api/agentChat.ts:184-190</code>) refreshes on any payload with a <code>conversation_id</code>. Every checkpoint kind&#x27;s payload carries one: <code>checkpoint_trigger.py:222/280/331/335/341</code>, <code>checkpoints.py:195/263/403</code>, <code>checkpoint_handover.py:278</code>.</li>
+<li>The six sentence lines in <code>eventSummary.ts</code> are where R1 said.</li>
+<li><code>useSSE.test.tsx:128</code> uses <code>job_deleted</code> as its fixture.</li>
+</ul>
+<h5>D4&#x27;s per-kind table, row by row against payloads and query keys</h5>
+<p>R2 compared each row with the payload the Hub sends and the query keys the UI reads.</p>
+<div class="scroll"><table class="md"><thead><tr><th>Kind</th><th>R1 row</th><th>R2 verdict</th></tr></thead><tbody><tr><td><code>job_archived</code></td><td><code>jobs</code>, <code>jobs/&lt;id&gt;</code>, <code>loops</code></td><td>Stands. The payload is <code>{&quot;id&quot;}</code> and the keys are at <code>api/jobs.ts:164/173</code>. Archiving a job also archives its loops (<code>jobs.py:1280-1285</code>)</td></tr><tr><td><code>project_deleted</code></td><td><code>[&#x27;projects&#x27;]</code></td><td>Stands. It is broadcast under the deleted project&#x27;s own id (<code>projects.py:641</code>)</td></tr><tr><td><code>agent_requested</code></td><td><code>agents</code>, <code>[&#x27;projects&#x27;]</code></td><td>Stands. It creates an agent row and a conversation (<code>agents.py:2236</code>). Its <code>conversation_id</code> also triggers <code>useProjectConversations</code></td></tr><tr><td><code>question_declined</code></td><td><code>questions</code>, <code>status</code></td><td>Stands. The payload is <code>{id, agent}</code> (<code>questions.py:588</code>)</td></tr><tr><td><code>task_blocked</code>/<code>task_unblocked</code></td><td><code>tasks</code>, <code>status</code>, <code>questions</code></td><td>Stands. No <code>task_updated</code> accompanies either one, and <code>status</code> carries <code>task_counts</code> (<code>status.py:62</code>). The <code>questions</code> entry repeats what the accompanying question events usually do, and it does no harm</td></tr><tr><td><code>run_diverged</code>/<code>run_divergence_resolved</code></td><td><code>tasks</code>, <code>status</code></td><td>Stands, but <strong>the reason is corrected</strong>. The badge reads <code>task.has_open_divergence</code> from the tasks list (<code>TaskCard.tsx:396</code>), not a divergence query. <code>useDivergences</code> (<code>api/tasks.ts:447</code>) has no consumer, so it is deliberately not invalidated</td></tr><tr><td><code>review_unstaffed</code></td><td><code>tasks</code>, <code>status</code> (&quot;a divergence may restaff&quot;)</td><td><strong>Changed to <code>loops</code>, <code>loops/&lt;loop_id&gt;</code>.</strong> <code>_emit_review_unstaffed</code> writes only its event row and &quot;does not touch the job&quot; (<code>scheduler.py:2427-2478</code>), so nothing on a task changes. The place it shows is the loop card&#x27;s stall reason (<code>scheduler.py:2070-2086</code>), and the payload has <code>loop_id</code></td></tr><tr><td><code>queue_agent_held</code>/<code>queue_agent_paused</code></td><td><code>agents</code>, <code>queue/&lt;agent&gt;</code></td><td>Stands. Both payloads carry <code>agent</code> (<code>agent_trigger.py:2536</code>, <code>turn_scheduler.py:490</code>)</td></tr><tr><td><code>worktree_released</code></td><td><code>worktrees</code>, <code>worktree-conflicts</code></td><td>Stands. The keys are at <code>api/workspace.ts:116/156</code></td></tr><tr><td>Checkpoint and conversation kinds, <code>new_session_request</code></td><td>No central case</td><td>Stand</td></tr></tbody></table></div>
+<h5>What disagreed with the code, and what was changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Claim</th><th>Code</th><th>Change</th></tr></thead><tbody><tr><td>1</td><td>F251 D4: <code>review_unstaffed</code> invalidates <code>tasks</code>, <code>status</code></td><td>It writes no task state (<code>scheduler.py:2439-2443</code>)</td><td>The row is split out as <code>loops</code>, <code>loops/&lt;loop_id&gt;</code>. The <code>run_diverged</code> row&#x27;s reason is rewritten (design D4)</td></tr><tr><td>2</td><td>F251 D3: the generated union is the <code>EVENT_KINDS</code> keys</td><td>F253&#x27;s <code>ActivityLog</code> would compare <code>event.type === &#x27;stream_gap&#x27;</code>. That is TS2367 if the union lacks the kind</td><td>The union also carries stream frames the app dispatches (<code>stream_gap</code>), never <code>connected</code> (design D3)</td></tr><tr><td>3</td><td>F251 task 2.6: the <code>tsc</code> fallout is unknown</td><td>Exactly two dead <code>case</code> labels will fail <code>tsc</code>. One is <code>job_deleted</code> (<code>useSSE.ts:523</code>). The other is <code>question_not_asked</code> in <code>eventBelongsToTimeline</code> (<code>api/agents.ts:400</code>). That function is called only from the live listener (<code>:418</code>), and nothing broadcasts that kind, so its &quot;old rows&quot; comment is wrong there</td><td>Both are named in task 2.6, with the reason <code>eventSummary.ts:125</code>&#x27;s copy stays</td></tr><tr><td>4</td><td>F251 D1: the AST walk reads &quot;the kind argument&quot;</td><td>The kind is argument 2 of <code>defer_broadcast</code> but argument 1 of <code>broadcast</code></td><td>Stated in design D1.1</td></tr></tbody></table></div>
+<p>Minor citation fixes:</p>
+<ul>
+<li>F253 design: <code>ActivityLog.tsx:136-144</code> is now <code>:136-146</code> (the check is at <code>:139</code>).</li>
+<li>The Overview path is <code>components/overview/OverviewPage.tsx</code>.</li>
+</ul>
+<p><strong>R1&#x27;s open question on <code>checkpoint_due</code> and <code>agent_requested</code> in the feed.</strong> <code>EventRow</code> titles each row with the kind name. It shows a summary only when the summary differs from that name (<code>EventRow.tsx:81-82</code>). Neither payload has <code>error</code>, <code>message</code>, <code>summary</code> or <code>title</code>, so each row reads as the actor plus the kind name, like any kind with no sentence. This is recorded in F251 design D5 and left to the human check.</p>
+<h5>Planned tests</h5>
+<p>With its fix reversed, each planned test would fail as its task states.</p>
+<ul>
+<li><strong>F335:</strong> 1.1 and 1.2 share one spy on the single <code>publish</code> funnel, so 1.1 cannot pass vacuously. 1.3 pins the order the real route sends.</li>
+<li><strong>F253:</strong> 1.6 uses the order <code>stream_frames</code> emits: <code>connected</code>, then the event, then the gap. 1.7 uses the other order the design permits.</li>
+<li><strong>F251:</strong> 1.5 builds its payloads from the shapes above, stamped the way <code>SSEManager</code> stamps them.</li>
+</ul>
+<p><strong>What each route returns when its callee raises.</strong> A raise in <code>after_commit</code> was measured to propagate out of a commit that has already landed. F335 test 1.5 covers it. F253 and F251 change no route&#x27;s error path.</p>
+<h5>Collisions</h5>
+<p>None. Of the 49 unarchived changes, those that mention broadcasts add only kinds that are already registered (<code>spec_updated</code>, <code>loop_stopped</code>, <code>checkpoint_ready</code>). As R1 said, B8&#x27;s and B10&#x27;s changes touch only payloads or ordering. None of them carries F251, F253 or F335.</p>
+<h5>Observations (not filed)</h5>
+<ul>
+<li><strong>R1&#x27;s Overview claim is confirmed.</strong> <code>components/overview/OverviewPage.tsx:101</code> renders</li>
+</ul>
+<p><code>getBufferedEvents().slice(-10)</code>. That is the module buffer fed by the instance-wide operator stream (<code>useSSE.ts:186</code>). It has no <code>project_id</code> filter, and it shows on a project&#x27;s Overview tab (<code>App.tsx:388-391</code>). Two more problems on the same strip:</p>
+<ul>
+<ul>
+<li><code>agent_output</code> is allowlisted, so streamed chunks from any project will usually fill all ten</li>
+</ul>
+</ul>
+<p>pills.</p>
+<ul>
+<ul>
+<li>Its warning dot tests <code>severity === &#x27;warning&#x27;</code> (<code>:209</code>), but the Hub writes <code>warn</code>. So only</li>
+</ul>
+</ul>
+<p><code>context_warning</code> ever shows amber.</p>
+<ul>
+<li><code>useDivergences</code> (<code>api/tasks.ts:447</code>) is a hook no component mounts.</li>
+</ul></div></section><section class="sec-round" id="R3"><h2>R3 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Read against the worktree (no <code>hub/</code> change since <code>404c7d5</code>). 24 claims re-checked; 20 stand, 4 changed the proposal. No recommendation reversed; one new operator question (B9-Q2).</p>
+<h5>Re-measured</h5>
+<div class="scroll"><table class="md"><thead><tr><th>What</th><th>R3 measured</th><th>How</th></tr></thead><tbody><tr><td>Kinds broadcast / allowlisted / dropped / dead</td><td><strong>63 / 46 / 18 / <code>job_deleted</code> only</strong>; one non-literal site (<code>agent_trigger.py:1916</code>)</td><td>R3&#x27;s own AST script (outside the repo)</td></tr><tr><td><code>tsc</code> fallout of typing <code>SSEEvent.type</code> as the union</td><td><strong>Two</strong>, as R2 said: <code>useSSE.ts:523</code> <code>job_deleted</code>, <code>api/agents.ts:400</code> <code>question_not_asked</code>. (<code>run_interrupted</code> at <code>agents.ts:401</code> is real: <code>run_reconciliation.py:134</code>)</td><td>Every <code>case &#x27;…&#x27;</code> / <code>.type === &#x27;…&#x27;</code> in non-test files that use <code>SSEEvent</code>, against the 63</td></tr><tr><td><code>commit=False</code> sites</td><td>Still three (<code>run_divergence.py:102</code>, <code>task_transition_service.py:776</code>, <code>:797</code>); only the first broadcasts</td><td>grep</td></tr><tr><td>Test sessions</td><td>Real <code>async_session_factory()</code> sessions, no outer savepoint (<code>conftest.py:766</code>), so the <code>in_nested_transaction()</code> skip cannot make F335&#x27;s tests vacuous</td><td>grep</td></tr></tbody></table></div>
+<h5>What disagreed, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Claim</th><th>Code</th><th>Change</th></tr></thead><tbody><tr><td>1</td><td>F335 D4: the AST guard (rule 1) is enough, and B10&#x27;s note says &quot;whichever lands second converts to <code>defer_broadcast</code>&quot;</td><td>Converting a post-commit broadcast <strong>in place</strong> stages it after the function&#x27;s last commit. <code>get_session</code> closes without committing (<code>db/engine.py:166-168</code>), <code>after_transaction_end</code> clears the list, and the frame is silently never sent. <code>update_job</code>&#x27;s trailing <code>job_updated</code> (<code>jobs.py:1167</code>, after <code>_hand_job_to_scheduler</code>) is that shape, and it is one of the four functions B10 hands over</td><td><strong>Rule 2 added</strong> (a <code>defer_broadcast</code> must precede the function&#x27;s own last <code>.commit()</code>), with a snippet-based negative control (task 1.6b). Both failure messages now spell out the remedy for whoever lands second: stage with <code>defer_broadcast</code> above the commit, in today&#x27;s wire order, and spy on <code>publish</code>. Rule 1 was <strong>not</strong> narrowed (B10 asked for this check)</td></tr><tr><td>2</td><td>F335 task 1.6: fails &quot;on nothing else&quot;</td><td>False if B10 lands first: then <code>update_job</code>, <code>archive_job</code>, <code>archive_loop</code>, <code>set_loop_control</code> fail too</td><td>1.6 made conditional; task 2.4b converts them when B10 is first. No existing test spies on those broadcasts (<code>test_jobs.py</code> mentions <code>broadcast</code> only in a docstring), so no spy breaks</td></tr><tr><td>3</td><td>F335 spec: the deferred form is for writes that &quot;leave the commit to the caller&quot;</td><td>The guard also covers functions that commit themselves (B10&#x27;s four)</td><td>Requirement text widened to match the guard: every function staging with <code>commit=False</code> announces deferred, staged before the commit it reports</td></tr><tr><td>4</td><td>F251 0.4: F335 &quot;on the tree&quot; keeps F335&#x27;s false line out of the app</td><td><code>:8000</code> serves <code>hub/hub/static/ui</code> from disk (<code>main.py:19</code>), so a bundle commit reaches it on reload, <strong>before</strong> the process restarts onto F335. <code>ui_stale</code> compares bundle with <code>hub/ui/src</code> (<code>main.py:199-255</code>), not with the process, so nothing notices</td><td>New F251 design section and <strong>task 0.5</strong>: the bundle commit waits for the operator&#x27;s confirmation that <code>:8000</code> was restarted onto F335 (<strong>B9-Q2</strong>). F253 and F335 were checked for the same skew: both safe (F253 design gained the two-way skew note; F335 design says when it takes effect)</td></tr></tbody></table></div>
+<p>Also made order-independent (the F335 → F253 → F251 order is recommended, not required, except F251 after F335): F253 task 2.3b (if F251 landed first, register <code>stream_gap</code> in <code>STREAM_FRAMES</code> and regenerate, or its <code>=== &#x27;stream_gap&#x27;</code> is TS2367); F251 tasks 2.1 and 2.4 (register <code>stream_gap</code> and keep F253&#x27;s branch ahead of the generic dispatch with <code>continue</code>, so a gap is dispatched once).</p>
+<h5>Stands (checked at file:line)</h5>
+<p><code>run_divergence.py:93-104</code> (stage, then broadcast before commit) · <code>broadcast</code> has no <code>await</code> (<code>sse.py:71-103</code>), so the sync <code>publish</code> funnel is sound · both <code>QueueFull: pass</code> blocks (<code>sse.py:91-94</code>, <code>:100-103</code>) · <code>fireReconnect</code> (<code>useSSE.ts:141</code>) and the invalidate-all hook (<code>:410-414</code>) · <code>ActivityLog</code>&#x27;s project filter (<code>:139</code>) and history dedupe (<code>:117</code>) · <code>dispatchEvent</code> reads <code>severity</code> from the payload (<code>useSSE.ts:184</code>) · <code>job_archived</code> payload <code>{&quot;id&quot;}</code> (<code>jobs.py:1290</code>) · B10 adds no new kind (<code>loop_stopped</code>, <code>loop_archived</code> are already sent, <code>scheduler.py:3187</code>, <code>loops.py:184</code>) and no <code>useSSE</code> edit · <code>a-loops-outstanding-mail-is-mail-not-yet-delivered</code> adds no broadcast · no other unarchived change stages with <code>commit=False</code> next to a broadcast.</p>
+<p>All three changes pass <code>openspec validate --strict</code>.</p></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B9.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

@@ -69,6 +69,19 @@ honest; refetching is not in scope.
 `{"dropped": int, "severity": "warn"}`, which always serialises. A client that disconnects mid-gap
 leaves through the route's existing `finally`.
 
+## A bundle ahead of its Hub, and a Hub ahead of its bundle (R3)
+
+A committed bundle reaches the operator's `:8000` on its next page reload; Hub code reaches it only
+when the operator restarts it. Both skews are safe for this change:
+
+- **New bundle, old Hub process:** the old Hub never writes `stream_gap`, so the new branch never
+  runs and the app behaves exactly as today (drops are still silent until the restart). No
+  regression.
+- **New Hub, old bundle still open in a tab:** the old allowlist (`useSSE.ts:337`) drops
+  `stream_gap`, which is today's behaviour. The next reload picks up the new bundle.
+
+So this change needs no restart gate.
+
 ## Open questions
 
 None for the operator. Noticed, not in scope (R2 confirmed): `components/overview/OverviewPage.tsx:101` lists the last ten buffered

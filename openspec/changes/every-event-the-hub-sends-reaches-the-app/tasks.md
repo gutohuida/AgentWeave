@@ -1,9 +1,11 @@
 ## 0. Rounds and prerequisites — no task below may start until these are done
 
 - [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B9.md`): re-derive the vocabulary from `hub/hub` (every `.broadcast(` call, multi-line ones included, by AST, not grep) and the allowlist from `hub/ui/src/hooks/useSSE.ts:21-68`, without reading R1's list first; re-check D4's table against each payload and each UI query key
-- [ ] 0.2 R3: a second independent re-derivation; `openspec validate every-event-the-hub-sends-reaches-the-app --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B9.md`): a second independent re-derivation; `openspec validate every-event-the-hub-sends-reaches-the-app --strict` passes
 - [ ] 0.3 The operator answers B9-Q1 (design D2); record it in `spec-queue/DECISIONS.md`
 - [ ] 0.4 `an-event-is-announced-only-once-its-write-is-committed` is implemented and its test 1.1 passes on the tree this change starts from (or both land in one commit). **Do not start group 2 otherwise** — F335's false line would reach the feed
+
+- [ ] 0.5 (B9-Q2, design "A bundle ahead of its Hub") Before task 2.8 commits the bundle into the checkout `:8000` serves, the operator confirms that `:8000` has been restarted onto a tree that contains F335's fix. The builder cannot check this itself (`:8000` may not be called), so it asks, or parks at 2.8 and says why. If the operator has answered B9-Q2 "accept the window", this gate is dropped and the window is stated in the commit message
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -21,10 +23,10 @@
 
 ## 2. The fix
 
-- [ ] 2.1 (D1) `hub/hub/sse_events.py`: `EVENT_KINDS` (63 at R1, each with its one-line meaning) and `STREAM_FRAMES`
+- [ ] 2.1 (D1) `hub/hub/sse_events.py`: `EVENT_KINDS` (63 at R1, R2 and R3, each with its one-line meaning) and `STREAM_FRAMES` (`"connected"`, plus `"stream_gap"` if `a-live-view-that-fell-behind-is-told-and-catches-up` has landed)
 - [ ] 2.2 (D1) `hub/hub/sse.py`: a `logger.warning` for an unregistered kind in `publish` (or `broadcast`, if F335's funnel is not there), never a raise
 - [ ] 2.3 (D3) `scripts/generate_sse_event_kinds.py`; run it; commit `hub/ui/src/lib/sseEventKinds.generated.ts`
-- [ ] 2.4 (D2) `hub/ui/src/hooks/useSSE.ts`: delete `SSE_EVENT_TYPES`; skip `connected` beside the `message` skip; dispatch every other named frame; type `SSEEvent.type` as `SseEventKind` with the skew comment. Delete the now-obsolete comment at `:538-543` about kinds "absent from `SSE_EVENT_TYPES`"
+- [ ] 2.4 (D2) `hub/ui/src/hooks/useSSE.ts`: delete `SSE_EVENT_TYPES`; skip `connected` beside the `message` skip; dispatch every other named frame; type `SSEEvent.type` as `SseEventKind` with the skew comment. Delete the now-obsolete comment at `:538-543` about kinds "absent from `SSE_EVENT_TYPES`". If F253's change has landed, keep its `stream_gap` branch (dispatch, `fireReconnect()`, `continue`) **ahead of** the generic dispatch, so a gap is dispatched once and still fires the catch-up; F253's tests 1.6-1.7 must still pass
 - [ ] 2.5 (D4) The central switch: the cases in D4's table; `job_deleted` → `job_archived`
 - [ ] 2.6 Fix any `tsc` fallout from 2.4 (each is either a dead handler to delete or a kind missing from the registry — never widen the type to `string` to silence it); list each in the round log. R2 expects exactly two, both dead handlers: `case 'job_deleted'` (`useSSE.ts:523`, replaced in 2.5) and `case 'question_not_asked'` in `eventBelongsToTimeline` (`api/agents.ts:400`). The latter's comment says it is kept for old `event_logs` rows, but the function is called only from the live SSE listener (`api/agents.ts:418`) and nothing broadcasts that kind, so it is dead there; `summaryForEvent`'s copy (`eventSummary.ts:125`) stays, because it takes `type: string` and renders history rows
 - [ ] 2.7 Run group 1; `py -3.11 -m pytest hub/tests -q`; `cd hub/ui && npm test && npm run lint && npm run build`; `ruff check hub/ scripts/ --select E9,F63,F7,F82,F401,F841`; `black --check --target-version py311 hub/hub hub/tests`

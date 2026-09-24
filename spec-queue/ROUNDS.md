@@ -392,6 +392,7 @@ bundle's full record and its **Final** section are in `spec-queue/tracks/Bn.md` 
 | Bundle | Status | Recommended decisions (the Final section has the why) | Changes |
 |---|---|---|---|
 | B8 Checkpoint cutover (S2: F293, F294) | R3 done, parked | Handed over at most once **per conversation** (partial unique index), recorded as `Checkpoint.cut_over_to_conversation_id`; a DB compare-and-set serialises two presses (measured, WAL and rollback journal); exact backfill (0 rows on `:8000`); the automatic trigger declines a reopened, handed-over conversation (D6) | `a-checkpoint-is-handed-over-once-and-says-where-it-went` (M) |
+| B9 SSE tells the client what it lost (S4: F335, F253, F251) | R3 done, parked | An event is announced only after its write commits (publish-on-commit, a guard test with a rule for whoever lands second); a lagging subscriber gets a `stream_gap` frame and catches up as after a reconnect; **B9-Q1:** drop the app's allowlist and keep event kinds as one server-side list with a generated TypeScript type (yes); **B9-Q2:** hold F251's UI bundle until `:8000` is restarted (yes). Candidate finding: the Overview strip shows every project's events and checks `warning` where the Hub writes `warn` | `an-event-is-announced-only-once-its-write-is-committed`, `a-live-view-that-fell-behind-is-told-and-catches-up`, `every-event-the-hub-sends-reaches-the-app` — build in that order |
 
 **Migration numbering:** four unarchived changes name `0106` (B8's, B3's
 `agents-no-longer-register-themselves`, B7's `worker-spend-counts-against-the-budget`, B5's

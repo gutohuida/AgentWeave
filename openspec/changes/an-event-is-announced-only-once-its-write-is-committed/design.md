@@ -63,9 +63,48 @@ order is unchanged. Test 1.3 asserts that order from the real route, and would f
 ## D4 — guard the shape, not just the site
 
 `hub/tests/test_an_event_is_announced_after_commit.py::test_no_staged_event_is_broadcast_before_commit`
-walks `hub/hub` with `ast`: in any function that calls `persist_event(..., commit=False)`, a call to
-`sse_manager.broadcast` / `.publish` is a failure naming the file and line. `defer_broadcast` is the
-allowed form. On today's tree it fails on `run_divergence.py:104` (and only there — R1's scan).
+walks `hub/hub` with `ast`. Two rules, each failure naming the file and line:
+
+1. In any function that calls `persist_event(..., commit=False)`, a call to `sse_manager.broadcast`
+   / `.publish` fails, **even one placed after that function's own commit**. The rule is kept broad
+   on purpose (R3): "a function that stages an event row announces through `defer_broadcast`" is one
+   sentence a reader can hold; "…unless the broadcast follows a commit in source order" is a
+   heuristic that branches defeat. On today's tree it fails on `run_divergence.py:104` only (R1's
+   and R3's scans).
+2. In a function that calls `defer_broadcast` **and** awaits a `.commit()` of its own, every
+   `defer_broadcast` call must come before that function's last `.commit()` call in source order.
+   **R3 found the trap this closes:** converting a post-commit `await sse_manager.broadcast(...)` to
+   `defer_broadcast(...)` *in place* stages it after the last commit; `get_session` then closes the
+   session without committing (`db/engine.py:166-168`), `after_transaction_end` clears the list, and
+   the frame is **silently never sent**. `update_job`'s trailing `job_updated`
+   (`api/v1/jobs.py:1167`, after `_hand_job_to_scheduler`) is exactly that shape. A function with no
+   commit of its own (it leaves the commit to its caller, like `resolve_divergences_for_task`) is
+   exempt from rule 2. Rule 2 is conservative: a commit hidden inside a callee
+   (`persist_event(commit=True)`, `_hand_job_to_scheduler`) does not count, so a defer placed
+   before one of those still fails and must move above the function's own `session.commit()`.
+
+**The failure messages are the instructions for whoever lands second.** Rule 1's message reads:
+*"`<file>:<line>` broadcasts in a function that stages an event row with
+`persist_event(commit=False)`. Replace it with `defer_broadcast(session, project_id, kind,
+payload)` placed before this function's `session.commit()`, in the order the frames go out today,
+and spy on `SSEManager.publish` in its tests — a `broadcast` spy no longer sees it."* Rule 2's:
+*"`<file>:<line>` defers an announcement after this function's last commit; nothing will publish
+it. Move it above the commit."*
+
+**Collision with B10 (R3).** `a-loop-is-stopped-archived-and-delegated-from-its-own-tab` (B10,
+design D3/D3a/D3b) moves the event rows of `update_job`, `archive_job`, `archive_loop` and
+`set_loop_control` into their transactions with `commit=False`. Each of those functions then
+broadcasts after its commit (`job_updated`, `loop_edit_staged`, `job_archived`, `loop_archived`,
+`loop_control_changed`, and B10's new `loop_stopped` sites), which rule 1 flags. That is intended:
+- **B10 lands first:** this change's task 1.6 fails on those four functions as well, and task 2.4b
+  converts them (staged above each function's own commit, in today's wire order).
+- **This change lands first:** B10's task 2.2c converts them, and this guard tells it how.
+
+Either way no kind is added (`loop_stopped` and `loop_archived` are already broadcast,
+`scheduler.py:3187`, `loops.py:184`), and the frames still go out after the commit they report. No
+test spies on those functions' broadcasts today (`grep broadcast hub/tests/test_jobs.py` finds only
+a docstring), so the conversion breaks no existing spy. `a-loops-outstanding-mail-is-mail-not-yet-delivered`
+(B10) adds no broadcast and does not collide.
 
 ## Out of scope, noticed
 
@@ -73,6 +112,15 @@ allowed form. On today's tree it fails on `run_divergence.py:104` (and only ther
   `persist_event` commits. Nothing is rolled back on that path (the message was committed at
   `:3036`), so it is not F335's shape. Not changed.
 
+## When it takes effect on `:8000` (R3)
+
+This change is Hub code only. The operator's `:8000` runs this checkout but only picks up Hub code
+when the operator restarts it, so until then `:8000` still sends the false frame. Today that is
+invisible (the app drops the kind, F251). It becomes visible only when
+`every-event-the-hub-sends-reaches-the-app`'s **bundle** reaches `:8000` — and a committed bundle
+reaches it on the next page reload, with no restart. That change carries the gate (its task 0.5,
+question B9-Q2).
+
 ## Open questions
 
-None for the operator.
+None for the operator in this change (B9-Q2 lives in `every-event-the-hub-sends-reaches-the-app`).

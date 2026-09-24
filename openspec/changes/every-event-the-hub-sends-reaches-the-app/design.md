@@ -109,8 +109,32 @@ drop the kind. (`conversation_updated` carries `title`, so its row shows the con
 
 No route changes. `publish`'s new warning is a `logger.warning` call and cannot raise.
 
+## A bundle ahead of its Hub (R3) — B9-Q2
+
+Prerequisite 0.4 checks F335 on the **tree**. The operator's `:8000` does not run the tree; it runs
+the Hub process it last started from the tree, and serves `hub/hub/static/ui` from disk
+(`StaticFiles`, `hub/hub/main.py:19`), so **a committed bundle reaches `:8000` on the next reload,
+before any restart**. `/health`'s `ui_stale` does not see this skew: it compares the bundle with
+`hub/ui/src` (`main.py:199-255`), not with the running process.
+
+| Skew | What the operator sees |
+|---|---|
+| New bundle, `:8000` process older than F335 | Every one of the 18 kinds is now admitted, including `run_divergence_resolved`, which the old process still sends falsely when a review is refused at delivery. The Activity feed shows *"1 open divergence on T resolved"* for a divergence that is still open. The board stays true: the same frame's `tasks`/`status` invalidation refetches real state (D4). Every other admitted kind is a true event and is safe |
+| New bundle, `:8000` process has F335 but not this change's registry | Safe. The registry has no runtime effect in the app (the generated module is a type), and the old process sends the same 63 kinds |
+| New Hub, old bundle still open in a tab | Today's behaviour (the old allowlist drops the 18) until the tab reloads |
+
+So the only hazard is F335's false line, for as long as `:8000` runs a process older than F335
+while the new bundle is loaded. **B9-Q2:** gate the bundle commit on the operator's restart
+(task 0.5, recommended), or accept the window. The builder cannot verify a restart itself, since
+`:8000` may not be called.
+
 ## Open questions
 
+- **B9-Q2 (for the operator):** before this change's bundle is committed, must `:8000` have been
+  restarted onto F335's fix? **Recommended: yes** (task 0.5). It costs one restart the operator
+  would make anyway to pick up F335, and one question from the builder. Answering "accept the
+  window" drops 0.5; until the next restart a refused review on `:8000` can put one false
+  "divergence resolved" line in the feed while the board shows the truth.
 - **B9-Q1 (for the operator):** keep a runtime allowlist generated from the registry (option A), or
   drop the runtime filter and keep the vocabulary as a type (option B)? **Recommended: B**, for the
   stale-bundle reason in D2.

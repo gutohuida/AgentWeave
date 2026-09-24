@@ -41,7 +41,11 @@ of every `persist_event(..., commit=False)` site (`run_divergence.py:102`,
 - `SSEManager` gets one synchronous funnel (`publish`) that both the existing `async broadcast` and
   the deferred path go through, so a test can observe every frame at one point.
 - A test forbids the shape from coming back: a function that stages an event row with
-  `commit=False` may not call `sse_manager.broadcast` directly.
+  `commit=False` may not call `sse_manager.broadcast` directly, even after its own commit, and a
+  function that commits itself may not defer an announcement after its last commit (where it would
+  be silently discarded). Each failure message says what to do instead, because B10's
+  `a-loop-is-stopped-archived-and-delegated-from-its-own-tab` adds four functions of that shape and
+  whichever change lands second converts them (design D4).
 
 ## What does not change
 

@@ -8,6 +8,11 @@ commit. This change admits `run_divergence_resolved` to the app; until F335 is f
 refused at delivery broadcasts that kind falsely, and the Activity feed would render *"1 open
 divergence on T resolved"* for a divergence that is still open.
 
+**And its bundle waits for `:8000`'s restart (R3, B9-Q2).** A committed bundle reaches the
+operator's `:8000` on the next reload, before the Hub process restarts; F335's fix reaches it only at
+the restart. Until then the new bundle would show F335's false line there (design, "A bundle ahead
+of its Hub"). Task 0.5 gates the bundle commit on the operator's restart.
+
 ## Why
 
 `useSSE.ts:337` dispatches a frame only if its name is in `SSE_EVENT_TYPES` (`:21-68`), a

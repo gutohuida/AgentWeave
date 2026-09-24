@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in `spec-queue/tracks/B9.md`
 
 - [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B9.md`): re-derive D1-D4 from `hub/hub/sse.py`, `hub/hub/api/v1/events.py`, `hub/ui/src/hooks/useSSE.ts`, `hub/ui/src/components/activity/ActivityLog.tsx` and `hub/ui/src/api/agents.ts:540-570` without reading R1's argument first
-- [ ] 0.2 R3: a second independent re-derivation; `openspec validate a-live-view-that-fell-behind-is-told-and-catches-up --strict` passes
+- [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B9.md`): a second independent re-derivation; `openspec validate a-live-view-that-fell-behind-is-told-and-catches-up --strict` passes
 - [ ] 0.3 Operator approval in `spec-queue/APPROVALS.md`
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
@@ -21,6 +21,7 @@
 - [ ] 2.1 `hub/hub/sse.py`: `SubscriberQueue`, returned by both subscribe methods; `QueueFull` increments `dropped` in both loops (in `publish` if `an-event-is-announced-only-once-its-write-is-committed` has landed); `make_gap_event(n)`; `stream_frames(queue, is_disconnected)`
 - [ ] 2.2 `hub/hub/api/v1/events.py`: both routes yield from `stream_frames`, keeping their `try/finally` unsubscribe and `EventSourceResponse(..., ping=15)`
 - [ ] 2.3 `hub/ui/src/hooks/useSSE.ts`: handle `stream_gap` before the allowlist test; dispatch it, then `fireReconnect()`; widen `onSseReconnect`'s docstring
+- [ ] 2.3b (only if `every-event-the-hub-sends-reaches-the-app` landed first, against the recommended build order) Add `"stream_gap"` to `STREAM_FRAMES` in `hub/hub/sse_events.py`, re-run `scripts/generate_sse_event_kinds.py` and commit the regenerated `sseEventKinds.generated.ts`; without it 2.4's `=== 'stream_gap'` is TS2367 and `test_the_generated_vocabulary_is_current` fails. The `stream_gap` branch still goes before the generic dispatch and ends with `continue`, so the frame is dispatched once
 - [ ] 2.4 `hub/ui/src/components/activity/ActivityLog.tsx`: let `stream_gap` past the project filter. `hub/ui/src/lib/eventSummary.ts`: the `stream_gap` sentence (design D4)
 - [ ] 2.5 Run group 1; `py -3.11 -m pytest hub/tests -q` and `cd hub/ui && npm test && npm run lint && npm run build`; record the counts. `ruff check hub/`, `black --check --target-version py311 hub/hub hub/tests`
 - [ ] 2.6 `python scripts/refresh_ui_bundle.py`; commit `hub/ui/src` and `hub/hub/static/ui` together
