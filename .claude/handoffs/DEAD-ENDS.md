@@ -1619,3 +1619,14 @@ disappears is indistinguishable from one that was forgotten.
   `write_bytes(s.encode())` (or `newline=""`). The heredoc `\n`-becomes-a-real-newline trap
   (UI-1 entry above) also still bites in `.py` test files: use Edit for any string holding `\n`.
   *(2026-09-23)*
+
+## 2026-09-24 (night) — bundle rounds R1–R3 by subagents
+
+- **`py -3.11 scripts/rounds_page.py --help` does not print help: it regenerates `ROUNDS.html` and
+  every `spec-queue/tracks/B*.html`.** Three round agents ran it to learn the options and rewrote
+  the pages as a side effect. Harmless (the pages are derived), but don't run it to "look". The
+  only options are `--quiet` and the hidden `--tracks-dir DIR`. *(2026-09-24)*
+- **Twelve Opus subagents launched at once took the 5-hour usage window from ~0 to 64% in about
+  25 minutes.** Total tokens are the same run serially or in parallel; the problem is the burst
+  inside one 5-hour window. An R1 bundle round cost 175k–440k subagent tokens; an R2/R3 with the
+  narrow-reading rules cost 130k–280k. Run spec rounds at most one to four at a time. *(2026-09-24)*
