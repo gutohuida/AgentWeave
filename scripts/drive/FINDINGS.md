@@ -32746,3 +32746,39 @@ all ten pills. Its amber dot tests `event.severity === 'warning'` (`:209`), but 
 more visible once B9's F251 lets 18 more event kinds through and F253 adds `stream_gap` (`"warn"`).
 Repair shape: filter by the page's project id (as `ActivityLog` does) and test `"warn"`, and add a test
 that fails if a foreign project's event reaches the strip.
+
+## F420 (B) — the checkpoint and probe worker runs `claude -p` with every default tool enabled, on untrusted transcript text
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `build_worker_command` (`hub/hub/worker.py:120-146`)
+builds `claude --output-format json [--model M] -p <prompt>` for Claude, with no `--tools ""`, while
+Codex gets `--ephemeral --sandbox read-only`. The prompt carries conversation transcript text, which
+is untrusted: anything an agent read or a user pasted can steer a worker that holds the default tool
+set. F195 closed this same gap for the titler. Repair shape: pass `--tools ""` (as the titler does)
+for every JSON-mode worker call, with a test that fails if the flag is dropped.
+
+## F421 (B) — an `unwritten` checkpoint becomes the next checkpoint's anchor
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `latest_checkpoint` (`hub/hub/checkpoints.py:95-108`)
+orders by `sequence` with no status filter, so a checkpoint whose generation failed or timed out
+(`unwritten`) anchors the next one. The next transcript starts at the unwritten checkpoint's
+`created_at` with no predecessor body, and the failed span drops out of the chain. `latest_checkpoint_for_loop`
+also briefs from it. Any worker timeout or failure does this today. Repair shape: anchor on the latest
+*written* checkpoint (or read through an unwritten one, as F130's fix did for an empty span), with a
+test over a chain holding an unwritten middle checkpoint.
+
+## F422 (C) — the titler pays again for the same title after every turn
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final). `generate_conversation_title` (`hub/hub/conversation_titles.py:175-233`)
+checks only `title_set_by_operator` and the mode, and is called at `agent_trigger.py:2630` and `:3219`
+on the same excerpt after each turn. Each call is a billed model invocation producing the title the
+conversation already has. Repair shape: skip when a generated title exists and the excerpt it was made
+from has not changed (or title once per conversation unless asked), with a test counting invocations.
+
+## F423 (C) — a declined handover's note never reaches that task's reviewer
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final) (found by R3). `_briefing_checkpoint` falls back to the loop's latest
+checkpoint; later, `_authors_pending_note` carries only the author's newest note, possibly into a
+later task's checkpoint. So the note written for a declined handover can land beside the wrong task, or
+nowhere. Today this happens when no checkpoint runner is set; with B7's
+`worker-spend-counts-against-the-budget` (D7.1) it also happens at budget exhaustion. Repair shape:
+key the pending note to its task and deliver it with that task's review briefing.
