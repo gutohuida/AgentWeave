@@ -47,7 +47,9 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 1. **A bash word's brace patterns are expanded before its words are judged (F403).** The bash
    lexer marks the braces and commas it would expand (not quoted, not escaped, not `${`), and each
    argument is judged as every word its brace patterns expand to. A pattern with more alternatives
-   than a fixed bound is refused as uncheckable. PowerShell has no brace expansion and is unchanged.
+   than a fixed bound is refused as uncheckable. **(R2)** A brace the outer shell leaves literal
+   (quoted, escaped, or any brace in PowerShell) is also judged as an inner shell would expand it,
+   because `bash -c 'cp n .{,.}/x'` is refused today only by the tail reading step 2 removes.
 2. **Rule 6 reads a non-plain word as the pieces a shell could take from it, never from the middle of
    a name (F362).** The word is divided at the characters where another path can begin: the shell's
    own metacharacters that survive lexing (`<`, `>`, `|`, `;`, `&`, `(`), a quote, and the prefixes a
@@ -61,7 +63,9 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 4. **In bash, the null device and the standard streams may be named** (`/dev/null`, `/dev/stdin`,
    `/dev/stdout`, `/dev/stderr`), as whole words or as a piece. `/dev/tcp/…` and every other
    `/dev` path stay refused.
-5. **A schemeless address in the two forms a program reads as remote is refused as a network
+5. **(R2) An approver whose judge raises denies with a reason** instead of failing the tool call
+   silently (design D6).
+6. **A schemeless address in the two forms a program reads as remote is refused as a network
    address**, not as a path: `user@host:path` (scp, git over ssh) and `host:port/…`. Today both are
    refused only by the backstop's false filesystem reason (`a-url-is-not-a-path` D3 named this a
    residual). Without this step the whole-word reading would allow them.
@@ -76,6 +80,8 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 
 ## Residuals, kept on purpose
 
+- `cp n '.{,.}'/x` (a file literally named `.{,.}` in a directory): refused, because an inner shell
+  would expand the pattern (R2).
 - `grep -c '</script>' a.html`: the trimmed word is `/script`, refused by rule 5. `<` before `/` is
   an input redirect to any inner shell, so it stays refused.
 - `gcc -Iinclude/x`, `tar -xvf/tmp/a.tar`: which letters of a glued option take a value is the
@@ -89,7 +95,7 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 
 ## Findings
 
-- **F362** — fixed by steps 2 to 5.
+- **F362** — fixed by steps 2 to 4 and 6; step 5 (R2) makes the judge fail closed visibly.
 - **F403** — fixed by step 1.
 - The changes are in one file, `hub/hub/mcp_server.py`, plus its tests. No migration, no UI bundle,
   no Hub restart. **An edit reaches the operator's `:8000` agents on their next run, committed or

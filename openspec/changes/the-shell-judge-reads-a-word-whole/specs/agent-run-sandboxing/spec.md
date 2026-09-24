@@ -167,8 +167,10 @@ workspace names nothing outside it. Judging the text instead of the alternatives
 it lets `.{,.}` through, and it refuses `src/{a,b}`.
 
 A brace the shell does not expand, because it is quoted, escaped, opens a parameter expansion, or
-holds no alternatives, SHALL be read as the literal character it is. A dialect without brace
-expansion is unaffected.
+holds no alternatives, SHALL be read as the literal character it is. Because a quoted word may be
+handed to an inner shell that does expand it, a brace pattern left literal by the outer shell, in
+either dialect, SHALL also be judged as the words that inner shell would expand it to, and a
+refusal of either reading refuses the command.
 
 #### Scenario: A brace pattern that expands to the parent directory is refused
 
@@ -183,10 +185,17 @@ expansion is unaffected.
   workspace
 - **THEN** that pattern does not make the command refused
 
-#### Scenario: A quoted brace is literal
+#### Scenario: A quoted brace is also judged as an inner shell expands it
 
-- **WHEN** a bash command names a brace pattern inside quotes or with its braces escaped
-- **THEN** it is judged as the literal word
+- **WHEN** a command hands an inner shell a quoted brace pattern one of whose alternatives resolves
+  outside the workspace
+- **THEN** the command is refused
+
+#### Scenario: A quoted brace whose alternatives are harmless stands
+
+- **WHEN** a command names a quoted brace pattern, such as an awk program or an inline JSON value,
+  none of whose alternatives resolves outside the workspace
+- **THEN** that pattern does not make the command refused
 
 #### Scenario: A pattern too large to judge is refused as uncheckable
 

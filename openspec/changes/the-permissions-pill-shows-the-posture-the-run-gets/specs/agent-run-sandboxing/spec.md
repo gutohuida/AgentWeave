@@ -1,6 +1,11 @@
+## RENAMED Requirements
+
+- FROM: `### Requirement: Introducing an enforced posture does not change existing runs`
+- TO: `### Requirement: The built-in posture a run receives is the posture shown for it`
+
 ## MODIFIED Requirements
 
-### Requirement: Introducing an enforced posture does not change existing runs
+### Requirement: The built-in posture a run receives is the posture shown for it
 
 The built-in posture a run receives when neither its conversation nor its agent states one SHALL be decided in one place per provider, and every surface that shows a posture at rest SHALL show that posture.
 

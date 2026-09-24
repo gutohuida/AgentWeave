@@ -36,7 +36,18 @@ side fails it.
 
 The list route already resolves the bound runner (`agents.py:548`, `bound_runner.cli`; config merged at `:534`) and holds
 the agent's config (`agent_meta`). `hub_client` comes from that config, as
-`agent_trigger.py:1056` reads it; `yolo` likewise (`agent_trigger.py:805`). The value is computed by
+`agent_trigger.py:1056` reads it; `yolo` likewise (`agent_trigger.py:805`).
+
+**R2 correction — the list must apply the spawn's whole `hub_client` resolution.** The trigger reads
+`config` from `launchability.get_agent_config` (`agent_trigger.py:718`), which merges the session's
+per-agent entry over `Agent.config` exactly as the list does (`launchability.py:484-485`,
+`agents.py:533-534`) **and** then falls back to the session-wide `hub_client`
+(`launchability.py:476-479`). The list route has no such fallback, so for a project whose
+session.json sets a top-level `hub_client: "cli"`, the list would say `workspace` while every run
+spawns `acceptEdits`: the drift this change exists to end. Build: extract that fallback into one
+pure helper in `launchability.py` (`effective_hub_client(meta, session_data)`), used by
+`get_agent_config` and by the list route (which already holds `session_data`, `agents.py:296`).
+Task 1.3 gains a row for it. The value is computed by
 `posture_at_rest(catalog_provider_for_runner(cli), resolve_access_path(cli, hub_client), yolo)`.
 Unknown cli → `null`.
 
@@ -65,11 +76,22 @@ deleted; its comment's premise ("an agent with no runner bound at all") is what 
   that window the UI finds no `permission_mode_at_rest` and a catalog still saying `acceptEdits`, so
   the pill reads "Edit files" exactly as it does today: no regression, and no fix until the restart.
   The UI must treat a missing field as unknown, never as an error (task 1.4 covers it).
-- The requirement keeps its name, *"Introducing an enforced posture does not change existing runs"*,
-  because a MODIFIED delta must match the header; its text now states the one built-in default. R2
-  should decide whether a RENAMED delta is worth it.
+- **R2:** the requirement *"Introducing an enforced posture does not change existing runs"* is
+  RENAMED to *"The built-in posture a run receives is the posture shown for it"* (a RENAMED plus a
+  MODIFIED block; `openspec validate --strict` passes). Its old name states the opposite of what
+  its text now says, and nothing outside the spec cites it (grep over `openspec/specs`, `hub/`).
 - `hub_client` has no UI control (`DECISIONS.md` f299-f301); an agent with `hub_client: "cli"` will
   now correctly read "Edit files".
+- **Two of the seven posture reads B3 lists (B3 R2, "every place a run's permission posture is
+  read") are outside this function, on purpose, and stay residuals:** `Runner.flags` are appended
+  raw after `--permission-mode` (`runner_commands.py:285`), so a runner whose flags name a posture
+  wins over what the pill shows; and an agent's `config["env_vars"]` can carry
+  `AW_PERMISSION_POSTURE=operator`, which the spawn leaves in place unless the run is `manual`
+  (`agent_trigger.py:1195-1196`) and the approver honours (`mcp_server.py:1699`), turning a
+  "Workspace only" run into "Ask me". Neither is a built-in default; both are operator-written
+  configuration. The other five agree: `default_permission_mode` and `runtime_overrides` sit above
+  `posture_at_rest` in the pill's precedence exactly as in the spawn (`agent_trigger.py:760-768`),
+  `yolo` and `hub_client` are its inputs, and `read_only` moves the boundary, not the posture.
 
 ## Open questions
 

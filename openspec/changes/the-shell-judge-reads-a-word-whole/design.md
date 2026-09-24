@@ -43,10 +43,19 @@ argument: a `{…}` group expands when it holds a top-level sentinel comma (`{a,
 `{x..y}` of two integers or two single letters; any other marked brace is restored as a literal
 character. Groups nest, and a preamble and a postscript are distributed (`a{b,c}d` → `abd acd`).
 
-- **A sequence is replaced by one representative** (its first endpoint). Its elements are integers
-  or single letters, so none of them can be `..`, `~` or contain a separator, and each would be
-  judged alike. This keeps `{1..1000}` from costing a thousand judgements.
-- **Bounded.** Past 256 alternatives for one argument, `_expand_braces` returns `None` and
+- **An integer sequence is replaced by one representative** (its first endpoint). Its elements
+  (`{1..1000}`, `{01..10}`, `{-1..1}`, `{1..9..2}`) are an optional sign and digits, so none of them
+  can be `..`, `~` or contain a separator, and each would be judged alike. This keeps `{1..1000}`
+  from costing a thousand judgements.
+- **A letter sequence is expanded in full (R2).** R1 treated it like an integer one, but bash's
+  letter range runs over the ASCII codes between its endpoints, not over letters: measured in Git
+  Bash 5.2.37, `echo {Z..a}` prints `Z [`, a backslash, `] ^ _`, a backtick and `a`. On Windows the
+  backslash is a separator, so `{Z..a}..` has the alternative `\..`, which the judge already refuses
+  (`cp x '\..'` is denied today, measured) and a representative `Z..` would allow. A letter
+  sequence has at most 58 elements (`A`..`z`), so full expansion stays within the bound.
+- **Bounded.** Past 256 alternatives for one argument, or 1024 across one command's reading (R2:
+  each alternative costs a `realpath`, twice with the `continues` extension, and a bash command is
+  read twice for `$'…'`; the per-argument bound alone lets a 100-argument command cost ~25,000), `_expand_braces` returns `None` and
   `_read_command` refuses the word as uncheckable with a new reason, `_TOO_MANY_BRACES` ("expands to
   more words than can be checked…"). Refusing is the only total answer that cannot allow an unseen
   word.
@@ -58,11 +67,32 @@ Measured in Git Bash 5.2.37: `echo .{,.}/x` → `./x ../x`; `{.,.}./x` → `../x
 `${HOME:0:3}{a,b}` → `/c/a /c/b`; `{..}` → literal `{..}`; `{a,{b,c}}d` → `ad bd cd`;
 `cp notes.md .{,.}/` put `notes.md` in the parent.
 
-**Totality:** string operations on a `str`, bounded recursion (nesting is bounded by the argument's
-length and by the 256 cap). R2 must confirm that the expander cannot recurse past Python's limit on
-a pathological `{{{{…` (it should iterate or bail to `None`).
+**Totality (R2).** The expander must not recurse on nesting depth: an argument of 5000 `{` would
+pass Python's recursion limit (1000) and raise `RecursionError`, which `approve_tool_call` does not
+catch (see D6). Build it iteratively (an explicit stack of groups), or cap nesting at 32 and return
+`None` past it (refused as `_TOO_MANY_BRACES`). `fnmatch.fnmatchcase` (D3) was measured total on
+Python 3.11: unbalanced `[`, `.[`, `[[[[.*`, `.[!]`, `.[z-a]`, `.[]`, `.[\`, `.[a-` all answer
+`False` without raising, and components of 5000 `*a`, 3000 `[a]*`, 4000 `?*` answer in 0.035 s or
+less (the subject is always the two-character `..`, so no pattern can backtrack far).
 
-**PowerShell is untouched.** `{…}` is a script block there and `,` an array operator.
+**R2: a brace an inner shell will expand is judged as expanded too.** D1 as R1 wrote it expands only
+the braces the outer bash expands. A quoted brace pattern handed to an inner shell
+(`bash -c 'cp n .{,.}/x'`, `sh -c 'cp n {,..}/x'`) reaches `_words` literal, is split at its commas
+(`.{` and `.}/x`), and today is refused only by rule 6's tail reading (`'/x'`, measured, in both the
+Bash and the PowerShell tool). Under D2 the piece `.}/x` is a name inside, so **D2 would let every
+quoted brace escape through** — the regression D1 exists to prevent, one quote away. So
+`_read_command` also judges, for an argument holding a brace the outer shell left literal (quoted,
+escaped, or any brace in the PowerShell dialect), the words that argument expands to when **every**
+brace is treated as bash treats an unquoted one (a `{` after a `$` or a `_LITERAL_DOLLAR` still opens
+a parameter expansion). This is the brace counterpart of D2 step 4's quote-removed reading, which
+exists for the same reason (an inner shell joins quotes). It also closes F403's own shape one level
+down (`bash -c 'cp n .{,.}'`, allowed today, measured). Cost: a literal brace pattern whose
+alternatives include `..` is refused even when no inner shell reads it (`cp n '.{,.}'/x`, a file
+literally named `.{,.}`); `awk '{print $1, $2}'` and inline JSON expand to harmless words; the same
+bounds apply.
+
+**PowerShell's own reading is unchanged** (`{…}` is a script block there and `,` an array
+operator); only the inner-shell reading above is added to it.
 
 ### D2 — Rule 6 judges pieces, not tails (F362)
 
@@ -71,7 +101,14 @@ Rule 6 is replaced. For a word that reached it (a separator, no expansion, not p
 1. If a schemeless address matches (D5), refuse as a network address.
 2. If the word begins with `-` and `_GLUED_OPTION_RE` (`:1048`) matches, drop that option run; what
    follows is the value.
-3. Split the value at `_PIECE_BREAKS` = `[<>|;&(@:\s'"`]+` and judge each non-empty piece.
+3. Split the value at `_PIECE_BREAKS` = `[<>|;&(@:\s'"`]+` and judge each non-empty piece. **R2:
+   in the PowerShell reading, a `:` directly after a single ASCII letter that begins the value or a
+   piece is not a break**, so `Z:foo\bar` and `-Destination:Z:foo\bar` keep one piece `Z:foo\bar`,
+   which `_where` resolves on drive Z (outside). Without this the `:` break yields `Z` and
+   `foo\bar`, both inside, and **two PowerShell writes to another drive, refused today (`'\\bar'`,
+   measured), become allowed**. The bash reading keeps the break (Git Bash writes a file named `C:`,
+   F402). The cost is PowerShell `git show a:src/x.py` (a one-letter revision) refused as drive A,
+   the residual `a-drive-or-a-home-variable-names-a-directory-by-itself` already accepts.
 4. Also remove the quote characters `'"`` from the value, split at the same breaks less the quotes,
    and judge each piece.
 5. Each piece: a NUL anywhere refuses it as `_UNRESOLVED` (keeps row X8); a bash device (D4)
@@ -185,10 +222,28 @@ No HTTP route changes. `approve_tool_call` returns whatever `_decide` returns an
 would reach Claude as a failed tool call, which the model reports as a broken approval system — so
 the tasks include a totality test over adversarial words (task 1.6).
 
+### D6 (R2) — an approver that fails denies, with a reason
+
+**Refuse or allow, if the judge raises?** Today: neither, cleanly. The exception propagates out of
+`approve_tool_call`; FastMCP returns it as a tool error, which is never the
+`{"behavior": "allow"}` string (`:1710-1711`), so the call is not allowed — but no reason reaches the
+model, and `_report_decision` (`:1709`) never runs, so the operator's activity log shows nothing.
+D1 adds the first code in the judge that could plausibly raise (recursion). Totality tests (1.6)
+are the first defence; the second is structural: `approve_tool_call` wraps `_decide` in
+`try/except Exception` and answers `{"allow": False, "reason": "the workspace check failed on this
+call (<exception class>); ask the operator with ask_user"}`, then reports it like any refusal. Fail
+closed, visibly. No return annotation is added (`.claude/rules/mcp-server.md`: an annotation would
+make FastMCP derive `structuredContent` and silently defeat an allow).
+
 ## Risks
 
 - **The change reaches `:8000` before any commit** (`agent_trigger.py` starts the run's MCP server
   from this checkout; `.claude/rules/mcp-server.md`). Task 0.3.
+- **Order against B11's `an-agents-tool-server-is-the-one-its-hub-loaded` (F354, R2).** Until that
+  change is built **and** `:8000` has restarted onto it, an edit here reaches `:8000`'s next run
+  from the working tree, committed or not. After it, only on the operator's restart. Either order is
+  safe for this change (no Hub-side counterpart, no protocol change), so it does not wait on B11;
+  if B11 lands first, task 0.3's warning becomes "on your next restart".
 - **Other bundles may edit `mcp_server.py`** in the same window (B12's F363 touches
   `read_spec_document`). No overlapping function; rebase at build time.
 - **A regex written like a glob with a leading dot** (`.*/utils`) is refused as `..`. Accepted; the

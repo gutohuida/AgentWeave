@@ -30,11 +30,24 @@ In `_ask_operator` (`hub/hub/mcp_server.py:1624-1649`), before opening:
 `AW_WORKSPACE_DIR`, which the Hub sets for every run (`agent_trigger.py:1192`), under both postures.
 For an `mcp__agentweave__*` tool the operator is never asked (`:1703`), so no verdict is needed.
 
+**R2: the advice must not be able to stop the ask.** `_ask_operator`'s only `try` is around the
+request (`:1636-1647`). A `_decide` that raised there would escape `approve_tool_call` (no `try`,
+`:1706`) and the operator would never be asked — advice turning into a failure of the thing it
+advises. So the verdict is computed under its own `try/except Exception` and becomes `None` (no
+field sent, the card shows nothing) on any failure. `the-shell-judge-reads-a-word-whole`'s design
+D6 wraps `_decide` on the workspace path too; the two are separate on purpose, because the ask
+path's answer on a judge failure is "ask anyway", not "deny".
+
 For Codex, `_await_operator_permission` gains `workspace: Optional[str]` (the lambda at
 `agent_trigger.py:3021` has `work_dir` in scope) and computes
 `codex_appserver.workspace_verdict(subject, workspace)`, a new helper that returns
 `{"allow": _within(cwd or grantRoot, workspace), "reason": …}` — the check `decide_approval` applies
-under "Workspace only" (`codex_appserver.py:280-283`).
+under "Workspace only" (`codex_appserver.py:280-283`). **R2:** `decide_approval`'s workspace branch
+is rewritten to call the same helper, so the card's verdict and the posture's answer cannot drift
+(two restatements of one check is the shape `outside_write_record.py` rejects). Only the sandbox
+methods reach the operator under "Ask me" (`:274-277`); the permissions and elicitation methods are
+decided without asking, so they need no verdict. The Codex path writes its row directly
+(`agent_trigger.py:2793-2807`), not through the route, so D2's 422 hazard does not apply to it.
 
 ### D2 — The protocol change survives an un-restarted Hub
 
@@ -42,6 +55,15 @@ under "Workspace only" (`codex_appserver.py:280-283`).
 operator's `:8000` spawns `mcp_server.py` fresh from the checkout on every turn but runs its Hub code
 until restarted. A new approver sending `workspace_verdict` to that Hub gets a **422**, `_ask_operator`
 catches it (`:1643`) and denies: *every "Ask me" card on `:8000` would fail* until the restart.
+
+**Order against B11 (R2).** B11's `an-agents-tool-server-is-the-one-its-hub-loaded` (F354) makes a
+run's tool server the copy its Hub loaded at start. Once it is built **and** `:8000` has restarted
+onto it, the approver and the route change on the same restart and this skew cannot occur. But
+until that restart the checkout's file is still spawned, and B11's build does not force the
+restart; so the retry is kept whatever the order. It costs one branch, and it also covers the
+reverse case every future field will meet (a verdict the route rejects for its own reasons, such as
+an over-long reason, still gets the operator asked). If B11 is built and `:8000` restarted first,
+the retry is inert, not wrong.
 
 So: `_ask_operator` posts with the field; on `HubAPIError` with status 422 (`_hub_request` raises it,
 `:187-198`) it posts once more with today's body. A 422 is raised by validation before the handler

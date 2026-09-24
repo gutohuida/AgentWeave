@@ -44,7 +44,8 @@ resolve it, SHALL still be allowed.
 A reference to a variable that the shell or the platform defines as the home directory, the
 current or previous working directory, or the temporary directory names that directory by itself,
 exactly as the home-directory shorthand does, and SHALL be refused with a reason saying where it
-points cannot be checked, when it is the whole word or an option's whole value. A reference the
+points cannot be checked, when it begins the word or an option's value and no separator follows
+it, since whatever is joined on names that directory or a sibling of it. A reference the
 shell will not expand, because it is quoted literally or escaped, is text and SHALL stand. A word
 whose text before its first expansion is the parent directory starts in the parent whatever the
 expansion yields, and SHALL be refused as uncheckable.
@@ -135,8 +136,9 @@ it stays inside.
 
 #### Scenario: A directory variable referenced alone is refused as uncheckable
 
-- **WHEN** a shell command, in either dialect, names as a whole word or as an option's whole value a
-  reference to the variable holding the home, working, previous working or temporary directory
+- **WHEN** a shell command, in either dialect, names a separator-less word or option value that
+  begins with a reference to the variable holding the home, working, previous working or temporary
+  directory
 - **THEN** the command is refused
 - **AND** the reason states that where the word points cannot be checked
 

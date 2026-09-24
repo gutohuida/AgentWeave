@@ -7,10 +7,10 @@ No Hub and no agent turn needed.
 | What | How | Passes when |
 |---|---|---|
 | Ordinary shell stops being refused | `py -3.11 -m pytest hub/tests/test_the_shell_judge_reads_a_word_whole.py -q` (task 1.1) | globs, `@scope/pkg`, `HEAD:path`, `%h/%s`, regexes and `2>/dev/null` are allowed |
-| Brace patterns are judged as expanded | same file (tasks 1.2, 1.3) | `.{,.}`, `{.,.}.`, `.{,.}/x`, `src/{a,..}/../y` refused; quoted or escaped braces literal |
+| Brace patterns are judged as expanded | same file (tasks 1.2, 1.3) | `.{,.}`, `{.,.}.`, `.{,.}/x`, `src/{a,..}/../y` refused; the same patterns handed to `bash -c` refused; `awk '{print $1, $2}'` allowed |
 | A glob cannot reach the parent | same file (task 1.4) | `.*/x`, `../*` refused, naming the whole piece |
 | Schemeless remotes are network addresses | same file (task 1.5) | `git@github.com:o/r.git`, `127.0.0.1:9/x` refused with the network reason |
-| The judge always answers | same file (task 1.6) | no exception for pathological braces or brackets |
+| The judge always answers | same file (task 1.6) | no exception for pathological braces or brackets; a judge made to raise yields a deny with a reason |
 | Escapes stay refused | same file (task 1.7) plus `test_permission_approver.py` (task 1.8) | every negative control refused; only the listed rows moved |
 | Nothing else moved | full `hub/tests/` (task 2.4) | count recorded |
 

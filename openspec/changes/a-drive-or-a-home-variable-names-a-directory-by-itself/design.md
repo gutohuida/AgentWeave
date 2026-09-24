@@ -49,7 +49,16 @@ existing trim applies. Rule 4 then checks, before its option handling:
   `gettempdir` can raise when no temp directory is usable, so it is wrapped and becomes
   `_UNRESOLVED`.
 - A colon-joined option value (`_COLON_OPTION_RE`, `:1047`) is read with the colon kept, so
-  `-Destination:Z:` judges `Z:`.
+  `-Destination:Z:` judges `Z:`. **R2: the trim rule above does not do this by itself.** Measured,
+  `_words` turns `-Destination:Z:` into the word `-Destination:Z` (the trailing `:` is in
+  `_WORD_TRIM`), and the piece `-Destination:Z:` does not fullmatch `_PS_DRIVE_RE`, so it falls to
+  the existing trim and rule 4 sees the value `Z`. The PowerShell trim must also keep the colon when
+  the piece, trimmed of `_WORD_TRIM` less `:`, is `_COLON_OPTION_RE` followed by a `_PS_DRIVE_RE`
+  fullmatch. Task 1.1's `-Destination:<other>:` row fails if it does not.
+- **R2: with a separator after the drive** (`Z:foo\bar`, `-Destination:Z:foo\bar`) the word is
+  not rule 4's; today rule 6 refuses it by its tail (`'\\bar'`). `the-shell-judge-reads-a-word-whole`
+  (design D2 step 3) keeps that refused when it replaces rule 6, by not breaking at a drive colon in
+  the PowerShell reading. The two changes agree on one meaning of `Z:` in PowerShell.
 
 `s:a:b` (a second colon) and `HEAD:README.md` (more than one letter, not `Temp`) do not match and
 stand, meeting F402's constraint. Bash is unchanged (F402: Git Bash wrote a file named `C:`).
@@ -64,7 +73,13 @@ In rule 4, after the `~` check and on the same `value` (the whole word, or an op
 - either: `%NAME%`;
 
 with `NAME` from `HOME|PWD|OLDPWD|USERPROFILE|TMPDIR|TMP|TEMP|APPDATA|LOCALAPPDATA` (bash names are
-case-sensitive, PowerShell's and cmd's are not), fullmatched and not followed by a name character.
+case-sensitive, PowerShell's and cmd's are not), matched **at the start of the value and not
+followed by a name character** (R2: R1 wrote "fullmatched", which contradicts "not followed by a
+name character" and misses `cp x $HOME.bak` and `cp x $PWD..`, a sibling of home and a sibling of
+the workspace, both separator-less, both outside; a prefix match refuses them at no extra cost,
+since `echo $HOME` is already refused). The bash form also takes any parameter expansion of such a
+variable, `${NAME` followed by a non-name character or the end (`${HOME-x}`, `${HOME:+y}`), whose
+value is the directory or a word the operator wrote; `${HOME%/}` has a separator and is rule 3's.
 Match → `_refuse(word, _UNCHECKED)`. A `$` the lexer marked literal (`_LITERAL_DOLLAR`, single
 quotes or an escape) does not match, so `echo '$HOME'` stands; this is narrower than rule 3, which
 counts a literal `$` too (`_expands`, `:1161-1170`), and it is deliberate: the word is exactly the
