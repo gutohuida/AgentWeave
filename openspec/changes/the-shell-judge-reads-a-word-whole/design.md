@@ -32,7 +32,35 @@ What changed, each with its measurement below:
 - **A MODIFIED delta** is added on the posture requirement, whose scenario "Traversal and links
   cannot escape" R3 broke.
 
-The record is in `spec-queue/tracks/B4.md`, under "R4". **It awaits an independent R5.**
+The record is in `spec-queue/tracks/B4.md`, under "R4".
+
+**R5 ran on 2026-09-24 (independent verification).** It re-derived the design from
+`hub/hub/mcp_server.py` at `8786289` (no product change since `b7d976a`). It measured with `_decide`
+in-process in `py -3.11` (3.11.9), with a real junction `up` and a dot-named junction `.l` pointing
+outside, and in Windows PowerShell 5.1. It also counted 42,860 Bash commands from this repository's
+own Claude Code transcripts. The argument holds. Seven places could not fire as written, or could
+not end, and were fixed:
+
+- **D8 did not reach an absolute glob.** Rule 5 takes every absolute word first, so
+  `cp n C:/…/ws/u*/` and `cp n C:/…/ws/.*/x` never reach rule 6. Both are allowed today (measured)
+  and stayed allowed under R4. D8 and D3 now also run in rule 5.
+- **D8 globbed a word's pieces only, never the whole word.** `@` and `:` are breaks, so
+  `node_modules/@s/u*/` was globbed as `s/u*/` from the root. D8 now also globs the whole value.
+- **D8's dot rule is bash's.** PowerShell's `*` matches `.l` (measured: `Resolve-Path *`), so in the
+  PowerShell dialect a dot-named link, such as a linked `.venv`, would have been missed.
+- **D7 could not end on a final backslash.** `src\` has no character after its `\`, so "until no
+  backslash is left" never arrives. It now ends when a level changes nothing.
+- **D5 missed a trailing colon.** `_words` trims `:`, so `scp n user@example.com:` reaches the
+  judge as `user@example.com` (measured: allowed today, and under R4).
+- **The bounds are now charged before the cost.** A brace pattern's count is computed before it is
+  expanded (`{a,b}` × 40 is 2^40 words). Glob entries are charged as they are read, and each
+  directory is listed once per `_decide`, not once per pattern: over this repository's own
+  commands, a per-pattern memo spent up to 5,412 entries on one command's root listings.
+- **A `**` walk through a link cycle could not end** once listings are memoized, since a memo hit
+  charges nothing. A `**` walk now does not descend through a link, as bash's does not.
+
+R5 also added two named residuals and two costs, which are not decisions: an inner PowerShell's
+`> /dev/null` (D4), a POSIX `grep '\.\./'`, and a commit message naming `user@host:` (D5).
 
 ---
 
@@ -58,8 +86,9 @@ Functions are cited by name; line numbers drift.
   separator plus an expansion is uncheckable (`_expands`), rule 4 no separator, rule 5 absolute or
   `_PLAIN_RELATIVE_RE`, rule 6 the backstop over `_ABSOLUTE_PATH_RE`.
 - `_PLAIN_RELATIVE_RE` excludes `"'`{}[]()<>|;&@*?%` and NUL everywhere
-  (`_PLAIN_RELATIVE_EVERYWHERE`), and `:` in the first segment. So **every word holding a glob
-  character (`*`, `?`, `[`) reaches rule 6**; none is plain.
+  (`_PLAIN_RELATIVE_EVERYWHERE`), and `:` in the first segment. So **every relative word holding a
+  glob character (`*`, `?`, `[`) reaches rule 6**; none is plain. **(R5) An absolute one does not:**
+  rule 5 takes it by `os.path.isabs(word)` and resolves the literal text (see D8, "Where it runs").
 - `_ABSOLUTE_PATH_RE`: on Windows `(?:[A-Za-z]:[\\/]|[\\/])[^\s"'|;&><)]*`, on POSIX
   `(?:[A-Za-z]:[\\/]|/)…`. Both open at any separator anywhere in the word. **This is also the only
   reason a glob through a link is refused today:** `cp n u*/` is refused as `'/'` and `cp n u?/x` as
@@ -256,6 +285,15 @@ exemption holds for:
 A piece after a quote or a `(` is judged as a path. On POSIX `/dev/null` is the device for every
 program, so there the exemption also covers every piece.
 
+**What this leaves (R5, measured).** msys converts a whole *argument*, and the exemption is for a
+whole *word*. `_words` splits a quoted script at whitespace and trims a leading `>`, so the inner
+script's redirect target is a whole word. For `sh -c 'ls >/dev/null 2>&1'` that is right: the inner
+shell is msys. For `powershell -c 'echo x > /dev/null'` the inner shell is not msys, and it writes
+`\dev\null` on the current drive. That command is refused today (as `'/dev/null'`) and allowed
+after. The judge cannot tell which program the quoted script is for. The write fails unless a `\dev`
+directory already exists on that drive (`C:\dev` does not exist here). This is a named residual,
+put to the operator with Open Question 2.
+
 ### D5 — `user@host:` and `host:port/…` are network addresses, decided before rule 3
 
 **R4: where it runs.** R3 ran D5 as the first step of rule 6. Only a word with a separator reaches
@@ -299,6 +337,17 @@ The reason is `_NETWORK` unchanged, naming the whole word. A schemeless address 
 Hub is refused too: `_is_own_hub` needs a scheme, and the instructed spelling (`$HUB_URL`) carries
 one.
 
+**R5: a trailing colon.** `_words` trims `:` from a word's ends, so `scp n user@example.com:` (a
+copy to the remote home directory) reaches the judge as `user@example.com`. It is allowed today
+(measured), and `_SCP_ADDRESS_RE` as written never sees its colon. So `_words` also yields whether
+it trimmed a `:` directly after the word, and D5 matches the word with that colon restored. Over
+42,860 Bash commands from this repository's own transcripts, the rule with the colon kept matched
+only two words, both `git@github.com:o/r.git` in earlier probes.
+
+**Cost (R5).** The judge cannot tell text from a command, so an `echo`, a `grep` or a commit message
+naming an address in this form (`git@github.com:o/r.git`) is refused as a network address, as
+`echo '$HOME'` is under the sibling change. Write the message to a file and use `git commit -F`.
+
 ### D6 (R2) — an approver that fails denies, with a reason
 
 **Refuse or allow, if the judge raises?** Today: neither, cleanly. The exception propagates out of
@@ -329,7 +378,9 @@ catches its own verdict failure.
   Windows. R3 as written also allows it: one level gives `.\./x`, which is still inside. So the
   word is judged at **each** level:
   - Level 1 replaces each `\c` by `c`, scanning left to right. Level 2 does the same to level 1's
-    result, and so on until no backslash is left.
+    result, and so on **until a level changes nothing** (R5). A final backslash has no character
+    after it and stays, so "until no backslash is left" would never end for `src\` or `x\\`,
+    and the call would never be answered.
   - Every level at least halves each run of backslashes. So there are at most one more level than
     log2 of the longest run: 17 for a run of 65,536 characters.
   - Each level is judged **as a word, through all of `_judge_word`'s rules**, without a further
@@ -339,6 +390,9 @@ catches its own verdict failure.
     `a-drive-or-a-home-variable-names-a-directory-by-itself` see the directory variable.
   - Each level is an extra reading only. It can add a refusal and never remove one. On Windows
     every path spelled with `\` gains harmless readings (`src\a.py` → `srca.py`).
+  - **Cost (R5), POSIX only.** A regular expression that escapes dots to spell a traversal is
+    refused: `grep -rn '\.\./' src` reads `../` at level 1. It is allowed today on POSIX. On Windows
+    it is refused today already (as `'\\.\\./'`, measured), because `\` opens a root path there.
 - **A PowerShell provider-qualified path.** `Copy-Item x Microsoft.PowerShell.Core\FileSystem::C:\Windows\x`
   is allowed today (measured at `b66f6a6`). A word containing `::` is therefore not plain, in either
   dialect, and reaches the piece reading, where `::` is a break. Cost: `lib/Foo::Bar.pm` is read as
@@ -381,18 +435,32 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
    - `**` is `*`, except when the command's text names `globstar`, in which case `**` matches
      directories at any depth.
 
-   A name beginning with `.` matches only when the relaxed component begins with `.`, as bash's
-   default (`dotglob` off) does. The rule is dropped when the command's text names `dotglob`. When
-   D3 says the component can match `..`, `..` is also a candidate.
+   In the bash dialect, a name beginning with `.` matches only when the relaxed component begins
+   with `.`, as bash's default (`dotglob` off) does. The rule is dropped when the command's text
+   names `dotglob`. **(R5) In the PowerShell dialect there is no such rule**: its wildcards match a
+   dot-leading name (measured: `Resolve-Path *` lists `.l`), so a linked `.venv` matches `*` there.
+   When D3 says the component can match `..`, `..` is also a candidate.
+
+   Whether the command names `globstar` or `dotglob` is read once per `_decide`, from the whole
+   `command` (R5), so that the memo below cannot hold a result from a nested text read under
+   different flags.
 3. **Links are judged.** A matched entry that is a link is judged by
    `_judge_path(entry.path, root, <piece as written>, argument, False)`. An outside match refuses,
    and `_resolves_elsewhere` names where it lands. An entry is a link when `DirEntry.is_symlink()`
    is true or, on Windows, when it is a reparse point:
    `DirEntry.stat(follow_symlinks=False).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT`,
    which is served from the directory listing. **Python 3.11's `is_symlink()` is False for a
-   junction** (measured on `up`), so it cannot be the test alone.
+   junction** (measured on `up`), so it cannot be the test alone. (R5 re-measured on 3.11.9 with
+   two junctions made by `_winapi.CreateJunction`: `is_symlink()` False, `is_dir()` True, the
+   reparse-point attribute set, `st_reparse_tag` 0xA0000003, and `realpath` gives the target.) A
+   cloud or deduplicated file is a reparse point too; it costs one `realpath`, which resolves to
+   itself, inside.
 4. **Descend** into a matched directory for the next component, following a link only once it has
-   been judged inside. The last component's matches are not descended into.
+   been judged inside. The last component's matches are not descended into. **(R5) A `**` walk
+   under `globstar` does not descend through a link** (bash 4.3 and later do not either); it judges
+   the link and stops there. Without this, the listing memo below would never end a link cycle
+   (`loop` → the workspace): every level is a memo hit, which charges nothing. Each other
+   component moves one level, so any other walk ends with its components.
 5. **A directory that cannot be listed** (`OSError`, `ValueError`) contributes no matches. The shell
    cannot list it either, and the literal is judged regardless. A glob that matches nothing is passed
    on literally by bash, and the literal is already judged.
@@ -409,10 +477,24 @@ can all match more names than the shell would. For example, `fnmatch` does not m
 relaxed `*p` matches it. Matching more names can only add a refusal, and only where a link out of the
 workspace exists.
 
-**Where it runs.** In the piece reading here (rule 6).
+**Where it runs (R5: three places).**
+
+- **In the piece reading (rule 6), on each piece.**
+- **In rule 6, also on the whole value** (the word after its option run, and its quote-removed and
+  escape-removed readings). `@` and `:` are breaks for the literal reading, but to the shell's
+  globbing they are name characters. Globbed piece by piece, `ls node_modules/@s/u*/` is only
+  `s/u*/` from the root, and a link at `node_modules/@s/up` is never listed. Matching more names
+  can only add a refusal.
+- **(R5) In rule 5, on an absolute word that holds a glob character or an extglob group.** Rule 5
+  takes every absolute word before rule 6 (`os.path.isabs(word)`), and `_PLAIN_RELATIVE_RE` keeps
+  only relative globs out of it. So R4's D8 never saw `cp n C:/…/ws/u*/`, whose base is the
+  workspace itself. That command, and `cp n C:/…/ws/.*/x`, are allowed today (measured) and stayed
+  allowed under R4. In rule 5 such a word is also rewritten by D3 and then passed through
+  `_glob_links`. Step 1's "(or absolute)" base was already written for it.
+
 `a-drive-or-a-home-variable-names-a-directory-by-itself` applies the same `_glob_links` to a
 separator-less word (rule 4), where `cp n u*` is allowed today (measured). That change builds after
-this one.
+this one. Until it is built, a separator-less glob is judged as today, by its text alone.
 
 ### D9 (R4) — one platform key, and a Windows CI job
 
@@ -461,8 +543,21 @@ dialects for an unknown tool, both readings (`c`, `utf8`), and every nested subs
 
 **A memo keeps the readings from multiplying the cost.** `_decide` keeps one dictionary of word
 judgements, keyed by `(word, argument, continues, dialect, trusted)`. It also keeps one of
-expansions: brace alternatives keyed by the marked argument text and dialect, and `_glob_links`
-results keyed by base and remaining components. The budget is charged only on a miss. The `c` and
+expansions: brace alternatives keyed by the marked argument text and dialect, and **(R5) directory
+listings keyed by the resolved directory**. The budget is charged only on a miss. R4 keyed
+`_glob_links` results by base and remaining components, which lists the root once per distinct
+pattern. Over 42,860 Bash commands from this repository's own transcripts, one command (a Markdown
+heredoc) held 123 distinct separator-less glob words. At 44 root entries, a per-pattern memo would
+charge 5,412 of the 8,192, from one listing. A project with a larger root would pass the bound on
+ordinary text.
+
+**Each bound is checked before its cost is spent (R5).**
+
+- `_expand_braces` computes an argument's alternative count (the product of each group's size,
+  summed over nesting) before it builds any alternative, and returns `None` past either bound.
+  Building first and counting after would not end on `{a,b}` repeated 40 times (2^40 words).
+- `_glob_links` charges the budget as each directory entry is read from `os.scandir` and stops
+  reading at the bound. It does not list a directory first and count it after. The `c` and
 `utf8` readings differ only where a `$'…'` escape at or above 0x100 renders differently. So a
 second reading of the same text costs lookups, not listings or `realpath` calls. Without the memo,
 a per-`_decide` bound of 1024 would leave an unknown tool (four reads) 256 usable alternatives.
@@ -490,9 +585,13 @@ whenever `_decide` raises. The step-by-step:
   iterative, so there is no recursion.
 - `fnmatch.fnmatchcase` was measured total.
 - `_where` and `_judge_path` are total.
-- `_glob_links` catches `OSError` and `ValueError` around each `os.scandir`, each `DirEntry.is_dir()`
-  and each `DirEntry.stat()`, and treats them as "no match" for that entry or directory. It is
-  iterative, with an explicit stack, and bounded by the entry budget, so a link cycle ends there.
+- `_glob_links` catches `OSError` and `ValueError` around each `os.scandir` **and its iteration**
+  (R5: the iterator can raise part-way through a listing), each `DirEntry.is_dir()` and each
+  `DirEntry.stat()`, and treats them as "no match" for that entry or directory.
+- The escape-removed readings (D7) end when a level changes nothing, so a final backslash cannot
+  loop (R5). It is
+  iterative, with an explicit stack, and bounded by the entry budget. (R5) A link cycle ends because a
+  `**` walk does not descend through a link (D8 step 4), not at the budget: memo hits charge nothing.
 - Budget exhaustion is a return value (`None`, then `_TOO_MANY`), not an exception.
 - Anything else, `MemoryError` included, is caught by D6 and becomes a reported deny.
 
@@ -508,8 +607,10 @@ The tasks include a totality test over adversarial words (1.6) and an in-process
 - **Linked dependency directories.** In a project with a `node_modules`, `.venv` or `venv`, every
   agent worktree holds a link to the project checkout's copy (`worktrees.py`,
   `_symlink_shared_dependencies`). A path through it already resolves outside and is refused today
-  (`ls node_modules/x`, `.venv/bin/python`). D8 adds `ls node_modules/*`, and the sibling change the
-  bare `ls node_modules`. On this machine no project worktree holds such a link today: all four
+  (`ls node_modules/x`, `.venv/bin/python`). D8 adds `ls node_modules/*` and **(R5) any glob whose
+  component matches the link's name**: `ls */package.json` in a worktree with a linked
+  `node_modules`, and in PowerShell `Get-ChildItem *\x` with a linked `.venv`. The sibling change
+  adds the bare `ls node_modules` and a bare `*` (`ls *`, `grep foo *`, `du -sh *`). On this machine no project worktree holds such a link today: all four
   LoopEngine worktrees were checked read-only, and LoopEngine has no `node_modules`. So nothing
   measured moves. This is a candidate finding for the operator. The workspace boundary and the
   shared read-only dependency links disagree, and it is not this change's to settle.
@@ -542,6 +643,12 @@ New, or kept on purpose:
 - **`host:x/y` and `user@alias:path`** are read as paths (D5; operator, 2026-09-24).
 - **R3's:** a quoted JSON array past the bound (refused), and an inner shell's ANSI-C `..` with no
   separator (allowed).
+- **(R5) An inner PowerShell's or `cmd`'s `> /dev/null` on Windows** (D4): allowed after, refused
+  today.
+- **(R5) Named costs:** `grep -rn '\.\./' src` on POSIX (D7), and an address written as text
+  (`echo git@github.com:o/r.git`, a commit message naming one; D5).
+- **(R5) A glob mentioned in a heredoc that also names `globstar`** is walked at every depth, and
+  may pass the entry bound. The flag is read from the command's text.
 
 ## Open questions
 
@@ -551,6 +658,15 @@ New, or kept on purpose:
    alternative is to break at a `)` directly followed by `.` or `~`. That closes the relative case
    but refuses regexes ending `(…).*` or `(…)..`, and it leaves `1)/abs/x`.
 2. **D4's set.** Recommended: the four names (`/dev/null`, `/dev/stdin`, `/dev/stdout`,
-   `/dev/stderr`), not `/dev/null` alone. Still unanswered from the Final section.
+   `/dev/stderr`), not `/dev/null` alone. Still unanswered from the Final section. (R5) The answer
+   also accepts D4's residual on Windows: an inner PowerShell or `cmd` given `> /dev/null` writes
+   `\dev\null`, if that directory exists. Recommended: accept. The alternative, exempting only a
+   whole argument, refuses `sh -c 'cmd >/dev/null 2>&1'` on Windows.
 3. **The linked dependency directories (Risks).** Recommended: file a finding and leave this change
-   as written. The boundary is not this change's to redraw.
+   as written. The boundary is not this change's to redraw. (R5) The cost is larger than a bare
+   mention: with the sibling change, a bare `*` in a worktree with a linked `node_modules` is
+   refused. 595 of 42,860 Bash commands in this repository's own transcripts had a bare `*` word.
+   No worktree on this machine holds such a link now, so the recommendation stands. If a
+   JavaScript project is registered before the finding is fixed, the fix should come first.
+4. **(R5) Build order.** Recommended: build this change and the sibling in one window. Between the
+   two builds, a separator-less link or glob (`cp n up`, `cp n u*`) stays allowed, as it is today.

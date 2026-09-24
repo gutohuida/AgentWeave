@@ -7,7 +7,20 @@ operator must approve it (`spec-queue/APPROVALS.md`).
 **R4, 2026-09-24 (revise round, after the operator's review).** The Opus review found that R3's
 piece reading let a glob reach outside through a link (`cp n u*/`, measured writing outside in Git
 Bash). The operator sent the change back. Steps 9 to 12 below are R4's, and steps 4, 6 and 8 are
-revised. See `design.md`, "Operator review, 2026-09-24". An independent R5 comes next.
+revised. See `design.md`, "Operator review, 2026-09-24".
+
+**R5, 2026-09-24 (independent verification).** The argument holds. Seven places could not fire or
+could not end as written, and are fixed in the design, with tests:
+
+- an absolute glob skipped D8 (`cp n C:/…/ws/u*/`, allowed today, measured);
+- a glob after `@` or `:` was globbed from the wrong directory;
+- PowerShell's `*` matches dot names, and R4 applied bash's dot rule to it;
+- the escape levels could not end on a final backslash;
+- `scp n user@example.com:` lost its colon to the trim;
+- the bounds were not charged before the cost;
+- a `**` walk through a link cycle could not end.
+
+It also named two costs and one residual (design D4, D5, D7).
 
 ## Why
 
@@ -134,6 +147,11 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
   paths computed inside code (`python -c`, PowerShell `(Split-Path (pwd))`); and a hard link.
 - `cp n '.{,.}'/x` (a file literally named `.{,.}` in a directory): refused, because an inner shell
   would expand the pattern (R2).
+- (R5) On Windows, an inner PowerShell's or `cmd`'s `> /dev/null` (`powershell -c 'echo x > /dev/null'`)
+  is allowed after and refused today. It writes `\dev\null` only if that directory exists. Design
+  Open Question 2.
+- (R5) `grep -rn '\.\./' src` on POSIX (the escape levels read `../`), and an scp-style address
+  written as text in an `echo` or a commit message, are refused.
 - `grep -c '</script>' a.html`: the trimmed word is `/script`, refused by rule 5. `<` before `/` is
   an input redirect to any inner shell, so it stays refused.
 - `gcc -Iinclude/x`, `tar -xvf/tmp/a.tar`: which letters of a glued option take a value is the

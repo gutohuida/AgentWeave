@@ -14,8 +14,10 @@ For a shell command, the paths compared are the ones its text names as the shell
 read them (see *A path in a shell command is judged by where it resolves*). A glob pattern among
 them SHALL be judged by the entries it matches in the filesystem as well as by its text, so that a
 link it matches cannot carry the command outside, and a pattern that would need more entries
-examined than the check allows SHALL be refused. A path the command computes only when it runs is
-not one its text names, and this requirement does not claim that such a path is judged.
+examined than the check allows SHALL be refused. A word with no path separator is not one of these
+paths: *A word with no path separator is still judged when it names a directory by itself* says
+which such words are judged. A path the command computes only when it runs is not one its text
+names, and this requirement does not claim that such a path is judged.
 
 The boundary enforced SHALL be the same one the agent is told it is working in. A boundary that is
 described in one place and enforced from another can disagree, and the agent is given no way to tell
@@ -225,8 +227,8 @@ as a path of its own. Each piece read this way SHALL be judged as the path it sp
 against the workspace, and so SHALL the word with the quotes an inner shell would remove taken out.
 Because an inner shell also removes a backslash before any character, and a shell between the
 command and that one may remove a level first, every word holding a backslash SHALL also be judged
-with one level of those escapes removed, and again with each further level removed until none is
-left, each as a word in its own right, whether or not it reads as a plain path.
+with one level of those escapes removed, and again with each further level removed until a level
+removes nothing, each as a word in its own right, whether or not it reads as a plain path.
 On a platform with drive letters, a letter and a colon that begin a word or a piece name that drive
 in every dialect, because a program the shell starts reads them so; that colon SHALL NOT divide
 them. A piece that begins with the home-directory shorthand, or a drive whose path begins with it,

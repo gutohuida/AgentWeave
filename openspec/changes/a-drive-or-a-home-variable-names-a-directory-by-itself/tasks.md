@@ -3,7 +3,7 @@
 - [ ] 0.1 R2 and 0.2 R3: independent re-derivations against `hub/hub/mcp_server.py` (`_words`, `_judge_word` rule 4, `_lex`'s literal `$`) and the separator-less requirement; recorded in `spec-queue/tracks/B4.md`
 - [ ] 0.2b R4 (revise round after the operator's 2026-09-24 review): re-derived from the code at `b7d976a`; recorded in `B4.md` under "R4"
 - [ ] 0.2c R5: an independent verification round of the R4 design
-- [ ] 0.3 The operator approves in `APPROVALS.md` and answers design Open Question 2 (D5 and `PWD` were answered on 2026-09-24); told first that `:8000`'s next run uses the edited file
+- [ ] 0.3 The operator approves in `APPROVALS.md` and answers design Open Questions 2 and 3 (D5 and `PWD` were answered on 2026-09-24; Open Question 3 is R5's, the one-letter drive word); told first that `:8000`'s next run uses the edited file
 - [ ] 0.4 (R4) `the-shell-judge-reads-a-word-whole` is built first. This change uses its `_glob_links`, budget, level-by-level escape reading, `_DRIVE_LETTERS` and `hub-judge-windows` job
 
 ## 1. Tests first (in `hub/tests/test_permission_approver.py`) — each must fail on today's code or on the R3 design as written (each row says which)
@@ -46,6 +46,7 @@
   - `cp x ..*` and `cp x .{,.}*`, refused as outside.
 
   Controls that stand: `grep '.*' f`, `ls -d .*` (no dot-named link), and, on Windows, Bash `cp notes.md C:` with the workspace on C.
+- [ ] 1.5c (R5, Windows job, per the answer to design Open Question 3) With only the workspace's drive present, or with the drive letter patched to one that does not exist: `py - <<'PY'` / `try:` / `    pass` / `except Exception as e:` / `    print(e)` / `PY`, and `jq '{a: .x, b: .y}' f`, are allowed under the recommended answer. Each FAILS against R4 as written (refused as drive E or A). Under the "keep" answer, assert them refused instead, so the cost stays visible. `Copy-Item x <other>:` with `<other>` an existing drive other than the workspace's (a `subst` drive made by the test, removed after) stays refused
 - [ ] 1.6 Update the `_decide` docstring assertion if any test pins its text; rows R5, R6 and X3b keep their answers
 
 ## 2. The fix

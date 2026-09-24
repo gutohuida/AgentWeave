@@ -39,7 +39,22 @@ real junction `up` pointing outside. What changed:
 - **Order:** this change now builds **after** `the-shell-judge-reads-a-word-whole`. It uses that
   change's `_glob_links`, its budget, its level-by-level escape reading (D7) and `_DRIVE_LETTERS`.
 
-The record is in `spec-queue/tracks/B4.md`, under "R4". **It awaits an independent R5.**
+The record is in `spec-queue/tracks/B4.md`, under "R4".
+
+**R5 ran on 2026-09-24 (independent verification)**, against the code at `8786289`, with `_decide`
+in-process in `py -3.11` and real junctions `up` and `.l` pointing outside. It also approximated
+the new rules over 42,860 Bash commands from this repository's own Claude Code transcripts. D2, D3
+and D10 are sound as written: every "allowed today" row it re-measured is allowed today
+(`bash -c 'cp n $HOME'`, `cp n $x..`, `cp -tup n`, `cp n u*`, `dd if=n of=c:$HOMEPATH`), and each
+is caught by the step named for it.
+
+**One cost was missing, and it is large.** It is D1 and D4's drive reading of a separator-less word
+in bash on Windows. A single letter and a colon is common text: `except Exception as e:` and
+`with open(p) as f:` in a Python heredoc or `py -c "…"`, `jq '{a: .x}'`, and `Plan A:` in a
+message. Each is judged as a drive, and a drive that is not the workspace's is outside, **whether or
+not it exists**: `_where("e:")` answers outside on a machine whose only drive is C (measured).
+873 of the 42,860 commands (2.0%) hold such a word for a letter other than C. 510 of them hold a
+heredoc. All are allowed today. See "Costs" and Open Question 3.
 
 ---
 
@@ -91,6 +106,12 @@ existing trim applies. Rule 4 then checks, before its option handling:
 
 `s:a:b` (a second colon) and `HEAD:README.md` (more than one letter, not `Temp`) do not match and
 stand.
+
+**(R5) A drive word judged inside does not end rule 4.** The drive check returns only a refusal; on
+the workspace's own drive it passes the word on to the checks below. On Windows, with the workspace
+on C, `dd if=n of=c:$HOMEPATH` gives the word `c:$HOMEPATH`, which matches `_PS_DRIVE_RE` and
+resolves inside as `c:` plus a name. Only D2's check after a colon refuses it. Task 1.4c's row
+catches an early return on the Windows job.
 
 ### D2 — A directory variable, referenced by itself, is uncheckable (F401)
 
@@ -281,7 +302,22 @@ Named in full, because they fall on ordinary work:
   the parent, and the operator accepted it. Its nested text `dirname $PWD` has the word `$PWD`.
 - `git show a:README.md` in PowerShell, and in bash on Windows (a one-letter revision), is refused
   as drive A.
+- **(R5, measured) Any word that is one letter and a colon, on Windows, in either dialect**, unless
+  the letter is the workspace's drive. That is Python in a heredoc or a `-c` string
+  (`except Exception as e:`, `with open(p) as f:`, `for k in d:`, `lambda x:`), a one-letter JSON,
+  jq or YAML key (`jq '{a: .x, b: .y}' f`, `cat > c.yml <<EOF` with `x: 1`), and prose
+  (`Plan A:`). **873 of 42,860 Bash commands (2.0%)** in this repository's own transcripts hold such
+  a word (the most frequent words: `e:` 153 times, `f:` 134, `A:` 83, `t:` 75, `s:` 73). 510 of them hold a
+  heredoc. All are allowed today. **The sibling change's own control `jq '{a: .x, b: .y}' f` (its
+  task 1.3) would fail on the `hub-judge-windows` job** once this change is built as written. The
+  PowerShell dialect has the same cost for a PowerShell-tool command carrying such a script. Open
+  Question 3.
+- (R5, measured) 33 of the 42,860 commands name a directory variable as a word, most often
+  `cd "$TMPDIR"` and `echo "… $TEMP"`. That is the cost the operator accepted, counted.
 - (R4) In a worktree with a linked dependency directory, a bare mention of it is refused (D10).
+  **(R5)** So is a bare `*` when the link's name has no leading dot (`node_modules`, `venv`):
+  `ls *`, `grep foo *`, `du -sh *`. 595 of the 42,860 commands had a bare `*` word. No worktree on
+  this machine holds such a link now.
 
 ## Residuals, named
 
@@ -298,4 +334,23 @@ Named in full, because they fall on ordinary work:
    a finding** that the Hub's shared-dependency links make every path through them outside. Its fix
    belongs to the boundary: for example, treating the Hub's own links as read-only inside, or
    provisioning without links. Exempting the bare names alone would refuse `ls node_modules/x` and
-   allow `ls node_modules`, which is the incoherence F375 removed for `..`.
+   allow `ls node_modules`, which is the incoherence F375 removed for `..`. (R5) The cost includes
+   a bare `*` in a JavaScript worktree (see "Costs"). The recommendation stands while no worktree
+   holds such a link. If a JavaScript project is registered before the finding is fixed, the fix
+   should come first.
+3. **(R5) A one-letter word with a colon, on Windows (D1, D4).** As written, 2.0% of this
+   repository's own Bash commands are refused, mostly Python's `as e:` and `as f:` (see "Costs").
+   **Recommended: judge a separator-less drive word only when that drive exists**
+   (`os.path.exists("Z:\\")`, wrapped, looked up once per letter per `_decide`), in both dialects.
+   A drive that does not exist cannot be written to, so refusing it guards nothing. On this machine
+   (drive C only) the measured cost falls to none, because `c:` is the workspace's own drive and
+   inside. `Z:` stays refused wherever Z is a real or mapped drive. What remains: on a machine with
+   a second drive D, a `d:` word (30 occurrences in the 42,860 commands). A drive mapped by `subst` or
+   `net use` in an earlier call is seen, because it exists by then. One mapped in the same command
+   names its target as a path, which is judged. The spec sentence would read "…names that drive's
+   current location, and, where that drive exists, SHALL be judged by where it resolves".
+   The alternatives:
+   - **Keep the rule as written**, and accept the 2.0%.
+   - **Drop the bash reading on Windows**, and keep R2's PowerShell-only rule. Then
+     `python w.py Z:` and `powershell -c 'Copy-Item x Z:'` from the Bash tool stay allowed, as they
+     are today. The PowerShell tool keeps the cost for scripts it carries.

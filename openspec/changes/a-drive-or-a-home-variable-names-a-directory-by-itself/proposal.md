@@ -9,8 +9,15 @@ implemented. R2 and R3 must re-derive it, and the operator must answer D5 and ap
 three answers: refuse the quoted form, extend the list, and complete the PowerShell spellings. R4
 also found separator-less escapes of the same kind, allowed today (measured): `$x..`, `$(true)..`,
 `dd of=c:$HOMEPATH`, and a link named by itself (`cp n up`, `cp n u*`, `cp -tup n`). Steps 2 and 3
-are revised and step 5 is new. See `design.md`, "Operator review, 2026-09-24". An independent R5
-comes next.
+are revised and step 5 is new. See `design.md`, "Operator review, 2026-09-24".
+
+**R5, 2026-09-24 (independent verification).** Steps 2, 3 and 5 are sound as written. Steps 1 and 4
+carry a cost nobody had named. On Windows, a word made of one letter and a colon is judged as a
+drive in both dialects, and a drive other than the workspace's is outside even when it does not
+exist. That word is common text: Python's `except Exception as e:` and `as f:` in a heredoc or a
+`-c` string, `jq '{a: .x}'`, and `Plan A:`. 873 of 42,860 Bash commands (2.0%) in this repository's
+own transcripts hold one, and all are allowed today. Design Open Question 3 recommends judging such
+a word only when that drive exists.
 
 ## Why
 
@@ -87,6 +94,9 @@ an accepted cost).
   never appears as a word (`:1546-1548`); the requirement now says so for a bare expansion too.
 - `git show a:README.md` in PowerShell (a one-letter revision) is refused as drive A. Rare; the
   reason names the word.
+- (R5) On Windows, any one-letter word with a colon, in either dialect (`as e:`, `{a: .x}`,
+  `Plan A:`): 2.0% of this repository's own Bash commands, unless the operator takes design Open
+  Question 3's recommendation.
 - (R4) Accepted costs, named in design "Costs the operator accepts": `echo '$HOME'`, `grep '$HOME' f`
   and a commit heredoc mentioning `$HOME` are refused (write the message to a file and use
   `git commit -F`). In a worktree whose `node_modules`, `.venv` or `venv` is the Hub's shared link,
