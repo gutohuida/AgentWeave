@@ -173,7 +173,7 @@ if ($dirty.Count -gt 0) {
   $dirty | ForEach-Object { Say "    $_" }
   $logPath = Join-Path $Repo $w.LogFile
   $stamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK")
-  Add-Content -Path $logPath -Encoding utf8 -Value @("[$stamp] arm-$Window REFUSED (exit 3): tracked modifications:") + @($dirty | ForEach-Object { "    $_" })
+  Add-Content -Path $logPath -Encoding utf8 -Value (@("[$stamp] arm-$Window REFUSED (exit 3): tracked modifications:") + @($dirty | ForEach-Object { "    $_" }))
   exit 3
 }
 

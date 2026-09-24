@@ -151,7 +151,11 @@ Every field earns its place:
 - `current` and `next_action` — the first item, written for a stranger.
 - `limits` — the constraints, quoted.
 - `decisions_for_user` — **start it populated** with anything Step 3.1 could not settle. An empty
-  array here after a real prep is usually a sign the hunt was not done.
+  array here after a real prep is usually a sign the hunt was not done. **For the repo's daily
+  cycle** (`.claude/loops/day-window.md` / `night-window.md`, armed by `arm-cycle.ps1`), this field
+  carries only ids of `OPEN` rows in `spec-queue/DECISIONS.md`, never a sentence (F305): add the
+  `OPEN` row there first, then list its id here. A one-off loop with no `DECISIONS.md` keeps a short
+  sentence per entry.
 - `stop_at`, `branch`, `purpose`.
 
 Alongside it, state plainly:

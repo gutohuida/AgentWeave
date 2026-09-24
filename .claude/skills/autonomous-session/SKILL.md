@@ -181,6 +181,11 @@ rewritten at the end of every iteration:
 `next_action` is the important field. Write it as an instruction to a stranger, because that is
 what the next session is.
 
+`decisions_for_user` is free text in a one-off loop like this example. The repo's daily cycle is
+stricter: under `day-window.md`/`night-window.md` it carries only ids of `OPEN` rows in
+`spec-queue/DECISIONS.md`, and a window's compose step drops and logs any inherited id whose row is
+not `OPEN` (F305). Follow the contract of the STATE file you are writing.
+
 Commit both before doing any work.
 
 ## Step 4 — Run iterations
