@@ -45,7 +45,10 @@ F374 measured it live twice: `beta` refused three times, re-staffed to `gamma`, 
   run would (`evaluate`, `:600`) and answers the gate's sentence when the refusal includes a
   category only the operator can remove for that candidate: `unaccepted`, or a `blocking` entry in
   `awaiting_review` (both are evidence decisions) where the candidate lacks `can_accept_evidence`;
-  or `diagnostics` (a requirement that cannot hold evidence as written). Otherwise `None`.
+  or `diagnostics` (a requirement that cannot hold evidence as written); or, whatever the candidate
+  is granted, F424's "could not ask git" (operator, 2026-09-24, `spec-queue/tracks/reviews/B1-2026-09-24.md`
+  §2). Any other exception is logged at warning and answers `None`. The evaluation runs in a
+  savepoint, and its git spawns run off the event loop with a 5 s diagnostic timeout.
 - **The restaff asks it** (design D2). In `_answer_failed_review`, after the resolution picks
   `choice.agent`, a held approval surfaces instead of restaffing. For a declared reviewer, the
   surfaced sentence is the gate's rather than *"asking this one again"*.

@@ -1,5 +1,20 @@
 # Design — why queued input waits is told truthfully
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review is in `spec-queue/tracks/reviews/B1-2026-09-24.md` §4 (verdict: approve
+with fixes); the operator took no separate decision on this change. Applied here:
+
+- **MEDIUM: D3 spawned git inside the polled status route, unguarded.** R2's D3 called
+  `resolve_turn_workspace_inputs`, which runs `_integration_base` → `branch_exists` and
+  `_prerequisite_commits` → `merge_targets` (`task_workspace.py:150-160`): raw
+  `task_integration._git` spawns, F424's class (a `TimeoutExpired` becomes a 500, or blocks the
+  loop for up to 60 s). D3 needs only the checkout's `task_id`, which `takes_own_checkout(task)`
+  (`task_workspace.py:58-83`) answers from the row alone. D3 now calls that and drops base and
+  prerequisites, and the whole of D3 is wrapped so that any exception falls through to D4.
+- **LOW:** Collisions now names B3's F77 change, which edits `create_message_for_actor`'s refusal
+  branch in the function whose return type D1 changes.
+
 **Built on no operator decision.** D2 departs from ROUNDS.md's one-line sketch of S1 ("with a
 written `waiting_reason`"); the reason is stated there. If the operator wants the entry written as
 well, D2's alternative is the one extra write it names.
@@ -57,17 +72,28 @@ The D8 refusal is raised in `trigger_agent_directly` when
 status route can ask both: it already resolves the project workspace (`inbound_queue.py:159-172`) and
 the agent's config (`:146`).
 
-- **Which task** (R2, corrected). The trigger does not read the controlling entry's task: it binds
-  the turn by `resolve_bound_task(conversation=…, queue_entry_ids=<the selected entries>)`
-  (`run_task_binding.py:402-440`, which reads only), then asks `resolve_turn_workspace_inputs`
-  (`task_workspace.py:123-160`) for the checkout's `task_id` — `None` for a grandfathered task or an
-  id that cannot become a ref — and only then `takes_task_workspace` and the holder
-  (`agent_trigger.py:985-1001`). The route calls the same three, in that order, on the same
-  **selected** set `_attempt_turn` would deliver (`turn_scheduler.py:340-367`: the controlling
-  entry's conversation, within the budget, of a compatible kind). That selection is exactly what
-  B11's F133 factors out of `_attempt_turn` into a shared read-only function; **this change is built
-  on it** (see Collisions). A **review** controlling entry skips D3: a review turn never reaches the
-  D8 check (the `elif review_context is not None` branch at `agent_trigger.py:948` pre-empts it).
+- **Which task** (R2, corrected; review 2026-09-24, narrowed). The trigger binds the turn by
+  `resolve_bound_task(conversation=…, queue_entry_ids=<the selected entries>)`
+  (`run_task_binding.py:402-440`, which reads only), then asks for the checkout's `task_id` — `None`
+  for a grandfathered task or an id that cannot become a ref — and only then `takes_task_workspace`
+  and the holder (`agent_trigger.py:966-1001`). The trigger gets that `task_id` from
+  `resolve_turn_workspace_inputs`, which also computes the base and the prerequisites with raw git
+  spawns (`task_workspace.py:150-160`); the route needs none of them. It computes the same `task_id`
+  as `bound.id if task_workspace.takes_own_checkout(bound) else None` — the predicate
+  `resolve_turn_workspace_inputs` itself asks first (`:146`), and whose docstring names it as the one
+  implementation for exactly this reason (`:58-67`). The route runs it on the same **selected** set
+  `_attempt_turn` would deliver: `select_turn(...).selected`, the function B11's F133 factors out of
+  `_attempt_turn` (`turn_scheduler.py:340-367`); **this change is built on it** (see Collisions). A
+  **review** controlling entry skips D3: a review turn never reaches the D8 check (the
+  `elif review_context is not None` branch at `agent_trigger.py:948` pre-empts it).
+- **The one git spawn left** is `worktrees.is_git_repo` inside `takes_task_workspace`
+  (`worktrees.py:119-138`): guarded (`OSError`/`SubprocessError` answer `False`) and bounded at
+  `_GIT_TIMEOUT_SECONDS` (30, `:68`). The route awaits `takes_task_workspace` through
+  `asyncio.to_thread`, so a slow git delays this status read and not the Hub.
+- **Wrapped whole.** Everything D3 does — `resolve_bound_task`, `takes_own_checkout`,
+  `takes_task_workspace`, `tasks_held_by_a_running_turn` — runs inside one `try`; any exception is
+  logged at warning level and the route falls through to D4. The status route is a diagnostic and
+  must not 500 because one of its checks failed.
 - **Where:** after the provider-hold and token-budget checks and the launchability probe, as one
   more live check before the fallback. The sentence is the trigger's own, moved into a shared
   function (`checkout_held_sentence(holder, task_id)`) so the two cannot drift.
@@ -87,12 +113,12 @@ is what the operator reads, with the old holder's name inside a sentence that sa
 
 - `POST /messages` and `POST /agent-actions/messages`: nothing new raises. `project_limits` is read
   already.
-- `GET /queue/{agent}/status`: D3 adds `tasks_held_by_a_running_turn` (a read) and
-  `takes_task_workspace` (a filesystem probe on a resolved root). The route already calls
-  `resolve_project_workspace` inside a `try` that turns `ProjectWorkspaceError` into a reason
-  (`:168-172`). D3 runs only where that resolved, and a failure in `takes_task_workspace` SHALL
-  fall through to D4 rather than raise: the status route is a diagnostic and must not 500 because
-  one of its checks failed.
+- `GET /queue/{agent}/status`: D3 adds `resolve_bound_task` and `tasks_held_by_a_running_turn`
+  (reads), `takes_own_checkout` (no I/O) and `takes_task_workspace` (one guarded `git rev-parse`, off
+  the loop). The route already calls `resolve_project_workspace` inside a `try` that turns
+  `ProjectWorkspaceError` into a reason (`:168-172`). D3 runs only where that resolved, and **any**
+  exception inside D3 falls through to D4 rather than raise (review 2026-09-24). No git spawn that
+  can raise is on this route.
 
 ## Collisions with other changes (R2)
 
@@ -113,6 +139,10 @@ is what the operator reads, with the old holder's name inside a sentence that sa
   not `waiting_reason`'s storage. No overlap; noted because the prompt listed it.
 - **B11 `input-the-hub-accepted-is-answered-as-accepted`** (F349): `messages.py:318`, as recorded in
   the proposal.
+- **B3's F77 change** (`a-message-to-the-operator-is-told-where-the-operator-reads`) edits `create_message_for_actor`'s refusal branch (`api/v1/messages.py`), the
+  function whose return type D1 changes to `(msg, held)` (review 2026-09-24, LOW). Whichever lands
+  second carries the other's edit: F77's refusal still raises before any `held` is computed, and D1's
+  two callers unpack the pair.
 
 ## Residual
 
@@ -135,3 +165,8 @@ is what the operator reads, with the old holder's name inside a sentence that sa
   `agent_actions.py:201-224`; `mcp_server.py:236-244` posts to `/api/v1/agent-actions/messages`; the
   status route's fallback at `inbound_queue.py:178`.
 - **R3, 2026-09-24** (bundle B1): re-derived against the code. No correction. Held: `waiting_reason` has one writer (`turn_scheduler.py:475`, a refusal's words) and one clearer (`inbound_queue.py:191`), so D4's *"the last delivery attempt was refused"* is true of every stored value; the status route's order and fallback (`api/v1/inbound_queue.py:127-178`). Neighbour checked: B2's `an-undelivered-message-says-how-its-last-attempt-ended` is about a given-up entry's last **run** in the conversation view, not this route; no overlap.
+- **Operator review, 2026-09-24** (`spec-queue/tracks/reviews/B1-2026-09-24.md` §4): D3 narrowed to
+  `takes_own_checkout` (no base, no prerequisites, so no raw git spawn), `takes_task_workspace`
+  awaited off the loop, and all of D3 wrapped to fall through to D4; B3's F77 named in Collisions.
+  Re-checked at HEAD `61d553e`: `task_workspace.py:58-83`, `:123-160`; `worktrees.py:68`, `:119-138`,
+  `:763-773`; `agent_trigger.py:948-1001`; `api/v1/inbound_queue.py:97-196`.

@@ -9,7 +9,9 @@
    repair) and 1.5 (the mixed case the gate lets through) are controls that pass before and after.
 3. **The operator reads the gate, not the roster** (F374 point 3). Tasks 1.1 and 1.3 check the
    divergence reason; 1.7 checks the flow card's sentence and its 500-character fit.
-4. **A failed gate evaluation changes nothing.** Tasks 1.6 and 1.8.
+4. **A failed gate evaluation changes nothing, unless git is what failed.** Tasks 1.6, 1.6b and 1.8;
+   a git timeout or `OSError` holds the review for the operator (1.6c, operator 2026-09-24), and the
+   predicate's git never runs on the event loop or waits longer than 5 s (1.6d).
 
 ## Human-only
 

@@ -49,7 +49,8 @@ failing.
   `tasks_with_a_turn_pending_or_running` and `task_agent_pairs_with_a_turn_queued`. It returns
   `(task, agent)` pairs, each with how it is attended: a running turn bound to the task, input
   queued within the hop budget, or input queued within the budget behind that agent's refused head
-  (refusal is read at the entry the agent's next turn would start with; design D1, R3).
+  (refusal is read at the entry the agent's next turn would start with, which is B11's F133
+  `select_turn(...).controlling`, built first; design D1, R3).
   Suspended input (past the budget) is not a pair at all. `tasks_held_by_a_running_turn` stays: the
   trigger's *may this turn start* question is a different one (its own docstring, `:363-371`).
 - **The three `decide_firing` readers ask the pair question** (design D2):
@@ -59,10 +60,14 @@ failing.
     the hold;
   - the F70 recovery guard keeps asking whether **anyone** attends the task, now without suspended
     or refused input.
-- **Refused input is not attendance** (design D3). A turn whose last delivery was refused is not
+- **Refused input is not attendance, and a refused head is surfaced, not re-briefed** (design D3;
+  operator review 2026-09-24, `spec-queue/tracks/reviews/B1-2026-09-24.md` §1). A turn whose last delivery was refused is not
   being taken. For a review, the surfaced sentence carries the refusal's own words. For ordinary
-  work, the firing briefs the assignee as it does today, which is what retries a refused head today
-  (there is no tick: `turn_scheduler.py:665`, `agent_trigger.py:2643`); removing that would strand it.
+  work (operator, 2026-09-24), the firing does the same: the task is surfaced as a step it could not
+  staff, with the refusal's words, and the assignee is **not** briefed again. Re-briefing churned
+  (one briefing per firing, one abandoned per three passes, F158's conflict refusal), and for a held,
+  paused or budget-spent assignee it reached no pass at all, so briefings piled up for the whole hold
+  (review 2026-09-24, HIGH). Every other pass still retries the head and gives it up at the limit.
   An F70/F167 author wedge whose recovery waits for another agent's turn is not surfaced as a
   review the author is not doing (design D2, `wedge_deferred`, R3).
 - **The F154 sentence stops claiming "none is queued"** (design D4). Input the flow does not count
@@ -79,8 +84,9 @@ Scheduler and binding module only: no migration, no route shape, no UI, no `mcp_
 
 - `agent-loops` — *A task reported as in flight is one an agent is actually working*: the in-flight
   condition is keyed to the agent whose name is on the task, excludes input past the hop budget and
-  input whose last delivery was refused, and an in-flight assigned task is not briefed again whatever
-  holds its turn.
+  input whose last delivery was refused, an in-flight assigned task is not briefed again whatever
+  holds its turn, and an assigned task whose agent's head was refused is surfaced with the refusal
+  rather than briefed again.
 - `agent-flows` — *A review nobody is doing is named, whatever its history*: defined by that
   condition; a third agent's input does not hide it; a refused delivery is named. *A flow treats an
   agent whose queue is held as unable to take a turn*: its "does not count" list is aligned.

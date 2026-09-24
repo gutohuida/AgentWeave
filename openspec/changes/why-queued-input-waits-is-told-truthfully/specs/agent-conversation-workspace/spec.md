@@ -20,6 +20,10 @@ Where the check finds the holder still running a turn on that task, the status S
 agent and that task as the present reason. Where it finds nothing holding the task, the remembered
 refusal SHALL be presented as the last attempt's.
 
+Where the check itself cannot be completed, the status SHALL still answer, and SHALL present the
+remembered refusal as the last attempt's. The status is how the operator learns why input waits,
+so a check that fails must not take the answer away with it.
+
 #### Scenario: A checkout held now is reported as the present reason
 
 - **WHEN** an agent's input names a task, and another agent is running a turn on that task
@@ -40,3 +44,9 @@ refusal SHALL be presented as the last attempt's.
 
 - **WHEN** an agent's input waits because the agent is running a turn
 - **THEN** the queue status reports that reason exactly as before
+
+#### Scenario: A check that fails still leaves an answer
+
+- **WHEN** an agent's last delivery attempt was refused, and checking whether another agent holds the task's checkout fails
+- **THEN** the queue status still answers
+- **AND** it presents the refusal as what the last attempt was refused with

@@ -49,8 +49,11 @@ repaired) still reads as present.
   "a written `waiting_reason`"; this change writes the reason to the **sender**, and leaves the entry
   derived, because a stored copy outlives a budget the operator raises.
 - **The checkout-holder reason is checked now** (design D3). The status route asks
-  `tasks_held_by_a_running_turn` for the controlling entry's task, gated by the trigger's own
-  `worktrees.takes_task_workspace`, and names the holder only while it holds.
+  `tasks_held_by_a_running_turn` for the task the turn would be bound to, whose checkout id comes
+  from `takes_own_checkout` on the task row alone, gated by the trigger's own
+  `worktrees.takes_task_workspace`, and names the holder only while it holds. It spawns none of the
+  gate's raw git calls, and any failure inside the check falls through to the labelled fallback
+  (review 2026-09-24, `spec-queue/tracks/reviews/B1-2026-09-24.md` §4).
 - **The fallback is labelled as the last attempt's** (design D4): *"the last delivery attempt was
   refused: …"*.
 

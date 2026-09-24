@@ -6,7 +6,10 @@
    before and passes after, in both insertion orders. 1.2 is its control. The assertion is a count
    of `job` entries, so it cannot pass vacuously.
 2. **An idle assignee whose turn cannot start is not re-briefed** (F368). Task 1.3 fails before and
-   passes after. 1.4 proves a refused head is still retried by the briefing, as today.
+   passes after.
+   1.4, 1.4b and 1.4c prove a refused head is surfaced with its refusal and never re-briefed, whether
+   the assignee is idle, held or budget-stopped (operator, 2026-09-24); 1.4e proves the remedy the
+   sentence names (withdraw, then the next firing briefs once) works; 1.4d that the refusal is never cut.
 3. **A review nobody is doing is named although someone else has input about it** (F371). Tasks
    1.5 and 1.6 fail before and pass after. 1.8 and 1.9 are the controls that stop the fix from
    over-reaching: a staffed review still queued, and a running review, stay in flight.
@@ -23,3 +26,8 @@
 2. Withdraw the reviewer's queued review input from its conversation (Discard). On the next firing
    the card names the reviewer and says nobody is reviewing it, and offers the three exits. It does
    not say "none is queued" although the third agent's message still is.
+3. **A refused work turn stalls visibly** (operator, 2026-09-24). On a trial Hub (`:8010`), once F158
+   is built, give a task's checkout a prerequisite whose merge conflicts. The flow card names the
+   task and quotes the refusal (the prerequisite, the checkout path, the merge command); further
+   firings add no briefings to the agent's queue. Resolve the merge, withdraw the refused input, and
+   the next firing briefs the agent once and the turn starts.

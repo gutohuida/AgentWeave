@@ -3,7 +3,8 @@
 - [x] 0.1 R1 (bundle B1, 2026-09-24): proposal, design, deltas, tasks, test guide; F361 and F289 re-verified by reading at `404c7d5`, F289's changed shape (F288 fixed 2026-09-23) recorded
 - [x] 0.2 R2 (2026-09-24): done — design.md round log and Collisions. Original brief: re-derive against `hub/hub/api/v1/messages.py`, `agent_actions.py:201-224`, `schemas/messages.py`, `mcp_server.py:203-244` (and `ask_user`: D1's open check), `api/v1/inbound_queue.py:97-205`, `agent_trigger.py:960-1005`, `run_task_binding.resolve_bound_task`. Check that no consumer of `MessageResponse` (the UI's `api/messages.ts` and the SSE `message_created` payload, `_msg_dict`) breaks on two added optional fields
 - [x] 0.3 R3 (2026-09-24): done — see design.md round log; `openspec validate why-queued-input-waits-is-told-truthfully --strict` passes
-- [ ] 0.4 Operator approval (APPROVALS.md), including D2's departure from ROUNDS.md's sketch
+- [x] 0.4 Opus adversarial review, 2026-09-24 (`spec-queue/tracks/reviews/B1-2026-09-24.md` §4): fixes applied — see design.md "Operator review" and round log
+- [ ] 0.5 Operator approval (APPROVALS.md), including D2's departure from ROUNDS.md's sketch
 
 ## 1. Tests first — each fails on today's code unless marked as a control
 
@@ -18,7 +19,8 @@ New file `hub/tests/test_why_queued_input_waits_is_told_truthfully.py`.
 - [ ] 1.7 (D3) Control: the F97 test (`test_task_turn_collision.py:495-550`) passes unchanged: holder still running → reason names the holder and the task
 - [ ] 1.8 (D4) An entry with a stored non-D8 refusal (e.g. the review-commit sentence) and nothing live → reason is `the last delivery attempt was refused: <sentence>`. FAILS today
 - [ ] 1.8b (D3, R2) The controlling entry is a **review** entry and a stored D8 sentence exists from an earlier work entry: the route does not run the holder check and answers D4's labelled fallback
-- [ ] 1.9 (D3) `takes_task_workspace` patched to raise → the route answers 200 with D4's reason, not 500
+- [ ] 1.9 (D3, review 2026-09-24) Each of `resolve_bound_task`, `takes_own_checkout`, `takes_task_workspace` and `tasks_held_by_a_running_turn` patched in turn to raise (parametrize) → the route answers 200 with D4's labelled reason, not 500, and logs a warning
+- [ ] 1.10 (D3, review 2026-09-24) On 1.6's and 1.7's stagings with `hub.task_integration._git` patched to raise `subprocess.TimeoutExpired`: the route answers 200 with the same reason as unpatched (it spawns no `task_integration` git: no base, no prerequisites). FAILS under R3's D3 (500 via `resolve_turn_workspace_inputs`)
 
 ## 2. Implementation
 
@@ -26,6 +28,6 @@ New file `hub/tests/test_why_queued_input_waits_is_told_truthfully.py`.
 - [ ] 2.1 (D1) `messages.py`: `create_message_for_actor` returns `(msg, held)`; one `held_note(...)` builder; both routes build `MessageResponse` with the two fields
 - [ ] 2.2 (D1) `schemas/messages.py`: the two optional fields
 - [ ] 2.3 (D1) `mcp_server.send_message`: add both keys when held. Read `.claude/rules/mcp-server.md` first; no import added
-- [ ] 2.4 (D3) Move the D8 sentence into `checkout_held_sentence(holder, task_id)` (in `run_task_binding` or `worktrees`, whichever both callers already import without a cycle); `agent_trigger` uses it; `get_queue_status` adds the live check
+- [ ] 2.4 (D3) Move the D8 sentence into `checkout_held_sentence(holder, task_id)` (in `run_task_binding` or `worktrees`, whichever both callers already import without a cycle); `agent_trigger` uses it; `get_queue_status` adds the live check: `select_turn(...).selected` → `resolve_bound_task` → `takes_own_checkout` → `await asyncio.to_thread(takes_task_workspace, ...)` → holder, all inside one `try` that logs and falls through to D4. Never `resolve_turn_workspace_inputs`
 - [ ] 2.5 (D4) The labelled fallback
 - [ ] 2.6 Run the new file, `test_task_turn_collision.py`, `test_inbound_queue.py`, `test_agent_trigger.py`, `test_delivery_attempts.py`, `test_a_start_is_reported_to_its_own_input.py`, `test_hop_budget_bound.py` and every test naming `send_message` **with `claude` stripped from PATH**; then the CLAUDE.md lint block; then the full `hub/tests/`

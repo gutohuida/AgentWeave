@@ -64,7 +64,7 @@ re-brief a held agent's assigned task on every firing, and the agent would find 
 identical briefings when its hold ended.
 
 A task assigned to a held agent SHALL be reported as in flight while input naming that task is
-queued for that agent, and SHALL NOT be briefed again. Input naming the task that is queued for a different agent does not count, and neither does input past the hop budget or input whose last delivery was refused, as `agent-loops` *A task reported as in flight is one an agent is actually working* defines. Where no input naming it is queued for the held agent, the firing
+queued for that agent, and SHALL NOT be briefed again. Input naming the task that is queued for a different agent does not count, and neither does input past the hop budget or input whose last delivery was refused, as `agent-loops` *A task reported as in flight is one an agent is actually working* defines. Where the input the held agent's next turn would start with was refused on its last delivery, the task SHALL be surfaced with that refusal's words and SHALL NOT be briefed again, as that requirement also defines: a held agent's pass returns before any delivery, so a briefing queued behind the refused input would wait for the hold and then for the refusal. Where no input naming it is queued for the held agent, the firing
 SHALL brief it once, as it resumes any assigned task, and the task is in flight from then on. A held agent is
 working nothing, so its assignment alone is not the in-flight condition: that condition is the one
 `agent-loops` *A task reported as in flight is one an agent is actually working* already states.
@@ -87,6 +87,13 @@ them make it unavailable, is unchanged.
 - **AND** the flow fires three times
 - **THEN** no further input is queued for the held agent
 - **AND** its task is reported in flight
+
+#### Scenario: A held assignee whose input was refused is surfaced, not re-briefed
+
+- **WHEN** an agent's queue is held, it is assigned a task, and the input its next turn would start with was refused on its last delivery
+- **AND** the flow fires three times
+- **THEN** no further input is queued for the held agent
+- **AND** the flow surfaces the task with the refusal's own words
 
 #### Scenario: A held assignee with nothing queued is briefed once
 

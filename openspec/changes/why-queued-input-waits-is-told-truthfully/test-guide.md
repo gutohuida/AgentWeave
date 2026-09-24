@@ -9,7 +9,8 @@
 4. **A holder that has gone is not reported as holding** (F289). Task 1.6 fails before and passes
    after; 1.7 (the F97 test) is the control that the live case still names the holder.
 5. **A remembered refusal says it is remembered.** Task 1.8.
-6. **The status route does not 500 on a failed check.** Task 1.9.
+6. **The status route does not 500 on a failed check, and spawns no raw git.** Tasks 1.9 and 1.10
+   (review 2026-09-24).
 
 ## Human-only
 
