@@ -1228,13 +1228,43 @@ board, but the operator has to already suspect there is something to look for.
 
 ## F20 (C) — Deep links use query parameters, and nothing says so
 
-**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** canonicalise the address to `/` plus the resolved destination's query (compare the pathname too) and change `cli.py:306`'s `view=overview` to `tab=overview`; a **no-spec fix round** (tests in `useWorkspaceNavigation.test.tsx` and `tests/test_cli.py`). Was: open (no commit references it)
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — canonicalised the address to `/` plus the resolved destination's query, comparing pathname too, and fixed the CLI's `view=overview` to `tab=overview`. Was: open — Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final): canonicalise the address to `/` plus the resolved destination's query (compare the pathname too) and change `cli.py:306`'s `view=overview` to `tab=overview`; a no-spec fix round (tests in `useWorkspaceNavigation.test.tsx` and `tests/test_cli.py`)
 
 `/projects/{id}/tasks` silently renders Overview. The app has no router dependency; destinations
 are query parameters read from `window.location.search` (`navigation.ts:327-375`), so the working
 URL is `/?project={id}&tab=tasks`. This is a deliberate design (`useWorkspaceNavigation.ts` cites
 "design.md decision 9 — no routing"), and it works — but an unknown path shape falls back to
 Overview without comment rather than 404ing or correcting itself.
+
+**FIXED 2026-09-24 (Round 6):** `hub/ui/src/hooks/useWorkspaceNavigation.ts` now writes the address
+as `canonicalUrl(destination)` — `/` plus `serializeDestination(destination)` — instead of a bare
+`?…` query. The auto-correction effect compares `currentAddress()` (pathname *and* search) against
+that canonical form, not just `currentSearch()` as before, so a deep link whose query was already
+canonical but whose pathname was not (e.g. `/projects/proj-1/tasks?project=proj-1&tab=overview`)
+now gets corrected too — previously `target !== currentSearch()` was false there and nothing ran.
+The `navigate()` callback was changed the same way, since its own `target || window.location.pathname`
+fallback had the identical bug (a relative `?…` URL keeps whatever pathname is already in the address
+bar). `src/agentweave/cli.py:306` (`_hub_project_app_url`) now emits `tab=overview` — the parameter
+`navigation.ts:parseDestination` (`PROJECT_TABS`) actually reads — instead of `view=overview`, which
+no parser has ever consumed.
+
+**Production path:** `_hub_project_app_url` builds the URL the CLI hands to `webview.create_window`
+(native app mode) or the OS browser launcher (`_open_app_window`/`_hub_resolve_launch_url`) on every
+`agentweave hub start`/`agentweave status --open`-style launch that resolves a project — so every
+operator launch of the app window went through the broken `view=` parameter. On the UI side,
+`useWorkspaceNavigation` is mounted once by `App.tsx` for the whole SPA, so its correction effect
+runs on every load and every `popstate`, live for any deep link (browser address bar, a bookmarked
+URL, or the CLI's own launch link) that reaches the app.
+
+**Tests:** `hub/ui/src/__tests__/useWorkspaceNavigation.test.tsx` — all 10 (8 pre-existing + 2 new:
+`canonicalises an unknown deep-link pathname to the root (F20)` and `still canonicalises the pathname
+when the search half already matches the resolved destination`) pass via `npx vitest run
+src/__tests__/useWorkspaceNavigation.test.tsx`. `tests/test_hub_commands.py` (`TestOpenProjectCall`,
+2 assertions updated from `view=overview` to `tab=overview`) and `tests/test_cli.py` — 85 tests pass
+together via `py -3.11 -m pytest tests/test_cli.py tests/test_hub_commands.py -v`
+(run with `PYTHONPATH` pointed at this worktree's `hub`/`src` — see report). Also ran: `npx tsc
+--noEmit` (clean), `npm run lint` (clean), `py -3.11 -m ruff check`, `py -3.11 -m black --check
+--target-version py311`, and `py -3.11 -m mypy src/` (all clean) over every touched file.
 
 ## F21 (B) — A Haiku agent cannot reach `record_evidence`, and burns a whole turn trying
 
