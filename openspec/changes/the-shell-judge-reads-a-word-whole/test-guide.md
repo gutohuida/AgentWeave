@@ -11,6 +11,8 @@ No Hub and no agent turn needed. Every row runs on Linux in `hub-test` and on Wi
 | Brace patterns are judged as expanded | same file (tasks 1.2, 1.3) | `.{,.}`, `{.,.}.`, `.{,.}/x`, `src/{a,..}/../y` refused; the same patterns handed to `bash -c` refused; `awk '{print $1, $2}'` allowed |
 | A glob cannot reach the parent | same file (tasks 1.4, 1.4b) | `.*/x`, `../*`, `@(..)/x` refused, naming the whole piece |
 | **A glob cannot reach through a link** (R4) | same file (task 1.4c), with a real link or junction `up` → outside | `u*/`, `u?/x`, `[u]p/x`, `[[:alpha:]]p/x`, `bash -c 'cp n u*/'` refused, naming where the match resolves; `sub/*.py` and an inside link allowed |
+| **A bracket at a word's edge is a glob** (R6) | same file (tasks 1.4c, 1.4e) | `[u]p/`, `./u[p]`, `'[[:alpha:]]p'/x` refused, naming where `up` resolves; `[.]./x` refused as `'[.]./x'`; `ls [../x]` still refused; `arr[0]` allowed |
+| **A `..` after a link is judged from the link's target** (R6) | same file (task 1.4f), with `sub/l` → the workspace | `sub/l/../y` (Windows job), `sub/l*/..` and `sub/l*/../x` (both) refused, naming the workspace's parent; `in/../sub` allowed |
 | The bounds hold per call (R4) | same file (tasks 1.4d, 1.6) | a glob over 8193 entries and a 300-alternative brace are refused with the too-many reason; a link cycle answers; the memo charges two readings once |
 | Schemeless remotes are network addresses | same file (task 1.5) | `git@github.com:repo` (no separator too), `user@example.com:f`, `127.0.0.1:9/x` refused with the network reason; `alpine@sha256:…`, `x@npm:y`, `host:x/y` not |
 | Escapes an inner shell removes are read (R4) | same file (task 1.7c) | `bash -c 'cp n .\./x'` and `bash -c 'bash -c "cp n .\\./x"'` refused |
@@ -32,5 +34,9 @@ After the change ships, on the operator's Hub (on `:8000` the edited file is use
    (`New-Item -ItemType Junction -Path lnk -Target <outside dir>`), then ask the agent to
    `cp notes.md l*/`. **Expect:** a refusal naming where `lnk` resolves. Delete the junction
    afterwards.
-5. Watch the activity log for refusals whose quoted word is a fragment of a longer word (for
+5. (R6) In the same scratch project, make a junction `sub\l` pointing at the agent's workspace
+   root, and ask the agent (Bash tool) to `cp notes.md sub/l/../y`. **Expect:** a refusal naming the
+   workspace's parent. Without the refusal, Git Bash would write `y` beside the workspace. Delete the
+   junction afterwards.
+6. Watch the activity log for refusals whose quoted word is a fragment of a longer word (for
    example `'/x'` out of `a/x`). **Expect:** none; report any.

@@ -24,6 +24,18 @@ a word only when that drive exists.
 (step 4, design D1). D10's linked-dependency cost is filed as F444. This change builds after
 `the-shell-judge-reads-a-word-whole`, in the same night window. Every open question is answered.
 
+**R6, 2026-09-24 (revise round, after the second pre-approval review,
+`spec-queue/tracks/reviews/B4-2026-09-24-second.md`).** Four fixes, none of them a new rule:
+
+- step 5's separator-less bracket globs (`cp n [u]p`, `cp n u[p]`, both measured writing through the
+  link) reach the glob check through the sibling change's bracket-kept word (its D11);
+- step 2's PowerShell spelling requires `env:` for an environment name, so a user's `$tmp` stands,
+  and only `$HOME`, `$PWD`, `$PSHOME` and `$PROFILE` match without it;
+- step 2's bash spelling also matches PowerShell's `$env:NAME`, which a nested `powershell -c`
+  expands (measured: allowed today from the Bash tool);
+- step 1's `Temp:` is read in PowerShell only (Windows PowerShell 5.1 has no such drive, measured),
+  so a heredoc's `temp:` stands; this is R6's choice, put to the operator to confirm.
+
 ## Why
 
 F375's change (`a-word-without-a-separator-can-still-leave`, archived 2026-09-22) made rule 4 of the
@@ -62,7 +74,7 @@ refuses `~` and allows `$HOME` has the incoherence F375 fixed for `..` and `../`
    another drive is outside; the workspace's own drive is the shell's current location, which the
    judge takes to be the workspace root, as it does for every relative word. The same holds for such
    a value joined to a parameter by a colon (`-Destination:Z:`). `Temp:` (PowerShell 7's temporary
-   drive) is judged as the temporary directory. Bash is unchanged on a POSIX host; on Windows see step 4 (R3).
+   drive) is judged as the temporary directory, in PowerShell only (R6). Bash is unchanged on a POSIX host; on Windows see step 4 (R3).
 2. **Both dialects: a bare reference to a directory variable is refused as uncheckable (F401).** A
    reference to a variable the shell, PowerShell or the platform sets for every process to one
    directory is refused with the reason rule 3 already gives. It is caught at the start of the word
@@ -71,8 +83,9 @@ refuses `~` and allows `$HOME` has the incoherence F375 fixed for `..` and `../`
    `SystemDrive`, `PUBLIC`, the `OneDrive*` names, `ProgramData`, `ALLUSERSPROFILE`, `SystemRoot`,
    `windir`, the program directories, the `XDG_*_HOME` names, `XDG_RUNTIME_DIR`, and PowerShell's
    `$PSHOME` and `$PROFILE`. Every spelling is covered: bash `$N`/`${N…}`; PowerShell
-   `$N`/`${N}`/`$env:N`/`${env:N}`/`$variable:N`/`$global:N` and the other scope prefixes; `%N%` for
-   a nested `cmd`. **(R4)** A single-quoted or escaped reference (`'$HOME'`) is **refused too**,
+   `$env:N`/`${env:N}` for an environment name, and `$N`/`${N}`/`$variable:N`/`$global:N` and the
+   other scope prefixes for PowerShell's own `HOME`, `PWD`, `PSHOME` and `PROFILE` (R6); `%N%` for
+   a nested `cmd`; and, in bash, PowerShell's `$env:N` handed to a nested PowerShell (R6). **(R4)** A single-quoted or escaped reference (`'$HOME'`) is **refused too**,
    because an inner shell expands it (operator, 2026-09-24).
 3. **A word whose literal text before its first expansion is `..`** (`..$x`, `..${x}`, `..$(…)`),
    **or (R4) whose text with every expansion removed is `..`** (`$x..`, `$(true)..`, `.$x.`), is

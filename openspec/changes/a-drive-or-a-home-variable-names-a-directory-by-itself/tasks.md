@@ -1,8 +1,10 @@
 ## 0. Before building
 
-- [ ] 0.1 R2 and 0.2 R3: independent re-derivations against `hub/hub/mcp_server.py` (`_words`, `_judge_word` rule 4, `_lex`'s literal `$`) and the separator-less requirement; recorded in `spec-queue/tracks/B4.md`
-- [ ] 0.2b R4 (revise round after the operator's 2026-09-24 review): re-derived from the code at `b7d976a`; recorded in `B4.md` under "R4"
-- [ ] 0.2c R5: an independent verification round of the R4 design
+- [x] 0.1 R2 and 0.2 R3: independent re-derivations against `hub/hub/mcp_server.py` (`_words`, `_judge_word` rule 4, `_lex`'s literal `$`) and the separator-less requirement; recorded in `spec-queue/tracks/B4.md`
+- [x] 0.2b R4 (revise round after the operator's 2026-09-24 review): re-derived from the code at `b7d976a`; recorded in `B4.md` under "R4"
+- [x] 0.2c R5: an independent verification round of the R4 design
+- [x] 0.2d R6 (revise round after the second Opus pre-approval review, `spec-queue/tracks/reviews/B4-2026-09-24-second.md`): the PowerShell `env:` pattern, bash's `env:` forms, `Temp:` in PowerShell only, the bracket glob through the sibling's D11; recorded in `B4.md` under "R6"
+- [ ] 0.2e R7: one independent comparison round of R6's fixes against the code, before approval; recorded in `B4.md`
 - [x] 0.3a The operator answers design Open Questions 2 and 3: answered 2026-09-24 afternoon in `spec-queue/DECISIONS.md` (`B4-dep-links`: build D10 as written, residual filed as F444; `B4-drive-exists`: a drive word is judged only when the drive exists). D5 and `PWD` were answered earlier the same day
 - [ ] 0.3 The operator approves in `APPROVALS.md` (after the Opus pre-approval review); told first that `:8000`'s next run uses the edited file
 - [ ] 0.4 (R4; order decided in `B4-residuals`: both in one night window) `the-shell-judge-reads-a-word-whole` is built first. This change uses its `_glob_links`, budget, level-by-level escape reading, `_DRIVE_LETTERS` and `hub-judge-windows` job
@@ -11,7 +13,7 @@
 
 - [ ] 1.1 F402, PowerShell, on Windows only (`skipif os.name != "nt"`; runs in the `hub-judge-windows` job; the workspace fixture's drive is the tmp drive). Refused as outside, naming the word with its colon: `Copy-Item notes.md <other>:`, `Copy-Item x <other>:foo`, `Copy-Item x -Destination:<other>:`, where `<other>` is an **existing** drive that is not the workspace's (operator, `B4-drive-exists`; taken or made with `subst` as in 1.5c). Each FAILS today (allow)
 - [ ] 1.2 F402 controls that stand, both platforms. PowerShell: `Copy-Item x <own drive>:` and `<own>:foo` (Windows), `git show HEAD:README.md`, `sed s:a:b: f`. Bash: `cp notes.md C:`, with the workspace on C on Windows. Each PASSES today and catches a rule that ignores the dialect or the second colon
-- [ ] 1.3 F402 `Temp:`: PowerShell `Copy-Item x Temp:` refused as outside, with `TMP`/`TEMP` monkeypatched to a directory outside the workspace; FAILS today
+- [ ] 1.3 F402 `Temp:`: PowerShell `Copy-Item x Temp:` refused as outside, with `TMP`/`TEMP` monkeypatched to a directory outside the workspace; FAILS today. (R6, design D1) In the bash reading `temp:` stays an ordinary word, with `_DRIVE_LETTERS` monkeypatched True and the same `TMP`/`TEMP`: Bash `cat <<'EOF'` / `temp: 5` / `EOF` is allowed (FAILS against R5, which kept the colon in bash on a drive-letter host), and Bash `pwsh -c 'Copy-Item x Temp:'` is allowed (the named residual, asserted so a change of mind is visible)
 - [ ] 1.4 F401, refused as uncheckable (the reason contains "cannot be checked", not "outside"). Each FAILS today:
   - Bash: `cp notes.md $HOME`, `"$HOME"`, `${HOME}`, `$OLDPWD`, `$TMP`, `--target-directory=$HOME`, `cp x %USERPROFILE%`.
   - PowerShell: `Copy-Item x $HOME`, `$env:USERPROFILE`, `$ENV:temp`, `-Destination:$HOME`.
@@ -26,21 +28,24 @@
   - Bash tool: `bash -c 'cp n $HOME'`, `sh -c "cp n \$HOME"`, `bash -c 'cp n ${HOME}'`, `bash -c 'cp n ..$x'`, `powershell -c 'Copy-Item x $HOME'`.
   - PowerShell tool: `bash -c 'cp n $HOME'`, `powershell -c 'Copy-Item x ${env:TEMP}'`.
   - POSIX CI: `bash -c 'bash -c "cp n \$HOME"'`, which needs the sibling change's level-by-level escape reading.
+  - (R6) Bash tool: `powershell -c 'Copy-Item x $env:TEMP'` and `powershell -c 'Copy-Item x ${env:USERPROFILE}'`. Each FAILS today (allowed, measured: the words are `␀env:TEMP` and `␀{env:USERPROFILE`) and FAILS against R5, whose bash pattern had no `env:` form.
 - [ ] 1.4e (R4, D3) Refused as uncheckable. Each FAILS today (allowed, measured) and FAILS against R3 (whose D3 read only the text before the first expansion):
   - Bash: `cp n $x..`, `cp n $(true)..`, `cp n .$x.`, `` cp n `true`.. ``;
   - Bash tool: `` bash -c 'cp n `true`..' ``;
   - PowerShell: `Copy-Item n $x..`.
 - [ ] 1.4f (R4, D10) With the sibling change's link fixture (`up` → outside, made with `os.symlink` or `_winapi.CreateJunction`), refused as outside, naming where `up` resolves. Each FAILS today (allowed, measured) and against R3:
   - Bash: `cp n up`, `cp n u*`, `cp -tup n`, `cp n {up,x}`, `cp --target-directory=up n`, and `ls -d .*` with a link `.l` → outside;
-  - PowerShell: `Copy-Item n up`, `Copy-Item n -Destination:up`.
+  - PowerShell: `Copy-Item n up`, `Copy-Item n -Destination:up`;
+  - (R6) Bash: `cp n [u]p` and `cp n u[p]`. Each FAILS today (allowed, measured; both wrote through `up` in Git Bash) and FAILS against R5 (the words are `u]p` and `u[p`; needs the sibling's D11 bracket-kept word).
 
   Controls allowed: `cp n sub`, `ls in` (an inside link), `cp -r n newdir`, `grep -r foo --exclude-dir=node_modules .` with no `node_modules` link. With `node_modules` a link to outside, that grep is **refused**: assert it, so the accepted cost stays visible.
 - [ ] 1.5 F401 controls that must stay allowed. Each PASSES today and names the rule it catches:
   - `echo $x`, `for f in $files; do echo $f; done`, `test -n "$VAR"`;
   - `echo $HOMEDIR` (a prefix match), `echo '$HOMEDIR'`;
   - `tmp=$(mktemp); cp x $tmp` (a lowercase user variable), `cp x $(git rev-parse --show-toplevel)` (a substitution naming no directory variable);
-  - the commit heredoc `git commit -m "$(cat <<'EOF'` / `fix the judge` / `EOF` / `)"`.
-- [ ] 1.5a (R4, the accepted costs, asserted refused so that a change of mind is visible) `echo '$HOME'`, `grep '$HOME' f`, `cp x $(dirname $PWD)`, and the commit heredoc whose body line is `use $HOME for config`. Each PASSES today (allowed), so each FAILS today, and the first three also FAIL against R3
+  - the commit heredoc `git commit -m "$(cat <<'EOF'` / `fix the judge` / `EOF` / `)"`;
+  - (R6) PowerShell: `$tmp = New-TemporaryFile; Remove-Item $tmp` and `Copy-Item x $TEMP` (a script variable, not the environment's). Each PASSES today and FAILS against R5, whose PowerShell pattern made the `env:` prefix optional for every name.
+- [ ] 1.5a (R4, the accepted costs, asserted refused so that a change of mind is visible) `echo '$HOME'`, `grep '$HOME' f`, `cp x $(dirname $PWD)`, and the commit heredoc whose body line is `use $HOME for config`. Each PASSES today (allowed), so each FAILS today, and the first three also FAIL against R3. (R6) Also PowerShell `Copy-Item x $PWD.Path` and `Write-Output $HOME.Length`, refused (member access; design Costs). Each FAILS today (allowed)
 - [ ] 1.5b (R3, design D4). Each FAILS today (allowed):
   - Windows, Bash tool: `python w.py <other>:` and `powershell -c 'Copy-Item x <other>:'`, with `<other>` an existing drive as in 1.1, refused as outside;
   - both platforms: `dd if=x of=c:~` and `echo PATH=a:~`, refused as uncheckable;
@@ -60,12 +65,12 @@
 ## 2. The fix
 
 - [ ] 2.0 `_drive_exists(letter)`: `os.stat(letter + ":\\")`, `FileNotFoundError` → False, a return → True, any other exception → True; memoized per letter in the sibling change's per-`_decide` memo (design D1)
-- [ ] 2.1 `_words(arguments, dialect)` and `_PS_DRIVE_RE`, keeping the colon for a bare drive and for a colon-joined option whose value is a drive (design D1, R2). Pass the dialect from `_read_command`
+- [ ] 2.1 `_words(arguments, dialect)` and `_PS_DRIVE_RE`, keeping the colon for a bare drive and for a colon-joined option whose value is a drive (design D1, R2); (R6) `Temp:` keeps its colon in the PowerShell reading only. Pass the dialect from `_read_command`. `_DRIVE_LETTERS` is read at call time (the sibling's D9): no regex or default argument built from it at import, or task 1.5c's monkeypatch passes without reaching the code
 - [ ] 2.2 Rule 4, in this order:
   - the drive check (PowerShell on any host; bash where `_DRIVE_LETTERS`, design D4), made on a drive-letter host only when `_drive_exists(letter)` (design D1, `B4-drive-exists`), and returning only a refusal, never ending the rule on an inside or skipped answer;
   - the `~` after a colon;
   - the `..`-glob;
-  - `_DIRECTORY_VARIABLE_RE[dialect]` at the value's start and after each `:`, matching `$` and `_LITERAL_DOLLAR` (design D2, R4);
+  - `_DIRECTORY_VARIABLE_RE[dialect]` at the value's start and after each `:`, matching `$` and `_LITERAL_DOLLAR` (design D2, R4); (R6) the PowerShell pattern requires `env:` for an environment name, and matches `HOME`, `PWD`, `PSHOME` and `PROFILE` with or without a scope prefix; the bash pattern also matches `env:` forms;
   - the `..` prefix and the `..` remainder (design D3);
   - (R4) the link check with glued-option suffixes, and `_glob_links` on a separator-less glob (design D10).
 
@@ -80,6 +85,7 @@
   - PowerShell 5.1, with a second drive available (or `subst`): `Copy-Item notes.md Z:` lands outside, and `Copy-Item notes.md C:` lands in the current location.
   - Git Bash: `cp notes.md $HOME` lands in home, and `cp notes.md C:` writes a file named `C:`.
   - (R4) Git Bash, with `x` unset: `echo $x.. $(true)..` prints `.. ..`; `ls -d c:$HOMEPATH` lists home; with a junction `up` pointing outside, `cp n up` lands outside.
+  - (R6) Git Bash: `cp n [u]p` and `cp n u[p]` land outside through `up`. PowerShell 5.1: `$TEMP` is empty and `$tmp = New-TemporaryFile; Remove-Item $tmp` runs.
 
   Delete the scratch.
 

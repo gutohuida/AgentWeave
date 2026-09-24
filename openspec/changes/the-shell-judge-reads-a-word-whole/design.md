@@ -67,6 +67,27 @@ first, with the sibling in the same window.
 R5 also added two named residuals and two costs, which are not decisions: an inner PowerShell's
 `> /dev/null` (D4), a POSIX `grep '\.\./'`, and a commit message naming `user@host:` (D5).
 
+**R6 ran on 2026-09-24 (revise round, after the second pre-approval review,
+`spec-queue/tracks/reviews/B4-2026-09-24-second.md`).** It re-derived the two HIGHs from
+`hub/hub/mcp_server.py` at `dd069ec` (no product change since `4e910fd`). It measured with `_lex`,
+`_words`, `_where` and `_decide` in-process in `py -3.11`, in Git Bash 5.2.37 and in Windows
+PowerShell 5.1, in `testbed/scratch/b4-r6/top/ws`, which held real junctions made by `mklink /J`:
+`up` and `.l` pointing to a sibling `out`, `sub/l` pointing to `ws` itself, and `in` pointing to
+`ws/sub`. The operator's `B4-link-dotdot` (`spec-queue/DECISIONS.md`) decided HIGH 2's scope. What
+changed:
+
+- **D11 (new): a bracket at a word's edge.** `_words` also yields the *bracket-kept* word, trimmed
+  of everything `_WORD_TRIM` holds except `[` and `]`, and it is judged through every rule like any
+  word. D3's test and D8's dot rule learn that a component can open with a bracket expression.
+- **D12 (new): a `..` after a link is judged physically,** in `_where` (a second, physical reading)
+  and in D8's walk, which now carries each branch's real directory. So "Traversal and links cannot
+  escape" holds as restated.
+- **The memo key** carries the trimmed-colon flag (D5).
+- **Residuals:** an outer extglob through a link is named beside the `case` arm. **D2 step 3** says
+  that `B4-drive-exists` covers separator-less words only.
+
+The record is in `spec-queue/tracks/B4.md`, under "R6".
+
 ---
 
 **Built on the recommended answer to D4** (the built-in default posture for a Claude run stays
@@ -86,7 +107,10 @@ Functions are cited by name; line numbers drift.
 ## Context
 
 - `_words` splits each lexed argument at `[\s=,]+` and trims `_WORD_TRIM`
-  (`"\"'`{}[]()<>|;&:"`) from both ends.
+  (`"\"'`{}[]()<>|;&:"`) from both ends. **(R6) That trim removes a glob's own bracket** when the
+  bracket expression opens or closes the word: `[u]p/x` reaches the judge as `u]p/x`,
+  `'[[:alpha:]]p'/x` as `alpha:]]p/x`, `[.]./x` as `.]./x`, `u[p]` as `u[p` and `sub/[a]` as `sub/[a`
+  (measured). See D11.
 - `_judge_word`: rule 1 URL (`_URL_SCHEME_RE`), rule 2 `$HUB_URL` (`_HUB_REFERENCE_RE`), rule 3 a
   separator plus an expansion is uncheckable (`_expands`), rule 4 no separator, rule 5 absolute or
   `_PLAIN_RELATIVE_RE`, rule 6 the backstop over `_ABSOLUTE_PATH_RE`.
@@ -100,7 +124,9 @@ Functions are cited by name; line numbers drift.
   `'/x'` (measured). Neither refusal has anything to do with the link.
 - `_where` is total: `OSError`/`ValueError` become `_UNRESOLVED`, a drive mismatch becomes
   `_OUTSIDE`, and `os.path.realpath` resolves symlinks and junctions. `_judge_path` adds the
-  `continues` extension.
+  `continues` extension. **(R6) On Windows `realpath` removes `..` lexically before it reads the
+  link in front of it**, so `_where("sub/l/../y")`, with `sub/l` a junction to the workspace root,
+  answers inside although Git Bash writes to the parent (measured). See D12.
 - `approve_tool_call` calls `_decide` with no `try`, then `_report_decision`, then returns one
   `json.dumps` string.
 - `_lex` never treats `{`, `,`, `}`, `*`, `?` or `[` specially. `(` and `)` end an argument in the
@@ -179,7 +205,10 @@ not a schemeless address — D5 now runs before rule 3):
    nested PowerShell too (`python w.py 'Z:foo\bar'`), so the bash reading needs the exception as
    much as the PowerShell reading does. Git Bash's own `cp` writes a file named `Z:` there, so the
    refusal is a harmless false one. On a POSIX host the break stands. Cost: `git show a:src/x.py`
-   (a one-letter revision) is refused as drive A on Windows.
+   (a one-letter revision) is refused as drive A on Windows. **(R6) This holds whether or not drive A
+   exists.** The operator's `B4-drive-exists` (the sibling change's `_drive_exists`) covers only a
+   separator-less word, which is rule 4's. A word with a separator after the drive is judged here,
+   and such words are refused today already by the tail (`'/x.py'`), so this is not a new cost.
 4. Also remove the quote characters `'"`` from the value, split at the same breaks less the quotes,
    and judge each piece: this is what an inner shell joins.
 5. Each piece:
@@ -252,6 +281,15 @@ component that begins with `.`, contains `*`, `?` or `[`, and for which
 refusal still quotes the piece as written. `*` and `?*` never match a dot-leading name in bash, so
 they are not rewritten. `..?` needs a third character (measured: `sub/..?/y` allowed; `.[.]/y`,
 `.*/x`, `..*/x` refused).
+
+**(R6) A component that opens with a bracket expression.** "Begins with `.`" also holds when the
+component's first element is a bracket expression that `fnmatch.fnmatchcase(".", <that expression>)`
+matches (`[.]./x`, `[.a].`). Measured in Git Bash 5.2.37 with `globskipdots` off, in a directory
+whose parent is the workspace: `echo [.].` prints `[.].` (a bracket does not match a leading dot
+there), while `echo .[.]` prints `..`. The review reported that bash before 5.2 expands `[.]./x`
+to `../x`, and no such bash was available to measure. So the judge over-approximates: counting the
+component as `..`-capable can only add a refusal, and costs a word no one writes. The component is
+read from the bracket-kept word (D11), since the ordinary trim removes the opening `[`.
 
 **Extglob (R4, review MEDIUM).** With `extglob` on and `globskipdots` off, `@(..)/x` and
 `?(..)/x` expand to `../x` (the review measured this in Git Bash). `bash -O extglob -c 'cp n @(..)/x'`
@@ -345,7 +383,8 @@ one.
 **R5: a trailing colon.** `_words` trims `:` from a word's ends, so `scp n user@example.com:` (a
 copy to the remote home directory) reaches the judge as `user@example.com`. It is allowed today
 (measured), and `_SCP_ADDRESS_RE` as written never sees its colon. So `_words` also yields whether
-it trimmed a `:` directly after the word, and D5 matches the word with that colon restored. Over
+it trimmed a `:` directly after the word, and D5 matches the word with that colon restored. (R6:
+the flag is part of the memo key; see "The bounds".) Over
 42,860 Bash commands from this repository's own transcripts, the rule with the colon kept matched
 only two words, both `git@github.com:o/r.git` in earlier probes.
 
@@ -430,8 +469,11 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
 (`bash -c 'cp n u*/'`).
 
 1. **Base.** The piece's leading components that hold no glob character, joined to the root (or
-   absolute), resolved with `os.path.realpath`. If the base is outside, the literal judgement has
-   already refused.
+   absolute), resolved by D12's physical reading (`_physical`), not by `os.path.realpath` alone.
+   On Windows `realpath` removes a `..` before it reads the link in front of it (D12), so
+   `sub/l/../u*` would be globbed in `sub` instead of in the workspace's parent. If the base is
+   outside, the literal judgement has already refused, because `_where` makes the same physical
+   reading (D12).
 2. **One component at a time.** List the current directory with `os.scandir`. An entry matches the
    component's *relaxed* pattern under `fnmatch.fnmatchcase` after `os.path.normcase` of both sides.
    Relaxed means:
@@ -441,7 +483,10 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
      directories at any depth.
 
    In the bash dialect, a name beginning with `.` matches only when the relaxed component begins
-   with `.`, as bash's default (`dotglob` off) does. The rule is dropped when the command's text
+   with `.`, as bash's default (`dotglob` off) does. **(R6)** It also matches when the component, as
+   written, opens with a bracket expression that can match `.` (D3). Bash 5.2 does not match a
+   leading dot that way (measured: `echo [.]l` prints `[.]l` beside a `.l`, and prints `.l` only
+   under `dotglob`), but older bash is not measured, and a wider match only adds refusals. The rule is dropped when the command's text
    names `dotglob`. **(R5) In the PowerShell dialect there is no such rule**: its wildcards match a
    dot-leading name (measured: `Resolve-Path *` lists `.l`), so a linked `.venv` matches `*` there.
    When D3 says the component can match `..`, `..` is also a candidate.
@@ -461,7 +506,35 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
    cloud or deduplicated file is a reparse point too; it costs one `realpath`, which resolves to
    itself, inside.
 4. **Descend** into a matched directory for the next component, following a link only once it has
-   been judged inside. The last component's matches are not descended into. **(R5) A `**` walk
+   been judged inside. The last component's matches are not descended into.
+
+   **(R6) Each branch carries its real directory, and `..` moves from it.** The review measured
+   `cp n sub/l*/..` (bash expands it to `sub/l/..`), with `sub/l` a junction to the workspace root,
+   writing `n` into the workspace's parent in Git Bash, and R6 re-measured it. Under R5's walk the
+   `..` after `l` matched no listing entry, since a listing never holds `.` or `..`, so nothing was
+   judged, and the literal `sub/l*/..` resolves to `sub` on both platforms. So:
+
+   - A branch holds the **real** path of the directory it has reached. At the start that is the
+     base's physical reading (step 1). After a non-link directory entry it is `<real>/<entry name>`,
+     which is real, because a child of a real directory that is not a link is itself real. After a
+     link it is the link's `os.path.realpath`, once the link has been judged inside.
+   - A component that is `..`, as written or as D3's candidate, moves the branch to
+     `os.path.dirname(<real>)`. The directory reached is judged by `_judge_path` on that real path,
+     quoting the piece as written, and an outside answer refuses. `.` leaves the branch where it is.
+     Both apply to the last component too.
+   - A component with no glob character, other than `..` and `.`, is not matched against a listing:
+     the branch moves to `<real>/<component>`, and, if that entry is a link (step 3's test), the link
+     is judged and followed as a match would be. A name that does not exist still moves the branch,
+     so a later `..` returns to `<real>`. On POSIX the kernel refuses `missing/..`, so this can only
+     add a refusal.
+
+   Each `..` step costs one `_judge_path` on a real path (one `realpath`, which returns it
+   unchanged). It happens once per branch, and every branch came from a listed entry that was
+   charged to the budget, so the steps are bounded by the entry budget. Control, measured:
+   `ls in/../sub`, with `in` a junction to `ws/sub` (a link to a directory of the same depth), lists
+   `ws/sub` in Git Bash and stays allowed.
+
+   **(R5) A `**` walk
    under `globstar` does not descend through a link** (bash 4.3 and later do not either); it judges
    the link and stops there. Without this, the listing memo below would never end a link cycle
    (`loop` → the workspace): every level is a memo hit, which charges nothing. Each other
@@ -471,7 +544,7 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
    on literally by bash, and the literal is already judged.
 
 **Why only links are resolved.** A non-link entry of a directory that is itself inside is inside by
-construction. Only a link, or `..` (D3), can carry a match out. So a glob costs one listing per
+construction. Only a link, or `..` (D3, and R6's `..` after a link, step 4), can carry a match out. So a glob costs one listing per
 directory it enters (about 9 µs per entry on this machine) and one `realpath` per matched link
 (about 85 µs), not one `realpath` per match.
 
@@ -496,6 +569,8 @@ workspace exists.
   workspace itself. That command, and `cp n C:/…/ws/.*/x`, are allowed today (measured) and stayed
   allowed under R4. In rule 5 such a word is also rewritten by D3 and then passed through
   `_glob_links`. Step 1's "(or absolute)" base was already written for it.
+- **(R6) On the bracket-kept word (D11)** in whichever of the places above it reaches. It is a word
+  of its own, so it needs no fourth place.
 
 `a-drive-or-a-home-variable-names-a-directory-by-itself` applies the same `_glob_links` to a
 separator-less word (rule 4), where `cp n u*` is allowed today (measured). That change builds after
@@ -532,6 +607,145 @@ The `test` job already runs on `windows-latest` for the CLI, so the runner is kn
 link fixture uses `os.symlink` on POSIX and `_winapi.CreateJunction` on Windows (no privilege
 needed), so the link rows run on both jobs. Production is Windows.
 
+**(R6) `_DRIVE_LETTERS` is read at call time.** Every rule that consults it (D2 step 3, D4, D12 and
+the sibling change's D1 and D4) reads the module attribute when it runs. No regex or default argument
+is built from it at import. Tests monkeypatch it on Linux (the sibling's task 1.5c), and a value
+baked in at import would make those tests pass without reaching the code.
+
+### D11 (R6) — a bracket at a word's edge is kept for a second reading
+
+**The defect (second review, HIGH 1; re-measured).** `_words` trims `_WORD_TRIM`, which holds `[`
+and `]`, from both ends of every word. So the bracket expression that opens or closes a glob is
+removed before D3 and D8 see it. Measured with today's `_lex` and `_words`:
+
+| Argument | Word judged today | Today's answer |
+|---|---|---|
+| `[u]p/x` | `u]p/x` | refused, tail `'/x'` |
+| `[u]p/` | `u]p/` | refused, tail `'/'` |
+| `'[[:alpha:]]p'/x` | `alpha:]]p/x` | refused, tail `'/x'` |
+| `[.]./x` | `.]./x` | refused, tail `'/x'` |
+| `sub/[a]` | `sub/[a` | refused, tail `'/[a'` |
+| `u[p]` | `u[p` | **allowed** |
+| `[u]p` | `u]p` | **allowed** |
+
+In Git Bash, with `up` a junction to `out`, `cp n [u]p/`, `cp n u[p]` and `cp n [u]p` each wrote `n`
+into `out` (measured). Under R5 the first five would be **allowed**: none of the trimmed words holds
+a glob D8 can use (`u[p` has no `]`, and `fnmatch` reads a lone `[` literally: measured,
+`fnmatchcase("up", "u[p")` is False and `fnmatchcase("up", "u[p]")` True).
+
+**Rule.** For each piece that `_words` yields a word from, it also yields a **bracket-kept word** when
+both hold:
+
+- the ordinary trim removed a `[` or a `]` from the piece's ends;
+- the piece, trimmed instead of `_WORD_TRIM` less `[` and `]`, holds a `[` followed later by a `]`
+  (bash reads a `[` with no closing `]` literally, so nothing else can be a bracket expression).
+
+The bracket-kept word carries the same argument, its own `continues` (computed with the same
+narrower trim) and its own trimmed-colon flag. `_read_command` judges it through every rule of
+`_judge_word`, exactly like a word, so each reading (quote-removed, escape-removed), D3, D8 and the
+sibling change's rule 4 reach it.
+
+**Why a second word, not a narrower trim.** Keeping the brackets in the one word would change what
+today's literal reading sees. For example `[../x]` is refused today as `../x`. Kept whole, it is the
+name `[..` inside (bash reads it that way too, since `/` ends a bracket expression). A second word
+is an extra reading only: it can add a refusal and never remove one, like D7's levels.
+
+**Traced, each row through the step that now fires:**
+
+- `[u]p/x`, `[u]p/`: rule 6. The piece `[u]p/x` holds `[`, so `_glob_links` runs. The relaxed
+  component `*p` matches `up`, a junction, which is judged outside. Refused, naming where `up`
+  resolves.
+- `'[[:alpha:]]p'/x`: rule 6. `:` is a piece break, so the pieces are `[[`, `alpha`, `]]p/x`, and
+  none of them matches. **The whole-value pass of D8 (R5) catches it:** the component `[[:alpha:]]p`
+  relaxes to `*p`. This row is the reason the whole value must also be globbed.
+- `[.]./x`: rule 6. D3 (R6) reads the component `[.].` as opening with a bracket expression matching
+  `.`, and `fnmatchcase("..", "[.].")` is True (measured), so it is rewritten to `..`. Refused as
+  `'[.]./x'` outside.
+- `sub/[a]`: rule 6. `_glob_links` with base `sub`: the component `[a]` relaxes to `*`, and any link
+  in `sub` is judged.
+- `u[p]` and `[u]p` (no separator): rule 4, which this change leaves as it is. **They stay allowed
+  until the sibling change is built.** There D10 step 3 sends a separator-less glob to
+  `_glob_links`, and the bracket-kept word is such a glob. Without D11, the sibling's D10 step 1
+  would check `lexists("u]p")`, which is False, and its new SHALL would be false (second review).
+- `C:/…/ws/u[p]` (absolute): rule 5 on the bracket-kept word, then D3 and `_glob_links` (R5).
+
+**Cost.** One more `_judge_word` for each word whose edge bracket closes inside it: `arr[0]`, `x[1:]`,
+`test[0-9]`. Such a word is separator-less, so under this change alone it costs nothing. Under the
+sibling change it costs one listing of the directory it names, memoized per `_decide`. A JSON array
+split at its commas (`["a"`, `"b"]`) yields no bracket-kept word, because neither piece holds a
+`[` with a later `]`.
+
+### D12 (R6) — a `..` after a link is judged physically as well as lexically
+
+**The defect (second review, HIGH 2; operator `B4-link-dotdot`).** Bash on msys resolves a `..`
+physically: from where the link in front of it really points. Measured in Git Bash, with `sub/l` a
+junction to the workspace root:
+
+| Command | Where it wrote (Git Bash) | Today's judge (Windows) |
+|---|---|---|
+| `cp n sub/l/../y1` | the workspace's parent | **allowed** |
+| `echo hi > sub/l/../x1` | the workspace's parent | **allowed** |
+| `cp n sub/l*/..` (expands to `sub/l/..`) | `n` in the workspace's parent | refused, tail `'/l*/..'` |
+| PowerShell 5.1 `Set-Content sub\l\..\p1 hi` | `ws/sub` (lexical) | allowed |
+| `cmd /c "echo hi > sub\l\..\c1"` | `ws/sub` (lexical) | allowed |
+
+`ntpath.realpath` normalises `..` lexically before it reads any link: measured,
+`realpath("ws/sub/l/..")` is `ws/sub`, and `_where("sub/l/../y")` answers inside. So on Windows,
+through the Bash tool, the literal form escapes **today**, and the restated scenario "Traversal and
+links cannot escape" is false at HEAD. On POSIX, `posixpath.realpath` resolves each component in
+turn and pops `..` from the resolved path, so the literal form is refused there already. The glob
+form `sub/l*/..` escapes D8 on both platforms (D8, R6).
+
+**Rule, in `_where`** (as the operator decided): a second, **physical** reading, `_physical(absolute)`.
+
+- Walk the absolute path's components, split at every separator the platform accepts. Keep a
+  current path, starting at the anchor (the drive and root). A name is appended. `.` and empty
+  components are skipped.
+- For `..`: if a name was appended since the last resolution, the current path is first replaced by
+  its `os.path.realpath`. Then it moves to its parent, `os.path.dirname`. At the anchor it stays.
+- At the end, the result is `os.path.realpath(current)`.
+
+`_where` judges the physical result exactly as it judges the lexical one: `commonpath` against the
+root, a different drive outside, and `_resolves_elsewhere` naming it. **A refusal of either reading
+refuses.** When both are inside, `_where` answers None as today. The physical reading is made only
+when the path holds a `..` after a name, and only on a host where `os.path.realpath` normalises
+before resolving (`_DRIVE_LETTERS`, read at call time; D9). On POSIX `realpath` already is the
+physical reading, so there `_physical` is `os.path.realpath` itself (D8's base uses it on both).
+
+Prototype, measured in the R6 scratch: `sub/l/../y` → the workspace's parent, outside;
+`sub/l/../../x` → outside; `in/../sub` → `ws/sub`, inside; `sub/../x` and `sub/nonexist/../a.py` →
+inside, the same as the lexical reading.
+
+**Why both readings, not the physical one alone.** Native Windows programs resolve `..` lexically
+(PowerShell 5.1 and `cmd`, measured above), and msys resolves it physically. The judge cannot tell
+which program a word reaches, so it takes both. The lexical reading is never dropped, so nothing
+refused today becomes allowed.
+
+**Where it reaches.** `_where` serves every path judgement: rule 5's literal words, rule 6's pieces,
+D8's links and `..` steps, and the file tools' `file_path` (`_decide`'s `_PATH_KEYS`). So
+`cp n sub/l/../y`, `echo hi > sub/l/../x1` and `ls sub/l/../x` are refused through rule 5, and a
+piece such as the `sub/l/../y` in `HEAD:sub/l/../y` through rule 6.
+
+**Bound.** A path needs one `realpath` per `..` that follows a name. `_physical` makes at most 64
+of them for one path. A path that would need more is answered `_UNRESOLVED`, which refuses. No real
+path comes near it, and it keeps a word of 10,000 `a/..` pairs from costing about a second.
+
+**Totality.** `_physical` runs inside `_where`'s existing `try`, so an `OSError` or `ValueError` from
+any of its `realpath` calls is `_UNRESOLVED`. `ntpath.splitdrive`, `os.path.dirname` and the split
+are string work.
+
+**Costs (named).**
+
+- On Windows, a path with a `..` after an inside link that points to a *shallower* directory is
+  refused wherever the physical reading lands outside, although a native program (PowerShell,
+  `cmd`, Claude Code's own file tools through Node) writes it lexically inside. Example:
+  `Set-Content sub\l\..\p1` in the PowerShell tool writes `ws/sub/p1` (measured) and is now refused.
+  The workspace needs such a link for this to happen: an inside link whose target is shallower than
+  the link. pnpm and yarn workspaces create them (`node_modules/@s/p` → `../../packages/p`).
+- The file tools share `_where`, so a Write or Edit whose `file_path` spells such a traversal is
+  refused too. The outside-write record (`workspace_writes.py`, its own `realpath`) is not changed,
+  and it records what Node actually wrote.
+
 ## The bounds (R4: per `_decide`)
 
 One `_Budget` is created by `_decide` and passed through every `_read_command` it makes: both
@@ -547,7 +761,12 @@ dialects for an unknown tool, both readings (`c`, `utf8`), and every nested subs
 | Substitution nesting | 8 (`_MAX_NESTING`, unchanged) | per `_read_command` chain |
 
 **A memo keeps the readings from multiplying the cost.** `_decide` keeps one dictionary of word
-judgements, keyed by `(word, argument, continues, dialect, trusted)`. It also keeps one of
+judgements, keyed by `(word, argument, continues, colon, dialect, trusted)`. **(R6)** `colon` is the
+flag D5 adds to `_words`, whether a `:` was trimmed directly after the word. The key must carry every
+per-word input the judgement reads. Without `colon`, `a@example.com,a@example.com:` gives two words
+with the same key (measured: `_words` yields `a@example.com` twice), and the second, which D5
+refuses, would reuse the first's allow. The bracket-kept word (D11) is a different text, so it has
+its own key. It also keeps one of
 expansions: brace alternatives keyed by the marked argument text and dialect, and **(R5) directory
 listings keyed by the resolved directory**. The budget is charged only on a miss. R4 keyed
 `_glob_links` results by base and remaining components, which lists the root once per distinct
@@ -589,7 +808,10 @@ whenever `_decide` raises. The step-by-step:
 - `_lex`, `_words`, the extglob scan and `_expand_braces` are string work. `_expand_braces` is
   iterative, so there is no recursion.
 - `fnmatch.fnmatchcase` was measured total.
-- `_where` and `_judge_path` are total.
+- `_where` and `_judge_path` are total. **(R6)** D12's `_physical` runs inside `_where`'s `try`, so a
+  raise from any of its `realpath` calls is `_UNRESOLVED`, and its 64-step bound is a return value.
+- **(R6)** The bracket-kept word (D11) is string work in `_words`. D8's `..` steps call
+  `_judge_path`, which is total.
 - `_glob_links` catches `OSError` and `ValueError` around each `os.scandir` **and its iteration**
   (R5: the iterator can raise part-way through a listing), each `DirEntry.is_dir()` and each
   `DirEntry.stat()`, and treats them as "no match" for that entry or directory.
@@ -642,6 +864,11 @@ New, or kept on purpose:
 - **An inner shell's `case` arm executing a path straight after `)`**
   (`sh -c 'case 1 in 1)../../evil.sh;;esac'`). It is refused today and allowed after. It executes and
   cannot write. Accepted (Open Question 1, `B4-residuals`).
+- **(R6, second review) An outer extglob through a link.** With `shopt -s extglob` set on an earlier
+  line of the same command (or by a shell snapshot), `cp n @(u)p/x` expands through `up`. The outer
+  lexer ends an argument at `(` (`_ARGUMENT_ENDS`), so the words are `@`, `u` and `p/x`, all inside.
+  It is allowed today and after. The inner, quoted form is one word and is judged (D3, 1.4c). Named
+  with the `case` arm, as the same shape: a `(` the outer lexer must keep as a break.
 - **`**` is matched as `*`** unless the command names `globstar`. A program's own recursive glob
   (`prettier "src/**/*.ts"`) through a link two or more levels down is not seen. Walking every level
   would refuse such globs in any tree larger than the budget.

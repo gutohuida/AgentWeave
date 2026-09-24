@@ -13,8 +13,10 @@ Runs after `the-shell-judge-reads-a-word-whole` is built. The Windows-only rows 
 | Home and directory variables are uncheckable, in every spelling | same (tasks 1.4, 1.4b, 1.4c) | the reason says "cannot be checked" for `$HOME`, `$HOMEPATH`, `$PUBLIC`, `${env:TEMP}`, `$variable:HOME`, `$PROFILE`, `c:$HOMEPATH`… |
 | **The same variable handed to an inner shell is refused** (R4) | same (task 1.4d) | `bash -c 'cp n $HOME'`, `sh -c "cp n \$HOME"`, `powershell -c 'Copy-Item x $HOME'` refused |
 | A `..` that survives an expansion is refused (R4) | same (task 1.4e) | `$x..`, `$(true)..`, `.$x.` refused |
-| **A link named by itself is refused** (R4) | same (task 1.4f), with a real link or junction | `cp n up`, `cp n u*`, `cp -tup n` refused, naming where `up` resolves; an inside link allowed |
-| Ordinary shell stands | same (task 1.5) | `echo $x`, loops, `$tmp`, `$(git rev-parse --show-toplevel)` and the commit heredoc allowed |
+| **A link named by itself is refused** (R4) | same (task 1.4f), with a real link or junction | `cp n up`, `cp n u*`, `cp -tup n`, (R6) `cp n [u]p` and `cp n u[p]` refused, naming where `up` resolves; an inside link allowed |
+| Ordinary shell stands | same (task 1.5) | `echo $x`, loops, `$tmp`, `$(git rev-parse --show-toplevel)` and the commit heredoc allowed; (R6) PowerShell `$tmp = New-TemporaryFile; Remove-Item $tmp` and `Copy-Item x $TEMP` allowed |
+| **A nested PowerShell's `$env:` is refused from Bash** (R6) | same (task 1.4d) | `powershell -c 'Copy-Item x $env:TEMP'` from the Bash tool refused as uncheckable |
+| **`temp:` is PowerShell's only** (R6) | same (task 1.3) | PowerShell `Temp:` refused; a Bash heredoc line `temp: 5` allowed |
 | The accepted costs are what was accepted | same (task 1.5a) | `echo '$HOME'`, `cp x $(dirname $PWD)` and a heredoc naming `$HOME` refused |
 | Nothing else moved | full `hub/tests/` (task 2.4) | count recorded |
 

@@ -8,7 +8,9 @@ the run's own workspace, rather than permitted in advance.
 Under that posture a tool call confined to the run's workspace is allowed, and one reaching outside
 it is refused with a reason stating what was refused and why. The comparison SHALL be made on fully
 resolved paths, so that a relative traversal or a symbolic link cannot escape a boundary that an
-unresolved comparison would have accepted.
+unresolved comparison would have accepted. A traversal that follows a link is resolved by some
+programs from where the link points and by others from the text as written, so such a path SHALL be
+judged both ways, and it is inside only when both readings are inside.
 
 For a shell command, the paths compared are the ones its text names as the shell that runs it will
 read them (see *A path in a shell command is judged by where it resolves*). A glob pattern among
@@ -41,6 +43,14 @@ unknown boundary is not an absent one.
 
 - **WHEN** a path reaches outside the workspace only after relative traversal or link resolution
 - **THEN** it is refused
+
+#### Scenario: A traversal after a link is judged from where the link points
+
+- **WHEN** a path names a link inside the workspace followed by a parent-directory step, and the
+  link points to a directory from which that step leaves the workspace, although the path read as
+  text stays inside
+- **THEN** it is refused
+- **AND** a link to a directory at the same depth, whose parent is inside, does not make it refused
 
 #### Scenario: A glob that matches a link out of the workspace is refused
 
@@ -241,7 +251,11 @@ directory SHALL be judged as the parent directory, and so SHALL a component hold
 pattern group one of whose alternatives begins with a dot. The characters inside such a group SHALL
 NOT divide the word. A glob SHALL also be judged by the entries it matches in the filesystem, so that
 a match that is a link is judged by where the link resolves, and this holds for a pattern an inner
-shell would expand as much as for one the outer shell expands.
+shell would expand as much as for one the outer shell expands. A bracket expression that opens or
+closes a word is part of its pattern, so a word SHALL also be judged with the brackets at its edges
+kept, and a component that opens with a bracket expression able to match a dot SHALL be read as
+beginning with a dot. A parent-directory step after a link a glob matched SHALL be judged from where
+that link points.
 
 In the dialect whose shell provides them, the null device and the standard streams are not
 filesystem destinations, and naming them SHALL NOT refuse a command. On a platform with drive
@@ -375,6 +389,20 @@ answered. An error in place of an answer is not a decision.
 
 - **WHEN** a command hands an inner shell a quoted glob pattern that shell would expand to an entry
   of the workspace that is a link resolving outside it
+- **THEN** the command is refused
+
+#### Scenario: A bracket expression at a word's edge is judged as a glob
+
+- **WHEN** a shell command names a glob whose bracket expression begins or ends the word, such as
+  `[u]p/x` or `sub/[a]`, and the pattern matches an entry of the workspace that is a link resolving
+  outside it
+- **THEN** the command is refused
+- **AND** the reason names where the matched entry resolves
+
+#### Scenario: A parent-directory step after a globbed link is judged from the link's target
+
+- **WHEN** a shell command names a glob that matches a link inside the workspace, followed by a
+  parent-directory step, such as `sub/l*/..` with `sub/l` a link to the workspace root
 - **THEN** the command is refused
 
 #### Scenario: An extended pattern group that can match the parent directory is refused

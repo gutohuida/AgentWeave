@@ -22,6 +22,14 @@ could not end as written, and are fixed in the design, with tests:
 
 It also named two costs and one residual (design D4, D5, D7).
 
+**R6, 2026-09-24 (revise round, after the second pre-approval review,
+`spec-queue/tracks/reviews/B4-2026-09-24-second.md`).** The review measured two shapes that D8 could
+not see, each refused today only by the tail and allowed after R5: a glob whose bracket opens or
+closes the word (`cp n [u]p/`, since `_words` trims the bracket), and a `..` after a link that a
+glob matched (`cp n sub/l*/..`). It also found the literal form, `cp n sub/l/../y`, **writing outside
+through the Bash tool on Windows today**. Steps 13 and 14 are R6's, and the operator decided that
+step 14 is in this change (`B4-link-dotdot`). The memo key now carries D5's colon flag.
+
 ## Why
 
 Under the default posture every shell command an agent runs is read by `mcp_server._decide`, and
@@ -117,11 +125,19 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
     (design D4). `python -c "open('/dev/null','w')"` opens `C:\dev\null` and stays refused.
 12. **(R4) The bounds are per call, with a memo** (design, "The bounds"), and **the Windows rules run
     in a Windows CI job** (design D9).
+13. **(R6) A bracket at a word's edge is kept for a second reading** (design D11). The word is also
+    judged with the `[` and `]` at its edges kept, so `[u]p/x`, `sub/[a]` and `[.]./x` reach D3 and
+    D8 as the globs they are.
+14. **(R6) A `..` after a link is judged physically as well as lexically** (design D12). `_where`
+    adds a physical reading (Git Bash resolves `..` from where the link points; PowerShell and `cmd`
+    from the text), and a refusal of either refuses. D8's walk carries each branch's real directory,
+    so `sub/l*/..` is judged from the link's target.
 
 ## What does not change
 
-- Rules 1, 2, 4 and 5, the lexer's quote and ANSI-C handling, `_where`, `_judge_path` and the
-  refusal-length bound. **(R4)** One step is inserted between rules 2 and 3: the schemeless-address
+- Rules 1, 2, 4 and 5, the lexer's quote and ANSI-C handling, `_judge_path` and the
+  refusal-length bound. **(R6)** `_where` gains the physical reading of step 14, and only that; its
+  lexical reading is unchanged. **(R4)** One step is inserted between rules 2 and 3: the schemeless-address
   check (step 6).
 - Every separator-less word (rule 4): `..` alone, `~` and option-joined values stay as F375 left
   them. `a-drive-or-a-home-variable-names-a-directory-by-itself` changes rule 4 separately and
@@ -139,6 +155,12 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
   (`sh -c 'case 1 in 1)../../evil.sh;;esac'`) is refused today and allowed after, because `)` is
   not a break (regex back-references keep that allowed). It executes and cannot write. Accepted
   (design Open Question 1, answered `B4-residuals`).
+- (R6) An outer extglob through a link, with `extglob` set earlier in the same command
+  (`cp n @(u)p/x`): the outer lexer splits it at `(`, and it is allowed today and after. Named with
+  the `case` arm.
+- (R6) On Windows, a path with a `..` after an inside link pointing to a shallower directory is
+  refused wherever the physical reading lands outside, although PowerShell, `cmd` and the file tools
+  write it lexically inside (design D12, Costs).
 - (R4) `**` is matched as `*` unless the command names `globstar`, so a program's own recursive
   glob through a link two or more levels down is not seen.
 - (R4) `host:x/y` and `user@alias:path` (a dotless host) are read as paths (operator, 2026-09-24).
@@ -168,7 +190,8 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 
 ## Findings
 
-- **F362**: fixed by steps 2 to 4, 6 and 9 to 11. Step 5 (R2) makes the judge fail closed visibly.
+- **F362**: fixed by steps 2 to 4, 6, 9 to 11 and 13. Step 14 closes the traversal-after-a-link
+  escape the second review found, which no finding had recorded. Step 5 (R2) makes the judge fail closed visibly.
 - **F403**: fixed by step 1.
 - The change touches `hub/hub/mcp_server.py` and its tests, plus one CI job
   (`.github/workflows/ci.yml`). No migration, no UI bundle, no Hub restart. **An edit reaches the
@@ -178,7 +201,9 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 ## Impact
 
 - **Code:** `hub/hub/mcp_server.py`:
-  - `_lex`, `_read_command`, `_decide` (the per-call budget and memo);
+  - `_lex`, `_words` (the colon flag and the bracket-kept word), `_read_command`, `_decide` (the
+    per-call budget and memo);
+  - `_where` (R6: the physical reading, `_physical`);
   - `_judge_word` (rule 6, and the address step before rule 3);
   - new `_expand_braces` and `_glob_links`;
   - patterns beside `_ABSOLUTE_PATH_RE`, and `_DRIVE_LETTERS`;

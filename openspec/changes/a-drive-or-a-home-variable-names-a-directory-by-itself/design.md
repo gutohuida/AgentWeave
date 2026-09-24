@@ -68,6 +68,30 @@ REVISING rounds"). Every open question is answered:
   built in one night window. That change's `case` arm and its four device names are accepted as
   recommended.
 
+**R6 ran on 2026-09-24 (revise round, after the second pre-approval review,
+`spec-queue/tracks/reviews/B4-2026-09-24-second.md`).** It re-derived D1, D2 and D10 from
+`hub/hub/mcp_server.py` at `dd069ec`, and measured with `_lex`, `_words` and `_decide` in-process in
+`py -3.11`, in Git Bash 5.2.37 and in Windows PowerShell 5.1, with real junctions in
+`testbed/scratch/b4-r6/`. What changed:
+
+- **D10 reaches a bracket glob.** Change 1's new D11 yields the bracket-kept word, so `cp n [u]p`
+  and `cp n u[p]` reach D10 step 3 as globs (both wrote through `up` in Git Bash, measured). Without
+  it, step 1 checked `lexists("u]p")`, which is False.
+- **D2's PowerShell pattern needs `env:` for an environment name.** Only `HOME`, `PWD`, `PSHOME` and
+  `PROFILE` are PowerShell variables of their own. Measured in PowerShell 5.1: `$TEMP`, `$TMP` and
+  `$USERPROFILE` are empty, and `$tmp = New-TemporaryFile; Remove-Item $tmp` runs. R5's pattern
+  refused that user variable, against the scenario "Any other bare expansion stands".
+- **(R6, new) D2's bash pattern gains PowerShell's `env:` forms.** From the Bash tool,
+  `powershell -c 'Copy-Item x $env:TEMP'` reaches rule 4 as `␀env:TEMP` (measured), which no bash
+  spelling matched. It is the operator's inner-shell case one dialect over.
+- **`Temp:` is read in the PowerShell dialect only** (the review's LOW; R6's choice, put to the
+  operator to confirm). Windows PowerShell 5.1 has no `Temp:` drive (measured), and in the bash
+  reading `temp:` is ordinary text (a YAML key in a heredoc).
+- **Named:** `$PWD.Path` and the other member accesses (Costs). `_DRIVE_LETTERS` is read at call
+  time (change 1's D9).
+
+The record is in `spec-queue/tracks/B4.md`, under "R6".
+
 ---
 
 **Built on the recommended answer to D5** (*"How strict should the shell judge be about bare `$VAR` /
@@ -96,10 +120,10 @@ reason say the command names values decided at run time; this change does not ne
 ### D1 — A drive keeps its colon (F402)
 
 `_words(arguments)` becomes `_words(arguments, dialect)`. In the PowerShell reading, and in the bash
-reading on a host with drive letters (`_DRIVE_LETTERS`, the sibling change's D9; see D4 below), a
-piece is first trimmed of `_WORD_TRIM` less `:`. If that fullmatches
-`_PS_DRIVE_RE = [A-Za-z]:[^:\\/]*` or `(?i)temp:[^:\\/]*`, it is the word, colon kept. Otherwise the
-existing trim applies. Rule 4 then checks, before its option handling:
+reading on a host with drive letters (`_DRIVE_LETTERS`, the sibling change's D9, read at call time;
+see D4 below), a piece is first trimmed of `_WORD_TRIM` less `:`. If that fullmatches
+`_PS_DRIVE_RE = [A-Za-z]:[^:\\/]*`, or, **in the PowerShell reading only (R6)**,
+`(?i)temp:[^:\\/]*`, it is the word, colon kept. Otherwise the existing trim applies. Rule 4 then checks, before its option handling:
 
 - `[A-Za-z]:…` → `_judge_path(word, root, word, argument, continues)`, **on a drive-letter host
   only when `_drive_exists(letter)`** (below). `_where` gives Windows' answer. Measured:
@@ -109,6 +133,14 @@ existing trim applies. Rule 4 then checks, before its option handling:
 - `Temp:…` → `_judge_path(os.path.join(tempfile.gettempdir(), rest), …)`, quoting the word.
   `gettempdir` can raise when no temporary directory is usable, so it is wrapped and becomes
   `_UNRESOLVED`.
+- **(R6) `Temp:` is the PowerShell dialect's only.** `Temp:` is a drive of PowerShell 7's
+  FileSystem provider. Windows PowerShell 5.1 has none (measured: `Get-PSDrive Temp` fails), no
+  native program reads `Temp:` as a directory, and msys does not. In the bash reading on a Windows
+  host, R5's rule refused ordinary text: a heredoc line `temp: 5` gives the word `temp:` (measured:
+  today `_words` yields `temp`), which would have been refused as the temporary directory. So the
+  bash reading does not keep the colon of `temp:`. What this leaves is a named residual: from the
+  Bash tool, `pwsh -c 'Copy-Item x Temp:'` is allowed, today and after. The other choice, keeping
+  the rule and naming the cost, is put to the operator to confirm.
 - A colon-joined option value (`_COLON_OPTION_RE`) is read with its colon kept, so
   `-Destination:Z:` judges `Z:`. **(R2)** The trim rule alone does not do this. `_words` turns
   `-Destination:Z:` into `-Destination:Z`, so the trim must also keep the colon when the piece,
@@ -197,10 +229,29 @@ siblings of home and of the workspace, are refused, while `$HOMEDIR` stands. A m
 | Dialect | Pattern (NAME from the list below) | Case |
 |---|---|---|
 | bash | `[$␀]NAME` and `[$␀]\{NAME` followed by `}`, a non-name character, or the end (`${HOME-x}`, `${HOME:+y}`); `_words` trims the closing `}`, so `${HOME}` reaches the judge as `${HOME` | a POSIX name exactly (`HOME`); a Windows name in its Windows spelling or all capitals (`OneDrive`, `ONEDRIVE`), because msys keeps some names' case and capitalises others: Git Bash here shows `ProgramData`, `OneDrive` and `CommonProgramW6432` as spelled, and `PROGRAMFILES`, `SYSTEMROOT`, `WINDIR`, `SYSTEMDRIVE` in capitals (measured). A lowercase user variable such as `$tmp` is not matched |
-| PowerShell | `[$␀]\{?(?:(?:env\|variable\|global\|local\|script\|private\|using):)?NAME` | any case |
+| PowerShell | **(R6)** `[$␀]\{?env:NAME`, for every NAME; and `[$␀]\{?(?:(?:variable\|global\|local\|script\|private\|using):)?AUTO`, where AUTO is one of PowerShell's own `HOME`, `PWD`, `PSHOME`, `PROFILE` | any case |
+| bash, also (R6) | `[$␀]\{?env:NAME`, PowerShell's environment spelling, handed to a nested PowerShell | any case |
 | either | `%NAME%` (a nested `cmd`) | any case |
 
 `␀` stands for `_LITERAL_DOLLAR`.
+
+**(R6) Why PowerShell needs `env:` for an environment name.** R4's PowerShell pattern made the scope
+prefix optional for every name. But in PowerShell a bare `$TEMP` is a variable of the script, not
+the environment: measured in PowerShell 5.1, `$TEMP`, `$TMP` and `$USERPROFILE` are empty, and
+`$env:TEMP` is the temporary directory. Only `HOME`, `PWD`, `PSHOME` and `PROFILE` are PowerShell's
+own automatic variables. So R5 as written would refuse `$tmp = New-TemporaryFile; Remove-Item $tmp`
+in the PowerShell tool (measured: that command runs, and is allowed today), a user variable the
+scenario "Any other bare expansion stands" says SHALL stand.
+
+**(R6) Why the bash reading also matches `env:`.** From the Bash tool,
+`powershell -c 'Copy-Item x $env:TEMP'` lexes to the word `␀env:TEMP`, and
+`powershell -c 'Copy-Item x ${env:USERPROFILE}'` to `␀{env:USERPROFILE` (measured). No bash spelling
+matched either, and D2's check after a colon finds `TEMP`, not a reference. Both are allowed today,
+and would have stayed allowed after R5, although the operator decided that a directory variable
+handed to an inner shell is refused. In bash itself `$env:TEMP` is the variable `env` followed by
+`:TEMP`, which no one writes for any other reason. The PowerShell automatic names need no bash
+addition: `$HOME` and `$PWD` are already bash's own, and `$PSHOME` and `$PROFILE` match as the list
+spells them (the Windows-spelling rule).
 
 **(R4) A quoted or escaped `$` matches too.** R1 to R3 excluded `_LITERAL_DOLLAR`, on the argument
 that a quoted reference is text. But a quoted reference is exactly what an inner shell expands:
@@ -331,6 +382,14 @@ After D1 to D4, and before rule 4 answers None, the value is checked, cut at a N
    match. The latter is refused only where a dot-named link out of the workspace exists (a linked
    `.venv`).
 
+**(R6) A bracket glob reaches step 3 through the sibling's bracket-kept word.** `_words` trims `[`
+and `]` from a word's ends, so `cp n [u]p` and `cp n u[p]` give the words `u]p` and `u[p`
+(measured). `u]p` holds no glob character, so step 1 checks `lexists("u]p")`, which is False. `u[p`
+reaches step 3, but `fnmatch` reads a lone `[` literally and matches nothing. Both wrote `n` through
+`up` in Git Bash (measured), and both would have stayed allowed, making this change's own SHALL
+false. The sibling change's D11 also yields the bracket-kept words `[u]p` and `u[p]`, which reach
+step 3 as globs. Their relaxed patterns `*p` and `u*` match `up`, which is judged outside.
+
 **Cost.** One `lexists` per separator-less word: 10 µs when the entry does not exist, 18 µs when it
 does (measured). Plus one `realpath` per word that names an entry, and the glob listings, which are
 charged to the sibling change's per-`_decide` budget. **What it refuses:** a bare mention of a link
@@ -387,11 +446,19 @@ Named in full, because they fall on ordinary work:
   this machine holds such a link now. **(Operator, `B4-dep-links`)** Accepted and filed as **F444**
   (`scripts/drive/FINDINGS.md`), which must be fixed before a JavaScript project is registered.
 
+- **(R6) A PowerShell member access on a directory variable.** In PowerShell a `.` after a
+  reference is member access, and `.` is not a name character, so `$PWD.Path`, `$HOME.Length` and
+  `$PROFILE.CurrentUserAllHosts` are refused. `$PWD.Path` is the idiomatic way to get the current
+  directory (measured: it prints the location), so it names the same directory `$PWD` does, within
+  the operator's accepted `$PWD` cost. `$HOME.Length` names no directory and is a false refusal.
+
 ## Residuals, named
 
 - **A user or tool variable naming a directory** (`D=/tmp; cp x $D`, `$VIRTUAL_ENV`, `${!ref}`),
   and a computed one (`$(mktemp -d)`, `(Resolve-Path ~)`). Such a variable is not judged, and the
   requirement says so.
+- **(R6) PowerShell 7's `Temp:` handed on from the Bash tool** (`pwsh -c 'Copy-Item x Temp:'`),
+  allowed today and after (D1).
 - **PowerShell drives that are not filesystem locations** (`Env:`, `Function:`, `HKLM:`…) and
   drives created by `New-PSDrive` in an earlier call.
 

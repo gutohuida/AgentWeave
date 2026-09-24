@@ -51,7 +51,10 @@ reference to one SHALL be refused with a reason saying where it points cannot be
 begins the word or an option's value, or follows a colon within it, and no name character follows it,
 since whatever is joined on names that directory or a sibling of it. This holds for every spelling
 the dialect accepts for the reference, including braces, a scope or provider prefix, and a nested
-command interpreter's percent form. A reference the outer shell will not expand, because it is
+command interpreter's percent form, and in a bash command for PowerShell's environment spelling,
+which a nested PowerShell expands. In PowerShell an environment variable is referenced only through
+the environment provider; a script variable that merely shares an environment variable's name, such
+as `$TEMP` or a user's `$tmp`, is not that directory and is one of the other variables below. A reference the outer shell will not expand, because it is
 quoted literally or escaped, SHALL be refused as well, because the word may be handed to an inner
 shell that expands it and the judge cannot tell text from a command handed on. A word whose text
 before its first expansion is the parent directory, or whose text with every expansion removed is
@@ -72,7 +75,7 @@ shell runs in. On a platform with drive letters, where the platform reports that
 exists, the word is an ordinary name, since nothing can be written there. A check of the drive that
 fails for any other reason SHALL count the drive as existing, so that a failure never allows a word
 naming a real drive. Whether the word is judged as a drive or not, the other checks of this
-requirement still apply to it. PowerShell's temporary drive SHALL be judged as the temporary directory. A word with a
+requirement still apply to it. In the PowerShell dialect, PowerShell's temporary drive SHALL be judged as the temporary directory; in a bash command the same text is an ordinary word. A word with a
 second colon, or a longer name before the colon, such as a revision and a path, is not a drive. In
 bash on a platform without drive letters these words are ordinary names.
 
@@ -181,6 +184,19 @@ SHALL NOT be read as a statement that it stays inside.
   scope prefix, or a command names it in a nested command interpreter's percent form
 - **THEN** the command is refused as uncheckable
 
+#### Scenario: A nested PowerShell's environment reference is refused in a bash command
+
+- **WHEN** a bash command hands a nested PowerShell a reference to a directory variable in
+  PowerShell's environment spelling, such as `powershell -c 'Copy-Item x $env:TEMP'`
+- **THEN** the command is refused as uncheckable
+
+#### Scenario: A PowerShell variable sharing an environment variable's name stands
+
+- **WHEN** a PowerShell command names a variable without the environment provider whose name is
+  also an environment variable's, or a user variable, such as the `$tmp` in
+  `$tmp = New-TemporaryFile; Remove-Item $tmp`
+- **THEN** that word does not make the command refused
+
 #### Scenario: Any other bare expansion stands
 
 - **WHEN** a shell command names a separator-less word that is a reference to any other variable,
@@ -205,6 +221,13 @@ SHALL NOT be read as a statement that it stays inside.
 
 - **WHEN** a shell command names a separator-less glob pattern that matches an entry of the
   workspace that is a link resolving outside it
+- **THEN** the command is refused
+
+#### Scenario: A separator-less bracket glob that matches a link is refused
+
+- **WHEN** a shell command names a separator-less glob whose bracket expression begins or ends the
+  word, such as `[u]p` or `u[p]`, and it matches an entry of the workspace that is a link resolving
+  outside it
 - **THEN** the command is refused
 
 #### Scenario: The parent directory before an expansion is refused
@@ -257,6 +280,11 @@ SHALL NOT be read as a statement that it stays inside.
 - **WHEN** on a platform with drive letters, a command names a word such as `of=c:$HOMEPATH`, where
   the drive exists and is the workspace's drive, or `e:$HOMEPATH`, where no drive E exists
 - **THEN** the command is refused as uncheckable
+
+#### Scenario: The temporary drive is PowerShell's only
+
+- **WHEN** a bash command names the word `temp:`, for example as a key in a heredoc
+- **THEN** that word is not judged as the temporary directory
 
 #### Scenario: A revision with a colon is not a drive
 
