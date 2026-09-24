@@ -1,6 +1,6 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/agent_trigger.py` (every call of
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): an independent re-derivation against `hub/hub/api/v1/agent_trigger.py` (every call of
       `finalize_job_run_for_conversation` and `return_run_entries`, and `withdraw_refused_entry`),
       `hub/hub/inbound_queue.py` (`return_run_entries`, `_withdraw_if_queued`), `hub/hub/turn_scheduler.py`
       (the give-up), `hub/hub/api/v1/inbound_queue.py` (the withdrawal route), `hub/hub/run_reconciliation.py`
@@ -9,8 +9,8 @@
       really on for the session at each site? Record in `spec-queue/tracks/B2.md`
 - [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate
       a-retried-firing-records-how-its-work-ended --strict` passes
-- [ ] 0.3 The operator records D1 in `spec-queue/DECISIONS.md` and answers design Open Questions 1
-      and 2. No task below starts before D1 is recorded as *a row is a dispatch*
+- [ ] 0.3 The operator records D1 in `spec-queue/DECISIONS.md` and answers design Open Questions 1,
+      2 and 3. No task below starts before D1 is recorded as *a row is a dispatch*
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -30,11 +30,12 @@ conversation `conv-<case>` and writes the job's queue entry with `origin_type="j
 - [ ] 1.3 The last attempt: the entry at `delivery_attempts=2`; `_record_run_failure_tail`. Assert the
       entry is `withdrawn` with its `abandoned_reason`, and the `JobRun` is `failed` with
       `error_summary` equal to that reason. Record that it FAILS today on the summary (`None`)
-- [ ] 1.4 (F147, `.first()`) On C, insert an `interrupted` `Run` **first** and a `running` `Run` with
-      this test process's pid **second**, and a `JobRun` `in_progress`. `reconcile_stale_job_runs()`
-      leaves it `in_progress`. Record the result today: it depends on the unordered `.first()`, so run
-      it with the older row inserted first and record whether it FAILS (`failed`). If it passes today
-      by luck of rowid order, keep it as a guard and say so
+- [ ] 1.4 (F147, `.first()`) On C, a `JobRun` `in_progress`; an `interrupted` `Run` with the
+      **earlier** `started_at`, and a `running` `Run` with this test process's pid and the later
+      `started_at`. Insert the `running` one **first**, so the test cannot pass by insertion order.
+      `reconcile_stale_job_runs()` leaves the row `in_progress`. FAILS today, deterministically (R2:
+      `ix_runs_conversation_started` orders the unordered query by `started_at`, so `.first()` is
+      the interrupted run whatever the insertion order)
 - [ ] 1.5 Scheduler give-up: a job entry `queued` at `delivery_attempts=2` for an agent whose turn
       the scheduler refuses at request level non-transiently (reuse the refusal fixture in
       `test_a_delivery_attempt_is_counted_where_attempted*` or equivalent), with `JobRun`
@@ -50,8 +51,18 @@ conversation `conv-<case>` and writes the job's queue entry with `origin_type="j
       record names the job run. Record that it FAILS today (the function does not exist)
 - [ ] 1.8 Controls, PASS today and must keep passing: every test in `test_run_reconciliation.py`,
       notably `:168` (no run at all → `failed`), `:197` (dead run, no entry → `failed`), `:236` (live
-      run → `in_progress`); and the refusal case in `test_a_held_agent_is_busy.py` that reads
-      `reconcile_stale_job_runs`
+      run → `in_progress`); and the two refusal cases in `test_a_held_agent_is_busy.py` that read
+      `reconcile_stale_job_runs` (`test_a_held_firing_survives_a_restart`,
+      `test_a_firing_whose_reset_passed_while_the_hub_was_down_survives_a_restart`)
+- [ ] 1.8a (Open Question 3) `test_a_held_agent_is_busy.py:732-739`,
+      `test_a_firing_for_an_agent_with_no_runner_and_no_refusal_still_fails`: if the operator answers
+      *yes*, invert it (the row stays `in_progress`) and rename it; record that the inverted form
+      FAILS today. If *no*, it stays a control and D4 takes the narrower exception
+- [ ] 1.8b `test_scheduler.py:1289-1328` (spawn fails): await every background run until
+      `agent_trigger._background_runs` is empty (the retries are scheduled by the re-drain after the
+      first snapshot), then assert the entry `withdrawn` and the `JobRun` `failed` with the
+      abandonment reason as `error_summary`. Add an intermediate assertion after the first attempt
+      only: `in_progress`. Record that the intermediate assertion FAILS today (`failed`)
 - [ ] 1.9 The operator's follow-up: a job entry delivered in run R on C, plus an operator entry
       (`origin_type="operator"`) `queued` on C. R completes. The `JobRun` reads `completed`. Control
       today (passes), must keep passing — it pins D1's *job input* scope
@@ -64,13 +75,18 @@ conversation `conv-<case>` and writes the job's queue entry with `origin_type="j
 - [ ] 2.1 `hub/hub/scheduler.py`: replace `finalize_job_run_for_conversation` with
       `conclude_dispatches_for_conversation(session, conversation_id, status, *, reason=None)`
       (design D1). Two `EXISTS` subqueries; `UPDATE` every `in_progress` row on the conversation.
-      Docstring names this change and D1's decision
+      Docstring names this change and D1's decision. Follow the rename in
+      `hub/tests/test_scheduler.py:46` (and its unit test at `:1333-1373`),
+      `hub/tests/test_flow_holds_the_loop_requirements.py:162`, and the comments that name the old
+      function (`db/models.py:1400`, `run_reconciliation.py:238`, `scheduler.py:1013`, `:3435`,
+      `:3553`, `:3645`, `hub/ui/src/hooks/useSSE.ts:477-479`; a comment-only UI edit needs no
+      bundle refresh)
 - [ ] 2.2 `hub/hub/api/v1/agent_trigger.py`: at `:2050`, `:2193`, `:3065`, `:2521`, `:3159` move the
       call below `return_run_entries`, same session, before the commit (design D2). Delete the
       `if refusal is None:` guard at `:2521`; keep and generalise its comment. At the three failure
       sites pass the abandoned job entry's reason where `abandoned_for_run` names one
 - [ ] 2.3 Conclude on withdrawal (design D3): `turn_scheduler.py` give-up (after its commit, per
-      abandoned job entry), `withdraw_refused_entry`'s caller at `agent_trigger.py:1625`, and the
+      abandoned job entry) and the
       route at `api/v1/inbound_queue.py:259`. Each wraps the call so a raise is logged and does not
       change what the writer answers
 - [ ] 2.4 `hub/hub/run_reconciliation.py` `reconcile_stale_job_runs`: D1's two conditions per row;

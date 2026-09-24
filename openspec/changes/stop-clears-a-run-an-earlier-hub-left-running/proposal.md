@@ -21,9 +21,13 @@ will ever see it exit (`run_liveness.py:8-13`: the registries hold only runs *th
 executes). Then:
 
 - the roster shows the agent busy, because it reads the same column;
-- every turn is refused: `schedule_agent` answers *"agent is already running"* (`turn_scheduler.py:
-  320-331`), and `POST /agent/trigger` answers 409 *"{agent} already has a run in progress."*
-  (`agent_trigger.py:747-754`);
+- every turn waits: `schedule_agent` answers *"agent is already running"* (`turn_scheduler.py:
+  325-331`), so `POST /agent/trigger` answers **200 `queued`** with that `waiting_reason`
+  (`agent_trigger.py:1597-1672`), and `GET /queue/{agent}/status` states the same sentence
+  (`api/v1/inbound_queue.py:120-129`). (R2: R1 said the trigger answers 409 *"already has a run in
+  progress"* (`agent_trigger.py:747-754`). That guard sits in `trigger_agent_directly`, whose only
+  caller is `_attempt_turn` (`turn_scheduler.py:408`), which checks for a `running` run first and
+  returns before reaching it, so an operator does not see that 409 in this state);
 - `POST /agent/{agent}/stop` finds the row, finds no handle in either registry, and answers **409
   *"{agent}'s run is not in a stoppable state right now."*** (`agent_trigger.py:1726-1732`).
 
@@ -50,9 +54,10 @@ Decision D11 (recommended, `spec-queue/tracks/B2.md`): the trigger for a stale-r
   `status: "interrupted"`.
 - A run **this** process started and has not registered keeps today's 409: that window is real and
   the run will settle itself.
-- The refusals that report the agent busy name the way out when the run is an earlier process's:
-  `POST /agent/trigger`'s 409 and the scheduler's waiting reason say that the run was left by an
-  earlier Hub and that Stop clears it.
+- The reasons that report the agent busy name the way out when the run is an earlier process's:
+  the scheduler's waiting reason (which `POST /agent/trigger` answers as its `waiting_reason`) and
+  the queue status route's reason say that the run was left by an earlier Hub and that Stop clears
+  it.
 - The single-run body of `reconcile_interrupted_runs` is extracted so startup and Stop share one
   definition of *reconciled*.
 
@@ -65,9 +70,15 @@ Decision D11 (recommended, `spec-queue/tracks/B2.md`): the trigger for a stale-r
 ## Impact
 
 - `hub/hub/run_liveness.py`, `hub/hub/run_reconciliation.py`, `hub/hub/api/v1/agent_trigger.py`
-  (stop route, trigger refusal), `hub/hub/turn_scheduler.py` (waiting reason).
-- Routes changed: `POST /agent/{agent}/stop`, `POST /agent/trigger` (refusal text only). What they
-  return when the functions they call raise is in design D4.
+  (stop route), `hub/hub/turn_scheduler.py` (waiting reason), `hub/hub/api/v1/inbound_queue.py`
+  (queue status reason).
+- Routes changed: `POST /agent/{agent}/stop`; `POST /agent/trigger` and `GET /queue/{agent}/status`
+  (reason text only). What they return when the functions they call raise is in design D4.
+- Neighbours (R2): `an-agent-can-be-paused-and-keeps-its-input` (B3) calls `stop_agent_run` from its
+  pause route, so pausing an agent that holds an earlier process's run would now clear it rather than
+  meet the 409; whichever of the two lands second says so in its design.
+  `why-queued-input-waits-is-told-truthfully` (B1) rewrites how the queue status route derives its
+  reason; the sentence here goes into whichever derivation lands second.
 - No migration, no UI change: the conversation header's Stop already calls this route.
 - Not in scope, and deliberately: `GET /runs` and a per-run cancel route. F168's own bound shows
   neither would clear this state (a cancel hitting the same empty registries has the same 409).

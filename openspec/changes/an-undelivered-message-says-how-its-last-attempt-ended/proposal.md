@@ -48,10 +48,15 @@ the SSE stream has ended"*, so its silent loss mattered. **Both halves are no lo
   served to the conversation by the run facts map (`RunFacts.status`, `.exit_code`), which
   `AgentTimeline` reads as the authoritative outcome (`AgentTimeline.tsx:130-161`: the status line is
   the fast signal, the run row the backstop);
-- the status-line write is now `_record_observation` on its own session (`agent_trigger.py:2611-2625`,
-  F359): a lock is retried and then dropped with a warning naming the run (`:1939-1956`), and any
-  other error propagates to the catch-all, which logs it naming the run and leaves the terminal
-  status alone (`_record_run_failure_tail`, `:2025-2031`).
+- on the process path the status-line write is now `_record_observation` on its own session
+  (`agent_trigger.py:2611-2625`, F359): a lock is retried and then dropped with a warning naming the
+  run (`:1939-1956`), and any other error propagates to the catch-all, which logs it naming the run
+  and leaves the terminal status alone (`_record_run_failure_tail`, `:2025-2031`). **R2: the Codex
+  path does not use `_record_observation`.** It writes the line on the finalize block's own session
+  after that block's commit (`agent_trigger.py:3206-3216`), so any error there, a lock included, goes
+  straight to the same catch-all: logged naming the run, the committed terminal status untouched,
+  and the re-drain still run by the tail. The amended requirement holds on both paths; only the
+  retry is process-path only.
 
 So the outcome F273 feared (*"the row that was supposed to say how it ended is silently absent"*)
 now costs a refresh's latency, not the fact. What is still wrong is the spec, which requires the line

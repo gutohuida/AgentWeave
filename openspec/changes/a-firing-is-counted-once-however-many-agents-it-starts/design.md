@@ -43,7 +43,7 @@ Readers of `run_count`:
 
 ## Decisions
 
-### D1 — The counter counts firings that started at least one agent
+### D1 — The counter counts firings that queued work for at least one agent
 
 Delete the increment in `_stage_selection`. The primary path's increment already happens at the
 boundary F11 chose, before any extra selection is staged (`:3444` commits before

@@ -1,6 +1,8 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/agent_trigger.py` (`stop_agent_run`,
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B2.md`; the UI's Stop does settle on
+      `run_interrupted`: `useSSE.ts:474-487` invalidates the agents query for it, and
+      `AgentOutputPanel.tsx:315` clears the stopping state once the agent no longer reads `running`): an independent re-derivation against `hub/hub/api/v1/agent_trigger.py` (`stop_agent_run`,
       `trigger_agent_directly`'s running guard, every writer of `Run` rows), `hub/hub/run_reconciliation.py`,
       `hub/hub/run_liveness.py`, `hub/hub/turn_scheduler.py` (`_attempt_turn`) and `hub/hub/pty_runner.py`
       (`pid_alive`, `terminate_process_tree`). Check in particular: is `trigger_agent_directly` really
@@ -21,8 +23,10 @@ and seed `started_at` either side of it.
       in it. `POST /agent/{agent}/stop` answers **200** `status: "interrupted"`; the run is
       `interrupted` with `ended_at`; the entry is `queued`; a `run_interrupted` event is persisted.
       Record that it FAILS today (409)
-- [ ] 1.2 After 1.1, `POST /agent/trigger` for the agent is not refused with *"already has a run in
-      progress"*. Record that it FAILS today
+- [ ] 1.2 Before Stop, with 1.1's seed and a runner bound, `POST /agent/trigger` answers 200
+      `queued` (it does today: R2). After Stop, the queued input is delivered: a new `Run` starts on
+      the agent, with no Hub restart. Record that the second half FAILS today (the input waits
+      behind the stale row)
 - [ ] 1.3 The surviving process: spawn a real sleeper (`subprocess.Popen([sys.executable, "-c",
       "import time; time.sleep(60)"])`), seed its pid. Stop answers 200, and the sleeper has exited
       (`poll()` is not `None` within a few seconds). Record that it FAILS today (409, sleeper alive).
@@ -37,9 +41,13 @@ and seed `started_at` either side of it.
 - [ ] 1.7 Control, PASSES today and must keep passing: every test in `test_run_reconciliation.py`,
       including `:132` (`test_run_with_live_pid_is_left_running`), which pins the startup skip this
       change deliberately does not touch
-- [ ] 1.8 The busy reasons: with 1.1's seed, `POST /agent/trigger` answers 409 containing
-      `earlier Hub` and `Stop`; `schedule_agent` returns a `waiting_reason` containing the same, with
-      `terminal_failure=False`. Record that both FAIL today
+- [ ] 1.8 The busy reasons: with 1.1's seed, `POST /agent/trigger` answers 200 `queued` whose
+      `waiting_reason` contains `earlier Hub` and `Stop`; `schedule_agent` returns the same
+      `waiting_reason` with `terminal_failure=False`; `GET /queue/{agent}/status` states it too.
+      Record that all three FAIL today (`agent is already running`)
+- [ ] 1.9 Stop's commit raises after `reconcile_run` staged its event: no `run_interrupted` frame is
+      broadcast (capture `sse_manager.broadcast`), and the run reads `running`. Record that it FAILS
+      today (the function does not exist; the startup loop broadcasts before its commit)
 
 ## 2. The fix
 
@@ -47,7 +55,8 @@ and seed `started_at` either side of it.
 - [ ] 2.2 `hub/hub/run_reconciliation.py`: extract `reconcile_run` (design D1); `reconcile_interrupted_runs`
       calls it with no change in effect (1.7 is the check)
 - [ ] 2.3 `hub/hub/api/v1/agent_trigger.py` `stop_agent_run`: design D2 and D4
-- [ ] 2.4 Design D3's two sentences, at `agent_trigger.py:747-754` and `turn_scheduler.py:328-331`
+- [ ] 2.4 Design D3's sentence, from one helper, at `turn_scheduler.py:325-331`,
+      `api/v1/inbound_queue.py:128-129` and `agent_trigger.py:747-754`
 - [ ] 2.5 Run group 1; full `py -3.11 -m pytest hub/tests/ -q`, count inline; any moved assertion is
       named and explained
 - [ ] 2.6 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, clean

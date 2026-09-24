@@ -24,7 +24,7 @@ firing, correlated to its run through its own conversation); a `Run` row is an *
 | Finalize, process transport | `:2521-2528` | finalize `final_status` unless a refusal, then return if `failed` and no binding conflict | if `failed` |
 | Finalize, Codex | `:3159-3163` | finalize `final_status`, then return if `failed` and no binding conflict | if `failed` |
 | Startup reaper | `run_reconciliation.py:258-281` | `failed` if `.first()` Run is not running and no refusal wait | — |
-| Firing's own schedule refusal | `scheduler.py:3471-3477` | `failed` with `waiting_reason` | input stays queued (not a run) |
+| Firing's own schedule refusal | `scheduler.py:3471-3477` (primary), `:3611-3616` (each extra selection, `_start_additional_turns`) | `failed` with `waiting_reason` | input stays queued (not a run) |
 
 `finalize_job_run_for_conversation` (`scheduler.py:2282-2303`) flips the newest `in_progress` row on
 the conversation and nothing else.
@@ -34,10 +34,13 @@ the conversation and nothing else.
 | Writer | Line | Today's effect on the dispatch |
 |---|---|---|
 | Scheduler gives up at the limit | `turn_scheduler.py:600-640` | none (the row was already `failed` by the first attempt's run end, or by `scheduler.py:3471`) |
-| Request-level refusal withdrawn | `agent_trigger.py:1625`, `inbound_queue.py:440` | none |
+| Request-level refusal withdrawn | `agent_trigger.py:1625`, `inbound_queue.py:440` | none, and never can be: the only caller withdraws the trigger route's own entry, always `origin_type="operator"` (`agent_trigger.py:1567-1571`). **Not a D3 writer** (R2) |
 | Operator withdraws | `api/v1/inbound_queue.py:259-272` | none |
 
-Today none of these needs to conclude anything, because the first failing attempt already did. Once
+Today the give-up needs to conclude nothing, because the first failing attempt already did. The
+operator's withdrawal **already strands a row today** (R2): a job's input queued behind a busy agent
+(`"agent is already running"`, `terminal_failure=False`, so `scheduler.py:3472` does not fire) is
+withdrawn, and its `in_progress` row waits for the next Hub start. Once
 D2 below stops that, each of them becomes the last event of a dispatch and must conclude it, or the
 row strands `in_progress` until the next Hub start. That would break *"A firing that starts no agent
 SHALL NOT be reported as running"* (`loop-firing-accountability/spec.md:6`) in a new way.
@@ -111,7 +114,6 @@ that entry's conversation:
 | Writer | Status | Reason |
 |---|---|---|
 | `turn_scheduler` give-up | `failed` | the entry's `abandoned_reason` |
-| `withdraw_refused_entry` | `failed` | the refusal's detail |
 | operator withdrawal | `stopped` | `"Withdrawn by the operator"` |
 
 `stopped` is an existing `JobRun` status (`db/models.py:1395`), written today when a run is stopped.
@@ -123,8 +125,7 @@ raises, the withdrawal has already happened and cannot be un-said, so the route 
 naming the dispatch and still answers 200 with the withdrawn entry**. The row stays `in_progress`,
 which the startup reaper then concludes (D4: no queued input, no running run). The route must not
 answer 500 for a withdrawal that happened: the operator would retry it and be told *not queued*.
-`withdraw_refused_entry` and the scheduler give-up are not routes; each logs and continues, for the
-same reason.
+The scheduler give-up is not a route; it logs and continues, for the same reason.
 
 ### D4 — The reaper asks the same question
 
@@ -135,18 +136,23 @@ construction: the question is *is any run on this conversation running*, which h
 `_waits_on_a_refusal` (`:214-229`) is deleted. The job input it protects is queued, so D1 already
 leaves it alone.
 
-**One stance of the D10 comment is reversed, deliberately.** That comment
+**One stance of the D10 comment is reversed. R2: this is a decided, pinned case, so it is Open
+Question 3, not taken here.** That comment
 (`run_reconciliation.py:251-257`) keeps failing a firing *"waiting for a runner to be bound"*
 because the Hub cannot promise that repair. With D1, a row whose **retried** input is queued for an
 agent that has since lost its runner stays `in_progress`. That is what the queue itself promises
 (F96, `turn_scheduler.py:670-673`: *"the entry waits, the operator performs the repair, and binding
 a runner delivers it"*). The card does not show the loop as firing (`firing_active` needs a running
 `Run`). A firing whose **first** delivery is refused that way is unaffected: `scheduler.py:3471-3477`
-concludes it `failed` at once, before any reaper.
+concludes it `failed` at once, before any reaper. What is affected is a row left `in_progress` with
+queued input and no runner: after a retry (new with D2), or after a Hub that died between the
+firing's commit (`:3444`) and `:3472`. That second shape is exactly what
+`test_a_held_agent_is_busy.py:732-739` seeds, and it inverts.
 
 ### D5 — The firing's own refusal is unchanged here
 
-`scheduler.py:3471-3477` concludes a dispatch `failed` when its turn did not begin, even though its
+`scheduler.py:3471-3477` (and `:3611-3616` for a wide flow's extra selections) concludes a dispatch
+`failed` when its turn did not begin, even though its
 input stays queued and may be delivered later. That is the same shape as F123 (a later success under
 a `failed` row), and D1 argues against it. It is **not** changed here, because it is the operator's
 decision of 2026-08-21 (`2026-08-21-diagnose-and-clear-a-broken-loop` design D1, *"reuse `failed`"*,
@@ -171,11 +177,36 @@ rows, which of them were later retried to completion without re-deriving F147's 
 ## Open Questions
 
 1. **Should a firing whose turn did not begin wait too, rather than conclude `failed`?** *(Reverses
-   an operator decision, so it is asked, not taken.)* Its input stays queued and is delivered when
-   the repair is made (F96). If it then completes, the history reads `failed`. *Recommended:* yes,
-   in a follow-up change that also amends `loop-firing-accountability`'s first requirement: the row
-   stays `in_progress` with the reason in `error_summary`, and the card shows the reason beside a
-   neutral status. Not in this change, because it changes the requirement's text
-   (*"reach a terminal state"*) rather than its intent.
+   an operator decision, so it is asked, not taken.)* **What the operator decided on 2026-08-21**
+   (`archive/2026-08-21-diagnose-and-clear-a-broken-loop/design.md` D1, and its spec delta, now
+   `loop-firing-accountability`'s first requirement): *"A firing whose selection did not start is not
+   `in_progress`. It becomes a terminal `JobRun` state carrying the reason"*, and *"That state is
+   `failed` — operator decision, 2026-08-21. No new vocabulary."* Rejected in the same decision:
+   `skipped` (reads *nothing happened*), a new `not_started` (*"worth revisiting only together with
+   the `JobCard` branch"*), inferring it later from the absence of a `Run`, and *"leaving
+   `in_progress` and fixing only `firing_active`'s derivation"* (*"every other reader would inherit
+   the lie"*). The requirement text: *"the firing's record SHALL reach a terminal state carrying the
+   stated reason, without waiting for any later sweep."* That decision was made before F123/F147
+   showed that such input is later delivered (F96) and a completed run then finds no `in_progress`
+   row. Its sites: `scheduler.py:3471-3477` and `:3611-3616`. *Recommended:* yes, in a follow-up
+   change that amends that requirement: the row stays `in_progress` with the reason in
+   `error_summary`, and the card shows the reason beside a neutral status. The 08-21 objection to
+   `in_progress` was a loop *reported as firing*; `firing_active` now requires a `running` `Run`
+   (`api/v1/jobs.py:454-466`), so that objection no longer holds. Not in this change, because it
+   changes the requirement's text (*"reach a terminal state"*) rather than its intent.
 2. **Is `stopped` right for an operator's withdrawal?** *Recommended:* yes (D3). The alternative,
    `failed`, reads red for the operator's own choice.
+3. **May the startup reaper leave open a row whose queued job input waits on an agent with no
+   runner?** *(R2. Reverses a pinned case, so it is asked.)* D4 leaves every row with queued job
+   input `in_progress`. That covers the F123 crash (input handed back, delivered at startup), and it
+   also covers input waiting on a repair the Hub cannot promise. The 2026-08-21 decision D2 measured
+   the reaper turning exactly that row (`job-0b490274`, `runner_id` NULL) from `in_progress` to
+   `failed` and called it correct. `a-spent-allowance-holds-the-queue` D10 kept that verdict
+   deliberately (*"a firing waiting for a runner to be bound waits on a repair the Hub cannot
+   promise, so the existing rule stands for it"*), and `test_a_held_agent_is_busy.py:732-739` pins it.
+   *Recommended:* yes, answered together with Question 1, because it is the same principle (input
+   the queue still holds is not a failed dispatch; F96 promises its delivery on repair), and the loop
+   is not reported as firing either way. *If no:* D4 keeps a narrower exception: it leaves the row
+   open only when its queued job input's agent has a runner bound or a refusal hold (today's
+   `_waits_on_a_refusal`, widened), and fails it otherwise. The F123 crash is still fixed, the pinned
+   test stays a control, and a crashed firing for an unbound agent reads `failed` as today.

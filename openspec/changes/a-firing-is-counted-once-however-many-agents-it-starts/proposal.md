@@ -60,5 +60,12 @@ The counter on the job is therefore a count of **firings**, and it must not move
   give the same boolean, because every firing that reaches `_stage_selection` has already
   incremented once at `:3443`. Unaffected.
 - Tests that move on purpose: `test_flow_width.py:424` (2 → 1); `jobCard.test.tsx:391-412`
-  (`'0 runs'` → `'0 fired'`).
+  (`'0 runs'` → `'0 fired'`) and `:433-435` (`'1 runs'` → `'1 fired'`; R2 found this second one).
+- **What counts (R2).** The increment sits where the firing's input is queued (`scheduler.py:3437-3444`),
+  before `schedule_agent` runs (`:3471`), and its comment says a turn that then fails to begin still
+  counts. R1's wording *"firings that started at least one agent"* was therefore not what the code
+  counts; the spec delta and the field description now say *queued work for at least one agent*.
+- Neighbours (R2): `a-flow-stages-its-review-in-the-dispatch` and
+  `a-flows-own-moves-are-recorded-as-the-flows` (both open) edit `_stage_selection` too, in other
+  lines; whichever lands second rebases.
 - No migration, no route shape change.

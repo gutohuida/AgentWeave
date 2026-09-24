@@ -1,6 +1,6 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: an independent re-derivation of this proposal against `hub/hub/scheduler.py` (every
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): an independent re-derivation of this proposal against `hub/hub/scheduler.py` (every
       `run_count` write; `_do_fire_job`, `_stage_additional_selections`, `_stage_selection`) and every
       reader of `run_count` in `hub/hub`, `hub/ui/src` and `src/`. Rebuild design's table from `grep`
       before reading it. Record in `spec-queue/tracks/B2.md`
@@ -25,15 +25,16 @@
       firing does not count) and `test_a_loop_staffs_the_agent_it_names.py:336`
 - [ ] 1.5 `hub/ui/src/__tests__/jobCard.test.tsx:391-412`: expect `'0 fired'` where it expects
       `'0 runs'`, and add `expect(screen.queryByText(/\bruns\b/)).not.toBeInTheDocument()` against the
-      badge row. Add a case `run_count: 3` renders `'3 fired'`. Record that both FAIL today
+      badge row. Update `:433-435` (`'1 runs'` → `'1 fired'`). Add a case `run_count: 3` renders
+      `'3 fired'`. Record that they FAIL today
 
 ## 2. The fix
 
 - [ ] 2.1 `hub/hub/scheduler.py` `_stage_selection`: delete `job.run_count += 1` (`:3756`) and
       rewrite the comment at `:3753-3755` to say the counter counts firings (this change, D1) and
       the row counts the dispatch
-- [ ] 2.2 `hub/hub/schemas/jobs.py:213`: `run_count: int = Field(description="Firings that started
-      at least one agent. A firing that starts several agents counts once.")`
+- [ ] 2.2 `hub/hub/schemas/jobs.py:213`: `run_count: int = Field(description="Firings that queued
+      work for at least one agent. A firing that queues work for several agents counts once.")`
 - [ ] 2.3 `hub/ui/src/components/jobs/JobCard.tsx:435`: `{job.run_count} fired`. Rewrite the F25
       comment (`:436-442`) and the one at `:362-363` to the firing wording
 - [ ] 2.4 `make ui` (or `scripts/refresh_ui_bundle.py`); commit `hub/ui/src` and

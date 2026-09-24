@@ -1,6 +1,6 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: an independent re-derivation. `grep -n '"run_id"' hub/hub/scheduler.py hub/hub/api/v1/jobs.py`
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): an independent re-derivation. `grep -n '"run_id"' hub/hub/scheduler.py hub/hub/api/v1/jobs.py`
       and every other persist or broadcast of a `JobRun` id; every reader of `run_id` out of event
       data in `hub/hub`, `hub/ui/src` and `scripts/drive`. Rebuild design's reader table before
       reading it. Record in `spec-queue/tracks/B2.md`

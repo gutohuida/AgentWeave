@@ -24,7 +24,11 @@ What each reader of these events reads, at HEAD:
 | Agent timeline run facts | `hub/hub/api/v1/agents.py:883-891` | `run_id` of **every** event returned | yes: it stops looking up `JobRun` ids as runs |
 | SSE tests | `hub/ui/src/__tests__/useSSE.test.tsx:128-144`, `:198-225` | frame type and `id` | no |
 | Event summary tests | `hub/ui/src/__tests__/eventSummary.test.ts:154-168`, `:231` | as above | no |
-| Hub tests | `grep -rn run_id hub/tests` near job events | none found in R1 | no |
+| Hub tests | `grep -rn run_id hub/tests` near job events | none (R2: every `["run_id"]` read in `hub/tests` is of a trigger answer or a run event) | no |
+| MCP `run_job` | `mcp_server.py:929-937` | passes the route's body through; reads no key | no |
+| Drive scripts reading `POST /jobs/{id}/run`'s answer | 13 scripts under `scripts/drive/` call the route | none reads `run_id` from its answer (R2 `grep`) | no |
+| Drive scripts collecting `run_id` from every event | `scripts/drive/d1_aturn_runs.py:51`, `d1_aturn_window.py:33-34` | `run_id` of every event, like the timeline route | yes, the same way as the timeline: they stop collecting `JobRun` ids |
+| B9's generated event vocabulary (`every-event-the-hub-sends-reaches-the-app`) | `hub/ui/src/lib/sseEventKinds.generated.ts` (planned) | event **kinds** only; it changes no payload | no. `job_run_failed` is persisted only, never broadcast, as B9 also records |
 
 `JobRun.requested_by_run_id` (`db/models.py:1421`) holds a real `Run` id and keeps its name.
 
@@ -50,8 +54,9 @@ meaning for a shared key. The next event with a second kind of id is the case it
 ## Risks / Trade-offs
 
 - **An external script reading `run_id` from `job_fired`** breaks. The drive harnesses under
-  `scripts/drive/` are the only such scripts in the repo; R1's `grep` found none reading it. R2 should
-  re-check.
+  `scripts/drive/` are the only such scripts in the repo. R2 re-checked: none reads it from a job
+  event or from `run_job`'s answer; two collect it from every event and are better off without the
+  `JobRun` ids.
 - **An agent that read `run_id` from `run_job`'s MCP result** sees `job_run_id` instead. No MCP tool
   accepts a `JobRun` id, so there is nothing the agent could have done with it.
 

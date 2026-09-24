@@ -48,7 +48,12 @@ Extract the loop body of `reconcile_interrupted_runs` (`run_reconciliation.py:82
 `interrupted`, `ended_at`, `expire_pending_for_run`, `record_turn_usage(sample=None)`,
 `return_run_entries`, divergence deferral, `abandoned_for_run`, `run_interrupted` persisted and
 broadcast) into `reconcile_run(db, run) -> ReconciledRun`, returning what the caller needs to
-schedule and evaluate after its commit. Startup calls it in its loop, unchanged in effect. Stop calls
+schedule, evaluate **and broadcast** after its commit. R2: today the loop broadcasts `run_interrupted`
+*before* the commit (`run_reconciliation.py:134`, commit at `:137`). At startup no client is
+subscribed yet, so the order is invisible there; on Stop it is not. If Stop's commit then fails (D4),
+the app would already have been told the run was interrupted while the row still reads `running`.
+So `reconcile_run` stages the event row in the session and returns the payload; each caller
+broadcasts after its own commit. Startup calls it in its loop, unchanged in effect. Stop calls
 it for one run. The dispatch conclusion added by `a-retried-firing-records-how-its-work-ended` (if
 that change lands first) belongs inside it too, so both callers conclude a firing the same way.
 
@@ -82,16 +87,23 @@ process on a pid-only check.
 *Rejected:* **`GET /runs` + a per-run cancel route.** F168's own bound: the state is one run per agent,
 and a cancel hitting the same empty registries has the same 409.
 
-### D3 — The busy refusals name the way out
+### D3 — The busy reasons name the way out
 
-Where the running run is an earlier process's (the same test as D2):
+Where the running run is an earlier process's (the same test as D2), one helper builds the sentence
+*"{agent} has a run left running by an earlier Hub process ({run_id}). Stop it to clear it."* and
+it is used by:
 
-- `trigger_agent_directly`'s 409 (`:747-754`) reads *"{agent} has a run left running by an earlier Hub
-  process ({run_id}). Stop it to clear it."*
-- `turn_scheduler._attempt_turn`'s waiting reason (`:328-331`) reads the same, still
-  `terminal_failure=False`: the input keeps waiting, and Stop's re-drain delivers it.
+- `turn_scheduler._attempt_turn`'s waiting reason (`:325-331`), still `terminal_failure=False`: the
+  input keeps waiting, and Stop's re-drain delivers it. `POST /agent/trigger` answers this as its
+  `waiting_reason` with **200 `queued`** (`agent_trigger.py:1644-1672`), which is where the operator
+  reads it (`AgentOutputPanel.tsx`'s `queuedNotice`);
+- `GET /queue/{agent}/status`'s reason (`api/v1/inbound_queue.py:128-129`), which the queue card
+  reads without sending anything;
+- `trigger_agent_directly`'s 409 (`:747-754`), for consistency only. R2: it is not reachable in this
+  state from any route, because its one caller (`_attempt_turn`, `turn_scheduler.py:408`) returns on
+  the same `running` check first. No test targets it.
 
-Otherwise both keep today's text.
+Otherwise all three keep today's text.
 
 ### D4 — What the route returns when what it calls raises
 
@@ -110,6 +122,10 @@ Otherwise both keep today's text.
 - **Clock steps.** A wall-clock step backwards after boot could make a run this process started read
   as earlier. It would then be terminated by handle-less Stop, which for a run of this process is
   the *spawned-but-not-registered* window only, milliseconds wide. Accepted.
+
+- **A Codex app-server run records no pid** (the only `pid` write is on the PTY path,
+  `agent_trigger.py:2240`). For such a run D2 cannot end a surviving app-server; it reconciles the
+  run and the answer says no process was ended. Codex is not driven on this machine.
 
 ## Migration Plan
 

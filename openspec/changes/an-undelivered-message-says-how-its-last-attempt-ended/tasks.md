@@ -1,6 +1,6 @@
 ## 0. Rounds and decision
 
-- [ ] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/agent_chat.py` (both chat routes'
+- [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): an independent re-derivation against `hub/hub/api/v1/agent_chat.py` (both chat routes'
       assembly order, `_queued_entries_for`, `_run_facts_for`), `hub/hub/api/v1/agents.py` (the
       timeline's run facts), `hub/hub/schemas/agents.py` (`RunFacts`), `hub/hub/api/v1/agent_trigger.py`
       (every write of `Run.error`; the status-line write and what happens when it raises),

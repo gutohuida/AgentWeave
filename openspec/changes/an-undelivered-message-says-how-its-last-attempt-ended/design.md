@@ -75,7 +75,9 @@ three times. One line under the message says it once.
 
 ### D3 — `queue_entry_abandoned` refreshes the conversation
 
-Add it to `QUEUE_EVENT_TYPES` (`agentChat.ts:284-290`). Its payload carries `agent`
+Add it to `QUEUE_EVENT_TYPES` (`agentChat.ts:284-290`). R2 checked that the frame reaches the hooks
+at all: `queue_entry_abandoned` is already in `useSSE`'s dispatch allowlist (`useSSE.ts:21-68`), so
+the one-line addition fires in production without B9's change. Its payload carries `agent`
 (`turn_scheduler.py:641-647`, and `_report_abandoned_entries` on the run path), which is what
 `eventTargetsAgent` matches (`:334-335`).
 

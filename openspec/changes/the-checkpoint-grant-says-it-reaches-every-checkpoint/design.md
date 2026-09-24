@@ -32,7 +32,11 @@ In the UI: the type `hub/ui/src/api/checkpoints.ts:14`, and test fixtures in
 
 In the Hub tests: `hub/tests/test_checkpoint_access.py` seeds `visibility` in its `_checkpoint`
 helper (`:49-56`), and one test exists only for the unreachable state:
-`test_a_granted_peer_still_cannot_read_a_private_checkpoint` (`:96-104`).
+`test_a_granted_peer_still_cannot_read_a_private_checkpoint` (`:96-104`). R2 found two more writers
+R1's table missed: `hub/tests/test_checkpoint_record.py:541` and `:732` construct
+`Checkpoint(..., visibility="private")`, which raise once the column leaves the model (group 3).
+`hub/tests/test_migrations.py:2390` and `:3058-3086` write the column in raw SQL against older
+revisions (the latter upgrades only to `0097`), and are unaffected.
 
 ## Decisions
 
@@ -73,6 +77,19 @@ already lists exactly what the removal touches.
 - **An external reader of `CheckpointSummary.visibility`.** None in the repo (`grep` above); MCP's
   `list_checkpoints`/`read_checkpoint` go through the same routes and an agent reading the field
   would have read `project` every time.
+
+- **Recreating `checkpoints` under B8's index (R2).** SQLite cannot `DROP COLUMN` a column named in
+  a table-level `CHECK` (`ck_checkpoints_visibility`), so this migration must use
+  `batch_alter_table`, which rebuilds the table and re-creates its indexes from reflection. If B8's
+  `a-checkpoint-is-handed-over-once-and-says-where-it-went` lands first, its partial unique index
+  `ix_checkpoints_one_handover_per_conversation` (`... WHERE` clause) is on this table, and a rebuild
+  that lost the `WHERE` would turn it into a full unique index on `conversation_id`. The migration
+  re-creates that index explicitly after the batch if it existed, and the F329 parity test
+  (`test_migrations.py:3669`, DDL of `create_all`+alembic against alembic+`create_all`) is the check.
+- **Same function as B7.** `worker-spend-counts-against-the-budget` (B7) adds parameters to
+  `generate_checkpoint`, whose `visibility` parameter this change removes; whichever lands second
+  rebases. B7 and B8 each also name migration `0106`; numbers are assigned at IMPL in landing order,
+  not here.
 
 ## Migration Plan
 

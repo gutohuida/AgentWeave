@@ -40,9 +40,16 @@ when the input went back to the queue"* (`:3166-3169`). This change makes that t
 the exception.
 
 **A second defect in the reaper (F147).** `reconcile_stale_job_runs` correlates a row to its run
-with an unordered `.first()` over every `Run` on the conversation (`run_reconciliation.py:265-268`).
-After any retry there are two or more. A crash during a retried firing can read the older
-`interrupted` row and write off a firing that is running.
+with a `.first()` over every `Run` on the conversation, with no `ORDER BY`
+(`run_reconciliation.py:265-268`). After any retry there are two or more. **R2 settled that it is
+not luck:** the only index leading on `runs.conversation_id` is `ix_runs_conversation_started`
+(`conversation_id, started_at`; `db/models.py:1239`, migration `0017`), SQLite's plan for the query
+is `SEARCH runs USING INDEX ix_runs_conversation_started`, and rows come back in `started_at` order,
+so `.first()` is **always the earliest-started run** (checked with `EXPLAIN QUERY PLAN` against that
+schema: a `running` row inserted first still came back second). A crash during a retried firing
+therefore always reads the older `interrupted` or `failed` row and writes off a firing that is
+running. Today it is latent only because every retried row is already `failed` by then; once this
+change keeps the row open, it would fire every time.
 
 Decision D1 (recommended answer, `spec-queue/tracks/B2.md`): a `JobRun` row is a **dispatch**, one
 agent's share of one firing. An attempt is a `Run`. A dispatch has concluded when its input has, not
@@ -59,15 +66,21 @@ when one attempt has.
   `:2521` is subsumed: its input is queued, so the rule does not hold.
 - **Input the Hub or the operator takes out of the queue concludes its dispatch** (design D3): the
   scheduler giving up at the delivery limit (`turn_scheduler.py:600-640`) → `failed` with the
-  abandonment reason; a request-level refusal (`withdraw_refused_entry`, `agent_trigger.py:1625`) →
-  `failed` with the refusal; the operator's withdrawal (`api/v1/inbound_queue.py:259-272`) →
-  `stopped`.
+  abandonment reason; the operator's withdrawal (`api/v1/inbound_queue.py:259-272`) → `stopped`.
+  (R1 also listed `withdraw_refused_entry`, `agent_trigger.py:1625`. R2 removed it: its only caller
+  withdraws the entry the trigger route itself just wrote, always `origin_type="operator"`
+  (`agent_trigger.py:1567-1571`), so it can never withdraw job input.) The operator's withdrawal
+  strands a row **today** as well, not only after this change: withdraw a job's input while its
+  agent is busy and the row stays `in_progress` until the next Hub start.
 - **The startup reaper uses the same rule** (design D4): it leaves a row whose conversation holds
   queued job input, and asks whether *any* run on the conversation is running (an `EXISTS`), not
-  whichever `.first()` returns. `_waits_on_a_refusal` is deleted as a subset.
-- A firing whose turn did not begin (`_do_fire_job`'s `terminal_failure` branch, `scheduler.py:
-  3471-3477`) is **unchanged**: it is concluded `failed` at once, as `loop-firing-accountability`
-  requires. Whether that verdict should wait too is Open Question 1.
+  whichever `.first()` returns. `_waits_on_a_refusal` is deleted as a subset. **This reverses a
+  pinned, decided case** (a firing queued for an agent with no runner reads `failed` at restart;
+  `test_a_held_agent_is_busy.py:732-739`). Open Question 3 asks the operator.
+- A firing whose turn did not begin (`scheduler.py:3471-3477` for the primary selection,
+  `:3611-3616` for each extra selection of a wide flow) is **unchanged**: it is concluded `failed` at
+  once, as the operator decided on 2026-08-21. Whether that verdict should wait too is Open
+  Question 1.
 
 ## Capabilities
 
@@ -79,7 +92,7 @@ when one attempt has.
 ## Impact
 
 - `hub/hub/scheduler.py` (`finalize_job_run_for_conversation` → `conclude_dispatches_for_conversation`),
-  `hub/hub/api/v1/agent_trigger.py` (five run-end sites, the refused-request withdrawal),
+  `hub/hub/api/v1/agent_trigger.py` (five run-end sites),
   `hub/hub/turn_scheduler.py` (give-up), `hub/hub/api/v1/inbound_queue.py` (operator withdrawal),
   `hub/hub/run_reconciliation.py` (`reconcile_stale_job_runs`).
 - Routes changed: `DELETE /queue/entries/{id}` gains a write. Its answer when that write raises is
@@ -87,6 +100,15 @@ when one attempt has.
 - No migration. No new status. No UI change: `in_progress` already renders (`JobCard.tsx:91-102`,
   neutral), and `firing_active` already requires a `running` `Run` (`api/v1/jobs.py:454-466`), so a
   row waiting for its retry never shows the loop as firing.
-- No existing test is expected to move. `test_run_reconciliation.py:197`
-  (`test_stale_job_run_with_a_dead_run_becomes_failed`) seeds no queue entry, so nothing is handed
-  back and the row still concludes `failed`; it becomes a control (task 1.8).
+- **Existing tests that move (R2; R1 said none would):**
+  - `test_a_held_agent_is_busy.py:732-739`, `test_a_firing_for_an_agent_with_no_runner_and_no_refusal_still_fails`
+    — seeds an `in_progress` row with queued job input and no refusal and asserts `failed` at
+    restart. D4 leaves it `in_progress`. It inverts, or stays, according to Open Question 3;
+  - `test_scheduler.py:1289-1328` (`test_loop_fire_whose_spawn_fails_leaves_the_job_run_failed_not_stuck_in_progress`) — asserts `failed` after awaiting only
+    the background runs that existed before the retries were scheduled. After D2 the first failure
+    requeues (attempt 1 of 3), so the row reads `in_progress` until the third attempt abandons the
+    input. The test must await every retry and then assert `failed` with the abandonment reason;
+  - `test_scheduler.py:46` (used at `:1333-1373`) and `test_flow_holds_the_loop_requirements.py:162` import
+    `finalize_job_run_for_conversation` by name and follow the rename.
+  `test_run_reconciliation.py:197` (`test_stale_job_run_with_a_dead_run_becomes_failed`) seeds no
+  queue entry, so nothing is handed back and the row still concludes `failed`; it stays a control.

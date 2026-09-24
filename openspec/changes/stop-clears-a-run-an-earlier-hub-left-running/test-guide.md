@@ -2,13 +2,14 @@
 
 ## Agent-verifiable
 
-1. **Stop clears it.** Tasks 1.1 and 1.2 fail before (409, then *already has a run in progress*) and
-   pass after.
+1. **Stop clears it.** Tasks 1.1 and 1.2 fail before (409; then the queued input stays waiting) and
+   pass after (the input is delivered without a restart).
 2. **A surviving process is ended first.** Task 1.3, with a real sleeper process.
 3. **Failures leave the run as it was and say so.** Tasks 1.4 (409) and 1.5 (500).
 4. **This process's own window is untouched.** Control 1.6.
 5. **Startup is untouched.** Control 1.7.
-6. **The busy reasons name Stop.** Task 1.8.
+6. **The busy reasons name Stop.** Task 1.8: the trigger's `waiting_reason`, the scheduler and the
+   queue status route. **Nothing is announced that did not commit:** task 1.9.
 7. **Live.** Task 3.1 reproduces the state F168 described and clears it with the real button.
 
 ## Human-only
