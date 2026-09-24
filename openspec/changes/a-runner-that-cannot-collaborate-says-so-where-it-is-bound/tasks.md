@@ -8,6 +8,11 @@
   `collaboration_ready` still reaches no screen, and whether design D3's condition is exact. Rerun
   `grep -rn "AgentCard\|collaboration_" hub/ui/src --include=*.tsx | grep -v __tests__`.
 - [ ] 0.2 R3: the same, fresh.
+  **Done 2026-09-24.** The condition, the mount (`AgentSettingsPage.tsx:113`) and the failure line
+  stand. Rebinding invalidates the verdict at once: `useBindAgentRunner` invalidates
+  `['project', pid, 'agents']`, the launchability key's prefix. Nothing breaks on a Hub that has not
+  restarted, because the route has returned `collaboration_*` since before this change. One more
+  stale reference was added to 2.2.
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -30,7 +35,10 @@
 - [ ] 2.1 `RunnerPicker`: the line per design D3.
 - [ ] 2.2 Delete `hub/ui/src/components/agents/AgentCard.tsx` and
   `hub/ui/src/__tests__/agentCardCollaboration.test.tsx`. Fix the comment at
-  `hub/ui/src/lib/agentStatusConfig.ts:3`.
+  `hub/ui/src/lib/agentStatusConfig.ts:3` and the docstring of
+  `hub/tests/test_dashboard_truth.py::test_the_agents_route_reports_the_derived_last_seen` (`:184`,
+  *"`AgentCard` and `OverviewPage` read this response"*). AgentCard has no query hook of its own,
+  so no `n11` row or ceiling moves.
 - [ ] 2.3 `get_agents_launchability` docstring: name the runner picker as its consumer.
 - [ ] 2.4 `make ui`. Commit `hub/ui/src` and `hub/hub/static/ui` together.
 

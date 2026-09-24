@@ -25,8 +25,10 @@
 1. Create a loop with no stop condition. Open its tab from the conversation side panel's Loops
    index. Check that *"runs until stopped by the operator"* now sits beside a Stop control, and
    that the controller line reads naturally.
-2. Delegate, then take back. Check that the loop's timeline shows both `loop_control_changed`
-   events, and that the controller line updated without a reload.
+2. Delegate, then take back. Check that the controller line updated without a reload. Then read
+   `GET /api/v1/projects/{id}/loops/{loop_id}` on `:8010` (curl, or the request in DevTools'
+   Network tab) and check that `events` holds both `loop_control_changed` rows. The tab itself
+   renders no event list (design, *Residuals*), so the history cannot be checked on screen.
 3. Stop the loop while a firing is running. Confirm the running firing finishes and no new firing
    starts. Confirm the badge reads *Stopped early: <reason>*.
 4. Archive it. It leaves the index. Switch *Show archived* on, and it is back, marked *Archived*.
@@ -34,4 +36,5 @@
    updates without a reload, through the `loop_stopped` SSE event.
 6. Archive a **running** loop's job from the Jobs page. It is still accepted, and the loop tab shows
    it stopped with *"archived with its job"* (design D1, unchanged behaviour). An open loop tab
-   updates without a reload, and its history now lists the stop and the archival (design D3a).
+   updates without a reload. `GET /loops/{loop_id}`'s `events` now lists the stop and the archival
+   (design D3a). Check this through the API, as in step 2.

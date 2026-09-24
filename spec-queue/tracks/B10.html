@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B10 -- Dead surfaces: build or delete</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B10.md, tracked</p>
+  <h1>B10 &mdash; Dead surfaces: build or delete</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F178, F225, F260, F263, F259</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">D6</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/a-loop-is-stopped-archived-and-delegated-from-its-own-tab/</code>, <code>openspec/changes/a-runner-that-cannot-collaborate-says-so-where-it-is-bound/</code>, <code>openspec/changes/a-loops-outstanding-mail-is-mail-not-yet-delivered/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R3 done — parked for operator</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><a class="toc-item" href="#R2">R2</a><a class="toc-item" href="#R3">R3</a><a class="toc-item toc-final" href="#Final">Final</a></nav>
+  </div>
+  <section class="sec-final" id="Final"><h2>Final -- what the bundle reached, and why</h2><div class="md-body"><p>This bundle took five findings about code that exists but that no operator can reach: a card that nothing mounts, routes that have no button, and a flag that nothing sets. For each one it decided whether to <strong>build the missing mount or delete the dead code</strong> (D6). One finding was already fixed. Three are addressed by specified changes, and one by a no-spec deletion. <strong>IMPL has not started. The bundle is parked, awaiting the operator&#x27;s approval.</strong></p>
+<h5>Decisions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Recommended answer</th><th>Why</th></tr></thead><tbody><tr><td>D6.1</td><td>Launchability card (F178): build or delete?</td><td><strong>Build</strong> the collaboration line under the runner picker, and <strong>delete</strong> the unmounted <code>AgentCard</code></td><td>The line predicts a silent failure: a Codex agent&#x27;s AgentWeave tool calls are denied with no one present to approve them (<code>agents.py:256-262</code>). The picker already fetches the verdict and handles a failed read, so this is a few lines. <code>AgentCard</code>&#x27;s only importer is its own test. The runnable half already reaches the picker (F179, <code>12db377</code>).</td></tr><tr><td>D6.2</td><td>Loop controls (F225): build or delete?</td><td><strong>Build</strong> Stop, Archive and delegation in the loop&#x27;s own tab</td><td>The spec wrote delegation and loop archival on purpose (<code>agent-loops:344-350</code>, <code>:483-506</code>), and the enforcement code exists (<code>tasks.py:701-703</code>). Only the buttons are missing. The tab already promises <em>&quot;runs until stopped by the operator&quot;</em> (<code>LoopTab.tsx:242</code>) and offers no way to do it. The work is three hooks on existing routes, and the clientless-route ceiling drops 35 → 33.</td></tr><tr><td>D6.2a</td><td>Once Stop exists, should archiving a running loop&#x27;s job be refused (ROUNDS item 3)?</td><td><strong>No, still no refusal</strong></td><td>Archiving the job already ends the loop in the same transaction, with a reason (<code>jobs.py:1279-1285</code>), and an archived job can never fire again (F222). The main spec says <em>&quot;the operator is not required to stop it first&quot;</em> (<code>agent-loops:534-540</code>). A refusal would add a step and no information.</td></tr><tr><td>D6.2b</td><td>Should an operator stop whose reason reads &quot;loop queue is empty&quot; record <code>completed</code>?</td><td><strong>No: an operator stop always records <code>stopped</code></strong></td><td>The main spec forbids deriving the ending from prose (<code>agent-loops:552</code>). <code>end_loop</code> does exactly that (<code>loop_ending.py:57-58</code>). The fix is a required <code>completed=</code> keyword on <code>end_loop</code>.</td></tr><tr><td>D6.2c</td><td>Should the stop, archive and control events be written in the same transaction as the change?</td><td><strong>Yes, all event rows of the four functions</strong></td><td>Today each is written after the commit, so a failed write answers 500 for a change that landed with no history row. In the same transaction, B9&#x27;s now-final guard (rules 1 and 2) is also satisfied mechanically, whichever change lands first. The frame order is fixed in design D3.</td></tr><tr><td>D6.3</td><td>Messages screen (F260): build or delete?</td><td><strong>Delete</strong></td><td>An accepted spec removed the Messages destination and kept only the API (<code>agent-conversation-workspace:162-179</code>). Peer mail is read in each conversation&#x27;s timeline.</td></tr><tr><td>D6.4</td><td>Message read flag (F259): mark read on delivery, derive, or drop the column?</td><td><strong>(b) Derive &quot;outstanding&quot; from the inbound queue&#x27;s delivery state</strong></td><td>There is no migration, no API change and no second stored copy. Withdrawn mail stops counting as outstanding. Mail delivered into a creator turn that is still running counts as in flight. (c), dropping the column, remains a possible later cleanup.</td></tr></tbody></table></div>
+<h5>Changes</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>a-loop-is-stopped-archived-and-delegated-from-its-own-tab</code></td><td>F225</td><td>Adds Stop, Archive and <em>Let {agent} decide / Decide them yourself</em> to <code>LoopTab</code>. An operator stop, and archiving a running loop&#x27;s job, write <code>loop_stopped</code> (and <code>loop_archived</code>) against the loop. Every event row of <code>update_job</code>, <code>archive_job</code>, <code>archive_loop</code> and <code>set_loop_control</code> moves into its transaction. <code>end_loop(completed=)</code> is required. Ceiling 35 → 33.</td><td>Medium: 4 backend functions, 1 helper, 3 hooks, 1 tab section, about 13 tests, UI bundle</td></tr><tr><td><code>a-runner-that-cannot-collaborate-says-so-where-it-is-bound</code></td><td>F178</td><td>Adds <em>&quot;This agent will run, but cannot collaborate: {reason}&quot;</em> under <code>RunnerPicker</code>, and deletes <code>AgentCard</code> and its test</td><td>Small: UI only, 4 tests, UI bundle</td></tr><tr><td><code>a-loops-outstanding-mail-is-mail-not-yet-delivered</code></td><td>F259</td><td><code>_pending_loop_request</code> counts a message as outstanding while it is <code>queued</code>, or <code>delivered</code> into a still-<code>running</code> run. <code>/status</code> <code>pending</code> counts only <code>queued</code> mail. <code>Message.read</code> decides nothing.</td><td>Small: 2 queries, 6 tests, no migration</td></tr><tr><td><strong>No-spec round</strong> (no change directory)</td><td>F260</td><td>Delete <code>hub/ui/src/components/messages/</code> (<code>MessagesFeed</code>, <code>MessageCard</code>, <code>ConversationGroup</code>), <code>hub/ui/src/api/messages.ts</code>, and the <code>@/api/messages</code> mock at <code>conversationShell.test.tsx:49</code>. Remove <code>n11</code>&#x27;s three <code>DEAD</code> rows (<code>n11_query_error_surface.py:165-167</code>). Because those rows are <code>MISREPORT</code> rows, <strong>lower both <code>MISREPORT_CEILING</code> (53) and <code>UNHANDLED_SITE_CEILING</code> (97)</strong> in <code>hub/tests/test_surface_ceilings.py</code> by the drop <code>n11</code> measures. <code>CLIENTLESS_ROUTE_CEILING</code> does not move: <code>GET /messages</code> and <code>PATCH /messages/{id}/read</code> stay reached through the CLI transport (<code>src/agentweave/transport/http.py:283-312</code>), which is left alone. Rebuild and commit the UI bundle with <code>hub/ui/src</code>.</td><td>Small: deletions and two constants</td></tr></tbody></table></div>
+<p>Order: the three changes and the no-spec round can land in any order. Two textual overlaps need care. <code>agents-no-longer-register-themselves</code> 2.9 edits <code>AgentCard</code>, which F178&#x27;s change deletes, and B11&#x27;s <code>a-loop-that-is-gone-lets-go-of-its-document</code> edits other lines of <code>update_job</code>. Two changes carry <code>agent-loops</code> deltas, on requirements different from each other and from the other open changes. Run the R-2 collision script before archiving.</p>
+<h5>Open for the operator</h5>
+<ol>
+<li><strong>Approve D6 as recommended: build, build, delete, derive?</strong> Recommended: yes.</li>
+<ul>
+<li><em>Delete</em> for F225 would replace the change with a removal: the two routes go, and delegation</li>
+</ul>
+</ol>
+<p>and loop archival are REMOVED from <code>agent-loops</code>. The <em>&quot;runs until stopped by the operator&quot;</em> and <em>Show archived</em> copy would also need rewording.</p>
+<ul>
+<ul>
+<li><em>Delete</em> for F178 would remove <code>collaboration_*</code> from the payload and REMOVE <code>runtime-diagnostics</code>&#x27;</li>
+</ul>
+</ul>
+<p><em>&quot;Collaboration readiness is checkable before it is needed&quot;</em>. The silent Codex denial would then have no warning.</p>
+<ul>
+<ul>
+<li><em>Build</em> for F260 would reverse an accepted spec decision.</li>
+<li>(a) for F259 needs a backfill migration that runs on <code>:8000</code>&#x27;s next restart. (c) needs a table</li>
+</ul>
+</ul>
+<p>rebuild and modifies <code>agent-conversation-workspace</code>.</p>
+<ol>
+<li><strong>Confirm that <code>archive_job</code> still does not refuse a running loop once Stop ships (D6.2a).</strong></li>
+</ol>
+<p>Recommended: confirm. The alternative adds a MODIFIED delta that removes <em>&quot;Archiving a job retires its loop&quot;</em>, and makes <code>archive_job</code> refuse while <code>ending_state IS NULL</code>. Every other part of the change stays the same.</p>
+<ol>
+<li><strong>B9 and B10 both touch the same four functions. Should one land first?</strong> Recommended: either</li>
+</ol>
+<p>order. Design D3 fixes where each frame goes in both cases, so the second lander&#x27;s work is mechanical. If you prefer one order, land B9 first. B10 then writes <code>defer_broadcast</code> directly, and B9&#x27;s task 2.4b is never needed.</p>
+<h5>Findings that did not need a change</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>Status</th><th>Evidence</th></tr></thead><tbody><tr><td>F263</td><td><strong>Already fixed</strong> in <code>779820e</code> (Round 3a, 2026-09-22)</td><td><code>list_messages</code> takes <code>sort: Literal[&quot;asc&quot;, &quot;desc&quot;]</code> (<code>hub/hub/api/v1/messages.py:363</code>). Any other value gets a 422.</td></tr><tr><td>F178, runnable half</td><td><strong>Fixed by F179</strong> (<code>12db377</code>)</td><td><code>RunnerPicker</code> shows the <code>runnable: false</code> sentence. Only the collaboration half is carried.</td></tr></tbody></table></div>
+<p><strong>Candidate findings, not carried</strong> (for the ledger, not for this bundle):</p>
+<ul>
+<li><code>POST /agents/{name}/compact</code> and <code>/new-session</code> (<code>agents.py:2971-3040</code>) create <code>sender=&quot;hub&quot;</code></li>
+</ul>
+<p><code>Message</code> rows with no inbound-queue entry, so they are never delivered to the agent. Their UI hooks (<code>api/context.ts:4-8</code>) are also unrendered. After F259&#x27;s change they stop inflating <code>/status</code> <code>pending</code>, but the request still never reaches the agent.</p>
+<ul>
+<li><code>LoopTab</code> fetches <code>LoopDetail.events</code> (the loop&#x27;s audit trail) and renders none of it. The</li>
+</ul>
+<p>events that F225&#x27;s change writes can only be read through the API.</p></div></section><section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>Worked in <code>.claude/worktrees/spec-tracks</code> at <code>ce086b6</code> (HEAD <code>404c7d5</code> plus the bundle-opening commit). All three changes pass <code>openspec validate --strict</code>. No product code or test was edited.</p>
+<h5>Each finding, re-verified</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>Verdict</th><th>Evidence</th></tr></thead><tbody><tr><td><strong>F263</strong> (D)</td><td><strong>Already fixed</strong>, <code>779820e</code> (2026-09-22, Round 3a)</td><td><code>hub/hub/api/v1/messages.py</code> <code>list_messages</code>: <code>sort: Literal[&quot;asc&quot;, &quot;desc&quot;]</code>. Any other value is a 422. Its foot in FINDINGS records the tests. It needs no D6 answer.</td></tr><tr><td><strong>F178</strong> (B)</td><td><strong>Changed shape: half fixed</strong></td><td>The runnable half reaches a screen since <code>12db377</code> (UI-1, F179): <code>RunnerPicker</code> (<code>AgentSettingsControls.tsx:225-275</code>) is <code>useAgentLaunchability</code>&#x27;s only non-test caller. The <strong>collaboration</strong> half is still dead. <code>collaboration_ready</code>/<code>collaboration_reason</code> (<code>agents.py:236-270</code>) are rendered only by <code>AgentCard.tsx</code>, and nothing but <code>__tests__/agentCardCollaboration.test.tsx</code> imports that. From the app, the only reachable <code>false</code> verdict is the Codex app-server opt-out (<code>agents.py:249-262</code>): the other branch, <code>bound_address.known()</code> false, cannot hold during a UI request, because <code>_observe_bound_address</code> (<code>main.py:517-520</code>) records the address on every request.</td></tr><tr><td><strong>F225</strong> (C)</td><td><strong>Open, unchanged</strong></td><td><code>hub/ui/src/api/loops.ts</code> exports <code>useLoops</code> and <code>useLoop</code> only. Running <code>n10</code>&#x27;s <code>clientless_routes</code> today gives <strong>35</strong>, and it includes <code>POST …/loops/{loop_id}/archive</code> and <code>…/control</code>. No UI writes <code>stop_reason</code> either: the operator stop exists only as <code>PATCH /jobs/{id}</code> (<code>jobs.py:1068-1076</code>). <strong>New, in the same path:</strong> an operator stop writes no <code>loop_stopped</code> event and broadcasts none. Only the firing path does (<code>scheduler.py:3176-3187</code>). The loop&#x27;s own history misses the operator&#x27;s stop, which <code>agent-loops</code> <em>&quot;A loop&#x27;s history is answerable…&quot;</em> requires, and <code>useSSE</code> does not refresh loop views on <code>job_updated</code> (<code>useSSE.ts:522-536</code>).</td></tr><tr><td><strong>F260</strong> (C)</td><td><strong>Open, unchanged</strong></td><td><code>components/messages/{MessagesFeed,MessageCard,ConversationGroup}.tsx</code> are imported only by each other. <code>api/messages.ts</code>&#x27;s three hooks are imported only by them and mocked by <code>conversationShell.test.tsx:49</code>. The removal of the <em>Messages</em> destination is <strong>specified</strong>: <code>agent-conversation-workspace</code> <em>&quot;Agents and Messages are removed as navigation destinations&quot;</em> (<code>spec.md:162-179</code>, from <code>2026-08-02-agent-conversation-workspace</code>). <code>conversationShell.test.tsx:137-141</code> asserts it.</td></tr><tr><td><strong>F259</strong> (B)</td><td><strong>Open in substance; one correction</strong></td><td><code>msg.read = True</code> appears only in <code>PATCH /messages/{id}/read</code> (<code>messages.py:410</code>). Its clients are the dead <code>useMarkRead</code> and the CLI transport&#x27;s <code>archive_message</code> (<code>src/agentweave/transport/http.py:300-312</code>), which nothing in <code>src/</code> calls. Two product decisions still read the flag: <code>_pending_loop_request</code> (<code>scheduler.py:498</code>) and <code>GET /status</code> <code>message_counts.pending</code> (<code>status.py:42-46</code>). <strong>Correction to the 2026-09-02 amendment:</strong> <code>pending</code> does reach one screen now, raw, in Settings → Diagnostics (<code>DiagnosticsPanel.tsx</code>, a JSON dump of <code>useStatus</code>).</td></tr></tbody></table></div>
+<h5>D6 — build the mount point, or delete the code? One answer per surface</h5>
+<p><strong>The rule R1 applied.</strong> A surface is built when it carries something the operator needs and cannot get elsewhere, and a small mount exists. It is deleted when the spec already removed it on purpose, or when everything it carried is shown somewhere else. That follows <code>DIRECTION.md</code>&#x27;s two standing lines: &quot;barriers are the enemy&quot; argues against deleting a warning or a control, and &quot;cleanest solution wins&quot; argues against keeping unmounted code that a unit test certifies.</p>
+<p><strong>1. Launchability card (F178): build the collaboration line in <code>RunnerPicker</code>, and delete <code>AgentCard</code>.</strong></p>
+<ul>
+<li><em>Build</em> releases the one sentence that predicts a silent failure (*&quot;AgentWeave tool calls … will</li>
+</ul>
+<p>be silently denied&quot;*). It goes in the component that already fetches the verdict and already handles a failed read, so no query call site is added or removed. Spec: one ADDED <code>runtime-diagnostics</code> requirement.</p>
+<ul>
+<li><em>Delete</em> would remove <code>collaboration_*</code> from the payload and REMOVE <code>runtime-diagnostics</code>&#x27; *&quot;Collaboration</li>
+</ul>
+<p>readiness is checkable before it is needed&quot;*. The silent failure would stay, with no warning left.</p>
+<ul>
+<li><code>AgentCard</code> goes either way. Its other content is on the rail and in the header, and an</li>
+</ul>
+<p>unmounted card certified by a test is how F178 went unnoticed for 24 days.</p>
+<ul>
+<li>Change: <code>a-runner-that-cannot-collaborate-says-so-where-it-is-bound</code>.</li>
+</ul>
+<p><strong>2. Loop controls (F225): build Stop, Archive and delegation in <code>LoopTab</code>.</strong></p>
+<ul>
+<li><em>Build</em> costs three mutation hooks and one tab section, and uses existing routes only. The Stop</li>
+</ul>
+<p>control uses <code>update_job</code>&#x27;s existing operator stop, not a new <code>/loops/{id}/stop</code>. It makes <code>LoopTab.tsx:242</code>&#x27;s <em>&quot;runs until stopped by the operator&quot;</em> and <code>LoopsIndexTab</code>&#x27;s <em>Show archived</em> true. The clientless ceiling goes from 35 to 33.</p>
+<ul>
+<li><em>Delete</em> would REMOVE delegation (<code>agent-loops:344-350</code>, *&quot;SHALL be able to delegate … and to take</li>
+</ul>
+<p>it back&quot;*) and loop archival. That is a governance capability the spec wrote on purpose, and the code that enforces it (<code>tasks.py:701-703</code>) would stay behind without its switch.</p>
+<ul>
+<li>The change also fixes the missing operator <code>loop_stopped</code> event, written in the same transaction</li>
+</ul>
+<p>as the stop. Otherwise a failed event write would answer 500 for a stop that landed.</p>
+<ul>
+<li>Change: <code>a-loop-is-stopped-archived-and-delegated-from-its-own-tab</code>.</li>
+</ul>
+<p><strong>The interaction with <code>ROUNDS.md</code> item 3.</strong> The <code>archive_job</code> refusal was withdrawn <em>because</em> no stop control existed, to be <em>&quot;revisited only if a stop control ships&quot;</em> (<code>jobs.py:1238-1242</code>). This bundle ships one, so it re-answers the question, and the answer is <strong>still no refusal</strong>:</p>
+<ul>
+<li>Since F224, archiving the job ends the loop in the same transaction, with a recorded reason</li>
+</ul>
+<p>(<code>jobs.py:1279-1285</code>). An archived job can never fire again (F222). So the refusal&#x27;s purpose, D17&#x27;s <em>&quot;archiving can never conceal work that is still firing&quot;</em>, is already met.</p>
+<ul>
+<li>The main spec says it outright: *&quot;Archiving a job retires its loop … the operator is not required</li>
+</ul>
+<p>to stop it first&quot;* (<code>agent-loops:534-540</code>).</p>
+<ul>
+<li>The refusal would turn one action into two and add no information.</li>
+</ul>
+<p>The only code consequence is <code>archive_job</code>&#x27;s docstring. The two answers are consistent. <em>Build</em> is what makes the refusal <em>possible</em> to bring back, and D1 of the change is why it still should not come back.</p>
+<p><strong>3. Messages screen (F260, F263): delete.</strong></p>
+<ul>
+<li>The <em>Messages</em> destination was removed by an accepted spec, which also requires the messages API</li>
+</ul>
+<p>to stay (<code>agent-conversation-workspace:162-179</code>). Peer mail is read in each conversation&#x27;s timeline. What would be lost is a project-wide who-wrote-to-whom view. The spec judged that redundant, and nothing since has asked for it back.</p>
+<ul>
+<li><em>Build</em> would mean reversing a specified decision, and the screen&#x27;s three query sites are all</li>
+</ul>
+<p>MISREPORT rows (<code>n11</code> rows 165-167).</p>
+<ul>
+<li><strong>The deletion changes no main spec, so it gets no change directory.</strong> It is a no-spec round.</li>
+</ul>
+<p>Delete <code>components/messages/</code> (3 files), <code>api/messages.ts</code>, and the <code>@/api/messages</code> mock in <code>conversationShell.test.tsx:49</code>. Remove <code>n11</code>&#x27;s three <code>DEAD</code> rows (165-167) and lower <code>UNHANDLED_SITE_CEILING</code> by the measured drop.</p>
+<ul>
+<li><strong>The route ceiling does not move.</strong> <code>GET /messages</code> and <code>PATCH /messages/{id}/read</code> stay</li>
+</ul>
+<p>&quot;reached&quot; through the CLI transport (<code>n10</code> measured today: both rows have <code>cli: True</code>). Deleting the UI hooks therefore adds no clientless route.</p>
+<ul>
+<li>Leave the CLI transport&#x27;s <code>get_pending_messages</code>/<code>archive_message</code> alone in that round. Deleting</li>
+</ul>
+<p>them would make both routes clientless, which the R-1 ratchet forbids unless the routes go too, and the spec requires them to stay.</p>
+<ul>
+<li>F263 needs nothing: it was already fixed.</li>
+</ul>
+<p><strong>4. The message-read flag (F259): stop deciding anything from it. Derive &quot;outstanding&quot; and &quot;pending&quot; from the delivery the inbound queue already records.</strong></p>
+<ul>
+<li>Every agent- or operator-sent message has exactly one entry with <code>message_id</code></li>
+</ul>
+<p>(<code>messages.py:265-276</code>, <code>agents.py:2228-2236</code>). Its <code>state</code> moves queued → delivered, and back to queued or to withdrawn (<code>inbound_queue.py:175-195</code>, <code>:225-295</code>). The timeline already derives <code>delivery_state</code> from it (<code>agent_chat.py:210</code>).</p>
+<ul>
+<li>Options, laid out in the change&#x27;s design D1:</li>
+<ul>
+<li><strong>(a) Mark read on delivery.</strong> A second stored copy, four transitions to keep in step, and a</li>
+</ul>
+</ul>
+<p>backfill migration against <code>:8000</code>. Withdrawn mail would stay outstanding forever.</p>
+<ul>
+<ul>
+<li><strong>(b) Derive (recommended).</strong> Two query changes, no migration, no API change.</li>
+<li><strong>(c) Delete the column and the PATCH route.</strong> The cleanest end state, but it modifies</li>
+</ul>
+</ul>
+<p><code>agent-conversation-workspace</code>&#x27;s <em>&quot;messages API MUST remain unchanged&quot;</em> and rebuilds a table on <code>:8000</code>. It stays available later as a separate cleanup.</p>
+<ul>
+<li>Spec: MODIFIED <code>agent-loops</code> <em>&quot;An empty queue with a request still in flight…&quot;</em>. Its scenario said</li>
+</ul>
+<p><em>&quot;unread message&quot;</em>, which named the dead flag.</p>
+<ul>
+<li>Change: <code>a-loops-outstanding-mail-is-mail-not-yet-delivered</code>.</li>
+<li><strong>How it fits with answer 3:</strong> with (b), deleting <code>useMarkRead</code> changes nothing the product</li>
+</ul>
+<p>decides, so the two can ship in either order.</p>
+<h5>What was written</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Spec</th></tr></thead><tbody><tr><td><code>a-loop-is-stopped-archived-and-delegated-from-its-own-tab</code></td><td>F225</td><td>Stop, Archive and delegation in <code>LoopTab</code>; the operator stop writes its own <code>loop_stopped</code> in the stop&#x27;s own transaction; the <code>archive_job</code> docstring records D1; ceiling 35 → 33</td><td><code>agent-loops</code>, 2 ADDED</td></tr><tr><td><code>a-runner-that-cannot-collaborate-says-so-where-it-is-bound</code></td><td>F178</td><td>The <code>collaboration_reason</code> line under <code>RunnerPicker</code>; <code>AgentCard</code> and its test deleted</td><td><code>runtime-diagnostics</code>, 1 ADDED</td></tr><tr><td><code>a-loops-outstanding-mail-is-mail-not-yet-delivered</code></td><td>F259</td><td><code>_pending_loop_request</code> and <code>/status</code> <code>pending</code> read delivery state, not <code>Message.read</code></td><td><code>agent-loops</code>, 1 MODIFIED</td></tr><tr><td>(no-spec round)</td><td>F260</td><td>Delete the dead Messages UI subtree and its <code>n11</code> rows</td><td>none</td></tr></tbody></table></div>
+<p>Each change&#x27;s <code>tasks.md</code> names tests that fail before the fix, and why. The loop-history test looks the event up by type, because <code>GET /loops/{id}</code> returns events newest-first. Each <code>design.md</code> says what its routes return when the function they call raises.</p>
+<h5>Left for R2 and R3</h5>
+<ul>
+<li><strong>F225 D2:</strong> should an operator stop pin <code>ending_state=&quot;stopped&quot;</code>? Today <code>end_loop</code> records</li>
+</ul>
+<p><code>completed</code> if the operator&#x27;s reason is exactly <code>loop queue is empty</code> (<code>loop_ending.py:32</code>, <code>:57-58</code>).</p>
+<ul>
+<li><strong>F225 D3:</strong> should <code>archive_loop</code>/<code>set_loop_control</code> also move their event writes inside the</li>
+</ul>
+<p>transaction? Today a failed event write answers 500 after the change has committed.</p>
+<ul>
+<li><strong>F259 D2:</strong> does an entry duplicated for one message need a test? Does</li>
+</ul>
+<p><code>inbound_queue_entries.message_id</code> need an index (a migration)?</p>
+<ul>
+<li><strong>Adjacent, not taken:</strong> <code>POST /agents/{name}/compact</code> and <code>/new-session</code> (<code>agents.py:2971-3040</code>)</li>
+</ul>
+<p>write <code>sender=&quot;hub&quot;</code> messages that get no queue entry, so nothing ever delivers them. Their hooks are on R-1&#x27;s unrendered list. They are the same dead-surface shape as this bundle&#x27;s surfaces, but no D6 row names them.</p>
+<ul>
+<li><strong>Collisions:</strong> two of the three changes carry <code>agent-loops</code> deltas, on different requirements</li>
+</ul>
+<p>from each other and from <code>pressing-run-names-the-reason-that-held</code>. Other bundles opened tonight may add more. Run the R-2 collision script before any archive.</p></div></section><section class="sec-round" id="R2"><h2>R2 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>I checked 31 load-bearing claims against the code. All three changes still pass <code>openspec validate --strict</code>. No product code or tests were edited. The only thing run was <code>n10_route_reachability.py</code>: 35 clientless routes, including <code>loops/{loop_id}/archive</code> and <code>loops/{loop_id}/control</code>, which confirms R1.</p>
+<h5>Claims that disagreed with the code, or were incomplete, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>R1 claim / open point</th><th>What the code shows</th><th>Change made</th></tr></thead><tbody><tr><td>1</td><td>D2 left open: should an operator stop pin <code>stopped</code>?</td><td><code>end_loop</code> derives <code>ending_state</code> from the reason&#x27;s text (<code>loop_ending.py:57-58</code>). The main spec already forbids that: <code>agent-loops</code> <em>&quot;How a loop ended is a distinct value&quot;</em> says <em>&quot;without interpreting prose&quot;</em>, and it names <em>&quot;stopped by the operator&quot;</em> as a stop. The new reason field makes the bug reachable. An allowed agent can already send it through <code>PATCH /jobs</code>.</td><td><strong>Pin it.</strong> <code>end_loop(..., completed: bool)</code> becomes a required keyword. The scheduler passes the comparison and the routes pass <code>False</code>. There are no direct <code>end_loop</code> calls in the tests. New scenario, and task 1.11.</td></tr><tr><td>2</td><td>Only <code>update_job</code> misses the operator&#x27;s <code>loop_stopped</code></td><td><code>archive_job</code> also ends a running loop (<code>jobs.py:1279-1285</code>). It writes only <code>job_archived</code> with no <code>loop_id</code> (<code>:1290-1291</code>), and <code>useSSE</code> does not handle <code>job_archived</code>. So the loop&#x27;s history misses both the stop and the archival, and an open tab stays stale. The ADDED requirement would have been false on this path.</td><td>Design <strong>D3a</strong>: <code>archive_job</code> writes <code>loop_stopped</code> (when it ended the loop) and <code>loop_archived</code> against the loop, in the transaction. The requirement text and a scenario were extended. Task 1.12.</td></tr><tr><td>3</td><td>D3 left open: move the <code>archive_loop</code>/<code>set_loop_control</code> events into the transaction?</td><td>Both commit, broadcast, then <code>persist_event(commit=True)</code> (<code>loops.py:180-185</code>, <code>:217-229</code>). A failed write answers 500 for a change that landed with no history row. That breaks <em>&quot;Each change of control SHALL be recorded&quot;</em>.</td><td><strong>Yes</strong> (design <strong>D3b</strong>). The requirement now says control and archival are recorded in the same operation. Scenario and task 1.13.</td></tr><tr><td>4</td><td>Task 1.4 expects &quot;the response is 500&quot;</td><td>The conftest client is <code>ASGITransport</code> with the default <code>raise_app_exceptions=True</code> (<code>conftest.py:864</code>), so the exception reaches the test. It must also monkeypatch <code>hub.api.v1.jobs.persist_event</code>, not <code>hub.utils</code>.</td><td>Task 1.4 rewritten.</td></tr><tr><td>5</td><td>(not raised) Interaction with B9</td><td>B9&#x27;s <code>an-event-is-announced-only-once-its-write-is-committed</code> adds an <code>ast</code> guard. It fails <strong>any</strong> broadcast in a function that calls <code>persist_event(commit=False)</code>, even one after the commit. After this change that covers <code>update_job</code> (including its existing <code>job_updated</code> and <code>loop_edit_staged</code> broadcasts), <code>archive_job</code>, <code>archive_loop</code> and <code>set_loop_control</code>.</td><td>Design D3 note and task 2.2c: whichever change lands second converts these to <code>defer_broadcast</code>. R3 checks the guard&#x27;s wording.</td></tr><tr><td>6</td><td>F259: outstanding = entry <code>queued</code> only</td><td>This misses a message <strong>delivered into a creator run that is still running</strong>. The creator is reading it and has not answered, which is the plainest <em>&quot;request still in flight&quot;</em>.</td><td>The loop predicate is now <code>queued</code> <strong>or</strong> <code>delivered</code> into a <code>Run.status == &quot;running&quot;</code>. <code>/status</code> <code>pending</code> stays <code>queued</code>-only. The spec text was reworded and a new scenario added. Task 1.4a passes today and fails on R1&#x27;s version.</td></tr><tr><td>7</td><td>F259 D2: does a duplicate entry need a test?</td><td>Only two <code>new_entry(..., message_id=)</code> sites exist (<code>messages.py:272</code>, <code>agents.py:2235</code>). Requeue and withdrawal mutate that entry in place (<code>inbound_queue.py:259-292</code>).</td><td>Both queries now use an uncorrelated <code>Message.id IN (select entry.message_id …)</code>, which cannot double-count by construction. <strong>No duplicate test.</strong></td></tr><tr><td>8</td><td>F259 D2: does <code>inbound_queue_entries.message_id</code> need an index?</td><td>No index exists on <code>message_id</code>. <code>ix_inbound_queue_project_agent_state_arrival (project_id, agent, state, sequence)</code> does exist (<code>models.py:667-673</code>), and so does <code>ix_inbound_queue_delivered_run</code>.</td><td><strong>No index and no migration.</strong> The subquery filters the entry side on <code>project_id</code>/<code>agent</code>/<code>state</code>, so the existing composite index drives it, and <code>messages</code> is probed by primary key. Task 3.3 records one <code>EXPLAIN QUERY PLAN</code> on a trial DB, and reopens this if it shows a per-message scan.</td></tr><tr><td>9</td><td>F178 change</td><td>Two open changes touch the same UI. <code>agents-no-longer-register-themselves</code> 2.9 edits <code>AgentCard.tsx:65-72</code>, which this change deletes. <code>a-runner-choice-names-its-model</code> 2.2 edits <code>RunnerPicker</code>&#x27;s options.</td><td>Design D5 records both as order-independent. Tests find the status lines by text.</td></tr><tr><td>10</td><td>F260 no-spec round: &quot;lower <code>UNHANDLED_SITE_CEILING</code>&quot;</td><td><code>n11</code> rows 165-167 are <code>MISREPORT</code> rows, so <code>MISREPORT_CEILING</code> (53) drops as well.</td><td>Noted here for the no-spec round. Lower both ceilings by the measured drop.</td></tr></tbody></table></div>
+<h5>Re-checked, and stands</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Claim</th><th>Evidence</th></tr></thead><tbody><tr><td>F263 already fixed</td><td><code>messages.py:363</code> <code>sort: Literal[&quot;asc&quot;, &quot;desc&quot;]</code>. <code>779820e</code> is <em>&quot;Round 3a: … F263&quot;</em>.</td></tr><tr><td>F178 half fixed</td><td><code>RunnerPicker</code> (<code>AgentSettingsControls.tsx:225-275</code>) renders only <code>runnable === false</code> (<code>12db377</code>). <code>collaboration_*</code> is read only by <code>AgentCard.tsx</code>, and nothing but its test imports that.</td></tr><tr><td>D3 condition <code>runnable === true &amp;&amp; collaboration_ready === false</code> is exact</td><td>The collaboration value is computed only when <code>runner_row</code> is set and <code>probe[&quot;runnable&quot;]</code> holds (<code>agents.py:241</code>). Otherwise it is <code>null</code>.</td></tr><tr><td>Only the Codex opt-out reaches the UI</td><td><code>_observe_bound_address</code> records the address on every HTTP request (<code>main.py:516-520</code>).</td></tr><tr><td>An operator stop writes no <code>loop_stopped</code>, and <code>job_updated</code> does not refresh loops</td><td><code>update_job</code> (<code>jobs.py:1068-1167</code>) has no such event. <code>useSSE.ts:522-536</code> invalidates only <code>jobs</code> (except for <code>job_fired</code>).</td></tr><tr><td><code>ended_now</code> is needed</td><td><code>end_loop</code> rewrites <code>stop_reason</code>/<code>stopped_at</code> on an already-ended loop and keeps <code>ending_state</code> (<code>loop_ending.py:53-58</code>). So &quot;ended by this call&quot; can be read only before the call.</td></tr><tr><td>The SSE payload key <code>loop_id</code> is routed</td><td><code>useSSE.ts:541-556</code> reads <code>loop_id ?? id</code>.</td></tr><tr><td>Delegation goes to <code>loop.agent</code></td><td>D8 makes <code>AIJob.agent</code> the creator (<code>tasks.py:611-613</code>). The delegated branch returns at <code>:701-703</code>.</td></tr><tr><td>D1: no <code>archive_job</code> refusal</td><td><code>archive_job</code> ends the loop in the same transaction (<code>jobs.py:1279-1285</code>). <code>update_job</code> refuses to re-enable an archived job (<code>:926-927</code>). The main spec&#x27;s <em>&quot;Archiving a job retires its loop … not required to stop it first&quot;</em> stands.</td></tr><tr><td>Deleting the Messages screen needs no spec change</td><td><code>agent-conversation-workspace</code> <em>&quot;Agents and Messages are removed as navigation destinations&quot;</em> removes the destination and keeps only the API and records. No other main spec names a messages feed or mark-read (grep). <code>MessagesFeed</code>/<code>MessageCard</code>/<code>ConversationGroup</code> and <code>api/messages.ts</code> have no importer outside themselves and one test mock.</td></tr><tr><td>Deleting the Messages UI adds no clientless route</td><td><code>http.py:283-312</code> calls <code>GET /messages</code> and <code>PATCH /messages/{id}/read</code>, so both move to n10&#x27;s &quot;called by the CLI&quot; group.</td></tr><tr><td><code>Message.read</code> readers</td><td>Only <code>messages.py:371</code> (API filter), <code>scheduler.py:498</code> and <code>status.py:45</code>. The only writer is <code>messages.py:410</code>.</td></tr><tr><td><code>agent-loops</code> collisions</td><td>Four open deltas touch four different requirements. This bundle has 2 ADDED requirements (<em>&quot;A loop&#x27;s own view offers…&quot;</em>, <em>&quot;An operator&#x27;s stop is recorded…&quot;</em>) and MODIFIED <em>&quot;An empty queue with a request still in flight…&quot;</em>. <code>pressing-run-names-the-reason-that-held</code> MODIFIES <em>&quot;Pressing Run on a loop that declines…&quot;</em>, and B1&#x27;s <code>a-task-is-attended-only-by-a-turn-that-will-reach-it</code> MODIFIES <em>&quot;A task reported as in flight…&quot;</em>. No two touch the same requirement.</td></tr></tbody></table></div>
+<h5>Decision recommendations</h5>
+<p>None reversed. D6 per surface stands: build loop controls, build the collaboration line and delete <code>AgentCard</code>, delete the Messages UI, and derive F259 (option b). R2 settled R1&#x27;s four open points: pin <code>stopped</code>; move the events into the transaction, extended to <code>archive_job</code>; no duplicate test; no index.</p></div></section><section class="sec-round" id="R3"><h2>R3 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>I checked 34 claims at <code>6c38a61</code>, working from the code and not from R1&#x27;s or R2&#x27;s reasoning. All three changes still pass <code>openspec validate --strict</code>. No product code or tests were edited, and nothing was run except <code>openspec validate</code>.</p>
+<h5>Claims that disagreed with the code, or were incomplete, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Claim</th><th>What the code shows</th><th>Change made</th></tr></thead><tbody><tr><td>1</td><td>Design D3 on B9: &quot;whichever lands second converts the broadcasts&quot;</td><td>B9 is final, and its guard has a <strong>second rule</strong>: every <code>defer_broadcast</code> must come before the function&#x27;s own last <code>.commit()</code>, and a commit inside a callee does not count. In the four functions, some rows are still written after the commit: <code>update_job</code>&#x27;s <code>loop_edit_staged</code> (<code>jobs.py:1152</code>, <code>commit=True</code>) and <code>archive_job</code>&#x27;s <code>job_archived</code> (<code>:1291</code>). If a frame is deferred to the main commit while its row lands in a later commit, the frame goes out before the row exists.</td><td>Design D3 now moves <strong>every</strong> event row of <code>update_job</code>, <code>archive_job</code>, <code>archive_loop</code> and <code>set_loop_control</code> into the transaction (<code>commit=False</code>). A table fixes each function&#x27;s frame order. Each branch, B9 landed or not, says where each frame goes: a <code>defer_broadcast</code> above the function&#x27;s single own commit (<code>jobs.py:1145</code>, <code>:1287</code>, <code>loops.py:182</code>, <code>:217</code>), or a post-commit <code>broadcast</code> in the same order for B9&#x27;s task 2.4b to convert. Tasks 2.1, 2.2 and 2.2c were rewritten, and the proposal was updated.</td></tr><tr><td>2</td><td>Test guide human steps 2 and 6: the loop&#x27;s timeline/history &quot;shows&quot; the new events</td><td><code>LoopTab</code> renders <code>loop.history</code> (firings) and never <code>loop.events</code>. <code>grep &quot;\.events\b&quot; hub/ui/src</code> finds no component that reads <code>LoopDetail.events</code>. The spec requires only that the history be <em>retrievable</em> (<code>agent-loops:452-453</code>).</td><td>Both steps now read <code>GET /loops/{id}</code> <code>events</code>. A residual in design D4 records it as a candidate finding.</td></tr><tr><td>3</td><td>Design D4: a failure shows the Hub&#x27;s <code>detail</code> or the action&#x27;s fallback</td><td><code>fetchWithAuth</code> throws <code>ApiError(status, text)</code>. On a plain-text 500, <code>readableApiError</code> returns the body (<em>&quot;Internal Server Error&quot;</em>), not the fallback. A 422 for <code>max_length=4000</code> reads <em>&quot;String should have at most 4000 characters&quot;</em>, with no field prefix (<code>client.ts:103</code>).</td><td>D4 now lists what the operator reads for each failure. <code>readableRefusal</code> was rejected: for a broadcast that fails after the commit, it would say <em>&quot;Could not stop this loop.&quot;</em> next to a stopped loop.</td></tr><tr><td>4</td><td>F178 task 2.2: every reference to <code>AgentCard</code> is covered</td><td><code>hub/tests/test_dashboard_truth.py:184</code>&#x27;s docstring names <code>AgentCard</code> as a reader.</td><td>Added to 2.2. AgentCard has no query hook, so no <code>n11</code> row moves.</td></tr><tr><td>5</td><td>F259 task 1.5 seeds through <code>POST /messages</code></td><td>The route commits the entry <code>queued</code> and then may try to drain it (<code>messages.py:265-298</code>). With no runner it stays queued, but the test would depend on that.</td><td>1.5 now asserts the entries are <code>queued</code> before counting, and seeds the rows directly otherwise.</td></tr></tbody></table></div>
+<h5>What I asked, and what I found</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody><tr><td>Which component mounts each new control?</td><td>Loop controls: <code>LoopTab</code>, opened as a tab from <code>ConversationView.tsx:376</code>, which is reached from the conversation panel&#x27;s Loops index. Collaboration line: <code>RunnerPicker</code>, mounted at <code>AgentSettingsPage.tsx:113</code> (Execution).</td></tr><tr><td>What do they call?</td><td><code>PATCH /jobs/{job_id} {stop_reason}</code>, <code>POST /loops/{id}/archive {}</code>, <code>POST /loops/{id}/control {control}</code>. The collaboration line calls nothing new: it reads <code>useAgentLaunchability</code>, which <code>RunnerPicker</code> already calls.</td></tr><tr><td>What does the operator see when a call fails?</td><td>See row 3. After every call, <code>onSettled</code> re-reads loops and jobs. If the launchability read fails, the line <em>&quot;Could not check whether this agent can run.&quot;</em> already exists (<code>AgentSettingsControls.tsx:258-263</code>). Rebinding refreshes the verdict at once: <code>useBindAgentRunner</code> invalidates <code>[&#x27;project&#x27;, pid, &#x27;agents&#x27;]</code>, the launchability key&#x27;s prefix.</td></tr><tr><td>Does a committed bundle break a <code>:8000</code> that has not restarted?</td><td><strong>No.</strong> Every body field the new UI sends already exists on today&#x27;s models, which use <code>extra=&quot;forbid&quot;</code> (<code>schemas/common.py:32</code>): <code>JobUpdate.stop_reason</code> (<code>schemas/jobs.py:67</code>), <code>LoopControlUpdate.control</code> (<code>:191</code>), and an empty archive body. <code>collaboration_*</code> has been in the launchability payload since before this bundle. Until <code>:8000</code> restarts, an old Hub serving the new bundle stops loops without writing <code>loop_stopped</code>. It still records <code>completed</code> if a reason reads exactly <code>loop queue is empty</code>. Nothing fails. The Messages deletion removes code that the build already tree-shakes out (<code>d5_reachability_walk.py:7</code>).</td></tr><tr><td>Does a running firing survive Stop?</td><td>Yes. <code>scheduler.remove_job</code> only unregisters (<code>scheduler.py:2922-2934</code>), and the stop check runs at the <em>start</em> of a firing (<code>:3150</code>). So the sentence in the confirmation is true.</td></tr><tr><td>Does <code>_hand_job_to_scheduler</code> write rows that a deferred <code>job_updated</code> would get ahead of?</td><td>No. It commits and then touches only the in-memory store (<code>jobs.py:548-590</code>, F351).</td></tr><tr><td>Does an operator stop pin <code>stopped</code>, as R2 decided?</td><td>Yes. <code>end_loop</code> is the only place the value is derived from the reason&#x27;s text (<code>loop_ending.py:57-58</code>). It has three callers: <code>jobs.py:1075</code>, <code>:1284</code> and <code>scheduler.py:3156</code>. <code>scheduler.py:3188</code> already compares against <code>QUEUE_DRAINED_REASON</code> for its own purposes.</td></tr><tr><td>F259&#x27;s states and sites</td><td>The entry states are <code>queued</code>, <code>delivered</code> and <code>withdrawn</code>. &quot;Abandoned&quot; is <code>withdrawn</code> with an <code>abandoned_reason</code>. <code>Run.status</code> defaults to <code>running</code>. Of four <code>Message(</code> sites, <code>messages.py:45</code> and <code>agents.py:2213</code> get an entry, and <code>/compact</code> and <code>/new-session</code> (<code>agents.py:2979</code>, <code>:3016</code>) get none.</td></tr><tr><td>Collisions</td><td>B11&#x27;s <code>a-loop-that-is-gone-lets-go-of-its-document</code> edits <code>update_job</code>&#x27;s claim path (<code>jobs.py:1027</code>) and <code>_adopt_document_tasks</code>. The two changes touch different lines of <code>update_job</code> and different <code>agent-loops</code> requirements, so the overlap is textual only. The overlaps R2 recorded (B9, <code>agents-no-longer-register-themselves</code>, <code>a-runner-choice-names-its-model</code>) stand.</td></tr></tbody></table></div>
+<h5>What stands</h5>
+<p>R1&#x27;s and R2&#x27;s other claims matched the code, and no decision recommendation was reversed. Those claims are F263 fixed (<code>messages.py:363</code>), F178&#x27;s half-fix, D3&#x27;s <code>runnable === true</code> condition, the Codex opt-out as the only reachable <code>false</code>, the missing operator <code>loop_stopped</code>, <code>useSSE</code>&#x27;s <code>loop_id ?? id</code> routing, D1 (no <code>archive_job</code> refusal), the Messages deletion needing no spec, the readers of <code>Message.read</code>, and R2&#x27;s running-turn clause, <code>IN</code> subquery and no-index verdict.</p></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B10.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

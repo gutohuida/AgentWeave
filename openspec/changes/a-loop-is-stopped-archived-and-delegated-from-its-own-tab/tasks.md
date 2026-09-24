@@ -12,6 +12,11 @@
   **Done 2026-09-24.** D2: pin `stopped`. D3: yes, and extended to `archive_job` (D3a/D3b).
   See the B10 record.
 - [ ] 0.2 R3: the same, fresh. Also confirm the B9 `ast` guard's wording (design D3).
+  **Done 2026-09-24.** B9 is final, and its guard has a second rule: a deferred announcement must
+  come before the function's own last commit. So design D3 now moves every event row of the four
+  functions into the transaction, and it fixes the frame order in a table. 2.1, 2.2 and 2.2c were
+  rewritten to match. The human-only steps read loop history through the API, because `LoopTab`
+  renders no events.
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -64,19 +69,30 @@
 
 - [ ] 2.1 `hub/hub/api/v1/jobs.py` `update_job`: `ended_now` before `end_loop`; when true,
   `persist_event(..., "loop_stopped", {job_id, loop_id, reason}, agent=agent_identity,
-  loop_id=loop.id, commit=False)` before the commit, and the broadcast after it (design D3).
+  loop_id=loop.id, commit=False)` before the commit (design D3). Also move the existing
+  `loop_edit_staged` row (`:1152`) above the commit with `commit=False`. The frames go in design
+  D3's table order: `loop_edit_staged`, `loop_stopped`, `job_updated`.
 - [ ] 2.2 `archive_job` docstring: replace *"Revisit only if a stop control ships"* with the D1
   outcome. Also in `archive_job` (design D3a): capture `ended_now` before `end_loop`. Before the
   commit, persist `loop_stopped` (when `ended_now`) and `loop_archived` `{"id": loop.id}` with
-  `loop_id=loop.id, commit=False`. Broadcast both after the commit.
+  `loop_id=loop.id, commit=False`. Also move the existing `job_archived` row (`:1291`) above the
+  commit with `commit=False`. The frames go `job_archived`, `loop_stopped`, `loop_archived`.
 - [ ] 2.2a `hub/hub/loop_ending.py`: `end_loop(..., completed: bool)`, required and keyword-only.
   The `QUEUE_DRAINED_REASON` comparison moves to `scheduler.py:3156`. Both routes pass
   `completed=False`. Update the module docstring (design D2).
 - [ ] 2.2b `hub/hub/api/v1/loops.py` `archive_loop` / `set_loop_control`: `persist_event(...,
   commit=False)` before `session.commit()`, then the broadcast (design D3b).
-- [ ] 2.2c Check whether B9's `an-event-is-announced-only-once-its-write-is-committed` has landed.
-  If it has, use `defer_broadcast` for every new announcement and convert the four functions'
-  remaining broadcasts, then run its `ast` guard test (design D3).
+- [ ] 2.2c Check whether B9's `an-event-is-announced-only-once-its-write-is-committed` has landed
+  (`grep -n "def defer_broadcast" hub/hub/sse.py`).
+  - **Landed:** every frame in design D3's table is a `defer_broadcast(...)` placed **above** its
+    function's own `session.commit()` (`update_job`, `archive_job`, `archive_loop`,
+    `set_loop_control`), in the table's order. None is left where today's post-commit broadcast
+    sits, because rule 2 fails that and nothing would publish it. Test 1.2's spy moves to
+    `SSEManager.publish`. Run `test_no_staged_event_is_broadcast_before_commit` and
+    `test_no_announcement_is_deferred_after_the_last_commit`.
+  - **Not landed:** the frames are `await sse_manager.broadcast(...)` after each commit, in the
+    same order. Record in the commit message that B9's task 2.4b now applies to these four
+    functions.
 - [ ] 2.3 `hub/ui/src/api/loops.ts`: `useStopLoop` (`patchJson` `/jobs/${jobId}` `{stop_reason}`),
   `useArchiveLoop` (`postJson` `/loops/${loopId}/archive`), `useSetLoopControl` (`postJson`
   `/loops/${loopId}/control` `{control}`). Each `onSettled` invalidates

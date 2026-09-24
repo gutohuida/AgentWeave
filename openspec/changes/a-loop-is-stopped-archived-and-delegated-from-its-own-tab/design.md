@@ -124,18 +124,54 @@ called from inside another function's uncommitted transaction"*).
   both cases the `onSettled` invalidation re-reads the truth.
 - `POST /jobs/{id}/archive`: see D3a. Same shape as the stop.
 
-**The broadcast goes after the commit, never before.** Note for whoever lands second, this change or
-B9's `an-event-is-announced-only-once-its-write-is-committed`. That change adds `defer_broadcast`
-and an `ast` guard, `test_no_staged_event_is_broadcast_before_commit`. The guard fails any
-function that calls `persist_event(..., commit=False)` **and** calls `sse_manager.broadcast`
-anywhere in its body, even after the commit. After this change that would flag `update_job`
-(its existing `job_updated` and `loop_edit_staged` broadcasts included), `archive_job`,
-`archive_loop` and `set_loop_control`.
-- If B9 lands first, this change stages each new announcement with `defer_broadcast` and converts
-  those four functions' other broadcasts too.
-- If this change lands first, B9's IMPL converts them.
-Either way the wire order is unchanged: the route's own broadcast still follows the commit. R3
-should confirm B9's guard text has not narrowed in the meantime.
+**Every event row these four functions write moves into the transaction, and B9's guard decides
+how their frames are sent (R3).** B9's `an-event-is-announced-only-once-its-write-is-committed` is
+now final (R3 read its design D4 and tasks 1.6, 1.6b and 2.4b at `6c38a61`). Its `ast` guard has
+two rules:
+
+1. A function that calls `persist_event(..., commit=False)` must not call `sse_manager.broadcast`
+   or `.publish` anywhere in its body, even after its commit. It must use
+   `defer_broadcast(session, project_id, kind, payload)`.
+2. In a function that calls `defer_broadcast` and awaits a `.commit()` of its own, every
+   `defer_broadcast` must come before that function's **last own** `.commit()` in source order. A
+   commit hidden in a callee (`persist_event(commit=True)`, `_hand_job_to_scheduler`) does not
+   count. A defer left where today's post-commit broadcast sits is never published: the listener
+   fires on the commit, and `get_session` then closes the session without another one.
+
+So that either landing order is mechanical, this change moves **every** event row of the four
+functions into the transaction, not only the new ones. That includes `update_job`'s
+`loop_edit_staged` (today it is `commit=True` after the commit, `jobs.py:1147-1160`) and
+`archive_job`'s `job_archived` (today it comes after the commit and after its broadcast,
+`:1290-1291`). If one stayed after the commit, a frame deferred to the main commit would go out
+before its row existed. A reader refetching the loop on that frame would miss the row, which is the
+shape B9 forbids. Each function then has exactly one commit of its own: `update_job` `:1145`,
+`archive_job` `:1287`, `archive_loop` `loops.py:182`, `set_loop_control` `:217`. Every row and every
+announcement goes above it. The frame order is fixed here, so neither lander has to choose one:
+
+| Function | Rows staged before the commit (`commit=False`) | Frames, in this order |
+|---|---|---|
+| `update_job` | `loop_edit_staged` (if staged), `loop_stopped` (if `ended_now`) | `loop_edit_staged`, `loop_stopped`, `job_updated {id, enabled}` |
+| `archive_job` | `job_archived`, `loop_stopped` (if `ended_now`), `loop_archived` (if it has a loop) | `job_archived`, `loop_stopped`, `loop_archived` |
+| `archive_loop` | `loop_archived` | `loop_archived` |
+| `set_loop_control` | `loop_control_changed` | `loop_control_changed` |
+
+- **If B9 has not landed:** each frame is an `await sse_manager.broadcast(...)` after the function's
+  commit, in the table's order, where today's broadcasts sit. B9's rule 1 then flags all four
+  functions. B9's task 2.4b converts each one to a `defer_broadcast` above the commit, in the same
+  order, and moves the spies. Nothing else in B9 changes.
+- **If B9 has landed:** each frame is a `defer_broadcast(session, project_id, kind, payload)`
+  **above** the function's own `session.commit()`, in the table's order. Payloads are built from
+  values known before the commit: `job.enabled` is final by then, and `set_loop_control`'s
+  `new_value` is `loop.control or "operator"` after the assignment. Tests that spy on these frames
+  (1.2) spy on `SSEManager.publish`, not `broadcast`. Run B9's
+  `test_no_staged_event_is_broadcast_before_commit` and
+  `test_no_announcement_is_deferred_after_the_last_commit`.
+
+The wire effect is the same either way: every frame follows the commit of the row it reports. The
+one visible difference with B9 is that `job_updated` and `job_archived` go out a few milliseconds
+before `_hand_job_to_scheduler` registers or unregisters the job. That function writes nothing to
+the database, because the store is in memory (F351). A reader that refetches on the frame reads the
+same rows.
 
 ## D3a — archiving a running loop's job is an operator stop too, and is recorded as one
 
@@ -191,6 +227,17 @@ badge (`loopCounts.ts`). The badge and the controls cannot disagree:
   including from a structured `{message, code}` detail. Each action has its own fallback, e.g.
   *"Could not stop this loop."* Do not add a third local `errorDetail` copy
   (`JobsPage.tsx:18` and `AgentCreateDialog.tsx:10` already have one each).
+  **What the operator reads, per failure (R3).** A refusal is JSON, so its sentence is shown:
+  *"loop is already archived"*, *"this loop is still running; it must stop or complete before it
+  can be archived"* (a race with another tab), *"Job not found"* / *"Loop not found"*, or, for a
+  reason over 4000 characters, the 422 rendered as *"String should have at most 4000 characters"*
+  (the field name is dropped because the message starts with a capital, `client.ts:103`). An unhandled exception's 500 has a plain-text body, so `readableApiError` shows that
+  body (*"Internal Server Error"*), not the fallback. The fallback appears only when no response
+  arrived (a network error). In every case `onSettled` re-reads the loop, so the controls then
+  match what the Hub recorded. That includes the one misleading case, a broadcast that raised
+  after the commit, where the line says the call failed while the tab shows the loop stopped.
+  `readableRefusal` was considered and rejected: it would turn that same case into *"Could not stop
+  this loop."* beside a stopped loop.
 - **Why a new stop hook rather than `useUpdateJob`** (`api/jobs.ts:207`, which has no component
   caller today): that hook invalidates only `jobs`, and the tab reads `loops`. A dedicated
   `useStopLoop` keeps the invalidation next to the one reader it serves.
@@ -209,3 +256,9 @@ the new floor.
   route too (`loops.py:56`). It cannot be reached today (see its own docstring), so it is left alone.
 - The Jobs page `LoopBlock` still reads a stopped loop from `stop_reason` text (`JobCard.tsx:286`)
   rather than from `ending_state`. Not this change's finding.
+- **`LoopTab` fetches the loop's history and renders none of it (R3).** `LoopDetail.events`
+  (`loops.ts`, *"This loop's own audit trail"*) is read by no component (`grep -rn "\.events"
+  hub/ui/src`). The events this change writes are therefore checked through `GET /loops/{id}`, not
+  on screen (test guide, human-only steps 2 and 6). This is a candidate finding for the ledger, not
+  carried here: the spec asks only that the history be retrievable (`agent-loops` *"A loop's
+  history is answerable…"*: *"The Hub SHALL let a caller retrieve…"*).

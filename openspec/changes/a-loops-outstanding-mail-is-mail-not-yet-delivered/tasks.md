@@ -10,6 +10,12 @@
   **Done 2026-09-24.** No duplicate test: the `IN` subquery cannot double-count. No index: the
   entry side uses the existing composite index. R2 added the running-turn clause (design D2).
 - [ ] 0.2 R3: the same, fresh.
+  **Done 2026-09-24.** The readers are confirmed: `scheduler.py:498`, `status.py:45`, and the API
+  filter. The one writer, `messages.py:410`, is confirmed too. Of the four `Message(` sites, only
+  `messages.py:45` and `agents.py:2213` get an entry. `/compact` and `/new-session`
+  (`agents.py:2979`, `:3016`) get none, so after this change they stop inflating `pending`. The
+  entry states are `queued`, `delivered` and `withdrawn`. "Abandoned" is `withdrawn` with an
+  `abandoned_reason`. `Run.status` defaults to `running`. Nothing changed but 1.5's setup.
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -36,8 +42,10 @@
   through a real run row.
 - [ ] 1.5 `hub/tests/test_status.py` `test_pending_counts_mail_not_yet_delivered` (new): two
   operator messages (`POST /messages`, no `from`) to a registered agent with no runner, so both stay
-  `queued`. `pending == 2`. Mark one entry `delivered` in the DB, and `pending == 1` while
-  `total == 2`. **Fails today**: `pending` stays 2.
+  `queued`. Before counting, read both entries from the DB and assert they are `queued`, so the test
+  does not depend on whether the route's drain attempt has settled. If they are not, seed the
+  `Message` and `InboundQueueEntry` rows directly. `pending == 2`. Mark one entry `delivered` in the
+  DB, and `pending == 1` while `total == 2`. **Fails today**: `pending` stays 2.
 
 ## 2. Implementation
 

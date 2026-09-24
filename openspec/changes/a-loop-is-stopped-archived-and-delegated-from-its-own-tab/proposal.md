@@ -23,7 +23,8 @@ Three places on screen promise what cannot be done:
   operator"*. No control stops it.
 - `LoopsIndexTab.tsx:141-152` offers *Show archived*. Only archiving a loop's job can archive a loop.
 - `LoopSummary.control` is on every loop route (`hub/hub/schemas/jobs.py`, `control`) and rendered
-  nowhere, while the loop's timeline can show a `loop_control_changed` event.
+  nowhere, while `GET /loops/{id}`'s `events` can hold a `loop_control_changed` row (`LoopTab`
+  renders no event list, R3).
 
 The gap also shapes a decision. On 2026-09-23 the operator decided that `archive_job` does not refuse
 a running loop: archiving the job ends the loop (F224). A refusal was withdrawn *because no screen can
@@ -86,6 +87,9 @@ only `jobs` queries, so an open loop tab stays stale.
   `hub/hub/loop_ending.py` (`end_loop(..., completed=)`), `hub/hub/scheduler.py` (its one
   `end_loop` call), `hub/hub/api/v1/loops.py` (`archive_loop` and `set_loop_control` event order).
 - Interacts with B9's `an-event-is-announced-only-once-its-write-is-committed`: whichever lands
-  second converts these functions' broadcasts to its `defer_broadcast` (design D3).
+  second converts these functions' broadcasts to its `defer_broadcast`, above each function's own
+  commit and in the order design D3's table fixes. This change moves every event row of the four
+  functions into the transaction, including the existing `loop_edit_staged` and `job_archived`, so
+  that conversion is mechanical.
 - `hub/tests/test_surface_ceilings.py` (ceiling constant).
 - Spec: `agent-loops`, two ADDED requirements.
