@@ -233,6 +233,24 @@ async def consider(
             logger.info("final checkpoint warning for %s", conversation_id)
             return None
 
+        # A conversation already handed over is not billed for another checkpoint it cannot use:
+        # `cut_over` would refuse it (design D6). After the backstop above, which is free and
+        # still owed, and before anything billed or announced.
+        handed_over_to = (
+            await db.execute(
+                select(Checkpoint.cut_over_to_conversation_id).where(
+                    Checkpoint.conversation_id == conversation_id,
+                    Checkpoint.cut_over_to_conversation_id.is_not(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if handed_over_to is not None:
+            _declined(
+                conversation_id,
+                f"already handed over to {handed_over_to}; its line continues there",
+            )
+            return None
+
         if should_request_notes(policy, context_tokens=context_tokens, percent=percent):
             if not await _notes_already_in_hand(db, conversation_id):
                 db.add(
@@ -329,7 +347,9 @@ async def consider(
                 # rather than being left with a conversation that quietly kept going.
                 payload["cutover_refused"] = str(exc)
                 await sse_manager.broadcast(project_id, "checkpoint_ready", payload)
-                return checkpoint.id
+                # Not `checkpoint.id`: a cutover that lost a race rolled the session back, which
+                # expires every instance, and reading one raises MissingGreenlet.
+                return payload["checkpoint_id"]
             payload["successor_conversation_id"] = successor.id
             payload["queue_entry_id"] = entry_id
             await sse_manager.broadcast(project_id, "conversation_cut_over", payload)

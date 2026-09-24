@@ -365,7 +365,9 @@ async def test_a_spent_checkpoint_cannot_be_cut_over_a_second_time(app):
 
         successor, entry_id = await cut_over(db, conversation, checkpoint)
 
-        with pytest.raises(CutoverRefusedError, match="already archived"):
+        # Was "already archived" until `a-checkpoint-is-handed-over-once-and-says-where-it-went`
+        # (design D4): the checkpoint now records where it went, so the refusal names the successor.
+        with pytest.raises(CutoverRefusedError, match=successor.id):
             await cut_over(db, conversation, checkpoint)
 
         successors = (

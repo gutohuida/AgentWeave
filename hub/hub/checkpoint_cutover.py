@@ -16,6 +16,9 @@ from __future__ import annotations
 import logging
 from typing import Optional, Tuple
 
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
+
 from .checkpoint_generation import render_checkpoint
 from .conversations import CONVERSATION_TITLE_MAX_LENGTH, archivable, archive, new_conversation
 from .db.models import Checkpoint, Conversation
@@ -55,6 +58,54 @@ def successor_title(previous: Optional[str]) -> str:
     return candidate[:CONVERSATION_TITLE_MAX_LENGTH]
 
 
+async def _handover_of(db, conversation_id: str) -> Optional[Tuple[str, str]]:
+    """`(checkpoint id, successor id)` of the checkpoint that handed this conversation over."""
+    row = (
+        await db.execute(
+            select(Checkpoint.id, Checkpoint.cut_over_to_conversation_id).where(
+                Checkpoint.conversation_id == conversation_id,
+                Checkpoint.cut_over_to_conversation_id.is_not(None),
+            )
+        )
+    ).first()
+    return None if row is None else (row[0], row[1])
+
+
+def _already_handed_over(
+    conversation_id: str, checkpoint_id: str, prior: Tuple[str, str]
+) -> CutoverRefusedError:
+    handed_by, successor = prior
+    if handed_by == checkpoint_id:
+        return CutoverRefusedError(
+            f"Checkpoint {checkpoint_id} was already cut over to {successor}; that conversation "
+            "holds the work."
+        )
+    return CutoverRefusedError(
+        f"Conversation {conversation_id} was already handed over to {successor} (checkpoint "
+        f"{handed_by}); continue there, or keep working in this one."
+    )
+
+
+async def _lost_the_race(
+    db, predecessor_id: str, checkpoint_id: str, error: Optional[IntegrityError]
+) -> Exception:
+    """The refusal for a press that lost to a concurrent one, read after the rollback.
+
+    An `IntegrityError` that names no handed-over checkpoint came from some other constraint, and
+    is returned as itself rather than dressed as a refusal that names nothing.
+    """
+    prior = await _handover_of(db, predecessor_id)
+    if prior is None:
+        return (
+            error
+            if error is not None
+            else RuntimeError(
+                f"cutover claim on checkpoint {checkpoint_id} matched no row and none is recorded"
+            )
+        )
+    return _already_handed_over(predecessor_id, checkpoint_id, prior)
+
+
 def delivery_content(checkpoint: Checkpoint) -> str:
     """What the successor actually receives: the rendered checkpoint, framed."""
     return _DELIVERY_PREAMBLE + render_checkpoint(checkpoint)
@@ -73,33 +124,43 @@ async def cut_over(
     Refuses outright when the predecessor cannot be archived — a run still in progress, or
     undelivered queue entries that archiving would strand. Cutting over anyway would leave the
     operator with a successor holding a summary and a predecessor holding the actual work. Also
-    refuses when the predecessor is already archived, which is what makes a cutover happen at
-    most once per conversation.
+    refuses a conversation that was already handed over, and a checkpoint that was already cut
+    over. That is recorded on the checkpoint (`cut_over_to_conversation_id`), not inferred from the
+    predecessor being archived: reopening a handed-over conversation clears its archived state and
+    used to re-arm the checkpoint (F293). The claim is a conditional UPDATE, and a partial unique
+    index on `checkpoints.conversation_id` backs it for two different checkpoints of one
+    conversation, so two simultaneous presses cannot both win (F294).
 
     Order matters: the successor and its entry are created **before** the predecessor is
     archived, so a failure part-way leaves the predecessor open and usable rather than closed
     with nowhere to continue.
     """
+    # Plain strings before any write: a rollback expires every instance in the session, and
+    # reading one afterwards raises MissingGreenlet, which a route answers as a 500.
+    checkpoint_id = checkpoint.id
+    predecessor_id = predecessor.id
     if checkpoint.status != "ready":
         raise CutoverRefusedError(
             f"Checkpoint {checkpoint.id} is {checkpoint.status!r}; only a ready checkpoint "
             "carries something to continue from."
         )
 
+    # The handover record comes first, so "unarchive it first" is said only to a conversation that
+    # was never handed over, where following it is correct (design D4).
+    prior = await _handover_of(db, predecessor.id)
+    if prior is not None:
+        raise _already_handed_over(predecessor.id, checkpoint.id, prior)
+
     # Asked here rather than left to `archivable`, whose first line returns None for an archived
     # conversation. That early return is right for what `archivable` is for -- archiving an
     # archived conversation is a no-op, not an error -- and wrong as the question a cutover asks.
-    # Without this, a spent checkpoint could be cut over a second time: `status` is unchanged by a
-    # cutover, so the check above still passes, and the second press minted a second successor
-    # that was delivered the same checkpoint and burned a whole turn rediscovering that its work
-    # was already done (F126, reproduced live 2026-08-30). It also contradicts the lineage
-    # requirement that a chain is linear -- two successors of one predecessor is a fork.
+    # A conversation the operator archived by hand reaches here; refusing is honest, since a
+    # cutover closes a conversation and this one is closed.
     if predecessor.lifecycle == "archived":
         raise CutoverRefusedError(
             f"Conversation {predecessor.id} is already archived, so there is nothing left to "
-            "hand over. A cutover closes a conversation and opens its successor; if this one "
-            "was cut over already, its successor holds the work, and if it was archived by "
-            "hand, unarchive it first."
+            "hand over. A cutover closes a conversation and opens its successor; unarchive it "
+            "first."
         )
 
     refusal = await archivable(db, predecessor)
@@ -142,9 +203,34 @@ async def cut_over(
     db.add(entry)
 
     archive(predecessor)
-    await db.commit()
 
-    logger.info("cut %s over to %s on checkpoint %s", predecessor.id, successor.id, checkpoint.id)
+    # Both callers arrive with nothing pending, so rolling back below discards only this
+    # function's own adds. A caller that staged changes before `cut_over` would lose them, and its
+    # instances come back expired either way: read plain ids, never `checkpoint.id`, afterwards.
+    successor_id = successor.id
+    entry_id = entry.id
+    await db.flush()
+    try:
+        claim = await db.execute(
+            update(Checkpoint)
+            .where(
+                Checkpoint.id == checkpoint_id,
+                Checkpoint.cut_over_to_conversation_id.is_(None),
+            )
+            .values(cut_over_to_conversation_id=successor_id)
+            .execution_options(synchronize_session=False)
+        )
+        claimed = claim.rowcount == 1
+        if claimed:
+            await db.commit()
+    except IntegrityError as error:
+        await db.rollback()
+        raise await _lost_the_race(db, predecessor_id, checkpoint_id, error) from error
+    if not claimed:
+        await db.rollback()
+        raise await _lost_the_race(db, predecessor_id, checkpoint_id, None)
+
+    logger.info("cut %s over to %s on checkpoint %s", predecessor_id, successor_id, checkpoint_id)
 
     if auto_continue:
         # Started here rather than left for the operator to trigger with a message. The successor
@@ -197,4 +283,4 @@ async def cut_over(
                     result.waiting_reason,
                 )
 
-    return successor, entry.id
+    return successor, entry_id

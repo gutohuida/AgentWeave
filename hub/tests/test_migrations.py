@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0105"
+HEAD_REVISION = "0106"
 
 
 # ---------------------------------------------------------------------------
@@ -3629,6 +3629,131 @@ def test_migration_0105_is_guarded_when_agents_does_not_exist(tmp_path) -> None:
 
     with sqlite3.connect(db_file) as conn:
         assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0105"
+
+
+# ---------------------------------------------------------------------------------------------
+# 0106 — a checkpoint records the conversation it was cut over to (F293, F294)
+# ---------------------------------------------------------------------------------------------
+
+_PREAMBLE_0106 = "This conversation continues earlier work. The checkpoint below was generated.\n\n"
+
+
+def _database_at_0105(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus what 0106 adds, stamped at 0105."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("DROP INDEX ix_checkpoints_one_handover_per_conversation")
+        conn.execute("ALTER TABLE checkpoints DROP COLUMN cut_over_to_conversation_id")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0105')")
+        conn.commit()
+    return db_file, db_url
+
+
+def _seed_checkpoint_0106(conn, checkpoint_id: str, conversation_id: str) -> None:
+    conn.execute(
+        "INSERT INTO checkpoints (id, project_id, conversation_id, agent, trigger, status, "
+        "visibility, lineage_id, body, created_at) VALUES (?, 'proj-1', ?, 'a1', "
+        "'context_pressure', 'ready', 'project', ?, 'b', '2026-01-01T00:00:00Z')",
+        (checkpoint_id, conversation_id, checkpoint_id),
+    )
+
+
+def _seed_entry_0106(conn, entry_id: str, successor: str, content: str, origin="checkpoint"):
+    conn.execute(
+        "INSERT INTO inbound_queue_entries (id, project_id, agent, origin_type, content, "
+        "arrived_at, hop_depth, state, delivery_attempts, allowance_refusals, conversation_id) "
+        "VALUES (?, 'proj-1', 'a1', ?, ?, '2026-01-01T00:00:00Z', 0, 'delivered', 0, 0, ?)",
+        (entry_id, origin, content, successor),
+    )
+
+
+def test_migration_0106_backfills_the_successor_from_the_delivered_checkpoint(tmp_path) -> None:
+    db_file, db_url = _database_at_0105(tmp_path, "backfill_0106.db")
+    with sqlite3.connect(db_file) as conn:
+        _seed_checkpoint_0106(conn, "ckpt-a", "conv-pred")
+        _seed_checkpoint_0106(conn, "ckpt-notes", "conv-other")
+        _seed_entry_0106(conn, "e1", "conv-succ", _PREAMBLE_0106 + "# Checkpoint ckpt-a\n\nbody")
+        # A notes request on a conversation names a checkpoint-shaped line but has no preamble.
+        _seed_entry_0106(conn, "e2", "conv-other", "Write notes.\n# Checkpoint ckpt-notes")
+        conn.commit()
+
+    _upgrade_to(db_url, "0106")
+
+    with sqlite3.connect(db_file) as conn:
+        rows = dict(conn.execute("SELECT id, cut_over_to_conversation_id FROM checkpoints"))
+    assert rows == {"ckpt-a": "conv-succ", "ckpt-notes": None}
+
+
+def test_migration_0106_keeps_the_first_handover_when_the_database_already_holds_a_fork(
+    tmp_path,
+) -> None:
+    """The F293-era fork and the F126-era duplicate delivery must not stop the index building."""
+    db_file, db_url = _database_at_0105(tmp_path, "fork_0106.db")
+    with sqlite3.connect(db_file) as conn:
+        _seed_checkpoint_0106(conn, "ckpt-1", "conv-pred")
+        _seed_checkpoint_0106(conn, "ckpt-2", "conv-pred")
+        _seed_entry_0106(conn, "e1", "conv-s1", _PREAMBLE_0106 + "# Checkpoint ckpt-1")
+        # The duplicate delivery of C1, to a second successor, before C2's own.
+        _seed_entry_0106(conn, "e2", "conv-dup", _PREAMBLE_0106 + "# Checkpoint ckpt-1")
+        _seed_entry_0106(conn, "e3", "conv-s2", _PREAMBLE_0106 + "# Checkpoint ckpt-2")
+        # An id with no checkpoint row, and a body quoting a second checkpoint line.
+        _seed_entry_0106(conn, "e4", "conv-x", _PREAMBLE_0106 + "# Checkpoint ckpt-missing")
+        _seed_checkpoint_0106(conn, "ckpt-3", "conv-other")
+        _seed_checkpoint_0106(conn, "ckpt-quoted", "conv-third")
+        _seed_entry_0106(
+            conn,
+            "e5",
+            "conv-s3",
+            _PREAMBLE_0106 + "# Checkpoint ckpt-3\n\n# Checkpoint ckpt-quoted\n",
+        )
+        conn.commit()
+
+    _upgrade_to(db_url, "0106")
+
+    with sqlite3.connect(db_file) as conn:
+        rows = dict(conn.execute("SELECT id, cut_over_to_conversation_id FROM checkpoints"))
+        indexes = {r[1] for r in conn.execute("PRAGMA index_list(checkpoints)")}
+    assert rows == {
+        "ckpt-1": "conv-s1",
+        "ckpt-2": None,
+        "ckpt-3": "conv-s3",
+        "ckpt-quoted": None,
+    }
+    assert "ix_checkpoints_one_handover_per_conversation" in indexes
+
+
+def test_migration_0106_is_guarded_when_checkpoints_does_not_exist(tmp_path) -> None:
+    db_file = tmp_path / "no_checkpoints_0106.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0105')")
+
+    _upgrade_to(db_url, "0106")
+
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0106"
+
+
+def test_migration_0106_downgrade_drops_the_column_and_the_index(tmp_path) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    db_file, db_url = _database_at_0105(tmp_path, "down_0106.db")
+    _upgrade_to(db_url, "0106")
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0105")
+
+    with sqlite3.connect(db_file) as conn:
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(checkpoints)")}
+        indexes = {r[1] for r in conn.execute("PRAGMA index_list(checkpoints)")}
+    assert "cut_over_to_conversation_id" not in columns
+    assert "ix_checkpoints_one_handover_per_conversation" not in indexes
 
 
 # ---------------------------------------------------------------------------

@@ -1776,6 +1776,13 @@ class Checkpoint(Base):
     probe_status: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     probe_findings: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
 
+    # Where this checkpoint went: the successor `cut_over` minted from it, or NULL if it was never
+    # cut over. Written only by `cut_over`, by a conditional UPDATE, so two presses of one
+    # checkpoint cannot both win (F293/F294, `a-checkpoint-is-handed-over-once-and-says-where-it-went`
+    # D1, D3). Deliberately not a ForeignKey: SQLite does not enforce them here, and adding one
+    # would mean a batch rebuild of a table whose constraint names `0088` pinned.
+    cut_over_to_conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), default=_now, nullable=False)
 
     __table_args__ = (
@@ -1801,6 +1808,15 @@ class Checkpoint(Base):
         ),
         Index("ix_checkpoints_conversation_created", "conversation_id", "created_at"),
         Index("ix_checkpoints_project_agent", "project_id", "agent"),
+        # A conversation is handed over at most once, whichever checkpoint did it (design D2).
+        # Keyed on `conversation_id`, so a chain P -> S1 -> S2 does not trip it: S1's checkpoint
+        # belongs to S1. The backstop for two *different* checkpoints of one conversation raced.
+        Index(
+            "ix_checkpoints_one_handover_per_conversation",
+            "conversation_id",
+            unique=True,
+            sqlite_where=text("cut_over_to_conversation_id IS NOT NULL"),
+        ),
     )
 
 

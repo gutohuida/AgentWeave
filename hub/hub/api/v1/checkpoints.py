@@ -45,6 +45,7 @@ class CheckpointSummary(BaseModel):
     citations: Optional[list] = None
     body: Optional[str] = None
     generation_error: Optional[str] = None
+    cut_over_to_conversation_id: Optional[str] = None
     created_at: Optional[str] = None
 
     @classmethod
@@ -66,6 +67,7 @@ class CheckpointSummary(BaseModel):
             citations=row.citations,
             body=row.body,
             generation_error=generation_error,
+            cut_over_to_conversation_id=row.cut_over_to_conversation_id,
             created_at=row.created_at.isoformat() if row.created_at else None,
         )
 
