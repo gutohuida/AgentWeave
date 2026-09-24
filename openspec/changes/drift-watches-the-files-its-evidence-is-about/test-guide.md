@@ -9,6 +9,9 @@
    asserts `reachable_from_main` so it cannot pass because of some other difference.
 4. **A resolution survives the basis flip.** Task 1.7.
 5. **What is not watched is listed.** Tasks 1.5 and 1.8 read `unwatched` with both reasons.
+5a. **The watch set is what the evidence names (R3).** Tasks 1.13-1.15: reachability is asked of the
+   configured main branch; a merge commit's first-parent diff is watched; `path::test` and
+   `path:12` watch the path, `.` and a command watch nothing.
 6. **The migration is at head** in `test_migrations.py` and `test_project_persistence.py`.
 7. **Nothing else moved.** The full-suite count in 2.6, with only 1.9's rewrites named.
 8. **Drive** (3.1): F217's leg-3 table re-measured; the agent row now raises one candidate.

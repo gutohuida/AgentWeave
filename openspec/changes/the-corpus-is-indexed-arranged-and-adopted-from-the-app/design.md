@@ -147,6 +147,10 @@ documents' own navigation — a separate question).
 
 ## Round log
 
+### Round 3 — 2026-09-24 (B6 R3)
+
+Re-derived `reindex` (`spec.py:1213-1290`: writes the index, re-renders, then commits; no broadcast) and `build_index` (`spec_documents.py:247-339`: files on-disk-and-known only; the home diagnostic precedes `index_home_required`). `useSpecList().specs` are discovered files, so an entry with a `document_id` is tracked and on disk, and D2's select is right. Nothing disagreed.
+
 ### Round 2 — 2026-09-24 (B6 R2)
 
 Re-derived the four routes' bodies and refusals (`spec.py:1213-1416`, `:1470-1524`), `build_index`

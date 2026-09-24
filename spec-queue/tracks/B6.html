@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B6 -- Spec-flow drift, corpus writes and audit reads</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground:#F4F5F8; --surface:#FFFFFF; --surface-2:#EAECF2;
+  --ink:#16181F; --ink-2:#4D5464; --ink-3:#787F90;
+  --rule:#DCDFE8; --accent:#4A57A0; --accent-soft:#E7E9F6;
+  --sevA:#A8372C; --sevA-soft:#F7E6E3; --sevB:#8A5F14; --sevB-soft:#F7EEDA;
+  --sevC:#3F6E52; --sevC-soft:#E4EFE8; --sevD:#606878; --sevD-soft:#E9EBF0;
+  --ok:#2F7A4B; --ok-soft:#E1F1E6; --op:#7A3E86; --op-soft:#F2E7F5;
+  --sans:'IBM Plex Sans',-apple-system,Segoe UI,system-ui,sans-serif;
+  --mono:'IBM Plex Mono',Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+    --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+    --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+    --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+    --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+    --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#0E1014; --surface:#171A21; --surface-2:#1F232C;
+  --ink:#E4E7EE; --ink-2:#A6ACBB; --ink-3:#7A8194;
+  --rule:#262B35; --accent:#8E9BDE; --accent-soft:#1D2238;
+  --sevA:#E07E6E; --sevA-soft:#301C19; --sevB:#D5A64A; --sevB-soft:#2E2514;
+  --sevC:#7FB795; --sevC-soft:#16261C; --sevD:#98A0B2; --sevD-soft:#1E222B;
+  --ok:#7FC79A; --ok-soft:#15281D; --op:#C79AD2; --op-soft:#2A1B2E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:36px 16px 72px}
+a{color:var(--accent)}
+code{font-family:var(--mono);font-size:.86em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.back{font-family:var(--mono);font-size:12px;display:inline-block;margin-bottom:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);margin:0 0 8px}
+h1{font-size:clamp(24px,4.5vw,32px);font-weight:700;letter-spacing:-.02em;line-height:1.15;margin:0 0 18px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px 18px}
+.sfig .sl{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.sfig .sv{font-size:13.5px}
+.sfig .sv code{background:var(--surface-2);padding:1px 4px;border-radius:3px}
+.toc{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule)}
+.toc-item{font-family:var(--mono);font-size:12px;padding:5px 12px;border-radius:999px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);text-decoration:none}
+.toc-item:hover{border-color:var(--accent);color:var(--accent)}
+.toc-item.toc-missing{opacity:.5;font-style:italic}
+.toc-item.toc-final{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.toc-item.toc-final.toc-missing{background:var(--surface-2);color:var(--ink-3);opacity:.5}
+section.sec-round,section.sec-final{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:16px 20px;margin-bottom:14px;scroll-margin-top:14px}
+section.sec-final{border-color:var(--accent);border-width:2px;background:var(--accent-soft)}
+section h2{font-size:16px;font-weight:700;margin:0 0 10px;letter-spacing:-.01em}
+section.sec-final h2{color:var(--accent)}
+.empty{color:var(--ink-3);font-style:italic;font-size:13.5px}
+.md-body{font-size:14px;line-height:1.62}
+.md-body h1,.md-body h2,.md-body h3{font-size:15px;margin:18px 0 7px}
+.md-body h4,.md-body h5,.md-body h6{font-size:13px;margin:14px 0 5px;color:var(--ink-2)}
+.md-body>*:first-child{margin-top:0}
+.md-body p{margin:0 0 11px}
+.md-body li{margin:0 0 5px}
+.md-body ul,.md-body ol{margin:0 0 11px;padding-left:20px}
+.md-body pre{background:var(--surface-2);padding:10px 12px;border-radius:5px;overflow-x:auto;font-size:12.5px;margin:0 0 11px}
+.md-body code{font-family:var(--mono);font-size:.92em}
+.md-body pre code{font-size:inherit}
+.md-body blockquote{margin:0 0 11px;padding-left:13px;border-left:2px solid var(--rule);color:var(--ink-2)}
+.md-body blockquote p:last-child{margin-bottom:0}
+.md-body .scroll{overflow-x:auto}
+.md-body table.md{border-collapse:collapse;font-size:12.5px;width:100%}
+.md-body table.md th,.md-body table.md td{border:1px solid var(--rule);padding:5px 9px;text-align:left;vertical-align:top}
+.md-body table.md th{background:var(--surface-2);font-weight:600}
+.md-body hr{border:0;border-top:1px solid var(--rule);margin:16px 0}
+footer{margin-top:30px;font-size:12px;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../ROUNDS.html">&larr; Rounds</a>
+  <p class="eyebrow">spec-queue/tracks/B6.md, tracked</p>
+  <h1>B6 &mdash; Spec-flow drift, corpus writes and audit reads</h1>
+  <div class="card">
+    <div class="summary"><div class="sfig"><div class="sl">Findings</div><div class="sv">F129, F132, F216, F217 · F206, F208, F205 · F211, F169 · F213</div></div><div class="sfig"><div class="sl">Decisions</div><div class="sv">F217 drift branch basis (moved out of D13); two raised in R1 — what unwatched evidence watches (sub-question of F217), and who authors a capability document (F206&#x27;s merge route); plus one small product call per change (demotion reason, proposal clean-up shape)</div></div><div class="sfig"><div class="sl">Changes</div><div class="sv"><code>openspec/changes/drift-watches-the-files-its-evidence-is-about/</code>, <code>openspec/changes/drift-is-scanned-and-answered-on-the-document/</code>, <code>openspec/changes/the-corpus-is-indexed-arranged-and-adopted-from-the-app/</code>, <code>openspec/changes/a-documents-rigor-history-and-retired-requirements-are-on-screen/</code>, <code>openspec/changes/a-pending-proposal-can-be-withdrawn/</code></div></div><div class="sfig"><div class="sl">Status</div><div class="sv">R3 done — parked for operator</div></div></div>
+    <nav class="toc"><a class="toc-item" href="#R1">R1</a><a class="toc-item" href="#R2">R2</a><a class="toc-item" href="#R3">R3</a><a class="toc-item toc-final" href="#Final">Final</a></nav>
+  </div>
+  <section class="sec-final" id="Final"><h2>Final -- what the bundle reached, and why</h2><div class="md-body"><p>Bundle B6 puts four parts of the specification flow on screen:</p>
+<ul>
+<li><strong>Drift:</strong> the product asking <em>&quot;the code changed after this was verified — which one was wrong?&quot;</em></li>
+<li><strong>The corpus routes:</strong> index, arrange and adopt.</li>
+<li><strong>The audit reads:</strong> rigor history and retired requirements.</li>
+<li><strong>Clean-up of pending proposals.</strong></li>
+</ul>
+<p>It carries ten findings and produced five changes. <strong>Nothing is built. The bundle is parked until the operator approves it.</strong></p>
+<h5>Decisions</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Question</th><th>Recommended answer</th><th>Why</th></tr></thead><tbody><tr><td>F217</td><td>What should drift compare agent evidence against once its work has merged?</td><td><strong>C: narrow each footprint to the files its evidence is about, then compare against the main branch once the work has reached it</strong></td><td>Today a footprint holds the whole tree (<code>requirement_evidence.py:539</code>, <code>:969</code>), so one commit to any file raises a candidate for unrelated evidence. R1 measured it: evidence on <code>ledger.py</code>, then a commit to <code>other.py</code>, gave one candidate. Agent evidence is also compared against its own branch (<code>:1140-1152</code>). Nothing commits to that branch after the merge, so the evidence stops being watched exactly when the work ships. A (only say so) keeps both problems. B (switch the basis without narrowing) floods: an agent commit&#x27;s whole tree differs from <code>main</code> in every file anyone else merged</td></tr><tr><td>F217-a</td><td>What does evidence watch when it names no file?</td><td><strong>Nothing, and it is listed as unwatched with the reason and the fix</strong></td><td>Watching the whole tree is the flood. Nothing reaches drift today (F129), so no operator loses a signal. There are three reasons: <code>names_no_file</code>, <code>recorded_before_watching</code> and <code>no_footprint</code></td></tr><tr><td>F217-b</td><td>What happens to footprints recorded before the change?</td><td><strong>They are not scanned, and are listed as <code>recorded_before_watching</code></strong></td><td>Their <code>entries</code> are whole trees. Scanning them would flood exactly the rows <code>:8000</code> already holds</td></tr><tr><td>F129</td><td>How often is drift scanned?</td><td><strong>Manually, by a Scan button on the document</strong></td><td>A scan runs a git read per branch plus the reachability refresh (<code>spec.py:963-966</code>). An automatic cadence would change two things at once, and can be added later</td></tr><tr><td>F132</td><td>Should F132&#x27;s severity be raised?</td><td><strong>No. Change 2 ships detect and resolve together, so the finding closes</strong></td><td>Its rule was that it becomes B the day detect ships without resolve</td></tr><tr><td>F206</td><td>Who authors a capability document? (This decides whether <em>merge</em> gets a screen.)</td><td><strong>M1: merge stays API-only for now. M3 (agents draft capability content as proposals and the operator accepts them) gets its own exploration later</strong></td><td>No agent can write a capability document (<code>spec_service.py:159-162</code>), and the operator has no authoring screen either. A merge button would be a JSON editor (M2)</td></tr><tr><td>F211</td><td>Must lowering a document&#x27;s rigor in the app carry a reason?</td><td><strong>Yes</strong></td><td>The app sends an empty reason on every rigor change (<code>SpecPhaseBar.tsx:62-70</code>), but the spec requires the reason to be recorded</td></tr><tr><td>F213</td><td>How are duplicate pending proposals cleared?</td><td><strong>W3: a repeat from the same proposer creates nothing, a revision supersedes that proposer&#x27;s earlier one, and the operator can Withdraw without judging</strong></td><td>W1 alone leaves twins already stored with only Reject to clear them. W2 alone keeps creating the twins it asks the operator to clear</td></tr></tbody></table></div>
+<h5>Changes</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td><code>drift-watches-the-files-its-evidence-is-about</code></td><td>F217, plus the whole-tree defect</td><td>A footprint watches three things: the file its locator names (pytest node and line suffixes are accepted), the files its named commit changed (merge commits by first parent), and the files its branch changed off <code>main</code>. It records where those came from (<code>watched_from</code>, one migration). Drift compares against <code>main</code> once the work is there, and reachability is asked of the configured main branch. <code>GET /spec/drift</code> lists unwatched evidence. Backend only</td><td>M</td></tr><tr><td><code>drift-is-scanned-and-answered-on-the-document</code></td><td>F129, F132</td><td>A <em>Drifting</em> strip on the document shows open candidates in the route&#x27;s order, three answers, a Scan button, and the unwatched line with its remedy. A candidate can be answered only once (409). Detect and resolve broadcast. The gate&#x27;s remedy says the operator answers the candidate on the document</td><td>M</td></tr><tr><td><code>the-corpus-is-indexed-arranged-and-adopted-from-the-app</code></td><td>F206 (4 of its 5 routes)</td><td>A corpus strip in the document browser shows the index state, a Rebuild button (which asks for a home only when the Hub does) and Adopt all. Untracked rows get Adopt. The document gets <em>Place under…</em>. Reindex broadcasts</td><td>M</td></tr><tr><td><code>a-documents-rigor-history-and-retired-requirements-are-on-screen</code></td><td>F211</td><td>Rigor history appears under Enforcement, newest first. A rigor change must be confirmed, and lowering it needs a reason. Retired requirements are listed with the tasks and evidence still linked to them. UI only</td><td>S</td></tr><tr><td><code>a-pending-proposal-can-be-withdrawn</code></td><td>F213</td><td>A duplicate submission creates nothing (<code>already_pending</code>). A revision supersedes the earlier one. The operator gets a Withdraw route and button. Twins are marked. Reject, withdraw and an accept refused as stale all broadcast and refresh every view</td><td>S–M</td></tr></tbody></table></div>
+<p><strong>Order.</strong> B5&#x27;s <code>a-footprint-names-the-line-of-work-its-commit-is-on</code> lands first, then change 1, then change 2. Change 2 must not ship without change 1, because it would put a Scan button over whole-tree comparison. Changes 3, 4 and 5 are independent. Change 1&#x27;s migration takes the next free revision at build time.</p>
+<h5>Open for the operator</h5>
+<ol>
+<li><strong>F217: option C?</strong> <em>Recommended: C.</em></li>
+<ul>
+<li>With A, change 1 keeps the narrowing (D1, D2, D4) and drops the basis switch (D3 and the MODIFIED</li>
+</ul>
+</ol>
+<p>requirement). Change 2&#x27;s strip also says <em>&quot;agent evidence is watched only on its own branch&quot;</em>.</p>
+<ul>
+<ul>
+<li>With B, change 1 is withdrawn and change 2 cannot ship.</li>
+</ul>
+<li><strong>Does evidence that names no file watch nothing?</strong> <em>Recommended: yes.</em> Watching &quot;the whole tree, as</li>
+</ul>
+<p>today&quot; keeps the flood for that evidence, and change 2&#x27;s unwatched line loses its main reason.</p>
+<ol>
+<li><strong>Are legacy footprints left unscanned?</strong> <em>Recommended: yes.</em> Scanning them as whole trees floods the</li>
+</ol>
+<p>existing rows on the first scan.</p>
+<ol>
+<li><strong>Is the scan manual?</strong> <em>Recommended: yes.</em> An automatic cadence would be a scheduler change on top</li>
+</ol>
+<p>of change 2.</p>
+<ol>
+<li><strong>Merge: M1?</strong> <em>Recommended: M1 now, with M3 as its own exploration.</em></li>
+<ul>
+<li>M2 adds a JSON-editor dialog to change 3.</li>
+<li>M3 changes <em>&quot;capability documents are written by the operator&quot;</em> to <em>&quot;accepted by the operator&quot;</em>.</li>
+</ul>
+<li><strong>Does a demotion need a reason in the app?</strong> <em>Recommended: yes.</em> Making it optional keeps change 4&#x27;s</li>
+</ol>
+<p>reason field and drops the rule that disables Confirm.</p>
+<ol>
+<li><strong>Proposal clean-up: W3?</strong> <em>Recommended: W3.</em></li>
+<ul>
+<li>W1 only drops Withdraw (D3 and D4&#x27;s button).</li>
+<li>W2 only drops de-duplication and supersession (D1 and D2).</li>
+</ul>
+<li><strong>File the candidate findings below.</strong> No round may write the ledger. Items 1–4, 9 and 10 are</li>
+</ol>
+<p>carried by a change here and need ids so the change can name what it closes. Items 5–8 and 11 are carried by nothing.</p>
+<h5>Candidate findings (not in the ledger)</h5>
+<ol>
+<li>A footprint watches the whole tree, so one commit raises a candidate for every piece of evidence (R1 measured it). <strong>Carried: change 1.</strong></li>
+<li>Rejecting a proposal in the app leaves it on screen: there is no broadcast, and the mutation invalidates nothing (<code>spec.py:669-694</code>, <code>api/spec.ts:244-256</code>). <strong>Carried: change 5.</strong></li>
+<li>The app records every rigor change with an empty reason (<code>SpecPhaseBar.tsx:62-70</code>). <strong>Carried: change 4.</strong></li>
+<li>A drift candidate can be answered twice, and the second answer overwrites the first (<code>resolve_drift</code> has no state check). <strong>Carried: change 2.</strong></li>
+<li>Only one unit of a multi-unit proposal can be accepted before its siblings go stale, although the spec calls them individually acceptable. Not carried: an operator design question.</li>
+<li>Reindex and arrange write files before the database commit, so an <code>OSError</code> leaves files written and digests rolled back (<code>spec.py:1255-1265</code>, <code>:1375-1379</code>). Not carried.</li>
+<li>A drift candidate is never superseded when its requirement is reworded, although the model says it is (<code>models.py:2643-2644</code>). Not carried.</li>
+<li>A capability document has no authoring path in the product (<code>spec_service.py:159-162</code>; <code>PUT …/content</code> has no client). Not carried: this is the M3 exploration.</li>
+<li><strong>(R2)</strong> An accept refused as stale commits <code>stale</code> and leaves the row on screen (<code>spec.py:642-649</code>). <strong>Carried: change 5.</strong></li>
+<li><strong>(R2)</strong> Evidence with no footprint row is never scanned and is not reported. <strong>Carried: change 1</strong> (<code>no_footprint</code>).</li>
+<li><strong>(R3)</strong> Any drift answer silences that exact change for good, whether it is true or not. For example, <em>Code corrected</em> pressed before the code is reverted stops the candidate from ever returning (<code>requirement_evidence.py:1221</code>, <code>:1160-1163</code>). Not carried; change 2 words the buttons as past-tense facts.</li>
+</ol>
+<h5>Findings that did not need a change</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>Why</th><th>Evidence</th></tr></thead><tbody><tr><td>F216</td><td>Already fixed: drift rows name the requirement (<code>FR-n</code> and its document) and the evidence (summary and author), not bare ids</td><td><code>list_drift</code>, <code>spec.py:1017-1052</code>; commit <code>a7b2df1</code>; the ledger says fixed. Change 2 reads these fields</td></tr><tr><td>F208</td><td>Already fixed: the arrange 409 names <code>POST /spec/reindex</code> and its <code>home</code> input</td><td><code>spec.py:1338-1348</code>; <code>568f868</code>; <code>test_a_refusal_says_what_would_work.py</code></td></tr><tr><td>F205</td><td>Already fixed: Archive is offered on <code>exploring</code> and <code>proposed</code>, and the dialog shows the refusal</td><td><code>SpecPhaseBar.tsx:146-160</code>; <code>58477dc</code></td></tr><tr><td>F169</td><td>Already fixed: the task drawer renders <code>approval_report</code> from both approving paths</td><td><code>TaskDetailDrawer.tsx:366</code>, <code>:406</code>; <code>taskApprovalReportAndPending.test.tsx</code>; <code>58477dc</code>, <code>f473510</code></td></tr></tbody></table></div></div></section><section class="sec-round" id="R1"><h2>R1 -- explore and propose (2026-09-24)</h2><div class="md-body"><p>Read on HEAD <code>404c7d5</code> (the worktree&#x27;s branch head <code>ce086b6</code> adds only the bundle scaffolding). Sources: <code>hub/hub/api/v1/spec.py</code>, <code>hub/hub/requirement_evidence.py</code>, <code>hub/hub/requirement_gate.py</code>, <code>hub/hub/spec_service.py</code>, <code>hub/hub/spec_documents.py</code>, <code>hub/hub/spec_adoption.py</code>, <code>hub/hub/spec_rigor.py</code>, <code>hub/hub/worktrees.py</code>, <code>hub/hub/api/v1/agent_trigger.py</code>, the spec UI (<code>hub/ui/src/api/spec.ts</code>, <code>components/spec/*</code>, <code>main.tsx</code>), the three touched main specs, and the other bundles&#x27; change directories as they appeared during this round. One throwaway test measured the whole-tree footprint (below); it was deleted.</p>
+<h5>Each finding, re-verified</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>Slice</th><th>Verdict on <code>404c7d5</code></th><th>Evidence</th></tr></thead><tbody><tr><td>F129 (B)</td><td>b</td><td><strong>Still open</strong></td><td><code>grep -rn &quot;spec/drift&quot; hub/ui/src</code> → nothing. <code>POST /spec/drift/detect</code> (<code>spec.py:956-974</code>) is still the only writer of <code>RequirementDrift</code>; no agent route or MCP tool reaches drift.</td></tr><tr><td>F132 (C)</td><td>b</td><td><strong>Still open</strong></td><td><code>requirement_gate.py:60-62</code> remedy <em>&quot;resolve the drift candidate&quot;</em>; <code>resolve</code> still has no client; <code>detect_drift</code> still skips evidence with an open candidate (<code>requirement_evidence.py:1131</code>).</td></tr><tr><td>F216 (C)</td><td>b</td><td><strong>Already fixed</strong></td><td><code>a7b2df1</code> (Round 4c): <code>list_drift</code> carries <code>created_at</code>, <code>requirement: {identifier, document}</code>, <code>evidence: {summary, locator, actor, actor_kind}</code> (<code>spec.py:1000-1058</code>). The drift change reads these fields.</td></tr><tr><td>F217 (C)</td><td>b</td><td><strong>Still open; decided here as a recommendation</strong></td><td><code>detect_drift</code> compares against <code>footprint.branch</code> (<code>:1140-1152</code>); the docstring&#x27;s deferral is unchanged (<code>:1089-1095</code>). Task release keeps the branch (<code>worktrees.py:987-993</code>), so the comparison keeps succeeding and finds nothing.</td></tr><tr><td>F206 (B)</td><td>c</td><td><strong>Still open</strong></td><td>None of <code>spec/reindex</code>, <code>documents/arrange</code>, <code>spec/adopt</code>, <code>documents/adopt</code>, <code>…/merge</code> appears in <code>hub/ui/src</code>.</td></tr><tr><td>F208 (D)</td><td>c</td><td><strong>Already fixed</strong></td><td><code>568f868</code> (Round 4b): the arrange 409 names <code>POST /spec/reindex</code> and the <code>home</code> input (<code>spec.py:1338-1348</code>); <code>test_a_refusal_says_what_would_work.py</code>.</td></tr><tr><td>F205 (C)</td><td>c</td><td><strong>Already fixed</strong></td><td><code>58477dc</code> (UI-1): <code>SpecPhaseBar.tsx:146-160</code> offers Archive on <code>exploring</code>/<code>proposed</code>; the dialog shows the refusal.</td></tr><tr><td>F211 (C)</td><td>d</td><td><strong>Still open</strong></td><td><code>rigor-history</code> and <code>spec/requirements</code> have zero hits in <code>hub/ui/src</code>.</td></tr><tr><td>F169 (C)</td><td>d</td><td><strong>Already fixed</strong></td><td><code>58477dc</code> + <code>f473510</code> (UI-1 and its review): <code>TaskDetailDrawer</code> renders <code>approval_report</code>; <code>taskApprovalReportAndPending.test.tsx</code>.</td></tr><tr><td>F213 (D)</td><td>single</td><td><strong>Still open</strong></td><td><code>propose_edit</code> (<code>spec_service.py:290-399</code>) diffs against stored content only; no withdraw route (<code>spec.py:590-694</code>).</td></tr></tbody></table></div>
+<h5>What R1 found beyond the ledger</h5>
+<p>These are not in <code>FINDINGS.md</code> (R1 may not write it). The orchestrator should decide whether to file them.</p>
+<ol>
+<li><strong>A footprint watches the whole tree</strong> (the defect <code>read_footprint</code>&#x27;s docstring defers,</li>
+</ol>
+<p><code>requirement_evidence.py:519-522</code>; F215&#x27;s entry measured 44 candidates from one commit). Measured in R1: operator evidence with <code>locator: &quot;ledger.py&quot;</code>, then a commit changing only <code>other.py</code> → one candidate with <code>observed: {&quot;other.py&quot;: …}</code>. <strong>Carried</strong> in the first drift change, because making drift reachable without it delivers a flood.</p>
+<ol>
+<li><strong>Rejecting a proposal in the app leaves it on screen.</strong> <code>reject_proposal_route</code> broadcasts</li>
+</ol>
+<p>nothing (<code>spec.py:669-694</code>), <code>useSpecMutation</code> does not invalidate <code>specProposals</code> (<code>api/spec.ts:244-256</code>), and <code>refetchOnWindowFocus</code> is off (<code>main.tsx:8-15</code>); the comment at <code>api/spec.ts:164-166</code> claims reject broadcasts. Read, not driven. <strong>Carried</strong> in the proposal change.</p>
+<ol>
+<li><strong>The app records every rigor change with an empty reason.</strong> The Enforcement select posts on</li>
+</ol>
+<p>change with no reason (<code>SpecPhaseBar.tsx:62-70</code>, <code>:184</code>), while the spec requires the reason to be recorded (<code>spec-document-authority/spec.md:959-962</code>). <strong>Carried</strong> in the audit change.</p>
+<ol>
+<li><strong>A drift candidate can be answered twice</strong>; the second answer overwrites the first and its</li>
+</ol>
+<p>fingerprint (<code>resolve_drift</code>, <code>requirement_evidence.py:1190-1222</code>, no state check). <strong>Carried</strong> in the second drift change.</p>
+<ol>
+<li><strong>Only one unit of a multi-unit proposal can be accepted without a resubmission.</strong> Accepting one</li>
+</ol>
+<p>changes the digest, and every sibling is refused as stale on its accept (<code>test_accepting_a_second_proposal_against_the_same_digest_is_refused_as_stale</code>). The spec calls proposals <em>&quot;individually acceptable&quot;</em> (<code>spec-document-authority/spec.md:1080-1086</code>). The proposal change&#x27;s supersession makes the agent&#x27;s resubmission replace the stale siblings, but does not change the compare-and-swap. <strong>Not carried</strong> — a design question for the operator.</p>
+<ol>
+<li><strong>Reindex and arrange write files before the database commit</strong> (<code>spec.py:1255-1265</code>,</li>
+</ol>
+<p><code>:1375-1379</code>): an <code>OSError</code> mid-rerender leaves files written and digests rolled back. <strong>Not carried</strong>; flagged for R2 in the corpus change&#x27;s D6.</p>
+<ol>
+<li><strong>A drift candidate is never superseded when its requirement is reworded</strong>, though the model</li>
+</ol>
+<p>comment says it is (<code>models.py:2643-2644</code>). <strong>Not carried</strong>; noted in the first drift change.</p>
+<ol>
+<li><strong>A capability document has no authoring path in the product</strong>: an agent&#x27;s write is refused</li>
+</ol>
+<p>(<code>spec_service.py:159-162</code>) and the operator&#x27;s <code>PUT …/content</code> (<code>spec.py:470-532</code>) has no client. This is why merge is a decision, below.</p>
+<h5>Decisions</h5>
+<p><strong>F217 — the drift branch basis</strong> (moved here from D13). Options, with what the code says about each:</p>
+<div class="scroll"><table class="md"><thead><tr><th></th><th>Option</th><th>What it breaks</th><th>What it releases</th></tr></thead><tbody><tr><td>A</td><td>Keep the branch basis; state the asymmetry on the drift surface and in the spec</td><td>nothing</td><td>honesty only; agent evidence is never watched after merge, and the whole-tree flood stays</td></tr><tr><td>B</td><td>Switch to <code>main</code> once <code>reachable_from_main</code>, whole tree</td><td>floods — an agent commit&#x27;s whole tree differs from <code>main</code> in every file anyone else merged</td><td>agent evidence watched, drowned</td></tr><tr><td><strong>C</strong></td><td><strong>Narrow the footprint to the files the evidence is about, then switch to <code>main</code> once reached</strong></td><td>evidence that names no file and changed nothing off <code>main</code> watches nothing (today it watches everything); tests relying on the whole tree are rewritten; one migration</td><td>agent evidence watched where the product is; one unrelated commit raises nothing</td></tr></tbody></table></div>
+<p><strong>Recommended: C.</strong> The docstring&#x27;s objection to switching (<em>&quot;drift would flip bases underneath an open candidate&quot;</em>) does not survive narrowing: <code>reachable_from_main</code> only moves to <code>True</code> (<code>refresh_reachability</code>&#x27;s filter, <code>:1028</code>), an open candidate is skipped before any comparison (<code>:1131</code>), and a resolution&#x27;s fingerprint is <code>{path: {was, now}}</code> (<code>:1221</code>), which a clean merge reproduces exactly on <code>main</code>.</p>
+<p><strong>Sub-question raised in R1 — what does evidence that names no file watch?</strong> Recommended: nothing, listed as unwatched with the reason and the remedy (name a file or commit in the locator). The alternative (the whole tree, as today) keeps the flood for exactly that evidence. No operator loses a signal: nothing reaches drift today.</p>
+<p><strong>Legacy footprints</strong> (recorded before the change, whole tree): recommended not scanned, listed as <code>recorded_before_watching</code>. Same reasoning.</p>
+<p><strong>F129&#x27;s scan cadence</strong>: recommended manual (F129&#x27;s own argument, and <code>spec.py:963-964</code>).</p>
+<p><strong>F206&#x27;s merge route — who authors a capability document?</strong> Options: M1 leave merge API-only for now (recommended); M2 a payload editor dialog (rejected: the operator hand-editing JSON inverts the product&#x27;s premise); M3 agents draft capability content that always lands as proposals, the merge recorded as the operator&#x27;s on accept (the likely eventual answer; changes <em>&quot;capability documents are written by the operator&quot;</em> to <em>accepted by</em>, so it wants its own exploration).</p>
+<p><strong>Smaller product calls, one per change:</strong> a demotion in the app requires a reason (recommended yes); proposal clean-up is W3 — de-duplicate and supersede at submission, plus an operator withdraw (recommended over either alone).</p>
+<p>The decisions interact in one place: F217&#x27;s answer and the unwatched sub-question decide what the second drift change&#x27;s strip shows. Under A the strip also says agent evidence is watched only on its branch; under C it does not need to.</p>
+<h5>Changes written</h5>
+<p>All five pass <code>openspec validate &lt;name&gt; --strict</code>. Order: 1 before 2 (hard dependency); 3, 4, 5 independent of each other and of 1–2. Stopping after any one leaves complete work.</p>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Change</th><th>Findings</th><th>What it does</th><th>Size</th></tr></thead><tbody><tr><td>1</td><td><code>drift-watches-the-files-its-evidence-is-about</code></td><td>F217 + whole-tree defect</td><td><code>watched_files</code> (locator path, named commit&#x27;s diff, branch diff since leaving <code>main</code>); <code>EvidenceFootprint.watched_from</code> + migration; basis = <code>main</code> once reached; <code>unwatched</code> in <code>GET /spec/drift</code>; <code>footprint_view</code> reports what is watched. Backend only</td><td>M</td></tr><tr><td>2</td><td><code>drift-is-scanned-and-answered-on-the-document</code></td><td>F129, F132 (reads F216&#x27;s fields)</td><td><code>SpecDriftPanel</code> on the document: open candidates, three answers, Scan, unwatched line; <code>document</code>/<code>state</code> filters; answer-once 409; detect/resolve broadcast; gate remedy names the operator and where</td><td>M</td></tr><tr><td>3</td><td><code>the-corpus-is-indexed-arranged-and-adopted-from-the-app</code></td><td>F206 (4 of 5 routes)</td><td>Corpus strip in the document browser (index state, Rebuild with the home question, Adopt all); Adopt on untracked tree rows; Place under… on the document; reindex broadcasts</td><td>M</td></tr><tr><td>4</td><td><code>a-documents-rigor-history-and-retired-requirements-are-on-screen</code></td><td>F211</td><td>Rigor history under Enforcement; a rigor change is confirmed with a reason, required for demotion; retired requirements listed with the work still linked (the detail route&#x27;s caller). UI only</td><td>S</td></tr><tr><td>5</td><td><code>a-pending-proposal-can-be-withdrawn</code></td><td>F213 + reject-refresh defect</td><td>Repeat creates nothing (<code>already_pending</code>); a revision supersedes the same proposer&#x27;s earlier one; operator Withdraw route and button; twins marked; reject/withdraw broadcast and invalidate</td><td>S–M</td></tr></tbody></table></div>
+<p>Tests planned in each <code>tasks.md</code> group 1, each marked with why it fails today. UI tests that read a route&#x27;s payload use the route&#x27;s order: drift (<code>created_at</code> ascending), rigor history (ascending, reversed by the component on purpose), requirements (<code>identifier</code> string sort, re-sorted numerically on purpose), proposals (<code>created_at</code> ascending, twin marker compares against earlier rows). Every change&#x27;s design has a <em>what each route answers when what it calls raises</em> section.</p>
+<h5>Cross-bundle collisions (for the orchestrator and R2)</h5>
+<ul>
+<li><strong>B5 <code>a-footprint-names-the-line-of-work-its-commit-is-on</code></strong> (F165/F166) edits the same functions</li>
+</ul>
+<p>as change 1: <code>_take_footprint</code>, <code>read_footprint</code>, <code>restamp_run_footprints</code>, <code>footprint_root</code>. The two are semantically independent (B5&#x27;s is <em>which branch string</em>, B6&#x27;s is <em>which files</em>), but they touch the same lines and both feed <code>detect_drift</code> (B5&#x27;s fix gives review-checkout footprints a real branch where today they read <code>&quot;HEAD&quot;</code> and are skipped). Implement them in sequence; the second&#x27;s R-round must re-read against the first.</p>
+<ul>
+<li><strong>B5 <code>the-coverage-bar-takes-the-evidence-decision-it-asks-for</code></strong> (F215) owns the evidence list for</li>
+</ul>
+<p>active requirements and edits <code>SpecCoverageBar.tsx</code>. Change 2 touches one string there; change 4 deliberately does not re-list active requirements&#x27; evidence (its preamble), and gives <code>GET /spec/requirements/{identifier}</code> a caller only for retired requirements, which nothing else shows. B5&#x27;s proposal already lists F211 and drift as B6&#x27;s.</p>
+<ul>
+<li><strong>B5 <code>a-document-moves-forward-only-through-its-checks</code></strong> (F207) edits <code>SpecPhaseBar.tsx</code>&#x27;s Approve</li>
+</ul>
+<p>path; change 4 edits its rigor control. Different regions, same file.</p>
+<ul>
+<li>F215&#x27;s entry carries the 44-candidate measurement; the fix is change 1, not B5.</li>
+</ul>
+<h5>Not resolved in R1</h5>
+<ul>
+<li>Whether items 5 and 6 of <em>What R1 found</em> deserve findings of their own.</li>
+<li>The reject-refresh defect (item 2) was read, not driven; change 5&#x27;s task 1.11 is the test that</li>
+</ul>
+<p>would confirm it with a real query client.</p></div></section><section class="sec-round" id="R2"><h2>R2 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Re-derived on the worktree head (product code unchanged since <code>404c7d5</code>). About 45 load-bearing claims checked against the code. All five changes still pass <code>openspec validate --strict</code>.</p>
+<h5>R1&#x27;s &quot;already fixed&quot; verdicts: all four stand</h5>
+<div class="scroll"><table class="md"><thead><tr><th>Finding</th><th>Checked</th><th>Verdict</th></tr></thead><tbody><tr><td>F216</td><td><code>list_drift</code> returns <code>created_at</code>, <code>requirement {identifier, document}</code> and <code>evidence {summary, locator, actor, actor_kind}</code> (<code>spec.py:977-1058</code>). <code>a7b2df1</code> is an ancestor of HEAD; the ledger says fixed</td><td>fixed</td></tr><tr><td>F208</td><td>The arrange 409 names <code>POST /spec/reindex</code> and the <code>home</code> input (<code>spec.py:1338-1348</code>). <code>568f868</code> is in HEAD; the ledger says fixed</td><td>fixed</td></tr><tr><td>F205</td><td>Archive is offered on <code>approved</code>, <code>exploring</code> and <code>proposed</code> (<code>SpecPhaseBar.tsx:146-160</code>). <code>58477dc</code> is in HEAD; the ledger says fixed</td><td>fixed</td></tr><tr><td>F169</td><td><code>TaskDetailDrawer</code> keeps <code>approval_report</code> from both approving paths (<code>:366</code>, <code>:406</code>), and <code>taskApprovalReportAndPending.test.tsx</code> exists. <code>58477dc</code> and <code>f473510</code> are in HEAD; the ledger says fixed</td><td>fixed</td></tr></tbody></table></div>
+<h5>Claims that disagreed with the code, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Change</th><th>R1 claim</th><th>Code</th><th>Fix</th></tr></thead><tbody><tr><td>1</td><td>drift-watches</td><td><code>refresh_reachability</code> is called only by <code>POST /spec/drift/detect</code></td><td>It is also called after every in-app integration that merged (<code>task_transition_service.py:908-913</code>)</td><td>Context corrected. This helps: a merge made by the product flips the basis with no scan</td></tr><tr><td>2</td><td>drift-watches</td><td>Reason 1 for a safe flip is that reachability &quot;only moves one way&quot;</td><td><code>restamp</code> can write <code>False</code> over <code>True</code> (<code>requirement_evidence.py:966-976</code>), but only together with a new commit and new <code>entries</code></td><td>Restated as &quot;at most one flip per baseline&quot;. The conclusion holds</td></tr><tr><td>3</td><td>drift-watches</td><td>D3 compares against main when reachable, else as today. The order was unstated, and the MODIFIED spec said a footprint naming no line of work &quot;SHALL raise nothing&quot;</td><td>A reachable footprint with <code>branch == &quot;&quot;</code> (a detached review checkout, or a non-tip commit) would be skipped before the basis check</td><td>D3 checks reachability first. Spec sentence rewritten; a scenario and task 1.12 added</td></tr><tr><td>4</td><td>drift-watches</td><td><code>record</code> takes <code>main_branch</code> from &quot;the route&quot;</td><td>There are two callers: <code>spec.py:833</code> and the agent&#x27;s <code>agent_actions.py:1207</code></td><td>Task 2.2 names both</td></tr><tr><td>5</td><td>drift-watches</td><td><code>unwatched</code> has two reasons</td><td>Evidence with no footprint row is inner-joined out of <code>detect_drift</code>, and neither reason lists it</td><td>Third reason <code>no_footprint</code>, task 1.11, and change 2&#x27;s D3 remedy text</td></tr><tr><td>6</td><td>drift-watches</td><td>Task 1.7 &quot;FAILS today only if…, record which&quot;</td><td>It passes today: branch basis, same <code>moved</code>, matching resolved fingerprint</td><td>Made a control that asserts the main basis is in use</td></tr><tr><td>7</td><td>corpus</td><td>The home select comes from <code>useSpecDocuments</code></td><td><code>build_index</code> files only documents that are on disk <strong>and</strong> tracked (<code>spec_documents.py:259-269</code>). A row whose file is gone gets <code>home_missing</code>, and the question loops</td><td>Select from <code>useSpecList</code> entries that have a <code>document_id</code>, plus a &quot;nothing to index&quot; answer; task 1.10</td></tr><tr><td>8</td><td>corpus</td><td>Adopt, then shape the corpus</td><td>Nothing in <code>spec_adoption.py</code> writes <code>spec/index.json</code> (<code>write_index</code> has two callers, reindex and arrange). An adopted document stays unindexed, and arrange answers 404 for it</td><td>After an adopt, the strip leads with Rebuild; task 1.11</td></tr><tr><td>9</td><td>proposals</td><td>Only a reject leaves a stale row</td><td>An accept refused as stale <strong>commits</strong> <code>stale</code>, then answers 409 (<code>spec.py:642-649</code>) with no broadcast. <code>useSpecMutation</code> invalidates only on success. Same defect</td><td>D5: the refusal path broadcasts and mutations invalidate on settled; task 1.13</td></tr><tr><td>10</td><td>proposals</td><td>The twin marker compares <code>proposed_payload</code></td><td>Key order in a JSON column is not guaranteed</td><td>Compared by a key-sorted serialisation</td></tr></tbody></table></div>
+<h5>What stands (checked, agreed)</h5>
+<ul>
+<li><strong>Change 1&#x27;s premises.</strong> Footprints cover the whole tree (<code>read_footprint</code> <code>:539</code>, restamp <code>:969</code>), and <code>detect_drift</code> is the only reader of <code>entries</code>. Reasons 2 and 3 for a safe flip hold: open candidates are skipped, and the fingerprint is <code>{path: {was, now}}</code>. Integration is a real <code>git merge</code> (<code>task_integration.py:517</code>), so <code>is_reachable_from</code> becomes true after it.</li>
+<li><strong>F217: C is still recommended.</strong> The options table is complete: A leaves the flood and B floods. The sub-decisions are consistent with C and with each other: evidence that names no file watches nothing and says so, and legacy rows are not scanned.</li>
+<li><strong>Change 2.</strong> <code>resolve_drift</code> has no state check (<code>:1190-1222</code>). The resolve route hard-codes 422 (<code>spec.py:1078-1081</code>), so task 2.1&#x27;s <code>http_status</code> mapping is needed. <code>spec_updated</code> with <code>path: null</code> is already sent by <code>spec/adopt</code> (<code>:1415</code>), and both UI consumers guard on it (<code>api/spec.ts:168</code>, <code>:196</code>).</li>
+<li><strong>Change 4.</strong> Every route&#x27;s shape, order and 404/422 path is as stated (<code>spec.py:376-398</code>, <code>:536-559</code>, <code>:738-819</code>; <code>spec_rigor.py:181-187</code>). The app sends <code>reason: &#x27;&#x27;</code> on every rigor change (<code>SpecPhaseBar.tsx:62-70</code>; <code>api/spec.ts:305</code>).</li>
+<li><strong>Change 5.</strong> <code>propose_edit</code> never reads pending proposals (<code>spec_service.py:290-399</code>). Reject does not broadcast (<code>spec.py:669-694</code>). The <code>useSpecEvents</code> comment claiming it does is false (<code>api/spec.ts:163-167</code>).</li>
+<li><strong>Unchanged recommendations.</strong> Merge M1, a required reason for demotion, and W3.</li>
+</ul>
+<h5>Collisions with B5</h5>
+<ul>
+<li><strong><code>a-footprint-names-the-line-of-work-its-commit-is-on</code>.</strong> Change 1&#x27;s design now has a</li>
+</ul>
+<p><strong>&quot;Builds on B5&quot;</strong> section; B5 lands first. Change 1 assumes three pieces of B5:</p>
+<ul>
+<ul>
+<li><strong>D1:</strong> <code>&quot;&quot;</code> is the only spelling of &quot;unknown&quot;, and the <code>&quot;HEAD&quot;</code> guard stays for one release.</li>
+<li><strong>D2:</strong> <code>read_footprint(root, *, at, task_branch)</code> and <code>line_of_work</code>. Change 1&#x27;s keyword-only</li>
+</ul>
+</ul>
+<p><code>locator</code>, <code>actor_kind</code> and <code>main_branch</code> go beside <code>task_branch</code>.</p>
+<ul>
+<ul>
+<li><strong>D3:</strong> a run directory that is gone is read at the task tip in <code>workspace.root</code>. Rule 3&#x27;s</li>
+</ul>
+</ul>
+<p><code>merge-base</code> still answers there.</p>
+<p>B5&#x27;s D4 does not interact. B5 asked for a flood check on its named-branch operator footprints, and change 1 is what answers it: those footprints watch only their files, and once reachable they compare against main anyway. Both changes take the next free migration revision (B5 names <code>0106</code>).</p>
+<ul>
+<li><strong><code>SpecCoverageBar.tsx</code> / <code>useSpecEvents</code>.</strong> Change 2 edits one string in the coverage bar. B5&#x27;s</li>
+</ul>
+<p>F215 change adds a <code>specEvidence</code> invalidation to <code>useSpecEvents</code>, next to the lines that changes 2, 4 and 5 add. All the additions are independent lines. Noted in change 2&#x27;s Risks.</p>
+<ul>
+<li><strong><code>SpecPhaseBar.tsx</code>.</strong> B5&#x27;s F207 change edits the Approve <code>onError</code> (around <code>:136-145</code>). Change 4</li>
+</ul>
+<p>edits <code>onRigor</code> and the select (<code>:62-92</code>, <code>:178-215</code>). Different regions. Noted in change 4&#x27;s Risks.</p>
+<h5>What each changed route returns when what it calls raises</h5>
+<p>Each design&#x27;s section matches the code. The one added case is accept&#x27;s stale-refusal path (row 9).</p>
+<p>The <strong>reindex/arrange ordering hazard is confirmed</strong>: <code>write_index</code> is a plain <code>write_text</code> (<code>spec_documents.py:345</code>), <code>rerender_corpus</code> calls <code>write_document</code> without a try (<code>spec_service.py:881</code>), and the commit comes afterwards (<code>spec.py:1265</code>, <code>:1379</code>). An <code>OSError</code> therefore gives a 500 with files written and digests rolled back. It is recorded as a candidate and not carried.</p>
+<h5>Candidates, not filed (R1&#x27;s eight, plus two from R2)</h5>
+<ol>
+<li>A footprint watches the whole tree. Carried in change 1.</li>
+<li>A reject in the app leaves the row on screen. Carried in change 5.</li>
+<li>The app records every rigor change with an empty reason. Carried in change 4.</li>
+<li>A drift candidate can be answered twice. Carried in change 2.</li>
+<li>Only one unit of a multi-unit proposal can be accepted without a resubmission, because the compare-and-swap covers the whole document. Not carried: an operator design question.</li>
+<li>Reindex and arrange write files before the DB commit. Confirmed by R2; not carried.</li>
+<li>A drift candidate is never superseded when its requirement is reworded (<code>models.py:2643-2644</code>). Not carried.</li>
+<li>A capability document has no authoring path (the merge decision). Not carried.</li>
+<li><strong>(R2)</strong> An accept refused as stale leaves the row on screen. Carried in change 5 with item 2.</li>
+<li><strong>(R2)</strong> Evidence with no footprint row is never scanned and is not reported. Carried in change 1 (<code>no_footprint</code>).</li>
+</ol></div></section><section class="sec-round" id="R3"><h2>R3 -- independent comparison (2026-09-24)</h2><div class="md-body"><p>Product code unchanged since <code>404c7d5</code>. About 40 claims checked. The drift path was re-derived end to end from its real entry points, under B6&#x27;s changes and against <strong>B5&#x27;s final text</strong>: <code>POST /spec/evidence</code> (<code>spec.py:823-851</code>) and the agent&#x27;s <code>record_evidence</code> (<code>agent_actions.py:1207</code>) → <code>record</code> (<code>requirement_evidence.py:97-191</code>) → <code>_take_footprint</code> → <code>read_footprint</code> → <code>_apply_footprint</code>; run end → <code>restamp_run_footprints</code> (<code>agent_trigger.py:1791</code>); acceptance → <code>integrate_task</code> → <code>refresh_reachability</code> (<code>task_transition_service.py:900-913</code>); <code>POST /spec/drift/detect</code> → <code>refresh_reachability</code> → <code>detect_drift</code> → <code>_changed</code>; <code>POST /spec/drift/{id}/resolve</code> → <code>resolve_drift</code>. One git measurement (a throwaway repo, deleted); no pytest run. All five changes pass <code>openspec validate --strict</code>.</p>
+<h5>Claims that disagreed with the code, and what changed</h5>
+<div class="scroll"><table class="md"><thead><tr><th>#</th><th>Change</th><th>Claim</th><th>Code</th><th>Fix</th></tr></thead><tbody><tr><td>1</td><td>1</td><td>&quot;Builds on B5&quot;: <code>_take_footprint</code> and <code>capture_footprint</code> pass <code>locator</code>/<code>actor_kind</code>/<code>main_branch</code> to <code>read_footprint</code></td><td>B5&#x27;s final D3 routes <strong>both</strong> through <code>read_evidence_footprint(workspace, actor_kind, actor, recorded_dir, task_id, *, named=None)</code>, which makes all three <code>read_footprint</code> calls</td><td>The table row and task 2.2 now thread the parameters through <code>read_evidence_footprint</code>, and rule 2 keys on B5&#x27;s <code>named</code>. Added the D4 row as B5 finally wrote it (inside <code>merge_targets</code>, proper ancestor; still unrelated). Added B5 change 2&#x27;s revise-in-place path: it re-applies <code>taken</code>, so <code>watched_from</code> follows it</td></tr><tr><td>2</td><td>1</td><td>Rule 2 watches &quot;the paths that commit changed&quot; through <code>diff-tree --name-only -r --root &lt;commit&gt;</code></td><td><strong>Measured on git 2.49:</strong> that command prints nothing for a merge commit, and integration lands every task with <code>merge --no-ff</code> (<code>task_integration.py:517-518</code>). An operator naming the commit on <code>main</code> that carried the fix would watch nothing</td><td>Use <code>--diff-merges=first-parent</code>; test 1.14</td></tr><tr><td>3</td><td>1</td><td>Rule 1: the locator counts &quot;when it is a path in the tree, or a directory prefix&quot;</td><td>The MCP tool documents the locator as <em>&quot;a path, a command, a run id&quot;</em> (<code>mcp_server.py:1964</code>). <code>hub/x.py::test_y</code> and <code>x.py:12</code> would name no file. <code>.</code> is a prefix of every path, which brings back the whole tree</td><td>Rule 1 strips <code>::…</code> and <code>:&lt;n&gt;[-&lt;m&gt;]</code>, and <code>&quot;&quot;</code>/<code>.</code> contribute nothing. Commands are not parsed; they are reported as <code>names_no_file</code>. Test 1.15. Change 2&#x27;s remedy now says <em>a file path or commit id, not a command</em></td></tr><tr><td>4</td><td>1</td><td>D3 compares against the configured main branch once <code>reachable_from_main</code> is true</td><td>At record time the flag is asked against the <strong>guessed</strong> <code>main</code>/<code>master</code> (<code>read_footprint</code> <code>:540</code> → <code>:615-628</code>). Restamp and refresh ask the configured branch (<code>:970-974</code>, <code>:1040-1044</code>), and refresh never re-asks a <code>True</code> row (<code>:1028</code>). With <code>main_branch = develop</code> and a <code>main</code> present, the flag and the basis name different branches</td><td><code>read_footprint</code> asks the configured branch when it is given one (it already receives <code>main_branch</code> for rule 3). Test 1.13</td></tr><tr><td>5</td><td>1</td><td>D3: <code>main_branch</code> is &quot;read once per scan, as the route does&quot;</td><td><code>detect_drift(session, project_id, workspace)</code> takes no branch; only the route reads <code>Project.main_branch</code> (<code>spec.py:965-971</code>)</td><td>Task 2.4: <code>detect_drift(..., *, main_branch=None)</code>, passed in by the route</td></tr><tr><td>6</td><td>2</td><td><em>Spec updated</em> means &quot;the specification has been (or will be) changed&quot;, and the drive presses <em>Code corrected</em> while the file is still changed</td><td><code>resolve_drift</code> stores <code>resolved_fingerprint = observed</code> for every resolution (<code>:1221</code>), and <code>detect_drift</code> skips a later change equal to it (<code>:1160-1163</code>). So any answer silences that exact change for good, whether it is true or not</td><td>The tooltip is past tense only. The drive reverts the file before answering. Added a Risks paragraph and candidate 11 below</td></tr></tbody></table></div>
+<h5>What stands</h5>
+<ul>
+<li><strong>The basis flip is safe</strong>, by reasons 2 and 3 and R2&#x27;s restated reason 1. An open candidate is</li>
+</ul>
+<p>skipped (<code>:1131</code>). A resolution fingerprint is <code>{path: {was, now}}</code>. A <code>--no-ff</code> merge leaves the watched blob on <code>main</code> equal to the branch&#x27;s. So test 1.7&#x27;s control holds on the main basis.</p>
+<ul>
+<li><strong>After B5 change 2&#x27;s D6</strong>, a failed integration skips the in-app <code>refresh_reachability</code>. The next</li>
+</ul>
+<p>scan&#x27;s refresh (<code>spec.py:966</code>) still flips the basis, so the check is delayed, not lost.</p>
+<ul>
+<li><strong>What each route answers when the function it calls raises:</strong></li>
+<ul>
+<li><strong>Record:</strong> <code>watched_files</code> reaches git only through <code>_git</code>, which answers <code>None</code> on failure</li>
+</ul>
+</ul>
+<p>(<code>:475-490</code>), so it adds no new raise.</p>
+<ul>
+<ul>
+<li><strong>Detect:</strong> <code>_git</code> and <code>tree_entries</code> answer <code>None</code>. A database error is a 500 before the commit</li>
+</ul>
+</ul>
+<p>and before change 2&#x27;s broadcast. <code>broadcast</code> cannot raise past the commit (<code>sse.py:86-95</code>).</p>
+<ul>
+<ul>
+<li><strong>List:</strong> reads only.</li>
+<li><strong>Resolve:</strong> its 404, 409 and 422 all come before the commit.</li>
+<li><strong>Withdraw (change 5):</strong> its 404 and 409 come before any write.</li>
+<li><strong>Reindex (change 3):</strong> the existing write-before-commit 500 (candidate 6) is unchanged, and the</li>
+</ul>
+</ul>
+<p>strip says so.</p>
+<ul>
+<li><strong>Changes 3, 4 and 5 held when re-derived:</strong></li>
+<ul>
+<li><code>build_index</code> files only documents that are on disk and known, and its diagnostic order is as the</li>
+</ul>
+</ul>
+<p>change says.</p>
+<ul>
+<ul>
+<li><code>useSpecList().specs</code> are discovered files, so &quot;has a <code>document_id</code>&quot; means &quot;tracked and on disk&quot;.</li>
+<li>Identifiers are unique per document (<code>uq_spec_requirements_document_identifier</code>), so change 4&#x27;s</li>
+</ul>
+</ul>
+<p>detail view of a retired requirement never answers 422.</p>
+<ul>
+<ul>
+<li><code>SpecEditProposal.status</code> has no <code>CheckConstraint</code> (<code>models.py:2138</code>), so change 5 needs no</li>
+</ul>
+</ul>
+<p>migration.</p>
+<ul>
+<ul>
+<li>The accept route commits on <strong>every</strong> <code>ProposalRefusedError</code> (<code>spec.py:643-650</code>), so change 5&#x27;s</li>
+</ul>
+</ul>
+<p>broadcast there also fires for <code>proposal_not_pending</code>. That is harmless.</p>
+<ul>
+<li><strong>No collision</strong> beyond those R2 recorded. B5&#x27;s two footprint and evidence changes are the only</li>
+</ul>
+<p>other changes that edit <code>requirement_evidence</code>, and change 5 is the only one that touches the proposal routes.</p>
+<ul>
+<li><strong>Decisions:</strong> none reversed.</li>
+</ul></div></section>
+  <footer>Derived from <code>spec-queue/tracks/B6.md</code>. Never edit this file; the
+  record is appended to by each round (see <code>spec-queue/tracks/README.md</code>) and this page
+  is regenerated by <code>py -3.11 scripts/rounds_page.py</code>.</footer>
+</div>
+</body>
+</html>

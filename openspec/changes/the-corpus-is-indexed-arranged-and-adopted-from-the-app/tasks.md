@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/spec.py` (`reindex`, `arrange_document`, `adopt_corpus`, `adopt_document`), `hub/hub/spec_documents.py` (`build_index`, `_select_home`, `write_index`), `hub/hub/spec_adoption.py`, `hub/ui/src/api/spec.ts`, `SpecDocumentBrowser.tsx`, `SpecTree.tsx`, `SpecDocumentPanel.tsx`, `specNavigation.ts`. Decide design D6's flag (a reindex that fails mid-write): file it or not
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate the-corpus-is-indexed-arranged-and-adopted-from-the-app --strict` passes
+- [x] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/spec.py` (`reindex`, `arrange_document`, `adopt_corpus`, `adopt_document`), `hub/hub/spec_documents.py` (`build_index`, `_select_home`, `write_index`), `hub/hub/spec_adoption.py`, `hub/ui/src/api/spec.ts`, `SpecDocumentBrowser.tsx`, `SpecTree.tsx`, `SpecDocumentPanel.tsx`, `specNavigation.ts`. Decide design D6's flag (a reindex that fails mid-write): file it or not
+- [x] 0.2 R3: a second independent re-derivation (design round log). `openspec validate the-corpus-is-indexed-arranged-and-adopted-from-the-app --strict` passes
 - [ ] 0.3 The operator answers the merge decision (design, recommended M1); record in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — each must fail on today's code unless marked as a control

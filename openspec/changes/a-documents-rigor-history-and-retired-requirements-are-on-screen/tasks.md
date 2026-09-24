@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/spec.py` (`rigor_history`, `list_requirements`, `requirement_detail`, `set_document_rigor`), `hub/hub/spec_rigor.py` (`history_for`, `set_rigor`), `hub/hub/requirement_coverage.py` (`include_retired`, `_state`), `SpecPhaseBar.tsx`, `SpecDocumentPanel.tsx`, `api/spec.ts`. Check the preamble's scope call on F211's second route against bundle B5's `the-coverage-bar-takes-the-evidence-decision-it-asks-for` as it then stands
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate a-documents-rigor-history-and-retired-requirements-are-on-screen --strict` passes
+- [x] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/spec.py` (`rigor_history`, `list_requirements`, `requirement_detail`, `set_document_rigor`), `hub/hub/spec_rigor.py` (`history_for`, `set_rigor`), `hub/hub/requirement_coverage.py` (`include_retired`, `_state`), `SpecPhaseBar.tsx`, `SpecDocumentPanel.tsx`, `api/spec.ts`. Check the preamble's scope call on F211's second route against bundle B5's `the-coverage-bar-takes-the-evidence-decision-it-asks-for` as it then stands
+- [x] 0.2 R3: a second independent re-derivation (design round log). `openspec validate a-documents-rigor-history-and-retired-requirements-are-on-screen --strict` passes
 - [ ] 0.3 The operator answers Open Question 1 (demotion requires a reason, recommended yes)
 
 ## 1. Tests first — each must fail on today's code unless marked as a control

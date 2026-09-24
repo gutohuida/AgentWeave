@@ -102,6 +102,10 @@ statements (the index stores no statement, `SpecRequirement` columns).
 
 ## Round log
 
+### Round 3 — 2026-09-24 (B6 R3)
+
+Re-derived `history_for` (ascending), `list_requirements` (string sort), `requirement_detail` → `_requirement` → `spec_index.resolve`: identifiers are unique per document (`uq_spec_requirements_document_identifier`), so passing `document` makes a retired `FR-n` resolve to one row and the 422 is unreachable, as D3 says. `onOpenTasks` is already a `SpecDocumentPanel` prop (`:42`, passed to the coverage bar at `:240`). Nothing disagreed.
+
 ### Round 2 — 2026-09-24 (B6 R2)
 
 Re-derived: `rigor_history` (`spec.py:536-559`), `history_for` (`spec_rigor.py:181-187`,

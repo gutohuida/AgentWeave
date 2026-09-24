@@ -24,8 +24,9 @@ what `entries` means). This change is written against the code *after* B5, and a
 | D1: `"HEAD"` is never written; its migration rewrites stored `'HEAD'` to `''` | D3's "names no line of work" is `branch == ""`. B5 keeps `detect_drift`'s `ref == "HEAD"` guard for one release; this change keeps it and does not remove it. |
 | D2: `line_of_work(root, commit, *, task_branch=None)`; `read_footprint(root, *, at=None, task_branch=None)` | `read_footprint` gains this change's keyword-only `locator`, `actor_kind`, `main_branch` **beside** B5's `task_branch`. `branch` is whatever B5 computes; `watched_files` never reads or writes it. |
 | D2: `restamp_run_footprints` reads `Run.task_id` once per run | Rule 3's branch diff is computed once per run beside it (task 2.3). |
-| D3: an agent whose run directory is gone is read at `agentweave/task/<id>`'s tip in `workspace.root` | `watched_files` runs at that root and commit; `merge-base` and `diff` are repository-wide, so rule 3 answers what it would in the task checkout. |
-| D4: the merge reduction keeps the descendant commit | Unrelated: it reads `branch` and `commit_sha`, never `entries` or `watched_from`. |
+| D3: an agent whose run directory is gone is read at `agentweave/task/<id>`'s tip in `workspace.root`, through the seam `read_evidence_footprint(workspace, actor_kind, actor, recorded_dir, task_id, *, named=None)`, which **both** `_take_footprint` and `capture_footprint` call after B5 | `watched_files` runs at that root and commit; `merge-base` and `diff` are repository-wide, so rule 3 answers what it would in the task checkout. **R3:** this change's `locator` and `main_branch` are threaded through `read_evidence_footprint` (all three of its `read_footprint` calls), not added to `_take_footprint`'s direct call, which B5 removes. Rule 2 keys on B5's `named` (the operator's verified commit), so `actor_kind` need not reach `read_footprint` at all. |
+| D4 (B5 final): inside `merge_targets`, within one line of work the incoming commit replaces the incumbent only when the incumbent is a *proper* ancestor | Unrelated: it reads `branch` and `commit_sha`, never `entries` or `watched_from`. |
+| B5 `evidence-is-decided-after-the-run-that-recorded-it`, D2: recording again in the same run revises that run's undecided row and re-applies the new `taken` with `_apply_footprint` | Covered by task 2.2: `_apply_footprint` writes `watched_from` from `taken`, so the revised locator's watch set replaces the old one. Its D6 (decision routes answer before integrating) means a failed integration skips `task_transition_service`'s `refresh_reachability`; the next scan's refresh (`spec.py:966`) still flips the basis. |
 
 B5 asks the second change's R2 to confirm that operator footprints on non-tip commits, which now
 name a branch, *"do not flood"*. This change is what answers it: once a footprint watches only its
@@ -85,11 +86,20 @@ New `requirement_evidence.watched_files(root, commit, tree, *, locator, actor_ki
 `restamp_run_footprints`. `tree` is the `tree_entries(root, commit)` both callers already read. The
 union of:
 
-1. **`locator`** — the locator, normalised (`./` and backslashes stripped, posix), when it is a path
-   in `tree`, or a directory prefix of paths in `tree` (all of them). Applies to agents and operators:
+1. **`locator`** — the locator, normalised (`./` and backslashes stripped, posix; **R3:** a pytest
+   node suffix `::…` and a trailing line reference `:<n>` or `:<n>-<m>` removed), when it is a path
+   in `tree`, or a directory prefix of paths in `tree` (all of them). A locator that normalises to
+   `""` or `.` contributes nothing — as a prefix it would be the whole tree again. A command
+   (`pytest hub/tests/x.py -q`) is **not** parsed for paths: picking tokens out of it is the guess
+   `_COMMIT_ISH`'s comment refuses (`requirement_evidence.py:549-555`); the MCP tool documents the
+   locator as *"a path, a command, a run id"* (`mcp_server.py:1964`), so this case is common and is
+   reported as `names_no_file` with its remedy (D4). Applies to agents and operators:
    F71's rule is about *which commit* an agent's locator may name, not which files it may name.
-2. **`commit`** — operator only, where `locator_commit(locator)` named the commit (F71): the paths
-   that commit changed, `git diff-tree --no-commit-id --name-only -r --root <commit>`.
+2. **`commit`** — operator only, where `locator_commit(locator)` named the commit (F71; B5's `named`): the paths
+   that commit changed, `git diff-tree --no-commit-id --name-only -r --root --diff-merges=first-parent <commit>`.
+   **R3 measured (git 2.49):** without `--diff-merges=first-parent`, `diff-tree` prints **nothing** for a
+   merge commit, and integration lands every task as a `merge --no-ff` (`task_integration.py:517-518`) —
+   so an operator naming the commit on `main` that carried the fix would have watched nothing.
 3. **`branch`** — where the main branch resolves and `commit` is **not** reachable from it: the
    paths changed between `git merge-base <main> <commit>` and `<commit>`. `main` is `main_branch`
    when configured, else the first of `MAIN_BRANCH_NAMES` that resolves (the same fallback
@@ -121,12 +131,23 @@ It is reported rather than silent (D4), because F217's second complaint is that 
 In `detect_drift`, for a git footprint (in this order; R2 made the order explicit):
 - `reachable_from_main is True` → compare against the main branch **whatever `branch` says**,
   including `""` (a detached review checkout, or a non-tip commit B5 could not name) (resolved as in D1, rule 3; the
-  project's `main_branch` is read once per scan, as `detect`'s route already does at `spec.py:965`).
+  project's `main_branch` is read once per scan, as `detect`'s route already does at `spec.py:965`,
+  and passed to `detect_drift` as a new keyword `main_branch`; R3).
   If the main branch does not resolve, raise nothing (unknown is not drift).
 - otherwise → `footprint.branch`, unchanged, including the detached-HEAD and vanished-branch skips.
 
 `detect_drift` already runs after `refresh_reachability` in the same request (`spec.py:966-973`), so
 a merge performed by integration or by hand in a terminal is noticed by the scan that follows it.
+
+**The flag and the basis name the same branch (R3).** At record time `read_footprint` answers
+`reachable_from_main` with `is_reachable_from_main` — the *guessed* `main`/`master`
+(`requirement_evidence.py:540`, `:615-628`) — while `restamp` and `refresh_reachability` ask the
+*configured* branch (`:970-974`, `:1041-1045`) and D3 compares against the configured one. In a project
+integrating into `develop` whose `main` also exists, operator evidence at a commit on `main` only is
+written `True` at record, `refresh` never re-asks a `True` row (`:1028`), and D3 would then compare
+it against `develop`. So `read_footprint`, which receives `main_branch` for rule 3 anyway, answers
+reachability the way `restamp` does: `is_reachable_from(root, commit, main_branch)` when configured,
+else the guess. Task 1.13.
 
 Without a repository: observe by hashing only the baseline's paths (a missing file observes `None`
 and so drifts, as `_changed` already reads it), instead of `hash_tree` over the whole directory.
@@ -190,6 +211,21 @@ its work lands; what is not watched is listed with the reason.
    operator sees until the second change ships.
 
 ## Round log
+
+### Round 3 — 2026-09-24 (B6 R3)
+
+Re-derived the drift path from the entry points: `POST /spec/evidence` / agent `record_evidence` →
+`record` → `_take_footprint` → `read_footprint` → `_apply_footprint`; run end →
+`_restamp_evidence_footprints` → `restamp_run_footprints`; decision → `integrate_task` →
+`refresh_reachability`; `POST /spec/drift/detect` → `refresh_reachability` → `detect_drift` →
+`_changed` → `resolve_drift`. Checked against B5's **final** text. Corrected: B5's
+`read_evidence_footprint` seam is where this change's parameters go (the "Builds on B5" table named
+`_take_footprint`'s direct call, which B5 removes), and B5's evidence-revision path re-applies
+`taken`; rule 2 printed nothing for a merge commit (measured; `--diff-merges=first-parent`); rule 1
+treated `path::test` and `path:12` as naming no file, and `.` as the whole tree; the record-time
+`reachable_from_main` asked a different branch than D3 compares against; `detect_drift` needs
+`main_branch` passed in. Held: whole-tree `entries` (`:539`, `:969`), `detect_drift` the only
+reader of `entries`, the three reasons for the flip's safety, R2's order of the basis check.
 
 ### Round 2 — 2026-09-24 (B6 R2)
 

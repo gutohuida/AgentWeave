@@ -52,7 +52,7 @@ Each row, oldest first (the order the route returns — the component does not r
 
 | Button | Sends | Tooltip |
 |---|---|---|
-| **Spec updated** | `specification_updated` | The implementation is right; the specification has been (or will be) changed to match it. |
+| **Spec updated** | `specification_updated` | The implementation is right; the specification has been changed to match it. |
 | **Code corrected** | `implementation_corrected` | The implementation was wrong and has been put back. |
 | **No change** | `no_change_required` | The change does not affect what this requirement says. |
 
@@ -68,8 +68,8 @@ the sentence says so rather than implying it scanned one document. An error body
 ### D3 — Unwatched evidence is named with its remedy
 
 One line under the rows: *"K pieces of accepted evidence here are not watched for drift"*,
-expandable to each `FR-n`, summary and reason: `names_no_file` → *"it names no file or commit — name
-one in the locator to have it watched"*; `recorded_before_watching` → *"recorded before drift watched
+expandable to each `FR-n`, summary and reason: `names_no_file` → *"it names no file or commit — put a file path or a commit id (not a command)
+in the locator to have it watched"* (R3: the first change does not parse commands); `recorded_before_watching` → *"recorded before drift watched
 files — record it again to have it watched"*; `no_footprint` (added by the first change in R2) →
 *"the Hub could not read the workspace when it was recorded — record it again"*. `unwatched` gains the same `document` filter as
 `drift`.
@@ -123,6 +123,14 @@ reworded (noted in the first change's design).
   change lands second rebases it. B5's `the-coverage-bar-takes-the-evidence-decision-it-asks-for`
   also adds one `invalidateQueries` line (`specEvidence`) to `useSpecEvents`, as D5 here does
   (`specDrift`); both are additive lines in one block (R2).
+- **An answer silences that exact change, whatever the answer says (R3).** `resolve_drift` stores
+  `resolved_fingerprint = observed` for all three resolutions (`requirement_evidence.py:1221`), and
+  `detect_drift` skips a later change equal to it (`:1160-1163`). So *Code corrected* pressed before
+  the code is put back, or *Spec updated* pressed for a specification that is never changed, silences
+  the candidate for good. Not changed here (it is `resolve_drift`'s existing contract); the tooltips
+  are worded in the past tense (*"has been put back"*, *"has been changed"*) so the button asserts a
+  fact, and the drive (3.1) reverts the file before pressing *Code corrected*. Recorded as a
+  candidate finding in the bundle record.
 - **A project-wide scan from a document** may raise candidates elsewhere. The sentence in D2 says
   how many, and the rail's coverage bars refresh through the broadcast.
 
@@ -133,6 +141,15 @@ reworded (noted in the first change's design).
    ships both, so the finding closes instead. Record that on the finding at IMPL.
 
 ## Round log
+
+### Round 3 — 2026-09-24 (B6 R3)
+
+Re-derived `resolve_drift` (`:1190-1222`), `_resolved_for`, `open_drift_for`, the three drift routes,
+the coverage route's 404 (`spec.py:711-713`) and `totals` (`requirement_coverage.py:143-161`), and
+`sse_manager.broadcast` (`sse.py:71-95`, cannot raise past the commit). Held. Changed: the
+`names_no_file` remedy now says *a file path or commit id, not a command* (the first change's rule
+1 does not parse commands); *Spec updated*'s tooltip no longer says *"or will be"*, and the drive
+reverts the file before *Code corrected*, because any answer silences that exact change (Risks).
 
 ### Round 2 — 2026-09-24 (B6 R2)
 

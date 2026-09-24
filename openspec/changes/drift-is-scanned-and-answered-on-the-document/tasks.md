@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/spec.py` (`detect_drift`, `list_drift`, `resolve_drift`), `hub/hub/requirement_evidence.py` (`detect_drift`, `resolve_drift`, `open_drift_for`), `hub/hub/requirement_gate.py`, `hub/ui/src/api/spec.ts`, `SpecDocumentPanel.tsx`, `SpecCoverageBar.tsx`. Check in particular that `spec_updated` with `path: null` is safe for every consumer of that event (`grep -rn spec_updated hub/ui/src`)
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate drift-is-scanned-and-answered-on-the-document --strict` passes
+- [x] 0.1 R2: an independent re-derivation against `hub/hub/api/v1/spec.py` (`detect_drift`, `list_drift`, `resolve_drift`), `hub/hub/requirement_evidence.py` (`detect_drift`, `resolve_drift`, `open_drift_for`), `hub/hub/requirement_gate.py`, `hub/ui/src/api/spec.ts`, `SpecDocumentPanel.tsx`, `SpecCoverageBar.tsx`. Check in particular that `spec_updated` with `path: null` is safe for every consumer of that event (`grep -rn spec_updated hub/ui/src`)
+- [x] 0.2 R3: a second independent re-derivation (design round log). `openspec validate drift-is-scanned-and-answered-on-the-document --strict` passes
 - [ ] 0.3 `drift-watches-the-files-its-evidence-is-about` is implemented and archived (or at least merged) first. The operator confirms the manual scan (design preamble) and Open Question 1
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
@@ -36,4 +36,4 @@ UI in a new `hub/ui/src/__tests__/specDriftPanel.test.tsx` (mock `@/api/spec` as
 
 ## 3. Drive it
 
-- [ ] 3.1 On a trial Hub from source (never `:8000`): a git fixture, a `gate` document, operator evidence naming a file; commit a change to that file; open the document in the app; press **Scan for drift**; the strip shows the candidate; the coverage bar reads *Drifting*; approving a linked task is refused with the new remedy; press **Code corrected**; the strip empties and the bar reads *Verified* in a second open tab without reload. Screenshot each step
+- [ ] 3.1 On a trial Hub from source (never `:8000`): a git fixture, a `gate` document, operator evidence naming a file; commit a change to that file; open the document in the app; press **Scan for drift**; the strip shows the candidate; the coverage bar reads *Drifting*; approving a linked task is refused with the new remedy; revert the file and commit, then press **Code corrected** (R3: the answer silences that change whatever it says, so the drive must make it true); the strip empties and the bar reads *Verified* in a second open tab without reload. Screenshot each step

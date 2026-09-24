@@ -130,6 +130,10 @@ withdraw; showing withdrawn/superseded history in the panel (the list route retu
 
 ## Round log
 
+### Round 3 — 2026-09-24 (B6 R3)
+
+Re-derived the accept route's refusal path (`spec.py:643-650`: commits on **every** `ProposalRefusedError`, so D5's broadcast there fires for `proposal_not_pending` too — harmless, an extra refetch) and the reject route (no broadcast). `SpecEditProposal.status` has deliberately no `CheckConstraint` (`models.py:2138`), so `withdrawn`/`superseded` need no migration. Nothing disagreed.
+
 ### Round 2 — 2026-09-24 (B6 R2)
 
 Re-derived: `propose_edit`/`_create_proposal` (`spec_service.py:290-437`: diffs against stored

@@ -1,7 +1,7 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: an independent re-derivation against `hub/hub/spec_service.py` (`propose_edit`, `_create_proposal`, `accept_proposal`, `reject_proposal`, `merge_document`), `hub/hub/api/v1/spec.py` (the three proposal routes, `write_document_content`, `merge_document`), `hub/hub/api/v1/agent_actions.py` (`submit_spec_document`), `hub/hub/mcp_server.py` (`submit_spec_document`'s docstring — read `.claude/rules/mcp-server.md` first), `api/spec.ts`, `SpecProposalsPanel.tsx`, `main.tsx`. Confirm the reject-refresh defect by a UI test with a real `QueryClient` rather than by reading
-- [ ] 0.2 R3: a second independent re-derivation. `openspec validate a-pending-proposal-can-be-withdrawn --strict` passes
+- [x] 0.1 R2: an independent re-derivation against `hub/hub/spec_service.py` (`propose_edit`, `_create_proposal`, `accept_proposal`, `reject_proposal`, `merge_document`), `hub/hub/api/v1/spec.py` (the three proposal routes, `write_document_content`, `merge_document`), `hub/hub/api/v1/agent_actions.py` (`submit_spec_document`), `hub/hub/mcp_server.py` (`submit_spec_document`'s docstring — read `.claude/rules/mcp-server.md` first), `api/spec.ts`, `SpecProposalsPanel.tsx`, `main.tsx`. Confirm the reject-refresh defect by a UI test with a real `QueryClient` rather than by reading
+- [x] 0.2 R3: a second independent re-derivation (design round log). `openspec validate a-pending-proposal-can-be-withdrawn --strict` passes
 - [ ] 0.3 The operator answers Open Question 1 (W3 recommended); record in `spec-queue/DECISIONS.md`. The orchestrator files the reject-refresh defect as a finding (R1 cannot write FINDINGS.md)
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
