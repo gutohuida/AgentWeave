@@ -1,5 +1,37 @@
 # Design — a refused first send leaves no exploration behind
 
+## Operator review, 2026-09-24
+
+The operator approved **D-B12-1: archive, never delete** and **D-B12-2: a creation failure refuses
+the send**. An Opus adversarial review found four gaps; each fix below was checked against the code
+at `8cd1558`.
+
+1. **An accepted armed send tells subscribers the spec list changed.** `POST /project/documents`
+   broadcasts `spec_updated {path, phase}` after its commit (`spec.py:1466-1467`); moving creation
+   into `POST /agent/trigger` would have dropped that, and the spec tree would not show the new
+   exploration until something else refreshed it. The route now broadcasts
+   `spec_updated {"path": path, "phase": "exploring"}` right after its commit (`agent_trigger.py:1587`),
+   beside the `queue_entry_queued` broadcast (`:1595-1596`). D1, task 2.3, test 1.3.
+2. **The commit-failure cleanup also removes the directory it minted.** `write_document` creates
+   the document's parent directory (`spec_documents.py:163`), so removing only the file leaves an
+   empty `spec/changes/<placeholder>/` that discovery walks. The cleanup prunes it when empty, with
+   the same bounded, non-recursive rule `move_document` uses (`spec_documents.py:185`,
+   `_prune_if_empty` at `:189-204`). D2, D6, test 1.6.
+3. **A failed write or commit answers with a sentence, not a bare 500.** `OSError` or
+   `ProjectPathError` (`project_workspace.py:31`) from `write_document` answers **409**
+   `{"code": "exploration_write_failed", "message": "the exploration's file could not be written:
+   <reason>"}`, the precedent being `GET /project/spec`'s 409 for an unreadable file
+   (`spec.py:197-205`). A failed commit of an armed send answers **503**
+   `{"code": "send_not_saved", "message": "the conversation and its exploration could not be saved:
+   <reason>. Nothing was sent; send again."}`. D2 rows 3 and 4, task 2.3, tests 1.6 and 1.11.
+4. **The loser of a concurrent send never deletes the winner's file.** Two sends can both pass
+   `mint_document_path`'s check (`spec_service.py:105-112`, rows and disk read before either
+   writes). New D6 fixes the rule: the cleanup removes the file only if this request's own write
+   returned, the bytes on disk are still the bytes it wrote, and, read after the rollback, no
+   `spec_documents` row holds that path. Task 2.5, tests 1.10 and 1.12.
+5. **Line citations refreshed.** At `8cd1558` the trigger route's commit is `agent_trigger.py:1587`
+   (R1–R3 wrote `:1586`) and `new_entry` is `:1567` (D1 wrote `:1570`); both corrected in place.
+
 **Built on R2's recommended answers to D-B12-1 and D-B12-2** (R2 reversed R1's D-B12-1; see D3 and
 `spec-queue/tracks/B12.md`).
 
@@ -33,7 +65,7 @@
   (`spec-document-authority` *Document discovery covers every safe document*, `:315`;
   `spec-document-adoption`). So the commit-failure branch must remove the file the request wrote, since the rows roll back and the file does not.
 - `POST /agent/trigger` (`agent_trigger.py:1405-1671`) commits the conversation and the entry at
-  `:1586`, then calls `schedule_agent`. Where the scheduler's refusal names this entry,
+  `:1587`, then calls `schedule_agent`. Where the scheduler's refusal names this entry,
   `withdraw_refused_entry` runs and the route raises the refusal's status (`:1613-1641`).
 - The composer restores the typed text whenever `onSubmit` throws (`Composer.tsx:216-217`).
 
@@ -53,15 +85,22 @@ workspace unavailable (`raise_workspace_http_error`), `work_dir` against a writi
 already decided (409), `review_task_id` with no commit or refused by `review_dispatch_refusal`, and
 overrides with no runner, a vanished runner or invalid values (409/400). All of them are before
 `new_entry` (`:1567`), so none can leave anything behind. The only failures after it are the
-commit (`:1586`) and `schedule_agent`'s refusals.
+commit (`:1587`) and `schedule_agent`'s refusals.
 
-The document is created immediately before `new_entry` (`:1570`). That is after every route-level
+The document is created immediately before `new_entry` (`:1567`). That is after every route-level
 refusal, so none of those can leave a document behind. It is created in the route's own session,
 with the operator as actor, as `spec.py:1444-1462` does today. Rather than copying that body, both
 routes share it: move the mint, create and save sequence into
 `spec_service.start_exploration(session, workspace, project_id, title, actor)` and call it from
 both. `trigger_agent` passes `title=body.message.strip()[:120]`, which is exactly what the composer
 sends today (`NewConversationSurface.tsx:87`). The entry's `spec_document` is the new path.
+
+**After the commit, the route broadcasts `spec_updated`** (operator review, 2026-09-24):
+`{"path": path, "phase": "exploring"}`, right after `await session.commit()` (`:1587`) and beside
+`queue_entry_queued` (`:1595-1596`), before `schedule_agent`. `POST /project/documents` does this
+today (`spec.py:1467`), and the spec tree refreshes on it; without it the new exploration would
+not appear until something else refreshed the list. If the send is then refused by its dispatch,
+D3's retire broadcasts a second `spec_updated` with the archived phase.
 
 **Rejected: the composer archives the document on refusal.** The row and the file would remain.
 The spec tree's current view hides archived documents (R2: `specNavigation.ts:53`), but the browser lists them under *Archived*, and `spec/changes/` would still hold one entry
@@ -81,15 +120,16 @@ would need the same compensation D3 describes, one layer further down.
 |---|---|---|---|
 | `NamingExhaustedError` | mint | 409 `{"code": "naming_exhausted"}`, the same shape as `spec.py:1432-1436` | nothing: no row, no file, no entry |
 | `PhaseError` | `create_document` | 409 `{"code": exc.code}` | nothing |
-| `OSError` from `write_document` | `save_document` | 500. The session is rolled back, and any partial file at that path is removed if one exists (D3) | nothing, if the removal succeeds |
-| anything | the commit at `:1586` | the error propagates as today (F329 answered 500). The file is removed before re-raising | nothing, if the removal succeeds |
+| `OSError` or `ProjectPathError` from `write_document` (operator review) | `save_document` | **409** `{"code": "exploration_write_failed", "message": "the exploration's file could not be written: <reason>"}`, as `GET /project/spec` answers an unreadable file (`spec.py:197-205`). The session is rolled back, and the file and its directory are cleaned up under D6 | nothing, if the removal succeeds |
+| `IntegrityError` on `uq_spec_documents_project_path` (`db/models.py:1986`) | `create_document`'s flush (`spec_lifecycle.py:221`), when a concurrent send minted the same path and committed first | 409 `{"code": "document_exists", ...}`, the shape `PhaseError` already has, after a rollback. This request wrote no file, so D6 removes nothing | nothing of this request's; the other send's document is untouched |
+| anything | the commit at `:1587`, on an armed send (operator review) | **503** `{"code": "send_not_saved", "message": "the conversation and its exploration could not be saved: <reason>. Nothing was sent; send again."}`. The session is rolled back, then the file and its directory are cleaned up under D6. An unarmed send's commit failure is unchanged (it propagates, F329's 500); widening that is not this change | nothing, if the removal succeeds |
 | a refusal naming this entry | `schedule_agent` | the refusal's own status and detail, as F108 does today | the document, **archived** as the operator's act with the refusal as its reason (D3) |
 | an environment-level refusal (no runner, runner busy) | `schedule_agent` | 200 `queued` with `waiting_reason`; it produces no `refusal` (`:1654-1658`) | the document, correctly: the input is still queued and will run with it |
 | anything unexpected | `schedule_agent`, `persist_event` or the broadcast, all after the commit | 500, as today | the document and the still-queued entry, correctly: the input will be delivered. The composer's thrown error is the only wrong signal, as it is for every send today |
 | none; the turn starts or waits | | 200 with `spec_document` set | the document, which is correct |
 
-If removing the file itself fails (`OSError`), the route still answers with the original error and
-logs the path. It does not replace a refusal with a cleanup error. What remains is a file with no
+If removing the file itself fails (`OSError`), the route still answers with the original error's
+status and sentence and logs the path. It does not replace a refusal with a cleanup error. What remains is a file with no
 row, which adoption can take in. That is the same outcome as today, and no worse.
 
 ### D3 — After the commit, a refused send archives its document; nothing is deleted (R2)
@@ -169,6 +209,38 @@ option a).
 `trigger_agent_directly`'s guards; mirroring all of them is a second authority that drifts, and a
 request-level refusal added later would silently reopen the gap.
 
+### D6 — The cleanup removes only what this request wrote, and only if nobody recorded it since (operator review, 2026-09-24)
+
+`mint_document_path` reads the recorded paths and the disk (`spec_service.py:105-112`) before
+anything is written, so two sends can mint the same placeholder. The database serialises them
+from there: `create_document` flushes the row (`spec_lifecycle.py:221`), which takes SQLite's write
+lock, and `uq_spec_documents_project_path` (`db/models.py:1986`) refuses the second row. So two
+requests cannot both have written a file for one path **while both transactions are open**. The
+hazard is the gap after a rollback: request A writes its file, A's commit fails, A rolls back and
+releases the lock, B flushes, writes and commits the same path, and only then does A's cleanup
+unlink `path`, deleting B's committed file.
+
+So the cleanup, `spec_service.discard_unrecorded_exploration(session, workspace, project_id, path,
+written)`, runs **after** the rollback and removes the file only when all three hold:
+
+1. this request's `write_document` returned, and `written` is the exact content it wrote (a
+   failure before the write leaves `written` unset, and nothing is removed);
+2. the file's current content equals `written`;
+3. `spec_lifecycle.get_document(session, project_id, path)`, read after the rollback, so against
+   committed state, returns `None`.
+
+Then it prunes the parent directory with `_prune_if_empty`'s rule (inside `spec/`, never `spec/`
+itself, only if empty, never recursive; `spec_documents.py:189-204`), exposed as a public helper
+rather than duplicated. An `OSError` at any step is logged and swallowed: the route still answers
+with the original failure (D2).
+
+**Residual, stated.** Between check 3 and the unlink, a concurrent request can have flushed and
+written the same path without committing. The unlink then removes its file only if its bytes are
+identical to this request's (same minted placeholder *and* same message), and that request's row
+then commits pointing at a missing file, which the read route already reports (*"registered but
+its file is missing"*). That needs a random placeholder collision and identical text in the same
+milliseconds; it is accepted rather than locked against.
+
 ### D4 — The composer sends one request
 
 `NewConversationSurface.handleSubmit` sends `{agent, message, start_exploration: exploring,
@@ -200,3 +272,7 @@ precondition, `:8000` restarted past `c18a87b`).
   does, so the file does not keep showing `exploring`. D3 gains the reachability argument: from the
   real composer the archive branch fires only on an archive race; D1 and the commit compensation are
   what close F330's recorded cases. No decision changed.
+- **Operator review (2026-09-24):** D-B12-1 (archive) and D-B12-2 (refuse) approved. Opus
+  adversarial review fixes: `spec_updated` after an accepted send's commit; the minted directory
+  pruned by the cleanup; 409/503 with sentences for a failed write or commit; D6, a cleanup that
+  cannot delete a concurrent winner's file. Tasks 1.3, 1.6, 2.3 edited; 1.10–1.12 and 2.5 added.

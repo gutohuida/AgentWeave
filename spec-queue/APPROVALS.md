@@ -16,6 +16,19 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-24
+
+Review page: the bundle pages (`tracks/B1.html` … `B12.html`, published as one artifact with
+`ROUNDS.html`); the day window did not run (disabled by the operator). **Written in an interactive
+session with the operator present** (DECIDE). Each APPROVED row had the Opus adversarial pass, and its
+fixes were applied and re-validated `--strict` before the row was written (each design.md opens
+with `## Operator review, 2026-09-24`). The 2026-09-23 rows below remain undecided.
+
+- APPROVED  a-checkpoint-is-handed-over-once-and-says-where-it-went   B8 (F293, F294). D2 per conversation; D6 amended by the operator: a reopened, handed-over conversation declines only the billed steps (notes turn, `due` warning, generation), and the free final compaction warning still fires (MODIFIED delta on `conversation-checkpoint`). Migration: takes `0106` if built first, otherwise renumbers in build order.
+- APPROVED  a-specification-is-read-in-results-that-fit   B12 (F363). Hub-enforced 40,000-character budget; continuation by `identifiers` leaves out the preamble (operator); MODIFIED delta on `agent-capability-plane`. Preferably after B11's `an-agents-tool-server-is-the-one-its-hub-loaded`, but not blocked by it (its D5).
+- APPROVED  a-refused-first-send-leaves-no-exploration-behind   B12 (F330). A post-commit refusal archives the document and never deletes it; a creation failure refuses the send. **Two commits: the UI commit waits for the operator's `:8000` restart past the Python commit.**
+- REVISING  a-file-path-is-not-redacted-as-a-credential   B12 (F278). The Opus review found (a) a base64/uppercase-hex key segment still redacts the whole path, so the scenario overpromises, and (b) a 16-31-character token used as a path segment, redacted today, would survive. Re-derive the rule and re-measure both residuals (URLs carrying tokens, not only random base64).
+
 ## 2026-09-23
 
 Review page: `review/review-2026-09-23.html`. **Written by the day window, not the DECIDE session —

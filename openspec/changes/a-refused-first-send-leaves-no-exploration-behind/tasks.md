@@ -15,6 +15,7 @@
 - [x] 0.2 R3 (2026-09-24): a second independent re-derivation. `openspec validate
   a-refused-first-send-leaves-no-exploration-behind --strict` passes. Added `rerender_phase` to the
   retire (2.2, 1.2) and D3's reachability argument.
+- [x] 0.2a Operator review (2026-09-24, Opus adversarial review): D-B12-1 (archive, never delete) and D-B12-2 (refuse) approved. Fixes applied to 1.3, 1.6, 2.3; 1.10, 1.11, 1.12 and 2.5 added (design, *Operator review* and D6)
 - [ ] 0.3 The operator answers D-B12-1 and D-B12-2 in `spec-queue/DECISIONS.md` and approves the
   change in `APPROVALS.md`.
 
@@ -45,14 +46,20 @@ workspace under `tmp_path` so the `spec/` files can be listed.
   withdraw's `True` branch.
 - [ ] 1.3 An accepted send: 200. `spec_document` in the response names a row in `exploring` and a
   file that exists. The queue entry's `spec_document` is that path, and the dispatched turn's
-  context carries the spec notice (`spec_turn_notice`). Record that it FAILS before group 2.
+  context carries the spec notice (`spec_turn_notice`). A `spec_updated` event with
+  `{"path": <that path>, "phase": "exploring"}` was broadcast after the commit (operator review:
+  `POST /project/documents` broadcasts it at `spec.py:1467`, and the new route must too; capture
+  `sse_manager.broadcast` as existing trigger tests do). Record that it FAILS before group 2.
 - [ ] 1.4 Retry: three refused sends (archived agent), then unarchive, then one accepted. Exactly
   one row and one file exist.
 - [ ] 1.5 Naming exhausted: patch `spec_service.mint_document_path` to raise
   `NamingExhaustedError`. The answer is 409 with `code == "naming_exhausted"`, and no conversation
   row and no entry exist.
 - [ ] 1.6 Commit failure: patch the session's commit at the route's commit point to raise once.
-  The request errors, and no file remains under `spec/`.
+  The answer is **503** with `code == "send_not_saved"` and a sentence (operator review; today a
+  bare 500). No file remains under `spec/`, **and the minted `spec/changes/<placeholder>/`
+  directory is gone too** (`write_document` created it, `spec_documents.py:163`), while `spec/` and
+  `spec/changes/` themselves still exist. No conversation row and no entry exist.
 - [ ] 1.7 D3's guard, unit-level on `retire_refused_exploration`:
   - (a) a document with an extra content event after creation is left in `exploring`, and the
     function returns `False`;
@@ -71,6 +78,23 @@ workspace under `tmp_path` so the `spec/` files can be listed.
   *"creates no document when exploration was not declared"* as a control, and assert that
   `start_exploration` is `false` or absent.
 
+- [ ] 1.10 (D6, the concurrent loser) Patch `spec_service.mint_document_path` to return one fixed
+  path `P`. Patch the route session's commit to raise once, and wrap its `rollback` so that, once,
+  after the real rollback returns, it runs a competing `spec_service.start_exploration` for `P` in a
+  **separate** `async_session_factory()` session with a different title, and commits it (the winner
+  of the gap D6 names). The armed send answers 503. Assert: the winner's row exists at `P`, and the
+  file at `P` still exists and holds the winner's bytes, not this request's. Fails if the cleanup
+  unlinks `P` unconditionally.
+- [ ] 1.11 (D2, operator review) `write_document` patched to raise `OSError("disk full")`, then
+  `ProjectPathError`: each answers **409** with `code == "exploration_write_failed"` and a message
+  containing *"the exploration's file could not be written"*. No row, no conversation, no entry, no
+  file, and no minted directory. Record that each is a 500 today (after group 2's field exists).
+- [ ] 1.12 (D6, unit-level on `discard_unrecorded_exploration`) (a) the file's bytes differ from
+  `written`: kept; (b) a committed row holds the path: kept; (c) `written` is `None` (the write never
+  returned): nothing removed; (d) all three conditions hold: file removed and its now-empty
+  directory pruned; (e) as (d) but the directory holds another file: file removed, directory kept;
+  (f) never removes `spec/` or `spec/changes/` itself. Mutation-check (a) and (b) once each.
+
 ## 2. The fix — commit A (Python only)
 
 - [ ] 2.1 `spec_service.start_exploration(...)`: move `spec.py:1429-1462`'s mint, create and save
@@ -83,6 +107,17 @@ workspace under `tmp_path` so the `spec/` files can be listed.
   `trigger_agent`, implement the 400 conflicts, the creation immediately before `new_entry`, the
   compensated commit, and the retire call in the F108 branch whatever `withdraw_refused_entry` returns. Also set
   `spec_document` on every 200 response, including the one built from `scheduled.response`.
+  Operator review: broadcast `spec_updated {"path": path, "phase": "exploring"}` right after the
+  commit (`agent_trigger.py:1587`), beside `queue_entry_queued`; answer `OSError`/`ProjectPathError`
+  from the write with 409 `exploration_write_failed`, the `uq_spec_documents_project_path`
+  `IntegrityError` with 409 `document_exists`, and a failed commit of an armed send with 503
+  `send_not_saved`, each with a sentence (design D2). Every failure after the write rolls back and
+  then calls task 2.5's cleanup.
+- [ ] 2.5 (D6) `spec_service.discard_unrecorded_exploration(session, workspace, project_id, path,
+  written)`: after the rollback, unlink the file only if `written` is set, the file's content equals
+  it, and `spec_lifecycle.get_document` finds no row for the path; then prune the parent directory
+  with `_prune_if_empty`'s rule (`spec_documents.py:189-204`), made a public helper of
+  `spec_documents` rather than copied. Log and swallow `OSError`.
 - [ ] 2.4 Run group 1's Python tests, with `claude` stripped from PATH, then the lint block.
   Commit and push.
 

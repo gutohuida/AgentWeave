@@ -12,8 +12,11 @@ retrying operator collects one per attempt.
 The composer SHALL ask for the exploration in the request that sends the message, and SHALL NOT
 create the document itself. The Hub SHALL create the document only after every refusal it can
 answer before queueing the message. It SHALL create it together with the conversation and the
-queued message. Where committing them fails, the Hub SHALL remove the file it wrote for that
-request. Where the message is refused by its dispatch after they were committed and before any
+queued message, and once they are committed SHALL tell subscribers that the specification list
+changed. Where writing the document's file or committing them fails, the Hub SHALL refuse the
+message with a sentence saying why, and SHALL remove the file it wrote for that request and the
+directory it created for it, but only while no other request has recorded a document at that path
+and the file still holds what this request wrote. Where the message is refused by its dispatch after they were committed and before any
 turn runs, the Hub SHALL archive the document it created for that request, through the document's
 phase, as the operator's act and with the refusal as the reason. It SHALL NOT delete the document
 or any event recorded for it, because a document's history is append-only.
@@ -46,13 +49,24 @@ phase like any other.
 
 #### Scenario: The commit fails
 - **WHEN** the operator arms an exploration and committing the conversation, the queued message and the document fails
-- **THEN** no document row SHALL exist for that request
-- **AND** no file SHALL remain under `spec/` for it
+- **THEN** the send SHALL be refused with a sentence saying why
+- **AND** no document row SHALL exist for that request
+- **AND** no file and no directory created for it SHALL remain under `spec/`
+
+#### Scenario: The document's file cannot be written
+- **WHEN** the operator arms an exploration and the Hub cannot write the document's file
+- **THEN** the send SHALL be refused with a sentence naming the reason
+- **AND** no conversation, queued message or document row SHALL exist for it
+
+#### Scenario: A failed send does not remove another send's document
+- **WHEN** two armed sends are given the same document path, and one fails after writing its file while the other records its document at that path
+- **THEN** the recorded document's file SHALL remain
 
 #### Scenario: A send that is accepted
 - **WHEN** the operator arms an exploration and the first message starts a turn or is queued behind other input
 - **THEN** the response SHALL name the document created for it
 - **AND** that turn's context SHALL carry that document
+- **AND** subscribers SHALL be told the specification list changed
 
 #### Scenario: Retrying after a refusal
 - **WHEN** the operator's armed send is refused three times and then accepted

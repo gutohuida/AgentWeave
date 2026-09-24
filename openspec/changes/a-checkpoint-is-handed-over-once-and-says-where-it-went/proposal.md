@@ -55,9 +55,10 @@ alone races just as the lifecycle guard does. Design *History* says why none of 
   the index. Guarded for a missing table. The backfill is exact (design D5). The operator's real
   database holds zero cutovers (read-only, 2026-09-24), so on that database it writes nothing.
 - **The automatic trigger stops at a conversation it can no longer hand over** (design D6, added
-  by R3). A reopened conversation that was already handed over gets no notes request, no warning
-  and no generated checkpoint. Without this, D2's refusal would cost one billed generation per
-  turn there.
+  by R3, amended by the operator 2026-09-24). A reopened conversation that was already handed
+  over gets no notes request, no `due` warning and no generated checkpoint: the billed steps. The
+  free final warning to a dismissed conversation still fires. Without this, D2's refusal would
+  cost one billed generation per turn there.
 - **`CheckpointSummary` gains `cut_over_to_conversation_id`**, so the operator routes that list and
   read checkpoints report it. No UI change is made here.
 
@@ -74,6 +75,9 @@ None.
   refusals today (F126's fix note). The existing lineage requirement in `conversation-checkpoint`
   (*"Lineage is recorded and participation is derived"*: a lineage *"is linear"*) is upheld, not
   modified.
+- `conversation-checkpoint`: one MODIFIED requirement, *"Crossing the threshold warns before it
+  spends"* (operator review, 2026-09-24). It now exempts a reopened, handed-over conversation from
+  the notes request, the `due` warning and generation, and keeps its final warning.
 
 ## Out of scope, and where it lives
 

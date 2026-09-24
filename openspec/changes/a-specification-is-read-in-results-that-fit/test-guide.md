@@ -4,7 +4,9 @@
 
 1. **Bounded.** Task 1.1 fails before the fix (paste the measured size) and passes after it.
 2. **Complete.** Task 1.2: repeated reads, following `remaining_identifiers`, return every
-   requirement exactly once.
+   requirement exactly once. Continuations carry no preamble, and task 1.15 shows a large preamble does
+   not push the read count past `ceil(total / budget) + 1`. Task 1.14: every name in
+   `omitted_sections` is readable with `include=<name>`.
 3. **In the route's own order.** Task 1.3 fails if the fit appends in payload order.
 4. **Addressable by id.** Task 1.7 fails before the fix with the exact F363 refusal.
 5. **Skew-safe.** Task 1.11. Then, by hand, point the new `mcp_server.read_spec_document` at a Hub

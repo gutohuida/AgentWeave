@@ -39,10 +39,13 @@ cannot deliver one:
 - **`identifiers`**: a new optional parameter, a comma-separated list such as `FR-3,FR-7`. It
   returns only those requirements. This is how the rest of a truncated read is fetched, and how a
   builder reads just the requirements its task serves.
-- **`include` gains `outline`**: each requirement's identifier, modal and statement, with no
-  rationale or criteria. It is the cheap map of a large document.
+- **`include` gains `outline`**: each requirement's identifier, key, modal, statement and state,
+  with no rationale or criteria. It is the cheap map of a large document.
 - **`include` also accepts one section name** (`design`, `tasks`, `algorithms`, `evidence`,
-  `lifecycle`), so an omitted section can be fetched on its own. A single section still larger than
+  `lifecycle`, and the preamble's `summary`, `problem`, `scope`, `open_questions`), so any omitted
+  section can be fetched on its own.
+- **A read by `identifiers` leaves out the preamble** (operator decision, 2026-09-24), so each
+  continuation spends the budget on the requirements that remain. A single section still larger than
   the budget is cut at the budget and marked `section_truncated`.
 - **`path` accepts a document id.** A value shaped `spdoc-<hex>` is looked up by id within the
   caller's project. Every response carries both `id` and `path`.
@@ -55,6 +58,10 @@ cannot deliver one:
 
 - `spec-document-authority`: adds *An agent can read a specification document in results that fit
   one tool call* and *A specification document is readable by the id tasks carry*.
+- `agent-capability-plane`: MODIFIES *An agent can read a specification document* (operator review,
+  2026-09-24), so that it no longer demands every requirement's criteria in one result: an outline
+  carries none, a bounded read names what remains, a document is readable by id, and a continuation
+  carries no preamble.
 
 ## Impact
 

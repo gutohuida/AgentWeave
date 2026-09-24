@@ -1,5 +1,56 @@
 # Design — a checkpoint is handed over once, and says where it went
 
+## Operator review, 2026-09-24
+
+The operator read this bundle with an Opus adversarial review and decided **D2 per conversation
+(approved)** and **D6 amended**. The edits below apply the review's fixes; each one was checked
+against the code at `8cd1558`.
+
+1. **D6 amended by the operator.** In a reopened, already-handed-over conversation the trigger
+   declines only the **billed** steps: the notes request turn, the `due` warning, and generation.
+   The **free** final warning (the compaction-approach backstop) for a dismissed conversation
+   still fires. The review found that R3's D6 (decline right after the lifecycle check,
+   `checkpoint_trigger.py:187-190`) sat **above** the backstop branch (`:192-234`), so it would
+   have silenced the final warning and contradicted `conversation-checkpoint`'s *"Crossing the
+   threshold warns before it spends"* (`openspec/specs/conversation-checkpoint/spec.md:382-409`).
+   The decline now sits **after** the backstop branch and before `should_request_notes` (`:236`).
+   A MODIFIED delta for that requirement was added (`specs/conversation-checkpoint/spec.md`), and
+   the ADDED requirement's trigger sentence was reconciled with it. New control task 1.13 pins
+   the placement. The final warning's *take checkpoint* action still meets the 409: that is the
+   known UI follow-up, out of scope.
+2. **The race tests' barrier moved inside `cut_over`.** Tasks 1.2, 1.4 and 1.11 waited on the
+   barrier **before** calling `cut_over`. Task 2.2's new pre-check query could then refuse the
+   second press sequentially, and the compare-and-set / `IntegrityError` / rollback path would
+   never run: green with or without it. They now use task 1.12's technique: patch
+   `hub.checkpoint_cutover.archivable` (imported at `checkpoint_cutover.py:20`, called at `:105`,
+   after every pre-check) with a wrapper that awaits a shared `asyncio.Barrier(2)` and then calls
+   the real function. Each test also spies on the sessions' `rollback` and asserts the loser went
+   through it.
+3. **Task 2.3's compare-and-set is specified.** `update(Checkpoint)…
+   .execution_options(synchronize_session=False)` with `result.rowcount == 1` required (or
+   `.returning(Checkpoint.id)` and a `None` check). The default `synchronize_session="auto"` would
+   evaluate the `IS NULL` predicate against the loser's stale in-memory row and write the
+   successor id into it even when the database matched nothing. The explicit `flush()` first
+   stays.
+4. **Task 1.8 fixed.** It now patches `hub.worker.resolve_executable` (as
+   `test_checkpoint_cutover.py:530` does), so on a CI runner with no `claude`
+   (`pty_runner.py:127-128` raises `FileNotFoundError`, which `worker.py:355` turns into an
+   `unwritten` checkpoint) the test fails for the right reason. *No new checkpoint row* is the
+   load-bearing assertion. The *"FAILS today because a second successor is minted"* note was
+   wrong: with the CLI exploding the checkpoint never becomes `ready`, so today it fails on the
+   exploding spawn's exception (or, where the spawn is swallowed, on the new row), never on a
+   second successor. The test relies on `_configured_project` setting `checkpoint_runner_id`
+   (`test_checkpoint_cutover.py:452`); without it `_resolve_runner` returns early
+   (`checkpoint_trigger.py:148-149, 293-300`) and the test passes for the wrong reason.
+5. **Task 3.2's backfill is specified per row.** The **first** `^# Checkpoint (ckpt-\S+)$` match
+   per entry (the rendered body can quote other ids); the "no sibling already set" check applied
+   row by row in `InboundQueueEntry.sequence` order (`models.py:565`), not as one bulk `UPDATE`;
+   an id that matches no checkpoint is skipped and counted. Test 3.5 gains the reverse-order case.
+6. **Noted, not fixed.** In the trigger path an `IntegrityError` that D3 step 4 cannot attribute,
+   or an `OperationalError`, surfaces only as `_run`'s warning (`checkpoint_trigger.py:376-377`),
+   and the checkpoint `generate_checkpoint` already committed gets no `checkpoint_ready` event.
+   That is pre-existing and unchanged (see *What each route returns*).
+
 **Built on the recommended answers to B8's design questions D1–D6 below.** The bundle carries no
 `DECISIONS.md` question; these are choices R1 made and the operator may overturn. If the operator
 answers otherwise:
@@ -15,7 +66,9 @@ answers otherwise:
 - **D5 answered "no backfill":** delete task 3.2 and its tests. Record that legacy cutovers stay
   re-armable by unarchive.
 - **D6 answered "generate anyway":** delete task 2.7 and task 1.8's decline assertions. The
-  per-turn billed generation on a reopened, handed-over conversation is then accepted.
+  per-turn billed generation on a reopened, handed-over conversation is then accepted. *(The
+  operator answered D6 on 2026-09-24 with an amendment: decline the billed steps only, keep the
+  free final warning. See Operator review item 1.)*
 
 **Round 1, 2026-09-24. Nothing here is implemented yet.**
 
@@ -234,9 +287,14 @@ Order inside `cut_over`, after the pre-checks:
    `conversation_id = checkpoint.conversation_id` as plain strings. After a rollback, use only
    these.
 1. `db.add(successor)`, `db.add(entry)`, `archive(predecessor)` (as today).
-2. `await db.execute(update(Checkpoint)…compare-and-set…)`. The ORM autoflushes 1 first, so the
-   `INSERT`s take the lock before the claim is evaluated.
-3. rowcount 0 → `await db.rollback()`, re-read the checkpoint, and raise `CutoverRefusedError`
+2. `await db.execute(update(Checkpoint)…compare-and-set…
+   .execution_options(synchronize_session=False))`. The ORM autoflushes 1 first, so the
+   `INSERT`s take the lock before the claim is evaluated. `synchronize_session=False` because the
+   default (`"auto"`, which tries `"evaluate"`) would test `IS NULL` against the loser's stale
+   in-memory row and write the successor id into it though the database matched nothing
+   (operator review, 2026-09-24).
+3. `result.rowcount != 1` (or, with `.returning(Checkpoint.id)`, a `None` result) →
+   `await db.rollback()`, re-read the checkpoint, and raise `CutoverRefusedError`
    naming its `cut_over_to_conversation_id`.
 4. `IntegrityError` from 2 or from the commit → `await db.rollback()`, re-read the conversation's
    handed-over checkpoint, and raise `CutoverRefusedError` naming its successor and its checkpoint.
@@ -290,8 +348,13 @@ Refusal texts (IMPL may polish them; the tests assert the ids and key phrases on
 ### D5 — Backfill the column from delivered entries
 
 For each `inbound_queue_entries` row with `origin_type = 'checkpoint'` whose `content` starts with
-`This conversation continues earlier work.`, parse `^# Checkpoint (ckpt-\S+)$` (multiline), in
-`sequence` order. Set that checkpoint's `cut_over_to_conversation_id` to the entry's
+`This conversation continues earlier work.`, parse `^# Checkpoint (ckpt-\S+)$` (multiline) and take the
+**first** match only (the rendered body can quote other checkpoint ids), in `sequence` order.
+**Operator review, 2026-09-24:** the entries are walked one row at a time in
+`InboundQueueEntry.sequence` order, and each row's two conditions below are evaluated against the
+state the earlier rows left. One bulk `UPDATE` cannot do that: it would evaluate "no sibling set
+yet" against the pre-migration state for every row at once. A parsed id that matches no
+`checkpoints` row is skipped and counted as skipped. Set that checkpoint's `cut_over_to_conversation_id` to the entry's
 `conversation_id` (the successor), but only where it is still NULL **and** no other checkpoint
 whose own `checkpoints.conversation_id` (the predecessor) equals this checkpoint's has been set
 yet. That is the index's key. The entry's `conversation_id` is the successor, so keying on it would
@@ -306,7 +369,30 @@ it re-arms F293 for that row. The link is exact, not heuristic, because the chec
 delivered text. R1 therefore recommends the backfill, even though it writes zero rows on both local
 databases today.
 
-### D6 — The automatic trigger does not spend a checkpoint on a conversation it cannot hand over (R3)
+### D6 — The automatic trigger does not spend a checkpoint on a conversation it cannot hand over (R3; amended by the operator 2026-09-24)
+
+**Operator's amended answer (2026-09-24), which supersedes (a) as R3 wrote it.** Decline only the
+**billed** steps: the notes request (it spends an agent turn), the `due` warning (its only action
+takes a billed checkpoint), and generation. The **free** final warning to a dismissed conversation
+still fires. So the decline is placed **after** the backstop branch
+(`checkpoint_trigger.py:192-234`, entered only when `not policy.automatic` and the warning is
+`dismissed` or `final`) and **before** `should_request_notes` (`:236`). Everything from `:236` to
+`:342` (notes, the threshold checks, the `due` warning, `_resolve_runner`, generation, cutover)
+is then behind it. Under `automatic` the backstop branch is never entered, so an automatic
+conversation is declined outright, as R3 intended. R3's placement, right after the lifecycle
+decline at `:187-190`, sat above the backstop and would have silenced the final warning,
+contradicting `conversation-checkpoint`'s *"A conversation whose warning was dismissed SHALL be
+warned once more…"*. That requirement is MODIFIED by this change to say so. The final warning's
+*take checkpoint* action still takes a billed checkpoint and meets the 409; that is the known UI
+follow-up, out of scope here.
+
+How a handed-over conversation can be `dismissed` at all: `take_checkpoint` clears the warning
+(`api/v1/checkpoints.py:192-193`) and `dismiss` needs a showing `due` warning (`:249`), which the
+decline now stops. It is reached when the operator dismisses a `due` warning and then cuts over
+with a checkpoint taken earlier (the cutover route does not touch the warning), then unarchives.
+Task 1.13 sets the state directly.
+
+R3's original text follows.
 
 D2 (b) creates a state that did not exist before: an **open** conversation that can never be handed
 over again (handed over, then reopened). `consider` does not know that. Under `automatic`, every
@@ -319,7 +405,7 @@ D6, it costs one generation per turn and produces a refusal each time.
 
 Options:
 
-- **(a) Decline in `consider`** (recommended). Right after the `lifecycle != "open"` decline
+- **(a) Decline in `consider`** (R3's recommendation; placement amended, see above). Right after the `lifecycle != "open"` decline
   (`:187-190`), check whether any checkpoint of this conversation has
   `cut_over_to_conversation_id IS NOT NULL`. If one does, `_declined(conversation_id, "already
   handed over to {successor}; its line continues there")` and return `None`. That covers every
@@ -405,8 +491,8 @@ nullable column and one partial index, and backfills zero rows (measured, see ab
 ## Open questions
 
 0. D6 (R3): should a reopened conversation that was already handed over still receive checkpoint
-   warnings and automatic generation? R3 recommends no (D6 (a)). See D6 for what each other answer
-   costs.
+   warnings and automatic generation? **Answered 2026-09-24:** no billed step (notes, `due`,
+   generation); yes to the free final warning. See D6.
 
 1. D2 (b) refuses re-handover of a reopened conversation by a new checkpoint. If the operator
    considers *"reopen and hand over again"* a workflow they use, the answer is D2 (a) plus a
@@ -436,3 +522,8 @@ nullable column and one partial index, and backfills zero rows (measured, see ab
   5. A **fourth** unarchived change names `0106`: `a-footprint-names-the-line-of-work-its-commit-is-on`.
 
   The D2-answer line in the header was also corrected. D1–D5 stand.
+- **Operator review (2026-09-24)**: D2 approved; D6 amended (billed steps only, the final
+  warning still fires). Opus adversarial review fixes applied: D6 placement and a MODIFIED delta
+  for *"Crossing the threshold warns before it spends"*; the race tests' barrier moved inside
+  `cut_over`; `synchronize_session=False` on the compare-and-set; task 1.8 made CI-safe; the
+  backfill specified per row. See the section at the top.

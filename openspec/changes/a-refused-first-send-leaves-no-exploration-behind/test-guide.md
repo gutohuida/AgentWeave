@@ -11,6 +11,10 @@
 4. **The retire cannot touch a document someone used.** Task 1.7's mutation check.
 5. **Creation failure refuses and loses nothing.** Tasks 1.5 and 1.6 at the route, and 1.9's
    vitest case at the composer.
+5a. **Failures answer with a sentence and clean up fully.** Tasks 1.6 and 1.11: 503/409 with a
+   code and a sentence, and neither the file nor the minted directory remains. Task 1.3: an accepted
+   send broadcasts `spec_updated`.
+5b. **A failed send cannot delete another send's document.** Tasks 1.10 and 1.12 (design D6).
 6. **Live, on `:8010`.** Task 4.1.
 
 ## Human-only

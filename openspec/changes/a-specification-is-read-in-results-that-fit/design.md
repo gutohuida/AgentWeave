@@ -1,5 +1,41 @@
 # Design — a specification is read in results that fit
 
+## Operator review, 2026-09-24
+
+The operator approved the Hub-enforced 40,000-character budget (D-B12-3) and decided that a
+continuation read by `identifiers` **leaves out the preamble** (`summary`, `problem`, `scope`,
+`open_questions`). An Opus adversarial review found five gaps; each fix below was checked against
+the code at `8cd1558`.
+
+1. **(HIGH) The corpus would have held contradictory SHALLs.** `agent-capability-plane`'s *"An
+   agent can read a specification document"* (`openspec/specs/agent-capability-plane/spec.md:791-842`)
+   says acceptance criteria SHALL be returned grouped under each requirement, and its scenario
+   says the reader *"receives the requirements"* read *"by path"*. `outline` returns no criteria,
+   a truncated read returns only some requirements, and a read may now be by id. A MODIFIED delta
+   (`specs/agent-capability-plane/spec.md`) now restates that requirement: `outline` is exempt from
+   the criteria rule, content is "returned, or named as remaining", a document may be read by id,
+   and a continuation carries no preamble.
+2. **Every omitted field is requestable.** D2 step 2 names a preamble field that does not fit in
+   `omitted_sections`, but `include` accepted only the five `full` sections, so a named field could
+   not be fetched. `include` now also accepts `summary`, `problem`, `scope` and `open_questions`
+   (task 2.2, test 1.14).
+3. **A continuation leaves out the preamble** (operator decision). Without it, a document with a
+   large preamble re-sends it on every continuation, each read carries fewer requirements, and task
+   1.2's `ceil(total / budget) + 1` bound is false. D2, the spec scenario *"Reading the rest"*, and
+   new test 1.15 (a large preamble) carry it.
+4. **`outline` entries carry `key`.** An unindexed requirement has `identifier: None`
+   (`spec_reading.py:164-189`, the second loop of `requirement_view`), and D3 continues it by
+   `key`. An outline without `key` would give the agent nothing to ask for it by. Task 1.5 and the
+   outline scenario now say `{identifier, key, modal, statement, state}`.
+5. **D1's measurement corrected.** `mcp_server.read_spec_document` returns a `dict`, so fastmcp
+   3.1.0 sends it as `structuredContent` as well as a text block (`fastmcp/tools/tool.py:286-301`),
+   and Claude Code 2.1.280, when `structuredContent` is present, uses its compact stringification
+   as the result text instead of the content blocks (read from the installed binary). Python's
+   default `json.dumps` (`", "`/`": "` separators, `ensure_ascii=True`) is never shorter than that
+   form, so it is an upper bound, pessimistic for non-ASCII text. Test 1.1 drops its `+ 2_000`
+   allowance: it asserts `len(json.dumps(body)) <= READ_BUDGET_CHARS` exactly, and also that the
+   compact form (`separators=(",", ":")`, `ensure_ascii=False`) is at most 50,000.
+
 **Built on the recommended answer to D-B12-3** (a budget the Hub enforces, of 40,000 serialised
 characters, with continuation by requirement identifier). If the operator picks a different
 number, only `READ_BUDGET_CHARS` and the test constants move. If they want pagination by page
@@ -61,11 +97,17 @@ limits, and the one R1 named is not the one that spills:
   a token, so about 100,000 characters) cuts the text and appends `[OUTPUT TRUNCATED …]`. This is
   the limit R1 cited; it is larger than the spill threshold, so it never binds first by default.
 
-What the harness measures is the text fastmcp sends: `pydantic_core.to_json(result)`, compact, not
-indented (fastmcp 3.1.0 `tools/tool.py:64-65`, the version installed). `json.dumps` with its default
-`", "` separators and ASCII escaping is never shorter for this data, so measuring with it is
-conservative. On the largest document measured, `json.dumps` gave 66,559 characters where
-fastmcp's form gave 64,450.
+What the harness measures (corrected in the operator review, 2026-09-24). The MCP tool returns a
+`dict`, so fastmcp 3.1.0 puts it in `structuredContent` (`fastmcp/tools/tool.py:286-301`: with no
+output schema, a dict becomes `structured_content`; with one, it is passed as is) alongside a text
+block made by `pydantic_core.to_json` (`:64-65`). Claude Code 2.1.280, when a result has
+`structuredContent`, takes its compact `JSON.stringify` as the result text in place of the text
+blocks. Both forms are compact and keep non-ASCII characters literal. Python's default `json.dumps`
+(`", "` and `": "` separators, `ensure_ascii=True`) is never shorter than either: it is an **upper
+bound**, pessimistic for non-ASCII text, where one character becomes a six-character `\uXXXX`.
+`fit_view` measures with it, so what the harness counts is at most what the Hub counted. On the
+largest document measured, `json.dumps` gave 66,559 characters where fastmcp's compact form gave
+64,450.
 
 So 40,000 leaves 10,000 characters under the 50,000 spill threshold. The binary also has an
 aggregate per-message tool-result budget (`skipAggregateToolResultBudget`); its size was not
@@ -85,8 +127,16 @@ The route builds `view` as today and then fits it:
 
 1. Fixed fields (`id`, `path`, `title`, `kind`, `phase`, `rigor`, `explore_closed`, `updated_at`,
    `diverged`, `divergence`, `diagnostics`) always go in.
-2. `summary`, `problem`, `scope` and `open_questions` go in next, each only if it fits. A field
-   that does not fit is named in `omitted_sections`.
+2. `summary`, `problem`, `scope` and `open_questions` (the **preamble**) go in next, each only if
+   it fits. A field that does not fit is named in `omitted_sections`, and can be read on its own
+   with `include=<field>` (operator review: `include` accepts the four preamble names too).
+   **A read that names `identifiers` leaves the preamble out entirely** (operator decision,
+   2026-09-24): it is a continuation or a targeted read, and the preamble was already offered by
+   the first read. The preamble fields are then absent and are not listed in `omitted_sections`.
+   Without this, a large preamble is re-sent on every continuation, each continuation carries
+   fewer requirements, and the read count grows past task 1.2's `ceil(total / budget) + 1`. A
+   read with `identifiers` returns the fixed fields and the named requirements only, and adds no
+   `full` section either.
 3. Requirements are added in identifier order (the order `requirement_view` already returns,
    `test_requirements_come_back_in_identifier_order`) while the total stays within the budget.
    Those not added are listed in `remaining_identifiers`.
@@ -109,7 +159,9 @@ unit-testable. The route calls it last.
 returned in `unknown_identifiers`, so a stale list degrades visibly instead of failing the whole
 read. The filter runs before the fit, so a named subset is still bounded.
 
-`outline` returns each requirement as `{identifier, modal, statement, state}`. **Measured by R2**
+`outline` returns each requirement as `{identifier, key, modal, statement, state}`. `key` is there
+because an unindexed requirement's `identifier` can be `None` (below), and continuation names it
+by key (operator review). **Measured by R2**
 over this repository's 34 `spec/**/spec.html` documents: the largest outline
 (`agent-conversation-workspace`, 47 requirements) is 13,199 characters, the next 12,656. Every
 outline in the corpus fits. The fit (D2) still applies to it.
@@ -176,3 +228,8 @@ already answers `OSError` with 409 *"could not read document: …"*. That route 
   continuation for requirements with no identifier; the outline was measured (13.2 KB at most).
   D6's unhandled raises decided (409). B11's F354 change agrees with the assumption. Tasks 1.3,
   1.11 and 1.12–1.13 corrected or added.
+- **Operator review (2026-09-24):** budget approved; continuation by `identifiers` leaves out the
+  preamble. Opus adversarial review fixes: a MODIFIED delta for `agent-capability-plane`'s read
+  requirement; the preamble fields accepted by `include`; `key` in the outline; D1's measurement
+  corrected to `structuredContent` and test 1.1 made exact. Tasks 1.1, 1.2, 1.5, 2.2, 2.3 edited;
+  1.14 and 1.15 added. See the section at the top.

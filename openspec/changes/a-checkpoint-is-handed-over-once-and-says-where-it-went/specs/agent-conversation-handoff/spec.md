@@ -15,8 +15,11 @@ database, as a claim on the checkpoint and a uniqueness constraint over handed-o
 conversation, and not by reading state and then writing it. A refused request SHALL leave no
 successor conversation and no queued entry behind.
 
-The automatic checkpoint trigger SHALL NOT request notes, warn, or generate a checkpoint for an open
-conversation that has already been handed over, since no cutover of it can succeed.
+The automatic checkpoint trigger SHALL NOT take a billed step for an open conversation that has
+already been handed over, since no cutover of it can succeed: it SHALL NOT request notes, raise the
+warning that a checkpoint is due, or generate a checkpoint. The final warning owed to a
+conversation whose warning was dismissed costs nothing, and SHALL still be raised as the
+requirement *Crossing the threshold warns before it spends* states.
 
 A refusal SHALL name the successor that holds the work. A conversation that was archived by hand
 and was never handed over MAY still be refused until it is reopened, and only that refusal SHALL
@@ -55,6 +58,21 @@ advise reopening it.
 - **AND** work in it crosses the checkpoint threshold under automatic checkpointing
 - **THEN** no checkpoint is generated and no model is called
 - **AND** no second successor exists
+
+#### Scenario: A handed-over conversation still receives its final warning
+
+- **WHEN** a conversation has been cut over and then reopened
+- **AND** its checkpoint warning had been dismissed
+- **AND** its context approaches the point at which the provider will compact it
+- **THEN** it is given the final warning
+- **AND** no checkpoint is generated and no model is called
+
+#### Scenario: A reopened handed-over conversation is not warned that a checkpoint is due
+
+- **WHEN** a conversation has been cut over and then reopened
+- **AND** work in it crosses the checkpoint threshold under a configuration that involves the operator
+- **THEN** no notes are requested and no checkpoint is reported as due
+- **AND** no checkpoint is generated
 
 #### Scenario: A conversation archived by hand is told to reopen first
 

@@ -24,8 +24,10 @@
    raises `MissingGreenlet`. Reverting task 2.6 must fail 1.12. A sequential refusal cannot show
    this, because it happens before any write.
 7a. **The trigger does not pay for a handover it cannot make (D6).** Task 1.8: a reopened,
-   handed-over conversation past its threshold spawns no CLI, writes no checkpoint and sends no
-   warning.
+   handed-over conversation past its threshold spawns no CLI, writes no checkpoint, requests no
+   notes and sends no `due` warning. Task 1.13 (control): the same conversation with a dismissed
+   warning still gets the free final warning near the window. Moving the decline above the
+   backstop must fail 1.13.
 8. **The migration is safe on real data.** Tasks 3.4–3.7. A database that already holds a fork
    still upgrades, and the F329 parity test passes.
 9. **Live, on a trial Hub.** Task 4.4 re-drives `t_d2_cutover_guard.py`. Record the verdict counts.

@@ -12,12 +12,20 @@ The bound SHALL be enforced by the Hub, not chosen by the agent. Where the reque
 fit, the Hub SHALL return the requirements in identifier order up to the bound and SHALL list the
 identifiers of those it did not return, naming a requirement the index has not given an identifier
 by its key, so that every requirement can be asked for again. It SHALL name the sections it did not return, and say in the
-result how to read the rest. The first requirement or requested section SHALL always be returned,
-cut if it alone exceeds the bound, so that every read makes progress.
+result how to read the rest. Every section it names as not returned SHALL be readable on its own,
+including the summary, problem, scope and open questions. The first requirement or requested
+section SHALL always be returned, cut if it alone exceeds the bound, so that every read makes
+progress.
 
 An agent SHALL be able to read only named requirements, and SHALL be able to read an outline of
 every requirement without its rationale or acceptance criteria. An identifier it names that the
 document does not declare SHALL be reported as unknown, and SHALL NOT fail the read.
+
+A read that names requirements SHALL return those requirements and the document's identifying
+fields only, without the summary, problem, scope or open questions. It continues a read that
+already offered them, and re-sending them on every continuation would spend the bound on what the
+agent already has, so that a document with a long preamble could take many more reads than its
+size requires.
 
 #### Scenario: A document larger than the bound
 - **WHEN** an agent reads a document whose requirements and criteria serialise to more than the bound
@@ -27,6 +35,12 @@ document does not declare SHALL be reported as unknown, and SHALL NOT fail the r
 #### Scenario: Reading the rest
 - **WHEN** an agent reads the same document again naming the identifiers the first result listed as remaining
 - **THEN** the result SHALL carry those requirements, within the bound
+- **AND** it SHALL NOT carry the document's summary, problem, scope or open questions
+
+#### Scenario: An omitted preamble field is read on its own
+- **WHEN** a read names the document's problem statement as not returned because it did not fit
+- **AND** the agent asks for that field alone
+- **THEN** the result SHALL carry it, cut to the bound and marked as cut if it alone exceeds it
 
 #### Scenario: A document that fits
 - **WHEN** an agent reads a document whose requested content is within the bound
@@ -34,7 +48,8 @@ document does not declare SHALL be reported as unknown, and SHALL NOT fail the r
 
 #### Scenario: An outline
 - **WHEN** an agent asks for the outline of a document
-- **THEN** each requirement SHALL be returned with its identifier, modal, statement and state, and without its rationale or acceptance criteria
+- **THEN** each requirement SHALL be returned with its identifier, key, modal, statement and state, and without its rationale or acceptance criteria
+- **AND** a requirement the index has not given an identifier SHALL still carry its key
 
 #### Scenario: An identifier the document does not declare
 - **WHEN** an agent names `FR-99` among the identifiers to read and the document has no `FR-99`

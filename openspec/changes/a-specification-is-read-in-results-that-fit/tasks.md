@@ -12,6 +12,7 @@
     against the design's F354 assumption.
 - [ ] 0.2 R3: a second independent re-derivation. `openspec validate
   a-specification-is-read-in-results-that-fit --strict` passes.
+- [x] 0.2a Operator review (2026-09-24, Opus adversarial review): D-B12-3 answered (40,000, Hub-enforced); continuation by `identifiers` leaves out the preamble. Fixes applied to 1.1, 1.2, 1.5, 2.2, 2.3; 1.14 and 1.15 and the `agent-capability-plane` MODIFIED delta added (design, *Operator review*)
 - [ ] 0.3 The operator answers D-B12-3 and approves the change in `APPROVALS.md`.
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
@@ -21,12 +22,16 @@ document is generated: N requirements, each with a 600-character statement and t
 400-character criteria, so its default view is over 100,000 characters. Do **not** check in a
 copy of a real spec.
 
-- [ ] 1.1 A large document read with defaults: `len(response.text) <= READ_BUDGET_CHARS + 2_000`
-  (the envelope allowance is named as a constant in the test), and `truncated is True`. The
+- [ ] 1.1 A large document read with defaults: `len(json.dumps(body)) <= READ_BUDGET_CHARS`
+  **exactly**, with no envelope allowance (the budget covers the whole response, D1), and
+  `len(json.dumps(body, separators=(",", ":"), ensure_ascii=False)) <= 50_000` (the compact form
+  Claude Code counts, from `structuredContent`; operator review), where `body = response.json()`.
+  `truncated is True`. The
   identifiers returned are a prefix of `FR-1..FR-N` in identifier order, and
   `remaining_identifiers` is exactly the rest. Record that it FAILS today: measure and paste the
   size.
-- [ ] 1.2 Continuation: read again with `identifiers=",".join(remaining)`. The union of the two
+- [ ] 1.2 Continuation: read again with `identifiers=",".join(remaining)`. The continuation carries
+  no `summary`, `problem`, `scope` or `open_questions` key (operator decision). The union of the two
   reads is all N requirements, with no duplicates. If the second read is truncated too, repeat
   until every requirement has been returned, and assert the loop terminates in at most
   `ceil(total / budget) + 1` reads.
@@ -39,7 +44,10 @@ copy of a real spec.
 - [ ] 1.4 `identifiers=FR-2,FR-99`: returns `FR-2` only, with `unknown_identifiers == ["FR-99"]` and
   status 200.
 - [ ] 1.5 `include=outline`: every requirement has exactly the keys
-  `{identifier, modal, statement, state}`.
+  `{identifier, key, modal, statement, state}` (operator review: `key` is how an unindexed
+  requirement, whose `identifier` is `None`, is continued; `spec_reading.py:164-189`). With the
+  document of 1.12, the unindexed requirement's outline entry has `identifier is None` and a
+  non-empty `key`.
 - [ ] 1.6 `include=full` on a document with a 60,000-character `design`: `"design"` is in
   `omitted_sections`. `include=design` then returns it, cut, with `section_truncated`.
 - [ ] 1.7 By id: reading `spdoc-…` returns the same `requirements` as reading by path, and carries
@@ -64,15 +72,31 @@ copy of a real spec.
   then `ProjectPathError`, the route answers 409 with *"the document's file could not be read"*.
   Record that each is a 500 today.
 
+- [ ] 1.14 (operator review) Every name `omitted_sections` can carry is readable: a document whose
+  `problem` alone is 60,000 characters, read with defaults, names `"problem"` in
+  `omitted_sections`; `include=problem` then returns it cut, with `section_truncated`. Repeat the
+  `include=<name>` read for `summary`, `scope` and `open_questions` (status 200, the field present).
+  Fails today with 422 (the `pattern` accepts only `requirements|full`).
+- [ ] 1.15 (operator decision, the read bound) A document with a 30,000-character preamble (split
+  across `summary`, `problem`, `scope`, `open_questions`) and requirements totalling over 120,000
+  characters. Follow `remaining_identifiers` until none remain. Assert every continuation read
+  (those with `identifiers`) has no preamble key, and the number of reads is at most
+  `ceil(len(json.dumps(default_unbounded_view)) / READ_BUDGET_CHARS) + 1`. Record that the bound
+  fails if the continuation includes the preamble (mutation at IMPL: re-add it and count the reads;
+  about 12 instead of 4).
+
 ## 2. The fix
 
 - [ ] 2.1 `spec_reading.fit_view` and `READ_BUDGET_CHARS`, per D2.
 - [ ] 2.2 In the route: the id branch (D4), the `identifiers` query parameter and filter (D3),
-  widen `include`'s pattern to `requirements|outline|full|design|tasks|algorithms|evidence|lifecycle`,
-  build the outline, and call `fit_view` last. Add `id` to the view. Handle D6: `OSError`, `UnicodeDecodeError` and `ProjectPathError` from `read_document` answer 409.
+  widen `include`'s pattern to `requirements|outline|full|design|tasks|algorithms|evidence|lifecycle|summary|problem|scope|open_questions`
+  (the four preamble names added by the operator review, so every name `omitted_sections` can carry
+  is requestable), build the outline with `key`, leave the preamble and the `full` sections out of
+  any read that names `identifiers`, and call `fit_view` last. Add `id` to the view. Handle D6: `OSError`, `UnicodeDecodeError` and `ProjectPathError` from `read_document` answer 409.
 - [ ] 2.3 `mcp_server.py`: add the `identifiers: str = ""` argument (sent only when non-empty),
-  widen the `include` Literal, and rewrite the docstring to explain truncation, `continue_with` and
-  the id. Stdlib and fastmcp imports only.
+  widen the `include` Literal (the same values as the route's constant, task 1.11), and rewrite the
+  docstring to explain truncation, `continue_with`, that a read by `identifiers` carries no preamble,
+  and the id. Stdlib and fastmcp imports only.
 - [ ] 2.4 `agents.py:1236-1250`: `args`, `fields` and `text` to match.
 - [ ] 2.5 Run group 1 and the MCP test files, with `claude` stripped from PATH, then the lint block.
 
