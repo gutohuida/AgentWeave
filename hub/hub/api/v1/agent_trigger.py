@@ -445,7 +445,7 @@ async def _review_task_from_entries(
         )
     review_task_id = named.pop()
     # A "work entry" here means one asserting `task_id` with no `review_task_id` beside it — the
-    # same distinction `turn_scheduler._entry_kind` makes. An entry naming neither (a plain message
+    # same distinction `inbound_queue.entry_kind` makes. An entry naming neither (a plain message
     # riding along) has no kind to conflict with a review and is not counted (the existing
     # `test_entries_agreeing_on_one_review_task_resolve_to_it` pins exactly this).
     work_task_ids = sorted(

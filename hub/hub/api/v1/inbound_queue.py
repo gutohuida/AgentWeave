@@ -16,6 +16,7 @@ from ...inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
     not_queued_reason,
     release_entry,
+    select_turn,
     withdraw_entry,
 )
 from ...launchability import get_agent_config, probe_agent
@@ -138,7 +139,16 @@ async def get_queue_status(
         elif hold is not None and not operator_would_probe(entries, hold):
             reason = hold_sentence(agent, hold)
         elif (
-            all(entry.origin_type != "operator" for entry in entries)
+            # The turn the scheduler would build, not every queued entry (F133): an operator
+            # message waiting in another conversation is not in that turn, and the scheduler
+            # still refuses it.
+            project_row is not None
+            and all(
+                entry.origin_type != "operator"
+                for entry in select_turn(
+                    entries, project_row.hop_budget, project_row.turn_delivery_cap
+                )[1]
+            )
             and (await project_budget_state(session, project_id))["exhausted"]
         ):
             reason = "token budget exhausted"

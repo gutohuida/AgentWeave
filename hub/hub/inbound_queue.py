@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Iterable, List, Optional, Tuple
+from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,6 +97,58 @@ async def queued_entries(
 
 def can_start(entries: Iterable[InboundQueueEntry], hop_budget: int) -> bool:
     return any(entry.hop_depth <= hop_budget for entry in entries)
+
+
+def entry_kind(entry: InboundQueueEntry) -> Optional[str]:
+    """Returns "review" or "work", or `None` for an entry naming neither (design D3, F66).
+
+    `review_task_id` wins when both are set — the divergence response that restaffs a failed
+    review sets both to the same task (`run_divergence.py`), and that entry needs the review
+    checkout, not the ordinary worktree, so it is a review turn regardless of the `task_id` beside
+    it.
+    """
+    if entry.review_task_id is not None:
+        return "review"
+    if entry.task_id is not None:
+        return "work"
+    return None
+
+
+def select_turn(
+    entries: Sequence[InboundQueueEntry], hop_budget: int, cap: int
+) -> Tuple[Optional[InboundQueueEntry], List[InboundQueueEntry]]:
+    """The turn *entries* would start: its controlling entry and the entries riding on it.
+
+    The one place the composition is decided, called by the scheduler that starts the turn and by
+    `GET /queue/{agent}/status` that explains why it has not started (F133): two predicates over
+    "the turn" had drifted, and the status route answered for every queued entry rather than the
+    entries a turn would carry. *entries* arrive in queue order. The controlling entry is the first
+    within the hop budget; the turn is that entry's conversation, within budget, of its kind
+    (an entry naming no kind rides along with either), capped. `(None, [])` when nothing is
+    within budget.
+
+    Filtered by depth and by kind, as well as by conversation: `can_start` asks whether the turn
+    may begin, and nothing used to ask which entries may ride on it, so an over-budget entry was
+    bundled into a turn admitted by a shallower one (design D1, F5). A review entry and a work
+    entry batched together delivered a turn that was neither, so the controlling entry's kind
+    decides the turn and the other kind's entries are deferred (design D3, F66).
+    """
+    controlling = next((entry for entry in entries if entry.hop_depth <= hop_budget), None)
+    if controlling is None:
+        return None, []
+    controlling_kind = entry_kind(controlling)
+    selected = [
+        entry
+        for entry in entries
+        if entry.conversation_id == controlling.conversation_id
+        and entry.hop_depth <= hop_budget
+        and (
+            controlling_kind is None
+            or entry_kind(entry) is None
+            or entry_kind(entry) == controlling_kind
+        )
+    ][:cap]
+    return controlling, selected
 
 
 def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:

@@ -106,6 +106,41 @@ async def test_exhausted_budget_keeps_autonomous_entries_queued(
 
 
 @pytest.mark.asyncio
+async def test_status_keeps_budget_reason_beside_an_operator_entry_in_another_conversation(
+    app, auth_headers, bind_runner
+) -> None:
+    """F133: the status route reads the turn the scheduler would build, not every queued entry."""
+    name = "paused-beside-operator"
+    await _configure_agent(app, auth_headers, bind_runner, name)
+    await _set_budget_and_usage(limit=100, used=100)
+    await _queue(name, "agent")
+    await _queue(name, "operator")
+
+    # The scheduler's turn is the earlier autonomous entry's conversation alone, so it refuses.
+    result = await schedule_agent("proj-test", name)
+    assert result.waiting_reason == "token budget exhausted"
+
+    status = await app.get(f"/api/v1/projects/proj-test/queue/{name}/status", headers=auth_headers)
+    assert status.json()["waiting_count"] == 2
+    assert status.json()["waiting_reason"] == "token budget exhausted"
+
+
+@pytest.mark.asyncio
+async def test_status_does_not_claim_budget_when_the_operator_entry_controls_the_turn(
+    app, auth_headers, bind_runner
+) -> None:
+    """The control for F133: operator first, so the turn is theirs and the budget does not hold it."""
+    name = "operator-first"
+    await _configure_agent(app, auth_headers, bind_runner, name)
+    await _set_budget_and_usage(limit=100, used=100)
+    await _queue(name, "operator")
+    await _queue(name, "agent")
+
+    status = await app.get(f"/api/v1/projects/proj-test/queue/{name}/status", headers=auth_headers)
+    assert status.json()["waiting_reason"] != "token budget exhausted"
+
+
+@pytest.mark.asyncio
 async def test_operator_turn_starts_while_budget_is_exhausted(
     app, auth_headers, bind_runner
 ) -> None:

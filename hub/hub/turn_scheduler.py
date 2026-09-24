@@ -18,9 +18,11 @@ from .db.models import Conversation, InboundQueueEntry, Run, Task
 from .inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
     can_start,
+    entry_kind,
     format_turn_prompt,
     project_limits,
     queued_entries,
+    select_turn,
 )
 from .provider_allowance import hold_sentence, operator_would_probe, provider_hold
 from .run_task_binding import decided_task_refusal
@@ -64,21 +66,6 @@ class ScheduleResult:
 
 def _lock_for(project_id: str, agent: str) -> asyncio.Lock:
     return _agent_locks.setdefault((project_id, agent), asyncio.Lock())
-
-
-def _entry_kind(entry: InboundQueueEntry) -> Optional[str]:
-    """Returns "review" or "work", or `None` for an entry naming neither (design D3, F66).
-
-    `review_task_id` wins when both are set — the divergence response that restaffs a failed
-    review sets both to the same task (`run_divergence.py`), and that entry needs the review
-    checkout, not the ordinary worktree, so it is a review turn regardless of the `task_id` beside
-    it.
-    """
-    if entry.review_task_id is not None:
-        return "review"
-    if entry.task_id is not None:
-        return "work"
-    return None
 
 
 async def other_input_would_have_run_elsewhere(
@@ -202,7 +189,7 @@ async def other_input_would_have_run_elsewhere(
     }
 
     for entry in eligible:
-        if _entry_kind(entry) == "review":
+        if entry_kind(entry) == "review":
             review_task_id = entry.review_task_id
             if review_task_id is None or review_task_id not in tasks:
                 continue
@@ -232,13 +219,13 @@ def _tasks_this_entry_is_about(
     """The task ids `other_input_would_have_run_elsewhere` has to resolve for *entry*.
 
     A review entry is about exactly one task and reaches it by a different route, so it names only
-    that one -- `_entry_kind` already encodes that `review_task_id` wins where an entry carries
+    that one -- `entry_kind` already encodes that `review_task_id` wins where an entry carries
     both, because the divergence response that restaffs a failed review sets both to the same task
     and needs the review checkout. Everything else names its own task *and* the one its thread
     inherits, except in the controlling conversation, whose binding is already known not to have
     taken a checkout of its own.
     """
-    if _entry_kind(entry) == "review":
+    if entry_kind(entry) == "review":
         return [entry.review_task_id] if entry.review_task_id is not None else []
     named: List[str] = []
     if entry.task_id is not None:
@@ -337,7 +324,7 @@ async def _attempt_turn(
     if not can_start(entries, hop_budget):
         return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
 
-    controlling = next((entry for entry in entries if entry.hop_depth <= hop_budget), None)
+    controlling, turn = select_turn(entries, hop_budget, cap)
     if controlling is None or controlling.conversation_id is None:
         return _Attempt(ScheduleResult(waiting_reason="queued entry has no conversation"))
     conversation = await get_conversation_by_id(db, controlling.conversation_id)
@@ -349,26 +336,9 @@ async def _attempt_turn(
     ):
         return _Attempt(ScheduleResult(waiting_reason="conversation is unavailable"))
 
-    # Filter by depth and by kind, as well as by conversation. `can_start` asks whether the
-    # turn may begin; nothing used to ask which entries may ride on it, so an over-budget
-    # entry was bundled into a turn admitted by a shallower one and delivered anyway (design
-    # D1, finding F5). F66 is the same defect one column over: a review entry and a work entry
-    # batched together delivered a turn that was neither, so the controlling entry's kind
-    # decides the turn and the other kind's entries are deferred to the next one (design D3).
-    # An entry naming neither — a plain message riding beside a delegation — has no kind to
-    # conflict with either and always rides along.
-    controlling_kind = _entry_kind(controlling)
-    selected = [
-        entry
-        for entry in entries
-        if entry.conversation_id == conversation.id
-        and entry.hop_depth <= hop_budget
-        and (
-            controlling_kind is None
-            or _entry_kind(entry) is None
-            or _entry_kind(entry) == controlling_kind
-        )
-    ][:cap]
+    # The turn's composition is `select_turn`'s, shared with the status route (F133). Entries
+    # naming no kind, such as a plain message riding beside a delegation, ride along with either.
+    selected = turn
     if not selected:
         return _Attempt(ScheduleResult(waiting_reason="hop budget exhausted"))
     controlling_operator = next(
