@@ -32893,3 +32893,14 @@ and passes today.
 ## F442 (C) — a flow review refused at a deferred dispatch (the run-end re-drain) does not finalize the firing's JobRun
 
 **Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B1 rounds (`spec-queue/tracks/B1.md` Final); found by R3. Pre-existing; pinned by S13's test 1.5b. The firing's `JobRun` stays open after its review was refused at the deferred dispatch.
+
+## F443 (C) — an agent can still set a task's holder, priority and description when it creates the task
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), from the Opus review of B3
+(`spec-queue/tracks/reviews/B3-2026-09-24.md` §7). B3's `an-agent-updates-a-task-with-what-its-tool-carries`
+makes holder, priority and description the operator's fields on *update* (403 for a run actor). But
+`POST /agent-actions/tasks` still lets an agent set all three at *creation*
+(`test_agent_actions_coordination.py:123` does). That is inconsistent with "the holder is the operator's
+statement", unless creation-time delegation is intended. Decide whether an agent creating a task may
+name its holder (delegation), then either document the exception in `task-lifecycle-governance` or
+refuse those fields at create for run actors.
