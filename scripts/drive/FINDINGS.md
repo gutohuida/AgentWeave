@@ -32782,11 +32782,34 @@ test over a chain holding an unwritten middle checkpoint.
 
 ## F422 (C) — the titler pays again for the same title after every turn
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final). `generate_conversation_title` (`hub/hub/conversation_titles.py:175-233`)
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — a conversation already titled from the same excerpt is skipped before any runner is resolved or spawned. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final). `generate_conversation_title` (`hub/hub/conversation_titles.py:175-233`)
 checks only `title_set_by_operator` and the mode, and is called at `agent_trigger.py:2630` and `:3219`
 on the same excerpt after each turn. Each call is a billed model invocation producing the title the
 conversation already has. Repair shape: skip when a generated title exists and the excerpt it was made
 from has not changed (or title once per conversation unless asked), with a test counting invocations.
+
+**FIXED 2026-09-24 (Round 6):** `hub/hub/conversation_titles.py`. The `conversation_titled` event
+`generate_conversation_title` already writes now also carries `excerpt_digest` (sha256 of the
+excerpt the title was made from); before resolving a runner, the function reads the latest
+`conversation_titled` event for this conversation (`EventLog.data["conversation_id"]`, same project)
+and returns None with no spawn when its digest equals the current excerpt's. No migration: the
+event log is never pruned. Why it re-titled: both callers — `agent_trigger.py` `_execute_run`
+(:2630) and `_execute_codex_appserver_run` (:3219), via `maybe_generate_title` — run after
+every completed turn, and `_excerpt` reads only the first message and first text reply, so the input
+is fixed after turn one. No legitimate retitle path exists (spec `conversation-lifecycle`: generation
+"SHALL run after the agent's first response", replaces only a non-operator title; the only other
+title writer is the operator rename). The digest, rather than "any generated title", keeps one real
+case: a first turn with no text reply is titled from the opening message alone, and the reply a later
+turn writes earns exactly one more call. A failed generation writes no event, so it is retried next
+turn; a conversation titled before this fix (event without a digest) is titled once more, then stops.
+Consistent with `worker-spend-counts-against-the-budget` D4: the skip sits before runner resolution,
+so it is not one of the "exits after the runner is resolved" that change records, and D4's
+"one row per turn" note becomes one row per distinct excerpt. Tests (`hub/tests/test_title_generation.py`):
+`test_a_second_turn_on_a_titled_conversation_makes_no_model_call` (three `maybe_generate_title`
+calls, one spawn), `test_a_first_reply_arriving_later_is_worth_one_more_title`,
+`test_a_failed_generation_is_retried_on_the_next_turn`,
+`test_another_conversations_title_does_not_count_as_this_ones`; the first, second and fourth fail on
+the pre-fix code.
 
 ## F423 (C) — a declined handover's note never reaches that task's reviewer
 

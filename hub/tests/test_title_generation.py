@@ -417,3 +417,141 @@ async def test_a_project_with_no_resolvable_directory_is_not_titled(
     assert result is None
     assert calls == []
     assert (await _title(conversation_id))[0] != "Should never be written"
+
+
+# ---------------------------------------------------------------------------
+# F422: a title is paid for once, not once per turn
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_second_turn_on_a_titled_conversation_makes_no_model_call(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    """`maybe_generate_title` is what both run-completion paths in `agent_trigger` call after every
+    turn. The excerpt is the opening message and the first reply, so it does not move after the
+    first turn -- and each later turn used to pay for the same title again."""
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    calls = []
+    _fake_spawn(monkeypatch, "Checkout flake investigation", calls)
+
+    for _turn in range(3):
+        await conversation_titles.maybe_generate_title(
+            project_id="proj-test", conversation_id=conversation_id
+        )
+
+    assert len(calls) == 1, "one title, one model call"
+    assert (await _title(conversation_id)) == ("Checkout flake investigation", False)
+
+
+@pytest.mark.asyncio
+async def test_a_first_reply_arriving_later_is_worth_one_more_title(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    """A first turn that wrote no text reply is titled from the opening message alone. The reply a
+    later turn writes changes the excerpt, and that -- only that -- earns one more call."""
+    from hub.output_recording import record_agent_output
+
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    prompts = []
+
+    def _run(cmd, cwd):
+        prompts.append(cmd[-1])
+        return f"Title {len(prompts)}"
+
+    monkeypatch.setattr(conversation_titles, "_run_titler", _run)
+
+    await conversation_titles.maybe_generate_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+    async with async_session_factory() as session:
+        await record_agent_output(
+            session,
+            "proj-test",
+            "offline",
+            content="The flake is a race in the payment mock.",
+            session_id=None,
+            conversation_id=conversation_id,
+            kind="text",
+        )
+        await session.commit()
+    for _turn in range(2):
+        await conversation_titles.maybe_generate_title(
+            project_id="proj-test", conversation_id=conversation_id
+        )
+
+    assert len(prompts) == 2
+    assert "race in the payment mock" not in prompts[0]
+    assert "race in the payment mock" in prompts[1]
+    assert (await _title(conversation_id))[0] == "Title 2"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_generation_is_retried_on_the_next_turn(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    """Only a written title is remembered. A crash, non-zero exit or timeout wrote nothing, so the
+    next turn tries again rather than leaving the truncated title in place for good."""
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    outputs = iter(["", "Checkout flake investigation"])
+    calls = []
+
+    def _run(cmd, cwd):
+        calls.append(cmd)
+        return next(outputs)
+
+    monkeypatch.setattr(conversation_titles, "_run_titler", _run)
+
+    for _turn in range(2):
+        await conversation_titles.maybe_generate_title(
+            project_id="proj-test", conversation_id=conversation_id
+        )
+
+    assert len(calls) == 2
+    assert (await _title(conversation_id))[0] == "Checkout flake investigation"
+
+
+@pytest.mark.asyncio
+async def test_another_conversations_title_does_not_count_as_this_ones(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    """The record is matched on the conversation id inside the event's payload. Another
+    conversation opened with the same words has the same excerpt digest, and its title must not
+    stand in for this one's."""
+    from hub.utils import persist_event
+
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    async with async_session_factory() as session:
+        conversation = await get_conversation_by_id(session, conversation_id)
+        digest = conversation_titles.excerpt_digest(
+            await conversation_titles._excerpt(session, conversation)
+        )
+        await persist_event(
+            session,
+            "proj-test",
+            "conversation_titled",
+            {
+                "conversation_id": "conv-someone-else",
+                "agent": "offline",
+                "title": "Their title",
+                "excerpt_digest": digest,
+            },
+            agent="offline",
+        )
+    calls = []
+    _fake_spawn(monkeypatch, "Checkout flake investigation", calls)
+
+    await conversation_titles.maybe_generate_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+
+    assert len(calls) == 1
+    assert (await _title(conversation_id))[0] == "Checkout flake investigation"
