@@ -38,8 +38,11 @@ agent, and it is a legitimate tool for a run to have — which rules out disabli
   create_task / update_task / ask_user directly"*) is qualified the same way, and the preamble says
   that a tool named elsewhere by its short name is called by the full name in the list (R2: at least 35
   such mentions across 7 modules, several built where no runner is known).
-- Other runners keep today's rendering (their MCP naming is not the same, and Codex is not driveable
-  here to measure it).
+- The sentence naming the host's `SendMessage` is rendered for **every** Claude-family run, including
+  a first run described in the HTTP form, where the collision is equally available (operator review
+  2026-09-24); only the prefix waits for grounds to describe the injected surface.
+- Other runners keep bare names (their MCP naming is not the same, and Codex is not driveable
+  here to measure it); their preamble says the harness *may* prefix them rather than asserting it.
 - The runner is passed into `_render_hub_agent_context` from `trigger_agent_directly`, which already
   holds it (`agent_trigger.py:1057`).
 

@@ -1,5 +1,29 @@
 # Design — a Claude run is told its AgentWeave tools by their full names
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B3-2026-09-24.md` §6) verdict was
+**APPROVE WITH FIXES**; the operator approved with the fixes applied. The server key is verified
+(`mcpServers.agentweave`, `runner_commands.py:252-256`; `--allowedTools mcp__agentweave__*`,
+`:262`). Fixes, re-verified on HEAD `a50a49b`:
+
+- **MEDIUM — a spec scenario claimed more than the change does.** *"A run whose harness prefixes
+  injected tools → each AgentWeave tool is named with that prefix"* was unscoped, but a first run has
+  `access_path == "mcp"` and `described_path == "cli"` (`launchability.described_access_path`,
+  `:281-311`), and its HTTP rendering labels each operation with its bare tool name
+  (`_http_lines`, `agents.py:1484`). The review offered two fixes; **both are taken**, because each
+  covers a different half (D2, *The first run*): the prefix scenario is scoped to *a run described
+  as having the injected surface*, and the sentence naming the host's `SendMessage` is rendered for
+  **every Claude-family run, in either form**. That sentence is a fact about the harness, not about
+  the injected surface, so it asserts nothing the Hub has no grounds for — and the first run is the
+  one F139's collision can hit with no full name to steer it.
+- **LOW — the unknown-harness wording disagreed with control 1.2.** The scenario said the harness
+  *may* prefix; today's preamble (`agents.py:1536-1537`) says *"with an MCP surface they are
+  prefixed `mcp__agentweave__`"*, which is unmeasured for Codex (design D1 option 3). Aligned on
+  **"may"**: the non-Claude MCP preamble becomes *"Names below are as declared; your harness may show
+  them with a prefix such as `mcp__agentweave__`."* Task 1.2 now asserts that wording (so it fails
+  today) plus bare names (control).
+
 **Built on the recommended answer to D10/F139**: *name the tools as the harness names them, for the
 runner family where the name is known; do not disable the host's tools.* **If the operator answers
 otherwise** — e.g. "disable `SendMessage` on Hub-spawned Claude runs" — the change becomes a
@@ -38,7 +62,7 @@ and loses subagent continuation for every Hub run.
 `f"{tool_prefix}{operation.tool}({operation.args})"`. `_render_hub_agent_context` takes an optional
 `runner` and passes `tool_prefix="mcp__agentweave__"` when `runner in CLAUDE_FAMILY_RUNNERS` and
 the path it renders (`described_path`, R3) is `"mcp"`. `CLAUDE_FAMILY_RUNNERS` is declared once, in `runner_commands.py`, and the
-`build_command` branch at `:179` reads it, so the two cannot drift. The HTTP rendering is unchanged.
+`build_command` branch at `:179` reads it, so the two cannot drift. The HTTP rendering's names are unchanged; it gains only the host-`SendMessage` sentence on a Claude-family run (operator review, *The first run* below).
 
 **Bare mentions outside the list (counted by R2).** A single-line-string grep for the 27 served tool
 names, outside `_operations()` and `mcp_server.py`, finds **at least 35** mentions in text that reaches
@@ -69,9 +93,24 @@ only where the operator set `hub_client: "mcp"` or a previous run of this agent 
 online (`launchability.py:281-311`), so a fresh agent's first run is described in the HTTP form while
 the server is injected. The prefix applies where the list is rendered in its MCP form
 (`described_path == "mcp"`) on a Claude-family runner, the only rendering that names MCP tools at
-all; the first-run case names no MCP tool, bare or prefixed, and is outside this change. Task 1.4's
+all; the first-run case names no MCP tool, bare or prefixed, and gets no prefix (but see *The first run*, below). Task 1.4's
 trigger test must establish the grounds (`hub_client: "mcp"` in the agent's config, or a prior `Run`
 with `mcp_adapter_online_at` set), or it fails for a reason unrelated to the fix.
+
+**The first run (operator review).** "Names no MCP tool" was true of the list but not of the risk:
+the HTTP rendering labels each operation `` (`send_message`) `` (`_http_lines`, `agents.py:1484`), the
+server *is* injected, and the host's `SendMessage` is in the model's tool list — the F139 collision is
+available on exactly this run. So the disambiguating sentence is keyed on the **runner family alone**
+(`runner in CLAUDE_FAMILY_RUNNERS`), and rendered after the preamble in both forms; only the prefix
+is keyed on `described_path == "mcp"`. A Claude run given no server (`hub_client: "cli"`) still has
+the host tool, so it gets the sentence too; that is correct, not a leak of surface. The prefix is not
+extended to the first run's HTTP labels: those name an operation, not a tool to call, and asserting
+the injected name there is what `described_access_path` exists to refuse.
+
+**Non-Claude preamble (operator review).** For a run in the MCP form on a runner outside
+`CLAUDE_FAMILY_RUNNERS`, the preamble says the harness *may* prefix the names
+(*"Names below are as declared; your harness may show them with a prefix such as
+`mcp__agentweave__`."*) instead of asserting that it does: Codex's naming is not measured here.
 
 ## D3 — What the route returns when what it calls raises
 
@@ -82,3 +121,4 @@ No route changes. `GET /agents/agent-context` passes no runner and renders as to
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): claims re-read (`agents.py:1533-1537` preamble, `_mcp_lines` `:1468-1473`, `build_command` `runner_commands.py:179`, server key `agentweave` `:252-253`, `access_path` resolved at `agent_trigger.py:1057`). Counted the bare mentions outside the list (≥35 in 7 modules) and found the access-path notice names `send_message` bare on every MCP run; added it to scope, plus one preamble clause for the rest.
 - R3 (2026-09-24): the context and the notice are rendered from `described_path`, which a fresh agent's first run has as HTTP; the prefix is keyed on it and task 1.4 now seeds the grounds. Other claims re-read and hold.
+- Operator review (2026-09-24): prefix scenario scoped to a run described as having the injected surface; the host-`SendMessage` sentence rendered for every Claude-family run in either form; non-Claude preamble says "may". Tasks 1.1a, 1.2, 1.4, 2.2 and the spec follow. Line numbers on HEAD `a50a49b`: `_render_hub_agent_context` is at `agents.py:1601` (not `:1616`), the preamble strings at `:1536-1537`.

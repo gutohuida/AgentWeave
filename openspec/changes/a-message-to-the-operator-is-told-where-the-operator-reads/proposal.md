@@ -46,7 +46,9 @@ reading the spec as authority could rebuild it.
   the `agent_action_rejected` event records `reason: "operator_not_a_recipient"`.
 - `send_message`'s docstring and its `_operations()` row say the operator is not a recipient and name
   the two ways to reach them.
-- The two retired requirements are **removed** from `agent-capability-plane`.
+- The two retired requirements are **removed** from `agent-capability-plane`, and the third
+  reference to the retired flag (`agent-conversation-workspace/spec.md:803`) is dropped by a
+  MODIFIED delta (operator review 2026-09-24: the removal ships in this change).
 - No new tool. Nothing detects anything in an agent's text.
 
 ## Capabilities
@@ -55,6 +57,9 @@ reading the spec as authority could rebuild it.
 
 - `agent-capability-plane` — adds the reserved-recipient requirement; removes the two retired
   backstop requirements.
+- `agent-conversation-workspace` — the attention-state requirement stops counting the retired
+  unasked-question flag as a reason a conversation waits on the operator (operator review
+  2026-09-24).
 
 ## Impact
 

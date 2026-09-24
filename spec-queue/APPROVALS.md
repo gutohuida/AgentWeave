@@ -75,6 +75,13 @@ with `## Operator review, 2026-09-24`). The 2026-09-23 rows below remain undecid
 - APPROVED  a-loop-that-is-gone-lets-go-of-its-document   B11 (F53, F157). Three MODIFIED agent-loops deltas; `loop_tasks_adopted` is written against both loops. Shares the staffing walk with `a-task-is-attended-only-by-a-turn-that-will-reach-it` (textual overlap only).
 - APPROVED  charters-are-named-once-and-an-empty-one-says-so   B11 (F134, F183). Runners are included (a new `runner-registry` requirement; three doors; exact match). One migration, no table rebuild (F177 reads `rowid`).
 - APPROVED  a-run-records-that-its-calls-were-allowed   B11 (F389). Lowest priority. The write happens in the background after the 202; writes are monotonic. Migration.
+- APPROVED  agents-no-longer-register-themselves   B3 (F111, F136, F3). Carries out `D3-self-registration`. Migration follows `0013` (`recreate="never"`; on `:8000`, `self_registered` is NOT NULL with no default), with a test seeded from `:8000`'s real `agents` DDL. Separate migration from any other `agents` alter. L: 19+ test files re-fixtured; `e2e.py` switches to `POST /agents`.
+- APPROVED  request-agent-models-the-new-agent-on-one-the-operator-made   B3 (F378). Copies runner, charter and config, minus `principal`, `yolo`, `hub_client` and the question-wait env; no grants or posture. A raise from the scheduler after the commit answers 201.
+- APPROVED  a-flows-own-moves-are-recorded-as-the-flows   B3 (F47, F120; D8). Migration. `enter_selected_task(..., origin, job_id)` is the signature S13 rebases onto. **Before** B1's attended change.
+- APPROVED  a-message-to-the-operator-is-told-where-the-operator-reads   B3 (F77). A refusal only; removes the retired backstop requirements, including the `agent-conversation-workspace` attention-state clause.
+- APPROVED  a-claude-run-is-told-its-agentweave-tools-by-their-full-names   B3 (F139). Full names for runs described with the injected surface; the host-`SendMessage` sentence for every Claude-family run.
+- APPROVED  an-agent-updates-a-task-with-what-its-tool-carries   B3 (F366). Review fixes: a MODIFIED governance delta; MCP `update_task`'s `status` becomes optional. F443 (create-time fields) is separate.
+- APPROVED  the-operator-can-rename-a-task   B3 (F125). Its own `useRenameTask` (renaming a blocked task works); `title: null` is refused. UI bundle together with its backend.
 
 ## 2026-09-23
 

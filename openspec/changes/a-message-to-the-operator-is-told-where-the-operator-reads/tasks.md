@@ -2,7 +2,7 @@
 
 - [x] 0.1 R2: independent re-derivation against `messages.py:40-140`, `worktrees.py:70-150`, `mcp_server.py:204-244`, the `_operations()` `send_message` row (`agents.py:1029`), and a `grep -rn "unasked" hub/ src/` confirming nothing implements the two removed requirements
 - [x] 0.2 R3: second independent re-derivation; `openspec validate a-message-to-the-operator-is-told-where-the-operator-reads --strict` passes
-- [ ] 0.3 The operator answers F77 (refusal only / a `notify_operator` tool later) and whether the REMOVED half ships here; recorded in `spec-queue/DECISIONS.md`
+- [x] 0.3 The operator answers F77 (refusal only / a `notify_operator` tool later) and whether the REMOVED half ships here; recorded in `spec-queue/DECISIONS.md`. **Answered 2026-09-24** (`spec-queue/tracks/reviews/B3-2026-09-24.md`): refusal only; the removal ships here. Only the `DECISIONS.md` entry remains
 
 ## 1. Tests first — `hub/tests/test_a_message_to_the_operator.py`
 
@@ -19,7 +19,7 @@
 
 ## 3. Spec reconciliation
 
-- [ ] 3.1 Sync: add the requirement and remove the two retired ones from `openspec/specs/agent-capability-plane/spec.md`; archive
+- [ ] 3.1 Sync: add the requirement and remove the two retired ones from `openspec/specs/agent-capability-plane/spec.md`; apply the MODIFIED attention-state requirement to `openspec/specs/agent-conversation-workspace/spec.md` (drops the unasked-question clause at `:803`, operator review); archive
 
 ## 4. Verify
 

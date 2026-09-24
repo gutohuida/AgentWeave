@@ -1,5 +1,25 @@
 # Design — a message to the operator is told where the operator reads
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B3-2026-09-24.md` §5) verdict was
+**APPROVE WITH FIXES**. **Operator decisions (F77):** *a refusal only* — no `notify_operator` tool —
+and *the retired-requirement removal ships in this change* (D4 is no longer optional). Fixes applied,
+re-verified on HEAD `a50a49b`:
+
+- **MEDIUM — a third stale reference to the retired backstop.**
+  `openspec/specs/agent-conversation-workspace/spec.md:803` defines "waiting on the operator" as
+  including *"an undismissed unasked-question flag"*. A MODIFIED delta of *"A conversation's attention
+  state is visible in navigation"* restates the whole requirement without that clause (D4; task 3.1).
+  `grep -rn unasked hub/ui/src` finds nothing, so the clause has no implementation to remove.
+- **LOW — adjacent change, no conflict.** `why-queued-input-waits-is-told-truthfully` changes
+  `create_message_for_actor` to return `(msg, held)`. This change's branch raises before that point
+  (before the recipient lookup, `messages.py:94-117`), so either order composes; recorded under
+  *Interaction*.
+- Checked by the review and re-read here: `create_message_for_actor` (`messages.py:32`) is the single
+  door for both planes (`agent_actions.py:218`, `messages.py:346`), and `.lower()` against the
+  reserved names (`worktrees.py:148`) covers every letter case.
+
 **Built on the recommended answer to D10/F77**: *no new operator-addressing channel; the refusal
 names the channels that already exist.* **If the operator answers otherwise** (a `notify_operator`
 tool that files a non-blocking, durable note on an operator surface), this change still ships as its
@@ -46,11 +66,24 @@ raises, the route answers 500 exactly as that branch would. No new raise path.
 
 REMOVED with reason and migration notes. This reconciles the main spec with shipped code (the
 operator retired the behaviour on 2026-08-20); it is here because F77 asks the operator-addressing
-question the removed text answers wrongly. If the operator prefers it separate, task group 3 splits
-out unchanged.
+question the removed text answers wrongly. **The operator decided 2026-09-24 that it ships here.**
+
+The same retirement left a third reference (operator review): `agent-conversation-workspace`'s
+*"A conversation's attention state is visible in navigation"* counts *"an undismissed
+unasked-question flag"* among the things that make a conversation wait on the operator. That flag
+no longer exists (migration `0082`), so the clause is dropped by a MODIFIED delta that restates the
+requirement otherwise word for word. No behaviour changes: nothing in `hub/hub` or `hub/ui/src`
+raises the waiting state from such a flag today.
+
+## Interaction
+
+- `why-queued-input-waits-is-told-truthfully` changes `create_message_for_actor` to return
+  `(msg, held)`. This change's refusal raises before the recipient lookup, so it never reaches that
+  return; no conflict in either order (operator review, LOW).
 
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): `messages.py:94-117` refusal re-read; reserved names `worktrees.py:73-80`, case-insensitive at `:148`. `grep -rln unasked hub/hub src` finds only migrations `0032/0036/0037/0082` and unrelated prose (`models.py:136`, `repo_hygiene.py`) — nothing implements the two requirements removed here. No agent on `:8000` holds a reserved name (read `mode=ro`), so checking before the lookup strands no existing row.
 - R3 (2026-09-24): the refusal branch is in the function both planes share (`messages.py:84-117`); R1's *"both planes"* contradicted D2's *"the operator's own sends are untouched"*. Scoped to run senders; control 1.2a added. Everything else re-read and holds.
+- Operator review (2026-09-24): refusal only, removal ships here (operator); MODIFIED delta for `agent-conversation-workspace`'s attention-state requirement; task 3.1 and the test guide follow. See the section at the top.

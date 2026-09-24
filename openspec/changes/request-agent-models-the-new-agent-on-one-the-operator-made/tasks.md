@@ -2,7 +2,7 @@
 
 - [x] 0.1 R2: independent re-derivation against `agents.py:2140-2258`, `agent_actions.py:829-840`, `mcp_server.py:622-627`, `_operations()` (`agents.py:1336-1344`) and `test_agent_actions_governed.py`. Argue design D2's `default_permission_mode` row
 - [x] 0.2 R3: second independent re-derivation (design D5: every posture read); `openspec validate request-agent-models-the-new-agent-on-one-the-operator-made --strict` passes
-- [ ] 0.3 The operator answers the F378 question (template = existing agent / registry / delete); recorded in `spec-queue/DECISIONS.md`
+- [x] 0.3 The operator answers the F378 question (template = existing agent / registry / delete); recorded in `spec-queue/DECISIONS.md`. **Approved 2026-09-24** (`spec-queue/tracks/reviews/B3-2026-09-24.md` §2): template = an existing open agent; `hub_client` dropped from the copy. Only the `DECISIONS.md` entry remains
 
 ## 1. Tests first — new file `hub/tests/test_request_agent_models_an_existing_agent.py`
 
@@ -12,6 +12,8 @@ Each builds the template with real agent rows (an `Agent` row plus `bind_runner`
 - [ ] 1.2 The template holds `can_accept_evidence=True`: the new agent's is `False`. FAILS today (400)
 - [ ] 1.2a The template was set to full access through `PATCH /agents/{t}` `{"default_permission_mode": "<full-access id>"}` (so its `config.yolo` is `True`): the new agent's `default_permission_mode` is `None` **and** its `config` has no truthy `yolo`; and the command `build_command` produces for it does not contain `--dangerously-skip-permissions`. FAILS today (400); would FAIL after a fix that copied `config` whole
 - [ ] 1.2b The template's `config` has `read_only: true` and `env_vars` set, and the template has a conversation whose `runtime_overrides` name full access: `read_only` and `env_vars` are on the new row (control for what *is* copied), and the new agent's first run carries no `permission_mode` control (nothing lent from the template's conversations). FAILS today only because every call 400s
+- [ ] 1.2c (operator review: drop `hub_client`) The template's `config` has `hub_client: "cli"`: the new row's `config` has no `hub_client` key, and the command `build_command` produces for the new agent's first run includes the injected `--mcp-config` and does not carry `--permission-mode acceptEdits`, while the template's own command does. FAILS today (400); would FAIL after a fix that dropped only `principal` and `yolo`
+- [ ] 1.2d The template's `config.env_vars` holds `AW_QUESTION_TIMEOUT: "5"` and one other key: the new row's `env_vars` keeps the other key and has no `AW_QUESTION_TIMEOUT`, and `effective_question_wait` of the new row equals the Hub default. FAILS today (400); would FAIL after a fix that copied `env_vars` whole
 - [ ] 1.3 Unknown template: 400, detail contains every open agent's name and not an archived one's. FAILS today (the detail names no agent)
 - [ ] 1.4 Archived template: 409 naming archival. FAILS today (400)
 - [ ] 1.5 Template with no runner: 409. FAILS today (400)
@@ -22,9 +24,10 @@ Each builds the template with real agent rows (an `Agent` row plus `bind_runner`
 ## 2. The fix
 
 - [ ] 2.1 In `request_agent`, replace the `_get_session_data` lookup with a query for the template `Agent` row; add the three refusals (design D3); count `existing_names` from agent rows only
-- [ ] 2.2 Create the new row with the template's `runner_id`, `charter_id`, `config` (minus `principal` and `yolo`); nothing else copied
+- [ ] 2.2 Create the new row with the template's `runner_id`, `charter_id`, `config` (minus `principal`, `yolo` and `hub_client`; `env_vars` copied as a new dict without `QUESTION_WAIT_ENV`, imported from `agent_trigger`); nothing else copied. The template's `config` and `env_vars` dicts are not mutated
 - [ ] 2.3 Wrap only `schedule_agent` in `try/except Exception`, log (naming the agent and that its first turn stays queued until the agent is next scheduled), and return the `201` payload
 - [ ] 2.4 Update the MCP docstring (`mcp_server.py:623-624`) and the `_operations()` text to say `template` is the exact name of an open agent in this project whose runner and charter the new agent takes; `test_tool_surface_matches_server.py` must stay green
+- [ ] 2.5 (operator review; **conditional**) If `an-agent-can-be-paused-and-keeps-its-input` has landed when this is implemented: test first — a paused template answers 409 *"'<t>' is paused; the operator paused it, so it cannot be a model for a new agent."* and no row is created (FAILS before the refusal) — then add the D3 row reading the pause from the template row. If the pause change has not landed, leave this unchecked with a note, and the pause change adds the refusal and its test when it lands (design D5, *A paused template*)
 
 ## 3. Verify
 

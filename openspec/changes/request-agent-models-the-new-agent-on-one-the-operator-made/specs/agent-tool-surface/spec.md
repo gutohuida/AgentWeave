@@ -14,6 +14,12 @@ permission posture, in any spelling the spawn reads, nor that agent's descriptio
 overrides. A new agent runs under the built-in default posture until the operator sets one. An agent MUST NOT be able to create a second holder of a grant
 the operator gave to one.
 
+A declaration that changes which tools a run is given, and through that its posture, SHALL NOT be
+inherited either: the operator's statement that an agent runs without the Hub's own tool server is
+made about that agent alone. A per-agent override carried in the template's runner environment,
+such as how long it waits for an answer, SHALL NOT be inherited any more than the same override
+written on the agent.
+
 A request naming no such agent SHALL be refused with the names of the project's open agents it could
 have named. A request naming an archived agent, or an agent with no runner bound, SHALL be refused
 saying so. The agent budget SHALL be counted over the project's agents alone.
@@ -37,6 +43,20 @@ saying so. The agent budget SHALL be counted over the project's agents alone.
 - **WHEN** an agent is requested from it
 - **THEN** the new agent's first turn is not started with full access
 - **AND** its settings show the built-in default posture
+
+#### Scenario: A template declared to run without the Hub's tool server does not pass that on
+
+- **GIVEN** a template agent the operator declared to run without the Hub's own tool server
+- **WHEN** an agent is requested from it
+- **THEN** the new agent carries no such declaration
+- **AND** its first turn is not started under the posture a run without that server falls back to
+
+#### Scenario: A waiting override in the runner environment is not inherited
+
+- **GIVEN** a template agent whose runner environment sets how long it waits for an answer
+- **WHEN** an agent is requested from it
+- **THEN** the new agent keeps the template's other runner environment settings
+- **AND** it waits for an answer for the Hub's default time
 
 #### Scenario: An unknown template names what would work
 

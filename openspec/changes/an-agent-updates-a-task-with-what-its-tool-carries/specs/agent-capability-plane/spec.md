@@ -10,7 +10,12 @@ the same request that sends it to review. The tool an agent is given has never o
 and a direct request that could write them was a capability the adapter did not have.
 
 The refusal SHALL name the fields it refused and say that an agent moves its task with status and
-notes. The question tool and the message tool are unaffected.
+notes and links it to the requirements it serves. The question tool and the message tool are
+unaffected.
+
+An agent SHALL be able to link its task to a requirement without restating the task's status, over
+either access path: a status an agent may not set (a block is observed, never asserted by an agent)
+must not stand between it and a link it may record.
 
 #### Scenario: An agent tries to take a task
 
@@ -22,6 +27,13 @@ notes. The question tool and the message tool are unaffected.
 
 - **WHEN** an agent's run updates its task naming a requirement the project declares
 - **THEN** the link is recorded as that agent's, over either access path
+
+#### Scenario: An agent links a requirement without moving its task
+
+- **GIVEN** an agent's task that is blocked
+- **WHEN** the agent's run links the task to a requirement and names no status
+- **THEN** the link is recorded as that agent's
+- **AND** the task's status and its reason for being blocked are unchanged
 
 #### Scenario: The operator is unaffected
 

@@ -755,6 +755,7 @@ recommended answers were taken as recommended unless noted below. The per-change
 - DECIDED   B3-D8  **A job's moves are recorded as `operator` with `origin="job"` and `job_id`**. A
   divergence-restaffed review staged late stays "You moved"; a manual Run press reads "Loop X moved";
   the 38 existing rows are not rewritten.
+- DECIDED   B3-all  **B3's recommendations are taken** (`spec-queue/tracks/B3.md` Final). Self-registration is deleted (`D3-self-registration`, plus the design's Open Question 2 as recommended). `request_agent` templates are an existing open agent, with no grants or posture copied, and no `yolo`, `hub_client` or question-wait overrides. F77: a refusal only, with the retired "unasked question" requirements removed in the same change. F139: full `mcp__agentweave__…` names, and the host `SendMessage` stays. F366: agents write status, notes and requirement links, and the operator writes holder, priority, description and title. F125: the operator may rename a task. F276: closed as decided. The pause (F15) is REVISING (see APPROVALS).
 - DECIDED   B12-F278-revise  **F278's change goes back for a round** (REVISING): base64 key segments
   and short tokens inside paths.
 

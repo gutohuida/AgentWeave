@@ -44,3 +44,45 @@ to be recorded as the operator's request.
 
 - **WHEN** a transition recorded as a scheduled job's would be refused for the operator
 - **THEN** it is refused on exactly the same grounds
+
+## MODIFIED Requirements
+
+### Requirement: The system may cause a transition without becoming an actor
+
+The system SHALL be able to move a task as a consequence of an event it observes, acting **as** the
+responsible run rather than as an actor of its own kind. Such a transition SHALL be subject to every
+legality and actor rule that governs a transition the run itself requests, and SHALL be refused on
+the same grounds.
+
+A scheduled job's firing SHALL likewise act **as the operator**, whose authority it holds because the
+operator created the job, and not as an actor of its own kind. Its moves SHALL be subject to every
+legality and actor rule that governs a transition the operator requests, and SHALL be refused on the
+same grounds; only the recorded cause says a scheduled job made them.
+
+There SHALL NOT be a third actor kind for the system. Actor kind is what the transition map and
+author/reviewer separation are keyed on; a system actor would require every edge to declare whether
+the system may take it, and would admit moves for which no one is accountable.
+
+#### Scenario: An automatic move obeys the map
+
+- **WHEN** the system would move a task automatically
+- **AND** that move is not an edge available to the responsible run
+- **THEN** no transition occurs
+- **AND** the task is unchanged
+
+#### Scenario: Author and reviewer separation is unaffected
+
+- **WHEN** a transition is made automatically on behalf of a run
+- **THEN** the agent recorded is that run's agent
+- **AND** later review of that task is judged against that agent exactly as if the agent had asked
+
+#### Scenario: A scheduled job's move is the operator's authority
+
+- **WHEN** a loop or flow firing moves a task
+- **THEN** the recorded actor kind is operator
+- **AND** the move is allowed or refused exactly as the same move requested by the operator would be
+
+#### Scenario: The actor kinds remain unchanged
+
+- **WHEN** the set of actor kinds is enumerated
+- **THEN** it contains agent run and operator, and nothing else

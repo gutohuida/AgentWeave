@@ -4,7 +4,9 @@
 
 1. **An agent cannot take or relabel a task.** Tasks 1.1–1.3 fail today, pass after; 1.2's "no
    transition row" is the assertion that proves the refusal comes before the write.
-2. **What agents legitimately do still works, now on both paths.** 1.4, 1.5.
+2. **What agents legitimately do still works, now on both paths.** 1.4, 1.5; and linking a
+   requirement needs no status restatement, even on a `blocked` task (1.5a, operator review
+   2026-09-24).
 3. **The operator is unaffected.** 1.6. **Existing refusals keep their words.** 1.7.
 
 ## Human-only

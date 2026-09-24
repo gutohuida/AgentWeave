@@ -34,8 +34,9 @@ is the axis the spec already provides for exactly this distinction.
 - A third **origin** value, `job`, meaning *"a scheduled firing made this move, with the operator's
   authority"*, plus a nullable `task_transitions.job_id` naming the job. The actor stays `operator`
   — the authority the gate needs is unchanged, so no legality or separation rule moves.
-- `enter_selected_task` takes the firing's `job_id`; its two scheduler callers (`scheduler.py:3336`,
-  `:3709`) pass `job.id`. Its third caller (`agent_trigger.py:898`) is reached by **every** delivered
+- `enter_selected_task` takes the move's cause as `(origin, job_id)`, the pair `apply_transition`
+  already takes and the signature S13 rebases onto (operator review 2026-09-24); its two scheduler
+  callers (`scheduler.py:3336`, `:3709`) pass `origin="job"` and `job.id`. Its third caller (`agent_trigger.py:898`) is reached by **every** delivered
   review entry, not only the operator's (R2): a flow's queued review that is delivered after its task
   came back to `completed` travels the edge there. So a queued entry carries the job too
   (`inbound_queue_entries.job_id`), and `:898` records `job` when the delivered review entries are a

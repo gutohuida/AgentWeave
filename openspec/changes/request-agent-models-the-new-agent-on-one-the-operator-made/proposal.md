@@ -34,7 +34,8 @@ Even where a template was found, the new agent was created with **no runner boun
 ## What Changes
 
 - **A template is an existing, open agent of the project, named exactly.** The new agent copies that
-  agent's `runner_id`, `charter_id` and `config` (less `principal` and `yolo`); it does **not** copy the
+  agent's `runner_id`, `charter_id` and `config` (less `principal`, `yolo` and `hub_client`, and less the
+  `AW_QUESTION_TIMEOUT` waiting override inside `env_vars` — operator review 2026-09-24); it does **not** copy the
   per-agent grants (`can_accept_evidence`, `can_read_checkpoints`, `can_recall` start closed), its
   permission posture (`default_permission_mode`, nor its legacy mirror `config["yolo"]`, which the
   spawn reads — R2), its description, or its checkpoint and waiting overrides. The operator approved the template by creating it; the agent

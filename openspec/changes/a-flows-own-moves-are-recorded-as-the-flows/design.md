@@ -1,5 +1,36 @@
 # Design — a flow's own moves are recorded as the flow's
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B3-2026-09-24.md` §4) verdict was
+**APPROVE WITH FIXES**. **The operator accepted D8 as designed**: a recorded cause, not a third actor
+kind; a review staged late by a divergence restaff stays "You moved"; a manual Run press reads
+"Loop X moved"; the 38 existing rows keep "You moved". Fixes applied (re-verified on HEAD `a50a49b`):
+
+- **Signature, aligned with S13.** S13 (`a-flow-stages-its-review-in-the-dispatch`, REVISING, not
+  edited here) rebases onto `enter_selected_task(..., origin, job_id)` (its design, *Collisions*).
+  This change's task 2.3 now **defines that signature**:
+  `enter_selected_task(session, task, *, agent, is_review, origin=ORIGIN_ACTOR, job_id=None)`,
+  passed through unchanged to both `apply_transition` calls, which validates the pair (D2). Chosen
+  over R3's `job_id`-only form because it is the cleaner one, not only because S13 expects it: the
+  dispatch at `agent_trigger.py:898` reads a *cause* off the delivered entries, and a cause is the
+  `(origin, job_id)` pair `apply_transition` already takes. One vocabulary from the entry to the row,
+  one validation point, and a later cause (the divergence question in *Interaction*) needs no new
+  parameter. S13 needs no rebase beyond what its text already says.
+- **Task 1.5's source scan would trip** on the MCP `task_history` docstring, which will name
+  `origin: "job"`. The scan is now AST-based: it finds the `ORIGIN_JOB` symbol and `origin=`
+  keyword arguments with a literal value, never text in a docstring.
+- **Line number:** `new_entry` is at `inbound_queue.py:24`, not `:50` (D5 corrected).
+- **Cross-reference.** `task-lifecycle-governance`'s *"The system may cause a transition without
+  becoming an actor"* (`openspec/specs/task-lifecycle-governance/spec.md:580-607`) now carries a
+  MODIFIED delta saying a scheduled job's move acts **as the operator**, as the runtime's acts as the
+  run.
+- **Stale text.** `spec-queue/tracks/B3.md:328` (outside this change; not edited) and this design's
+  *Interaction* said S13 never mentions this change. S13's R2 added a *Collisions* paragraph, a
+  governance sentence and task 1.14c, consistent with this change; *Interaction* is corrected.
+- The operator's three D8 answers are pinned: control 1.3d (divergence restaff stays the operator's
+  request), 1.3c (manual Run press is the loop's), and D2's no-backfill rule (old rows).
+
 **Built on the recommended answer to D8**: *no new actor kind; a new recorded cause (`origin="job"`)
 naming the job, with the operator's authority unchanged.* **If the operator answers otherwise** (a
 third actor kind), this change is withdrawn: that answer must first modify
@@ -104,7 +135,7 @@ exercised by a unit test rather than discovered in a live firing.
 ## D5 — Does every path that queues a loop's review carry the job? (R3)
 
 - **Producers.** `InboundQueueEntry` has one constructor, `inbound_queue.new_entry`
-  (`inbound_queue.py:50`); no path copies an entry. `origin_type="job"` is written at exactly two
+  (`inbound_queue.py:24`); no path copies an entry. `origin_type="job"` is written at exactly two
   sites, `scheduler.py:3407` (`_do_fire_job`, plain jobs and loops alike) and `:3739`
   (`_stage_selection`); both hold `job`, so task 2.2 covers every job-origin entry. The other writers
   of `review_task_id` are the operator's trigger (`agent_trigger.py:1582`) and a divergence restaff
@@ -133,14 +164,18 @@ exercised by a unit test rather than discovered in a live firing.
   firing staging a review and leaves `:898` as the only place a flow's review is staged. R1 of this
   change recorded that whichever landed second must carry the job cause through the queue entry; R2
   moved that work **into this change** (Context, above), because the entry-delivered path already
-  exists today. After R2, S13 needs nothing from this change beyond keeping `:898`'s cause read; S13's
-  own text does not mention this change yet, and its R2/R3 should.
-- **Divergence restaffs** are left recorded as the operator's request. The spec's cause clause arguably
-  reaches them too (the Hub acting on the operator's divergence policy); naming that cause is a
-  separate question, noted for the operator, not decided here.
+  exists today. After R2, S13 needs nothing from this change beyond keeping `:898`'s cause read.
+  S13's R2 has since recorded this change (its design *Collisions*, a governance sentence, and its
+  task 1.14c) and names the build order: this change first, S13 rebasing onto
+  `enter_selected_task(..., origin, job_id)` — the signature task 2.3 defines (operator review).
+- **Divergence restaffs** are left recorded as the operator's request — **accepted by the operator
+  2026-09-24** (a review staged late by a divergence restaff stays "You moved"). The spec's cause
+  clause arguably reaches them too (the Hub acting on the operator's divergence policy); naming that
+  cause is a separate, later question, and the `(origin, job_id)` signature leaves room for it.
 
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): R1's claim that `agent_trigger.py:898` only transitions on an operator dispatch is false — the review task id is read from delivered entries, and flow- and divergence-queued entries carry one. The job cause now travels on `InboundQueueEntry.job_id`. Loop vs flow labelling corrected. Every other claim (`ORIGINS` at `task_transition_service.py:563-565`, divergence resolution at `:701`, the three callers, the pin at `test_flow_chain_end_to_end.py:342-352`, jobs never deleted `jobs.py:1174`, `TaskTransitionHistory.tsx:40-44`) re-read and holds.
 - R3 (2026-09-24): every job-origin producer re-derived (two, both covered); no entry is copied; `origin` has no CHECK; its readers are unaffected. Added D5; recorded that a manual Run press is attributed to the loop. S13 still does not mention this change (B1 is at R1) — the B3 record's Final lists what B1's R2/R3 must check.
+- Operator review (2026-09-24): D8 accepted as designed; `enter_selected_task` takes `(origin, job_id)` to match S13; task 1.5's scan made AST-based; `new_entry` line corrected; MODIFIED delta for *"The system may cause a transition without becoming an actor"*; control 1.3d. See the section at the top.

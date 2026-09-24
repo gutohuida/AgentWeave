@@ -34,10 +34,15 @@ labour"*.
 - **Operator-only on the agent plane:** `assignee`, `priority`, `description` join `divergence_policy`
   and `escalation_agent`. A run actor naming any of them is refused **403 before anything is written**,
   with one sentence naming the fields and what an agent can do instead (*"An agent moves its task with
-  status and notes; who holds a task, its priority and its description are the operator's."*).
+  status and notes, and links it to the requirements it serves with requirement_ids; who holds a
+  task, its priority and its description are the operator's."*).
 - **Given to the tool instead of taken from the route:** `requirement_ids` and `spec_document` are added
   to MCP `update_task` and to its `_operations()` row, because the route already records an agent's
-  link as the agent's and linking work to requirements is agent work.
+  link as the agent's and linking work to requirements is agent work. The tool's `status` becomes
+  optional, so linking needs no status restatement (operator review 2026-09-24).
+- `task-lifecycle-governance`'s paragraph saying the agents' route accepts an assignee, and its
+  same-request reviewer scenario, are restated for the operator only (MODIFIED delta).
+- Not in scope: the fields an agent sets when it **creates** a task (F443, operator 2026-09-24).
 - The existing refusals keep their own sentences.
 
 ## Capabilities
@@ -45,6 +50,8 @@ labour"*.
 ### Modified Capabilities
 
 - `agent-capability-plane` — adds a requirement stating which task fields an agent may write.
+- `task-lifecycle-governance` — the author-as-holder requirement no longer says the agents' route
+  accepts an assignee; naming a reviewer in the same request is the operator's.
 
 ## Impact
 

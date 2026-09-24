@@ -1,5 +1,28 @@
 # Design — `request_agent` models the new agent on one the operator made
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B3-2026-09-24.md` §2) verdict was
+**APPROVE WITH FIXES**; the operator approved with the fixes applied and decided the open one:
+
+- **MEDIUM — `config["hub_client"]` decides posture. Operator: drop it**, for least authority.
+  The copy now omits `principal`, `yolo` **and `hub_client`** (D2, D5). `hub_client: "cli"` moves
+  the access path (`resolve_access_path`, `launchability.py:231-247`, read at
+  `agent_trigger.py:1056-1057`), and with no Hub tool server injected the run's default posture
+  falls back to `acceptEdits` (`runner_commands.py:81`, `:238-242`). New test 1.2c.
+- **LOW — a waiting setting rides in `env_vars`.** `effective_question_wait` reads
+  `AW_QUESTION_TIMEOUT` (`QUESTION_WAIT_ENV`, `agent_trigger.py:536`) from the agent's own
+  `config["env_vars"]` (`:581-582`). Resolved by **stripping** that key from the copied
+  `env_vars`: D2 already leaves the waiting overrides behind, and a waiting override in another
+  spelling is the same override. New test 1.2d.
+- **MEDIUM — the paused-template refusal had no task.** Added as task 2.5, conditional on
+  `an-agent-can-be-paused-and-keeps-its-input` (REVISING) landing first; otherwise that change
+  carries it.
+
+The config keys the code reads are `runner`, `model`, `cli`, `yolo`, `read_only`, `env_vars` and
+`hub_client` (review §2); after this change the copy carries `runner`, `model`, `cli`, `read_only`
+and `env_vars` (less `AW_QUESTION_TIMEOUT`). Citations re-verified on HEAD `a50a49b`.
+
 **Built on the recommended answer to S9's F378 question** ("where do `request_agent` templates come
 from?"): *an existing open agent of the project*. **If the operator answers otherwise** — delete the
 tool, or build a dedicated template registry — this change is replaced; the tests in group 1 that
@@ -34,7 +57,7 @@ assert "every call 400s today" still stand as the regression for whichever is ch
 |---|---|---|
 | `runner_id` | yes | without it the agent cannot run; the operator chose this runner for this kind of agent |
 | `charter_id` | yes | the charter is how the operator told this kind of agent how to behave |
-| `config` | yes, **minus `principal` and `yolo`** | carries runner options the runner row does not (`env_vars`, `read_only`, `hub_client`). `yolo` is not an option: it is the older spelling of the permission posture, written by `_apply_default_permission_mode` (`agents.py:2474-2492`) and read by the spawn (`agent_trigger.py:805` → `--dangerously-skip-permissions`) — see below |
+| `config` | yes, **minus `principal`, `yolo` and `hub_client`, and with `AW_QUESTION_TIMEOUT` removed from `env_vars`** | carries runner options the runner row does not (`env_vars`, `read_only`). `yolo` is not an option: it is the older spelling of the permission posture, written by `_apply_default_permission_mode` (`agents.py:2474-2492`) and read by the spawn (`agent_trigger.py:805` → `--dangerously-skip-permissions`) — see below. `hub_client` moves the posture too (operator review, D5); `AW_QUESTION_TIMEOUT` is a waiting override (row below) |
 | `can_accept_evidence`, `can_read_checkpoints`, `can_recall` | **no** | these are authority the operator grants one agent at a time (`agent-configuration`, *"The operator can grant an agent the authority to accept evidence"*); an agent must not be able to mint a second holder of it |
 | `description`, `default_permission_mode`, waiting and checkpoint overrides | no | per-agent settings the operator writes on the agent itself; defaults apply |
 
@@ -104,6 +127,8 @@ column leaves nothing else that grants the new agent more than its own row says.
 | `config["read_only"]` | `worktrees.is_writing_agent` (`worktrees.py:230`) | copied. It is an isolation opt-out, not a tool restriction: the agent shares the project checkout, which is also the "Workspace only" boundary (`AW_WORKSPACE_DIR`, `agent_trigger.py:1192`). Copied because it is on the new row's own config and the roster shows it (`ROSTER_CONFIG_KEYS`, `agents.py:651`), so the row and the run agree |
 | `config["env_vars"]` | `launchability.resolve_agent_env` | copied (it carries the provider key indirection the runner needs). The spawn then overwrites every `AW_*` identity and workspace key; the one it sets only conditionally, `AW_PERMISSION_POSTURE` (`:1195-1196`), is honoured by the approval tool only as the *operator-answered* posture (`mcp_server.py:1699`), which is stricter, not wider |
 | `permission_timeout_seconds`, `question_timeout_seconds` | `agent_trigger.py:1200-1203` | not copied (waiting, not authority) |
+| `config["hub_client"]` (operator review) | `agent_trigger.py:1056-1057` → `resolve_access_path` (`launchability.py:243-244`: `"cli"` means no Hub tool server) → `mcp_command` → `build_command`'s `default_posture` (`runner_commands.py:238-242`: `acceptEdits` when no server is injected) | **dropped from the copy** (operator decision, least authority). Without it the new agent gets the injected server and the `workspace` default, which asks before editing — stricter, never wider, than the template's |
+| `config["env_vars"]["AW_QUESTION_TIMEOUT"]` (operator review) | `effective_question_wait` (`agent_trigger.py:581-582`) | **stripped from the copied `env_vars`**: it is the question-wait override in environment spelling, and waiting overrides are not copied (row above) |
 
 So the rule holds: after the copy, every posture the run gets is one its own row states. One visible
 consequence, not a defect: a **Codex** template that opted out of the app-server transport and relied
@@ -119,10 +144,13 @@ is true whenever D4's `except` runs.
 **A paused template (with `an-agent-can-be-paused-and-keeps-its-input`).** If the pause lands, a
 peer could otherwise clone an agent the operator paused and get the same runner and charter running.
 Whichever of the two changes lands second adds a D3 row: template paused → 409 *"'<t>' is paused; the
-operator paused it, so it cannot be a model for a new agent."* Not in this change's tests until then.
+operator paused it, so it cannot be a model for a new agent."* Carried as task 2.5 (operator review):
+done here if the pause change has landed when this one is implemented; otherwise the pause change
+must add it, and the pause change's R-round is told so through the B3 record.
 
 ## Round log
 
 - R1 (2026-09-24): written. Not yet compared by R2/R3.
 - R2 (2026-09-24): route re-read (`agents.py:2140-2258`); every R1 claim about it holds. Argued `default_permission_mode` (not copied) and found the `config["yolo"]` leak that R1's copy would have created; D2 and D4 corrected; spec and tasks follow.
 - R3 (2026-09-24): re-derived every posture read (D5): column, `config.yolo`, conversation overrides, runner flags, `read_only`, `env_vars`, waiting settings. R2's drop of `yolo` is sufficient; nothing else copied grants more than the new row states. D4's raise path confirmed (a raise means no run started). Added the paused-template coordination with the pause change.
+- Operator review (2026-09-24): `hub_client` dropped from the copy (operator), `AW_QUESTION_TIMEOUT` stripped from copied `env_vars`, paused-template task 2.5 added; spec requirement and tasks 1.2c, 1.2d, 2.2, 2.5 follow. See the section at the top.

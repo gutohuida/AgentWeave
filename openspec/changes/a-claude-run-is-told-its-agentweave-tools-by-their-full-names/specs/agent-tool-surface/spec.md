@@ -27,13 +27,20 @@ record it was asked to write does not exist.
 - **WHEN** a named tool cannot be called in this turn
 - **THEN** the context SHALL say so rather than name it as available
 
-#### Scenario: A run whose harness prefixes injected tools
+#### Scenario: A run described as having the injected surface, on a harness that prefixes it
 
-- **WHEN** canonical context is assembled for a run whose harness names injected tools with a prefix
+- **WHEN** canonical context is assembled for a run described as having the injected tool surface, on a harness whose injected-tool prefix the Hub knows
 - **THEN** each AgentWeave tool is named with that prefix, as the run would call it
 - **AND** the context states that the harness's similarly named messaging tool does not reach AgentWeave agents
+
+#### Scenario: A run described without the injected surface, on that harness
+
+- **WHEN** canonical context is assembled for a run on that harness that is described in the request form
+- **THEN** no tool is named with the injected prefix
+- **AND** the context still states that the harness's similarly named messaging tool does not reach AgentWeave agents
 
 #### Scenario: A run whose harness naming is not known
 
 - **WHEN** canonical context is assembled for a run on a harness whose injected-tool naming the Hub does not know
-- **THEN** the tools are named as they are declared, with the note that the harness may prefix them
+- **THEN** the tools are named as they are declared, with a note that the harness may show them with a prefix
+- **AND** the note does not assert that they are prefixed

@@ -1,5 +1,27 @@
 # Design — agents no longer register themselves
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review (`spec-queue/tracks/reviews/B3-2026-09-24.md` §1) verdict was
+**APPROVE WITH FIXES**; the operator approved the change with those fixes applied. All four are
+folded in below and re-verified on HEAD `a50a49b`:
+
+- **HIGH, test inventory.** Three more files build rows or SQL with the dropped column:
+  `test_dashboard_truth.py:43-48,120,608,651` (`Agent(self_registered=...)` would raise
+  `TypeError`), `test_operator_is_told_the_truth.py:139-219` (its test at `:183` asserts the
+  exemption this change removes), and `test_migrations.py:724,3597,3602` (raw
+  `INSERT ... self_registered`). Added as task 2.7a; the test guide's grep now covers `hub/tests`.
+- **MEDIUM, migration shape.** D2 now follows `0013_drop_agent_pilot_columns.py`
+  (`batch_alter_table("agents", recreate="never")`, one guard per column), not a copy-and-recreate
+  batch, and task 1.6a adds a test seeded from `:8000`'s real `CREATE TABLE agents` (see D2).
+- **MEDIUM, the e2e harness hides the failure.** `.claude/skills/e2e-loop/e2e.py:124-133` swallows
+  the register `RuntimeError` and then PATCHes, so the deletion would surface as a confusing 404.
+  Task 2.10 switches it to `POST /agents` (and the gitignored mirror `.agents/skills/e2e-loop/e2e.py`),
+  and fixes `docs/reference/hub-api.md:62` ("Update self-registered agent…") as well as `:61`.
+- **LOW, re-fixturing changes what tests mean.** Registered test agents were self-registered `poll`
+  rows, which got the launchability exemption and the job skip. Task 2.7b requires re-running the
+  affected files on the new fixture and reading each failure, not substituting blindly.
+
 **Built on the recommended answer to D3**: self-registration leaves the product, as the operator
 already decided on 2026-08-29, so no "third sentence keyed on `contact_mode`" is written and
 `contact_mode` goes with the population it described. **If the operator answers otherwise** (keep
@@ -43,10 +65,23 @@ unreachable (F3's condition 1).
 
 ## D2 — The columns go in one migration
 
-`contact_mode`, `self_registered`, `mcp_endpoint`, `spawn_cmd` (`db/models.py:206-220`). SQLite
-needs `batch_alter_table` to drop columns; follow `.claude/rules/db-migrations.md` (guard for a
-missing table, bump the head assertions in `test_migrations.py` and
-`test_project_persistence.py`). The downgrade re-adds them nullable (`self_registered` with
+`contact_mode`, `self_registered`, `mcp_endpoint`, `spawn_cmd` (`db/models.py:206-220`). Follow
+`0013_drop_agent_pilot_columns.py`: `op.batch_alter_table("agents", recreate="never")`, so SQLite
+emits a direct `ALTER TABLE ... DROP COLUMN`, with an `if "<col>" in columns` guard on each column
+read from the inspector, plus the missing-table guard from `.claude/rules/db-migrations.md`; bump the
+head assertions in `test_migrations.py` and `test_project_persistence.py`. **Not** a
+copy-and-recreate batch: recreating `agents` would have to rebuild `ck_agents_lifecycle` and
+`ix_agents_project_name` (both present on `:8000`'s table, read `mode=ro` 2026-09-24) for no gain.
+None of the four columns is indexed or constrained, so the direct drop is legal.
+
+**Why the migration must not fail quietly.** On `:8000`, `self_registered` is `BOOLEAN NOT NULL` with
+no server default (measured, `mode=ro`), and `init_db` swallows a failed upgrade and starts anyway
+(`hub/hub/db/engine.py:230`, `"Alembic upgrade failed (continuing startup)"`). If the drop failed
+there while the model no longer names the column, every agent `INSERT` after it would fail
+`NOT NULL`. Task 1.6a therefore seeds the test database from `:8000`'s real `CREATE TABLE agents`
+text, upgrades, and then inserts an agent through the ORM.
+
+The downgrade re-adds them nullable (`self_registered` with
 `server_default='0'`), and does not restore values — there are none worth restoring (measured).
 
 Keeping the columns and only deleting the route was considered and rejected: the response fields
@@ -125,3 +160,4 @@ does not touch.
   watchdog first syncs"*; with self-registration gone that bootstrap order no longer exists, and that
   exemption is the last producer of F276's no-such-agent firing.
 - R3 (2026-09-24): every reader of the four columns re-derived by `grep` over `hub/hub`, `src/` and `hub/ui/src` (matches D3's table and task 2.x's sites exactly); `get_agent_registration` and `CONTACT_MODES` have no caller. Launchability's `"runner" in meta` also reads `Agent.config` (merged at `launchability.py:485-486`), so the unbound verdict after the change is "no runner row and no `runner` key anywhere" — as D3 says. Migration number: see the B3 record (three B3 changes and four others name or need `0106`). No change to the proposal.
+- Operator review (2026-09-24): fixes from `spec-queue/tracks/reviews/B3-2026-09-24.md` §1 applied (section at the top; D2; tasks 1.6a, 2.5, 2.7a, 2.7b, 2.10; test guide). Citations re-verified on HEAD `a50a49b`.

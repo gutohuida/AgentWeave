@@ -24,8 +24,10 @@ already writable through the same PATCH. No code assigns `task.title` after crea
   `PATCH /projects/{p}/tasks/{id}` writes it.
 - **Agents do not rename tasks.** If `an-agent-updates-a-task-with-what-its-tool-carries` has landed,
   `title` joins its operator-only list; if not, this change adds the same 403 for `title` alone.
+- `title: null` is refused as blank; an omitted `title` leaves it alone (operator review 2026-09-24).
 - The task drawer's title becomes editable in place (click or an edit affordance; Enter saves, Escape
-  cancels), through `useUpdateTask`.
+  cancels), through a separate `useRenameTask` that sends only `{title}` — not `useUpdateTask`, which
+  always sends `status` and would fail a rename of a `blocked` task (operator review).
 - A rename is not a transition and is not added to the transition history. Conversations and job
   threads already named after the old title keep their names.
 
@@ -37,4 +39,7 @@ already writable through the same PATCH. No code assigns `task.title` after crea
 
 ## Impact
 
-Schema + service (`tasks.py`), one UI component and its test, one bundle refresh. No migration.
+Schema + service (`tasks.py`), one UI hook, one UI component and their tests, one bundle refresh,
+committed with the Python in the night build (`DECISIONS.md` *2026-09-14-ui*). No migration.
+Until the operator restarts `:8000`, a rename sent from its reloaded page answers 422 and changes
+nothing (design D5).
