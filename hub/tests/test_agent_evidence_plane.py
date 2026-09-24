@@ -231,6 +231,37 @@ async def test_reading_narrowed_to_a_document_alone_excludes_the_other_document(
 
 
 @pytest.mark.asyncio
+async def test_the_operator_read_narrowed_to_a_document_alone_excludes_the_other(
+    app, auth_headers, builder
+):
+    """F448: the operator's `GET /spec/evidence` had F416's defect -- `document` without
+    `identifier` fell through to the whole project. Same two documents, read as the operator."""
+    await _document(app, auth_headers, builder)
+    await _second_document(app, auth_headers, builder)
+    for identifier_path, summary in ((PATH, "first"), (SECOND_PATH, "second")):
+        recorded = await app.post(
+            EVIDENCE,
+            json={"identifier": "FR-1", "document": identifier_path, "summary": summary},
+            headers=builder,
+        )
+        assert recorded.status_code == 201, recorded.text
+
+    scoped = await app.get(f"{BASE}/spec/evidence", params={"document": PATH}, headers=auth_headers)
+    assert scoped.status_code == 200, scoped.text
+    assert [row["summary"] for row in scoped.json()["evidence"]] == ["first"]
+
+    everything = await app.get(f"{BASE}/spec/evidence", headers=auth_headers)
+    assert sorted(row["summary"] for row in everything.json()["evidence"]) == ["first", "second"]
+
+    missing = await app.get(
+        f"{BASE}/spec/evidence",
+        params={"document": "spec/changes/does-not-exist/spec.html"},
+        headers=auth_headers,
+    )
+    assert missing.status_code == 404, missing.text
+
+
+@pytest.mark.asyncio
 async def test_reading_narrowed_to_an_unknown_document_is_refused(app, auth_headers, builder):
     """The same 404 `_resolve_requirement` gives an unknown document when narrowing by
     `identifier` — consistent behaviour for the same bad input, whichever way it is scoped."""

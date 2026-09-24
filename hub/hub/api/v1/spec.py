@@ -871,16 +871,20 @@ async def list_evidence(
         requirement = await _requirement(session, project_id, identifier, document or "")
         rows = await requirement_evidence.for_requirement(session, requirement.id)
     else:
-        rows = list(
-            (
-                await session.execute(
-                    select(RequirementEvidence)
-                    .where(RequirementEvidence.project_id == project_id)
-                    .order_by(RequirementEvidence.produced_at)
+        query = select(RequirementEvidence).where(RequirementEvidence.project_id == project_id)
+        if document:
+            # F448, the operator twin of F416: `document` alone used to be dropped, so a read
+            # scoped to one document returned the whole project's evidence with a 200.
+            document_row = await spec_lifecycle.get_document(session, project_id, document)
+            if document_row is None:
+                raise HTTPException(
+                    status_code=404, detail=f"no specification document at {document}"
                 )
-            )
-            .scalars()
-            .all()
+            query = query.join(
+                SpecRequirement, RequirementEvidence.requirement_id == SpecRequirement.id
+            ).where(SpecRequirement.document_id == document_row.id)
+        rows = list(
+            (await session.execute(query.order_by(RequirementEvidence.produced_at))).scalars().all()
         )
     prints = await _footprints_for(session, [row.id for row in rows])
     reviews = await _latest_reviews_for(session, [row.id for row in rows])

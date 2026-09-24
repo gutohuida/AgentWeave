@@ -33161,3 +33161,16 @@ Measured with Haiku `claude -p` in a scratch directory: without the flag the mod
 turn had no tool at all (one turn, no denials), and a `CLAUDE.md` codeword was still read, so the
 titler keeps the project memory F195 runs it there for. Production path: `run_worker` and
 `maybe_generate_title` spawn exactly these argvs.
+
+## F448 (C) — the operator's `GET /spec/evidence` ignores `document` when no `identifier` is given
+
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — the operator twin of F416. Was: found by the
+F416 fix in Round 6. `list_evidence` (`hub/hub/api/v1/spec.py`) dropped `document` without an
+`identifier` and returned the whole project's evidence with a 200.
+
+**FIXED 2026-09-24 (Round 6):** `document` alone now resolves the document through
+`spec_lifecycle.get_document` (404 when unknown, as `list_requirements` does) and joins
+`SpecRequirement` on `document_id`. Test:
+`hub/tests/test_agent_evidence_plane.py::test_the_operator_read_narrowed_to_a_document_alone_excludes_the_other`,
+which fails on the previous route. No UI code calls the route with `document` today, so the reach is the
+API and scripts.
