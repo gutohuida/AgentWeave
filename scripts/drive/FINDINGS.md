@@ -32712,3 +32712,24 @@ disambiguates the requirement. With no `identifier`, the query is scoped to the 
 gets every document's evidence and a 200, so the call "succeeds" by not doing what it was asked.
 Repair shape: filter by the document's requirements when `document` is given alone (or refuse it with
 a sentence), plus a test that a two-document project returns only the named document's rows.
+
+## F417 (B) — the Compact and New-session requests are saved but never reach the agent
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B10 rounds
+(`spec-queue/tracks/B10.md` Final). `POST /agents/{name}/compact` and `POST /agents/{name}/new-session`
+(`hub/hub/api/v1/agents.py:2971-3040`) create a `sender="hub"` `Message` row, broadcast
+`message_created` and persist an event, but create **no inbound-queue entry**, and messages reach an
+agent only through the inbound queue. The agent never sees the request, and the route answers
+`{"status": "ok"}`. The UI hooks (`hub/ui/src/api/context.ts:4-8`) are mounted nowhere, so today it is
+reachable only through the API: another dead surface in the sense of D6. Repair shape: decide
+build-or-delete as B10 did. Either queue the request as an inbound entry (and give it a mount), or
+delete both routes and their hooks. After B10's F259 change they no longer inflate `/status`
+`pending`, but the request still goes nowhere.
+
+## F418 (C) — the loop tab fetches the loop's event history and shows none of it
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B10 rounds.
+`LoopTab` reads `LoopDetail.events`, the loop's audit trail, and renders none of it. Once B10's
+`a-loop-is-stopped-archived-and-delegated-from-its-own-tab` writes `loop_stopped` / `loop_archived`
+against the loop, those rows are readable only through the API. Repair shape: a short history list in
+the loop tab (newest first, from the field already fetched), or stop fetching it.
