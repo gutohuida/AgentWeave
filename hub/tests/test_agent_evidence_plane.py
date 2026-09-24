@@ -110,6 +110,33 @@ async def _record(app, headers, identifier="FR-1", summary="18 tests pass"):
     return response.json()
 
 
+SECOND_PATH = "spec/changes/agent-evidence-second/spec.html"
+GAMMA = {"key": "gamma", "statement": "It sends a reminder", "modal": "MUST"}
+
+
+async def _second_document(app, auth_headers, run_headers):
+    created = await app.post(
+        f"{BASE}/documents",
+        json={"path": SECOND_PATH, "title": "A second document"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    saved = await app.post(
+        SUBMIT,
+        json={
+            "path": SECOND_PATH,
+            "document": {
+                "schema_version": SCHEMA_VERSION,
+                "kind": "change-spec",
+                "title": "A second document",
+                "requirements": [GAMMA],
+            },
+        },
+        headers=run_headers,
+    )
+    assert saved.status_code == 200, saved.text
+
+
 @pytest.mark.asyncio
 async def test_an_agent_records_evidence_and_it_awaits_a_decision(app, auth_headers, builder):
     await _document(app, auth_headers, builder)
@@ -163,6 +190,54 @@ async def test_reading_can_be_narrowed_to_what_is_awaiting(app, auth_headers, bu
 
     by_requirement = await app.get(EVIDENCE, params={"identifier": "FR-1"}, headers=reviewer)
     assert [row["identifier"] for row in by_requirement.json()["evidence"]] == ["FR-1"]
+
+
+@pytest.mark.asyncio
+async def test_reading_narrowed_to_a_document_alone_excludes_the_other_document(
+    app, auth_headers, builder
+):
+    """F416: `document` given without `identifier` used to be silently dropped — the query fell
+    through to the whole-project branch, so a call scoped to one document read every document's
+    evidence and still answered 200. Two documents, each with a requirement keyed `FR-1` (minted
+    per document, so both can hold that identifier without colliding), and evidence recorded
+    against each: `document` alone must return only the named document's row."""
+    await _document(app, auth_headers, builder)
+    await _second_document(app, auth_headers, builder)
+
+    first = await app.post(
+        EVIDENCE,
+        json={"identifier": "FR-1", "document": PATH, "summary": "first document's evidence"},
+        headers=builder,
+    )
+    assert first.status_code == 201, first.text
+    second = await app.post(
+        EVIDENCE,
+        json={
+            "identifier": "FR-1",
+            "document": SECOND_PATH,
+            "summary": "second document's evidence",
+        },
+        headers=builder,
+    )
+    assert second.status_code == 201, second.text
+
+    scoped = await app.get(EVIDENCE, params={"document": PATH}, headers=builder)
+    assert scoped.status_code == 200, scoped.text
+    assert [row["summary"] for row in scoped.json()["evidence"]] == ["first document's evidence"]
+
+    other = await app.get(EVIDENCE, params={"document": SECOND_PATH}, headers=builder)
+    assert other.status_code == 200, other.text
+    assert [row["summary"] for row in other.json()["evidence"]] == ["second document's evidence"]
+
+
+@pytest.mark.asyncio
+async def test_reading_narrowed_to_an_unknown_document_is_refused(app, auth_headers, builder):
+    """The same 404 `_resolve_requirement` gives an unknown document when narrowing by
+    `identifier` — consistent behaviour for the same bad input, whichever way it is scoped."""
+    missing = await app.get(
+        EVIDENCE, params={"document": "spec/changes/does-not-exist/spec.html"}, headers=builder
+    )
+    assert missing.status_code == 404, missing.text
 
 
 @pytest.mark.asyncio

@@ -11889,9 +11889,12 @@ Haiku turns, about 90 seconds, and it leaves the Hub running.
 
 ## F146 (B) — the operator's own question route accepts `blocking`, tells the panel an agent is waiting, and throws the answer away
 
-**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **no-spec fix round**: `POST /questions` refuses `blocking: true` (422 naming `blocking`); update `_asking_run_has_ended`'s docstring; drop `blocking` from the dead `HttpTransport.ask_question`. Was: open, filed not fixed under D5 — the clean repair changes what a public route accepts,
-which is the operator's call. Reproduced live by `scripts/drive/t_row13_operator_question.py`,
-**7/8**, the eighth being the file's own wrong expectation (corrected in place, see the end).
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — `POST /questions` now refuses
+`blocking: true` with a 422 naming `blocking`. Was: open — Decided 2026-09-24 (operator, daily
+review, bundle B11; `spec-queue/tracks/B11.md` Final): no-spec fix round…
+
+Reproduced live by `scripts/drive/t_row13_operator_question.py`, **7/8**, the eighth being the
+file's own wrong expectation (corrected in place, see the end).
 
 Every sweep so far has reached row 13 through `ask_user`. That is the *agent*-facing half. There is
 an operator-facing half — `POST /projects/{p}/questions` — and it differs from the agent route in
@@ -11994,6 +11997,42 @@ AW_HUB=http://127.0.0.1:8011 AW_KEY=... AW_PROJECT=proj-1964cdedffe2 AW_AGENT=pe
 
 Exits unless the agent is idle, bound and there is no other open question. Costs one Haiku turn
 (the control's delivery wakes the agent) and declines anything it leaves open.
+
+**FIXED 2026-09-24 (Round 6):** `hub/hub/api/v1/questions.py` — `ask_question` (`POST /questions`)
+now raises a 422 (`_BLOCKING_DETAIL`, which names `blocking`) before it ever calls
+`ask_question_for_actor` when `body.blocking` is true; `blocking: false` and an omitted `blocking`
+are unaffected. `_asking_run_has_ended`'s docstring is reworded to say the presumption now covers
+only a legacy row (one predating `created_by_run_id`, or one posted through this route before the
+refusal existed), not an unrecorded asker this route can still produce. `src/agentweave/transport/http.py`
+— the dead `HttpTransport.ask_question` no longer takes a `blocking` argument and always posts
+`blocking: False`. **Production path:** `hub/ui/src/api/questions.ts` (the operator's Questions
+panel) has no mutation that calls `POST /projects/{id}/questions` at all — it only reads, answers
+(`PATCH`) and declines — so this route is reachable only from outside the app (a direct API call,
+or a script). No product surface reaches the refused shape, matching B11's own note ("No product
+surface posts to that route"). Checked `openspec/specs/` for a requirement promising the operator's route accepts
+`blocking: true` — none found; every `blocking`-question scenario in `run-task-binding/spec.md` and
+`task-lifecycle-governance/spec.md` is about the *agent's* asking run (`/agent-actions/questions`),
+which this change does not touch. **Tests:** `hub/tests/test_questions.py` —
+`test_blocking_true_is_refused_at_post` (new, pins the 422 and that `blocking` is named in the
+detail), `test_blocking_false_or_absent_still_succeed` (new), and
+`test_answering_a_blocking_question_does_not_also_queue_it` (rewritten to create its row directly
+via the ORM, since the route can no longer produce a blocking row with no asking run — the
+behaviour it pins, the legacy-row presumption, is unchanged);
+`test_a_question_can_offer_options_and_they_survive_the_round_trip` changed from `blocking: True` to
+`blocking: False` (incidental to that test). `tests/test_http_transport.py` —
+`test_ask_question_always_posts_non_blocking` and
+`test_ask_question_no_longer_takes_a_blocking_argument` (both new). 12/12 in `test_questions.py`,
+41/41 in `test_http_transport.py`, plus 396/396 across every other test file that touches questions,
+evidence, or the MCP/agent-actions surface (`test_agent_actions_coordination.py`,
+`test_agent_tool_surface_phase7.py`, `test_asker_waiting_is_the_same_on_every_route.py`,
+`test_a_late_answer_is_delivered.py`, `test_a_request_means_what_it_says.py`,
+`test_a_task_waits_while_its_run_waits.py`, `test_bola.py`, `test_conversation_attention.py`,
+`test_project_workspace_unavailable.py`, `test_question_batches.py`,
+`test_question_batch_delivery.py`, `test_question_declined.py`, `test_question_wait_resolution.py`,
+`test_refused_capability.py`, `test_tool_surface_matches_server.py`, `test_dashboard_truth.py`,
+`test_mcp_server.py`, `test_scheduler.py`, `test_task_blocked.py`, `test_turn_produced_nothing.py`),
+all green. `py -3.11 -m mypy src/`: no issues. Note: `hub/hub/mcp_server.py` was not touched, per
+the round's rule.
 
 ---
 
@@ -32795,7 +32834,10 @@ previous commit (the agents were created) and passes now.
 
 ## F416 (C) — `list_evidence` ignores `document` when no `identifier` is given
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B12 R1 round
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — `list_evidence_for_agent` now filters by
+the named document's requirements when `document` is given without `identifier`. Was: open. Filed
+2026-09-24 (daily review, operator-accepted), surfaced by the B12 R1 round…
+
 while re-verifying F363. `GET /spec/evidence` (`hub/hub/api/v1/agent_actions.py`,
 `list_evidence_for_agent`) reads `document` only inside the `if identifier:` branch, where it
 disambiguates the requirement. With no `identifier`, the query is scoped to the whole project and
@@ -32803,6 +32845,40 @@ disambiguates the requirement. With no `identifier`, the query is scoped to the 
 gets every document's evidence and a 200, so the call "succeeds" by not doing what it was asked.
 Repair shape: filter by the document's requirements when `document` is given alone (or refuse it with
 a sentence), plus a test that a two-document project returns only the named document's rows.
+
+**FIXED 2026-09-24 (Round 6):** `hub/hub/api/v1/agent_actions.py` —
+`list_evidence_for_agent` (`GET /agent-actions/spec/evidence`) gains an `elif document:` branch
+between the existing `identifier` and whole-project branches: it resolves `document` (a path) to a
+`SpecDocument` via `spec_lifecycle.get_document` — 404 if none — then joins `RequirementEvidence` to
+`SpecRequirement` on `requirement_id` and filters on `SpecRequirement.document_id == document_row.id`
+(plus `RequirementEvidence.project_id`, matching the other two branches' scoping). `identifier`
+still wins when both are given, unchanged. **`hub/hub/mcp_server.py` was not touched** — its
+`list_evidence` tool already forwards `document` (or `None`) as a query param unconditionally
+(`hub/hub/mcp_server.py:1988-2009`), so no MCP-side change was needed for the fix to reach it; the
+bug was entirely in the route the tool calls, not in the tool itself. **Production path:** the MCP
+tool `list_evidence` → `_hub_request("GET", "/spec/evidence", params={..., "document": ...})` → the
+Hub's agent-bound router mounts this at `/api/v1/agent-actions/spec/evidence` →
+`list_evidence_for_agent`, which is the function changed. Verified by calling the route directly
+with the exact parameter shape the MCP tool sends (`identifier`, `document`, `review_state`, all
+optionally `None`/absent). **Aside, not fixed here (out of scope for F416, which names only the
+agent route):** `hub/hub/api/v1/spec.py`'s operator-facing `list_evidence` (`GET
+/projects/{id}/spec/evidence`, lines 863-889) has the identical defect — `document` is read only
+inside `if identifier:` there too — but F416 as filed and as scoped by this round's brief covers
+only `list_evidence_for_agent`; the operator route is a separate finding if the operator wants it
+tracked. **Tests:** `hub/tests/test_agent_evidence_plane.py` —
+`test_reading_narrowed_to_a_document_alone_excludes_the_other_document` (new: two documents, each
+declaring its own `FR-1`, with evidence recorded against each; `document` alone on each returns only
+that document's row) and `test_reading_narrowed_to_an_unknown_document_is_refused` (new: 404 for an
+unknown path, matching `_resolve_requirement`'s existing behaviour for the `identifier` case).
+16/16 in `test_agent_evidence_plane.py`, plus 313/313 across every other test file that touches
+evidence, requirements, task integration/release, or the MCP surface
+(`test_approval_refuses_unaccepted_evidence.py`, `test_conflict_refusal_names_what_clears_it.py`,
+`test_duplicate_evidence.py`, `test_evidence_footprint_root.py`,
+`test_evidence_latest_review_signal.py`, `test_evidence_restamp.py`, `test_loop_lands_its_work.py`,
+`test_requirement_coverage.py`, `test_requirement_drift.py`, `test_requirement_evidence.py`,
+`test_requirement_gate.py`, `test_task_integration.py`, `test_task_rejected_evidence_signal.py`,
+`test_task_release.py`, `test_the_evidence_names_the_author.py`, `test_mcp_server.py`,
+`test_mcp_adapter_online.py`), all green.
 
 ## F417 (B) — the Compact and New-session requests are saved but never reach the agent
 

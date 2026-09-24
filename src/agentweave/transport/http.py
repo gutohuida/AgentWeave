@@ -415,16 +415,18 @@ class HttpTransport(BaseTransport):
             )
             return False
 
-    def ask_question(self, from_agent: str, question: str, blocking: bool = False) -> Optional[str]:
+    def ask_question(self, from_agent: str, question: str) -> Optional[str]:
         """POST /api/v1/questions — post a question for the human user.
 
-        Returns the question ID, or None on failure.
+        Returns the question ID, or None on failure. Always non-blocking: F146 made the Hub's
+        `POST /questions` refuse `blocking: true` (that route creates no asking run for the Hub
+        to hold a wait open against), and this method has no caller to have passed one anyway.
         """
         try:
             result = self._request(
                 "POST",
                 "/questions",
-                {"from_agent": from_agent, "question": question, "blocking": blocking},
+                {"from_agent": from_agent, "question": question, "blocking": False},
             )
             return result.get("id")
         except RuntimeError as exc:
