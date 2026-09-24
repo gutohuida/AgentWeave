@@ -700,6 +700,23 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-24 — two decisions already made, now written down
+
+**DECIDED by the operator; recorded 2026-09-24 in an interactive session** ("Record both"). Both
+were decided earlier and were missing from this file. The B3 and B1 bundle rounds found the gaps
+(`spec-queue/tracks/B3.md`, `B1.md`).
+
+- DECIDED   D3-self-registration  **Agents no longer register themselves.** Self-registration is
+  deleted along with `contact_mode` and its sibling columns. The operator decided this on 2026-08-29
+  (handoff-0099, decision 2: *"No it does not belong in the product … I think it's a legacy thing"*;
+  FINDINGS F111 *"The decision, 2026-08-29"*; `openspec/explorations/2026-08-30-release-roadmap.md:78`).
+  It is carried out by the parked change `agents-no-longer-register-themselves` (B3), which is not
+  yet approved.
+- DECIDED   F327-scope-b  **Option (b): the dispatch, not the flow, stages `under_review`.** The
+  operator chose this on 2026-09-23 (`ROUNDS.md` S13), and it **supersedes `F327-scope` option (a)
+  of 2026-09-12** below. It is carried out by the parked change `a-flow-stages-its-review-in-the-dispatch`
+  (B1), which is not yet approved.
+
 ### 2026-09-22 afternoon — F119: `doctor`'s secret filter stays broad; R9-5 reconfirmed
 
 **DECIDED 2026-09-22, by the operator, in an interactive session.**
@@ -1264,7 +1281,7 @@ refusal comes from the §3.4 entry-guard fallback added at `4929ea0`, and before
 same sequence ended in a self-review. The fix is right, and it left a stall where the self-review
 was.
 
-- DECIDED   F327-scope  **Option (a): `a-refused-review-leaves-nothing-behind` ships as scoped, and
+- DECIDED   F327-scope  **[Superseded 2026-09-24 by `F327-scope-b`.] Option (a): `a-refused-review-leaves-nothing-behind` ships as scoped, and
   F327 stays open.** The operator decided it in session, 2026-09-12 ~19:20, answering R2's OPERATOR
   QUESTION. The change fixes the dispatch's own staging, on the route and the scheduler, and F320.
   A review a flow (or a divergence restaff) staffed *before* its dispatch, and which the dispatch
