@@ -4182,7 +4182,7 @@ operator has to translate the word before they can follow the instruction.
 
 ## F65 (C) — a review briefing refused for having no evidence stays queued, and blocks archiving its agent
 
-**Status:** open — `turn_scheduler.py` still ends a no-evidence review briefing on the first refusal rather than after three attempts; queued as Q4-SPEC
+**Status:** closed 2026-09-24 (operator, daily review) — the state can no longer arise: `decide_firing` asks `commit_for_task_review` before staffing (`scheduler.py:1970`, `3e07726`, 2026-08-28) and `POST /agent/trigger` refuses 409 before queueing (`agent_trigger.py:1527`); a pre-2026-08-28 leftover is given up after `DELIVERY_ATTEMPT_LIMIT = 3`. Evidence: `spec-queue/tracks/B12.md` Final. Was: open — `turn_scheduler.py` still ends a no-evidence review briefing on the first refusal rather than after three attempts; "queued as Q4-SPEC" (no such change exists).
 
 Found 2026-08-26 by the **operator**, while setting up check 11.4 — an incidental discovery rather
 than a targeted one, which is why it is recorded separately from F64.
@@ -32702,3 +32702,13 @@ and answers a 400 with the sentence. It is a 400 rather than a validator's 422 b
 renders `detail` as text. `test_the_create_dialog_route_refuses_a_reserved_name` fails on the
 previous commit (the agents were created) and passes now.
 
+## F416 (C) — `list_evidence` ignores `document` when no `identifier` is given
+
+**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B12 R1 round
+while re-verifying F363. `GET /spec/evidence` (`hub/hub/api/v1/agent_actions.py`,
+`list_evidence_for_agent`) reads `document` only inside the `if identifier:` branch, where it
+disambiguates the requirement. With no `identifier`, the query is scoped to the whole project and
+`document` is silently dropped. An agent that passes a document id to see that document's evidence
+gets every document's evidence and a 200, so the call "succeeds" by not doing what it was asked.
+Repair shape: filter by the document's requirements when `document` is given alone (or refuse it with
+a sentence), plus a test that a two-document project returns only the named document's rows.
