@@ -132,8 +132,12 @@ def build_worker_command(
     chosen over plain text for both CLIs because it is the only way the call reports what it cost,
     and because it puts the answer at a fixed address instead of at the end of a stream of prose.
     """
+    # No tools (F420), exactly as `conversation_titles.build_title_command` does since F195. Both
+    # prompts this builder carries -- a checkpoint's transcript and a probe's rendered checkpoint --
+    # are untrusted text, and both ask only for a JSON object written from that text, so nothing
+    # needs a tool. `--tools ""` removes every built-in one; Codex gets its read-only sandbox below.
     if cli == "claude":
-        cmd = ["claude", "--output-format", "json"]
+        cmd = ["claude", "--tools", "", "--output-format", "json"]
         if model:
             cmd += ["--model", model]
         return cmd + ["-p", prompt]

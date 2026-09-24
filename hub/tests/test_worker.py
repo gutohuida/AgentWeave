@@ -68,9 +68,28 @@ tokens used
 
 def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
     cmd = build_worker_command(cli="claude", model="claude-haiku-4-5-20251001", prompt="hi")
-    assert cmd[:3] == ["claude", "--output-format", "json"]
-    assert cmd[-2:] == ["-p", "hi"]
-    assert "--model" in cmd
+    # The whole argv, pinned (F420): `--tools ""` is what leaves a worker reading untrusted
+    # transcript text with nothing to act with, and a regression that drops it must fail here.
+    assert cmd == [
+        "claude",
+        "--tools",
+        "",
+        "--output-format",
+        "json",
+        "--model",
+        "claude-haiku-4-5-20251001",
+        "-p",
+        "hi",
+    ]
+    assert build_worker_command(cli="claude", model=None, prompt="hi") == [
+        "claude",
+        "--tools",
+        "",
+        "--output-format",
+        "json",
+        "-p",
+        "hi",
+    ]
     # The spec is explicit: a worker invocation carries no streaming protocol, no tool server,
     # no permission posture, no injected context. Pin it, because the tempting fix for any
     # future worker problem is to borrow a flag from `build_command`.

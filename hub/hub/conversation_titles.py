@@ -16,6 +16,7 @@ recorded as an event instead.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import subprocess
 from typing import List, Optional
@@ -25,7 +26,15 @@ from sqlalchemy import select
 from . import project_workspace
 from .conversations import get_conversation_by_id, title_from_message
 from .db.engine import async_session_factory
-from .db.models import Agent, AgentOutput, Conversation, InboundQueueEntry, Project, Runner
+from .db.models import (
+    Agent,
+    AgentOutput,
+    Conversation,
+    EventLog,
+    InboundQueueEntry,
+    Project,
+    Runner,
+)
 from .pty_runner import resolve_executable
 from .subprocess_windows import no_console_kwargs
 from .utils import persist_event
@@ -152,6 +161,39 @@ async def _excerpt(db, conversation: Conversation) -> str:
     return "\n\n".join(parts)
 
 
+def excerpt_digest(excerpt: str) -> str:
+    """What a generated title was made from, recorded on its `conversation_titled` event."""
+    return hashlib.sha256(excerpt.encode("utf-8")).hexdigest()
+
+
+async def _already_titled_from(db, conversation: Conversation, digest: str) -> bool:
+    """Whether the latest generated title for *conversation* was made from this same excerpt (F422).
+
+    `maybe_generate_title` runs after every completed turn, and `_excerpt` reads only the opening
+    message and the first reply, so after the first turn the excerpt never changes: without this,
+    every turn paid for another model call producing the title the conversation already had. The
+    record is the `conversation_titled` event the write below already persists -- no new column,
+    and the event log is never pruned. The digest rather than "any title at all" so the one case
+    where the excerpt does move is still titled again: a first turn that wrote no text reply is
+    titled from the opening message alone, and the reply a later turn writes is worth a better
+    title. An event written before F422 carries no digest, so such a conversation is titled once
+    more and then stops. A failed generation writes no event, so it is retried on the next turn.
+    """
+    latest = (
+        await db.execute(
+            select(EventLog.data)
+            .where(
+                EventLog.project_id == conversation.project_id,
+                EventLog.event_type == "conversation_titled",
+                EventLog.data["conversation_id"].as_string() == conversation.id,
+            )
+            .order_by(EventLog.timestamp.desc(), EventLog.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return isinstance(latest, dict) and latest.get("excerpt_digest") == digest
+
+
 async def _resolve_runner(db, project: Project, agent_name: str) -> Optional[Runner]:
     """The runner that does the titling: the project's choice, else the agent's own."""
     if project.conversation_title_runner_id:
@@ -190,12 +232,17 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
         if project is None or project.conversation_title_mode != "generate":
             return None
 
-        runner = await _resolve_runner(db, project, conversation.agent)
-        if runner is None or runner.cli not in _SUPPORTED_CLIS:
-            return None
-
         excerpt = await _excerpt(db, conversation)
         if not excerpt.strip():
+            return None
+        # Before the runner is even resolved: a title already made from this excerpt is not a
+        # model call at all, so nothing downstream of choosing one applies to it (F422).
+        digest = excerpt_digest(excerpt)
+        if await _already_titled_from(db, conversation, digest):
+            return None
+
+        runner = await _resolve_runner(db, project, conversation.agent)
+        if runner is None or runner.cli not in _SUPPORTED_CLIS:
             return None
         agent_name = conversation.agent
 
@@ -236,7 +283,12 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
             db,
             project_id,
             "conversation_titled",
-            {"conversation_id": conversation_id, "agent": agent_name, "title": title},
+            {
+                "conversation_id": conversation_id,
+                "agent": agent_name,
+                "title": title,
+                "excerpt_digest": digest,
+            },
             agent=agent_name,
         )
     return title

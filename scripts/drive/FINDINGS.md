@@ -32769,12 +32769,26 @@ that fails if a foreign project's event reaches the strip.
 
 ## F420 (B) — the checkpoint and probe worker runs `claude -p` with every default tool enabled, on untrusted transcript text
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `build_worker_command` (`hub/hub/worker.py:120-146`)
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — the Claude worker argv now carries `--tools ""`, pinned whole in a test. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final); re-checked in session. `build_worker_command` (`hub/hub/worker.py:120-146`)
 builds `claude --output-format json [--model M] -p <prompt>` for Claude, with no `--tools ""`, while
 Codex gets `--ephemeral --sandbox read-only`. The prompt carries conversation transcript text, which
 is untrusted: anything an agent read or a user pasted can steer a worker that holds the default tool
 set. F195 closed this same gap for the titler. Repair shape: pass `--tools ""` (as the titler does)
 for every JSON-mode worker call, with a test that fails if the flag is dropped.
+
+**FIXED 2026-09-24 (Round 6):** `hub/hub/worker.py` `build_worker_command` now builds
+`claude --tools "" --output-format json [--model M] -p <prompt>` — the same `[cli, "--tools", ""]`
+head `conversation_titles.build_title_command` uses since F195; Codex is unchanged
+(`--ephemeral --sandbox read-only`). Neither worker prompt needs a tool: `_GENERATION_PROMPT` and
+`_PROBE_PROMPT` (`checkpoint_generation.py`) each ask only for a JSON object written from the text
+they carry. Production path: `generate_checkpoint` → `run_worker(kind="checkpoint")` and
+`probe_checkpoint` → `run_worker(kind="checkpoint_probe")` → `build_worker_command` → `_run_worker_process`.
+Live check (Haiku, temp directory, the exact argv through `resolve_executable`): exit 0, envelope
+parsed, and asked to list its tools the model named no built-in tool. **Residual, not fixed here:**
+it still listed the account's claude.ai connector tools (`mcp__claude_ai_Claude_Docs__*`), which
+`--tools ""` does not remove — the titler shares this; a candidate finding. Tests:
+`hub/tests/test_worker.py::test_the_claude_command_asks_for_json_and_is_not_an_agent_turn` pins the
+whole argv with and without a model.
 
 ## F421 (B) — an `unwritten` checkpoint becomes the next checkpoint's anchor
 
@@ -32788,11 +32802,34 @@ test over a chain holding an unwritten middle checkpoint.
 
 ## F422 (C) — the titler pays again for the same title after every turn
 
-**Status:** open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final). `generate_conversation_title` (`hub/hub/conversation_titles.py:175-233`)
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — a conversation already titled from the same excerpt is skipped before any runner is resolved or spawned. Was: open. Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B7 rounds (`spec-queue/tracks/B7.md` Final). `generate_conversation_title` (`hub/hub/conversation_titles.py:175-233`)
 checks only `title_set_by_operator` and the mode, and is called at `agent_trigger.py:2630` and `:3219`
 on the same excerpt after each turn. Each call is a billed model invocation producing the title the
 conversation already has. Repair shape: skip when a generated title exists and the excerpt it was made
 from has not changed (or title once per conversation unless asked), with a test counting invocations.
+
+**FIXED 2026-09-24 (Round 6):** `hub/hub/conversation_titles.py`. The `conversation_titled` event
+`generate_conversation_title` already writes now also carries `excerpt_digest` (sha256 of the
+excerpt the title was made from); before resolving a runner, the function reads the latest
+`conversation_titled` event for this conversation (`EventLog.data["conversation_id"]`, same project)
+and returns None with no spawn when its digest equals the current excerpt's. No migration: the
+event log is never pruned. Why it re-titled: both callers — `agent_trigger.py` `_execute_run`
+(:2630) and `_execute_codex_appserver_run` (:3219), via `maybe_generate_title` — run after
+every completed turn, and `_excerpt` reads only the first message and first text reply, so the input
+is fixed after turn one. No legitimate retitle path exists (spec `conversation-lifecycle`: generation
+"SHALL run after the agent's first response", replaces only a non-operator title; the only other
+title writer is the operator rename). The digest, rather than "any generated title", keeps one real
+case: a first turn with no text reply is titled from the opening message alone, and the reply a later
+turn writes earns exactly one more call. A failed generation writes no event, so it is retried next
+turn; a conversation titled before this fix (event without a digest) is titled once more, then stops.
+Consistent with `worker-spend-counts-against-the-budget` D4: the skip sits before runner resolution,
+so it is not one of the "exits after the runner is resolved" that change records, and D4's
+"one row per turn" note becomes one row per distinct excerpt. Tests (`hub/tests/test_title_generation.py`):
+`test_a_second_turn_on_a_titled_conversation_makes_no_model_call` (three `maybe_generate_title`
+calls, one spawn), `test_a_first_reply_arriving_later_is_worth_one_more_title`,
+`test_a_failed_generation_is_retried_on_the_next_turn`,
+`test_another_conversations_title_does_not_count_as_this_ones`; the first, second and fourth fail on
+the pre-fix code.
 
 ## F423 (C) — a declined handover's note never reaches that task's reviewer
 
