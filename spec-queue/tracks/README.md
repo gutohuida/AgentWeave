@@ -39,6 +39,7 @@ One file per bundle, appended to by each round, never rewritten by a later round
 **Decisions:** D… (or "none")
 **Changes:** `openspec/changes/<name>/`, … (or "none — decision only")
 **Status:** R1 done | R2 done | R3 done — parked for operator
+(after the operator's review: R3 done — operator review YYYY-MM-DD: N approved, M revising (…))
 
 ## R1 — explore and propose (YYYY-MM-DD)
 …what the code showed, each finding re-verified (still open / already fixed / changed shape),

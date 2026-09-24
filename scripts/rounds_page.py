@@ -13,7 +13,7 @@ nowhere unstruck has left the plan (moved to a proposed change, say); it is list
 no total. Unstruck later mentions are cross-references and say "also in".
 
 **Bundle pages.** The page also links to one page per spec bundle (`spec-queue/tracks/Bn.md`,
-rendered to `Bn.html` next to it). Each bundle's own "Bundles -- R1/R2/R3 (parked for the operator)"
+rendered to `Bn.html` next to it). Each bundle's own "Bundles -- R1/R2/R3, then the operator's review"
 row is read from `spec-queue/tracks/README.md`'s table plus the record file's header fields and
 which of `## R1`/`## R2`/`## R3`/`## Final` it has written so far; a bundle with no record file yet
 shows "not started". `--tracks-dir` (hidden; default `spec-queue/tracks`) points the bundle-page
@@ -192,6 +192,57 @@ def fixed_on(status: str) -> str:
 
 _HEAD_FIELD = re.compile(r"^\*\*(Findings|Decisions|Changes|Status):\*\*\s*(.*)$", re.M)
 _ROUND_KEYS = ("R1", "R2", "R3", "Final")
+# A finding in one of these states is done for the plan; `closed` is an operator verdict, no fix.
+_DONE_STATES = ("fixed", "retired", "closed")
+APPROVALS = bp.QUEUE / "APPROVALS.md"
+ARCHIVE_DIR = bp.QUEUE.parent / "openspec" / "changes" / "archive"
+_CHANGE_NAME = re.compile(r"openspec/changes/([^/`\s]+)/")
+_VERDICT_ROW = re.compile(r"^- (APPROVED|REVISING|REJECTED)\s+(\S+)", re.M)
+# Verdict -> pip state; `archived` is read from openspec, not APPROVALS.md.
+_VERDICT_PIP = {
+    "archived": "done",
+    "APPROVED": "done",
+    "REVISING": "started",
+    "REJECTED": "pending",
+}
+
+
+def parse_verdicts(text: str) -> dict[str, tuple[str, str]]:
+    """Each change's latest verdict in APPROVALS.md: {name: (verdict, date)}.
+
+    APPROVALS.md is newest-first by `## YYYY-MM-DD` section, so the first row naming a change wins.
+    """
+    verdicts: dict[str, tuple[str, str]] = {}
+    for sec in re.split(r"\n(?=## )", text):
+        head = re.match(r"^## (\d{4}-\d{2}-\d{2})", sec)
+        if not head:
+            continue
+        for m in _VERDICT_ROW.finditer(sec):
+            verdicts.setdefault(m.group(2), (m.group(1), head.group(1)))
+    return verdicts
+
+
+def change_verdict(name: str, verdicts: dict[str, tuple[str, str]]) -> tuple[str, str]:
+    """(verdict, date) for one change; an archived change reads `archived` whatever it was given."""
+    if ARCHIVE_DIR.is_dir():
+        done = sorted(ARCHIVE_DIR.glob(f"????-??-??-{name}"))
+        if done:
+            return "archived", done[-1].name[:10]
+    return verdicts.get(name, ("undecided", ""))
+
+
+def verdict_summary(changes: list[str], verdicts: dict[str, tuple[str, str]]) -> str:
+    """Pips counting a bundle's changes by verdict, each titled with the change names."""
+    by: dict[str, list[str]] = {}
+    for c in changes:
+        by.setdefault(change_verdict(c, verdicts)[0], []).append(c)
+    order = ("archived", "APPROVED", "REVISING", "REJECTED", "undecided")
+    return "".join(
+        f'<span class="pip pip-{_VERDICT_PIP.get(v, "pending")}" title="{esc(", ".join(by[v]))}">'
+        f"{len(by[v])} {esc(v.lower())}</span>"
+        for v in order
+        if v in by
+    )
 
 
 def parse_bundle_table(text: str) -> list[dict]:
@@ -266,7 +317,11 @@ def pip_html(label: str, state: str) -> str:
 
 
 def render_bundle_page(
-    bundle_id: str, fallback_title: str, record_path: Path, out_rounds: Path
+    bundle_id: str,
+    fallback_title: str,
+    record_path: Path,
+    out_rounds: Path,
+    verdicts: dict[str, tuple[str, str]] | None = None,
 ) -> tuple[str, dict]:
     """Render one `spec-queue/tracks/Bn.md` to the page written at `Bn.html`, next to the record.
 
@@ -297,6 +352,20 @@ def render_bundle_page(
             ("status", "Status"),
         )
     )
+    changes = _CHANGE_NAME.findall(fields.get("changes", ""))
+    if changes:
+        lines = []
+        for c in changes:
+            verdict, when = change_verdict(c, verdicts or {})
+            state = _VERDICT_PIP.get(verdict, "pending")
+            lines.append(
+                f'<span class="pip pip-{state}">{esc(verdict.lower())}</span>'
+                f"{esc(' ' + when if when else '')} <code>{esc(c)}</code>"
+            )
+        summary_rows += (
+            '<div class="sfig"><div class="sl">Operator review</div>'
+            f'<div class="sv">{"<br>".join(lines)}</div></div>'
+        )
 
     order = [k for k in ("Final", "R1", "R2", "R3") if k in rec["sections"]]
     if order:
@@ -328,7 +397,7 @@ def render_bundle_page(
 
 
 def render_bundles_section(tracks_dir: Path, out_rounds: Path) -> str:
-    """The "Bundles -- R1/R2/R3 (parked for the operator)" section for ROUNDS.html.
+    """The "Bundles -- R1/R2/R3, then the operator's review" section for ROUNDS.html.
 
     Writes each bundle's `Bn.html` into `tracks_dir` as a side effect. The bundle table itself
     always comes from the real `spec-queue/tracks/README.md` -- it names the bundles that exist,
@@ -341,15 +410,26 @@ def render_bundles_section(tracks_dir: Path, out_rounds: Path) -> str:
     bundles = parse_bundle_table(TRACKS_README.read_text(encoding="utf-8", errors="replace"))
     if not bundles:
         return ""
+    verdicts = (
+        parse_verdicts(APPROVALS.read_text(encoding="utf-8", errors="replace"))
+        if APPROVALS.exists()
+        else {}
+    )
     rows = []
     for b in bundles:
         record_path = tracks_dir / f"{b['id']}.md"
         n = len(b["finding_ids"])
+        review = ""
         if record_path.exists():
             page_path = tracks_dir / f"{b['id']}.html"
-            page_html, pips = render_bundle_page(b["id"], b["title"], record_path, out_rounds)
+            page_html, pips = render_bundle_page(
+                b["id"], b["title"], record_path, out_rounds, verdicts
+            )
             page_path.write_text(page_html, encoding="utf-8", newline="\n")
             progress = "".join(pip_html(k, pips[k]) for k in _ROUND_KEYS)
+            record = parse_bundle_record(record_path.read_text(encoding="utf-8", errors="replace"))
+            changes = _CHANGE_NAME.findall(record["fields"].get("changes", ""))
+            review = verdict_summary(changes, verdicts)
             href = relhref(page_path, out_rounds.parent)
             name_html = (
                 f'<a href="{esc(href)}"><span class="fid">{esc(b["id"])}</span> '
@@ -360,21 +440,23 @@ def render_bundles_section(tracks_dir: Path, out_rounds: Path) -> str:
             name_html = f'<span class="fid">{esc(b["id"])}</span> {esc(b["title"])}'
         rows.append(
             f"<tr><td>{name_html}</td><td>{esc(b['absorbs'])}</td>"
-            f'<td class="num">{n}</td><td>{progress}</td></tr>'
+            f'<td class="num">{n}</td><td>{progress}</td><td>{review}</td></tr>'
         )
     table = (
         '<table class="bundles"><thead><tr><th>Bundle</th><th>Absorbs (ROUNDS.md)</th>'
-        "<th>Findings</th><th>Progress</th></tr></thead><tbody>"
+        "<th>Findings</th><th>Progress</th><th>Operator review</th></tr></thead><tbody>"
         + "".join(rows)
         + "</tbody></table>"
     )
     return (
         '<section class="bundlesec"><h2 class="sec-h">'
-        "Bundles &mdash; R1/R2/R3 (parked for the operator)</h2>"
+        "Bundles &mdash; R1/R2/R3, then the operator&rsquo;s review</h2>"
         '<p class="blurb">Every bundle from <code>spec-queue/tracks/README.md</code>, run by '
-        "separate subagents through R1 &rarr; R2 &rarr; R3 and parked at a Final recommendation "
-        "until the operator decides in <code>DECISIONS.md</code>. A bundle with no record file "
-        f"yet has not started.</p>{table}</section>"
+        "separate subagents through R1 &rarr; R2 &rarr; R3 to a Final recommendation. "
+        "<em>Operator review</em> counts the bundle&rsquo;s changes by their latest verdict in "
+        "<code>APPROVALS.md</code> (hover for names); a change moved under "
+        "<code>openspec/changes/archive/</code> reads <em>archived</em>. A bundle with no record "
+        f"file yet has not started.</p>{table}</section>"
     )
 
 
@@ -409,7 +491,7 @@ def build(tracks_dir: Path = TRACKS_DIR) -> tuple[str, dict]:
         return f["state"] if f else "missing"
 
     placed = list(home)
-    done = [fid for fid in placed if state(fid) in ("fixed", "retired")]
+    done = [fid for fid in placed if state(fid) in _DONE_STATES]
     current_key = ""
     for r in rounds:
         own = {
@@ -419,7 +501,7 @@ def build(tracks_dir: Path = TRACKS_DIR) -> tuple[str, dict]:
             if fid not in g["moved"] and home.get(fid) == r["key"]
         }
         r["own"] = sorted(own, key=lambda x: int(x[1:]))
-        r["done"] = [fid for fid in r["own"] if state(fid) in ("fixed", "retired")]
+        r["done"] = [fid for fid in r["own"] if state(fid) in _DONE_STATES]
         if (
             not current_key
             and r["kind"] == "fix"
@@ -650,11 +732,12 @@ ul{{list-style:none;margin:0;padding:0}}
 .st-open{{background:var(--surface-2);color:var(--ink-2)}}
 .st-fixed{{background:var(--ok-soft);color:var(--ok)}}
 .st-retired{{background:var(--surface-2);color:var(--ink-3);text-decoration:line-through}}
+.st-closed{{background:var(--surface-2);color:var(--ink-3)}}
 .it-moved{{opacity:.62}}
 .it-moved .fid{{text-decoration:line-through}}
 .xref.moved{{font-weight:600}}
 .st-missing{{background:var(--sevA-soft);color:var(--sevA)}}
-.it[data-state=fixed] .ttl,.it[data-state=retired] .ttl{{color:var(--ink-3);text-decoration:line-through}}
+.it[data-state=fixed] .ttl,.it[data-state=retired] .ttl,.it[data-state=closed] .ttl{{color:var(--ink-3);text-decoration:line-through}}
 .sev{{font-family:var(--mono);font-size:11px;font-weight:600;padding:1px 6px;border-radius:4px}}
 .sev-A{{background:var(--sevA-soft);color:var(--sevA)}} .sev-B{{background:var(--sevB-soft);color:var(--sevB)}}
 .sev-C{{background:var(--sevC-soft);color:var(--sevC)}} .sev-D{{background:var(--sevD-soft);color:var(--sevD)}}

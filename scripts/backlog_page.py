@@ -340,6 +340,9 @@ def classify(status: str, title: str) -> str:
         return "open"
     if plain.startswith("open") or "still open" in plain[:60]:
         return "open"
+    # `closed YYYY-MM-DD -- by design / decided, no change`: an operator verdict with no fix commit.
+    if plain.startswith("closed"):
+        return "closed"
     if "not a defect" in plain[:80] or "does not reproduce" in plain[:80]:
         return "closed"
     return "other"
