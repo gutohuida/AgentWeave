@@ -31,6 +31,9 @@ with `## Operator review, 2026-09-24`). The 2026-09-23 rows below remain undecid
 - APPROVED  a-loop-is-stopped-archived-and-delegated-from-its-own-tab   B10 (F225). Build Stop, Archive and delegation in the loop tab; `archive_job` still does not refuse a running loop (operator confirmed). Operator, after the Opus review: a stop on a loop that has already ended is **refused 409** and its record is left untouched (`end_loop` becomes write-once). Collides with B9's F335 guard; either order, per both designs.
 - APPROVED  a-runner-that-cannot-collaborate-says-so-where-it-is-bound   B10 (F178). The collaboration line under the runner picker, `AgentCard` deleted; runner update/delete now also refresh launchability (review fix). Overlaps `agents-no-longer-register-themselves` 2.9 (edits `AgentCard`), which is not yet approved.
 - APPROVED  a-loops-outstanding-mail-is-mail-not-yet-delivered   B10 (F259). Derived from inbound-queue delivery state, no migration.
+- APPROVED  an-event-is-announced-only-once-its-write-is-committed   B9 (F335). First of B9's three: F335, then F253, then F251. The AST guard's rule 1 now catches wrapper helpers (review fix). Collides with B10's loop change through the guard; either order, per both designs.
+- APPROVED  a-live-view-that-fell-behind-is-told-and-catches-up   B9 (F253). After F335. Needs no restart gate: an old Hub never sends `stream_gap`.
+- APPROVED  every-event-the-hub-sends-reaches-the-app   B9 (F251). After F335 is in the tree (task 0.4). **Its UI bundle waits for the operator's `:8000` restart onto F335 (task 0.5).** B9-Q1: no runtime allowlist, generated type.
 
 ## 2026-09-23
 

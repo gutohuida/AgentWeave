@@ -3,6 +3,26 @@
 No operator decision is involved. The one design choice (D1) is recorded with its alternatives so
 R2/R3 can re-derive it. Built on HEAD `ce086b6` (= `404c7d5` for every `hub/` file).
 
+## Operator review, 2026-09-24
+
+The Opus adversarial review found three gaps; all are fixed here (citations re-checked at HEAD
+`c1c0fa4`). The operator's B9-Q1 (no runtime allowlist; generated type) and B9-Q2 (the F251 bundle
+waits for the `:8000` restart) are confirmed and live in the other two changes.
+
+1. **Rule 1 missed wrapper helpers.** It matched only `sse_manager.broadcast` / `.publish`, so a
+   function staging an event row could announce through `_broadcast_run_lifecycle`
+   (`hub/hub/api/v1/agent_trigger.py:1881`) or `_broadcast_conversation`
+   (`hub/hub/api/v1/agent_chat.py:466`) unseen. Rule 1 now flags any call whose name contains
+   `broadcast` (plus `.publish`), except `defer_broadcast` (D4). Re-scanned at HEAD: still fails on
+   `run_divergence.py:104` only. Task 1.6 gains an inline-snippet negative control like 1.6b's.
+2. **Test 1.4's leak check could not fail.** `session.info` belongs to one session instance, so a
+   commit on a *new* session publishes nothing whatever the code does. It now closes the **same**
+   `AsyncSession`, commits on it again, and asserts nothing is published.
+3. **A late defer in a helper is silent.** Rule 2 sees only a function's own commit; a helper that
+   defers after its caller's last commit loses the frame without error. `defer_broadcast`'s
+   docstring says so (D1), and task 2.2b requires every new caller to have a test spying on
+   `SSEManager.publish`.
+
 ## D1 — defer the announcement to the session's commit
 
 Options considered:
@@ -31,6 +51,16 @@ and a savepoint release must not publish a transaction that can still roll back)
 hang off `after_transaction_end` for the root, not `after_rollback`, because a session closed
 without commit fires no `after_rollback`. The listener runs on the event loop's thread (the greenlet
 bridge), so `asyncio.Queue.put_nowait` inside it is safe.
+
+**`defer_broadcast`'s docstring states its one silent failure (Opus review).** A deferred
+announcement is published only by a *later* root commit of the same session. A helper that defers
+after its caller's last commit — the caller commits, then calls the helper, then the request ends —
+has its list cleared by `after_transaction_end` when `get_session` closes the session, and the
+frame is never sent, with no error and no log. D4 rule 2 catches that only when the defer and the
+commit sit in the same function; across a call boundary nothing static does. The docstring
+therefore says: *stage this before the commit that makes the write durable; if no commit of this
+session follows, nothing is published and nothing reports it — so every caller's tests spy on
+`SSEManager.publish` and assert the frame arrives.* Task 2.2b makes that test a requirement.
 
 ## D2 — one synchronous funnel
 
@@ -65,12 +95,19 @@ order is unchanged. Test 1.3 asserts that order from the real route, and would f
 `hub/tests/test_an_event_is_announced_after_commit.py::test_no_staged_event_is_broadcast_before_commit`
 walks `hub/hub` with `ast`. Two rules, each failure naming the file and line:
 
-1. In any function that calls `persist_event(..., commit=False)`, a call to `sse_manager.broadcast`
-   / `.publish` fails, **even one placed after that function's own commit**. The rule is kept broad
+1. In any function that calls `persist_event(..., commit=False)`, a call whose name (the `Name` id,
+   or the `Attribute`'s attr) **contains `broadcast`**, or is `.publish`, fails — except
+   `defer_broadcast` — **even one placed after that function's own commit**. Matching the substring
+   rather than `sse_manager.broadcast` alone is the Opus review's fix: the Hub announces through
+   wrappers such as `_broadcast_run_lifecycle` (`api/v1/agent_trigger.py:1881`, which persists and
+   broadcasts) and `_broadcast_conversation` (`api/v1/agent_chat.py:466`), and a receiver-name
+   match would pass a staged-then-announced path through either. The rule is kept broad
    on purpose (R3): "a function that stages an event row announces through `defer_broadcast`" is one
    sentence a reader can hold; "…unless the broadcast follows a commit in source order" is a
    heuristic that branches defeat. On today's tree it fails on `run_divergence.py:104` only (R1's
-   and R3's scans).
+   and R3's scans, and the review's re-scan with the substring rule at HEAD `c1c0fa4`: the other
+   staging function, `release_task_workspace` in `task_transition_service.py`, calls nothing named
+   `*broadcast*`).
 2. In a function that calls `defer_broadcast` **and** awaits a `.commit()` of its own, every
    `defer_broadcast` call must come before that function's last `.commit()` call in source order.
    **R3 found the trap this closes:** converting a post-commit `await sse_manager.broadcast(...)` to

@@ -3,7 +3,8 @@
 ## Agent-verifiable
 
 1. **The vocabulary is declared once and kept true.** 1.1-1.3 fail before and pass after. 1.2's
-   injected `job_deleted` proves the dead-name check can fail.
+   injected `job_deleted` proves the dead-name check can fail. 1.3 compares LF-normalised text, so
+   it passes on a Windows checkout, and the generated file passes `npm run lint` as emitted.
 2. **Nothing is dropped by name.** 1.5 (every admitted kind reaches a listener and invalidates what
    D4 says) and 1.6 (an unknown kind is dispatched; `connected` is not).
 3. **The code already written for these kinds now runs.** 1.7 (`useCheckpoints`), 1.8 (the rail).

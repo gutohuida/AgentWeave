@@ -3,6 +3,24 @@
 No operator decision is required. D1 records the one real choice with its alternatives, and the
 recommendation this change is built on. Built on HEAD `ce086b6`.
 
+## Operator review, 2026-09-24
+
+After the Opus adversarial review; citations re-checked at HEAD `c1c0fa4`. Operator decisions
+B9-Q1 (no runtime allowlist; generated type) and B9-Q2 (the F251 bundle waits for `:8000`'s
+restart) are confirmed; neither gates this change (see the skew section).
+
+- **Test 1.6's "once" depended on how many hooks were mounted (Opus review).** Every mounted
+  `useSSE()` registers its own reconnect listener that calls `queryClient.invalidateQueries()` with
+  no arguments (`hub/ui/src/hooks/useSSE.ts:410-414`), so one gap produces one no-argument call
+  **per mounted hook**. Test 1.6 (and 1.7) now render exactly one `useSSE()` and say so; the
+  assertion is exact only under that condition.
+- **Task 2.3b matched to F251's revised D3.** F251 now derives `DISPATCHED_STREAM_FRAMES` (every
+  `STREAM_FRAMES` entry except `connected`) and generates from it, so adding `stream_gap` is one
+  line in `STREAM_FRAMES` plus a regeneration.
+- **Follow-up, not in scope:** moving the invalidate-everything reconnect listener out of the hook
+  into one module-level listener would make the catch-up once per event regardless of how many
+  hooks are mounted (D4).
+
 ## D1 — tell the client with a gap frame (recommended), not a disconnect or a replay
 
 | Option | What it does | What it costs |
@@ -54,6 +72,13 @@ reaches both existing catch-ups — the invalidate-everything at `:410-414` and 
 reconciliation poll at `api/agents.ts:560`. `onSseReconnect`'s docstring (`:131-133`) is widened to
 *"fires whenever the client may have missed events: after a reconnect, or when the Hub reports a
 gap"*; the name stays, since both callers mean exactly that.
+
+**Once per hook, not once per event (Opus review).** The invalidate-everything listener is
+registered inside `useSSE()`'s own `useEffect` (`:410-414`), so every mounted instance adds one and
+a single `fireReconnect()` invalidates everything once per mounted hook. The app mounts one
+(`App.tsx`), so production behaviour is one catch-up; the tests pin it with exactly one hook
+mounted. Hoisting that listener to module level (registered once, beside `onSseReconnect` at
+`:134`) would make the count independent of mounts; it is a follow-up, not part of this change.
 
 `ActivityLog.tsx:136-146` (the check is at `:139`) drops any live event whose `project_id` is not the selected project's. A
 gap passes that filter unconditionally. `summaryForEvent` (`lib/eventSummary.ts`) gains

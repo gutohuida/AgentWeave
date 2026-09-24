@@ -735,6 +735,11 @@ recommended answers were taken as recommended unless noted below. The per-change
   compaction warning.** Only the billed steps decline (amends B8's D6).
 - DECIDED   B10-stale-stop  **A stop on a loop that has already ended is refused (409)** and its
   record is left as it was. `end_loop` is write-once.
+- DECIDED   B9-Q1  **The app keeps no runtime event allowlist.** The Hub's event vocabulary
+  (`sse_events.py`) is generated into a TypeScript type, so a handler for a kind that is never sent
+  fails `npm run build` (option B; `every-event-the-hub-sends-reaches-the-app`).
+- DECIDED   B9-Q2  **F251's UI bundle is committed only after the operator restarts `:8000` onto
+  F335's fix** (task 0.5 of the same change).
 - DECIDED   B12-F278-revise  **F278's change goes back for a round** (REVISING): base64 key segments
   and short tokens inside paths.
 

@@ -8,10 +8,12 @@
 2. **A real review still announces, once.** Control 1.2 passes before and after.
 3. **The order the app receives is unchanged.** 1.3: `run_divergence_resolved` precedes
    `task_updated` from the real PATCH route.
-4. **Rollback, close-without-commit and double commit publish nothing extra.** 1.4.
+4. **Rollback, close-without-commit and double commit publish nothing extra.** 1.4 — its leak check
+   commits again on the **same** closed `AsyncSession`; a check on a new session proves nothing.
 5. **A bad payload cannot turn a committed write into a 500.** 1.5.
 6. **The shape cannot come back.** 1.6's AST guard fails on today's tree at
-   `hub/hub/run_divergence.py:104` only.
+   `hub/hub/run_divergence.py:104` only, and its inline snippets prove it catches a wrapper such as
+   `_broadcast_run_lifecycle`, not only `sse_manager.broadcast`.
 7. **On the wire**, on a trial Hub from source (not `:8000`): reproduce the 2026-09-13 delivery leg
    (`scripts/drive/t_d1_0913_render.py Q`, a review queued behind a running turn whose commit is
    then pruned) with `curl -N` on `/api/v1/events`. Before: `event: run_divergence_resolved` on the

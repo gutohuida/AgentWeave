@@ -6,7 +6,8 @@
 2. **The stream says so, once, even after a burst followed by silence.** 1.2 and 1.3.
 3. **The gap is not a project's event.** 1.2 asserts no `project_id` on it.
 4. **The app catches up.** 1.6 and 1.7: every query invalidated and the reconnect hook fired, in
-   both orders the Hub can emit.
+   both orders the Hub can emit, with exactly one `useSSE()` mounted (each mounted hook adds its own
+   invalidate-everything listener, so "once" is per hook).
 5. **The feed says it.** 1.8.
 6. **Numbers add up on the wire.** 3.1 on a trial Hub: events received plus `dropped` = 3,000.
 
