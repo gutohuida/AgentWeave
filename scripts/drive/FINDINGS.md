@@ -25724,7 +25724,7 @@ wants its own look.
 
 ## F305 (B, harness) — a decision the operator has answered is re-asked, because the authority file is not what the windows read
 
-**Status:** open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final):** **no-spec fix round (harness)**: one channel, where `decisions_for_user` carries only ids of `OPEN` rows in `DECISIONS.md`. Edit `day-window.md`, `night-window.md`, `arm-cycle.ps1` and the two autonomous skills; at compose, a window drops and logs any inherited id that is not `OPEN`. Was: open — filed 2026-09-09, measured, not fixed.
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — one channel: `day-window.md`, `night-window.md` and `arm-cycle.ps1` now say `decisions_for_user` carries only ids of `OPEN` `DECISIONS.md` rows, and day-window.md's compose step drops and logs any inherited id that is not `OPEN`. Was: open — **Decided 2026-09-24 (operator, daily review, bundle B11; `spec-queue/tracks/B11.md` Final)**: no-spec fix round (harness).
 
 **Measured today, end to end.** The operator answered the `F299` posture question in session and the
 verdict was committed to `spec-queue/DECISIONS.md` at **`0ecfc38`, 08:51**. The day window composed
@@ -25759,6 +25759,47 @@ iteration 1 at all. The defect is the missing reconciliation, not the window's o
 `DECISIONS.md` carries a matching decided section, or `decisions_for_user` stops holding questions
 and holds only pointers into `DECISIONS.md`, which would leave one channel. The second is cleaner
 and larger. **Not fixed here** — it changes the loop's own contract and belongs in a proposal.
+
+**FIXED 2026-09-24 (Round 6):** implemented option (b), the operator's decided answer
+(`spec-queue/DECISIONS.md`, row `B11-all`; `spec-queue/tracks/B11.md` Final, row 16). Files:
+`.claude/loops/day-window.md` (Iteration 1 step 3 — reconciliation check; "A day that builds"'s
+`REV`-stops-a-change bullet; the Limits bullet), `.claude/loops/night-window.md` (the
+implementation-turns-out-wrong bullet; its Limits bullet), `.claude/loops/arm-cycle.ps1` (the
+`decisions_for_user` initializer, now commented with the contract, and the shared `limits` string
+both windows' `STATE-*.json` carry). Every site now says the same thing: a window raises a decision
+by adding an `OPEN` row to `spec-queue/DECISIONS.md` first, then puts only that row's id — never a
+sentence — into `decisions_for_user`; and day-window.md's compose step (Iteration 1 step 3, the one
+place a window structurally reads the other window's carried-forward `decisions_for_user`) looks
+every inherited id up in `DECISIONS.md` and drops and logs any whose row is not `OPEN` there (`DECIDED`,
+`DEFERRED`, or no row at all).
+
+**Production path that reaches the fix.** `arm-cycle.ps1` runs from the `AgentWeaveDayLoop` /
+`AgentWeaveNightLoop` Scheduled Tasks at 08:55/22:55 (`install-driver.ps1`'s registration), writes
+`STATE-day.json`/`STATE-night.json` with the updated `limits` string and an empty
+`decisions_for_user`, and the first `claude -p` firing of each window reads the corresponding
+playbook (`day-window.md`/`night-window.md`) in full per its own `next_action` before composing —
+so the reconciliation instruction and the id-only contract reach the actual unattended window, not
+just a document nobody reads. This is a prompt/playbook fix, not code: there is no interpreter that
+enforces it independently of the window following its own instructions, same as every other rule in
+these two files.
+
+**Scope note — the two `autonomous-prep`/`autonomous-session` skills were intentionally left
+untouched here.** They live outside this repository at the user level
+(`C:\Users\huida\.claude\skills\autonomous-prep\SKILL.md`,
+`C:\Users\huida\.claude\skills\autonomous-session\SKILL.md`) and the round's instructions were to
+propose exact text for them rather than edit them directly; see the round's delivered report for the
+proposed wording. Until that is applied, those two generic-loop skill docs still describe
+`decisions_for_user` without the `DECISIONS.md`-id contract — they do not drive the daily
+FILL/FIX cycle directly (`arm-cycle.ps1`/`day-window.md`/`night-window.md` do), so this does not
+reopen the finding, but it is a residual worth closing for consistency.
+
+**Tests.** No unit test applies — these are three markdown/PowerShell playbook and driver files with
+no Python/JS import path. Verified instead: `[System.Management.Automation.Language.Parser]::ParseFile`
+on `arm-cycle.ps1` reports no errors after the edit, and `arm-cycle.ps1 -Window night -DryRun` was
+run from the worktree on a clean tree and exited 0, printing the `DRY RUN:` line with no git mutation
+and no task registration (confirmed by reading the script's own `-DryRun` branch, which `exit 0`s
+before any `git checkout`/`commit`/`push`/`install-driver.ps1` call). `grep -n decisions_for_user`
+over all three files confirms every remaining mention uses the new id-only wording.
 
 ---
 
