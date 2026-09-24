@@ -1671,3 +1671,29 @@ disappears is indistinguishable from one that was forgotten.
   YYYY-MM-DD …` line as `other`, so `ROUNDS.html` counted operator-closed findings (F42, F65,
   F276, F281) as open. It now returns `closed`, and the rounds page counts `closed` as done
   (`b7d976a`).
+
+## 2026-09-24 (evening) — B4 R6–R8, Round 6 in parallel worktrees
+
+- **A test run from an agent worktree's root imports the MAIN checkout**, because the editable
+  installs point there. Green counts from a worktree prove nothing unless the run is made from the
+  worktree's `hub/` (for Hub tests) or with `PYTHONPATH` set to `<worktree>/hub;<worktree>/src`
+  **in Windows form** (`C:/Users/...`; a Git Bash `/c/...` path is mangled into `C:\c\...`). The
+  authoritative check is the full suite in the main checkout after merging. *(2026-09-24)*
+- **Python `Path.write_text` on Windows writes CRLF**, and git then warns "CRLF will be replaced by
+  LF". The commits stay LF (no churn), but to keep the working copy's endings, read and write bytes
+  and preserve `\r\n` if the file had it. *(2026-09-24)*
+- **Editing anything under `.claude/skills/` fails `tests/test_skill_sync.py`** (two mirrors stale)
+  until `py -3.11 scripts/sync_skills.py` is run. The mirrors are gitignored; nothing to commit.
+  The autonomous skills are repo-tracked at `.claude/skills/`, not user-level. *(2026-09-24)*
+- **`claude --tools ""` does not remove the account's claude.ai connector tools**
+  (`mcp__claude_ai_Claude_Docs__*`); `--strict-mcp-config` (no `--mcp-config`) does, and `CLAUDE.md` is
+  still read. Asking the model to *list* its tools is not evidence: with no tools it wrote imitation
+  tool calls as text. Measure by asking it to use a tool and reading `permission_denials`/`num_turns`
+  in the JSON envelope. *(2026-09-24, claude 2.1.280)*
+- **The night window shares this checkout and continues `autonomous/<date>-daily` whenever that
+  branch is merged into master** (it checks out the existing branch, not master). Once interactive
+  work lands on master after a merge, fast-forward the cycle branch to master before 22:55
+  (`git branch -f autonomous/<date>-daily master` + push, only when it is an ancestor), or the window
+  builds on stale code and the next merge is no longer a fast-forward. *(2026-09-24)*
+- **RESOLVED 2026-09-24:** `arm-cycle.ps1`'s dirty-tree refusal threw `ParameterBindingException`
+  (`-Value @(..) + @(..)` unparenthesised) instead of logging and exiting 3; parenthesised in `90be828`.
