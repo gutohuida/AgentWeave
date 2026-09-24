@@ -21505,7 +21505,7 @@ reusing the fixture for anything that needs a real turn.
 
 ## F276 (C) - `agent_wide`'s documented example was never marked `agent_wide`, and no site sets both flags
 
-**Status:** open. Filed 2026-09-04 (night window, phase 5 of
+**Status:** closed 2026-09-24 — **decided, no change** (operator, daily review, bundle B3 D10; `spec-queue/tracks/B3.md` Final). The no-such-agent refusal stays request-level and does not hold queued input: its only remaining producer is a job created in a project with an empty roster, and a job regenerates its input every firing, so nothing is lost. Follow-on candidate once `agents-no-longer-register-themselves` lands: the empty-roster exemption in `jobs._check_agent_exists` (`jobs.py:181-200`) loses its reason. Was: open. Filed 2026-09-04 (night window, phase 5 of
 `a-blocked-agent-workspace-holds-its-input`). **The documentation half is fixed in the same commit
 that filed this; the behaviour question below is what stays open.**
 
