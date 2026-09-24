@@ -82,6 +82,7 @@ with `## Operator review, 2026-09-24`). The 2026-09-23 rows below remain undecid
 - APPROVED  a-claude-run-is-told-its-agentweave-tools-by-their-full-names   B3 (F139). Full names for runs described with the injected surface; the host-`SendMessage` sentence for every Claude-family run.
 - APPROVED  an-agent-updates-a-task-with-what-its-tool-carries   B3 (F366). Review fixes: a MODIFIED governance delta; MCP `update_task`'s `status` becomes optional. F443 (create-time fields) is separate.
 - APPROVED  the-operator-can-rename-a-task   B3 (F125). Its own `useRenameTask` (renaming a blocked task works); `title: null` is refused. UI bundle together with its backend.
+- APPROVED  pressing-run-names-the-reason-that-held   09-23 (F400, F373). **B1's prerequisite: build first among B1's chain.** Review fix: the busy re-ask is unconditional below the skipped/failed arms; the stale-409-to-500 race is named in Risks. F411, F412 and F413 stay separate.
 
 ## 2026-09-23
 

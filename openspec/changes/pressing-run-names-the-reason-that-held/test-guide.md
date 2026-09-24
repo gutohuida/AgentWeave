@@ -11,7 +11,7 @@ Each of these can be checked with no person watching.
 3. **An in-flight press is not answered with an old stall.** Task 1.7 fails before and passes after.
    The earlier row's `tick_count` and requester are unchanged.
 4. **A continuing stall still answers from its own row.** Control 1.8 passes before and after, and
-   1.9 pins the gate that skips the busy re-ask for a counted stall.
+   1.9 pins that a counted stall is answered from its row before the busy re-ask is reached.
 4a. **A firing that fails is answered as a failure** (R2). Tasks 1.12 and 1.13 fail before and pass
    after: a crash before the row exists answers 500 *"Failed to fire job"*, not an earlier stall; a
    crash after the turn started answers 500 with the row's own reason, not *"already being

@@ -2,7 +2,7 @@
 
 **Round 1, 2026-09-23** (day window, D-2b, spec loop B). Findings: **F400 (B)** and **F373 (B)**,
 taken together because both are false sentences in one branch of one route (`run_job`'s
-`if not success:` block, `hub/hub/api/v1/jobs.py:1383-1453`) and both are governed by one
+`if not success:` block, `hub/hub/api/v1/jobs.py:1428-1497` at `8bc926f`) and both are governed by one
 requirement. Two proposals editing those lines would collide (the F300/F312 rule). Both were
 **re-measured on HEAD `dcdf723`** through the real route
 (`scripts/drive/d2b_0923_run_answer_probe.py`). Round 1 also filed **F411**: the app's Run button
@@ -22,13 +22,13 @@ that sentence to be the real reason. Two of its answers are not.
 
 **F400: a documentless loop is told nobody else is free.** Since `a-loop-staffs-the-agent-it-names`
 (archived 2026-09-22), a loop that declares no specification document gives its work only to the
-agent its job names. `_agents_a_loop_may_staff` returns `[]` for it (`scheduler.py:1240-1261`). So the
+agent its job names. `_agents_a_loop_may_staff` returns `[]` for it (`scheduler.py:1263-1284`). So the
 busy guard refuses it whenever that agent is busy, **whoever else is free**. `run_job` still picks its
 second clause as if the roster were the reason. Measured, with a sibling agent free:
 
 > `probe-owner is already running a turn, and no other agent is free to take this loop's work. Nothing was started.`
 
-That is false. The code's own comment (`jobs.py:1398-1400`) names what this does: it *"would send
+That is false. The code's own comment (`jobs.py:1443-1445`) names what this does: it *"would send
 them to free an agent, which changes nothing"*. The empty-queue clause has the same flaw, milder:
 *"this loop's queue holds no open task for another agent to take"*. A documentless loop never gives
 work to another agent. The current requirement says the documentless open-task sentence is *"not yet
@@ -36,7 +36,7 @@ decided"* (`agent-loops/spec.md:1515-1518`). This change decides it.
 
 **F373: an in-flight decline is answered with an earlier firing's stall.** After the busy-guard
 re-ask, the route answers from `latest_run` whenever its status is `skipped`
-(`jobs.py:1410-1414`). That branch is not gated on whether this press wrote or counted that row. An
+(`jobs.py:1455-1459`). That branch is not gated on whether this press wrote or counted that row. An
 in-flight decline writes nothing (F23), so the newest row is some earlier firing's. Measured: a flow
 whose only task is `in_progress` under its busy agent, with another agent free (so the guard
 passes), and an hour-old skipped row. The route answered 409:
@@ -91,7 +91,7 @@ pin *"no other agent is free"*. After this change they read the scope clause (de
 ## Impact
 
 - `hub/hub/scheduler.py`: the new structured guard answer (`_loop_flow_busy_refusal`), with
-  `_loop_flow_busy_reason` reduced to a wrapper over it. Its other two callers (the firing, `scheduler.py:2984`, and the board, `jobs.py:357`) are unchanged.
+  `_loop_flow_busy_reason` reduced to a wrapper over it. Its other two callers (the firing, in `_do_fire_job`, `scheduler.py:3045`, and the board's re-ask, `jobs.py:389`) are unchanged.
 - `hub/hub/api/v1/jobs.py`: `run_job`'s `not success` branch only.
 - `hub/tests/`: new tests, and two named assertions moved in `test_board_agent_role.py`.
 - **Not touched**: `hub/ui/`, `hub/hub/static/ui/`, `mcp_server.py`, models or migrations. Nothing

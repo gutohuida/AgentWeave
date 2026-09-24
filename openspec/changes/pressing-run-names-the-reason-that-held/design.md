@@ -1,5 +1,28 @@
 # Design — pressing Run names the reason that held
 
+## Operator review, 2026-09-24
+
+An Opus adversarial review (`spec-queue/tracks/reviews/2026-09-23-changes-2026-09-24.md` §2) found
+**APPROVE WITH FIXES**. The operator approved this change with its defaults:
+
+- **F411, F412 and F413 stay separate findings** (Open Questions 1, 3 and 4). None is folded in.
+- **The proposed scope-clause wording stands** (Open Question 2): *"this loop's work goes only to
+  {agent}, the agent its job names"*.
+
+These fixes from the review are applied here:
+
+- **MEDIUM, D3 contradicted itself on the re-ask gate.** The *"Two gates change"* bullet said the busy
+  re-ask runs where `not answered_by_row`. Task 1.14 has a concurrent tick's `in_progress` row, so
+  `wrote_row` is true, and it expects the busy 409. That gate would skip the re-ask and answer 500,
+  which is today's bug. The wording is deleted. The re-ask is now **unconditional below the `skipped`
+  and `failed` arms**, which already return first. That matches the sketch, task 2.3 and tasks 1.9
+  and 1.14 (D3).
+- **LOW, a stale-409-to-500 race** is now listed under Risks.
+- **LOW, stale line citations.** They are refreshed against HEAD `8bc926f`, and function names are
+  used where possible. The round log keeps the citations each round actually read.
+- **LOW, coordination with two other changes' declared rebases** (`an-agent-can-be-paused-and-keeps-its-input`
+  task 1.7, and `run-id-in-an-event-always-names-a-run`) is now listed under Risks.
+
 **Round 1, 2026-09-23** (day window, D-2b). F400 and F373, re-measured on `dcdf723` with
 `scripts/drive/d2b_0923_run_answer_probe.py`. To re-run it, copy it under `hub/tests/` as
 `test_zz_probe_*.py` and run it with `-s`. It prints what the route answers and asserts nothing about
@@ -7,46 +30,47 @@ the right answer. **Nothing here is implemented yet.**
 
 ## Context
 
-`run_job` (`hub/hub/api/v1/jobs.py:1326-1464`) fires the job through the scheduler with the route's
-own session: `scheduler._fire_job_internal(job, trigger="manual", session=session)`, at `:1372`.
-When that returns `False`, the branch at `:1383-1453` turns the decline into an HTTP answer. It
-cannot ask the firing why, because several declines deliberately write nothing. Every `return False`
-in `_fire_job_internal` (`scheduler.py:2908-3466`), read in R1:
+`run_job` (`hub/hub/api/v1/jobs.py`, `:1372-1510` at HEAD `8bc926f`) fires the job through the
+scheduler with the route's own session: `scheduler._fire_job_internal(job, trigger="manual",
+session=session)`, at `:1417`. When that returns `False`, the `if not success:` branch (`:1428-1497`)
+turns the decline into an HTTP answer. It cannot ask the firing why, because several declines
+deliberately write nothing. Every `return False` in `_do_fire_job` (which `_fire_job_internal`
+wraps), read in R1. The line column gives each branch's `return` at HEAD `8bc926f`:
 
 | Path | Line | Writes a `JobRun`? | What the route answers today |
 |---|---|---|---|
-| Busy guard (`_loop_flow_busy_reason`) | `:2984-2998` | **no** | Re-asks the guard: `{busy}, and {why}. Nothing was started.` (409) |
-| Agent skip (`_job_agent_skip_reason`) | `:3017-3037` | yes, `skipped` | That row's reason (409) |
-| Plain job held, first firing | `:3061-3079` | yes, `skipped` | That row's reason (409) |
-| Plain job held, later firings | `:3049-3060` | **no**, counts `tick_count` into the newest row | That row's reason (409), correctly |
-| Loop stop reached | `:3088-3155` | yes, `skipped` | That row's reason (409) |
-| In flight (`DECISION_IN_FLIGHT`, F23) | `:3193-3208` | **no** | **The newest row's reason if it is `skipped` (F373)**, else the in-flight answer |
-| Stall, first firing | `:3243-3264` | yes, `skipped` | That row's reason (409) |
-| Stall continues (D6 of `loop-notices-and-reacts`) | `:3222-3242` | **no**, counts `tick_count` | That row's reason (409), correctly |
-| Exception before `run` exists (R2) | `:2941-2998`, caught at `:3442` | **no**: `if "run" in locals()` is false | **The newest row's reason if it is `skipped`** (measured, R2), else 500 `Failed to fire job` |
-| Exception after `run` exists | `:3444-3464` | yes, `failed` | **Re-decides first**: the in-flight answer where `_loop_in_flight_decision` finds the queue in flight (measured, R2), else 500 with its summary |
-| Exception after `run` was **discarded** (R3): the in-flight and counted-stall branches discard and commit, then emit the staged loop edit (`:3202-3203`, `:3236-3237`) | caught at `:3442` | **no**: `run` is still a local, so the `except` persists `job_run_failed` naming a run id that no longer exists | The decision the firing made (measured, R3: the in-flight answer) |
+| Busy guard (`_loop_flow_busy_reason`) | `:3059` | **no** | Re-asks the guard: `{busy}, and {why}. Nothing was started.` (409) |
+| Agent skip (`_job_agent_skip_reason`) | `:3098` | yes, `skipped` | That row's reason (409) |
+| Plain job held, first firing | `:3140` | yes, `skipped` | That row's reason (409) |
+| Plain job held, later firings | `:3121` | **no**, counts `tick_count` into the newest row | That row's reason (409), correctly |
+| Loop stop reached | `:3216` | yes, `skipped` | That row's reason (409) |
+| In flight (`DECISION_IN_FLIGHT`, F23) | `:3269` | **no** | **The newest row's reason if it is `skipped` (F373)**, else the in-flight answer |
+| Stall, first firing | `:3325` | yes, `skipped` | That row's reason (409) |
+| Stall continues (D6 of `loop-notices-and-reacts`) | `:3303` | **no**, counts `tick_count` | That row's reason (409), correctly |
+| Exception before `run` exists (R2) | caught by the single `except` (`:3514`) | **no**: `if "run" in locals()` (`:3518`) is false | **The newest row's reason if it is `skipped`** (measured, R2), else 500 `Failed to fire job` |
+| Exception after `run` exists | same `except`, `return False` at `:3537` | yes, `failed` | **Re-decides first**: the in-flight answer where `_loop_in_flight_decision` finds the queue in flight (measured, R2), else 500 with its summary |
+| Exception after `run` was **discarded** (R3): the in-flight and counted-stall branches discard and commit, then emit the staged loop edit (`_emit_loop_edit_applied`, `:3264`, `:3298`) | same `except` | **no**: `run` is still a local, so the `except` persists `job_run_failed` naming a run id that no longer exists | The decision the firing made (measured, R3: the in-flight answer) |
 
-R2 rebuilt this table from `grep "return False\|return True"` over `:2908-3466` before reading R1's,
+R2 rebuilt this table from `grep "return False\|return True"` over `_do_fire_job` before reading R1's,
 and agreed on nine rows. It found the two exception rows' behaviour R1 did not list: `_do_fire_job`
 has one `try`, and its `except` marks a row `failed` only when the row already exists.
 
 The route tells "this press wrote the row" apart from "an earlier firing wrote it" by comparing the
-newest row's **id** before and after (D11 of `a-spent-allowance-holds-the-queue`, `:1363-1375`). A
+newest row's **id** before and after (D11 of `a-spent-allowance-holds-the-queue`, `jobs.py:1409-1420`). A
 counted stall keeps the id, so by id it looks exactly like a decline that wrote nothing. The
-`skipped` branch at `:1410-1414` is therefore left ungated. It is right for the two counting paths
+`skipped` branch (`jobs.py:1455-1459`) is therefore left ungated. It is right for the two counting paths
 and wrong for the in-flight one, which is F373.
 
-**The busy guard** (`scheduler.py:312-350`) refuses when the job's agent is running or held **and**
+**The busy guard** (`_loop_flow_busy_reason`, `scheduler.py:335-375`) refuses when the job's agent is running or held **and**
 one of three things holds. It asks them in this order:
 
-1. The loop holds no non-terminal task (`_loop_has_open_task`, `:295-309`).
+1. The loop holds no non-terminal task (`_loop_has_open_task`, `:318-332`).
 2. The loop declares no specification document. `_agents_a_loop_may_staff` returns `[]` for it
-   (`:1240-1261`), so the pool is empty whoever is free.
+   (`scheduler.py:1263-1284`), so the pool is empty whoever is free.
 3. The loop is a flow and `_agents_that_are_free` is empty.
 
 It returns only the busy sentence. The route then re-derives which half held with a second
-`_loop_has_open_task` query (`:1401-1405`), and it can tell only (1) from not-(1). It files (2) under
+`_loop_has_open_task` query (`jobs.py:1439-1449`), and it can tell only (1) from not-(1). It files (2) under
 (3). That is F400.
 
 **Measured on `dcdf723`** (probe, `live_scheduler`, `schedule_agent` stubbed):
@@ -75,13 +99,13 @@ compares an object with itself and always reads "unchanged".
 
 **The board is already right** (archived design's Open Question 2, answered). For the documentless
 open-task case, `decide_firing` answers `stalled` with `loop queue is stalled: no claimable task
-among 1 open (1 pending)` (`_stall_reason_from_walk`, `scheduler.py:2196-2234`). `jobs.py:357`
+among 1 open (1 pending)` (`_stall_reason_from_walk`, `scheduler.py:2243`). The board's re-ask (`jobs.py:389`)
 replaces that with the busy sentence, and the probe read `probe-owner is already running a turn`
 on the board. The busy sentence alone names no roster, so it is true. The board needs no edit here.
 
 **Who reads the route's answer.** The MCP tool `run_job` (`mcp_server.py:929-937`), which returns
 the Hub's answer to the calling agent, and any API client. **The app's own Run button does not
-display it** (`JobsPage.tsx:157`, `onRun={runJob.mutate}`, no `onError`; filed as F411, Open Question 1).
+display it** (`hub/ui/src/components/jobs/JobsPage.tsx:157`, `onRun={runJob.mutate}`, no `onError`; filed as F411, Open Question 1).
 
 ## Goals / Non-Goals
 
@@ -125,18 +149,18 @@ async def _loop_flow_busy_reason(session, loop, agent) -> Optional[str]:
 else `BUSY_NO_FREE_AGENT`. **Not `held`** (R1's name, renamed by R2): in this module *held* means a
 provider-allowance hold (`provider_hold`, `held_agents`), and the guard itself refuses a held
 agent, so `refusal.held == BUSY_EMPTY_QUEUE` would read as a statement about a hold. That is the same predicate `_agents_a_loop_may_staff` itself uses
-(`:1258`), and the archived change's D7 defines "documentless" by it. The docstring moves with the
+(`_agents_a_loop_may_staff`, `scheduler.py:1281`), and the archived change's D7 defines "documentless" by it. The docstring moves with the
 body; the wrapper keeps a one-line docstring pointing at it.
 
 **Why.** The route's second `_loop_has_open_task` query exists only because the guard's answer is a
 bare string. Two derivations of one decision is the drift shape that module's comments record going
-wrong twice (`scheduler.py:280-282`). F400 is a third instance: the route's derivation had two
+wrong twice (`_running_agents`' docstring, `scheduler.py:303-305`). F400 is a third instance: the route's derivation had two
 outcomes, and the guard had grown a third.
 
 **Rejected.** *Inline `loop.spec_document_id is None` in the route:* a third place that decides
 "documentless", beside `_agents_a_loop_may_staff` and the guard. It would be correct today and free
-to drift. *Change `_loop_flow_busy_reason`'s return type:* its other two callers (`scheduler.py:2984`,
-`jobs.py:357`) want only the sentence, and a tuple there invites a caller to test it for truth and
+to drift. *Change `_loop_flow_busy_reason`'s return type:* its other two callers (the firing, in `_do_fire_job`, `scheduler.py:3045`,
+and the board's re-ask, `jobs.py:389`) want only the sentence, and a tuple there invites a caller to test it for truth and
 get `True` from `("", …)`.
 
 ### D2 — One clause per condition; a flow's two sentences do not move
@@ -166,7 +190,7 @@ scope paragraph settled it (*"even where the roster is in fact empty"*), but onl
 sentence elsewhere. The delta now states one order, the guard's own: the empty queue, then the
 loop's scope, then the roster. The answer names only the first that holds. For a documentless loop
 (3) is never even evaluated, because `_agents_a_loop_may_staff` returns `[]` before asking who is
-free (`:1258-1259`).
+free (`_agents_a_loop_may_staff`, `scheduler.py:1281-1282`).
 
 **Two existing assertions move, deliberately.** `test_running_a_loop_whose_agent_is_mid_turn_answers_409_not_500`
 (`test_board_agent_role.py:385`) and `test_running_a_loop_whose_agent_is_held_names_the_hold`
@@ -217,7 +241,7 @@ loop = await _job_loop(session, job)
 ...busy re-ask, then the in-flight answers, then 500 "Failed to fire job"
 ```
 
-A counted row is always `skipped` (`_stall_run_to_increment` matches only `skipped`, `:978`), so the
+A counted row is always `skipped` (`_stall_run_to_increment` matches only `skipped`, `scheduler.py:1001`), so the
 `failed` arm is reached only through `wrote_row`.
 
 **R3: each status is named; no `else`.** R2's sketch answered 500 for any status other than
@@ -237,29 +261,38 @@ the true answer; the exception is in the Hub's log, which is where `_do_fire_job
 
 Two gates change:
 
-- The busy-guard re-ask runs where `not answered_by_row` (today: `not wrote_row`). A counted stall
-  means the guard passed at firing time and the firing reached the walk, so that row is this press's
-  answer. This makes the existing scenario *"A firing that recorded its own refusal is answered from
-  that record"* hold for a counted stall as it already does for a first one.
-  **This gate matters only in a race.** The firing's own guard runs before the stall walk
-  (`scheduler.py:2984`), so the route can meet a counted stall with a busy agent only where the agent
-  became busy between the two. Task 1.9 simulates that race with a patched guard. It cannot be
-  staged with real state.
+- **The busy-guard re-ask is unconditional below the `skipped` and `failed` arms** (today it is gated
+  on `not wrote_row`). *Operator review, 2026-09-24:* R1-R3 worded this as *"where `not
+  answered_by_row`"*, which contradicted the sketch above, task 2.3 and task 1.14, and that wording is
+  deleted. No gate is needed. A row this press wrote or counted into reads `skipped` or `failed`, and
+  those two arms return before the re-ask is reached. Any other row status falls through to the
+  re-ask, and that includes a concurrent tick's `in_progress` row. With a `not answered_by_row` gate,
+  task 1.14's press (`wrote_row` true through the tick's row) would skip the re-ask, find nothing in
+  flight, and answer 500 *"Failed to fire job"*. That is today's bug, kept. Unconditional, it answers
+  the busy 409.
+  A counted stall is answered by the `skipped` arm, before the re-ask. It means the guard passed at
+  firing time and the firing reached the walk, so that row is this press's answer. This makes the
+  existing scenario *"A firing that recorded its own refusal is answered from that record"* hold for
+  a counted stall as it already does for a first one.
+  **The ordering matters only in a race.** The firing's own guard runs before the stall walk (in
+  `_do_fire_job`, `scheduler.py:3045`), so the route can meet a counted stall with a busy agent only
+  where the agent became busy between the two. Task 1.9 simulates that race with a patched guard. It
+  cannot be staged with real state.
 - The row is read only where `answered_by_row` (the block above). An in-flight decline now falls
   through to `_loop_in_flight_decision`, and the answer is the in-flight one: *"already being worked
   … nothing is wrong"*, or the held form where the work waits on a hold. A firing that raised before
   its row existed falls through all three and answers 500 *"Failed to fire job"*, not an earlier
   firing's stall.
-- `_loop_in_flight_decision` is asked only where the press wrote nothing (it is below the gate). It
-  is never asked to explain a row this press wrote.
+- `_loop_in_flight_decision` is asked only below the `skipped` and `failed` arms, where the press
+  wrote nothing it can answer from. It is never asked to explain a decline's row this press wrote.
 
-The requester stamp (`:1376-1381`) stays keyed on `wrote_row`. A counted row was written by an earlier
+The requester stamp (`jobs.py:1422-1426`) stays keyed on `wrote_row`. A counted row was written by an earlier
 firing, and the requirement says the route *"SHALL NOT change that record's requester"*.
 
 **What D3 cannot see (R3, measured, F413).** The route reads side effects. A firing that raised and
 left no row looks exactly like a healthy decline that also left none. There are two ways this
 happens: the firing raised before `run` existed, or it raised after the in-flight or counted-stall
-branch had discarded `run`. Below the gate the route re-decides the loop, as the requirement says it
+branch had discarded `run`. Below the two arms the route re-decides the loop, as the requirement says it
 must where nothing was written. So the crash is answered as the decision the firing would have made.
 That is 409 *"already being worked … nothing is wrong"* on an in-flight flow, and the busy sentence
 on a busy loop. On the busy loop that answer is true of the loop. On the in-flight flow, *"nothing is
@@ -276,11 +309,11 @@ the route see the crash. But 18 test files assert `_fire_job_internal(...) is Fa
 (`grep`), so any richer return is a sweep through them.
 
 **Why `tick_count`, not a timestamp.** `fired_at` is deliberately not moved by a counted stall
-(`scheduler.py:3228-3233`). `tick_count` is the only column a count touches, and both counting paths
+(`_do_fire_job`'s continuing-stall branch, `scheduler.py:3289-3292`). `tick_count` is the only column a count touches, and both counting paths
 (stall and plain-job coalesce) increment it.
 
 **Rejected.** *Have `_fire_job_internal` return a richer result:* it is also the cron path's entry
-point (`scheduler.py:2906`), and 18 test files call it directly. A route-local
+point (`scheduler.py:2969`), and 18 test files call it directly. A route-local
 comparison fixes the route without touching the firing. *Re-query the row in a fresh session:* that
 works too, but it hides the identity trap instead of naming it, and the next edit to this code would
 face the same trap.
@@ -334,6 +367,29 @@ operator reads is governed at `:1499`, which this delta rewrites.
   its row existed, after an earlier coalesced `skipped` row, answered 409 with the coalesce reason;
   it will answer 500 *"Failed to fire job"*. A plain job's counted coalesce is still answered from
   its row, because `counted` covers it.
+- **An in-flight firing whose work finishes before the route re-asks now answers 500, not a stale
+  409 (Operator review, 2026-09-24).** The firing decides `DECISION_IN_FLIGHT` and writes nothing.
+  Then the task it saw in flight finishes before the route calls `_loop_in_flight_decision`, which
+  returns `None`. Today, with an earlier `skipped` row, the ungated `skipped` branch answers that
+  earlier row's stall reason, a stale 409. After this change the row is not the press's, the re-ask
+  finds no busy agent, the in-flight decision finds nothing, and the route answers 500 *"Failed to
+  fire job"*. The answer is false either way. The 500 is more alarming, but it no longer names an
+  earlier firing's condition as this press's. The window is the milliseconds between the firing's
+  decision and the route's re-decision. Accepted, and the code comment on the final 500 names it.
+- **Coordination with two other changes' declared rebases (Operator review, 2026-09-24).** Both
+  touch `run_job`. Whichever lands second rebases onto the first:
+  - `an-agent-can-be-paused-and-keeps-its-input`, task 1.7, asserts only `409` and `is paused` for a
+    paused loop agent, and not the sentence around it, because this change reshapes that sentence.
+    Its design records the overlap as textual adjacency in `run_job`, not a semantic conflict. The
+    pause is read inside the busy guard's `_loop_agent_busy_reason`, which
+    `_loop_flow_busy_refusal` keeps calling (D1), so `refusal.reason` carries the pause sentence
+    unchanged. If that change lands first, re-run task 1.11's controls and that change's 1.7 after
+    group 2.
+  - `run-id-in-an-event-always-names-a-run` edits `run_job`'s success return (`jobs.py:1510`) and
+    `_record_job_run_failure`'s payload. It renames the route's local `run_id` to `job_run_id`, which
+    sits next to this change's `wrote_row` and requester-stamp lines (`jobs.py:1419-1426`). This
+    change edits only the `if not success:` branch and the `earlier_ticks` copy before the firing, so
+    the overlap is textual. Its proposal already says *"Land either first; the second rebases."*
 - **MCP callers see a changed sentence.** An agent that pattern-matched *"no other agent is free"* on
   a documentless loop sees the scope clause instead. Nothing in `hub/hub/`, `src/agentweave/`, `hub/ui/src/` or `docs/`
   contains either moved phrase except `jobs.py` itself (`grep`, R1).
@@ -351,7 +407,7 @@ operator reads is governed at `:1499`, which this delta rewrites.
    not words.
 
 3. **Fold F412 in?** (filed by R2, measured). When `schedule_agent` reports that no turn began
-   (`terminal_failure`), `_do_fire_job` marks its row `failed` (`scheduler.py:3400-3406`) and still
+   (`terminal_failure`), `_do_fire_job` marks its row `failed` (`scheduler.py:3472-3478`) and still
    returns `True`, so `run_job` answers `200 {"success": true}`. It is F108's open class, on this
    route. It stays out because `terminal_failure` has known dishonest defaults (F108's section: six
    early returns claim it without meaning it), so reading it here needs its own look at which
