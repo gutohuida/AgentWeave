@@ -2,7 +2,7 @@
 
 - [x] 0.1 R1: explore and propose (2026-09-24, bundle B5)
 - [x] 0.2 R2: independent re-derivation against `requirement_evidence.py` (`read_footprint`, `_branch_at`, `_take_footprint`, `footprint_root`, `capture_footprint`, `restamp_run_footprints`, `detect_drift`), `task_integration.py` (`_targets`, `integration_targets`, `merge_targets`), `worktrees.py` (review and task checkouts, `release_task_worktree`), `task_transition_service.release_task_workspace`. In particular: re-measure the `(HEAD detached at …)` line; decide D3's seam; count drift candidates D2 adds on an existing fixture; answer design Open Question 1
-- [ ] 0.3 R3: second independent re-derivation; `openspec validate a-footprint-names-the-line-of-work-its-commit-is-on --strict` passes
+- [x] 0.3 R3: second independent re-derivation; `openspec validate a-footprint-names-the-line-of-work-its-commit-is-on --strict` passes
 - [ ] 0.4 The operator answers D12's third question (recommended: one spelling `""`, resolved, with a data migration) and approves
 
 ## 1. Tests first — each fails on today's code unless marked as a control
@@ -14,6 +14,8 @@ New file `hub/tests/test_a_footprint_names_its_line_of_work.py`, reusing the git
 - [ ] 1.3 (D1/D2, addendum) A reviewer-shaped footprint: record agent evidence from a checkout detached at the task branch's tip → `footprint.branch == <task branch>`. Detached at a commit no single branch contains → `""`, never `"HEAD"`. FAILS today (`"HEAD"`)
 - [ ] 1.4 (D1) `restamp_run_footprints` on a detached checkout writes the resolved branch, not `"HEAD"`. FAILS today
 - [ ] 1.5 (D4) Two accepted footprints on one task branch: author at D (observed first), reviewer at D's parent C (observed later). `merge_targets(session, task, root)` → `[D]`, while `integration_targets(session, task)` still answers `[C]` (its observation order, unchanged). Must be staged after D2 (or with branches set directly on the rows). FAILS on today's reduction when both rows carry the task branch
+- [ ] 1.5b (D4, R3) Through the route: with 1.5's rows (both carrying the task branch, staged as 1.5 is) on a task ready to approve, `PATCH /tasks/{id} {"status":"approved"}` → 200 and the task's integration row names **D**, and `D` is reachable from main. FAILS today with both rows on the task branch (merges `C` only, leaving D's change out). Pins that the reduction fires from the real approval path, not only from `merge_targets` called directly
+- [ ] 1.5c (D4, R3) Control: two accepted footprints naming the **same** commit on one branch → `merge_targets` keeps the later-observed row's `evidence_id`, as `integration_targets` does today. FAILS if the ancestry test is not proper
 - [ ] 1.6 (D4) Control: a rebase — two commits neither containing the other on one branch → the later observation wins. Passes before and after
 - [ ] 1.7 (D3, F166) Stage as `test_evidence_footprint_root.py::test_a_released_workspace_falls_back_rather_than_naming_a_missing_directory` (`:982-1013`) does, **plus** `Run.task_id` bound to the released task and a commit on its task branch: the footprint names `agentweave/task/<id>` and that branch's tip — not the agent's own checkout's commit (what the unbound test pins today) and not `main`. FAILS today
 - [ ] 1.7a (D2) `test_a_reviewers_evidence_is_footprinted_at_the_tree_it_reviewed` (`test_evidence_footprint_root.py:944-979`) gains `assert footprint.branch == "agentweave/task/task-dd44ee55ff66"` (the review checkout is detached at that branch's tip). FAILS today (`"HEAD"`)

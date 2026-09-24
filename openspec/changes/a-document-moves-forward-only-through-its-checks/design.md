@@ -48,6 +48,22 @@ exactly this race (the imported document reopened between propose and approve �
 **200** with the reference recorded as `document_not_approved`. Gating approval on the finding would
 reverse that decision and fail that test. It is still reported at `proposed`, as today.
 
+**R3: the exclusion is by code, and it is the right seam.** The alternatives both misfire: passing no
+`approved_document_paths` at approval reports *every* import as `import_not_approved`; passing the
+imports' own targets as "approved" lies to the pure function. Filtering the one code out of
+`check`'s result keeps `spec_completeness` a pure function of its inputs. One consequence, stated
+rather than hidden: because a `proposed` document stays writable, an import **added after the
+proposal** to a document that was never approved also reaches approval unrefused, and is recorded
+by `materialise` as `document_not_approved` — the same outcome, through the same code, as the race.
+Every other completeness finding (a dropped task, a new criterion-less requirement, an unresolved
+question added after proposing) is refused. **Nothing else reaches `approved` unchecked:**
+`transition` has two callers (`spec.py:1607` `set_phase`, `spec_service.py:781` `propose`, which
+only targets `proposed`) and nothing else assigns `SpecDocument.phase` (grep `\.phase =` → only
+`spec_lifecycle.py:339`). Adoption registers a document *at* `approved` from its metadata
+(`spec_adoption.py:235-240`, via `create_document(phase=…)`), but that path materialises no tasks
+(`materialise_quietly` has one caller, `spec.py:1624`), so it is B6's registration question, not a
+bypass of the gate that makes tasks.
+
 `propose` becomes: `blocking = await phase_blockers(...)`; if non-empty, return it; else
 `transition(...)`; `rerender_phase`. `transition` keeps its `explore_not_closed` refusal, so the
 state can never be reached by a caller that skips `phase_blockers`.
@@ -131,3 +147,10 @@ unhandled.
   `test_spec_criteria_reach_the_task.py:207`; task 2.3 completes them. No agent-plane route reaches `proposed` or `approved` (`transition` has two callers,
   `spec.py:1607` and `spec_service.py:781`, both operator-credentialed). F205 is already fixed
   (`SpecPhaseBar.tsx:146-160`), so the out-of-scope line about it is removed.
+- **R3, 2026-09-24.** Re-derived from the code, not from R2's notes. Every route/function claim holds
+  (`propose` `:747-786`, `set_phase` `:1585-1635`, `check` `:106-260`). R2's seam for
+  `import_not_approved` confirmed as the right one (filter the code, keep `check` pure) and its one
+  side effect stated in D1 (a post-proposal import to a never-approved document also passes, and is
+  recorded as `document_not_approved`). Confirmed nothing else reaches `approved` unchecked: two
+  `transition` callers, one `.phase =` writer, and adoption-at-`approved` materialises nothing. No
+  test changed.

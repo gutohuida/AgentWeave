@@ -2,7 +2,7 @@
 
 - [x] 0.1 R1: explore and propose (2026-09-24, bundle B5)
 - [x] 0.2 R2: independent re-derivation against `spec_service.propose`, `spec_lifecycle.transition`, `spec.py` `propose_document`/`set_phase`, `spec_adoption`, `SpecPhaseBar.tsx`. In particular: run the seven helpers listed in the proposal and record which fixtures are incomplete (a scratch copy that calls `spec_completeness.check` on each fixture payload is enough); confirm no agent-plane path reaches `proposed`/`approved`
-- [ ] 0.3 R3: second independent re-derivation; `openspec validate a-document-moves-forward-only-through-its-checks --strict` passes
+- [x] 0.3 R3: second independent re-derivation; `openspec validate a-document-moves-forward-only-through-its-checks --strict` passes
 - [ ] 0.4 The operator approves (APPROVALS.md), including the F113 status change
 
 ## 1. Tests first — each fails on today's code unless marked as a control

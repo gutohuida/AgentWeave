@@ -50,14 +50,19 @@ Both routes map `exc.http_status` already (`spec.py:916`, `agent_actions.py:1341
 
 **What the routes return when a called function raises.** `decide` raising → 409 (this code), 403 or
 422, nothing committed. After a successful decide, `integrate_what_was_waiting_for_this_evidence`
-catches everything and rolls back (`task_integration.py:672-707`). Measured in R1 with a scratch
-test that made `retry_integration` raise: `POST /spec/evidence/{id}/decision` answered **200** with
-`review_state: accepted`, and the stored row read `accepted`. So a repository failure does not undo
-or 500 the decision. Unchanged by this change.
+catches everything and rolls back (`task_integration.py:672-707`). **R3 re-ran this and it does not
+answer 200** when a task is actually waiting (R1's measurement did not reach the raise — see D6): the
+decision is committed and stands, but the route then answers **500**. D6 fixes it.
 
 ## D2 — a re-record in the same run revises its own undecided row
 
-In `record`, when `duplicate_of` returns a row `already` with `already.run_id == actor.run_id` and
+In `record`, **for an agent with a run, first look for this run's own matching row** — `duplicate_of`'s
+key plus `RequirementEvidence.run_id == actor.run_id` (a keyword on `duplicate_of`, or a second query
+beside it). R3: `duplicate_of` returns the **oldest** match (`order_by(produced_at, id).limit(1)`,
+`requirement_evidence.py:236-244`), and in D5's own case — a new turn whose checkout starts at the
+previous turn's snapshot, where the previous run's row already sits — that oldest row belongs to the
+*previous* run, so a same-run check made on it never fires and a second record in the same turn would
+mint a third row through D5. When this run's row `already` exists and
 `already.review_state == AWAITING`, update `already.kind`, `already.locator`, `already.summary`,
 re-apply the footprint just taken — `_apply_footprint(session, already, taken, existing_footprint,
 outside_writes=await outside_writes_for_run(session, already.run_id))`. The `outside_writes`
@@ -105,9 +110,14 @@ question fails → the refusal stands, as today.
   given an isolated workspace that is not a review checkout (`agent_trigger.py:1033`, `:1341`: a
   review turn and a turn in the project's own checkout pass `worktree=None`). Anywhere else the new
   row is never re-pointed and would be a real duplicate at the same commit — a reviewer's checkout
-  dirtied by `.pyc` files is the observed case. So D5 applies only when the footprint root lies
-  under `worktrees.task_root` or `worktrees.worktree_root` (`worktrees.py:153-188`), never
-  `review_root` (`:207`) or the project root.
+  dirtied by `.pyc` files is the observed case. So D5 applies only when **the run's recorded
+  directory** (`Run.workspace_dir`, written from `effective_work_dir`, `agent_trigger.py:1264` — the
+  same directory `_execute_run` snapshots) still exists and lies under `worktrees.task_root` or
+  `worktrees.worktree_root` (`worktrees.py:153-188`), never `review_root` (`:207`) or the project
+  root; `git status` runs there. R3: keyed on the recorded directory, not on `footprint_root`'s
+  answer, because when that directory is gone `footprint_root` falls back to the agent's *own*
+  checkout (`requirement_evidence.py:343-348`), which is not the directory the turn's snapshot will
+  commit.
 - Agents only. An operator's footprint may be a named commit (`_take_footprint`, F71), and their
   sentence still says to commit.
 - Test 1.8 (the cross-run control) must stage a **clean** checkout; test 1.12 stages a dirty one.
@@ -119,6 +129,29 @@ run_liveness.run_is_live(evidence.run_id))`. Registry lookup, no query. The oper
 return `_evidence_view` (requirement detail, list, record, decide) carry it. The agent-plane record
 response (`agent_actions.py:1238-1245`) is its own dict and gains the same key; the agent-plane
 list (`agent_actions.py:1248-1305`) spreads `_evidence_view` and inherits it.
+
+## D6 — a decision route answers the decision it committed, whatever the merge after it does (R3)
+
+**Measured by R3**, not read: a scratch test (deleted) recorded agent evidence, patched
+`tasks_awaiting_this_commit` to load a real approved-shaped `Task` (so a transaction is open, as in
+production) and `retry_integration` to raise, then called `POST /spec/evidence/{id}/decision
+{"decision":"accepted"}`. The decision committed (stored row `accepted`), the wrapper logged and
+rolled back (`task_integration.py:702-707`), and the route then raised
+`sqlalchemy.exc.MissingGreenlet` at `_evidence_view` (`spec.py:926` → `:1110`): **a bare 500**. The
+rollback expires every loaded instance (`expire_on_commit=False` does not cover a rollback —
+`turn_scheduler.py:402-404` says the same), and the route reads the expired `evidence` and `review`
+to build its answer. The agent-plane route reads `evidence.id` after the same call
+(`agent_actions.py:1354-1357`) and fails the same way. R1's "200" was measured with no task waiting,
+so the raise it staged was never reached.
+
+The fix: both decision routes build their response **before** calling
+`integrate_what_was_waiting_for_this_evidence` (operator: `view = _evidence_view(evidence,
+latest_review=review)`; agent plane: the two plain values) and return it afterwards. Integration
+changes no field either response carries. Any later reader in those routes (the `spec_updated`
+broadcast `the-coverage-bar-takes-the-evidence-decision-it-asks-for` adds) uses the captured id.
+Carried here because D1 adds a refusal to the same two routes and the coverage bar's Accept (the
+same bundle) consumes the response: a 500 on a decision that stood is what it would render. It is a
+new defect; the orchestrator should file it as a finding carried by this change.
 
 ## Risks
 
@@ -146,3 +179,10 @@ list (`agent_actions.py:1248-1305`) spreads `_evidence_view` and inherits it.
   placement (after all three existing refusals), D2's footprint re-apply (must pass
   `outside_writes`), and answered Open Question 2 as D5. The agent-plane list already spreads
   `_evidence_view` (`agent_actions.py:1296`), so D4 reaches it with no extra edit.
+- **R3, 2026-09-24.** Re-derived without R2's notes. **Ran** the decision route under a raising
+  integration with a task actually waiting: it answers **500** (MissingGreenlet after the wrapper's
+  rollback), decision committed — R1's 200 never reached the raise. Added **D6** (build the response
+  before integrating). D2 now looks for **this run's** matching row first (`duplicate_of` returns the
+  oldest match, which in D5's own new-turn case is the previous run's). D5 keys on the run's recorded
+  directory, not `footprint_root`'s fallback. D1's placement, D2's `outside_writes` and digest guard,
+  D3, D4 and the registry-popped-after-restamp ordering all re-derived and hold.

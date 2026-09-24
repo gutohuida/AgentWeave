@@ -9,6 +9,8 @@
 4. **A same-turn re-record revises instead of refusing.** 1.7 fails today; 1.8 (different runs) keeps
    refusing; 1.9 (reworded requirement) makes a new row.
 5. **The agent is not told to commit.** 1.10.
+5a. **A second record in a new, dirty turn revises that turn's row.** 1.7b.
+5b. **A merge failure after a decision does not 500 the decision.** 1.14 — fails today (measured).
 6. **The live trial** (3.1), with the 409 body recorded verbatim.
 
 ## Human-only

@@ -35,8 +35,8 @@ F358 names two more costs, both from the same window:
   sentence names the run and says the refusal clears itself when the run ends, because that is when
   the footprint is final. Both decision routes (`api/v1/spec.py:892`, `api/v1/agent_actions.py:1309`)
   already map `exc.http_status`; they need no new branch.
-- **A re-record in the same live run revises the undecided row** (design D2). Where `duplicate_of`
-  finds a row recorded **by the same run**, `record` updates that row's `kind`, `locator` and
+- **A re-record in the same live run revises the undecided row** (design D2). Where a matching row
+  recorded **by the same run** exists (looked up by run, not taken from `duplicate_of`'s oldest match), `record` updates that row's `kind`, `locator` and
   `summary` in place and re-reads its footprint, and answers with the same id and `revised: true`,
   instead of refusing. Under D1 such a row cannot have been decided, so nothing judged is rewritten.
 - **The cross-run duplicate refusal stops telling an agent to commit** (design D3). For an agent the
@@ -45,6 +45,13 @@ F358 names two more costs, both from the same window:
 - **The views say a row is still being recorded** (design D4). `_evidence_view` gains
   `recording_run_live: bool`, so a screen can hold its decision controls instead of learning from a
   409.
+- **A changed checkout in a new turn is not a duplicate** (design D5, R2). On the duplicate path only,
+  an agent whose run's own task or agent checkout holds uncommitted changes records a new row, which
+  the end-of-turn snapshot re-points at a new commit. Review checkouts and the project checkout keep
+  the refusal.
+- **A decision is answered as recorded when the merge after it fails** (design D6, R3). Both decision
+  routes answer **500** today when integration waiting on the evidence raises — the wrapper's
+  rollback expires the rows the response is built from (measured). They build the response first.
 
 ## Out of scope
 

@@ -111,3 +111,9 @@ Otherwise unchanged.
   claims hold. Decided the sharing (`merge_situation`, public, wrapped with the probe — R1 wrapped only
   the probe, but the preconditions raise the same way). Traced the gate's unwrapped git calls to a
   500 on every approval surface; left as a candidate finding. Measured the probe (Open Question 1).
+- **R3, 2026-09-24.** Re-derived: `task_integration._git` is an unwrapped `subprocess.run(timeout=60)`
+  (`:136-145`); `_merge_situation` has one call site (`requirement_gate.py:618`; tests name it only in
+  docstrings); the app has exactly two exception handlers (`main.py:532`, `:544`), so R2's
+  approval-surface 500 stands as traced. With the footprint change's D4 in `merge_targets`, the
+  preview (through `merge_situation`) probes the list approval merges; `is_reachable_from` is
+  wrapped, so D4 adds no raise inside the preview's wrap. No claim disagreed; nothing changed.

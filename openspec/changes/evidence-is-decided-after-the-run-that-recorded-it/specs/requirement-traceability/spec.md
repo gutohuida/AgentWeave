@@ -62,3 +62,24 @@ Hub re-points it at the commit holding those changes when the run ends.
 
 - **WHEN** an agent's new run records evidence matching a piece its earlier run recorded at the same commit, in a task or agent checkout the Hub commits at the end of the run, and that checkout holds uncommitted changes
 - **THEN** the new piece is recorded and not refused
+
+#### Scenario: A second record in a new turn revises that turn's own piece
+
+- **WHEN** an agent's new run, with uncommitted changes, records a piece matching its earlier run's piece at the same commit and then records the same demonstration again in the same run
+- **THEN** the new run's piece is revised
+- **AND** exactly two pieces exist, one per run
+
+### Requirement: A decision is answered as recorded even when the merge it triggers fails
+
+The Hub SHALL answer an accepted or rejected decision with the decision it recorded, even when integrating the work that was waiting for that decision fails.
+
+Accepting evidence may merge an approved task's waiting work, and a repository failure there is
+recorded as a skip rather than undoing the decision. The response SHALL NOT turn that failure into
+a server error, because the decision stands and a client told otherwise would show a failure for a
+decision that was made.
+
+#### Scenario: An integration failure after accepting still answers the decision
+
+- **WHEN** the operator or a granted agent accepts a piece of evidence that an approved task was waiting for, and integrating that task fails
+- **THEN** the response reports the piece as accepted
+- **AND** the stored piece reads accepted

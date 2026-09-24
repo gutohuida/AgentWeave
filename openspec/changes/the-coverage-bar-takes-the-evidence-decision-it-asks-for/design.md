@@ -18,8 +18,12 @@ mid-run decision simply succeeds as it does today.
 - `POST /spec/evidence/{id}/decision {decision, reason}` → 200 `_evidence_view` with the new review;
   404 for an id of another project; 422 `unknown_decision`; 403 for the grant (never, for the
   operator); after this bundle's F358 change, 409 `recording_run_live`. When integration after the
-  decision raises, the route still answers 200 with the decision standing — **measured in R1** (a
-  scratch test made `retry_integration` raise; 200, `review_state: accepted`, stored `accepted`).
+  decision raises **with a task actually waiting**, the route answers **500 today** while the
+  decision stands (stored `accepted`) — **measured by R3**; R1's 200 was measured with nothing
+  waiting, so the raise was never reached. `evidence-is-decided-after-the-run-that-recorded-it` D6
+  fixes it (the response is built before integrating). Until that lands, D2's error rendering shows
+  a failure for a decision that was recorded; the refetch on the next `spec_updated` or reopen
+  corrects the row.
 
 ## D1 — where the decision lives
 
@@ -81,8 +85,11 @@ recorded by run <id>; decide once it ends"*.
 ## What each route returns when what it calls raises
 
 - Decision route: `decide` raising → mapped status, nothing committed, no broadcast. Integration
-  raising → caught (`task_integration.py:700-706`), 200. The broadcast goes **after** integration so
-  a subscriber's refetch sees any merge; `sse_manager.broadcast` does not raise on a slow consumer
+  raising → caught (`task_integration.py:700-706`) and rolled back, which expires the loaded rows;
+  today the route then 500s reading them (R3, measured). With the F358 change's D6 the response is
+  built before integrating, and **this change's broadcast must carry the id captured before the
+  integration call**, never `evidence.id` read after it — reading it after is the same 500. The
+  broadcast goes **after** integration so a subscriber's refetch sees any merge; `sse_manager.broadcast` does not raise on a slow consumer
   (`sse.py:91-94`).
 - List route: `_requirement` → 404/422; the component shows the sentence in place of the list.
 
@@ -120,3 +127,8 @@ recorded by run <id>; decide once it ends"*.
   4 — rule); relabelled *latest* = most recently recorded. Open Question 2 answered. B6's edits to
   `SpecCoverageBar.tsx` (one *Drifting* string; a panel mounted beneath) and `SpecPhaseBar.tsx`
   (rigor select and history) touch no region this change edits.
+- **R3, 2026-09-24.** Re-derived the list route's order (`for_requirement`, `produced_at` then id),
+  the missing broadcasts and the query keys — hold. **Ran** the decision route under a raising
+  integration with a task waiting: **500**, decision stored (R1's 200 did not reach the raise). The
+  fix is carried by the F358 change (D6); this change's broadcast is told to use the captured id, and
+  task 1.1a pins it.

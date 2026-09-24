@@ -2,7 +2,7 @@
 
 - [x] 0.1 R1: explore and propose (2026-09-24, bundle B5)
 - [x] 0.2 R2: independent re-derivation against `tasks.py` (`task_integration_preview`), `requirement_gate.py` (`_merge_situation`, `_check_mergeable`), `task_integration.py` (`merge_targets`, `would_conflict`, `_git`), `TaskDetailDrawer.tsx`, `api/tasks.ts`. Decide D1's sharing; trace the approval route's answer when the gate's own `would_conflict` raises; answer Open Question 1
-- [ ] 0.3 R3: second independent re-derivation; `openspec validate the-approval-preview-asks-the-gates-merge-question --strict` passes
+- [x] 0.3 R3: second independent re-derivation; `openspec validate the-approval-preview-asks-the-gates-merge-question --strict` passes
 - [ ] 0.4 The operator answers D12's second question (recommended: not persisted; the preview asks live) and approves
 
 ## 1. Tests first — each fails on today's code unless marked as a control

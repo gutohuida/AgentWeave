@@ -2,7 +2,7 @@
 
 - [x] 0.1 R1: explore and propose (2026-09-24, bundle B5)
 - [x] 0.2 R2: independent re-derivation against `agents.py` (`patch_agent`, `register_agent`, `_merge_patch`), `worktrees.py` (`is_writing_agent`, `resolve_turn_workspace`, `snapshot_worktree`), `api/v1/worktrees.py` (`get_agent_workspace`, `_task_checkouts`), `run_liveness.py`, and any other writer of `Agent.config` (grep `\.config =`). Decide assigned-vs-provisioned; answer design Open Question 1's filing
-- [ ] 0.3 R3: second independent re-derivation; `openspec validate isolation-does-not-change-under-held-work --strict` passes
+- [x] 0.3 R3: second independent re-derivation; `openspec validate isolation-does-not-change-under-held-work --strict` passes
 - [ ] 0.4 The operator answers D12's first question (recommended: refuse under held work) and approves
 
 ## 1. Tests first — each fails on today's code unless marked as a control

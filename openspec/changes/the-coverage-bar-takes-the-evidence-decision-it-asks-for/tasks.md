@@ -2,12 +2,13 @@
 
 - [x] 0.1 R1: explore and propose (2026-09-24, bundle B5)
 - [x] 0.2 R2: independent re-derivation against `SpecCoverageBar.tsx`, `SpecDocumentPanel.tsx`, `api/spec.ts` (`useSpecEvents`), `api/tasks.ts` (every task-scoped query key), `spec.py` list/decision routes, `agent_actions.py` decision route, `sse.py`. Confirm the list route's order; confirm neither decision route broadcasts today; answer design Open Question 2
-- [ ] 0.3 R3: second independent re-derivation; `openspec validate the-coverage-bar-takes-the-evidence-decision-it-asks-for --strict` passes
+- [x] 0.3 R3: second independent re-derivation; `openspec validate the-coverage-bar-takes-the-evidence-decision-it-asks-for --strict` passes
 - [ ] 0.4 The operator approves (APPROVALS.md)
 
 ## 1. Tests first — each fails on today's code unless marked as a control
 
 - [ ] 1.1 (D3, backend) `hub/tests/test_evidence_decision_is_announced.py`: capture broadcasts by patching `hub.api.v1.spec.sse_manager.broadcast` (and `hub.api.v1.agent_actions.sse_manager.broadcast`) with a recording coroutine, the pattern in `test_a_flow_names_what_it_cannot_staff.py:997`, decide a piece through `POST /spec/evidence/{id}/decision`, assert one `spec_updated` event carrying the evidence id. The same through the agent plane with a granted agent. FAILS today (no event)
+- [ ] 1.1a (D3, R3) With the F358 change's test 1.14 staging (an approved task waiting, integration raising), the decision still broadcasts one `spec_updated` carrying the evidence id and answers 200. FAILS if the broadcast reads `evidence.id` after the integration call
 - [ ] 1.2 (D1, UI) `hub/ui/src/__tests__/evidencePieces.test.tsx`: mock `GET /spec/evidence?identifier=FR-1&document=…` returning **two awaiting pieces oldest first** (the route's order). Assert both render with summary, actor, `commit_sha[:12]` and branch, and that the *latest* label is on the **second** (the most recently produced). Reversing the fixture must fail the label assertion. FAILS today (component absent)
 - [ ] 1.3 (D1) Accept posts `{"decision":"accepted","reason":""}` to `/spec/evidence/<id>/decision` for the clicked piece
 - [ ] 1.4 (D1) Reject is disabled with an empty reason; with a reason it posts `{"decision":"rejected","reason":…}`

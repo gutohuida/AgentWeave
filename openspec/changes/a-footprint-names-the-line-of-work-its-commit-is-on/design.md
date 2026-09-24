@@ -137,13 +137,22 @@ path (`api/v1/tasks.py:1122`). So:
 
 - `merge_targets(session, task, root)`, governed path: take `integration_targets`' per-branch list
   **before** its reduction (a private `_accepted_targets` both share), and reduce with the ancestry
-  rule — an incoming target **replaces** its branch's incumbent unless the incoming commit is an
-  ancestor of the incumbent's (`requirement_evidence.is_reachable_from(root, incoming,
-  incumbent_commit) is True`; the third argument accepts a sha, since it is `rev-parse --verify`'d
+  rule — an incoming target **replaces** its branch's incumbent unless the incoming commit is a
+  **proper** ancestor of the incumbent's (a different sha, and `requirement_evidence.is_reachable_from(root, incoming,
+  incumbent_commit) is True`. R3: *proper*, because `merge-base --is-ancestor X X` succeeds, so a bare
+  ancestry test would keep the **older** row for two footprints of one commit where today the newer
+  observation wins — changing which `evidence_id` the gate's `unmergeable` entry names, `requirement_gate.py:448-452`; the third argument accepts a sha, since it is `rev-parse --verify`'d
   then passed to `merge-base --is-ancestor`, `:587-612`); where neither contains the other (a
   rebase), the newer observation wins as today. `None` from the probe is "not an ancestor".
 - `integration_targets` keeps its observation-order reduction and its pure-database contract, for
   any caller without a repository.
+- **It fires from the real approval path (R3, traced).** `PATCH /tasks/{id} {"status":"approved"}` →
+  `task_transition_service.transition` → `evaluate` → `requirement_gate._merge_situation` →
+  `merge_targets` (the conflict probe, `requirement_gate.py:417`), then on acceptance
+  `integrate_task` → `merge_targets` (`task_transition_service.py:714`, `:883`) → `integrate` per
+  target; an evidence decision's `retry_integration` → `integrate_task` (`:801-824`) takes the same
+  list. No merging caller reads `integration_targets` directly. Task 1.5b pins the route, not only
+  the function.
 - **The preview's governed path switches to `merge_targets`** (resolving the workspace, wrapped as
   its ungoverned path already is, `tasks.py:1126-1129`), so the list the drawer shows is the list
   approval merges. This is one step of `the-approval-preview-asks-the-gates-merge-question`'s D1;
@@ -198,3 +207,10 @@ what `branch` means), then B6's.
   `integration_targets` to `merge_targets` (the documented pure-database contract; every merging
   caller already uses `merge_targets`) and made the preview's governed path use it. Migration number
   made "next free" (0106 is claimed four times). Open Question 1 answered.
+- **R3, 2026-09-24.** Re-derived D4 from the approval route down: every merging path (gate probe,
+  `integrate_task`, `retry_integration`, prerequisites) goes through `merge_targets`, so the move
+  fires in production. One correction: the reduction keeps a newer observation of the **same**
+  commit (a *proper*-ancestor test), so today's evidence-id choice is unchanged where no ancestry is
+  at stake. `is_reachable_from` is wrapped (`None` on failure), so D4 adds no raise to the gate.
+  D1-D3, `line_of_work`, `read_footprint`'s signature and the `read_evidence_footprint` seam are
+  **unchanged** (B6 builds on them).

@@ -2,7 +2,7 @@
 
 - [x] 0.1 R1: explore and propose (2026-09-24, bundle B5)
 - [x] 0.2 R2: an independent re-derivation against `requirement_evidence.py` (`record`, `duplicate_of`, `decide`, `restamp_run_footprints`), `run_liveness.py`, `agent_trigger.py`'s finalize order, both decision routes and both record routes. In particular: is the registry entry really popped only after the restamp commit (re-read `_execute_run` and the app-server path); does D2's digest guard agree with `requirement_coverage`'s staleness; answer design Open Question 2
-- [ ] 0.3 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate evidence-is-decided-after-the-run-that-recorded-it --strict` passes
+- [x] 0.3 R3: a second independent re-derivation, not starting from R2's notes. `openspec validate evidence-is-decided-after-the-run-that-recorded-it --strict` passes
 - [ ] 0.4 The operator approves (APPROVALS.md)
 
 ## 1. Tests first — each fails on today's code unless marked as a control
@@ -22,6 +22,8 @@ New file `hub/tests/test_evidence_waits_for_its_run.py`. Stage liveness the way 
 - [ ] 1.12 (D5) As 1.8, but the second run's checkout has an uncommitted change → the second record answers 201 with a new id; two rows exist. FAILS today (409 `duplicate_evidence`)
 - [ ] 1.12a (D5) As 1.12, but the run is a review turn in a review checkout (dirty) → still refused `duplicate_evidence`. Control, passes before and after; FAILS if D5 ignores the snapshot condition
 - [ ] 1.13 (D5) Control: an operator records the same duplicate with a dirty checkout → still refused, and the message still says `commit it first`
+- [ ] 1.7b (D2, R3) Run A records FR-1 (clean) and ends (its row re-pointed at its snapshot). Run B, same agent and task, starts at that snapshot with an uncommitted change: records FR-1 (D5 → new row), then records FR-1 again with a new summary → **200** `revised: true` on **B's** row; exactly two rows exist (A's, B's). FAILS if D2 checks the same-run condition on `duplicate_of`'s oldest match (a third row appears)
+- [ ] 1.14 (D6, R3) Both decision routes, with an approved task waiting on the evidence and integration raising: patch `task_integration.tasks_awaiting_this_commit` to **load** that `Task` through the session it is given (so a transaction is open, as in production) and `task_transition_service.retry_integration` to raise. Operator `POST /spec/evidence/{id}/decision {"decision":"accepted"}` → **200**, `review_state: accepted`; a granted agent's `POST /agent-actions/spec/evidence/{id}/decision` → **200**; the stored row reads `accepted`. FAILS today (`MissingGreenlet` at `spec.py:926`, a 500 — measured by R3). A stub that returns a task without querying does not open a transaction and passes on today's code: not evidence
 - [ ] 1.11 Run `test_requirement_evidence.py`, `test_conflict_refusal_names_what_clears_it.py`, `test_approval_waits_for_the_turn.py`, `test_review_briefing_names_the_evidence_gate.py` before group 2 and record the counts
 
 ## 2. The fix
@@ -31,6 +33,8 @@ New file `hub/tests/test_evidence_waits_for_its_run.py`. Stage liveness the way 
 - [ ] 2.3 (D2) `agent_actions.record_evidence`: 200 with `revised: true` when revised; still broadcasts `spec_updated`
 - [ ] 2.4 (D3) The agent sentence in the duplicate refusal
 - [ ] 2.4a (D5) The agent-only dirty-checkout pass on the duplicate path, using this module's `_git`
+- [ ] 2.4b (D2, R3) The same-run lookup: `duplicate_of` gains `run_id=` (or a sibling query) so this run's matching row is found before the oldest match; D5's recorded-directory condition reads `Run.workspace_dir` (`recorded_workspace_dir`), not `footprint_root`
+- [ ] 2.4c (D6) Both decision routes build their response before `integrate_what_was_waiting_for_this_evidence` and return it after
 - [ ] 2.5 (D4) `_evidence_view` and the agent-plane record response gain `recording_run_live`
 - [ ] 2.6 `mcp_server.py`: `record_evidence` docstring says a same-turn re-record revises; `decide_evidence` docstring names `recording_run_live` and says to decide after the run ends. Read `.claude/rules/mcp-server.md` first (stdlib + fastmcp only)
 - [ ] 2.7 Group 1 passes; the 1.11 counts are unchanged except the tests this change moved; ruff, black `--target-version py311`

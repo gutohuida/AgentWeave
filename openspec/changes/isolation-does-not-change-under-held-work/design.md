@@ -98,3 +98,9 @@ deletes the guard with the route. B3's design already records this (its *Cross-b
   (`:2489`), none of which touches `read_only`. Kept "assigned" over "provisioned" (the turn-on
   direction has no checkout to count). Open Question 1: (d), routed as a candidate finding. No
   claim disagreed with the code.
+- **R3, 2026-09-24.** Re-derived: `patch_agent` merges `config` before any check (`agents.py:2648-2659`);
+  `get_session` never commits on exit (`db/engine.py:166-169`), so raising before `session.commit()`
+  refuses the body whole even though earlier fields were already set on the row; `is_writing_agent`
+  (`worktrees.py:226-230`), `run_liveness.live_run_ids` (`:64`) and `TERMINAL_STATUSES`
+  (`task_transition_service.py:736`) exist as the helper assumes; `takes_task_workspace` gives
+  `read_only` precedence over the task (`worktrees.py:763-773`). No claim disagreed; nothing changed.
