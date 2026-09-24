@@ -84,6 +84,8 @@ with `## Operator review, 2026-09-24`). The 2026-09-23 rows below remain undecid
 - APPROVED  the-operator-can-rename-a-task   B3 (F125). Its own `useRenameTask` (renaming a blocked task works); `title: null` is refused. UI bundle together with its backend.
 - APPROVED  pressing-run-names-the-reason-that-held   09-23 (F400, F373). **B1's prerequisite: build first among B1's chain.** Review fix: the busy re-ask is unconditional below the skipped/failed arms; the stale-409-to-500 race is named in Risks. F411, F412 and F413 stay separate.
 
+ORDER: F133, an-agents-tool-server-is-the-one-its-hub-loaded, pressing-run-names-the-reason-that-held, a-checkpoint-is-handed-over-once-and-says-where-it-went, an-event-is-announced-only-once-its-write-is-committed, run-id-in-an-event-always-names-a-run, a-flows-own-moves-are-recorded-as-the-flows
+
 ## 2026-09-23
 
 Review page: `review/review-2026-09-23.html`. **Written by the day window, not the DECIDE session —
