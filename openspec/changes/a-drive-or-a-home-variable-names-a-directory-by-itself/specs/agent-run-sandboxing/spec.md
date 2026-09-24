@@ -50,12 +50,22 @@ shell will not expand, because it is quoted literally or escaped, is text and SH
 whose text before its first expansion is the parent directory starts in the parent whatever the
 expansion yields, and SHALL be refused as uncheckable.
 
-In PowerShell, a word made of one drive letter and a colon, optionally followed by a name with no
-separator, names that drive's current location, and SHALL be judged by where it resolves: on
+In PowerShell, and in either dialect on a platform with drive letters (where a Bash command hands
+its words to native programs too), a word made of one drive letter and a colon, optionally followed
+by a name with no separator, names that drive's current location, and SHALL be judged by where it
+resolves: on
 another drive it is outside the workspace, on the workspace's own drive it is the directory the
 shell runs in. PowerShell's temporary drive SHALL be judged as the temporary directory. A word with a
 second colon, or a longer name before the colon, such as a revision and a path, is not a drive. In
-bash these words are ordinary names.
+bash on a platform without drive letters these words are ordinary names.
+
+The home-directory shorthand after a colon in a word's value, such as `of=c:~`, SHALL be refused as
+uncheckable, because a shell expands it there in an assignment-shaped word. A separator-less word or
+option value that is a glob pattern beginning with two dots and able to match the parent directory,
+such as `..*`, SHALL be judged as the parent directory, because a shell that does not skip the dot
+entries expands it to include the parent. A pattern beginning with one dot, such as `.*`, is not
+judged this way when it has no separator: it is as often a quoted regular expression, which the
+judge cannot tell from a glob.
 
 This requirement does not claim that every other separator-less word stays inside the workspace. A
 reference to any other variable, and a command substitution, become a directory only when the shell
@@ -160,6 +170,24 @@ it stays inside.
   following name, and that drive is not the workspace's drive
 - **THEN** the command is refused
 - **AND** the reason names the word with its colon
+
+#### Scenario: A glob that can match the parent directory is judged as the parent
+
+- **WHEN** a shell command names a separator-less word such as `..*`, or a brace pattern expanding
+  to one such as `.{,.}*`
+- **THEN** the command is refused as outside the workspace
+- **AND** a separator-less `.*` does not make the command refused
+
+#### Scenario: The home-directory shorthand after a colon is refused as uncheckable
+
+- **WHEN** a bash command names a separator-less word such as `of=c:~` or `PATH=a:~`
+- **THEN** the command is refused with a reason saying where it points cannot be checked
+
+#### Scenario: Another drive is outside in a Bash command on a platform with drive letters
+
+- **WHEN** on a platform with drive letters, a Bash command names a word that is a drive letter and
+  a colon, and that drive is not the workspace's drive
+- **THEN** the command is refused
 
 #### Scenario: A revision with a colon is not a drive
 

@@ -10,12 +10,13 @@
 - [ ] 1.3 F402 `Temp:`: PowerShell `Copy-Item x Temp:` refused as outside, with `TMP`/`TEMP` monkeypatched to a directory outside the workspace; FAILS today
 - [ ] 1.4 F401, refused as uncheckable (reason contains "cannot be checked", not "outside"), each FAILS today: Bash `cp notes.md $HOME`, `"$HOME"`, `${HOME}`, `$OLDPWD`, `$TMP`, `--target-directory=$HOME`, `cp x %USERPROFILE%`; PowerShell `Copy-Item x $HOME`, `$env:USERPROFILE`, `$ENV:temp`, `-Destination:$HOME`; Bash `cp notes.md ..$x` and `..$(echo)`; (R2) Bash `cp x $HOME.bak`, `cp x $PWD..`, `cp x ${HOME-y}`
 - [ ] 1.5 F401 controls that must stay allowed, each PASSES today and names the rule it catches: `echo $x`, `for f in $files; do echo $f; done`, `test -n "$VAR"`, `echo $HOMEDIR` (a prefix match), `echo '$HOME'` (the literal `$`), `cp x $(dirname $PWD)` (D5 leaves substitutions), and the commit heredoc `git commit -m "$(cat <<'EOF'` / `fix` / `EOF` / `)"`
+- [ ] 1.5b (R3, design D4), each FAILS today (allowed): Bash tool on Windows `python w.py <other>:` and `powershell -c 'Copy-Item x <other>:'` refused as outside; `dd if=x of=c:~` and `echo PATH=a:~` refused as uncheckable (both platforms); `cp x ..*` and `cp x .{,.}*` refused as outside (the second needs the sibling change's brace step; skip it if that has not landed). Controls that stand: `grep '.*' f`, `ls -d .*` (the `.*` residual), Bash `cp notes.md C:` with the workspace on C (Windows)
 - [ ] 1.6 Update the `_decide` docstring assertion if any test pins its text; rows R5, R6 and X3b keep their answers
 
 ## 2. The fix
 
 - [ ] 2.1 `_words(arguments, dialect)` and `_PS_DRIVE_RE`, keeping the colon for a bare drive and for a colon-joined option whose value is a drive (design D1, R2); pass the dialect from `_read_command` (`hub/hub/mcp_server.py:1521`)
-- [ ] 2.2 Rule 4: the drive check, then `_DIRECTORY_VARIABLE_RE[dialect]` and the `..`-prefix check on the whole word and on an option's joined value (design D2, D3); a comment naming F401, F402 and D5
+- [ ] 2.2 Rule 4: the drive check (PowerShell on any host, bash on a Windows host — design D4), the `~` after a colon, the `..`-glob, then `_DIRECTORY_VARIABLE_RE[dialect]` and the `..`-prefix check on the whole word and on an option's joined value (design D2, D3); a comment naming F401, F402 and D5
 - [ ] 2.3 Extend `_decide`'s docstring: a bare reference to any other variable, and a substitution, are not judged
 - [ ] 2.4 Run the judge's test files and the full `hub/tests/` with `claude` off PATH; record counts. Expected moves: exactly group 1's new rows
 - [ ] 2.5 ruff and black as in CLAUDE.md

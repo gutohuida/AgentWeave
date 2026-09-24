@@ -58,10 +58,11 @@ existing trim applies. Rule 4 then checks, before its option handling:
 - **R2: with a separator after the drive** (`Z:foo\bar`, `-Destination:Z:foo\bar`) the word is
   not rule 4's; today rule 6 refuses it by its tail (`'\\bar'`). `the-shell-judge-reads-a-word-whole`
   (design D2 step 3) keeps that refused when it replaces rule 6, by not breaking at a drive colon in
-  the PowerShell reading. The two changes agree on one meaning of `Z:` in PowerShell.
+  the PowerShell reading (R3: and in the bash reading on a Windows host). The two changes agree on
+  one meaning of `Z:` per platform.
 
 `s:a:b` (a second colon) and `HEAD:README.md` (more than one letter, not `Temp`) do not match and
-stand, meeting F402's constraint. Bash is unchanged (F402: Git Bash wrote a file named `C:`).
+stand, meeting F402's constraint. Bash is unchanged on a POSIX host (F402: Git Bash wrote a file named `C:`); on Windows see D4 (R3).
 
 ### D2 — A directory variable, referenced alone, is uncheckable (F401)
 
@@ -94,6 +95,33 @@ reference, and a quoted reference is text.
 In rule 4, a word (or option value) whose text before its first `$`, `_SUBSTITUTION` or `%` is
 exactly `..` is refused as uncheckable. Git Bash (F403, R2 of F375): `cp notes.md ..$x` with `x`
 unset landed in the parent. No ordinary word starts `..$`.
+
+### D4 (R3) — three separator-less shapes the same rule must cover
+
+R3 looked for words rule 4 still allows after D1-D3 that name a directory by themselves:
+
+- **The drive reading is keyed on the platform, not only the dialect.** On a Windows host the Bash
+  tool hands words to native programs and to nested PowerShell (`powershell -c 'Copy-Item x Z:'`,
+  `python w.py Z:`; both allowed today, measured at `b66f6a6`), which read `Z:` as drive Z. So D1's
+  drive words are judged in the bash reading too when `os.sep == "\\"`. Git Bash's own `cp x Z:`
+  writing a file named `Z:` becomes a harmless false refusal; `cp notes.md C:` with the workspace on
+  C still stands (`_where` joins `C:` to the root). `the-shell-judge-reads-a-word-whole` D2 step 3
+  makes the same call for a drive with a separator after it; the two changes keep one meaning of
+  `Z:` per platform. On POSIX, bash is unchanged.
+- **`~` after a colon.** Bash expands a tilde prefix after `:` in an assignment-shaped argument
+  (measured in Git Bash 5.2.37: `echo of=c:~/y` prints `of=c:/c/Users/huida/y`), so `dd if=x
+  of=c:~` names the home directory. `_words` splits at `=`, leaving `c:~`, which rule 4 allows (and
+  D1's drive reading would judge `c:~` as inside drive C). So the `~` check also applies to the text
+  after the value's last `:` (`_TILDE_PREFIX_RE.fullmatch`), refused as `_UNCHECKED`. Cost:
+  `git show HEAD:~` — none in practice.
+- **A separator-less glob beginning with `..`.** `cp x ..*` and `cp x .{,.}*` (after
+  `the-shell-judge-reads-a-word-whole`'s brace expansion) are allowed today; with `globskipdots`
+  off (bash before 5.2, e.g. Ubuntu 22.04's 5.1), `..*` matches `..`. A value that begins with `..`,
+  holds `*`, `?` or `[`, and satisfies `fnmatch.fnmatchcase("..", value)` is judged as `..` (the
+  sibling change's D3, applied to rule 4). **`.*` and `.?` are deliberately left out** when
+  separator-less: they are as often a quoted regular expression (`grep '.*' f`), which the judge
+  cannot tell from a glob because the lexer does not mark a quoted `*`. Named residual:
+  `chmod -R x .*` on bash 5.1 reaches the parent. This is part of the D5 answer the operator gives.
 
 ### Totality
 

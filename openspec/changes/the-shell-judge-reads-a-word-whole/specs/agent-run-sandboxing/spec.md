@@ -43,6 +43,14 @@ a revision or a field name, or after a leading short option. A separator that co
 not the start of a path, and the part of a relative word after such a separator SHALL NOT be judged
 as a path of its own. Each piece read this way SHALL be judged as the path it spells, resolved
 against the workspace, and so SHALL the word with the quotes an inner shell would remove taken out.
+Because an inner shell also removes a backslash before any character, every word holding a
+backslash SHALL also be judged with those escapes removed, whether or not it reads as a plain path.
+On a platform with drive letters, a letter and a colon that begin a word or a piece name that drive
+in every dialect, because a program the shell starts reads them so; that colon SHALL NOT divide
+them. A piece that begins with the home-directory shorthand, or a drive whose path begins with it,
+SHALL be refused as uncheckable, because a shell expands the shorthand after a colon in an
+assignment-shaped word. A word holding a provider qualifier (`Provider::path`) SHALL NOT be read as
+a plain relative path; the path after the qualifier is judged.
 
 A glob pattern in a path is judged as the names it can match. A component that can match the parent
 directory SHALL be judged as the parent directory.
@@ -153,6 +161,32 @@ answered. An error in place of an answer is not a decision.
 - **WHEN** a bash command redirects to or names the null device or a standard stream
 - **THEN** that word does not make the command refused
 - **AND** a PowerShell command naming the same path is still judged as a path
+
+#### Scenario: Another drive glued to a relative path is refused in either dialect
+
+- **WHEN** on a platform with drive letters, a Bash or PowerShell command names a letter, a colon
+  and a relative path with a separator, such as `Z:foo/bar`, where the letter is not the
+  workspace's drive
+- **THEN** the command is refused as outside the workspace
+- **AND** the reason names the drive with its path
+
+#### Scenario: The home-directory shorthand after a colon is refused as uncheckable
+
+- **WHEN** a bash command names a word such as `of=c:~/y`, whose piece after a colon begins with the
+  home-directory shorthand
+- **THEN** the command is refused with a reason saying where it points cannot be checked
+
+#### Scenario: A backslash an inner shell removes is judged as removed
+
+- **WHEN** a command hands an inner shell a quoted word such as `.\./x`, which that shell reads as
+  `../x`
+- **THEN** the command is refused
+
+#### Scenario: A provider-qualified path is judged by the path it names
+
+- **WHEN** a PowerShell command names `Microsoft.PowerShell.Core\FileSystem::` followed by a path
+  outside the workspace
+- **THEN** the command is refused
 
 ## ADDED Requirements
 

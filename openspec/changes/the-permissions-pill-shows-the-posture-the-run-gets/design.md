@@ -32,6 +32,16 @@ it returns). `build_command` (`:238-242`) computes `default_posture` through it;
 same posture produces as an explicit override (the approver flag included) — so a change to either
 side fails it.
 
+**R3: the equivalence holds for two of three postures as argv, not for `yolo`.** The override
+renders `control_args` where they are spliced, before `--mcp-config` (`runner_commands.py:216`),
+while the default appends `--permission-mode` near the end (`:275-282`), so the comparison is of the
+multiset of flag/value pairs, not the list. And a `yolo` run at rest emits
+`--dangerously-skip-permissions` (`:276`) while an explicit `bypassPermissions` renders
+`--permission-mode bypassPermissions` (`model_catalog.py:232`): the same Claude posture, different
+argv. Task 1.2 asserts pair-equality for `workspace` and `acceptEdits`, and for `yolo` asserts
+`posture_at_rest(...) == "bypassPermissions"` and that the at-rest argv holds
+`--dangerously-skip-permissions` and no approver flag.
+
 ### D2 — The agents list carries `permission_mode_at_rest`
 
 The list route already resolves the bound runner (`agents.py:548`, `bound_runner.cli`; config merged at `:534`) and holds
@@ -47,7 +57,18 @@ session.json sets a top-level `hub_client: "cli"`, the list would say `workspace
 spawns `acceptEdits`: the drift this change exists to end. Build: extract that fallback into one
 pure helper in `launchability.py` (`effective_hub_client(meta, session_data)`), used by
 `get_agent_config` and by the list route (which already holds `session_data`, `agents.py:296`).
-Task 1.3 gains a row for it. The value is computed by
+Task 1.3 gains a row for it.
+
+**R3 correction — the precedence inside that merge.** `get_agent_config` applies the session-wide
+fallback to the session's per-agent entry **before** laying that entry over `Agent.config`
+(`launchability.py:474-485`: `meta["hub_client"] = session_data["hub_client"]`, then
+`meta = {**agent_row.config, **meta}`), so the session-wide value **beats** a `hub_client` stored in
+`Agent.config`. A helper that merges first and falls back after (the natural reading of
+`effective_hub_client(merged_meta, session_data)`) gets that case backwards. The helper is therefore
+the whole merge, `agent_config(session_data, agent_name, agent_config) -> dict`, lifted out of
+`get_agent_config` unchanged and called by both. Task 1.3 row: `Agent.config` `hub_client: "mcp"`,
+session top-level `"cli"`, no per-agent entry → the spawn uses `cli` → the list reads
+`acceptEdits`. The value is computed by
 `posture_at_rest(catalog_provider_for_runner(cli), resolve_access_path(cli, hub_client), yolo)`.
 Unknown cli → `null`.
 
@@ -62,6 +83,22 @@ unaffected.
 `:393-395`). The Composer keeps sending only `pendingOverrides`, so showing the value records
 nothing (the existing requirement's second half). `PermissionDefaultSetting`
 (`AgentSettingsControls.tsx:178-214`) labels its blank option from the same field.
+
+**R3: there is a third place, and it disagrees today even for an agent that states a default.**
+`NewConversationSurface.tsx:201-218` renders a second `<Composer>` and passes **no**
+`effectiveControls` at all (`Composer.tsx:96` defaults it to `{}`), so its pill reads
+`control.default` for every agent: an agent whose default is "Ask me" shows "Edit files" on the
+surface that starts its conversation, and its first run is spawned under "Ask me"
+(`agent_trigger.py:765-766`). Built only in `AgentOutputPanel`, this change would leave the pill
+wrong on exactly the first message. So the at-rest value is one exported helper,
+`postureAtRest(agentRow)` in `hub/ui/src/api/agents.ts` →
+`{permission_mode: agentRow.default_permission_mode ?? agentRow.permission_mode_at_rest}` or `{}`
+when neither is known, read by **both** composer hosts; the settings select's blank label reads
+`permission_mode_at_rest` through the same module. A grep for `effectiveControls=` then finds one
+source. Server side, `posture_at_rest` is the one function the spawn and the list read. With those,
+every place the posture is shown (the two composer pills, the settings select) and the run agree
+through one helper per side; there is no other display (grep `permission_mode` over `hub/ui/src`:
+`AgentOutputPanel`, `AgentSettingsControls`, `modelCatalog`, `agents.ts` only).
 
 ### D4 — The catalog default is kept, and made true
 

@@ -70,6 +70,16 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
    refused only by the backstop's false filesystem reason (`a-url-is-not-a-path` D3 named this a
    residual). Without this step the whole-word reading would allow them.
 
+7. **(R3) Two regressions R2's rules would have let through are closed in step 2:** on a Windows
+   host a drive letter's colon is not a break in *either* reading (the Bash tool hands
+   `'Z:foo\bar'` to native programs and nested PowerShell; refused today, allowed under R2's bash
+   break), and a piece beginning with `~` after a colon is refused as uncheckable (`dd of=c:~/y`,
+   which bash expands to the home directory; refused today, allowed under R2's pieces).
+8. **(R3) Two escapes allowed today are closed** (design D7): a word holding a backslash is also
+   judged with an inner shell's escapes removed (`bash -c 'cp n .\./x'` writes `../x`), and a
+   PowerShell provider-qualified path (`…\FileSystem::C:\Windows\x`) is not read as a plain
+   relative path.
+
 ## What does not change
 
 - Rules 1 to 5, the lexer's quote and ANSI-C handling, `_where`, `_judge_path` and the
@@ -79,6 +89,13 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 - A word with a separator and an expansion is still refused as uncheckable (rule 3).
 
 ## Residuals, kept on purpose
+
+- (R3) A quoted JSON array of nine or more objects with commas (`curl -d '[{"a":1,"b":2},…]'`) is
+  refused as too many brace alternatives, spaces or not: the one new refusal of ordinary work.
+- (R3) An inner shell's ANSI-C string spelling `..` with no separator
+  (`bash -c "cp n \$'\\x2e\\x2e'"`) is allowed, today and after: rule 4 reads the literal `$'…'`.
+- (R3) `cp x ..*` (separator-less, `..`-capable glob) is rule 4's; carried to
+  `a-drive-or-a-home-variable-names-a-directory-by-itself` D4.
 
 - `cp n '.{,.}'/x` (a file literally named `.{,.}` in a directory): refused, because an inner shell
   would expand the pattern (R2).

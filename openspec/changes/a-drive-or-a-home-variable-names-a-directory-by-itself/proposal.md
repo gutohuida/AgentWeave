@@ -37,7 +37,7 @@ refuses `~` and allows `$HOME` has the incoherence F375 fixed for `..` and `../`
    another drive is outside; the workspace's own drive is the shell's current location, which the
    judge takes to be the workspace root, as it does for every relative word. The same holds for such
    a value joined to a parameter by a colon (`-Destination:Z:`). `Temp:` (PowerShell 7's temporary
-   drive) is judged as the temporary directory. Bash is unchanged: Git Bash writes a file named `C:`.
+   drive) is judged as the temporary directory. Bash is unchanged on a POSIX host; on Windows see step 4 (R3).
 2. **Both dialects: a bare reference to a directory variable is refused as uncheckable (F401).** A
    word that is exactly one reference to a variable the shell or platform defines as a directory —
    `HOME`, `PWD`, `OLDPWD`, `USERPROFILE`, `TMPDIR`, `TMP`, `TEMP`, `APPDATA`, `LOCALAPPDATA` — as
@@ -46,6 +46,11 @@ refuses `~` and allows `$HOME` has the incoherence F375 fixed for `..` and `../`
    already gives. A single-quoted reference (`'$HOME'`) is literal and stands.
 3. **A word whose literal text before its first expansion is `..`** (`..$x`, `..${x}`, `..$(…)`) is
    refused as uncheckable: whatever the expansion yields, the word starts in the parent.
+
+4. **(R3)** On a Windows host the drive reading applies to Bash commands too (they reach native
+   programs and nested PowerShell); a `~` after a colon (`of=c:~`) is refused as uncheckable; and a
+   separator-less glob beginning with `..` (`..*`) is judged as `..`. A separator-less `.*` stays
+   allowed (often a quoted regex). Design D4.
 
 Every other bare expansion stays allowed — `echo $x`, `for f in $files`, `test -n "$VAR"`, and the
 heredoc Claude Code commits with (`git commit -m "$(cat <<'EOF' … EOF)"`), whose argument is one

@@ -43,7 +43,7 @@ existed"* has been false since `72afb3c` (2026-08-13) moved the Claude default t
 2. **The agents list states it per agent**: `AgentSummary` gains `permission_mode_at_rest`, computed
    from the bound runner's cli, the agent's `hub_client` and `yolo`, by that function. It is `null`
    for an agent with no runner bound (there is no run to describe).
-3. **The composer's pill and the settings select read it.** At rest the pill shows
+3. **Both composers' pills and the settings select read it** (R3: the new-conversation surface's composer, `NewConversationSurface.tsx:201`, passes no agent value today and shows the catalog default even for an agent with a stated default), through one UI helper. At rest the pill shows
    `default_permission_mode ?? permission_mode_at_rest ?? control.default`; the select's blank option
    reads "Built-in default (<label of permission_mode_at_rest>)", or "Built-in default (depends on
    the runner)" when none is bound. Nothing is recorded as a choice.

@@ -15,8 +15,10 @@ setting. Writing the posture SHALL update that flag so the two cannot disagree, 
 posture SHALL clear it, since an agent left at full access after full access was cleared would
 contradict what the operator was told.
 
-Where the posture is shown at rest — the composer's permission control — it SHALL show what the run
-will actually do, and showing it SHALL NOT record it as a choice made for that conversation.
+Where the posture is shown at rest — every composer's permission control, including the one that
+starts a new conversation, and the agent's settings — it SHALL show what the run will actually do,
+every such place SHALL derive it the same way, and showing it SHALL NOT record it as a choice made
+for that conversation.
 
 #### Scenario: An unattended run has an answer
 
@@ -41,3 +43,9 @@ will actually do, and showing it SHALL NOT record it as a choice made for that c
 - **WHEN** an agent that states no default posture is shown in the composer or its settings
 - **THEN** the posture shown is the one its next run would be spawned under
 - **AND** showing it does not record it as a choice
+
+#### Scenario: A new conversation shows the posture its first run gets
+
+- **WHEN** the operator starts a new conversation with an agent whose default posture is "Ask me"
+- **THEN** the composer's permission control reads "Ask me" before the first message is sent
+- **AND** an agent with no default reads the posture its runner and configuration would spawn

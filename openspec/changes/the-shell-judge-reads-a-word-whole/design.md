@@ -106,13 +106,26 @@ Rule 6 is replaced. For a word that reached it (a separator, no expansion, not p
    piece is not a break**, so `Z:foo\bar` and `-Destination:Z:foo\bar` keep one piece `Z:foo\bar`,
    which `_where` resolves on drive Z (outside). Without this the `:` break yields `Z` and
    `foo\bar`, both inside, and **two PowerShell writes to another drive, refused today (`'\\bar'`,
-   measured), become allowed**. The bash reading keeps the break (Git Bash writes a file named `C:`,
-   F402). The cost is PowerShell `git show a:src/x.py` (a one-letter revision) refused as drive A,
-   the residual `a-drive-or-a-home-variable-names-a-directory-by-itself` already accepts.
+   measured), become allowed**. **R3: the exception is keyed on the platform, not the dialect** —
+   on a Windows host it holds in the bash reading too (R2 kept the bash break because Git Bash's `cp`
+   writes a file named `C:`, F402). A Bash-tool word also reaches native Windows programs
+   (`python w.py 'Z:foo\bar'`, `powershell -c "Copy-Item x Z:foo\bar"`), which read it as drive Z;
+   both are refused today by the tail (`'\\bar'`, measured at `b66f6a6`), and R2's bash `:` break
+   yields `Z` + `foo\bar`, both inside (measured: `_where` answers None for each) — **allowed**. Git
+   Bash's `cp` writing a file named `Z:` makes the refusal a harmless false one, not a reason to
+   allow. On a POSIX host there are no letter drives and the break stands in both readings. The
+   cost is `git show a:src/x.py` (a one-letter revision) refused as drive A on Windows in either
+   shell, the residual `a-drive-or-a-home-variable-names-a-directory-by-itself` already accepts.
 4. Also remove the quote characters `'"`` from the value, split at the same breaks less the quotes,
    and judge each piece.
-5. Each piece: a NUL anywhere refuses it as `_UNRESOLVED` (keeps row X8); a bash device (D4)
-   stands; otherwise its `..`-capable glob components are rewritten (D3) and it goes through
+5. Each piece: a NUL anywhere refuses it as `_UNRESOLVED` (keeps row X8); **(R3) a piece that
+   begins with `~`, or a drive piece whose text after the colon does, is refused as `_UNCHECKED`**
+   — bash expands a tilde after `:` in an assignment-shaped argument (measured, Git Bash 5.2.37:
+   `echo of=c:~/y` prints `of=c:/c/Users/huida/y`), so `dd if=x of=c:~/y` writes to the home
+   directory; today it is refused by the tail `'/y'` and R2's pieces `c` + `~/y` were both inside
+   (measured) — **allowed**. Rule 3 checks `startswith("~")` on the whole word only
+   (`_expands`, `mcp_server.py:1161-1170`), so it never sees a tilde after a colon; a bash device
+   (D4) stands; otherwise its `..`-capable glob components are rewritten (D3) and it goes through
    `_judge_path(rewritten, root, piece, argument, continues and <piece is last>)`.
 
 Why each break is there:
@@ -234,6 +247,59 @@ are the first defence; the second is structural: `approve_tool_call` wraps `_dec
 call (<exception class>); ask the operator with ask_user"}`, then reports it like any refusal. Fail
 closed, visibly. No return annotation is added (`.claude/rules/mcp-server.md`: an annotation would
 make FastMCP derive `structuredContent` and silently defeat an allow).
+
+**R3, checked against the annotation trap.** D6 is safe with it: the `try` wraps only the `_decide`
+call (`mcp_server.py:1708`) and yields the same `{"allow", "reason"}` dict, so the function still
+returns the one `json.dumps` string from one exit path and needs no annotation; `except Exception`
+covers `RecursionError` and `MemoryError`. The guard already exists on the wire:
+`test_response_carries_no_structured_content` (`hub/tests/test_permission_approver.py:907-925`)
+spawns the server and fails if `structuredContent` appears, so an implementer who "tidies" D6 with
+`-> str` is caught. The D6 test itself is in-process (monkeypatch `_decide` to raise) — a spawned
+server cannot be made to raise once the judge is total — and asserts the returned string parses
+to `behavior: deny` with the failure named, and that `_report_decision` was called. D6 must not
+wrap the operator path: change `an-ask-me-card-says-what-workspace-only-would-decide` catches its
+own verdict failure and asks anyway.
+
+### D7 (R3) — two escapes that exist today, closed in the same rule
+
+R3 searched for inputs the final rules allow. Besides the two regressions folded into D2 (the drive
+colon in the bash reading, the tilde after a colon), it found two words **allowed today** that no
+round had named. Both are plain words, so rule 5 (unchanged by D2) answers them before any piece
+reading runs; both are closed here because this change is the one that claims to read a word as a
+shell could:
+
+- **An inner shell's backslash escape.** `bash -c 'cp n .\./x'` is allowed (measured at `b66f6a6`):
+  the word `.\./x` is plain, and on Windows it reads as `.`, `.`, `x`; on POSIX as a directory
+  `.\.`. The inner bash removes the backslash and writes `../x` (measured in Git Bash:
+  `bash -c 'echo .\./x'` prints `../x`). The same from the PowerShell tool, whose single quotes are
+  literal. So, in both dialects, a word holding a backslash is **also** judged with each `\c`
+  replaced by `c`, before rule 5 — the backslash counterpart of step 4's quote removal, and an extra
+  reading only: it can add a refusal, never remove one. On Windows every path spelled with `\`
+  gains a harmless second reading (`src\a.py` → `srca.py`); on POSIX `grep '\/usr' f` becomes
+  refused (it names `/usr` to any inner shell). Note `..\/x` is already refused on Windows.
+- **A PowerShell provider-qualified path.** `Copy-Item x
+  Microsoft.PowerShell.Core\FileSystem::C:\Windows\x` is allowed (measured): `_PLAIN_RELATIVE_RE`
+  admits `:` after the first separator, so rule 5 joins the whole word under the workspace. A word
+  containing `::` is therefore not plain, in either dialect (a Bash-tool `powershell -c "…"` hands
+  it on too), and reaches the piece reading, where `::` is a break: `C:\Windows\x` is refused. The
+  short form `FileSystem::C:\x` is refused today and stays so. Cost: a word like `lib/Foo::Bar.pm`
+  is read as pieces, both inside.
+
+Also found and **not** changed here, both separator-less and so rule 4's: `cp x ..*` and `cp x
+.{,.}*` (allowed today; with `globskipdots` off, as in bash 5.1, `..*` matches `..`), carried to
+`a-drive-or-a-home-variable-names-a-directory-by-itself` D4; and an inner shell's ANSI-C `..`
+without a separator (`bash -c "cp n \$'\\x2e\\x2e'"`, allowed today, named as a residual below).
+
+**The 256/1024 bounds, re-derived (R3).** They cannot allow: past either bound the argument is
+refused. Their cost falls on JSON handed through quotes: `[{"a":1,"b":2},…]` has 2^n alternatives
+for n objects, so nine two-key objects (or six three-key ones) in one quoted argument pass the
+per-argument 256 and are refused as
+uncheckable (`curl -d '[…]'`, `gh api -f body='…'`, `python -c` literals). Spaces do not help: the
+inner-shell reading expands the whole quoted argument, so `{"a": 1, "b": 2}` is still two
+alternatives. Splitting at whitespace before expanding would remove most of the cost but is
+unsound: an inner-quoted space (`'{a," b",..}/x'`) keeps a group in one inner word, and `..}/x`
+would then read as a name inside. Accepted; the reason says to write the payload to a file. The
+operator should know this is the one new refusal of ordinary agent work the change introduces.
 
 ## Risks
 
