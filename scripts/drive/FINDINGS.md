@@ -32927,3 +32927,12 @@ Hub's own file reader already refuses such a path, so the listing and the reader
 bypass on its own: creating the link needs a shell call the posture judges. Repair shape open: filter
 the picker's listing by the same resolution the reader uses. Sibling of F444.
 
+## F446 (C) — a plain path word with a colon in a later component is refused on Windows
+
+**Status:** open. Filed 2026-09-24 (operator decision `B4-approve`), measured by R8 of B4
+(`spec-queue/tracks/B4.md` `## R8`). On a drive-letter host, today's rule 5 judges a plain word such as
+`src/a:1` (as in `rg foo src/a:1`) through `ntpath.realpath`, which on Python 3.11 reads any component
+whose second character is `:` as a drive and drops everything before it, so the word lands outside and
+is refused. A false refusal, not an escape. Change 1 (`the-shell-judge-reads-a-word-whole`) avoids the
+same misreading in its new whole-value pass by splitting at colons, since a Windows name cannot hold
+one; the same split in rule 5 is the likely repair shape.

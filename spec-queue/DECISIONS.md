@@ -757,6 +757,16 @@ R5 on `the-shell-judge-reads-a-word-whole`, `a-drive-or-a-home-variable-names-a-
   text, such as a YAML key in a heredoc. The accepted residual: `pwsh -c '…Temp:'` sent from the
   Bash tool stays allowed. Windows PowerShell 5.1 has no `Temp:` drive at all; only PowerShell 7
   does. Rejected: both dialects.
+- DECIDED   B4-approve  **Both B4 changes are approved as R8 left them** (`the-shell-judge-reads-a-word-whole`, `a-drive-or-a-home-variable-names-a-directory-by-itself`). The third
+  Opus review (`spec-queue/tracks/reviews/B4-2026-09-24-third.md`) returned APPROVE WITH FIXES with one
+  blocking HIGH (a non-plain word's value was never judged as a path). The operator chose "R8 fix, then
+  approve" over a further check round, then approved R8's three measured departures from the review's
+  text: on a drive-letter host the value is judged between its colons (ntpath reads `x:` as a drive;
+  judged whole, 44 of 26,038 transcript words were falsely refused); bracket expressions fnmatch cannot
+  read (`^`, `!`, `[`, `\`, backtick) loosen to `?`; `_glob_links` does not re-judge its own base.
+  Accepted residual: a directory whose name holds a colon (only Git Bash can make one) with a link
+  behind it, refused today by its tail and allowed after. R8's out-of-scope false refusal
+  (`rg foo src/a:1`) is filed as F446. Rejected: close the colon gap first; hold for a check round.
 
 ### 2026-09-24 — the daily review of the twelve bundles
 
