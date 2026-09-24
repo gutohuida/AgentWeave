@@ -20,6 +20,11 @@ result, in the Round log's R4 entry:
 
 Q1 to Q3 stand as answered. **Q4 (D10) is new.**
 
+**R5 ran on 2026-09-24** as an independent comparison. It added a fourth MODIFIED delta
+(`agent-conversation-workspace`, *A delivered turn reaches the model intact*). It corrected D10's
+account of the U+FEFF form, and measured 8 more rows. It also stated two things that must not
+raise: D4's echo and D7's restore. The argument otherwise stands. See the Round log's R5 entry.
+
 **Citations.** From R4 on, this document cites functions, not line numbers. Line numbers drifted
 between R3 and the review. The Round log's R1 to R3 entries keep the line numbers they were
 written with, as a record.
@@ -196,6 +201,21 @@ because the agent can read it anyway, but it shows expansion is not limited to a
 | `spec_notice_path` | `` This document (`spec/a @<abs>`) … pass `path='spec/a @<abs>'` `` | **E** |
 | `spec_notice_path_escaped` | the same with `\@` | — |
 
+**R5's rows**, the same method (`--model claude-haiku-4-5-20251001`, `claude` 2.1.280, run from
+`testbed/scratch/f409-r5/`, which was deleted afterwards with its transcripts). Each row sat in the
+inbound-queue shape, `please look at <token> .`:
+
+| R5 row | Token | E |
+|---|---|---|
+| `baseline_control` | `@<abs>` | **E** |
+| `picker_quoted_bom` | `@"x<U+FEFF>@<abs>"` (what `quoteMentionValue` emits for a U+FEFF path) | **E** |
+| `skill_dollar_at` | `$@<abs>` (a skill value with its at-sign at index 0) | — |
+| `skill_dollar_quoted_index0` | `$"@<abs> y"` | — |
+| `picker_quoted_index0` | `@"@<abs> y"` | — |
+| `small_commercial_at` | U+FE6B then `<abs>` (a lookalike that NFKC folds to `@`) | — |
+| `escaped_quoted` | `\@"<abs>"` (the neutralised quoted form) | — |
+| `bom_then_escaped` | U+FEFF then `\@<abs>` | — |
+
 **`client_composed`**, measured with the Hub's own `--mcp-config` (the canonical `mcp_server.py`,
 `HUB_URL` pointed at a dead port, no tool called):
 
@@ -310,6 +330,15 @@ for is returned as a tool result and never reaches argv. The neutralisation is a
 echo is composed, so it covers every route that delivers one: the answer, the decline that
 completes a batch, and the expiry report. All three go through `deliver_batch_if_complete`.
 
+**The neutralisation must not raise (R5).** All three routes commit their own write before they
+call `deliver_batch_if_complete`. If `_batch_delivery_text` raised, the route would return a 500
+for an answer it had already stored, and the batch would never be delivered. `Question.answer` is
+nullable in the schema. Today every answered row carries a string, because `answer_question`
+is the only writer of `answered=True` and `QuestionAnswer.answer` is required. But today's f-string
+renders a `None` as text, and a bare `.replace` on `None` would raise. So the neutralising call
+takes the value the f-string would interpolate, and a `None` answer is rendered exactly as it is
+today. Task 1.6 (f) pins this.
+
 **Consequence (R2, and wider since R4).** The echo is escaped where it is composed, because by the
 time the turn is composed the two halves are one string. So the *stored* entry content carries `\@`
 in the question and, when an option was chosen, in the answer. The chat view renders stored content,
@@ -375,6 +404,10 @@ use it too.
   `restore(neutralise(T)) == T`, including a `T` that already contained `\@`.
 - `worker._interpret` applies it to every string in the parsed JSON payload, recursively, **before**
   `output_model.model_validate`. That is one place for both checkpoint kinds and any later worker.
+  **(R5)** The walk descends into objects and arrays, rewrites strings, and passes every other JSON
+  value (number, boolean, null) through unchanged. `conversation-checkpoint` requires that a worker
+  failure never raises into its caller, and a walk that raised on a value it did not expect would
+  break that requirement.
   **(R4)** B7's worker changes keep both command builders and `_interpret`. Whichever of the two
   changes lands second must keep `restore_file_mentions` ahead of `model_validate` in `_interpret`.
 - `generate_conversation_title` applies it to the CLI's output before `title_from_output`.
@@ -411,8 +444,10 @@ path in the notice's exact shape expands, and the escaped form does not.
 Both still hold. But `validate_spec_path` allows spaces and at-signs, and adoption
 (`spec_adoption.adopt`) mints a row for any on-disk file that passes it. An agent with a write tool
 can create `spec/a @/home/u/notes/x.html` in the workspace. Once it is adopted and opened while
-unwritten, the notice names `@/home/u/notes/x.html` in mention position. The reach is narrow (the
-target must be a `.html` file), and the fix is cheap.
+unwritten, the notice names `@/home/u/notes/x.html` in mention position. The reach is narrow, and
+the fix is cheap. **(R5)** `validate_spec_path` also refuses upper case, backslashes, `..` and any
+segment that starts with `.`. So the target must be an absolute, lower-case `.html` path with no
+hidden segment: `~/.ssh` is out of reach, and `/home/u/notes/x.html` is not.
 
 **Why the sentence goes in the notice.** The notices are prepended in `_trigger_agent_directly`,
 outside `format_turn_prompt`. D6's trigger reads only the queue blocks, so it would not see an
@@ -437,16 +472,28 @@ A new `isSafeMentionValue(value)` in `hub/ui/src/lib/fileMentions.ts` decides th
 any untracked file an agent created. An agent that creates `x @/home/u/.ssh/id_rsa` in the project
 directory (the directories `x @`, `home`, `u`, `.ssh`, then a file) makes the picker offer that
 path. `formatMention` quotes it: `@"x @/home/u/.ssh/id_rsa"`. **Measured in R4:** the inner
-`@/home/…` expands. The quoting does not shield it. The unquoted form expands too, with U+FEFF in
-place of the space, since U+FEFF is not `\s`. So an operator message, or a typed answer, that picks
-that file attaches a file outside the workspace. The operator sees a path that looks like a
-workspace file.
+`@/home/…` expands. The quoting does not shield it. **(R5)** A U+FEFF in place of the space is
+quoted too: `quoteMentionValue` runs in JavaScript, whose `\s` includes U+FEFF (Python's does not).
+So the form the picker emits is `@"x<U+FEFF>@<abs>"`, and R5 measured that it expands.
+R4's `picker_unquoted_bom` row (`@x<U+FEFF>@<abs>`, **E**) is not a form the picker produces, and R4
+cited it as if it were. Either way the rule below refuses the value. So an operator message, or a
+typed answer, that picks that file attaches a file outside the workspace. The operator sees a path
+that looks like a workspace file.
 
 **Why an allow rule, and why this one.** D2's argument applies: a rule keyed to "an at-sign after
 whitespace" would have to mirror the CLI's whitespace set, and U+FEFF already breaks it. The allow
 rule rests on measured rows only:
 - `/` then `@` does not expand (R1's table, and R4's `picker_quoted_slash_at`).
 - `@@` does not expand (R1).
+- **(R5)** An allowed at-sign at index 0 can also come after the skill picker's `$`, or after the
+  opening quote of a quoted value. `$@<abs>`, `$"@<abs> y"` and `@"@<abs> y"` were measured, and none
+  expands.
+
+**Why the rule holds for every value (R5).** Inserting a value changes only two things:
+`quoteMentionValue` may wrap it in quotes, and it turns each `"` into `\"`. So the character before
+each at-sign in the value is unchanged, except for the at-sign at index 0. That one follows the
+trigger character or the opening quote. The rule therefore does not depend on how the CLI parses a
+quoted mention.
 
 So `packages/@scope/x.ts` and `node_modules/@types/y` stay offered. `notes@home.md` is no longer
 offered. That is a small loss: the operator can still type the path.
@@ -475,6 +522,10 @@ This is a UI change, in the same bundle refresh as D8.
   (an `unparseable` checkpoint), not a wrong stored body.
 - **The mixed answer (R4).** A scripted API answer that sends both `labels` and different `answer`
   text has its typed part neutralised too. No app surface sends it.
+- **The operator pastes an agent's text (R5).** Text the operator copies out of a reply, or out of a
+  file preview, and pastes into the composer is sent as the operator's own. It is not neutralised.
+  The `@<path>` is visible in the composer before it is sent. That is not true of the D10 picker
+  case, where the mention looks like a workspace file. This is accepted, not closed.
 - **Tool results.** Text an agent reads back through a tool (`read_checkpoint`, `get_answer`,
   `list_tasks`) is a tool result, not prompt input, and never reaches argv. R4 did not measure
   whether the harness scans tool results for mentions. Every measured expansion is of `-p` text, and
@@ -663,3 +714,64 @@ Q1 to Q3 were answered on 2026-09-24 (`DECISIONS.md` `0923-changes`) with the de
       `/agent/trigger` send what the operator typed.
   - `openspec validate an-at-mention-an-agent-wrote-reads-no-file --strict`: valid after these
     edits.
+- **R5, 2026-09-24: independent comparison.** I read the proposal and D1 to D10 as the claims under
+  test. I did not read R4's log entry until R5-1 to R5-5 had been found. The re-derivation started
+  from the code at HEAD fb4c8f5:
+  - every `"-p"`, every subprocess spawn and every stdin or PTY write in `hub/hub` and
+    `src/agentweave`;
+  - every `new_entry` and `origin_type=` site;
+  - the three browser callers of `POST /agent/trigger`, and every writer of the composer's text
+    (drafts, the insert effect, the trigger menu);
+  - both answer surfaces, and every notice in `_trigger_agent_directly`;
+  - `copy` and drag actions in the UI;
+  - `openspec/specs/` for every requirement about delivered content.
+
+  Eight Haiku rows were measured (Context, "R5's rows").
+
+  Findings:
+  - **R5-1, a requirement this change makes false, with no delta.** `agent-conversation-workspace`,
+    *A delivered turn reaches the model intact*, says that every delivered input "SHALL reach the
+    agent's model in full". Its scenario says the input's "full content formed part of the prompt".
+    A neutralised entry's content does not, byte for byte. R4's grep searched for "unchanged",
+    "verbatim" and similar words, and "in full" / "full content" was not among them. Added a
+    MODIFIED delta: in full, except for the neutralisation, and nothing is dropped. The header was
+    checked against the main spec.
+  - **R5-2, D10 misdescribed its own measured route.** It said the unquoted U+FEFF form expands
+    "since U+FEFF is not `\s`". But `quoteMentionValue` is JavaScript, and JavaScript's `\s` includes
+    U+FEFF (checked with node). So the picker quotes that value and never emits R4's
+    `picker_unquoted_bom` form. The form it does emit, `@"x<U+FEFF>@<abs>"`, was measured and
+    expands. The rule is unaffected, because it refuses both. D10's text is corrected, and the row is
+    added to task 3.1a.
+  - **R5-3, D10's index-0 allowance was measured for the path picker only.** It rested on `@@`.
+    The skill picker prefixes `$`, and `$` then `@` was in no table. A skill file at
+    `.claude/skills/@/etc/passwd/SKILL.md` would be offered as `$@/etc/passwd`. Measured: it does
+    not expand, and neither does the quoted index-0 form (`$"@<abs> y"`, `@"@<abs> y"`). D10 now
+    cites these rows. It also gives the reason the rule holds for any value: insertion changes the
+    character before an at-sign only at index 0.
+  - **R5-4, what a route returns when the new call raises.** The answer, decline and expiry routes
+    commit before `deliver_batch_if_complete`. `Question.answer` is nullable, and today's f-string
+    renders a `None`. A bare `.replace` would turn that into a 500 for a stored, never-delivered
+    answer. Today's writers never produce a `None`, but D4 now requires the call to take what the
+    f-string interpolates. Task 1.6 (f) is new. Likewise D7's recursive restore passes non-string
+    JSON values through, because `conversation-checkpoint` forbids a worker failure from raising.
+    Task 1.10 is widened.
+  - **R5-5, residuals stated.** First, text the operator copies from a reply and pastes is sent as
+    theirs; it is added to Risks as accepted. Second, D9's reach is narrower than R4 said, because
+    `validate_spec_path` also refuses hidden segments and upper case. D9 says so.
+
+  Held, re-derived rather than re-read:
+  - The three `-p` sites, and the one agent-turn composer (`turn_scheduler`, then
+    `_trigger_agent_directly`). No caller writes to a PTY. The Codex app-server gets the same
+    string.
+  - The nine `new_entry` rows. `send_peer_message` always has a `run_id` (`AgentActor.run_id` is
+    required), so an agent's message is never `by_operator`.
+  - The three browser trigger callers. The composer draft and the answer surfaces carry no agent
+    text except through D10's picker and insert paths.
+  - The D2 property. The tokeniser does not fold lookalikes (U+FE6B, like U+FF20, does not expand).
+  - D3's default-deny, which is one test outside today's three label branches.
+  - The three existing MODIFIED deltas, whose headers match the main specs exactly.
+  - Tests: every listed row fails on today's code as claimed. No existing test puts an at-sign
+    where these composers change it.
+
+  The argument stands with these corrections. `openspec validate an-at-mention-an-agent-wrote-reads-no-file --strict`:
+  valid after these edits.

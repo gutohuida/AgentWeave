@@ -14,6 +14,12 @@ options. New D9 covers the specification-turn notice's path. New D10 covers the 
 offering a path an agent named, which R4 measured to expand. The requirement no longer contradicts
 Q1, and three MODIFIED deltas were added. See design.md's `## Operator review, 2026-09-24` and the
 Round log's R4 entry.
+**Round 5, 2026-09-24 (independent comparison):** the argument stands. R5 found one requirement the
+change makes false with no delta, `agent-conversation-workspace`'s *A delivered turn reaches the
+model intact*, and added it. It also corrected D10's account of the U+FEFF form (JavaScript's `\s`
+includes U+FEFF, so the picker quotes it; the quoted form was measured and expands). It measured the
+index-0 at-sign after `$` and after a quote (neither expands). And it stated that D4's echo and D7's
+restore must not raise. See the Round log's R5 entry.
 **Nothing here is implemented yet.**
 
 ## Why
@@ -112,8 +118,9 @@ Hub.
   gains R4's rows, and exits non-zero when a CLI upgrade changes any row.
 - **Specs:** one ADDED `agent-run-sandboxing` requirement. MODIFIED: `agent-flows` (a review
   firing's loop message is delivered with its words unchanged and its at-signs neutralised),
-  `agent-composer` (*Trigger result sources*) and `conversation-side-panel` (*A file can be inserted
-  into the composer…*).
+  `agent-composer` (*Trigger result sources*), `conversation-side-panel` (*A file can be inserted
+  into the composer…*) and **(R5)** `agent-conversation-workspace` (*A delivered turn reaches the
+  model intact*: in full, except for the neutralisation).
 
 ## Non-goals
 
@@ -146,7 +153,7 @@ Hub.
 - `scripts/drive/d2_0923_at_mention_tokeniser.py` (gains R4's rows), and the R2 and R3 probes as
   evidence.
 - `openspec/specs/`: one ADDED requirement in `agent-run-sandboxing`, and MODIFIED requirements in
-  `agent-flows`, `agent-composer` and `conversation-side-panel`.
+  `agent-flows`, `agent-composer`, `conversation-side-panel` and `agent-conversation-workspace`.
 - **Behaviour an operator can notice:**
   - An agent sees `\@` where a peer, a job or a task wrote `@`, including email addresses and
     decorators.

@@ -15,7 +15,7 @@
 | How a worker answers an escaped prompt | `py -3.11 scripts/drive/d4_0923_worker_json_escape.py 3` | every row `outcome: ok`; no generation row stores `\@` once the restore is applied |
 | The workers, against the real CLI | `py -3.11 scripts/drive/d3_0923_worker_at_mention.py` (task 3.1) | before the fix both workers show `expanded=True`; after it both show `expanded=False`; the system-prompt-file control is `expanded=False` both times |
 | Nothing else moved | full `hub/tests/` (task 2.5) | the count is recorded; every moved assertion is named |
-| The CLI still behaves as measured | `py -3.11 scripts/drive/d2_0923_at_mention_tokeniser.py` (tasks 3.1, 3.1a) | `N/N match`; the `escaped`, `escaped_twice`, `after_002f` and `picker_quoted_slash_at` rows say `expanded=False` |
+| The CLI still behaves as measured | `py -3.11 scripts/drive/d2_0923_at_mention_tokeniser.py` (tasks 3.1, 3.1a) | `N/N match`; the `escaped`, `escaped_twice`, `after_002f`, `picker_quoted_slash_at`, `double_at`, `skill_dollar_at` and `picker_quoted_index0` rows say `expanded=False` |
 | The product, end to end | the scratch-Hub drive (tasks 4.1 to 4.2c) | B's CLI transcript has no file attachment for a peer's `@<outside path>`, a Start work title, or a clicked option; the operator's `@<inside path>` still attaches |
 
 ## Human-only
