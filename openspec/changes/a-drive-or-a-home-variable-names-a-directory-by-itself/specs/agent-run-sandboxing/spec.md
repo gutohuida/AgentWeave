@@ -65,10 +65,14 @@ that a match that is a link is judged by where it resolves.
 
 In PowerShell, and in either dialect on a platform with drive letters (where a Bash command hands
 its words to native programs too), a word made of one drive letter and a colon, optionally followed
-by a name with no separator, names that drive's current location, and SHALL be judged by where it
-resolves: on
+by a name with no separator, names that drive's current location, and, where that drive exists,
+SHALL be judged by where it resolves: on
 another drive it is outside the workspace, on the workspace's own drive it is the directory the
-shell runs in. PowerShell's temporary drive SHALL be judged as the temporary directory. A word with a
+shell runs in. On a platform with drive letters, where the platform reports that no such drive
+exists, the word is an ordinary name, since nothing can be written there. A check of the drive that
+fails for any other reason SHALL count the drive as existing, so that a failure never allows a word
+naming a real drive. Whether the word is judged as a drive or not, the other checks of this
+requirement still apply to it. PowerShell's temporary drive SHALL be judged as the temporary directory. A word with a
 second colon, or a longer name before the colon, such as a revision and a path, is not a drive. In
 bash on a platform without drive letters these words are ordinary names.
 
@@ -212,7 +216,7 @@ SHALL NOT be read as a statement that it stays inside.
 #### Scenario: Another drive is outside
 
 - **WHEN** a PowerShell command names a word that is a drive letter and a colon, with or without a
-  following name, and that drive is not the workspace's drive
+  following name, and that drive exists and is not the workspace's drive
 - **THEN** the command is refused
 - **AND** the reason names the word with its colon
 
@@ -232,8 +236,27 @@ SHALL NOT be read as a statement that it stays inside.
 #### Scenario: Another drive is outside in a Bash command on a platform with drive letters
 
 - **WHEN** on a platform with drive letters, a Bash command names a word that is a drive letter and
-  a colon, and that drive is not the workspace's drive
+  a colon, and that drive exists and is not the workspace's drive
 - **THEN** the command is refused
+
+#### Scenario: A drive letter that names no drive is an ordinary word
+
+- **WHEN** on a platform with drive letters, a command in either dialect names a word that is one
+  letter and a colon, such as `e:` in `except Exception as e:` or `a:` in `jq '{a: .x}'`, and the
+  platform reports that no drive with that letter exists
+- **THEN** that word does not make the command refused
+
+#### Scenario: A drive whose check fails is treated as existing
+
+- **WHEN** on a platform with drive letters, the check of whether a drive exists fails for a reason
+  other than the drive not existing, and the drive is not the workspace's drive
+- **THEN** a word naming that drive is judged as that drive, and the command is refused
+
+#### Scenario: A directory variable after the workspace's drive is still refused
+
+- **WHEN** on a platform with drive letters, a command names a word such as `of=c:$HOMEPATH`, where
+  the drive exists and is the workspace's drive, or `e:$HOMEPATH`, where no drive E exists
+- **THEN** the command is refused as uncheckable
 
 #### Scenario: A revision with a colon is not a drive
 

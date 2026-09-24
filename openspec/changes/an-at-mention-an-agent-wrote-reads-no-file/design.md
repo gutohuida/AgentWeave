@@ -18,7 +18,8 @@ result, in the Round log's R4 entry:
 - The requirement's contradiction with Q1 is fixed.
 - Three MODIFIED deltas were added (`agent-flows`, `agent-composer`, `conversation-side-panel`).
 
-Q1 to Q3 stand as answered. **Q4 (D10) is new.**
+Q1 to Q3 stand as answered. **Q4 (D10) is new**, and was answered on 2026-09-24 afternoon
+(`spec-queue/DECISIONS.md` `F409-Q4`): D10 stays in this change.
 
 **R5 ran on 2026-09-24** as an independent comparison. It added a fourth MODIFIED delta
 (`agent-conversation-workspace`, *A delivered turn reaches the model intact*). It corrected D10's
@@ -538,8 +539,10 @@ Q1 to Q3 were answered on 2026-09-24 (`DECISIONS.md` `0923-changes`) with the de
 - **Q2:** `a\@b.com` is accepted (D2).
 - **Q3:** Start work keeps an escaped title (D8).
 
-4. **Q4 (D10, R4):** keep the composer picker fix in this change (the default), or file it as its
-   own finding? **Recommended: keep it here.** It is the same F409 route, which is agent-chosen text
+4. **Q4 (D10, R4). Answered 2026-09-24 afternoon (`spec-queue/DECISIONS.md` `F409-Q4`): D10 stays
+   in this change.** Rejected: splitting it out, which would leave a measured bypass open until the
+   split landed. The question was: keep the composer picker fix in this change (the default), or
+   file it as its own finding? The recommendation was to keep it here. It is the same F409 route, which is agent-chosen text
    reaching a `-p` prompt as a mention, and it is the one hole in D4's "a typed answer is the
    operator's". It costs one predicate in the same new UI file and the same bundle refresh.
    Splitting it would ship F409 as "fixed" with a measured bypass still open.

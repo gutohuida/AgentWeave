@@ -4,7 +4,8 @@
 - [ ] 0.2 R3: a second independent re-derivation, not starting from R2's notes
 - [ ] 0.2b R4 (revise round after the operator's 2026-09-24 review): re-derived from the code at `b7d976a`; recorded in `B4.md` under "R4"
 - [ ] 0.2c R5: an independent verification round of the R4 design, not starting from R4's notes
-- [ ] 0.3 The operator approves the change in `spec-queue/APPROVALS.md` and answers design Open Questions 1 to 4; before `mcp_server.py` is edited, the operator is told that `:8000`'s next run is judged by the edited file, committed or not
+- [x] 0.3a The operator answers design Open Questions 1 to 4: answered 2026-09-24 afternoon in `spec-queue/DECISIONS.md` (`B4-residuals`: the `case` arm stays, the four device names, this change first and the sibling in the same window; `B4-dep-links`: build as written, residual filed as F444)
+- [ ] 0.3 The operator approves the change in `spec-queue/APPROVALS.md` (after the Opus pre-approval review); before `mcp_server.py` is edited, the operator is told that `:8000`'s next run is judged by the edited file, committed or not
 
 ## 1. Tests first — each must fail on today's code or on the R3 design as written (each row says which)
 
@@ -20,7 +21,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 - [ ] 1.3 Braces an inner shell expands (R2):
   - Refused: `bash -c 'cp n .{,.}/x'`, `sh -c 'cp n {,..}/x'`, `bash -c "cp x src/{a,..}/../y"` (Bash tool), and `bash -c 'cp n .{,.}/x'` (PowerShell tool). Each PASSES today (backstop `'/x'`) and FAILS against rule 6 without the inner-shell brace reading.
   - `bash -c 'cp n .{,.}'` refused. FAILS today (allowed).
-  - Allowed: `awk '{print $1, $2}' f`, `jq '{a: .x, b: .y}' f`, `sed 's/a{2}/b/' f`.
+  - Allowed: `awk '{print $1, $2}' f`, `jq '{a: .x, b: .y}' f`, `sed 's/a{2}/b/' f`. (R5, `B4-drive-exists`) Once the sibling change is built, the `jq` row stays allowed on the `hub-judge-windows` job only because drives A and B do not exist there. The sibling's task 1.5c pins that with the drive probe patched; if this row ever fails on Windows, check the runner's drives first.
   - `echo hi > ${X}/y` stays refused as uncheckable.
   - `cp notes.md '.{,.}'/x` is now refused (the accepted cost).
 - [ ] 1.4 Glob parents (D3): `ls .*/x`, `ls ..*/x`, `cp x .[.]/y`, `ls ../*`, `rm -rf ../*.py`, PowerShell `Get-ChildItem ..\*` refused, each quoting the whole piece. `ls sub/.*/x`, `cp x sub/..?/y` allowed. The refused rows PASS today with a fragment reason and FAIL on the reason assertion
@@ -115,4 +116,4 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 
 ## 4. Close
 
-- [ ] 4.1 F362 and F403 Status lines in `scripts/drive/FINDINGS.md` → `fixed <sha>`; file the linked-dependency-directory finding if the operator chose it (Open Question 3); regenerate the backlog; `openspec validate the-shell-judge-reads-a-word-whole --strict`; archive
+- [ ] 4.1 F362 and F403 Status lines in `scripts/drive/FINDINGS.md` → `fixed <sha>`; F444 (the linked-dependency-directory finding, filed 2026-09-24 under `B4-dep-links`) left open and noted as a prerequisite for registering a JavaScript project; regenerate the backlog; `openspec validate the-shell-judge-reads-a-word-whole --strict`; archive

@@ -59,6 +59,11 @@ not end, and were fixed:
 - **A `**` walk through a link cycle could not end** once listings are memoized, since a memo hit
   charges nothing. A `**` walk now does not descend through a link, as bash's does not.
 
+**Operator answers applied, 2026-09-24 afternoon** (`spec-queue/DECISIONS.md`: `B4-residuals`,
+`B4-dep-links`, `B4-drive-exists`). Every open question is answered. The `case` arm and the four
+device names are accepted, the linked-dependency residual is filed as F444, and this change builds
+first, with the sibling in the same window.
+
 R5 also added two named residuals and two costs, which are not decisions: an inner PowerShell's
 `> /dev/null` (D4), a POSIX `grep '\.\./'`, and a commit message naming `user@host:` (D5).
 
@@ -292,7 +297,7 @@ shell is msys. For `powershell -c 'echo x > /dev/null'` the inner shell is not m
 `\dev\null` on the current drive. That command is refused today (as `'/dev/null'`) and allowed
 after. The judge cannot tell which program the quoted script is for. The write fails unless a `\dev`
 directory already exists on that drive (`C:\dev` does not exist here). This is a named residual,
-put to the operator with Open Question 2.
+put to the operator with Open Question 2 and accepted (`B4-residuals`).
 
 ### D5 — `user@host:` and `host:port/…` are network addresses, decided before rule 3
 
@@ -612,8 +617,9 @@ The tasks include a totality test over adversarial words (1.6) and an in-process
   `node_modules`, and in PowerShell `Get-ChildItem *\x` with a linked `.venv`. The sibling change
   adds the bare `ls node_modules` and a bare `*` (`ls *`, `grep foo *`, `du -sh *`). On this machine no project worktree holds such a link today: all four
   LoopEngine worktrees were checked read-only, and LoopEngine has no `node_modules`. So nothing
-  measured moves. This is a candidate finding for the operator. The workspace boundary and the
-  shared read-only dependency links disagree, and it is not this change's to settle.
+  measured moves. The workspace boundary and the shared read-only dependency links disagree, and
+  it is not this change's to settle. **(Operator, `B4-dep-links`)** Filed as **F444**
+  (`scripts/drive/FINDINGS.md`), which must be fixed before a JavaScript project is registered.
 - **Other bundles may edit `mcp_server.py`** in the same window (B12's F363 touches
   `read_spec_document`). No overlapping function; rebase at build time.
 - **A regex written like a glob with a leading dot** (`.*/utils`) is refused as `..`. Accepted; the
@@ -635,7 +641,7 @@ New, or kept on purpose:
 
 - **An inner shell's `case` arm executing a path straight after `)`**
   (`sh -c 'case 1 in 1)../../evil.sh;;esac'`). It is refused today and allowed after. It executes and
-  cannot write. Operator question 1.
+  cannot write. Accepted (Open Question 1, `B4-residuals`).
 - **`**` is matched as `*`** unless the command names `globstar`. A program's own recursive glob
   (`prettier "src/**/*.ts"`) through a link two or more levels down is not seen. Walking every level
   would refuse such globs in any tree larger than the budget.
@@ -652,21 +658,27 @@ New, or kept on purpose:
 
 ## Open questions
 
-1. **The `case` arm (D2).** Recommended: **accept the residual and keep `)` not a break.** Closing it
-   by breaking at `)` refuses regex back-references again (`s/(foo)/\1/`, `rg 'foo(bar)/baz'`),
-   which were among F362's measured refusals. It is an execution and cannot write. The narrower
-   alternative is to break at a `)` directly followed by `.` or `~`. That closes the relative case
-   but refuses regexes ending `(…).*` or `(…)..`, and it leaves `1)/abs/x`.
-2. **D4's set.** Recommended: the four names (`/dev/null`, `/dev/stdin`, `/dev/stdout`,
-   `/dev/stderr`), not `/dev/null` alone. Still unanswered from the Final section. (R5) The answer
-   also accepts D4's residual on Windows: an inner PowerShell or `cmd` given `> /dev/null` writes
-   `\dev\null`, if that directory exists. Recommended: accept. The alternative, exempting only a
-   whole argument, refuses `sh -c 'cmd >/dev/null 2>&1'` on Windows.
-3. **The linked dependency directories (Risks).** Recommended: file a finding and leave this change
-   as written. The boundary is not this change's to redraw. (R5) The cost is larger than a bare
-   mention: with the sibling change, a bare `*` in a worktree with a linked `node_modules` is
-   refused. 595 of 42,860 Bash commands in this repository's own transcripts had a bare `*` word.
-   No worktree on this machine holds such a link now, so the recommendation stands. If a
-   JavaScript project is registered before the finding is fixed, the fix should come first.
-4. **(R5) Build order.** Recommended: build this change and the sibling in one window. Between the
-   two builds, a separator-less link or glob (`cp n up`, `cp n u*`) stays allowed, as it is today.
+All answered by the operator on 2026-09-24 afternoon, in `spec-queue/DECISIONS.md` ("the security
+REVISING rounds"), taking R4's and R5's recommendations (`spec-queue/tracks/B4.md`, R5, "Left for
+the operator", questions 1 to 5).
+
+1. **Answered (`B4-residuals`): the `case` arm (D2).** The residual is accepted, and `)` stays not a
+   break. Breaking at `)` would refuse regex back-references again (`s/(foo)//`,
+   `rg 'foo(bar)/baz'`), which were among F362's measured refusals. It is an execution and cannot
+   write.
+2. **Answered (`B4-residuals`): D4's set.** The four names stay exempt (`/dev/null`, `/dev/stdin`,
+   `/dev/stdout`, `/dev/stderr`). The inner-PowerShell or `cmd` `> /dev/null` residual on Windows
+   is accepted.
+3. **Answered (`B4-dep-links`): the linked dependency directories (Risks).** Build as written. The
+   residual is filed as **F444** (`scripts/drive/FINDINGS.md`): globs and bare names through a
+   worktree's shared dependency links (`node_modules`, `.venv`, `venv`) are refused, including a
+   bare `*` in a JavaScript worktree. **F444 must be fixed before a JavaScript project is
+   registered.** Rejected: folding a read-through exemption into this change now.
+4. **Answered (`B4-residuals`): build order.** This change builds first, and the sibling right after
+   it, in one night window. Between the two builds, a separator-less link or glob (`cp n up`,
+   `cp n u*`) stays allowed, as it is today.
+5. **Answered (`B4-drive-exists`), the sibling change's R5 question.** On Windows, a one-letter word
+   with a colon is judged as a drive only when that drive exists (sibling design D1,
+   `_drive_exists`). This change's own rules do not read separator-less drive words. Its task 1.3
+   control `jq '{a: .x, b: .y}' f` stays allowed after the sibling is built because drives A and B do
+   not exist, and the sibling's task 1.5c pins that with the probe patched.

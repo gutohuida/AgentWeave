@@ -5,7 +5,7 @@
 - [x] 0.3 The operator answers Q1 to Q3. **Done 2026-09-24 (`spec-queue/DECISIONS.md` `0923-changes`): all three defaults accepted.**
 - [x] 0.4 R4: revise after the operator's review (`spec-queue/tracks/reviews/2026-09-23-changes-2026-09-24.md` §1). **Done 2026-09-24 (R4-1 to R4-10 in the Round log). D4 widened to option answers, D9 and D10 added, the requirement's Q1 contradiction fixed, and MODIFIED deltas added for `agent-flows`, `agent-composer` and `conversation-side-panel`. 9 Haiku rows measured. validate --strict: valid.**
 - [x] 0.4a R5: an independent comparison. **Done 2026-09-24 (R5-1 to R5-5 in the Round log). Added the `agent-conversation-workspace` MODIFIED delta (*A delivered turn reaches the model intact*), corrected D10's U+FEFF account, stated the must-not-raise rules for D4 and D7, and measured 8 Haiku rows. validate --strict: valid.**
-- [ ] 0.5 The operator answers Q4 (D10 stays in this change, the default, or is split out). Record it in `spec-queue/DECISIONS.md`
+- [x] 0.5 The operator answers Q4 (D10 stays in this change, the default, or is split out). Record it in `spec-queue/DECISIONS.md`. **Done 2026-09-24 afternoon (`spec-queue/DECISIONS.md` `F409-Q4`): D10 stays in this change.**
 
 ## 1. Tests first. Each must fail on today's code unless it is marked as a control
 

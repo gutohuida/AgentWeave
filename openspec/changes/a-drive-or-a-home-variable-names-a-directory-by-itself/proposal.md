@@ -19,6 +19,11 @@ exist. That word is common text: Python's `except Exception as e:` and `as f:` i
 own transcripts hold one, and all are allowed today. Design Open Question 3 recommends judging such
 a word only when that drive exists.
 
+**Operator answers, 2026-09-24 afternoon** (`spec-queue/DECISIONS.md`: `B4-drive-exists`,
+`B4-dep-links`, `B4-residuals`). A one-letter drive word is judged only when that drive exists
+(step 4, design D1). D10's linked-dependency cost is filed as F444. This change builds after
+`the-shell-judge-reads-a-word-whole`, in the same night window. Every open question is answered.
+
 ## Why
 
 F375's change (`a-word-without-a-separator-can-still-leave`, archived 2026-09-22) made rule 4 of the
@@ -74,7 +79,7 @@ refuses `~` and allows `$HOME` has the incoherence F375 fixed for `..` and `../`
    refused as uncheckable: the word starts in the parent.
 
 4. **(R3)** On a Windows host the drive reading applies to Bash commands too (they reach native
-   programs and nested PowerShell); a `~` after a colon (`of=c:~`) is refused as uncheckable; and a
+   programs and nested PowerShell), and (operator) only to a drive that exists; a `~` after a colon (`of=c:~`) is refused as uncheckable; and a
    separator-less glob beginning with `..` (`..*`) is judged as `..`. A separator-less `.*` stays
    allowed (often a quoted regex). Design D4.
 5. **(R4) A separator-less word naming a link is judged by where the link resolves**, and so is a
@@ -92,15 +97,17 @@ an accepted cost).
   `/tmp` is judged (row R6 is refused today), but a variable set in an earlier call, inherited, or
   computed (`$(mktemp -d)`) is not seen. `_decide`'s docstring already says a path built at run time
   never appears as a word (`:1546-1548`); the requirement now says so for a bare expansion too.
-- `git show a:README.md` in PowerShell (a one-letter revision) is refused as drive A. Rare; the
-  reason names the word.
-- (R5) On Windows, any one-letter word with a colon, in either dialect (`as e:`, `{a: .x}`,
-  `Plan A:`): 2.0% of this repository's own Bash commands, unless the operator takes design Open
-  Question 3's recommendation.
+- `git show a:README.md` in PowerShell (a one-letter revision) is refused as drive A where drive A
+  exists. Rare; the reason names the word.
+- (operator, `B4-drive-exists`) On Windows, a one-letter word with a colon is judged as a drive only
+  when that drive exists, so R5's 2.0% (`as e:`, `{a: .x}`, `Plan A:`) is gone. What remains: such a
+  word whose letter names a drive that exists but is not meant, such as a removable card, a USB
+  stick or a second disk. A probe that fails other than by "not found" counts as existing (design D1).
 - (R4) Accepted costs, named in design "Costs the operator accepts": `echo '$HOME'`, `grep '$HOME' f`
   and a commit heredoc mentioning `$HOME` are refused (write the message to a file and use
   `git commit -F`). In a worktree whose `node_modules`, `.venv` or `venv` is the Hub's shared link,
-  a bare mention of it is refused (design Open Question 2).
+  a bare mention of it is refused. Accepted as **F444** (`B4-dep-links`), which must be fixed
+  before a JavaScript project is registered.
 - PowerShell drives that are not filesystem locations (`Env:`, `Function:`, `Variable:`, `Alias:`,
   `HKLM:`, `HKCU:`, `Cert:`) and drives created by `New-PSDrive` in an earlier call are not judged.
 

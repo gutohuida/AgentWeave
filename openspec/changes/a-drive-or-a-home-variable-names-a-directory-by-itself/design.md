@@ -56,6 +56,18 @@ not it exists**: `_where("e:")` answers outside on a machine whose only drive is
 873 of the 42,860 commands (2.0%) hold such a word for a letter other than C. 510 of them hold a
 heredoc. All are allowed today. See "Costs" and Open Question 3.
 
+**Operator answers applied, 2026-09-24 afternoon** (`spec-queue/DECISIONS.md`, "the security
+REVISING rounds"). Every open question is answered:
+
+- **`B4-drive-exists`** (Open Question 3): on Windows, a one-letter word with a colon is judged as a
+  drive **only when that drive exists**. D1 gains `_drive_exists`, and "Costs" is rewritten: the
+  2.0% is gone.
+- **`B4-dep-links`** (Open Question 2): build D10 as written. The residual is filed as **F444**
+  (`scripts/drive/FINDINGS.md`), which must be fixed before a JavaScript project is registered.
+- **`B4-residuals`**: this change builds after `the-shell-judge-reads-a-word-whole`, and both are
+  built in one night window. That change's `case` arm and its four device names are accepted as
+  recommended.
+
 ---
 
 **Built on the recommended answer to D5** (*"How strict should the shell judge be about bare `$VAR` /
@@ -89,10 +101,11 @@ piece is first trimmed of `_WORD_TRIM` less `:`. If that fullmatches
 `_PS_DRIVE_RE = [A-Za-z]:[^:\\/]*` or `(?i)temp:[^:\\/]*`, it is the word, colon kept. Otherwise the
 existing trim applies. Rule 4 then checks, before its option handling:
 
-- `[A-Za-z]:…` → `_judge_path(word, root, word, argument, continues)`. `_where` gives Windows'
-  answer. Measured: `_where("Z:")` → outside; `_where("C:")` and `_where("C:foo")` → inside for a
-  workspace on C. On a POSIX host (pwsh on Linux) `Z:` resolves as a file name inside, which is
-  what pwsh does with it.
+- `[A-Za-z]:…` → `_judge_path(word, root, word, argument, continues)`, **on a drive-letter host
+  only when `_drive_exists(letter)`** (below). `_where` gives Windows' answer. Measured:
+  `_where("Z:")` → outside; `_where("C:")` and `_where("C:foo")` → inside for a workspace on C. On
+  a POSIX host (pwsh on Linux) no probe is made: `Z:` goes to `_judge_path` as before and resolves
+  as a file name inside, which is what pwsh does with it.
 - `Temp:…` → `_judge_path(os.path.join(tempfile.gettempdir(), rest), …)`, quoting the word.
   `gettempdir` can raise when no temporary directory is usable, so it is wrapped and becomes
   `_UNRESOLVED`.
@@ -111,7 +124,59 @@ stand.
 the workspace's own drive it passes the word on to the checks below. On Windows, with the workspace
 on C, `dd if=n of=c:$HOMEPATH` gives the word `c:$HOMEPATH`, which matches `_PS_DRIVE_RE` and
 resolves inside as `c:` plus a name. Only D2's check after a colon refuses it. Task 1.4c's row
-catches an early return on the Windows job.
+catches an early return on the Windows job. **(Operator)** The same holds for a drive word skipped
+because its drive does not exist: the check yields no answer and the checks below still run.
+
+#### (Operator, `B4-drive-exists`) A drive word is judged only when the drive exists
+
+On a drive-letter host (`_DRIVE_LETTERS`), in both dialects, a separator-less word or option value
+matching `_PS_DRIVE_RE` is judged as a drive only when `_drive_exists(letter)` answers True.
+Otherwise the drive check yields nothing and rule 4 goes on (D2, D3, D4's `~` after a colon, D10).
+D10's link check still skips such a word, because `os.path.join(root, "e:x")` discards the root and
+a drive that does not exist has no entries.
+
+R5 measured the unconditional rule refusing 873 of 42,860 Bash commands in this repository's
+transcripts (2.0%): `except … as e:`, `with … as f:`, `jq '{a: .x}'`, `Plan A:`. A drive that does
+not exist cannot be written to, so refusing its letter guards nothing.
+
+**`_drive_exists(letter)`** is `os.path.exists(letter + ":\\")`, wrapped, with one deliberate
+difference. Bare `os.path.exists` (`genericpath.exists` on 3.11) catches **every** `OSError` and
+`ValueError` and answers False. Used bare, a drive that exists but cannot be read would count as
+absent and its word would be allowed: a drive whose root denies access, a network drive whose
+server is unreachable, or a card reader that is not ready. That is an allow of a word that may name
+a real drive outside. So the wrapper calls `os.stat(letter + ":\\")` and reads the outcome as
+follows:
+
+| Outcome | Counts as | Why |
+|---|---|---|
+| returns | exists | the drive is there |
+| `FileNotFoundError` | **absent** | measured: `os.stat("E:\\")`, `"A:\\"` and `"Z:\\"` on this machine (drive C only) each raise `FileNotFoundError` (errno 2, winerror 3) |
+| any other `OSError` (`PermissionError`, a not-ready or network error), `ValueError`, or any other exception | **exists** | fail closed. The word goes on to `_judge_path`. On another drive `_where` answers outside, or `_UNRESOLVED` if `realpath` raises, and the call is refused |
+
+**A raise counts as "exists".** The two errors are not symmetric. Counting a raise as absent can
+allow a word naming a real, reachable drive outside the workspace. Counting it as existing costs a
+false refusal of one word, on a machine with an unusual drive, and the reason names the word.
+
+The answer is memoized once per letter per `_decide`, in the sibling change's per-`_decide` memo. It
+is looked up only for a word that already matches `_PS_DRIVE_RE`. Cost (measured, `py -3.11`): 1.8
+µs for a letter with no drive, 14.6 µs for `C:\`. A `stat` of an unreachable mapped network drive
+can block for the system's network timeout. That is a latency cost, and the answer is still
+"exists".
+
+**What this leaves (named in "Costs"):** a word whose letter names a drive that exists but that no
+command means, such as a removable card, a USB stick, a second disk or a mapped drive, is still
+refused as that drive. A drive that appears between the judgement and the run, for example a stick
+plugged in or a drive mapped by an earlier command in the same call, is not seen. A same-command
+`subst e: ..` or `net use e: \\host\share` names its target as a path, and that path is judged.
+
+**The `c:$HOMEPATH` family stays refused.** C exists wherever the workspace is on C, so `c:` is
+judged and found inside, and D2's check after the colon refuses the word. If the workspace is on
+another drive, the drive check refuses it as outside. `e:$HOMEPATH`, with drive E absent, is not
+judged as a drive, and D2's check after the colon refuses it. D2 and D3 never consult the probe.
+
+**Words with a separator are unchanged.** `Z:foo\bar` is not rule 4's. The sibling change's D2 judges
+it as a path whether or not Z exists. R5 counted only separator-less words, and this change makes no
+claim about the others.
 
 ### D2 — A directory variable, referenced by itself, is uncheckable (F401)
 
@@ -218,7 +283,8 @@ ordinary word is `..` around an expansion.
 
 ### D4 (R3) — the drive and the tilde, per platform; a glob beginning with `..`
 
-- **The drive reading is keyed on the platform** (`_DRIVE_LETTERS`), not only the dialect. On a
+- **The drive reading is keyed on the platform** (`_DRIVE_LETTERS`), not only the dialect, and
+  (operator) on the drive existing (D1, `_drive_exists`). On a
   Windows host a Bash-tool word reaches native programs and nested PowerShell
   (`powershell -c 'Copy-Item x Z:'`, `python w.py Z:`; both allowed today, measured at `b66f6a6`).
   Git Bash's own `cp x Z:` writing a file named `Z:` becomes a harmless false refusal. On POSIX,
@@ -273,7 +339,7 @@ to the project checkout (`worktrees.py`, `_symlink_shared_dependencies`), that i
 `rm -rf node_modules` and `grep -r foo --exclude-dir=node_modules .`. The last is allowed today
 (measured) and would be refused there. Every path *through* such a link is refused today already. No
 project worktree on this machine has such a link now (checked read-only), so nothing measured moves.
-Open Question 2.
+Open Question 2, answered (`B4-dep-links`): filed as F444.
 
 ### Totality
 
@@ -281,6 +347,7 @@ What rule 4 now does is all total, or wrapped:
 
 - regex matches and slices;
 - `tempfile.gettempdir`, wrapped;
+- `_drive_exists`, which never raises: any failure other than `FileNotFoundError` answers True;
 - `os.path.lexists`, which returns False on `OSError`/`ValueError`;
 - `_judge_path`, which is total;
 - the sibling change's `_glob_links`, which is total and bounded.
@@ -301,23 +368,24 @@ Named in full, because they fall on ordinary work:
 - `echo $PWD`, `cd $OLDPWD`, `ls $TMPDIR` and `cp x $(dirname $PWD)` are refused. The last names
   the parent, and the operator accepted it. Its nested text `dirname $PWD` has the word `$PWD`.
 - `git show a:README.md` in PowerShell, and in bash on Windows (a one-letter revision), is refused
-  as drive A.
-- **(R5, measured) Any word that is one letter and a colon, on Windows, in either dialect**, unless
-  the letter is the workspace's drive. That is Python in a heredoc or a `-c` string
-  (`except Exception as e:`, `with open(p) as f:`, `for k in d:`, `lambda x:`), a one-letter JSON,
-  jq or YAML key (`jq '{a: .x, b: .y}' f`, `cat > c.yml <<EOF` with `x: 1`), and prose
-  (`Plan A:`). **873 of 42,860 Bash commands (2.0%)** in this repository's own transcripts hold such
-  a word (the most frequent words: `e:` 153 times, `f:` 134, `A:` 83, `t:` 75, `s:` 73). 510 of them hold a
-  heredoc. All are allowed today. **The sibling change's own control `jq '{a: .x, b: .y}' f` (its
-  task 1.3) would fail on the `hub-judge-windows` job** once this change is built as written. The
-  PowerShell dialect has the same cost for a PowerShell-tool command carrying such a script. Open
-  Question 3.
+  as drive A **where drive A exists** (operator, `B4-drive-exists`). Elsewhere it stands.
+- **(Operator, `B4-drive-exists`) A one-letter word with a colon, on Windows, whose letter names a
+  drive that exists and is not the workspace's.** R5's measured 2.0% (873 of 42,860 Bash commands:
+  `as e:`, `as f:`, `jq '{a: .x, b: .y}' f`, `Plan A:`) is gone. It came from letters with no drive,
+  which are now ordinary words. What remains is a letter naming a drive that exists but that the
+  command does not mean: a removable card or USB stick, a second disk, a DVD drive, or a mapped
+  network drive. There, `except … as d:` or a YAML key `d:` is refused as drive D. R5 counted 30
+  `d:` words in the 42,860 commands. On this machine (drive C only) the measured cost is none. A
+  drive whose probe fails other than by "not found" counts as existing (D1), so a not-ready card
+  reader refuses its letter too. On the `hub-judge-windows` runner, drives C and D normally exist,
+  so tests pin the probe (task 1.5c) rather than depend on the runner's drives.
 - (R5, measured) 33 of the 42,860 commands name a directory variable as a word, most often
   `cd "$TMPDIR"` and `echo "… $TEMP"`. That is the cost the operator accepted, counted.
 - (R4) In a worktree with a linked dependency directory, a bare mention of it is refused (D10).
   **(R5)** So is a bare `*` when the link's name has no leading dot (`node_modules`, `venv`):
   `ls *`, `grep foo *`, `du -sh *`. 595 of the 42,860 commands had a bare `*` word. No worktree on
-  this machine holds such a link now.
+  this machine holds such a link now. **(Operator, `B4-dep-links`)** Accepted and filed as **F444**
+  (`scripts/drive/FINDINGS.md`), which must be fixed before a JavaScript project is registered.
 
 ## Residuals, named
 
@@ -329,28 +397,24 @@ Named in full, because they fall on ordinary work:
 
 ## Open questions
 
-1. **Resolved by the operator on 2026-09-24:** D5 is (d), widened as above. `PWD` is included.
-2. **The linked dependency directories (D10's cost).** Recommended: **build D10 as written, and file
-   a finding** that the Hub's shared-dependency links make every path through them outside. Its fix
-   belongs to the boundary: for example, treating the Hub's own links as read-only inside, or
-   provisioning without links. Exempting the bare names alone would refuse `ls node_modules/x` and
-   allow `ls node_modules`, which is the incoherence F375 removed for `..`. (R5) The cost includes
-   a bare `*` in a JavaScript worktree (see "Costs"). The recommendation stands while no worktree
-   holds such a link. If a JavaScript project is registered before the finding is fixed, the fix
-   should come first.
-3. **(R5) A one-letter word with a colon, on Windows (D1, D4).** As written, 2.0% of this
-   repository's own Bash commands are refused, mostly Python's `as e:` and `as f:` (see "Costs").
-   **Recommended: judge a separator-less drive word only when that drive exists**
-   (`os.path.exists("Z:\\")`, wrapped, looked up once per letter per `_decide`), in both dialects.
-   A drive that does not exist cannot be written to, so refusing it guards nothing. On this machine
-   (drive C only) the measured cost falls to none, because `c:` is the workspace's own drive and
-   inside. `Z:` stays refused wherever Z is a real or mapped drive. What remains: on a machine with
-   a second drive D, a `d:` word (30 occurrences in the 42,860 commands). A drive mapped by `subst` or
-   `net use` in an earlier call is seen, because it exists by then. One mapped in the same command
-   names its target as a path, which is judged. The spec sentence would read "…names that drive's
-   current location, and, where that drive exists, SHALL be judged by where it resolves".
-   The alternatives:
-   - **Keep the rule as written**, and accept the 2.0%.
-   - **Drop the bash reading on Windows**, and keep R2's PowerShell-only rule. Then
-     `python w.py Z:` and `powershell -c 'Copy-Item x Z:'` from the Bash tool stay allowed, as they
-     are today. The PowerShell tool keeps the cost for scripts it carries.
+All answered. The operator answered R4's and R5's list (`spec-queue/tracks/B4.md`, R5, "Left for the
+operator", questions 1 to 5) on 2026-09-24 afternoon, in `spec-queue/DECISIONS.md`.
+
+1. **Answered 2026-09-24:** D5 is (d), widened as above. `PWD` is included.
+2. **Answered (`B4-dep-links`): the linked dependency directories (D10's cost). Build D10 as
+   written.** The residual is filed as **F444** (`scripts/drive/FINDINGS.md`): the Hub's
+   shared-dependency links (`node_modules`, `.venv`, `venv`) make every path, glob and bare name
+   through them outside, including a bare `*` in a JavaScript worktree. **F444 must be fixed before a
+   JavaScript project is registered.** Its fix belongs to the boundary, for example treating the
+   Hub's own links as read-only inside, or provisioning without links. Exempting the bare names alone
+   would refuse `ls node_modules/x` and allow `ls node_modules`, the incoherence F375 removed for
+   `..`. Rejected: folding a read-through exemption into these changes now.
+3. **Answered (`B4-drive-exists`): a one-letter word with a colon, on Windows (D1, D4).** It is
+   judged as a drive only when that drive exists (D1, `_drive_exists`). Any probe failure other than
+   `FileNotFoundError` counts as existing. Rejected: keeping the rule and accepting 2.0%, and dropping
+   the bash reading on Windows, which reopens `python w.py Z:` and `c:$HOMEPATH`-style words.
+4. **Answered (`B4-residuals`): build order.** This change builds after
+   `the-shell-judge-reads-a-word-whole`, and both are built in one night window.
+5. **Answered (`B4-residuals`), the sibling change's questions:** its `case`-arm residual stays, and
+   its four device names stay exempt, accepting the inner-PowerShell `> /dev/null` residual. Neither
+   bears on this change's rules.

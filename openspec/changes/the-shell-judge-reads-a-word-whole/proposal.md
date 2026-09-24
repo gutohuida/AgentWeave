@@ -137,8 +137,8 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
   (`bash -c "cp n \$'\\x2e\\x2e'"`) is allowed, today and after: rule 4 reads the literal `$'…'`.
 - (R4) An inner shell's `case` arm executing a path straight after `)`
   (`sh -c 'case 1 in 1)../../evil.sh;;esac'`) is refused today and allowed after, because `)` is
-  not a break (regex back-references keep that allowed). It executes and cannot write. Design Open
-  Question 1.
+  not a break (regex back-references keep that allowed). It executes and cannot write. Accepted
+  (design Open Question 1, answered `B4-residuals`).
 - (R4) `**` is matched as `*` unless the command names `globstar`, so a program's own recursive
   glob through a link two or more levels down is not seen.
 - (R4) `host:x/y` and `user@alias:path` (a dotless host) are read as paths (operator, 2026-09-24).
@@ -148,8 +148,8 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 - `cp n '.{,.}'/x` (a file literally named `.{,.}` in a directory): refused, because an inner shell
   would expand the pattern (R2).
 - (R5) On Windows, an inner PowerShell's or `cmd`'s `> /dev/null` (`powershell -c 'echo x > /dev/null'`)
-  is allowed after and refused today. It writes `\dev\null` only if that directory exists. Design
-  Open Question 2.
+  is allowed after and refused today. It writes `\dev\null` only if that directory exists. Accepted
+  (design Open Question 2, answered `B4-residuals`).
 - (R5) `grep -rn '\.\./' src` on POSIX (the escape levels read `../`), and an scp-style address
   written as text in an `echo` or a commit message, are refused.
 - `grep -c '</script>' a.html`: the trimmed word is `/script`, refused by rule 5. `<` before `/` is
@@ -163,7 +163,8 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
 - (R4, replacing R3's line) A glob that matches a link inside the workspace pointing outside is
   **refused** (step 9). In a worktree whose `node_modules`, `.venv` or `venv` is the Hub's shared
   link to the project checkout, every path through it is refused today already. Globs through it now
-  are too. See design Risks and Open Question 3.
+  are too. See design Risks. Accepted by the operator (`B4-dep-links`) and filed as **F444**, which
+  must be fixed before a JavaScript project is registered.
 
 ## Findings
 
