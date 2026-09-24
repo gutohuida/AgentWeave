@@ -24,10 +24,11 @@ _RESERVED_AGENT_NAMES = {
     "operator": ...,
     "conflicts": "GET /worktrees/conflicts would answer for it instead of its workspace",
     "settings": "GET /queue/settings would answer for it instead of its queue",
+    "sessions": "GET /agent/sessions/{agent} would answer for its chat and conversation list",  # R3
 }
 ```
 
-`RESERVED_AGENT_NAMES` in the CLI gains the same two. Task ids: one shared function in
+`RESERVED_AGENT_NAMES` in the CLI gains the same three. Task ids: one shared function in
 `schemas/tasks.py` (beside `_TASK_ID_RE`), called by **both** `TaskCreate._validate_id_shape` and
 `AgentTaskCreate.validate_id` (`agent_actions.py:127-132`, the agent door MCP `create_task` posts
 through), refuses
@@ -44,7 +45,11 @@ method, that match it segment for segment (R2: keyed on the match, not on the na
 parameter is Hub-minted sits in an explicit allowlist in the test (today only `{runner_id}`:
 `launchability`, `launchability-by-provider`); every other pair must have its word refused by the
 validator for that parameter's resource. It asserts `validate_agent_name(word)` or the task-id validator raises for each
-literal found. Today that list is exactly `conflicts`, `settings`, `board`, `boards`.
+literal found. Today that list is exactly `conflicts`, `settings`, `sessions`, `board`, `boards`.
+**(R3)** The walk must match a whole path, not one differing segment: `/agent/sessions/{agent}` and
+`/agent/{agent}/chat` differ in two segments, each a literal against a parameter, and both match
+`/agent/sessions/chat`. The earlier-registered route wins, so the victim is the later route's
+parameter (`{agent}` = `sessions`). R2's list missed this pair.
 
 This is what makes the fix durable. F248 was filed on 2026-09-01; the queue collision next to it
 existed then and nobody saw it, because nothing asked.
@@ -93,3 +98,11 @@ None beyond the decision this is built on.
   handler, so a `TaskCreate`-only fix answers 500 there; D1, D4 and tasks 1.4, 2.2 now use one
   shared check. D2's walk re-keyed on segment match plus a minted-parameter allowlist. `:8000`
   (`mode=ro`, 2026-09-24): no agent `conflicts`/`settings`, no task `board`/`boards`.
+- R3 2026-09-24: re-walked the built app's `app.routes` with a whole-path matcher (every pair of
+  routes with a shared method and equal depth whose segments are pairwise equal or literal-vs-
+  parameter). **Disagreed (1):** a fifth word. `GET /agent/sessions/{agent}`
+  (`agent_trigger.py:3257`) is registered before `GET /agent/{agent}/chat` and
+  `GET /agent/{agent}/conversations`, so an agent named `sessions` loses its chat history and
+  conversation list, both read by the UI (`api/agentChat.ts:167`, `:381`). `sessions` added to D1,
+  D2's list, the proposal and tasks 1.2 and 1.6; D2 now states the whole-path rule. The other four
+  rows and the `{runner_id}` allowlist held. `:8000` (`mode=ro`): no agent named `sessions`.

@@ -14,6 +14,7 @@ under that name can never be read at its own address. R1 listed every such pair 
 |---|---|---|---|
 | `GET /worktrees/{agent}` | `GET /worktrees/conflicts` | `worktrees.py:178` before `:293` | anyone creating an agent; `AGENT_NAME_RE` accepts `conflicts` |
 | `GET /queue/{agent}` | `GET /queue/settings` | `inbound_queue.py:80` before `:199` | the same; accepts `settings` |
+| `GET /agent/{agent}/chat`, `GET /agent/{agent}/conversations` | `GET /agent/sessions/{agent}` (R3: a path `/agent/sessions/chat` matches both; the earlier-registered sessions route wins) | `agent_trigger.py:3257`, registered before both | the same; accepts `sessions` |
 | `GET /tasks/{task_id}` | `GET /tasks/board`, `GET /tasks/boards` | `tasks.py:943`, `:1009` before `:1234` | a task creator: `TaskCreate.id` accepts `^[a-zA-Z][a-zA-Z0-9_-]{0,63}$` (`schemas/tasks.py:17`, `:72-79`) |
 
 The only other literal-beside-parameter pairs are `GET /runners/launchability` and
@@ -26,11 +27,13 @@ against them is task 1.1.
 
 The UI calls both `/queue/${agent}` (`hub/ui/src/api/queue.ts:40`) and `/worktrees/${agent}`
 (`api/workspace.ts:84`), so an agent named `settings` has an unreadable queue panel and one named
-`conflicts` an unreadable workspace panel.
+`conflicts` an unreadable workspace panel. The UI also reads `/agent/${agent}/conversations` and
+`/agent/${agent}/chat` (`api/agentChat.ts:167`, `:381`), so an agent named `sessions` has no readable
+conversation list or chat history (R3, from the built app's `app.routes`).
 
 ## What Changes
 
-- **The shadowed words are refused as names** (design D1): agent names `conflicts` and `settings`
+- **The shadowed words are refused as names** (design D1): agent names `conflicts`, `settings` and (R3) `sessions`
   join the reserved names, each with a reason naming the route it would lose to; task ids `board`
   and `boards` are refused the same way.
 - **A test makes the next collision fail** (design D2): it walks the app's routes, finds every literal
@@ -40,7 +43,7 @@ The UI calls both `/queue/${agent}` (`hub/ui/src/api/queue.ts:40`) and `/worktre
   `hub/hub/worktrees.py`).
 
 No route moves, so no UI bundle and no backend/bundle ordering on `:8000`. No migration: `:8000`
-has no agent named `conflicts` or `settings` and no task with id `board` or `boards` (measured,
+has no agent named `conflicts`, `settings` or `sessions` and no task with id `board` or `boards` (measured,
 `mode=ro`, 2026-09-24).
 
 ## Capabilities

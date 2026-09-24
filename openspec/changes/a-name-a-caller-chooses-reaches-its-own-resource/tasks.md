@@ -6,12 +6,12 @@
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
-- [ ] 1.1 Measure the two unmeasured rows first: with an agent named `settings` inserted directly, `GET /queue/settings` answers the settings body, not that agent's entries; with a task id `board` inserted directly, `GET /tasks/board` does not answer that task. Record both results in the round log (they justify rows 2 and 3)
-- [ ] 1.2 New `hub/tests/test_a_chosen_name_is_not_a_route.py`: D2's route walk. Record that it FAILS today, naming `conflicts`, `settings`, `board`, `boards`
+- [ ] 1.1 Measure the two unmeasured rows first: with an agent named `settings` inserted directly, `GET /queue/settings` answers the settings body, not that agent's entries; with a task id `board` inserted directly, `GET /tasks/board` does not answer that task. (R3) With an agent named `sessions` inserted directly, `GET /agent/sessions/chat` does not answer that agent's chat history. Record both results in the round log (they justify rows 2 and 3)
+- [ ] 1.2 New `hub/tests/test_a_chosen_name_is_not_a_route.py`: D2's route walk. Record that it FAILS today, naming `conflicts`, `settings`, `sessions`, `board`, `boards`
 - [ ] 1.3 Same file: `POST /agents {"name": "conflicts"}` and `{"name": "Settings"}` are refused, and the detail names the route. Record that both FAIL today (201)
 - [ ] 1.4 Same file: `POST /tasks {"id": "board", ...}` (operator door) **and** `POST /agent/tasks {"id": "boards", ...}` (agent door, run-token auth) each answer 422 naming `id`, never 500. Record that both FAIL today (201). The agent-door case fails if only `TaskCreate` gains the check (R2: it would 500 from `agent_actions.py:233`)
 - [ ] 1.5 Control: `user` and `operator` are still refused with their existing reasons; an agent named `conflict` (singular) is accepted
-- [ ] 1.6 `tests/`: the CLI's `is_valid_agent_name("settings")` is False. Record that it FAILS today
+- [ ] 1.6 `tests/`: the CLI's `is_valid_agent_name("settings")` and `is_valid_agent_name("sessions")` are False. Record that it FAILS today
 
 ## 2. The fix
 

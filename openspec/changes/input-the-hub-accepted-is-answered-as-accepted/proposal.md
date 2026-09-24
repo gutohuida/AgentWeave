@@ -41,7 +41,12 @@ Four more routes commit input and then call `schedule_agent` unguarded, in the s
   "accepted" in every case: `running` where a turn started with it, else `queued` with a
   `waiting_reason`. A scheduling failure's reason reads *"accepted; the Hub could not start a turn
   yet and will try again"*. An event that fails to persist is logged and does not change the answer.
-- The four other routes call the helper in place of `schedule_agent`, and keep their answers.
+- The six other post-commit sites (R2: `messages.py:318`, `agents.py:2257`, `questions.py:212`,
+  `inbound_queue.py:253`, `accounting.py:78`, `agents.py:2693`) call the helper in place of
+  `schedule_agent`, and keep their answers. **(R3)** Five of them also write an event on the route's
+  session between the commit and the schedule (`persist_event`, which commits), so a `database is
+  locked` there still answers 500 and never schedules. Those post-commit event writes go through one
+  never-raising `persist_accepted_event` that writes on its own session (design D3a).
 
 No migration, no API shape (the trigger's `TriggerAgentResponse` already has `status` and
 `waiting_reason`), no UI.
@@ -60,7 +65,7 @@ None.
 ## Impact
 
 - `hub/hub/turn_scheduler.py` (the helper), `hub/hub/run_reconciliation.py` (a public `defer` into
-  the existing set), `hub/hub/api/v1/agent_trigger.py` (`:1587-1672` only), and the four call sites.
+  the existing set), `hub/hub/api/v1/agent_trigger.py` (`:1587-1672` only), and the six other call sites (D4).
 - `hub/tests/`: a new `test_accepted_input_is_answered_as_accepted.py`.
 - **Interaction:** F133 (`queue status recomputes the reason`, a no-spec round in B11) reads the same
   queue. This change writes no `waiting_reason` column; it only answers the request. No collision.

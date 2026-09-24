@@ -131,3 +131,18 @@ None for the operator beyond the decision this design is built on.
   and called in the lifespan (2.3). **Residual, out of scope:** `src/agentweave/mcp/server.py` imports
   `hub.mcp_server` for a non-Hub-spawned client; the pin covers Hub-spawned runs only. Checked
   against B12 (F363) and B4: both order against this pin as a preference, not a gate; consistent.
+- R3 2026-09-24: traced the launch end to end, fresh. The Hub never runs the server itself: it
+  hands `[sys.executable, <path>]` to the runner CLI (Claude `--mcp-config`,
+  `runner_commands.py:250-260`; Codex `config.mcp_servers` per `thread/start`,
+  `codex_appserver.py:969-972`), and that CLI spawns a new Python per turn, which reads the file
+  **at that spawn**. So the path in `mcp_command` is exactly what a live agent loads, and pinning it
+  changes every turn spawned after the pinning Hub's start; a turn already running keeps the process
+  it has, pinned or not. `main.py:22` imports `agent_trigger` at module top, so task 2.2's module
+  import takes the pin at start. **One difference a copy makes, checked:** Python puts the script's
+  own directory first on `sys.path`, so today `hub/hub/` is importable by the server and after the
+  pin the digest directory is. No `hub/hub/*.py` shares a name with a standard-library module
+  (checked against `sys.stdlib_module_names`) and the server imports nothing else from its
+  directory, so the program is the same. **Residual, not pinned:** `fastmcp` and the standard
+  library still load from the Hub's interpreter at each spawn, so a `pip install` into that
+  environment reaches the next turn; that is an environment change, not a checkout edit. No
+  disagreement; no edit beyond this log.

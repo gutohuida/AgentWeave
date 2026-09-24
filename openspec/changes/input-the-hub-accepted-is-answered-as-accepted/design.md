@@ -15,7 +15,8 @@ operator prefers to keep a 500 (option c in D5), this change is withdrawn and F3
 | `ScheduleResult` can already say "not started, and why" without a refusal | `turn_scheduler.py:58-62` (`waiting_reason`, `refusal=None`) |
 | Nothing retries a queued entry on a timer | F349's foot; re-drain call sites listed in the proposal |
 | A deferred-schedule set exists, drained by the next request the Hub serves | `hub/hub/run_reconciliation.py:160-212`; `hub/hub/main.py:516-526` |
-| The same unguarded shape at four more routes | `messages.py:318`, `agents.py:2257`, `questions.py:212`, `inbound_queue.py:253` |
+| The same unguarded shape at six more sites (R2 widened from four) | `messages.py:318`, `agents.py:2257`, `questions.py:212`, `inbound_queue.py:253`, `accounting.py:78`, `agents.py:2693` |
+| (R3) Five of those six write an event on the route's session after the commit and before the schedule | `messages.py:285` and `:295` (and `:306` when suspended), `agents.py:2250` and `:2252`, `questions.py:207`, `inbound_queue.py:248`, `accounting.py:64`. Not `agents.py:2693` |
 
 ## D1 — `schedule_accepted` never raises
 
@@ -43,7 +44,10 @@ sentence the operator can act on, and the message they need is that nothing is l
 ## D2 — The Hub retries; the deferred set is the backstop
 
 `retry_schedule(project_id, agent)` starts one background task per `(project, agent)` (a second
-call while one is pending does nothing). It sleeps 1 s, 5 s, then 30 s, calling `schedule_agent`
+call while one is pending does nothing). **(R3)** The pending tasks are held in a module-level dict
+keyed by the pair and removed in the task's done-callback: that dict is the "pending" test, and it
+is also the strong reference asyncio needs (a bare `asyncio.create_task`, as `main.py:526` does for
+the drain, may be collected before it runs). It sleeps 1 s, 5 s, then 30 s, calling `schedule_agent`
 after each, and stops at the first call that does not raise. After the last failure it adds the pair
 to `run_reconciliation._deferred_schedules` through a new public `defer(agents)`, so the next request
 the Hub serves drains it (`main.py:516-526`). The delays are module constants so tests set them to 0.
@@ -100,10 +104,44 @@ failure result, the route re-reads the entry in a fresh session. If it is `deliv
 `running` with `delivered_in_run_id`. If the re-read raises too, the answer stays `queued`: the commit
 succeeded, so "accepted" is the one thing known to be true.
 
-## D4 — The other four routes
+## D3a (R3) — A post-commit event is written on its own session and never raises
+
+R2's rollback-and-capture step fixes the trigger alone, and it has to be repeated by hand at each
+route whose answer reads ORM rows (`messages.py` returns `msg`, `inbound_queue.py:254` refreshes
+`entry`). The other five routes of D4 have the same hazard **before** the schedule: a failed
+`persist_event` there raises out of the route, so neither `schedule_accepted` nor any retry runs,
+which is F349's own defect (queued, never started) under the likeliest failure, a locked write.
+
+One helper, beside `persist_event` in `hub/hub/utils.py`:
+
+```python
+async def persist_accepted_event(project_id, event_type, data, *, agent=None, severity="info") -> None:
+    """Record an event about input already committed. Its own session: a failure here cannot
+    poison the caller's, and nothing the caller loaded is expired."""
+    try:
+        async with async_session_factory() as own:
+            await persist_event(own, project_id, event_type, data, agent=agent, severity=severity)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("Could not record %s for %s after accepting input", event_type, project_id)
+```
+
+- `async_session_factory` is imported inside the function (as `turn_scheduler` imports it at module
+  top, `utils` must not import `db.engine` at module top if that would cycle; the test suite already
+  runs every route and the scheduler on that same factory, `hub/tests/conftest.py:77`).
+- Every **post-commit** `persist_event(session, …)` at the seven sites becomes
+  `persist_accepted_event(…)`. The broadcast beside each is unchanged and still runs.
+- The trigger (D3) uses the same helper, so the route's `session` never holds a failed commit. R2's
+  captured-values-and-rollback step is then not needed; it stays correct if an implementer prefers
+  it, but the helper is the one rule for all seven sites. Task 1.9 still pins the outcome.
+- Not for a `commit=False` event (a passenger in the caller's transaction): those belong to B9's
+  `an-event-is-announced-only-once-its-write-is-committed`, which does not touch these seven sites.
+
+## D4 — The other six sites
 
 Each calls `schedule_accepted` in place of `schedule_agent` and ignores the result, as it already
-ignores `schedule_agent`'s.
+ignores `schedule_agent`'s, and writes its post-commit events through D3a's helper.
 
 **(R2) Two more post-commit sites of the same shape**, from `grep -rn "schedule_agent(" hub/hub`:
 the token-budget `PUT` (`accounting.py:78`, a loop over every agent with queued input after the
@@ -120,7 +158,7 @@ what they committed, and are already true once the call cannot raise.
 
 | Option | What it would break | What it releases |
 |---|---|---|
-| **(a) Answer accepted, retry in the Hub (this change)** | Nothing: no caller relies on a 500 here. | The false 500 at five routes, and the wait on an unrelated action. |
+| **(a) Answer accepted, retry in the Hub (this change)** | Nothing: no caller relies on a 500 here. | The false 500 at seven sites (the trigger and D4's six), and the wait on an unrelated action. |
 | (b) Answer accepted, no retry | The answer is still false in effect: the input can wait indefinitely. | The status half only. |
 | (c) Keep 500, add a retry | Tells the operator a queued message failed, and invites a duplicate send. | The drain half only. |
 | (d) Move `schedule_agent` inside the request's transaction | The run spawn is not transactional; a rollback cannot un-spawn a process. | — |
@@ -141,3 +179,14 @@ what they committed, and are already true once the call cannot raise.
   back; task 1.9 added. (2) Two further post-commit routes (`accounting.py:78`, `agents.py:2693`);
   D4 widened, `checkpoints.py:334` excluded with its reason. D1/D2 stand: `schedule_agent` opens its
   own session (`turn_scheduler.py:283`), so its raise cannot poison the route's.
+- R3 2026-09-24: re-derived every `schedule_agent(` call (`grep`) and read each of D4's six sites.
+  **Disagreed (2):** (1) five of the six also `persist_event` on the route's session between the
+  commit and the schedule (the Context row R3 added), so switching only the schedule leaves a 500
+  that never schedules under a locked write; D3a adds one own-session, never-raising
+  `persist_accepted_event` for every post-commit event at all seven sites, and supersedes R2's
+  per-route rollback (task 1.6 widened, 2.3a added). (2) Counts: proposal and tasks said "four",
+  D5 "five"; now six sites plus the trigger. **Added:** D2's pending-retry dict doubles as the
+  strong task reference. **Held:** D1 (own session in `schedule_agent`, `turn_scheduler.py:283`),
+  the drain's loss on a raise (`run_reconciliation.py:184-187`, `:205`), `checkpoints.py:334`
+  excluded. No collision with B9's `an-event-is-announced-only-once-its-write-is-committed`
+  (that change is about `commit=False` events inside a caller's transaction).
