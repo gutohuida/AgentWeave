@@ -26,7 +26,9 @@ from pathlib import Path
 
 import pytest
 
-SERVER = Path(__file__).resolve().parents[1] / "hub" / "mcp_server.py"
+from hub.tool_server import pinned_server_path  # noqa: E402
+
+SERVER = pinned_server_path()
 
 
 def _tools_over_stdio() -> list:

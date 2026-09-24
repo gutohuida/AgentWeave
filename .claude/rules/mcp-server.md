@@ -9,8 +9,9 @@ paths:
   it needs from the Hub is restated there, with a test asserting the two agree.
 - `approve_tool_call` has **no return annotation**. FastMCP would derive `structuredContent` from
   one, which silently defeats an `allow`. Do not add one.
-- The operator's `:8000` Hub spawns this file fresh on every agent turn, so an edit here reaches
-  their real agents immediately, without a restart.
+- A Hub spawns the copy of this file it pinned at start (`hub/hub/tool_server.py`, under
+  `~/.agentweave/hub/tool-server/<digest>/`), so an edit here reaches a Hub's agents on that Hub's
+  next restart, not before. `:8000` runs this checkout, so its restart carries the edit.
 
 ## Adding an MCP tool
 

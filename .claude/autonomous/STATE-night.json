@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "8a5d0ed",
     "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-24-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "tool-server-impl",
-    "next_action": "Do queue item tool-server-impl (see its detail in queue). First read CI verdict for the previous push sha via gh run list, write it on the log entry's first line. Run tests/ before commit. Note: a full hub suite takes ~37 min; run it with run_in_background and a relevant subset in the foreground.",
+    "current": "pressing-run-impl",
+    "next_action": "Do queue item pressing-run-impl (see its detail in queue). First read CI verdict for the previous push sha via gh run list, write it on the log entry's first line. Run tests/ before commit. Full hub suite takes ~37 min; run it with run_in_background and a relevant subset in the foreground.",
     "queue": [
         {
             "id": "compose",
@@ -29,9 +29,9 @@
         },
         {
             "id": "tool-server-impl",
-            "status": "open",
+            "status": "done",
             "title": "an-agents-tool-server-is-the-one-its-hub-loaded",
-            "detail": "Build per openspec/changes/<name>/tasks.md (22 tasks). Build early; task 4.1 rewrites .claude/rules/mcp-server.md. Honour F392 rules 1-2."
+            "detail": "Done iteration 3: code+tests built; tasks 0.x, 2.4 (full suite) and 3.x (drive) still open, covered by night-drive."
         },
         {
             "id": "pressing-run-impl",

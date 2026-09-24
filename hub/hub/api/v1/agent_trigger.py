@@ -40,6 +40,7 @@ from ... import (
     review_turn,
     run_liveness,
     task_workspace,
+    tool_server,
     worktrees,
 )
 from ...agent_auth import hash_run_token, mint_run_token
@@ -1140,8 +1141,13 @@ async def _trigger_agent_directly(
     prompt = "\n\n".join([*notices, message])
     mcp_command = None
     if access_path == "mcp":
-        canonical_server = Path(__file__).resolve().parents[2] / "mcp_server.py"
-        mcp_command = [sys.executable, str(canonical_server)]
+        try:
+            mcp_command = [sys.executable, str(tool_server.pinned_server_path())]
+        except OSError as exc:
+            raise TriggerAgentError(
+                status.HTTP_409_CONFLICT,
+                f"Could not materialize the tool server for {agent}: {exc}",
+            ) from exc
 
     # Codex uses the app-server transport unless the runner explicitly opts out; see
     # `uses_app_server`. Both transport sentinels are stripped before `flags` reaches

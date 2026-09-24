@@ -745,6 +745,7 @@ async def test_trigger_injects_identity_env_and_tells_agent_the_access_path(
     assert "$HUB_URL/api/v1/agent-actions/..." in prompt
     assert "Authorization: Bearer $AW_RUN_TOKEN" in prompt
     assert captured_kwargs["mcp_command"][-1].endswith("mcp_server.py")
+    _assert_names_the_pinned_server(captured_kwargs["mcp_command"])
 
     from hub.agent_auth import hash_run_token
     from hub.db.engine import async_session_factory
@@ -797,6 +798,15 @@ async def test_trigger_stamps_the_new_run_with_this_hub_instances_id(
         assert run.instance_id == "test-instance-id"
 
 
+def _assert_names_the_pinned_server(mcp_command):
+    """The command names the Hub's pinned copy, never the checkout's file (F354)."""
+    from hub import tool_server
+
+    named = Path(mcp_command[-1])
+    assert named == tool_server.pinned_server_path()
+    assert named != Path(agent_trigger.__file__).resolve().parents[2] / "mcp_server.py"
+
+
 async def _trigger_and_capture_build_command(app, auth_headers, agent, *, session_suffix):
     """Run one trigger to completion and hand back the kwargs `build_command` was called with.
 
@@ -826,6 +836,44 @@ async def _trigger_and_capture_build_command(app, auth_headers, agent, *, sessio
                 assert resp.status_code == 200, resp.text
                 await _await_background_run()
     return captured_kwargs
+
+
+@pytest.mark.asyncio
+async def test_a_tool_server_that_cannot_be_pinned_refuses_the_trigger(
+    app, auth_headers, bind_runner
+):
+    """F354 D3: a failed pin keeps the input queued with its sentence and leaves no run, never a fallback."""
+    from sqlalchemy import select
+
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Run
+
+    sync = await app.post(
+        "/api/v1/projects/proj-test/session/sync",
+        json={"data": {"agents": {"pin-claude": {"runner": "claude"}}}},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 200
+    await bind_runner("pin-claude", cli="claude")
+
+    with patch("hub.tool_server.pinned_server_path", side_effect=OSError("disk full")):
+        with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+            resp = await app.post(
+                "/api/v1/projects/proj-test/agent/trigger",
+                json={"agent": "pin-claude", "message": "hi", "session_mode": "new"},
+                headers=auth_headers,
+            )
+    # The route queues the input and records the sentence, as for the context-file failure.
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "queued"
+    assert body["run_id"] is None
+    assert body["waiting_reason"] == (
+        "Could not materialize the tool server for pin-claude: disk full"
+    )
+    async with async_session_factory() as db:
+        rows = await db.execute(select(Run).where(Run.agent == "pin-claude"))
+        assert rows.scalars().first() is None
 
 
 @pytest.mark.asyncio
@@ -970,6 +1018,7 @@ async def test_a_run_holding_the_tools_is_not_told_it_is_empty(app, auth_headers
 
     # ...and the server was injected all the same, so the run genuinely holds the tools.
     assert captured["mcp_command"][-1].endswith("mcp_server.py")
+    _assert_names_the_pinned_server(captured["mcp_command"])
 
     prompt = captured["prompt"]
     assert "no MCP tools this turn" not in prompt

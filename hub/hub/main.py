@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, bound_address, instance_identity, run_reconciliation
+from . import __version__, bound_address, instance_identity, run_reconciliation, tool_server
 from .api.v1 import agent_trigger, v1_router
 from .api.v1.agent_trigger import terminate_all_active_runs
 from .config import settings
@@ -469,6 +469,12 @@ async def lifespan(app: FastAPI):
     # After the scheduler, which holds the wakes; after both reconciliations, whose rows it reads
     # past (`a-spent-allowance-holds-the-queue`, D5).
     await arm_held_queues()
+    try:
+        logger.info("Tool server pinned at %s", tool_server.pinned_server_path())
+    except OSError as exc:
+        logger.warning("Could not pin the tool server at start: %s", exc)
+    for pruned in tool_server.PIN.prune_stale():
+        logger.info("Pruned stale tool server %s", pruned)
     warning = _ui_staleness_warning()
     if warning:
         logger.warning(warning)
