@@ -752,6 +752,11 @@ R5 on `the-shell-judge-reads-a-word-whole`, `a-drive-or-a-home-variable-names-a-
   including the two cross-change notes written into B5's `evidence-is-decided-after-the-run-that-recorded-it`
   and B7's `worker-spend-counts-against-the-budget`, and F445 filed for the in-workspace link that
   lists an outside file.
+- DECIDED   B4-temp-dialect  **`Temp:` counts as a drive only in the PowerShell dialect** (R6's
+  wording in `a-drive-or-a-home-variable-names-a-directory-by-itself`). In bash, `temp:` is ordinary
+  text, such as a YAML key in a heredoc. The accepted residual: `pwsh -c '…Temp:'` sent from the
+  Bash tool stays allowed. Windows PowerShell 5.1 has no `Temp:` drive at all; only PowerShell 7
+  does. Rejected: both dialects.
 
 ### 2026-09-24 — the daily review of the twelve bundles
 
