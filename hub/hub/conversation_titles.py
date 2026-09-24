@@ -80,8 +80,10 @@ def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optio
     # project's `CLAUDE.md`, which is the point of running there; measured 2026-09-23 with F195's
     # ZEBRA control, `--restricted` and `--setting-sources ""` both drop that memory as well, so
     # neither is used. The project's own settings hooks still run, as they do in its sessions.
+    # `--strict-mcp-config` (with no `--mcp-config`) also removes the account's claude.ai
+    # connectors, which `--tools ""` leaves; measured 2026-09-24 to keep `CLAUDE.md` (F447).
     if cli == "claude":
-        cmd = [cli, "--tools", ""]
+        cmd = [cli, "--tools", "", "--strict-mcp-config"]
         if model:
             cmd += ["--model", model]
         return cmd + ["-p", prompt]

@@ -70,10 +70,12 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
     cmd = build_worker_command(cli="claude", model="claude-haiku-4-5-20251001", prompt="hi")
     # The whole argv, pinned (F420): `--tools ""` is what leaves a worker reading untrusted
     # transcript text with nothing to act with, and a regression that drops it must fail here.
+    # `--strict-mcp-config` removes the account's connector tools, which `--tools ""` leaves (F447).
     assert cmd == [
         "claude",
         "--tools",
         "",
+        "--strict-mcp-config",
         "--output-format",
         "json",
         "--model",
@@ -85,6 +87,7 @@ def test_the_claude_command_asks_for_json_and_is_not_an_agent_turn():
         "claude",
         "--tools",
         "",
+        "--strict-mcp-config",
         "--output-format",
         "json",
         "-p",

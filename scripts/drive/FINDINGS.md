@@ -33026,7 +33026,8 @@ one; the same split in rule 5 is the likely repair shape.
 
 ## F447 (B) — `--tools ""` leaves the account's claude.ai connector tools on the worker and titler
 
-**Status:** open. Filed 2026-09-24 (Round 6), measured by the F420 fix. With `--tools ""` (now on
+**Status:** fixed (this commit) [Round 6, 2026-09-24] — both argvs carry `--strict-mcp-config`. Was:
+open. Filed 2026-09-24 (Round 6), measured by the F420 fix. With `--tools ""` (now on
 both the checkpoint/probe worker, `hub/hub/worker.py` `build_worker_command`, and the titler,
 `hub/hub/conversation_titles.py` `build_title_command`), a live Haiku `claude -p` turn named no built-in
 tool but did list the account's claude.ai connector tools (`mcp__claude_ai_Claude_Docs__*`, including
@@ -33034,3 +33035,12 @@ create, update and delete). Both runs read untrusted transcript text, so a promp
 still reach a connector that writes outside the machine. Candidate repair: add
 `--strict-mcp-config` (with no `--mcp-config`) to both argvs and pin it in the argv tests; not yet
 measured, because the worktree sandbox refused the probe. Sibling of F420.
+
+**FIXED 2026-09-24 (Round 6):** `--strict-mcp-config` added after `--tools ""` in
+`hub/hub/worker.py` `build_worker_command` and `hub/hub/conversation_titles.py` `build_title_command`;
+the argv pins in `hub/tests/test_worker.py` and `hub/tests/test_title_generation.py` include it.
+Measured with Haiku `claude -p` in a scratch directory: without the flag the model called
+`mcp__claude_ai_Claude_Docs__read` (denied by the default permission mode, two attempts); with it the
+turn had no tool at all (one turn, no denials), and a `CLAUDE.md` codeword was still read, so the
+titler keeps the project memory F195 runs it there for. Production path: `run_worker` and
+`maybe_generate_title` spawn exactly these argvs.

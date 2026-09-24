@@ -135,9 +135,11 @@ def build_worker_command(
     # No tools (F420), exactly as `conversation_titles.build_title_command` does since F195. Both
     # prompts this builder carries -- a checkpoint's transcript and a probe's rendered checkpoint --
     # are untrusted text, and both ask only for a JSON object written from that text, so nothing
-    # needs a tool. `--tools ""` removes every built-in one; Codex gets its read-only sandbox below.
+    # needs a tool. `--tools ""` removes every built-in one, and `--strict-mcp-config` (with no
+    # `--mcp-config`) removes the account's claude.ai connectors, which `--tools ""` leaves (F447,
+    # measured 2026-09-24). Codex gets its read-only sandbox below.
     if cli == "claude":
-        cmd = ["claude", "--tools", "", "--output-format", "json"]
+        cmd = ["claude", "--tools", "", "--strict-mcp-config", "--output-format", "json"]
         if model:
             cmd += ["--model", model]
         return cmd + ["-p", prompt]

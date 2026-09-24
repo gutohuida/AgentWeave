@@ -21,7 +21,17 @@ from hub.db.models import Project
 def test_claude_command_is_a_one_shot_prompt() -> None:
     cmd = build_title_command(cli="claude", model="claude-opus-5", prompt="P")
     # `--tools ""`: the excerpt is untrusted text, run in the project's directory (F195).
-    assert cmd == ["claude", "--tools", "", "--model", "claude-opus-5", "-p", "P"]
+    # `--strict-mcp-config`: no account connector tools either (F447).
+    assert cmd == [
+        "claude",
+        "--tools",
+        "",
+        "--strict-mcp-config",
+        "--model",
+        "claude-opus-5",
+        "-p",
+        "P",
+    ]
     # None of an agent turn's apparatus: no streaming JSON, no MCP server, no permission mode.
     assert "--output-format" not in cmd
     assert "--mcp-config" not in cmd
