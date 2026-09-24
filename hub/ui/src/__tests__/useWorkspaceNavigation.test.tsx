@@ -113,4 +113,28 @@ describe('phase 5 useWorkspaceNavigation', () => {
     expect(result.current.destination).toEqual({ kind: 'zero' })
     expect(window.location.search).toBe('')
   })
+
+  it('canonicalises an unknown deep-link pathname to the root (F20)', () => {
+    // A URL shape nothing here parses — no `?project=` at all, so `window.location.search` is
+    // empty and the app falls back to the last-opened project — but the pathname itself is what
+    // the old `target !== currentSearch()` comparison never looked at, so it survived untouched.
+    window.history.pushState(null, '', '/projects/proj-1/tasks')
+    const { result } = renderHook(() =>
+      useWorkspaceNavigation({ availableProjectIds: ['proj-1'], lastOpenedProjectId: 'proj-1' }),
+    )
+    expect(result.current.destination).toEqual(projectDestination('proj-1'))
+    expect(window.location.pathname).toBe('/')
+    expect(window.location.search).toBe('?project=proj-1&tab=overview')
+  })
+
+  it('still canonicalises the pathname when the search half already matches the resolved destination', () => {
+    // The half of the old comparison that DID hold: with the query already canonical, only the
+    // pathname disagreed, so `target !== currentSearch()` was false and nothing ran.
+    window.history.pushState(null, '', '/projects/proj-1/tasks?project=proj-1&tab=overview')
+    renderHook(() =>
+      useWorkspaceNavigation({ availableProjectIds: ['proj-1'], lastOpenedProjectId: 'proj-1' }),
+    )
+    expect(window.location.pathname).toBe('/')
+    expect(window.location.search).toBe('?project=proj-1&tab=overview')
+  })
 })

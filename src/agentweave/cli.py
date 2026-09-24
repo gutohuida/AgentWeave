@@ -303,7 +303,7 @@ def _hub_open_project(port: int, directory: Path, token: Optional[str]) -> Optio
 def _hub_project_app_url(port: int, project: Optional[dict]) -> str:
     """Return the app URL to open: project-scoped if `project` resolved, else bare."""
     if project and project.get("id"):
-        return f"{_hub_url(port)}/?project={project['id']}&view=overview"
+        return f"{_hub_url(port)}/?project={project['id']}&tab=overview"
     return _hub_url(port)
 
 

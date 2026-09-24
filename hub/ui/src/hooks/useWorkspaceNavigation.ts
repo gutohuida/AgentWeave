@@ -11,8 +11,24 @@ function currentSearch(): string {
   return typeof window === 'undefined' ? '' : window.location.search
 }
 
+/** The address as it actually reads today: pathname plus search. A destination is always
+ *  serialized against the root (`canonicalUrl` below), so any other pathname — a deep link whose
+ *  shape this app doesn't parse, or one left over from before this canonicalisation existed — is
+ *  itself part of what makes the address non-canonical, not just its query. */
+function currentAddress(): string {
+  return typeof window === 'undefined' ? '' : `${window.location.pathname}${window.location.search}`
+}
+
 function resolveFromLocation(options: ResolveDestinationOptions): WorkspaceDestination {
   return resolveDestination(parseDestination(currentSearch()), options)
+}
+
+/** The one shape a destination is ever written to the address bar as: `/` plus its query, dropping
+ *  any pathname the request arrived with. The app has no router dependency (design.md decision 9)
+ *  — `main.py` serves `index.html` for any path — so a pathname is never meaningful state, only
+ *  ever a leftover that would otherwise survive a `replaceState` targeting a bare `?…` query. */
+function canonicalUrl(destination: WorkspaceDestination): string {
+  return `/${serializeDestination(destination)}`
 }
 
 /** Drives `WorkspaceDestination` from `window.location`'s search parameters
@@ -32,9 +48,9 @@ export function useWorkspaceNavigation(options: ResolveDestinationOptions) {
     // resolveFromLocation always equals a freshly recomputed one even when
     // the URL itself still holds the unresolved (invalid) request.
     const resolved = resolveFromLocation({ availableProjectIds, lastOpenedProjectId })
-    const target = serializeDestination(resolved)
-    if (target !== currentSearch()) {
-      window.history.replaceState(null, '', target || window.location.pathname)
+    const target = canonicalUrl(resolved)
+    if (target !== currentAddress()) {
+      window.history.replaceState(null, '', target)
     }
     setDestination((current) =>
       JSON.stringify(current) === JSON.stringify(resolved) ? current : resolved,
@@ -58,8 +74,7 @@ export function useWorkspaceNavigation(options: ResolveDestinationOptions) {
   const navigate = useCallback(
     (next: WorkspaceDestination, options?: { replace?: boolean }) => {
       const resolved = resolveDestination(next, { availableProjectIds, lastOpenedProjectId })
-      const target = serializeDestination(resolved)
-      const url = target || window.location.pathname
+      const url = canonicalUrl(resolved)
       if (options?.replace) window.history.replaceState(null, '', url)
       else window.history.pushState(null, '', url)
       setDestination(resolved)

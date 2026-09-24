@@ -396,7 +396,7 @@ class TestOpenProjectCall:
 
     def test_project_app_url_includes_project_id(self):
         url = _hub_project_app_url(8000, {"id": "proj-abc", "name": "Demo"})
-        assert url == "http://localhost:8000/?project=proj-abc&view=overview"
+        assert url == "http://localhost:8000/?project=proj-abc&tab=overview"
 
     def test_project_app_url_falls_back_to_bare_url_when_no_project(self):
         assert _hub_project_app_url(8000, None) == "http://localhost:8000"
@@ -430,7 +430,7 @@ class TestOpenProjectCall:
                 return_value={"id": "proj-abc", "name": "Demo"},
             ):
                 url = _hub_resolve_launch_url(8000, tmp_path)
-        assert url == "http://localhost:8000/?project=proj-abc&view=overview"
+        assert url == "http://localhost:8000/?project=proj-abc&tab=overview"
 
 
 class TestNativeStartProjectLifecycle:
