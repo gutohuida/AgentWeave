@@ -101,6 +101,31 @@ class TestHttpTransport(unittest.TestCase):
         self.assertEqual(raised.exception.status_code, 404)
 
     @patch("urllib.request.urlopen")
+    def test_ask_question_always_posts_non_blocking(self, mock_urlopen):
+        """F146: `POST /questions` now refuses `blocking: true` (no asking run exists on that
+        route to wait on it). This method is dead code — no caller reaches it — but its signature
+        no longer accepts a `blocking` argument, and the body it sends is always `blocking: False`.
+        """
+        mock_urlopen.return_value = _make_response({"id": "q-abc"})
+        result = self.transport.ask_question("claude", "Proceed?")
+        self.assertEqual(result, "q-abc")
+
+        request = mock_urlopen.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "http://localhost:8000/api/v1/projects/proj-test/questions",
+        )
+        self.assertEqual(
+            json.loads(request.data),
+            {"from_agent": "claude", "question": "Proceed?", "blocking": False},
+        )
+
+    def test_ask_question_no_longer_takes_a_blocking_argument(self):
+        import inspect
+
+        self.assertNotIn("blocking", inspect.signature(self.transport.ask_question).parameters)
+
+    @patch("urllib.request.urlopen")
     def test_send_message_failure(self, mock_urlopen):
         import urllib.error
 

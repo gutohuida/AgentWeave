@@ -83,12 +83,12 @@ async def test_ask_and_answer_question(app, auth_headers):
 
 
 @pytest.mark.asyncio
-async def test_answering_a_blocking_question_does_not_also_queue_it(app, auth_headers):
-    """`ask_user` waits and returns the answer as its own tool result, so the asking agent
-    already has it. Queuing as well told it twice and cost a whole extra turn — measured live,
-    the agent answered and then woke again to restate the same directive."""
-    from hub.db.engine import async_session_factory
-
+async def test_blocking_true_is_refused_at_post(app, auth_headers):
+    """F146: this route creates no asking run, so `blocking: true` cannot mean anything here —
+    an agent's blocking questions go through `/api/v1/agent-actions/questions`, which binds one.
+    Accepting it used to mark the operator's panel "agents are waiting" for a decision that would
+    never be delivered to anyone (`_asking_run_has_ended` presumes an unrecorded asker is still
+    waiting, so the answer route skipped queuing it)."""
     resp = await app.post(
         "/api/v1/projects/proj-test/questions",
         json={
@@ -101,7 +101,65 @@ async def test_answering_a_blocking_question_does_not_also_queue_it(app, auth_he
         },
         headers=auth_headers,
     )
-    q_id = resp.json()["id"]
+    assert resp.status_code == 422
+    assert "blocking" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_blocking_false_or_absent_still_succeed(app, auth_headers):
+    """The refusal is `blocking: true` only — the default and the explicit-false case, which are
+    what every real caller sends, keep working exactly as before."""
+    body = {
+        "from_agent": "claude",
+        "question": "Which one?",
+        "header": "Decide",
+        "options": [{"label": "Yes"}, {"label": "No"}],
+        "multi_select": False,
+    }
+    explicit_false = await app.post(
+        "/api/v1/projects/proj-test/questions",
+        json={**body, "blocking": False},
+        headers=auth_headers,
+    )
+    assert explicit_false.status_code == 201
+    assert explicit_false.json()["blocking"] is False
+
+    omitted = await app.post(
+        "/api/v1/projects/proj-test/questions", json=body, headers=auth_headers
+    )
+    assert omitted.status_code == 201
+    assert omitted.json()["blocking"] is False
+
+
+@pytest.mark.asyncio
+async def test_answering_a_blocking_question_does_not_also_queue_it(app, auth_headers):
+    """`ask_user` waits and returns the answer as its own tool result, so the asking agent
+    already has it. Queuing as well told it twice and cost a whole extra turn — measured live,
+    the agent answered and then woke again to restate the same directive.
+
+    F146 made `POST /questions` refuse `blocking: true`, so a row like this can only be a legacy
+    one with no recorded asker (a row predating `created_by_run_id`, or one posted through this
+    route before the refusal existed) — created directly here rather than through the route, since
+    the route can no longer produce it. `_asking_run_has_ended`'s presumption still applies to
+    such a row, and that presumption is exactly what this test pins."""
+    from hub.db.engine import async_session_factory
+    from hub.db.models import Question
+
+    q_id = "q-legacy-blocking"
+    async with async_session_factory() as session:
+        session.add(
+            Question(
+                id=q_id,
+                project_id="proj-test",
+                from_agent="claude",
+                question="Which one?",
+                blocking=True,
+                header="Decide",
+                options=[{"label": "Yes"}, {"label": "No"}],
+                multi_select=False,
+            )
+        )
+        await session.commit()
 
     answered = await app.patch(
         f"/api/v1/projects/proj-test/questions/{q_id}",
@@ -134,7 +192,7 @@ async def test_a_question_can_offer_options_and_they_survive_the_round_trip(app,
         json={
             "from_agent": "claude",
             "question": "Which database?",
-            "blocking": True,
+            "blocking": False,
             "header": "Database",
             "multi_select": False,
             "options": [

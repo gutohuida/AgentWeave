@@ -1261,6 +1261,7 @@ async def list_evidence_for_agent(
     **Who produced each row is part of the answer.** An agent may not decide evidence it produced
     itself, so one that cannot see the producer learns that rule by being refused once per row.
     """
+    from ... import spec_lifecycle
     from ...db.models import RequirementEvidence, SpecRequirement
     from .spec import _evidence_view, _footprints_for, _latest_reviews_for
 
@@ -1270,6 +1271,25 @@ async def list_evidence_for_agent(
         )
         query = select(RequirementEvidence).where(
             RequirementEvidence.requirement_id == requirement.id
+        )
+    elif document:
+        # F416: `document` alone used to be silently dropped here, so a call scoped to one
+        # document read the whole project's evidence and still answered 200 — it "succeeded" by
+        # not doing what it was asked. Resolved the same way `_resolve_requirement` resolves a
+        # document (by path, project-scoped) and scoped to that document's own requirements.
+        document_row = await spec_lifecycle.get_document(session, actor.project_id, document)
+        if document_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"no specification document at {document}.",
+            )
+        query = (
+            select(RequirementEvidence)
+            .join(SpecRequirement, RequirementEvidence.requirement_id == SpecRequirement.id)
+            .where(
+                RequirementEvidence.project_id == actor.project_id,
+                SpecRequirement.document_id == document_row.id,
+            )
         )
     else:
         query = select(RequirementEvidence).where(

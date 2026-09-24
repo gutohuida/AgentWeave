@@ -43,10 +43,13 @@ async def _asking_run_has_ended(session: AsyncSession, question: Question) -> bo
     live — so this only overrides that presumption on positive evidence: a recorded asking run that
     is no longer running.
 
-    An unrecorded asker (a row predating `created_by_run_id`, or a question posted through the
-    operator route rather than by a run) is left to the presumption. Guessing it had ended would
-    queue an answer the waiting agent already received as its tool result, which is the duplicate
-    turn this shortcut exists to avoid.
+    An unrecorded asker — a row predating `created_by_run_id`, or a legacy row posted through the
+    operator route before F146 made `POST /questions` refuse `blocking: true` — is left to the
+    presumption. That route now creates only non-blocking questions, so a *new* unrecorded row
+    with `blocking` true cannot occur; a pre-existing one still reads this function through
+    `_with_asker_state`/`_with_asker_state_one`'s `asker_waiting`, and, were it ever answered,
+    through `_asker_still_waiting`. Guessing it had ended would queue an answer the waiting agent
+    already received as its tool result, which is the duplicate turn this shortcut exists to avoid.
     """
     if not question.created_by_run_id:
         return False
@@ -299,6 +302,13 @@ async def ask_question_for_actor(
     return question
 
 
+_BLOCKING_DETAIL = (
+    "blocking: this route has no asking run for anyone to be waiting on — 'blocking: true' means "
+    "a run is holding a tool call open for the answer, which only the agent-facing "
+    "/agent-actions/questions route can bind. Post this question with 'blocking' omitted or false."
+)
+
+
 @router.post("", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
 async def ask_question(
     body: QuestionCreate,
@@ -306,6 +316,13 @@ async def ask_question(
     session: AsyncSession = Depends(get_session),
 ):
     project_id, _ = project
+    # F146: this route creates a question with no asking run (`created_by_run_id=None` below), so
+    # `blocking: true` used to be accepted, mark the panel "agents are waiting", and never be
+    # delivered — `_asking_run_has_ended` presumes an unrecorded asker is still waiting, and
+    # `answer_question` then skips queuing the answer because of it. There is no fix that both
+    # keeps the presumption and delivers the answer, so the route refuses the shape instead.
+    if body.blocking:
+        raise HTTPException(status_code=422, detail=_BLOCKING_DETAIL)
     # Converted here rather than inside the helper: `ask_question_for_actor` is shared with the
     # agent-facing path, which reads `conversation_id` off the row it returns and would break on a
     # response model that does not carry it. The route is what owes the caller `asker_waiting`.
