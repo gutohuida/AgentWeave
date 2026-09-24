@@ -5,6 +5,7 @@
 - [x] 0.2c R5: an independent verification round of the R4 design
 - [x] 0.2d R6 (revise round after the second Opus pre-approval review, `spec-queue/tracks/reviews/B4-2026-09-24-second.md`): the PowerShell `env:` pattern, bash's `env:` forms, `Temp:` in PowerShell only, the bracket glob through the sibling's D11; recorded in `B4.md` under "R6"
 - [x] 0.2e R7: one independent comparison round of R6's fixes against the code, before approval; recorded in `B4.md` under "R7" (no defect of this change's own; `B4-temp-dialect` cited)
+- [x] 0.2f R8 (the third Opus pre-approval review's fixes, `spec-queue/tracks/reviews/B4-2026-09-24-third.md`; the operator approves after this round): the review's LOW taken the cleaner way, in the sibling's D8 step 2: a bracket expression is matched exactly unless `fnmatch` cannot read it, and then as `?`; D10's R6 paragraph, Costs and task 1.4f's rows. Measured with real junctions in `testbed/scratch/b4-r8/`; recorded in `B4.md` under "R8"
 - [x] 0.3a The operator answers design Open Questions 2 and 3: answered 2026-09-24 afternoon in `spec-queue/DECISIONS.md` (`B4-dep-links`: build D10 as written, residual filed as F444; `B4-drive-exists`: a drive word is judged only when the drive exists). D5 and `PWD` were answered earlier the same day
 - [ ] 0.3 The operator approves in `APPROVALS.md` (after the Opus pre-approval review); told first that `:8000`'s next run uses the edited file
 - [ ] 0.4 (R4; order decided in `B4-residuals`: both in one night window) `the-shell-judge-reads-a-word-whole` is built first. This change uses its `_glob_links`, budget, level-by-level escape reading, `_DRIVE_LETTERS` and `hub-judge-windows` job
@@ -39,6 +40,8 @@
   - (R6) Bash: `cp n [u]p` and `cp n u[p]`. Each FAILS today (allowed, measured; both wrote through `up` in Git Bash) and FAILS against R5 (the words are `u]p` and `u[p`; needs the sibling's D11 bracket-kept word).
 
   Controls allowed: `cp n sub`, `ls in` (an inside link), `cp -r n newdir`, `grep -r foo --exclude-dir=node_modules .` with no `node_modules` link. With `node_modules` a link to outside, that grep is **refused**: assert it, so the accepted cost stays visible.
+
+  (R8, the third review's LOW; the sibling's D8 step 2) With `node_modules`, `venv` and `.venv` each a link to outside at the workspace root, a bare bracket expression is matched as the shell matches it, not as `*`. Allowed: Bash `grep '[0-9]' f`, `tr '[:upper:]' '[:lower:]'` and `grep '[[:digit:]]' f` (the bracket-kept words `[0-9]`, `[:upper:]`, `[:lower:]` and `[[:digit:]]` reach step 3), and PowerShell `Select-String '[0-9]' f` (no dot rule there, so `.venv` would match a `*`). Each PASSES today (allowed, measured) and FAILS against the sibling's D8 as R7 wrote it (every bracket expression relaxed to `*`, which matches the links). In the same fixture `cp n [u]p` and `cp n u[p]` stay refused, naming where `up` resolves: the second review's HIGH 1 is not reopened (`fnmatch` matches both to `up`, measured).
 - [ ] 1.5 F401 controls that must stay allowed. Each PASSES today and names the rule it catches:
   - `echo $x`, `for f in $files; do echo $f; done`, `test -n "$VAR"`;
   - `echo $HOMEDIR` (a prefix match), `echo '$HOMEDIR'`;

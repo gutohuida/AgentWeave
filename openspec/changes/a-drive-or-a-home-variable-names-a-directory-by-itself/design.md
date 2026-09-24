@@ -102,6 +102,21 @@ $env:TEMP'` and `…${env:USERPROFILE}` from the Bash tool give `␀env:TEMP` an
 keeps its brackets, because the bracket is not at the word's edge, and reaches D10 step 3 as the
 option's value. No defect of this change's own. `B4-temp-dialect` is cited where R6 asked for it.
 
+**R8 ran on 2026-09-24 (the third pre-approval review's fixes,
+`spec-queue/tracks/reviews/B4-2026-09-24-third.md`; the operator approves after this round).** The
+review's one LOW for this change: a bare bracket expression was relaxed to `*` by the sibling's
+`_glob_links`, so the bracket-kept words of `grep '[0-9]' f` and `tr '[:upper:]' '[:lower:]'` (`[0-9]`,
+`[:upper:]`, `[:lower:]`, measured with today's `_words`) matched `node_modules`, `venv` and every
+other root entry, and were refused wherever such a link sits at the root (in PowerShell also a
+linked `.venv`). R8 took the cleaner of the review's two fixes, in the sibling change's D8 step 2:
+only a bracket expression that `fnmatch` reads differently from the shell is relaxed (one opening
+with `!` or `^`, or holding a `[`, a `\` or a backtick, such as `[[:alpha:]]`), and it becomes `?`,
+since a bracket expression matches one character. Every other one is matched exactly. Measured with real junctions in `testbed/scratch/b4-r8/`: `[0-9]`, `[:upper:]` and
+`[:lower:]` match no root entry, and `[u]p` and `u[p]` still match `up`, so D10's R6 rows stay
+refused. D10's R6 paragraph and task 1.4f say so. This change's own rules do not change. The
+sibling's new whole-value judgement (its D2 step 6) is rule 6's and does not touch a separator-less
+word.
+
 ---
 
 **Built on the recommended answer to D5** (*"How strict should the shell judge be about bare `$VAR` /
@@ -399,7 +414,15 @@ and `]` from a word's ends, so `cp n [u]p` and `cp n u[p]` give the words `u]p` 
 reaches step 3, but `fnmatch` reads a lone `[` literally and matches nothing. Both wrote `n` through
 `up` in Git Bash (measured), and both would have stayed allowed, making this change's own SHALL
 false. The sibling change's D11 also yields the bracket-kept words `[u]p` and `u[p]`, which reach
-step 3 as globs. Their relaxed patterns `*p` and `u*` match `up`, which is judged outside.
+step 3 as globs. **(R8)** `fnmatch` matches each of them to `up` exactly (measured), which is judged
+outside. Under the sibling's D8 step 2 as R8 wrote it, only a bracket expression `fnmatch` cannot
+read is relaxed, and to `?`, so a bare bracket expression that is an argument, not a name, matches
+only one-character names: `grep '[0-9]' f` (the bracket-kept word `[0-9]`) and
+`tr '[:upper:]' '[:lower:]'` (`[:upper:]`, `[:lower:]`, each a class of five characters) stay
+allowed beside a linked `node_modules`, `venv` or `.venv` (measured: none of the three matches a root
+entry of the R8 scratch). R6 and R7 relaxed every bracket expression to `*`, which refused both
+there (third review). `grep '[[:digit:]]' f` and `grep '[^a]' f` are relaxed to `?`, which matches
+a one-character name only, so they stand beside those links too (measured: `?` matched only `n`).
 
 **Cost.** One `lexists` per separator-less word: 10 µs when the entry does not exist, 18 µs when it
 does (measured). Plus one `realpath` per word that names an entry, and the glob listings, which are
@@ -456,6 +479,11 @@ Named in full, because they fall on ordinary work:
   `ls *`, `grep foo *`, `du -sh *`. 595 of the 42,860 commands had a bare `*` word. No worktree on
   this machine holds such a link now. **(Operator, `B4-dep-links`)** Accepted and filed as **F444**
   (`scripts/drive/FINDINGS.md`), which must be fixed before a JavaScript project is registered.
+  **(R8, third review)** A bare bracket expression is not part of this cost. The sibling matches
+  it as bash does, or, where `fnmatch` cannot read it (a POSIX class, `^` or `!` negation), as `?`,
+  one character. So `grep '[0-9]' f`, `tr '[:upper:]' '[:lower:]'` and `grep '[[:digit:]]' f` stand
+  beside those links (task 1.4f). A bracket pattern that spells a linked name is refused, as the
+  same glob would be: `ls [[:alpha:]]env` relaxes to `?env` and matches `venv`.
 
 - **(R6) A PowerShell member access on a directory variable.** In PowerShell a `.` after a
   reference is member access, and `.` is not a name character, so `$PWD.Path`, `$HOME.Length` and

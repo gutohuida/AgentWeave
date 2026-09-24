@@ -230,6 +230,13 @@ SHALL NOT be read as a statement that it stays inside.
   outside it
 - **THEN** the command is refused
 
+#### Scenario: A bracket expression that matches no link out of the workspace stands
+
+- **WHEN** a shell command names, with no separator, a bracket expression such as `[0-9]` or
+  `[:upper:]` as an argument, and no entry of the workspace that is a link resolving outside it is a
+  name the shell could match to it
+- **THEN** that word does not make the command refused, although such links exist under other names
+
 #### Scenario: The parent directory before an expansion is refused
 
 - **WHEN** a shell command names a separator-less word that begins with the parent directory

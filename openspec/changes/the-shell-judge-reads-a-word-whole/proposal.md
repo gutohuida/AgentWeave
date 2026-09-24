@@ -37,6 +37,17 @@ and task 1.4f's assertion could not pass); a literal component's link test is `o
 `DirEntry` test; what each raise inside `_glob_links` gives is stated; and a traversal out and back
 in through a globbed link (`ls sub/l*/../ws/n`) is refused.
 
+**R8, 2026-09-24 (the third pre-approval review's fixes; the operator approves after this round).**
+The review found one more shape refused today only by the tail and allowed after R7: a link *before*
+a character that divides a word into pieces (`cp n sub/@s/p/x`, `cp n "a'b/up/x"`,
+`Copy-Item n -Destination:sub/@s/p/x`, all measured writing outside), because no step judged the
+word's value whole. Step 15 is R8's. R8 also found that the pieces let a run-on past the
+workspace's own name through (`cp n "../ws(a"`), which step 15 closes, and that on Windows the
+whole value must be judged between its colons, or `ntpath` misreads `x:y` as a drive. Also: a
+bracket expression is relaxed only where `fnmatch` cannot read it, so `grep '[0-9]' f` is not
+refused beside a linked `node_modules`; and D12's named cost now includes `node_modules/../src/x`
+through the Hub's shared dependency link.
+
 ## Why
 
 Under the default posture every shell command an agent runs is read by `mcp_server._decide`, and
@@ -139,6 +150,13 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
     adds a physical reading (Git Bash resolves `..` from where the link points; PowerShell and `cmd`
     from the text), and a refusal of either refuses. D8's walk carries each branch's real directory,
     so `sub/l*/..` is judged from the link's target.
+15. **(R8) The word's value is also judged whole** (design D2 step 6). Every character that
+    divides a word into pieces (`@`, a quote, `(`, and `:` on POSIX) is also a name character to
+    the shell, so the value after its option run is judged as the path it spells, as written and
+    with its quotes removed. On Windows, where no name holds a colon, it is judged between its
+    colons. Over this repository's own transcripts (26,038 words reaching rule 6) this refuses
+    nothing that no piece refuses: it adds a refusal only through a real link, a `..` after one,
+    or a run-on past the workspace's own name.
 
 ## What does not change
 
@@ -167,7 +185,12 @@ two findings therefore ship as one change. F403's own shapes, `cp notes.md .{,.}
   the `case` arm.
 - (R6) On Windows, a path with a `..` after an inside link pointing to a shallower directory is
   refused wherever the physical reading lands outside, although PowerShell, `cmd` and the file tools
-  write it lexically inside (design D12, Costs).
+  write it lexically inside (design D12, Costs). **(R8)** The same holds after any link whose
+  target's parent is outside, such as the Hub's shared `node_modules` link: `node_modules/../src/x`
+  is refused, correctly through the Bash tool (Git Bash writes into the checkout) and falsely
+  through the Write tool (Node writes the workspace's `src/x`).
+- (R8) On Windows, a directory whose name holds a colon, which only Git Bash can create, with a link
+  behind it (`t:d/up/x`): the value is judged between its colons there.
 - (R7) A traversal out and back into the workspace through a globbed link
   (`ls sub/l*/../ws/n`, with `sub/l` a link to the workspace) is refused at the `..`, although it
   lands inside. The same path without the glob is allowed.

@@ -235,6 +235,9 @@ a revision or a field name, or after a leading short option. A separator that co
 not the start of a path, and the part of a relative word after such a separator SHALL NOT be judged
 as a path of its own. Each piece read this way SHALL be judged as the path it spells, resolved
 against the workspace, and so SHALL the word with the quotes an inner shell would remove taken out.
+The word's value as a whole SHALL also be judged as the path it spells, with and without those
+quotes, because a character that divides it into pieces is also a name character to the shell; on
+a platform whose file names cannot hold a colon, the value is judged whole between its colons.
 Because an inner shell also removes a backslash before any character, and a shell between the
 command and that one may remove a level first, every word holding a backslash SHALL also be judged
 with one level of those escapes removed, and again with each further level removed until a level
@@ -352,6 +355,22 @@ answered. An error in place of an answer is not a decision.
   removes
 - **THEN** the command is refused
 - **AND** the reason names that piece, not the tail of a name
+
+#### Scenario: A link behind a character that divides a word is judged by where it resolves
+
+- **WHEN** a relative word of a shell command passes through a link that resolves outside the
+  workspace, and the link, or a directory before it, is named with a character that divides the
+  word into pieces, such as a package scope's `@`, a quote, or a colon joining an option or a
+  revision to the path
+- **THEN** the command is refused
+- **AND** the reason names where the path resolves
+
+#### Scenario: A word that runs on past the workspace's name at a dividing character is judged whole
+
+- **WHEN** a piece of a shell command's word resolves to the workspace itself, and the word carries
+  that piece's last name on through a character that divides it into pieces, naming a sibling of
+  the workspace
+- **THEN** the command is refused
 
 #### Scenario: A glob that can match the parent directory is refused
 

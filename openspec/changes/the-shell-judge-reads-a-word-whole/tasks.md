@@ -6,6 +6,7 @@
 - [x] 0.2c R5: an independent verification round of the R4 design, not starting from R4's notes
 - [x] 0.2d R6 (revise round after the second Opus pre-approval review, `spec-queue/tracks/reviews/B4-2026-09-24-second.md`, and the operator's `B4-link-dotdot`): D11, D12, the memo key's colon flag; recorded in `B4.md` under "R6"
 - [x] 0.2e R7: one independent comparison round of R6's fixes against the code, as the second review asks before APPROVE WITH FIXES; recorded in `B4.md` under "R7" (D8 step 4: the `..` refusal names where it lands, the literal component's link test is `os.lstat`, raises inside `_glob_links` stated, one named cost)
+- [x] 0.2f R8 (the third Opus pre-approval review's fixes, `spec-queue/tracks/reviews/B4-2026-09-24-third.md`; the operator approves after this round): D2 step 6, the whole value judged as the path it spells (between its colons on a drive-letter host); D8 step 1's claim restated; D8 step 2 relaxes only a bracket expression `fnmatch` cannot read; D8 step 4's listed path; D12's cost widened to the shared `node_modules` link; the `workspace_writes.py` docstring task. Measured with real junctions in `testbed/scratch/b4-r8/`; recorded in `B4.md` under "R8"
 - [x] 0.3a The operator answers design Open Questions 1 to 4: answered 2026-09-24 afternoon in `spec-queue/DECISIONS.md` (`B4-residuals`: the `case` arm stays, the four device names, this change first and the sibling in the same window; `B4-dep-links`: build as written, residual filed as F444)
 - [ ] 0.3 The operator approves the change in `spec-queue/APPROVALS.md` (after the Opus pre-approval review); before `mcp_server.py` is edited, the operator is told that `:8000`'s next run is judged by the edited file, committed or not
 
@@ -18,6 +19,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 - `work/sub/` with `a.py`, `b.py`;
 - an inside link `work/in` → `work/sub`;
 - (R6) an inside link `work/sub/l` → `work` itself (a link whose target is shallower than the link; D12). It is inside, so every existing control stays allowed: `ls sub/*` matches it and judges it inside, and a `**` walk does not descend through it.
+- (R8) a link `work/sub/@s/p` → `outside` (the shape `npm link` makes under a scope), a directory `work/a'b` holding a link `up` → `outside`, and a directory `work/a@b` holding a link `l` → `work`. `@s`, `a'b` and `a@b` are directories inside, not links, so `ls sub/*` and the root globs above are unchanged; `ls sub/**/x` without `globstar` stays allowed (the walk descends the directory `@s`, which holds no `x`, and does not list below it).
 
 - [ ] 1.1 Rows allowed after, refused today (each FAILS today): `ls test/*.test.js`, `grep -r foo src/*.py`, `find . -path './src/*' -name x`, `npm install @types/node`, `ls node_modules/@babel/core` (no link), `git show HEAD:src/a.py`, `git log --format=%h/%s`, `printf '%s/%s' a b`, `python -c 'print(1/2)'`, `sed -E 's/(foo)/\1/' f`, `mkdir -p src/{a,b}`, `ls src/?.ts src/[ab].ts`, `gcc -I./include/x a.c`, `ls 2>/dev/null` (Bash), `echo x > /dev/stderr` (Bash), PowerShell `Get-ChildItem src\*.py`
 - [ ] 1.2 Brace escapes refused as outside (F403), each FAILS today (allowed): `cp notes.md .{,.}`, `cp notes.md {.,.}.`. Brace escapes refused today only by the backstop, which must stay refused: `cp notes.md .{,.}/x`, `cp notes.md {.,.}./x`, `cp x src/{a,..}/../y`. The last three PASS today and FAIL against rule 6 rewritten without D1 (R1's prototype measured all three allowed)
@@ -30,7 +32,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 - [ ] 1.4 Glob parents (D3): `ls .*/x`, `ls ..*/x`, `cp x .[.]/y`, `ls ../*`, `rm -rf ../*.py`, PowerShell `Get-ChildItem ..\*` refused, each quoting the whole piece. `ls sub/.*/x`, `cp x sub/..?/y` allowed. The refused rows PASS today with a fragment reason and FAIL on the reason assertion
 - [ ] 1.4b (R4, D3 extglob) `bash -O extglob -c 'cp n @(..)/x'` and `bash -O extglob -c 'cp n ?(..)/x'` refused, the reason quoting `'@(..)/x'` / `'?(..)/x'`. Each PASSES today (tail `'/x'`) and FAILS against the R3 design (piece `..)/x`, inside); assert the reason, which FAILS today too. Controls allowed: `grep -E 'a*(b|c)' f`, `grep -E 'x+(y)' f`
 - [ ] 1.4c (R4, D8, link fixture) **globs through a link**, refused as outside, the reason naming where the match resolves:
-  - `cp n u*/`, `cp n u?/x`, `cp n [u]p/x`, and `cp n '[[:alpha:]]p'/x` (Bash; relaxed brackets);
+  - `cp n u*/`, `cp n u?/x`, `cp n [u]p/x`, and `cp n '[[:alpha:]]p'/x` (Bash; the first bracket matched exactly, the POSIX class relaxed, D8 step 2 as R8 wrote it);
   - `bash -c 'cp n u*/'` (inner shell);
   - `bash -O extglob -c 'cp n @(u)p/x'`;
   - PowerShell `Copy-Item n u*\x` (Windows) or `Copy-Item n u*/x` (POSIX).
@@ -43,6 +45,12 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - PowerShell `Get-ChildItem ?l\x` (Windows) or `?l/x` (POSIX), where `.l` is the only entry that `?l` can match. FAILS against R4 (its dot rule). Control: Bash `ls ?l/x` in the same fixture is allowed, because bash's `?` does not match a leading dot.
 
   Controls allowed: `ls sub/*.py`; `ls i*/a.py` (an inside link); `ls nomatch*/x` (no match, the literal is inside).
+
+  (R8, design D8 step 2) A bracket expression is matched as the shell matches it, and relaxed to `?` only where `fnmatch` cannot read it:
+  - `ls ./[0-9]/x` allowed: `[0-9]` matches only a one-character name, so it does not match `up`. FAILS today (tail `'/[0-9]/x'`) and FAILS against R7 (every bracket relaxed to `*`, which matches `up`).
+  - `ls ./[^a]p/x` (Bash) refused, naming where `up` resolves: bash negates with `^`, and `fnmatch` reads it literally. PASSES today only by the tail, so assert the resolved target; FAILS against a relaxation that keeps `[^a]` exact.
+  - PowerShell `Get-ChildItem .\[!a]p\x` (Windows) or `./[!a]p/x` (POSIX) refused, naming where `up` resolves: PowerShell reads `!` literally (measured: `Resolve-Path '[!u]p'` lists `up`). FAILS against a relaxation that keeps `[!a]` exact.
+  - `cp n '[[:alpha:]]p'/x`, `cp n [u]p/x` and `cp n ./u[p]` stay refused (rows above and 1.4e): the second review's HIGH 1 is not reopened.
 
   (R6) The rows `cp n [u]p/x` and `cp n '[[:alpha:]]p'/x` above pass only with D11: under R5 as written the words are `u]p/x` and `alpha:]]p/x`, no glob D8 can use, so both are **allowed** (FAIL against R5). The second is caught only by D8's whole-value pass, because `:` breaks the piece reading.
 - [ ] 1.4e (R6, D11, link fixture) **a bracket at a word's edge**, refused as outside, the reason naming where `up` resolves:
@@ -60,6 +68,23 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - The bound, Windows only: a relative path of 65 `sub/..` pairs followed by `x` is refused as `_UNRESOLVED`; 64 pairs are allowed.
 
   Controls allowed, both platforms: `ls in/../sub` (a link to a directory of the same depth), `ls sub/../sub/a.py`, `ls in/../sub/*.py`.
+
+  (R8, design D12 Costs, the third review's LOW) In its own fixture, so that the shared fixture's root globs are unchanged: a sibling `checkout/node_modules` and `checkout/src`, and `work/node_modules` a link → `checkout/node_modules` (the Hub's shared dependency link, `_symlink_shared_dependencies`), each refused, naming `checkout`'s `src/x` after "it resolves to":
+  - Bash `cp n node_modules/../src/x`: the correct refusal (Git Bash's `cp n node_modules/../nm1` wrote into `checkout`, measured). On the Windows job it FAILS today (allowed, measured: it escapes today); on Linux it PASSES today (`posixpath.realpath` is physical).
+  - `_decide("Write", {"file_path": <work>/node_modules/../src/x})`: the named false refusal (Node writes `work/src/x`), asserted so a change of mind is visible. On the Windows job it FAILS today (allowed, measured); on Linux it PASSES today.
+- [ ] 1.4g (R8, design D2 step 6, the third review's HIGH; the shared fixture's `sub/@s/p`, `a'b/up` and `a@b/l`) **the whole value is judged as the path it spells**. Refused, each naming where it resolves:
+  - `cp n sub/@s/p/x` (Bash) and PowerShell `Copy-Item n -Destination:sub/@s/p/x`: through a link behind a package scope's `@`, and behind a colon-joined option;
+  - `cp n "a'b/up/x"`: through a link behind a quote;
+  - `cp n sub/@s/p/*`: the glob's base is the link, and the literal whole value is what refuses (design D8 step 1);
+  - `cp n "a@b/l/../y"`: a physical `..` (D12) after a link behind `@`, naming the workspace's parent.
+
+  Each PASSES today only by the tail (`'/@s/p/x'`, `'/up/x'`, `'/@s/p/*'`, `'/l/../y'`), so assert the resolved target, which FAILS today. Each FAILS against R7 as written (allowed: the pieces `sub/`, `s/p/x`, `a`, `b/up/x`, `b/l/../y` are inside, and D8 listed `outside` from an outside base). Measured in Git Bash, the first three wrote into `outside` and the last beside the workspace.
+
+  Also refused, the run-on at a dividing character, quoting the whole value: `cp n "../work(a"` and `mkdir '../work@'` (the fixture's workspace directory is `work`; in the R8 scratch, whose workspace is `ws`, Git Bash's `cp n "../ws(a"` wrote the sibling file `ws(a` and `mkdir '../ws@'` made the sibling directory `ws@`, measured). Each PASSES today by the tail (`'/work(a'`, `'/work@'`), so assert the quoted `'../work(a'` and `'../work@'`, which FAILS today; each FAILS against R7 (the piece `../work` is the workspace).
+
+  POSIX only: a directory `work/t:d` holding a link `up` → `outside`; `cp n t:d/up/x` refused, naming where it resolves (the whole value with its colon). PASSES today by the tail, FAILS against R7. On Windows no name can hold a colon (design D2 step 6; the msys residual is named in design Residuals).
+
+  Controls allowed (the review's measured-nil costs; each must stay allowed with step 6 in place): `git show HEAD:src/a.py`, `git show HEAD~2:src/a.py`, `ls node_modules/@babel/core` (no link), `npm install @types/node`, `python -c 'print(1/2)'`, `sed -E 's/(foo)/\1/' f`, `git log --format=%h/%s`, `grep -E '^(a|b)/c' f`, `rg 'foo(bar)/baz'`, `sh -c 'ls 2>&1/x'` (each refused today by its tail, measured), and `ls lib/Foo::Bar.pm` (allowed today as a plain word; after D7 it reaches rule 6, whose whole value must not refuse it). On the Windows job also `grep 'ORM\|:2580' f` and `sed -E 's/(:700)/(:697)/g' f` (both from this repository's transcripts), which a whole-value reading that kept the colons on Windows would refuse (measured: `ntpath.realpath` reads `|:2580` and `(:700)` as drives; design D2 step 6). Controls refused by their pieces, as under R7: `npm i x@file:../lib` (`'../lib'`), `sh -c "echo hi>../x"` (`'../x'`), `sh -c 'cat</etc/passwd'`.
 - [ ] 1.4d (R4, bounds) A directory `big/` of 8193 empty files: `ls big/*` is refused with the too-many reason (FAILS against R3, which allows it). `ls sub/*` is allowed. With `globstar` named (`bash -O globstar -c 'ls sub/**/x'`) a link two levels down (`sub/deep/l` → outside) is refused, and without it the same `ls sub/**/x` is allowed (the named residual; assert it, so a change of mind is visible). R5: the pattern starts at `sub/`, because a top-level `**` matches the fixture's `up` link and would be refused either way
 - [ ] 1.5 Network (D5), each with the network reason naming the whole word:
   - `git clone git@github.com:o/r.git` and `curl -s 127.0.0.1:9/x` refused. Both FAIL today on the reason.
@@ -111,12 +136,12 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
 ## 2. The fix
 
 - [ ] 2.0 (R4) `_Budget` and the per-`_decide` memo (design, "The bounds"), created in `_decide` and passed through `_read_command` (both dialects, both readings, nested); (R6) the memo key includes the trimmed-colon flag. `_TOO_MANY`. `_DRIVE_LETTERS` (D9), read at call time by every rule that consults it: no regex, default argument or module constant is built from it at import (the sibling's task 1.5c monkeypatches it)
-- [ ] 2.0b (R6, D12) `_physical` and the second reading in `_where`, on a drive-letter host, with the 64-step bound, inside `_where`'s existing `try`. Run 1.4f's literal rows on Windows. This fixes a pre-existing escape and may be built first
+- [ ] 2.0b (R6, D12) `_physical` and the second reading in `_where`, on a drive-letter host, with the 64-step bound, inside `_where`'s existing `try`. Run 1.4f's literal rows on Windows. This fixes a pre-existing escape and may be built first. (R8, third review) Also correct the `hub/hub/workspace_writes.py` docstring, whose module text (lines 8-10) and `classify` text (lines 172-174) say its `realpath` is "the reason the two agree about a symlink" with `_decide`: after D12, `_decide` also reads a `..` after a link physically on a drive-letter host (a second reading, D12), and `classify` does not, so the two agree about a link named directly and may differ about a `..` after one (`node_modules/../src/x`: `_decide` refuses, on Windows `classify` records `ws/src/x`, inside, which is where Node writes). Comment only; no behaviour of `classify` changes
 - [ ] 2.1 D1 first: sentinels in `_lex` for bash, `_expand_braces` (iterative), and `_read_command` judging each alternative's words. Run 1.2 and 1.3
 - [ ] 2.1b The inner-shell brace reading (design D1, R2). Run 1.3 and 1.6
 - [ ] 2.1c (R4) D8 `_glob_links`, built **before** 2.2, because rule 6 without it regresses; (R6) with the base resolved by `_physical`, each branch carrying its real directory, literal components moved into rather than listed, and `..` moving to the real parent and judged (design D8 step 4); (R7) each branch also carries its listed path, so a `..` refusal names where it lands (`_resolves_elsewhere`), a literal component's link test is `os.lstat` (not `os.path.islink`), and `_physical`, `realpath` and `lstat` inside `_glob_links` are wrapped as design "What each changed route returns" says. Run 1.4c, 1.4d and 1.4f
 - [ ] 2.1d (R6, D11) The bracket-kept word in `_words`, and D3's and D8's reading of a component that opens with a bracket expression. Built before 2.2, for the same reason as 2.1c. Run 1.4c and 1.4e
-- [ ] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5):
+- [ ] 2.2 D2-D5 (R5: D3 and `_glob_links` also run in rule 5 on an absolute glob word, and in rule 6 on the whole value as well as each piece; `_words` reports a trimmed trailing `:` for D5; (R8) D2 step 6, the whole value's literal judgement, after the pieces, with a colon-joined option dropped, divided at its colons where `_DRIVE_LETTERS` is true (read at call time), and on POSIX judged whole as well, each through step 5. Run 1.4g):
   - replace rule 6 of `_judge_word` with the piece reading, including D3's extglob units;
   - add `_PIECE_BREAKS`, `_BASH_DEVICES`, `_SCP_ADDRESS_RE` and `_HOST_PORT_RE` beside `_ABSOLUTE_PATH_RE`, with a comment naming this change;
   - (R4) run the address check after rule 2 and before rule 3;
@@ -136,6 +161,7 @@ Shared fixture, new in `hub/tests/test_the_shell_judge_reads_a_word_whole.py`, s
   - (R4) with a junction `up` pointing outside, `cp n u*/` lands outside;
   - `bash -c 'bash -c "echo .\\./x"'` prints `../x`;
   - (R6) `cp n [u]p/` and `cp n u[p]` land outside through `up`; with a junction `sub/l` → the scratch workspace, `cp n sub/l/../y` and `cp n sub/l*/..` land in the workspace's parent, while PowerShell's `Set-Content sub\l\..\p1 hi` lands in `sub`.
+  - (R8) with a junction `sub/@s/p` pointing outside and a directory `a'b` holding a junction `up` pointing outside, `cp n sub/@s/p/x` and `cp n "a'b/up/x"` land outside, and PowerShell's `Copy-Item n -Destination:sub/@s/p/x` too; `cp n "../<workspace>(a"` writes a sibling of the workspace; with a junction `node_modules` pointing to a sibling checkout's `node_modules`, `cp n node_modules/../y` lands in the checkout.
 
   Record `bash --version`, `shopt globskipdots` and `shopt extglob`. Delete the scratch.
 

@@ -107,6 +107,35 @@ with four corrections:
 
 Also: D5's refusal quotes the word with its colon restored, which task 1.6 already assumed.
 
+**R8 ran on 2026-09-24 (the third pre-approval review's fixes,
+`spec-queue/tracks/reviews/B4-2026-09-24-third.md`; the operator approves after this round).** It
+measured with `_lex`, `_words`, `_where`, `_judge_path` and `_decide` in-process in `py -3.11`, a
+throwaway prototype of the whole-value pass and of D12's `_physical` written from this text, Git
+Bash 5.2.37 and Windows PowerShell 5.1, in `testbed/scratch/b4-r8/top/ws`, with real junctions
+(`mklink /J`): `up`, `sub/@s/p`, `a'b/up`, `.venv` and `venv` → the sibling `out`; `sub/l` and
+`a@b/l` → `ws`; `in` → `ws/sub`; `node_modules` → a sibling checkout's `node_modules`. What changed:
+
+- **D2 step 6 (new): the whole value is judged as the path it spells** (the review's HIGH). Each
+  break character is also a name character to the shell, so a link before one was never resolved:
+  `cp n sub/@s/p/w1` and `cp n "a'b/up/w2"` wrote into `out` in Git Bash (measured) and were
+  allowed under R7. **On a drive-letter host the value is judged between its colons**, because
+  `ntpath.realpath` reads any component whose second character is `:` as a drive (measured:
+  `realpath(<ws>\src\a:1)` is `a:1`); judged whole with its colons, 44 of the 26,038 rule-6 words
+  in this repository's own transcripts would be refused as outside. Judged between its colons, none
+  is (measured). It also closes a run-on R7 missed: `cp n "../ws(a"` wrote the sibling `ws(a`
+  (measured), and its pieces `../ws` and `a` both read as inside.
+- **D8 step 1** now says which judgement carries its claim (the literal one, including the new
+  whole-value judgement), and why `_glob_links` does not judge its base again.
+- **D8 step 2: only a bracket expression `fnmatch` cannot read is relaxed, and to `?`** (the review's
+  change-2 LOW). `[0-9]` and `[:upper:]` are matched exactly, so `grep '[0-9]' f` is not refused
+  where `node_modules` or `venv` is a link. `[u]p` and `u[p]` still match `up` (measured).
+- **D8 step 4:** the listed path is the listed parent joined with `entry.name`.
+- **D12, Costs:** widened to a `..` after any link whose target's parent is outside, such as the
+  Hub's shared `node_modules` link (`node_modules/../src/x`).
+- **Task 2.0b** updates `workspace_writes.py`'s docstring.
+
+The record is in `spec-queue/tracks/B4.md`, under "R8".
+
 ---
 
 **Built on the recommended answer to D4** (the built-in default posture for a Claude run stays
@@ -239,6 +268,68 @@ not a schemeless address — D5 now runs before rule 3):
    - Otherwise its `..`-capable glob components are rewritten (D3), and it goes through
      `_judge_path(rewritten, root, piece, argument, continues and <piece is last>)`.
    - **(R4)** Then, if it holds a glob character, it goes through the link expansion of D8.
+6. **(R8) The whole value.** After the pieces, the value is also judged as the path it spells, in
+   each reading the pieces get: as written (step 3) and with the quotes removed (step 4). Each
+   D7 escape level and the bracket-kept word (D11) are words of their own, so they reach this step
+   through rule 6 like any word.
+   - **The value** is the word after its option run, as in step 1, except that a colon-joined
+     option (`_COLON_OPTION_RE`, `-Destination:`) is dropped first. `_where(":sub/@s/p/w1")`
+     answers None (measured), because on Windows a leading `:` makes the component a name no link
+     can have, so a value that kept the colon would never reach the link.
+   - **Divided at its colons on a drive-letter host** (`_DRIVE_LETTERS`, read at call time; D9).
+     The value is split at each `:` that step 3 treats as a break, keeping step 3's drive
+     exception, and each non-empty segment is judged whole. A Windows name cannot hold a `:`,
+     which NTFS reserves for streams, so no link can sit behind one. And `ntpath.realpath` (3.11)
+     reads any component whose second character is `:` as a drive and drops everything before it.
+     Measured: `realpath(<ws>\src\a:1)` is `a:1`, `realpath(<ws>\s\::.*)` is `::.*`, and
+     `_where` then answers outside. Over this repository's own transcripts (40,213 distinct Bash
+     commands, 26,038 words reaching rule 6), judging the value whole with its colons refused 44
+     words that no piece refuses, all regular expressions and line references
+     (`sed 's/::.*//'`, `0:mm\:ss`, `ORM\|:2580`). Judged between its colons, **none**.
+   - **On a POSIX host** `:` is a name character, so the value is judged whole with its colons
+     (`cp n t:d/up/x` goes through a directory `t:d`), and also between its colons, as above.
+   - **Each value or segment goes through step 5** as a piece does: a NUL refuses it as
+     `_UNRESOLVED` (on Windows `_where("a\x00/b")` answers None, measured, so the NUL check is
+     needed here too), a leading `~` is `_UNCHECKED`, a bash device stands, D3 rewrites its
+     `..`-capable components, and it goes through
+     `_judge_path(rewritten, root, <it as that reading spells it>, argument, continues and <it ends the value>)`.
+     The refusal quotes the value or segment, and `_resolves_elsewhere` names where a link took it.
+   - **D8 on the whole value** runs on the undivided value, as "Where it runs" says, on every host.
+     A bracket expression can hold a `:` (`'[[:alpha:]]p'/x`), so dividing it would lose the glob.
+
+   **Why.** Each break character is also a name character to the shell: `@` and `'` everywhere,
+   `(` and `<>|;&` inside quotes, and `:` on POSIX. So a link *before* a break was never resolved.
+   Measured in Git Bash and with today's `_where` on the whole values:
+
+   | Command | Where it wrote | Today | Pieces only (R7) | With step 6 |
+   |---|---|---|---|---|
+   | `cp n sub/@s/p/w1` | `out/w1` | refused, tail `'/@s/p/w1'` | allowed | refused, resolves to `out\w1` |
+   | `cp n "a'b/up/w2"` | `out/w2` | refused, tail `'/up/w2'` | allowed | refused, resolves to `out\w2` |
+   | PowerShell `Copy-Item n -Destination:sub/@s/p/w5` | `out/w5` | refused, tail | allowed | refused, resolves to `out\w5` |
+   | `cp n sub/@s/p/*` | (expands in `out`) | refused, tail | allowed (D8 listed `out` from the outside base, where no entry is a link) | refused, resolves to `out\*` |
+   | `cp n "a@b/l/../y9"`, `a@b/l` → `ws` | `top/y9` | refused, tail | allowed | refused, resolves to `top\y` (D12) |
+   | `cp n "../ws(a"` | the sibling file `ws(a` | refused, tail `'/ws(a'` | allowed | refused, `'../ws(a'` outside |
+   | `mkdir '../ws@'` | the sibling directory `ws@` | refused, tail `'/ws@'` | allowed | refused, `'../ws@'` outside |
+
+   The last two are a run-on the pieces cannot see: the piece `../ws` is the workspace itself, and
+   the `continues` extension applies only where the *argument* carries on past the word.
+
+   **What it costs.** Lexically, a segment can land outside only where a piece does, because the
+   components before a break only deepen where the segment starts. A random test of 400,000 values
+   built from `a`, `x`, `1`, `ws`, `top`, `b4-r8`, `..`, `.`, `@`, `:`, `(`, `'` and `/` (a
+   letter-and-colon drive left out, since step 3 keeps it as one piece) found 35,300 values with a
+   segment outside. In 32 of them no piece was outside, and all 32 were the run-on above
+   (`../ws(x`, `..//ws@.`), which is a correct refusal. So step 6
+   adds a refusal only through a real link, a physical `..` (D12), or a run-on. The review's
+   controls answer None as whole values or segments (measured): `HEAD:src/a.py`,
+   `HEAD~2:src/a.py`, `print(1/2)`, `s/(foo)/\1/`, `%h/%s`, `^(a|b)/c`, `lib/Foo::Bar.pm`,
+   `a|b/c`, `x"y/z`, `a<b/c`, `foo(bar)/baz`, `2>&1/x`, `@types/node`, `--format=%h/%s`.
+   `x@file:../lib`, `ls>/dev/null`, `echo hi>../x` and `cat</etc/passwd` are decided by their pieces
+   first, as before. In time it costs one `_where` per value or segment in each reading, which is
+   one `realpath` (about 85 µs), plus D12's where a `..` follows a name. It is per word, like every
+   other literal judgement, and the memo keeps a second reading of the same word from repeating it. A path through a link that a program splits off at a colon is refused, as it is
+   today: `git show HEAD:sub/@s/p/x`, where `sub/@s/p` is a link out, although `git show` reads its
+   object store.
 
 Why each break is there:
 
@@ -303,7 +394,10 @@ they are not rewritten. `..?` needs a third character (measured: `sub/..?/y` all
 
 **(R6) A component that opens with a bracket expression.** "Begins with `.`" also holds when the
 component's first element is a bracket expression that `fnmatch.fnmatchcase(".", <that expression>)`
-matches (`[.]./x`, `[.a].`). Measured in Git Bash 5.2.37 with `globskipdots` off, in a directory
+matches (`[.]./x`, `[.a].`). **(R8)** A bracket expression that D8 step 2 relaxes, because `fnmatch`
+cannot read it (`[[:punct:]]`, `[^a]`), counts as able to match `.`, and for the `..` test it is
+read as `?`. Git Bash 5.2 does not expand `[[:punct:]][[:punct:]]` to `..` even with `globskipdots`
+off (measured), so this too only over-approximates older bash. Measured in Git Bash 5.2.37 with `globskipdots` off, in a directory
 whose parent is the workspace: `echo [.].` prints `[.].` (a bracket does not match a leading dot
 there), while `echo .[.]` prints `..`. The review reported that bash before 5.2 expands `[.]./x`
 to `../x`, and no such bash was available to measure. So the judge over-approximates: counting the
@@ -492,13 +586,58 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
 1. **Base.** The piece's leading components that hold no glob character, joined to the root (or
    absolute), resolved by D12's physical reading (`_physical`), not by `os.path.realpath` alone.
    On Windows `realpath` removes a `..` before it reads the link in front of it (D12), so
-   `sub/l/../u*` would be globbed in `sub` instead of in the workspace's parent. If the base is
-   outside, the literal judgement has already refused, because `_where` makes the same physical
-   reading (D12).
+   `sub/l/../u*` would be globbed in `sub` instead of in the workspace's parent. **(R8) If the base
+   is outside, the literal judgement of the same text has already refused.** Every text given to
+   `_glob_links` is first judged literally by `_where`, whose physical reading (D12) resolves the
+   same prefix: a piece by D2 step 5, the whole value by D2 step 6, an absolute word by rule 5, and
+   the bracket-kept word (D11) by whichever of those it reaches. Two cases need saying:
+   - **A literal that climbs back in.** A literal judged inside while its base is outside needs a
+     `..` after a glob component (`up/*/../../ws/x`). Step 4 judges that `..` from the real
+     directory and refuses it (the R7 cost below).
+   - **The whole value on a drive-letter host is judged between its colons** (D2 step 6). A base
+     with no colon is a prefix of the first segment, which is judged. A base that crosses a colon
+     names no directory Windows can hold. Whatever `_physical` makes of it, a directory that
+     cannot be listed gives no matches (step 5; measured: `os.scandir` raises `FileNotFoundError`
+     for `sub\x:y` and `OSError` 22 for `sub\x:y\p`), and a link that is listed is still judged by
+     `_judge_path`.
+
+   R7 wrote this claim when no literal judgement covered the whole value, so it was false for
+   `sub/@s/p/*` (third review). `_glob_links` does not judge its base again. A second judgement
+   through `_where` would add nothing where the literal has refused, and on a base holding `x:y` it
+   would meet `ntpath`'s drive misreading that D2 step 6 avoids.
 2. **One component at a time.** List the current directory with `os.scandir`. An entry matches the
    component's *relaxed* pattern under `fnmatch.fnmatchcase` after `os.path.normcase` of both sides.
    Relaxed means:
-   - the text from the component's first `[` to its last `]` becomes `*`;
+   - **(R8)** each bracket expression that `fnmatch` reads differently from the shell becomes `?`,
+     and every other bracket expression is kept and matched by `fnmatch` exactly. A bracket
+     expression matches exactly one character, so `?` is the widest reading that is still one
+     (bash's multi-character collating elements exist only in locales such as Czech's). A bracket
+     expression is found as bash finds it: from a `[`, past an optional leading `!` or `^` and a
+     `]` directly after that, to the `]` that closes it, where a `[:`, `[=` or `[.` inside opens a
+     class that runs to its own `:]`, `=]` or `.]`. A `[` with no closing `]` is a literal
+     character, as it is to `fnmatch`. It is relaxed when it **opens with `!` or `^`**, or **holds a
+     `[`, a `\` or a backtick**:
+     - `[[:alpha:]]`, `[[=a=]]`, `[[.a.]]`: `fnmatch` has no POSIX classes. It reads
+       `[[:alpha:]]p` as a class of `[:alph` followed by `]p`, so `fnmatchcase("up", "[[:alpha:]]p")`
+       is False, and bash's `echo [[:alpha:]]p` prints `up` (measured);
+     - `[^a]`: bash negates, `fnmatch` reads a literal `^` (measured: bash's `echo [^a]p` prints
+       `up`, and `fnmatchcase("up", "[^a]p")` is False);
+     - `[!a]`: PowerShell reads `!` literally (measured: `Resolve-Path '[!u]p'` lists `up`, which
+       `fnmatch` excludes). Bash negates with `!` as `fnmatch` does, but the rule does not depend
+       on the dialect, and `?` only widens bash's reading;
+     - `\` and the backtick escape inside a bracket in bash and PowerShell, and literally in
+       `fnmatch`.
+
+     `[0-9]`, `[ab]`, `[u]`, `[t-v]` and `[:upper:]` (outside a bracket, a class of the five
+     characters `:`, `u`, `p`, `e`, `r` to both) are matched exactly. **Until R8 every bracket
+     expression was relaxed**, from the first `[` to the last `]`. Then the bracket-kept word `[0-9]` from
+     `grep '[0-9]' f` matched `node_modules`, `venv` and `up` as `*` (third review, change 2 LOW),
+     although bash matches only a one-character name. Measured with the relaxation above, over a
+     root holding `.venv`, `a'b`, `a@b`, `in`, `n`, `node_modules`, `src`, `sub`, `up` and `venv`:
+     `[0-9]`, `[:upper:]` and `[:lower:]` match nothing; `[u]p`, `u[p]`, `[t-v]p` and `[n]ode_modules`
+     match their one name; `[[:alpha:]]p`, `[^a]p`, `[!u]p` and `[\u]p` relax to `?p` and match
+     `up`; `[[:digit:]]` and `[^a]` relax to `?` and match only the one-character `n` (R8
+     prototype, from this text). So the second review's HIGH 1 rows (`[u]p/`, `u[p]`, `[u]p/x`) still match `up`;
    - each extglob group becomes `*`;
    - `**` is `*`, except when the command's text names `globstar`, in which case `**` matches
      directories at any depth.
@@ -545,8 +684,11 @@ written, quote-removed and escape-removed. An inner shell globs a quoted pattern
      last component too.
    - **(R7) The refusal names where the step lands.** It quotes the piece as written and gives
      `_resolves_elsewhere(<listed>/.., <real parent>)`, where `<listed>` is the path the branch
-     reached as the shell spells it (the base, then each entry's `DirEntry.path` or the literal
-     name joined on). So each branch carries its listed path beside its real one. Passing the real
+     reached as the shell spells it: the base as written, then, at each step, the listed parent
+     joined with the matched `entry.name` or with the literal component. **(R8)** Not
+     `DirEntry.path`: step 2 lists the branch's *real* directory, so `DirEntry.path` is the real
+     path, and for `i*/l*/..` the reason would say `sub\l\..` where the shell wrote `in/l/..`
+     (third review). So each branch carries its listed path beside its real one. Passing the real
      parent to `_judge_path` as the path would not do: `_resolves_elsewhere` names the resolved
      path only when it differs from the path given, so the reason would be the bare
      `'sub/l*/..' is outside your workspace` (R7 measured exactly that), with nothing to say why
@@ -596,7 +738,7 @@ directory it enters (about 9 µs per entry on this machine) and one `realpath` p
 matching PowerShell's `-LiteralPath`/`-Destination` values although PowerShell does not expand them
 can all match more names than the shell would. For example, `fnmatch` does not match
 `[[:alpha:]]p` to `up`, but bash does (measured: `bash -c 'echo [[:alpha:]]p'` prints `up`); the
-relaxed `*p` matches it. Matching more names can only add a refusal, and only where a link out of the
+relaxed `?p` matches it. Matching more names can only add a refusal, and only where a link out of the
 workspace exists.
 
 **Where it runs (R5: three places).**
@@ -606,7 +748,9 @@ workspace exists.
   escape-removed readings). `@` and `:` are breaks for the literal reading, but to the shell's
   globbing they are name characters. Globbed piece by piece, `ls node_modules/@s/u*/` is only
   `s/u*/` from the root, and a link at `node_modules/@s/up` is never listed. Matching more names
-  can only add a refusal.
+  can only add a refusal. **(R8)** The value is the one D2 step 6 defines, with a colon-joined
+  option dropped, and it is globbed undivided on every host, although on a drive-letter host its
+  literal judgement is made between its colons (D2 step 6).
 - **(R5) In rule 5, on an absolute word that holds a glob character or an extglob group.** Rule 5
   takes every absolute word before rule 6 (`os.path.isabs(word)`), and `_PLAIN_RELATIVE_RE` keeps
   only relative globs out of it. So R4's D8 never saw `cp n C:/…/ws/u*/`, whose base is the
@@ -696,17 +840,18 @@ is an extra reading only: it can add a refusal and never remove one, like D7's l
 
 **Traced, each row through the step that now fires:**
 
-- `[u]p/x`, `[u]p/`: rule 6. The piece `[u]p/x` holds `[`, so `_glob_links` runs. The relaxed
-  component `*p` matches `up`, a junction, which is judged outside. Refused, naming where `up`
-  resolves.
+- `[u]p/x`, `[u]p/`: rule 6. The piece `[u]p/x` holds `[`, so `_glob_links` runs. The component
+  `[u]p` matches `up` (R8: `fnmatch` reads it exactly; R6 relaxed it to `*p`), a junction, which is
+  judged outside. Refused, naming where `up` resolves.
 - `'[[:alpha:]]p'/x`: rule 6. `:` is a piece break, so the pieces are `[[`, `alpha`, `]]p/x`, and
   none of them matches. **The whole-value pass of D8 (R5) catches it:** the component `[[:alpha:]]p`
-  relaxes to `*p`. This row is the reason the whole value must also be globbed.
+  relaxes to `?p` (R8; R6 wrote `*p`). This row is the reason the whole value must also be globbed.
 - `[.]./x`: rule 6. D3 (R6) reads the component `[.].` as opening with a bracket expression matching
   `.`, and `fnmatchcase("..", "[.].")` is True (measured), so it is rewritten to `..`. Refused as
   `'[.]./x'` outside.
-- `sub/[a]`: rule 6. `_glob_links` with base `sub`: the component `[a]` relaxes to `*`, and any link
-  in `sub` is judged.
+- `sub/[a]`: rule 6. `_glob_links` with base `sub`: the component `[a]` matches an entry `a` (R8:
+  exactly, as bash does; R6 relaxed it to `*`, so every link in `sub` was judged), and if that entry
+  is a link it is judged.
 - `u[p]` and `[u]p` (no separator): rule 4, which this change leaves as it is. **They stay allowed
   until the sibling change is built.** There D10 step 3 sends a separator-less glob to
   `_glob_links`, and the bracket-kept word is such a glob. Without D11, the sibling's D10 step 1
@@ -768,7 +913,10 @@ refused today becomes allowed.
 **Where it reaches.** `_where` serves every path judgement: rule 5's literal words, rule 6's pieces,
 D8's links and `..` steps, and the file tools' `file_path` (`_decide`'s `_PATH_KEYS`). So
 `cp n sub/l/../y`, `echo hi > sub/l/../x1` and `ls sub/l/../x` are refused through rule 5, and a
-piece such as the `sub/l/../y` in `HEAD:sub/l/../y` through rule 6.
+piece such as the `sub/l/../y` in `HEAD:sub/l/../y` through rule 6. **(R8)** So is a whole value or
+segment (D2 step 6), such as `a@b/l/../y` with `a@b/l` a link to the workspace, whose piece
+`b/l/../y` has no link in it: Git Bash's `cp n "a@b/l/../y9"` wrote `y9` beside the workspace
+(measured).
 
 **Bound.** A path needs one `realpath` per `..` that follows a name. `_physical` makes at most 64
 of them for one path. A path that would need more is answered `_UNRESOLVED`, which refuses. No real
@@ -786,9 +934,27 @@ are string work.
   `Set-Content sub\l\..\p1` in the PowerShell tool writes `ws/sub/p1` (measured) and is now refused.
   The workspace needs such a link for this to happen: an inside link whose target is shallower than
   the link. pnpm and yarn workspaces create them (`node_modules/@s/p` → `../../packages/p`).
+- **(R8, third review) The same holds for a `..` after any link whose target's parent is outside**,
+  not only a shallower inside link. The one every JavaScript worktree can hold is the Hub's shared
+  dependency link (`worktrees.py`, `_symlink_shared_dependencies`): `node_modules` → the project
+  checkout's `node_modules`. So `node_modules/../src/x` is judged at the checkout's `src/x`, outside.
+  Measured in the R8 scratch, with `ws/node_modules` a junction to `checkout/node_modules`:
+  - through the Bash tool the refusal is **correct**: Git Bash's `cp n node_modules/../nm1` wrote
+    `checkout/nm1`;
+  - through the Write or Edit tool it is a **new false refusal** on Windows: Node resolves the `..`
+    lexically, to `ws/src/x`. Today `_decide("Write", {"file_path": <ws>\node_modules\..\src\x})`
+    and `cp n node_modules/../src/x` are both allowed (measured; the second escapes today, into
+    the checkout), and `_physical` gives
+    `checkout\src\x`.
+
+  On POSIX the file tools already meet this today, because `posixpath.realpath` is physical. It is
+  in F444's family (the shared dependency links), and the file stays writable by its direct
+  spelling `src/x`. Task 1.4f asserts both.
 - The file tools share `_where`, so a Write or Edit whose `file_path` spells such a traversal is
   refused too. The outside-write record (`workspace_writes.py`, its own `realpath`) is not changed,
-  and it records what Node actually wrote.
+  and it records what Node actually wrote. **(R8)** Its docstring is changed: it says that
+  `classify` and `_decide` "agree about a symlink" (`workspace_writes.py:8-10` and `:172-174`),
+  which is only half true after D12. Task 2.0b corrects it.
 
 ## The bounds (R4: per `_decide`)
 
@@ -856,6 +1022,13 @@ whenever `_decide` raises. The step-by-step:
   raise from any of its `realpath` calls is `_UNRESOLVED`, and its 64-step bound is a return value.
 - **(R6)** The bracket-kept word (D11) is string work in `_words`. D8's `..` steps call
   `_judge_path`, which is total.
+- **(R8)** D2 step 6 is string work (dropping the option run, removing quotes, splitting at
+  colons) plus `_judge_path`, which is total. R8 called it on odd whole values and segments, and
+  none raised, each in under 4 ms (measured): a NUL (`a` NUL `/b`, which `_where` answers None on
+  Windows, so step 5's NUL check applies to the whole value too), a 70,000-character name, 20,000
+  `a/` components, `\\?\C:\x`, `\\.\nul/x`, `CON/x`, `nul/x`, `::`, `:/`, `*:?/x`, `|:<>/"`, a
+  right-to-left mark and a lone surrogate. Over the 26,038 rule-6 words of this repository's
+  transcripts, nothing raised.
 - `_glob_links` catches `OSError` and `ValueError` around each `os.scandir` **and its iteration**
   (R5: the iterator can raise part-way through a listing), each `DirEntry.is_dir()` and each
   `DirEntry.stat()`, and treats them as "no match" for that entry or directory.
@@ -934,6 +1107,12 @@ New, or kept on purpose:
   (`echo git@github.com:o/r.git`, a commit message naming one; D5).
 - **(R5) A glob mentioned in a heredoc that also names `globstar`** is walked at every depth, and
   may pass the entry bound. The flag is read from the command's text.
+- **(R8) A directory whose name holds a colon, on Windows.** Git Bash (msys) can create one,
+  storing the colon as a private-use character (measured: Git Bash's `mkdir 't:d'` made a
+  directory Python lists as `'td'`), and a link behind it (`t:d/up`) would then be
+  reached by `cp n t:d/up/x`. D2 step 6 judges the value between its colons on a drive-letter host,
+  so `d/up/x` is judged from the root, not from `t:d`. Native Windows programs cannot name such a
+  directory at all. Today the tail refuses it.
 - **(R7) A traversal out and back in through a globbed link** (`ls sub/l*/../ws/n`, with `sub/l` a
   link to the workspace) is refused at the `..`, although it lands inside (D8 step 4).
 
