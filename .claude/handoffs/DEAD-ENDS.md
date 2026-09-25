@@ -1725,3 +1725,9 @@ disappears is indistinguishable from one that was forgotten.
 - **2026-09-25 — sweep agents' personal-skill reach (F454)**: a Hub-launched Haiku agent can
   invoke skills from `~/.claude/skills` (it ran `e2e-loop` unprompted from a vague loop purpose).
   Never leave a scratch loop enabled on a drive Hub; archive it the moment its row is done.
+- **2026-09-25 — a SAVEPOINT before any write commits on release (pysqlite/aiosqlite)**: with
+  SQLAlchemy 2.0.50 + aiosqlite 0.22.1, `session.begin_nested()` issued before the transaction has
+  written becomes the outermost transaction, and releasing it commits. It nests only after a flush
+  has written something. Rolling a savepoint back also expires every ORM object touched inside it
+  (bulk `UPDATE`s included), and reading one afterwards raises `MissingGreenlet`. Carry plain values
+  out of a savepoint, never rows. Measured by R2 of `a-document-says-how-it-will-be-built-and-approval-starts-it`.
