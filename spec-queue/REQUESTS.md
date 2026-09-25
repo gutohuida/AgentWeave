@@ -249,3 +249,21 @@ and the operator has no screen for authoring one either (`PUT …/content` has n
 route has nothing to merge from the app. M3 would change *"capability documents are written by the
 operator"* to *"accepted by the operator"*. It is an exploration first (openspec-explore), not a
 proposal.
+
+## R10 — An AI canvas inside AgentWeave
+**Asked:** 2026-09-25
+**Theme:** Operator surfaces
+**Ready:** thinking
+
+Notes only, not a design. The operator asked not to go deeper yet.
+
+A screen that starts mostly blank. On it the operator creates terminals, each running the harness
+they choose (Claude, Codex, …). Those terminals are not standalone: each one is connected to the
+whole AgentWeave apparatus (project, agents, messaging, runs, the spec flow). Next to each terminal
+sit panels or tabs showing AgentWeave things that relate to it, for example the spec, the task
+cards, and so on.
+
+Open questions for later, not answered: how a canvas terminal relates to today's agents, runners and
+runs (is it an agent, a run, or something new?); which tabs, and whether they follow the terminal's
+current task; layout and persistence of the canvas; and what "connected" means concretely (tool
+server, identity, events). An exploration first (openspec-explore) when the operator picks it up.
