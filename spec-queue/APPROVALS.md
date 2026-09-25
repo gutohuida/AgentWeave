@@ -16,6 +16,25 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-25
+
+No review page today (the day window is disabled; the newest page, `review/review-2026-09-23.html`,
+was fully decided on 09-24). **Written in an interactive session with the operator present**
+(DECIDE). No new approvals: the seven rows below are 09-24 approvals, restated so that tonight's
+window, which reads only today's section, builds the next link of each chain whose prerequisite
+landed last night (`c9873c4`). Each row's notes and constraints are the 09-24 row's, unchanged. Each
+re-validated `--strict` today. The other 09-24 APPROVED rows stay approved and are not tonight's.
+
+- APPROVED  a-task-is-attended-only-by-a-turn-that-will-reach-it   B1, 09-24 row. Its prerequisites (pressing-run, F133, flows-own-moves) are built and archived.
+- APPROVED  a-review-no-reviewer-can-approve-goes-to-the-operator   B1, 09-24 row. After the attended change. Check the gate-code overlap with B5's approval-preview change.
+- APPROVED  why-queued-input-waits-is-told-truthfully   B1, 09-24 row. F133 is in.
+- APPROVED  a-live-view-that-fell-behind-is-told-and-catches-up   B9 (F253), 09-24 row. F335 is in. UI bundle (task 2.6): it reaches `:8000`'s live app on the operator's next reload, and an old Hub never sends `stream_gap`. `every-event-the-hub-sends-reaches-the-app` is NOT tonight's: its bundle still waits for the `:8000` restart onto F335.
+- APPROVED  evidence-is-decided-after-the-run-that-recorded-it   B5 (F358, F426), 09-24 row. Before the coverage-bar change. Mind the F409 cross-change note.
+- APPROVED  the-coverage-bar-takes-the-evidence-decision-it-asks-for   B5 (F215), 09-24 row. After the evidence change.
+- APPROVED  a-footprint-names-the-line-of-work-its-commit-is-on   B5 (F165, F166), 09-24 row. Before B6's drift change (still REVISING).
+
+ORDER: a-task-is-attended-only-by-a-turn-that-will-reach-it, a-review-no-reviewer-can-approve-goes-to-the-operator, why-queued-input-waits-is-told-truthfully, a-live-view-that-fell-behind-is-told-and-catches-up, evidence-is-decided-after-the-run-that-recorded-it, the-coverage-bar-takes-the-evidence-decision-it-asks-for, a-footprint-names-the-line-of-work-its-commit-is-on
+
 ## 2026-09-24
 
 Review page: the bundle pages (`tracks/B1.html` … `B12.html`, published as one artifact with
