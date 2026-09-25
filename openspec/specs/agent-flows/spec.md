@@ -272,6 +272,8 @@ task no agent completed — which this capability already forbids for the first 
 second one surfaces its reason to the same operator through the same event. The two resolutions
 SHALL NOT come to different accounts of one task.
 
+**Where approval of the task is refused for a reason only the operator can remove, a review that gave no verdict SHALL NOT be answered by resolving a second reviewer**, whether the reviewer that failed was declared or selected by availability. The Hub SHALL surface the review instead, as *A review no reviewer can approve is handed to the operator* states. A reason only the operator can remove is one whose remedy is a decision on evidence, where the agent the resolution would select has not been granted that decision; a drift candidate, which only the operator resolves whatever an agent is granted; a requirement that cannot be satisfied as written; or the Hub being unable to ask the project's repository whether the work would merge, which a second reviewer's approval would meet in the same repository. A second reviewer meets the identical refusal, so resolving one spends a review turn on a conclusion that has nowhere to go and tells the operator about staffing instead of about the decision waiting for them. Where the agent the resolution selects has been granted the decision on evidence, it can remove the reason itself, and the resolution SHALL proceed as above.
+
 **The Hub SHALL NOT resolve, as a task's reviewer, an agent that could not record a verdict on it.**
 An agent is barred from judging work it completed, so naming it would produce a review refused on
 arrival; the resolution SHALL exclude it rather than discover the refusal afterwards.
@@ -350,6 +352,19 @@ arrival; the resolution SHALL exclude it rather than discover the refusal afterw
 - **WHEN** an availability-picked review gives no verdict and no other eligible agent exists
 - **THEN** the flow surfaces that it could not staff the review, naming the task
 - **AND** the flow's job remains enabled and scheduled
+
+#### Scenario: A review whose approval waits on the operator is not given to a second reviewer
+
+- **WHEN** a review by an agent selected on availability ends without recording a verdict
+- **AND** approving the task is refused because evidence naming a commit is waiting to be decided, and no other agent's approved work would merge
+- **AND** the agent the resolution would select has not been granted the decision on evidence
+- **THEN** no other agent is fired for that review
+- **AND** the task's holder is unchanged
+
+#### Scenario: A reviewer granted the evidence decision is still resolved
+
+- **WHEN** a review by an agent selected on availability ends without recording a verdict, approving the task is refused because evidence is waiting to be decided, and the agent the resolution selects has been granted the decision on evidence
+- **THEN** that agent is fired for the review
 
 #### Scenario: The agent that completed the work is never resolved as its reviewer
 
@@ -1231,4 +1246,58 @@ decides that.
   task identifier may be
 - **THEN** the reason names that agent, with as many of its held tasks as fit, and counts the rest
 - **AND** it still names the action
+
+### Requirement: A review no reviewer can approve is handed to the operator
+
+Where a review turn ends without recording a verdict and approving the task is refused for a reason only the operator can remove, the Hub SHALL surface the review to the operator with that refusal's own sentence, and SHALL NOT surface it as a failure to staff a reviewer.
+
+The refusal is the approval gate's, and its sentence already names what the operator must do. A
+surfaced reason about who was free, or about which agents were excluded, sends the operator to the
+roster, where nothing they change moves the task.
+
+The flow's surfacing of the same task on later firings SHALL say the same thing. A task left under
+review with its silent reviewer named is *a review nobody is doing*; where approving it is refused
+for a reason only the operator can remove, the sentence the operator reads SHALL name that reason
+and its remedy first, and SHALL NOT offer asking the same reviewer again as a way forward, because
+that reviewer meets the same refusal.
+
+A review whose reason can be removed by a reviewer is unaffected. Where the only refusal is one the
+work's author can repair, a reviewer can still record that the work needs revision, and the review
+is answered as before.
+
+#### Scenario: The operator is told about the evidence, not about staffing
+
+- **WHEN** a review turn ends without a verdict, and approving the task is refused because evidence naming a commit is waiting to be decided
+- **THEN** the review is surfaced with the approval refusal's own sentence
+- **AND** the surfaced reason does not state that no agent is free, and does not list which agents were excluded
+
+#### Scenario: A drift only the operator resolves is not given to a second reviewer
+
+- **WHEN** a review selected on availability ends without a verdict, and approving the task is refused because a requirement it serves has an unresolved drift candidate
+- **AND** the agent the resolution would select has been granted the decision on evidence
+- **THEN** no second reviewer is resolved
+- **AND** the review is surfaced with the approval refusal's own sentence
+
+#### Scenario: A later firing names the same reason
+
+- **WHEN** a flow fires while that task is still under review with the silent reviewer named, and approving it is still refused for the same reason
+- **THEN** the sentence the flow records names that reason and the decision waiting for the operator
+- **AND** it does not offer asking the same reviewer again
+
+#### Scenario: A review whose approval could not ask git is not given to a second reviewer
+
+- **WHEN** a review selected on availability ends without a verdict, and asking the project's repository whether the task's work would merge fails or does not answer in time
+- **THEN** no second reviewer is resolved
+- **AND** the review is surfaced with a sentence saying the Hub could not ask git, and its reason
+
+#### Scenario: Any other failure to evaluate the gate leaves the review answered as before
+
+- **WHEN** a review selected on availability ends without a verdict, and evaluating approval fails for a reason other than the repository
+- **THEN** the reviewer is resolved again as *A flow resolves a reviewer by declaration, then by availability* states
+- **AND** the failure is logged as a warning
+
+#### Scenario: A refusal the author can repair is answered as before
+
+- **WHEN** a review selected on availability ends without a verdict, and approving the task is refused only because the work cannot be merged cleanly
+- **THEN** the reviewer is resolved again as *A flow resolves a reviewer by declaration, then by availability* states
 

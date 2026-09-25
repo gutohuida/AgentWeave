@@ -30103,7 +30103,7 @@ into that change's D3 (tasks 1.12, 1.13).
 
 ## F374 (B) — a review refused by the evidence gate is re-staffed to a second reviewer, who meets the same gate, and the surfaced reason blames staffing
 
-**Status:** open. Filed 2026-09-15 by the night window's drive of
+**Status:** fixed a8a0b32, driven live 2026-09-26 (drive Hub :8033, profile drive0926b, real Haiku: beta reviewed, was refused by the gate, no entry for gamma, task stayed with beta, run_diverged `surfaced` with the gate's sentence, flow card said approval waits on the operator; accepting the evidence then approving worked). Filed 2026-09-15 by the night window's drive of
 `a-task-nothing-will-move-holds-nobody` (drive Hub `:8013`, `profiles/drive0915`, project
 `proj-4297ab5fd02c`, task `task-f3bb989a5b1c`). **Measured live, twice** (the control and archived
 lanes), in real Haiku turns. Not caused by that change; it widens the reach (below).
@@ -33328,3 +33328,6 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 Reproduced in row 10: `builder` re-loaded `record_evidence`'s schema six times, then printed an invented "Recording evidence…" success block through PowerShell and ended `completed` with no evidence row. The prescribed focused retry worked at once, but it ran unbound to the task, so `ev-6da671ce9ee7`'s `footprint.commit_sha` is the project's initial commit, which does not contain the work its summary describes; `outside_workspace_writes` stayed `[]`.
 
+## F458 (B) — the surfaced reason for an operator-held review says "still running the turn ... this clears itself" after the turn has ended
+
+**Status:** open. Filed 2026-09-26, found driving `a-review-no-reviewer-can-approve-goes-to-the-operator` (`scripts/drive/d0926_review_hold.py`, real Haiku). The `run_diverged` reason for beta's ended review appends the gate's drift arm (`requirement_gate.py:324`): "beta is still running the turn that produces this task's work ... Approve once the turn has ended: this clears itself, with nothing for anyone to do." It is written at run end, while the run row still reads running, so it contradicts its own first half ("no reviewer can approve it until you act"). The flow card's stall_reason is correct. Not caused by the change; the change now surfaces the gate's text verbatim. A repair should decide whether the gate ignores the calling run when evaluating at run end.
