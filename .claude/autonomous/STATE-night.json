@@ -1,86 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-24-daily",
-    "parent_branch": "master",
-    "parent_sha": "8a5d0ed",
-    "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 11,
-    "log_file": ".claude/autonomous/2026-09-24-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "night-drive",
-    "next_action": null,
-    "queue": [
-        {
-            "id": "compose",
-            "status": "done",
-            "title": "Compose queue",
-            "detail": "Done iteration 1: ORDER from APPROVALS 2026-09-24."
-        },
-        {
-            "id": "f133-impl",
-            "status": "done",
-            "title": "F133 no-spec fix: shared select_turn in hub/hub/inbound_queue.py",
-            "detail": "Done iteration 2 (c418cb8): shared select_turn; driven by night-drive."
-        },
-        {
-            "id": "tool-server-impl",
-            "status": "done",
-            "title": "an-agents-tool-server-is-the-one-its-hub-loaded",
-            "detail": "Done iteration 3: code+tests built; tasks 0.x, 2.4 (full suite) and 3.x (drive) still open, covered by night-drive."
-        },
-        {
-            "id": "pressing-run-impl",
-            "status": "done",
-            "title": "pressing-run-names-the-reason-that-held",
-            "detail": "Done iteration 4: code + 13 tests built, groups 1 and 2.1-2.4, 2.6 ticked; 2.5 (full hub suite) was running in background at commit, 3.x (drive) deferred to night-drive."
-        },
-        {
-            "id": "checkpoint-handover-impl",
-            "status": "done",
-            "title": "a-checkpoint-is-handed-over-once-and-says-where-it-went",
-            "detail": "Done iteration 6: code, migration 0106, all tests; full hub suite 4815 passed. 4.4 drive and 4.5 footnote left to night-drive."
-        },
-        {
-            "id": "event-announce-impl",
-            "status": "done",
-            "title": "an-event-is-announced-only-once-its-write-is-committed",
-            "detail": "Done iteration 7: code, tests, AST guard; full hub suite 4822 passed. Drive left to night-drive; archive after."
-        },
-        {
-            "id": "run-id-event-impl",
-            "status": "done",
-            "title": "run-id-in-an-event-always-names-a-run",
-            "detail": "Done iteration 8: code, 5 tests; full hub suite 4827 passed, UI 1622 passed. Drive (3.1) left to night-drive; archive after."
-        },
-        {
-            "id": "flows-own-moves-impl",
-            "status": "done",
-            "title": "a-flows-own-moves-are-recorded-as-the-flows",
-            "detail": "Done iteration 9: code, migration 0107, tests, UI + bundle; full hub suite 4841 passed. 0.3 DECISIONS.md entry, 3.2 drive, 3.3 archive left to night-drive."
-        },
-        {
-            "id": "night-drive",
-            "status": "done",
-            "title": "Drive tonight's changes on a fresh drive Hub",
-            "detail": "Parts 1 and 2 done (iterations 10, 11). Tool-server pin not driven live (unit tests only)."
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-25-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "fca808d",
+    "stop_at":  "2026-09-26T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-25-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
