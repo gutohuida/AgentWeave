@@ -716,8 +716,18 @@ R2 and R3 of `a-flow-is-configured-from-its-own-tab` and
 - DECIDED   R1-bugs-inside  **The two defects R3 found are fixed inside change 1**, not filed separately:
   a changed agent resuming the old agent's session, and `_do_fire_job`'s except path reading
   `acting_agent` before it is set.
-- Still open, not asked: R2's choice that a `stop_at` already past at approval creates no flow;
-  R3's Spec-page link opening the loop agent's view with no document (Back returns to it).
+- DECIDED   R1-past-stop-no-flow  **A `stop_at` already past at approval creates no flow**, and the
+  report says so (R2's choice, accepted after the Opus review).
+- DECIDED   R1-flow-link-agent-view  **The Spec page's Flow link opens the loop agent's view with no
+  document attached**, and Back returns to the document (R3's choice, accepted).
+- DECIDED   R1-control-resets  **An applied change of default agent resets the loop's `control` to the
+  operator** (Opus review, change 1, finding 5, option b): a delegation to A is not a delegation to B.
+  The creator stays "the agent the job names", as the code already measures it.
+- DECIDED   R1-no-empty-flow  **An approval that would give the new flow no open task creates no flow**
+  and reports it (Opus review, change 2, finding 2). This covers a failed board and a board whose
+  every entry was already served.
+- The Opus review (`spec-queue/tracks/reviews/R1-2026-09-25.md`) returned APPROVE WITH FIXES on both.
+  Every fix was applied, and both changes were APPROVED the same day (`APPROVALS.md` 2026-09-25).
 
 ### 2026-09-24 — two decisions already made, now written down
 

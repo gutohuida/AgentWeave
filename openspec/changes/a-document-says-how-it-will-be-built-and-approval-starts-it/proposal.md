@@ -3,7 +3,9 @@
 **Round 1, 2026-09-25**, from an interactive explore with the operator on request **R1** (F377).
 Second of two changes; it builds on `a-flow-is-configured-from-its-own-tab`. **Round 2,
 2026-09-25**, re-derived it against the code (design.md, "Round 2"), and **Round 3** did so again
-(design.md, "Round 3"). **Nothing here is implemented yet.**
+(design.md, "Round 3"). An **Opus adversarial review** followed the same day
+(`spec-queue/tracks/reviews/R1-2026-09-25.md`; design.md, "Opus review, 2026-09-25"); its fixes and
+the operator's decisions on it are marked *(operator, review)*. **Nothing here is implemented yet.**
 
 ## Why
 
@@ -30,7 +32,8 @@ The operator's decisions from the explore are marked *(operator)*.
   tasks, self-review, stops when the queue empties. If the operator chooses a flow, the agent asks
   for the default agent (from the project's open agents, now listed in the spec turn), the stop
   condition and the cadence. "No flow" is a valid answer. *(operator)* Only change documents are
-  asked, since only they must answer (R2).
+  asked, since only they must answer (R2). The agent is told to include `delivery` in every later
+  submission, because a submission replaces the whole document (review).
 - **A new payload section, `delivery`:** `{"mode": "flow", "agent", "stop_when_queue_empties",
   "stop_at", "cron"}` or `{"mode": "none"}`. `submit_spec_document` gains the parameter (MCP and
   HTTP prose).
@@ -44,18 +47,28 @@ The operator's decisions from the explore are marked *(operator)*.
 - **Approval creates the flow**, with the operator as the actor (so `allow_agent_jobs` never
   applies). It is named after the document, and its first firing is on the **next scheduled tick**.
   If the flow cannot be created (agent not open on the project, document claimed in a race, bad
-  cadence, no stop condition, a stop time already past), **the document is still approved**, and
-  the report says why. *(operator)* A flow that already declares the document, as on a re-approval,
+  cadence, no stop condition, a stop time already past *(operator, review)*), **the document is
+  still approved**, and the report says why. *(operator)* **Nor is a flow created that the approval
+  gave no open task**, as when the board failed or every declared task was already served: a queue
+  never filled fires an agent turn every tick and never stops. The report says *"No flow was
+  started: the approval gave it no tasks. Start a flow… once there is work."* *(operator, review)* A flow that already declares the document, as on a re-approval,
   is reported as the document's flow, not as a refusal (R2), with its state: a flow that stopped
   when its queue emptied is reported as ended, with the new tasks waiting on it (R3). At approval the operator may pick a
   replacement agent for a stale delivery. The document is not edited; the report records the choice.
+  On a re-approval that finds an existing flow, that choice is not applied, and the report says so
+  (review).
 - **The board is always created**, flow or not, as today. *(operator)*
 - **Every approval writes an approval report:** tasks created, tasks skipped as already served,
   dependencies not honoured, a total failure to create the board (now caught in a savepoint, so it
   can no longer undo the approval), and the flow created or not created with the reason. It is
-  stored as a document event, returned when the document is read, and shown on the document. When
-  no flow was created, it offers change 1's **Start a flow…** for as long as no flow declares the
-  document. A board that fails part-way leaves none of its tasks behind (R2).
+  stored as a document event, returned when the document is read (the newest, by `created_at` then
+  `rowid`, since timestamps tie on this machine: review), and shown on the document. When no flow
+  was created, it points to change 1's **Start a flow…** in the phase bar above it, for as long as
+  no flow declares the document, and has no button of its own *(operator, review)*. A board that
+  fails part-way leaves none of its tasks behind (R2).
+- **The approval's frames are deferred to its commit** (review): `set_phase` stages an event row
+  with `commit=False`, so the shipped guard `test_an_event_is_announced_after_commit.py` requires
+  `defer_broadcast`, in today's order `spec_updated`, `task_updated`, then `job_created`.
 
 ## Capabilities
 
@@ -76,8 +89,8 @@ The operator's decisions from the explore are marked *(operator)*.
     change documents, plus a roster line in spec turns.
   - `mcp_server.py`: the `submit_spec_document` parameter; `.claude/rules/mcp-server.md` applies.
   - `spec_render.py`: a Delivery section.
-  - `api/v1/spec.py`: `set_phase` creates the flow and writes the report; `GET` returns the report and
-    the stale state.
+  - `api/v1/spec.py`: `set_phase` creates the flow, writes the report and defers its three frames
+    to its commit; `GET` returns the report and the stale state.
   - `spec_tasks.py`: savepoint and outcome.
   - `api/v1/jobs.py`: the flow-creation body is extracted into `build_flow_rows`, which flushes
     and never commits or rolls back, and which both routes call. `POST /jobs` then commits once,

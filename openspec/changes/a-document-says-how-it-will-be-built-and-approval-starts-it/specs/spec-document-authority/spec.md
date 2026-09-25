@@ -40,7 +40,8 @@ delivery SHALL mean no flow.
 While a change document is being explored, the authoring agent SHALL be instructed to ask the operator
 how the change will be built, recommending a flow where the work splits into tasks and stating what a
 flow does. If the operator chooses a flow, the agent SHALL be instructed to ask for its default agent,
-its stop condition and its schedule. The agent SHALL be told the project's open agents by name, whether
+its stop condition and its schedule, and to include the answer in every later submission of the
+document, since a submission replaces the whole document. The agent SHALL be told the project's open agents by name, whether
 or not the project has more than one. The question SHALL be asked in the reply, like the rest of the
 interview. An author exploring a document of any other kind SHALL NOT be asked it, since only a change
 document is required to answer it.

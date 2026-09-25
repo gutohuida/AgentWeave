@@ -40,7 +40,7 @@ it becomes its own group on the page.
 ## R1 — A button on the spec that starts the flow for it
 **Asked:** 2026-09-17
 **Theme:** Flows & loops
-**Ready:** ready
+**Ready:** proposed
 **Finding:** F377
 
 "It would probably be good if I had a button that I could create a flow on the spec. It creates a
@@ -49,6 +49,8 @@ flow from that spec. I have nothing that I can do easily."
 From an approved document, the only way to start a flow today is to ask an agent to call
 `create_flow` — which is the call that was refused in F376 and lost the LoopEngine_2 night.
 
+
+**2026-09-25:** explored with the operator and split into two approved changes: `a-flow-is-configured-from-its-own-tab` (a flow's settings panel, plus Start a flow…) and `a-document-says-how-it-will-be-built-and-approval-starts-it` (the interview asks how it will be built; approval starts the flow and reports what it did).
 ---
 
 ## R2 — The settings that actually matter, on the project page

@@ -3,6 +3,95 @@
 **Round 1, 2026-09-25.** Decisions made with the operator in an interactive explore are marked
 **(operator)**; the rest are this round's and are open to R2/R3.
 
+## Opus review, 2026-09-25
+
+The review is `spec-queue/tracks/reviews/R1-2026-09-25.md`, "Change 1". Each citation below was
+re-read in the code at HEAD `c32ba5d` before it was written in. All eleven items held; none was
+rejected. Decisions the operator made on the review are marked *(operator, review)*.
+
+1. **The loop summary asked about the old agent (fix).** `_batch_loop_summaries` passes the live
+   `job.agent` to `decide_firing` and to `_loop_flow_busy_reason` (`api/v1/jobs.py:377-389`). Under
+   D2a the next firing asks about `pending_agent` whenever no firing is active. So with A held and B
+   staged, the tab would say "A is held" while the next tick proceeds under B. That breaks the shipped
+   `agent-loops` sentence *"the summary SHALL report this refusal's reason"* (in "A firing is refused
+   while its loop's agent is already running"). **Done:** D2a's new "Who the summary asks about".
+   One helper, `scheduler._agent_for_next_firing`, answers for both the summary and the firing. The
+   firing-active query has to move ahead of the decide loop (`:378`), because today it runs after it
+   (`:454-465`). Added a MODIFIED-requirement scenario, test 1.3d and task 2.3b.
+2. **Collision with the approved `input-the-hub-accepted-is-answered-as-accepted` (F349) (fix).**
+   Its D6 has the `except` roll the session back before it records `failed`, when the raise comes
+   before the accepting commit. It also routes `_emit_loop_edit_applied` through
+   `persist_accepted_event`. An edit that D2a applied early would be discarded by that rollback,
+   and a handler that emitted anyway would announce something that did not happen. **Done:** D2a
+   "The `except` path" now states the rule: the handler emits only when its own commit included the
+   edit. After F349, a raise before the accepting commit leaves the edit staged and emits nothing.
+   Test 1.3c asserts whichever behaviour is in the tree. F349 is also named in Risks, with this
+   change's two new emit sites.
+3. **The `except` handler could emit `loop_edit_applied` twice (fix).** Every normal path emits
+   after its own commit, and then something can still raise. On the stop path the emit is at
+   `scheduler.py:3190-3191` and `persist_event(job_run_skipped)` follows at `:3192`. The stall path
+   has the same shape at `:3339-3341`. On the proceed path the emit is at `:3491-3492`, followed by
+   `queue_entry_queued`, `schedule_agent` and `job_fired`. **Done:** `pending_edit_payload = None`
+   immediately after each emit (D2a). Added test 1.3e, where `schedule_agent` raises after the late
+   emit and exactly one event results.
+4. **Nothing in the Hub writes `AIJob.last_session_id` (note).** The only readers are `jobs.py:82`,
+   `jobs.py:881` and `scheduler.py:3056`. `schemas/jobs.py:214` is the response model. Neither
+   `JobCreate` nor `JobUpdate` has the field. The only writer is the CLI's local
+   `src/agentweave/jobs.py:349`, and no Hub route accepts what it writes. The review also measured
+   0 non-null values on both `:8000` and `:8010`. **Done:** D2 now says so. The one-line clears
+   stay, in the PATCH and in `_stage_pending_loop_edit`. The scheduler-side drop of `conversation`,
+   `resume_session_id` and `run.session_id` is **removed** from this change, because it serves only
+   that state. `conversation_for_provider_session` runs at `:3057-3064` only when `resume_session_id`
+   is set, and `resume_session_id` is set only from `last_session_id`. With no writer, `conversation`
+   is `None` and `run.session_id` is `None` on every Hub firing, so the drop would guard nothing.
+   Test 1.2a is narrowed to the clear itself. The loop scenario of the ADDED requirement now says
+   what is enforced. D2 records what a future writer must add.
+5. **The creator is not the creator after an agent change (fix).** *(operator, review)* **(b): an
+   applied agent change resets the loop's `control` to the operator.** A delegation to A is not a
+   delegation to B. **Done:** see D2, "Control returns to the operator". This covers the application
+   in `_stage_pending_loop_edit`, the `changes.control` entry in `loop_edit_applied`, the panel's
+   warning before saving, test 1.2c with a named mutation, and MODIFIED deltas for "A loop has a
+   controller…" and "Only a loop's creator, or the operator, may add to its queue directly". The
+   second delta is needed as well. The Hub stores no creator apart from `job.agent` (`tasks.py:611`,
+   `:678-686`), so once B is applied the code measures callers against B. The shipped text says the
+   creator is "the agent that created it". Without a delta, the spec would say A may still add and
+   B may not, which is the opposite of the code.
+6. **Some stop-condition edits did nothing, or left a flow with no stop (fix).** `update_job` stages
+   `stop_at` only when `body.stop_at is not None` (`jobs.py:991`, `:1046-1048`, `:1063-1064`), so a
+   null answers 200 and changes nothing. The panel could also stage `stop_when_queue_empties: false`
+   on a flow with no `stop_at`. `create_flow` refuses a flow like that (`mcp_server.py:821-827`), and so does
+   D5's dialog. **Done:** D1 now says the stop time can be replaced but not cleared: the input has no
+   clear control, and an emptied input is not sent. The panel also refuses to save a **flow** whose
+   next-firing values have neither stop. Added a spec scenario and vitests 3.5(g) and (h).
+7. **Agent validation is weaker than the scenario claimed (note).** `_check_agent_exists` accepts any
+   name while the project has an empty roster. It also accepts a legacy session name whose `Agent`
+   row is archived, because `known` is widened from session data after `archived` is computed
+   (`jobs.py:209-215`). And a staged B that is archived before the firing is still applied.
+   `_stage_pending_loop_edit` rechecks nothing, and `agent_archivable` does not look at jobs.
+   **Done:** the scenario is scoped to a project with a roster. At application, a `pending_agent`
+   whose `Agent` row reads archived is dropped and reported as `agent_dropped` in
+   `loop_edit_applied` (D2a, test 1.2b). Risks says to switch the PATCH check to change 2's
+   `delivery_agent_state` when that change lands.
+8. **Pre-existing pending-edit race (note, not fixed here).** A firing that loaded the loop before a
+   PATCH staged the edit clears `pending_edit_at` when it commits, which strands the staged fields.
+   `pending_edit_actor` is also last-writer-wins. **Done:** listed in Risks, where it is filed as a
+   finding by the session.
+9. **D2a frees only new work (note).** A task A was working when the hold began stays A's, because
+   staffing never takes work away. **Done:** the panel's help text (D1, D2) and human step 2 of the
+   test guide now say so.
+10. **Test 1.6 named no mutation (note).** **Done:** its mutation is `_stage_pending_loop_edit`
+    reassigning the loop's pending tasks to B, which then fails.
+11. **Other open changes edit `_do_fire_job` and `update_job` (note).** **Done:** Risks names
+    `agents-no-longer-register-themselves`, `an-at-mention-an-agent-wrote-reads-no-file`,
+    `a-task-is-attended-only-by-a-turn-that-will-reach-it`, B10's `defer_broadcast` conversion, and
+    the fact that `:8000` sits at `0105`.
+
+Also *(operator, review)*: the Spec-page **Flow** link opens the loop agent's view without the
+document, and Back returns to the document. That behaviour is **accepted** as D4 states it. The
+operator-only 403 for `agent`, and fixing the two R3 bugs (the `except` path's unbound
+`acting_agent` and its missing `loop_edit_applied`) inside this change, were decided earlier and
+stand.
+
 ## Round 3, 2026-09-25
 
 Re-derived against HEAD `3f15bae`, from the code rather than from Round 2's notes. **Changed:**
@@ -204,6 +293,22 @@ turns them into inputs, and **Save** sends only the fields that changed.
 - **Shown, not editable:** the declared document (a flow's identity; rebinding a flow to another
   document is a new flow, not a setting) and `work_needs_evidence` (declared at creation, agent-loops
   "A loop declares at creation whether its work needs evidence").
+- **The stop time can be replaced but not cleared (Opus review, 6).** `update_job` reads a null
+  `stop_at` as "not supplied". It neither applies nor stages one (`jobs.py:991`, `:1046-1048`,
+  `:1063-1064`), so a clear would answer 200 and change nothing. The stop-time input therefore has
+  no clear control. An input the operator empties is treated as unchanged and is not sent. The help
+  text says: *"A stop time can be moved, not removed. To run without one, stop it when the queue
+  empties instead."* Making an explicit null clear the field through `model_fields_set` was
+  rejected. It would change the route for every caller, and it would need a staged "clear" that
+  `pending_stop_at IS NULL` cannot represent.
+- **A flow cannot be saved with neither stop condition (Opus review, 6).** The panel works out what
+  the next firing will have: the staged `stop_at` or `stop_when_queue_empties` where one exists, and
+  the live value otherwise. When the loop declares a document and both would be empty (no stop time,
+  and "when the queue empties" unchecked), **Save** sends nothing and shows *"A flow needs a stop
+  condition: keep 'when the queue empties', or set a stop time."*. That is the rule `create_flow`
+  (`mcp_server.py:821-827`) and D5's dialog already apply at creation. A loop that declares no
+  document is not refused. The route lets one exist with only a purpose (`_loop_opts_in`,
+  `jobs.py:106-108`), and no shipped requirement asks it to have a stop.
 - The panel never sends `stop_reason`. Stopping is B10's Stop action.
 - An ended or archived loop shows Settings read-only. Editing a loop that will not fire again would
   stage an edit nothing ever applies.
@@ -252,15 +357,21 @@ and never during one" states one rule for a loop's definition, and the agent joi
 - `_stage_pending_loop_edit(loop, job)` applies it to `job.agent` with the other pending fields, and
   `loop_edit_applied` carries `{"agent": {"from", "to"}}`. `_stage_pending_loop_edit` has one caller
   (`:3179`); the signature change adds the job.
-- **A firing that applies an agent change resumes nothing of the old agent's (R3).** `_do_fire_job`
-  looks up the resumed conversation for `job.agent` at `:3056-3064`, before either application
-  point. When the applied payload carries `agent`, `_stage_pending_loop_edit` sets
-  `job.last_session_id = None`, and `_do_fire_job` drops the `conversation` and
-  `resume_session_id` it looked up for A. On the late path it also clears `run.session_id`,
-  because the `JobRun` was built with A's session at `:3102`. A loop is meant never to resume (D4
-  of `many-named-loops`), but `jobs.py:1083-1092` checks that only when `session_mode` is in the
-  same PATCH. So a resume-mode plain job later opted into a loop keeps `resume`, and this is
-  reachable.
+- **An applied agent change leaves the job no session of the old agent's (R3, narrowed by the Opus
+  review, 4).** When the applied payload carries `agent`, `_stage_pending_loop_edit` sets
+  `job.last_session_id = None`, one line. **Nothing in the Hub writes `last_session_id`.** Its only
+  readers are `api/v1/jobs.py:82`, `:881` and `scheduler.py:3056`, and neither `JobCreate` nor
+  `JobUpdate` carries it. The one writer is the CLI's local `src/agentweave/jobs.py:349`, which no
+  Hub route accepts. The review measured 0 non-null values on `:8000` and `:8010`. So the clear
+  guards a state production cannot create today. It is kept because it costs one line and keeps
+  the column honest. R3's scheduler-side drop (discarding the `conversation` and
+  `resume_session_id` looked up at `:3056-3064`, and `run.session_id` on the late path) is
+  **removed**. It serves only that state: `conversation_for_provider_session` runs only when
+  `resume_session_id` is set, and `resume_session_id` comes only from `last_session_id`. So on
+  every Hub firing, `conversation` and `run.session_id` are already `None` at that point. **For
+  whoever adds a Hub writer:** the firing that applies an agent change reads `last_session_id` at
+  `:3056`, before either application point. That writer must also drop what the firing looked up
+  for the old agent, or the ADDED requirement's loop scenario stops holding.
 - `loop_edit_staged`'s `changes`, `_pending_loop_edit` (`jobs.py:528-545`) and so
   `LoopSummary.pending_edit` include `agent`. The TS `LoopPendingEdit` (`jobs.ts:29-35`) gains
   `agent?`, and `LoopTab`'s `stagedFields` gains a "Default agent" row.
@@ -270,7 +381,9 @@ and never during one" states one rule for a loop's definition, and the agent joi
 **On a plain job (no loop), an agent edit applies at once and clears `last_session_id`,** when the
 name actually changes. A resume-mode job would otherwise hand the old agent's provider session to
 the new agent (`scheduler.py:3056-3064`), which the product refuses where a flow's selection
-diverges from its job's agent (`_fire_additional_selection`'s docstring, `:3686-3690`). No scheduler
+diverges from its job's agent (`_fire_additional_selection`'s docstring, `:3686-3690`). As above,
+nothing in the Hub writes the column today, so this is a one-line guard, not a live hazard. A plain
+job has no `Loop` row and so no `control`; nothing about control applies to it. No scheduler
 re-registration is needed, because a firing reads the job back by id (`_fire_job_by_id`, `:2994-2999`).
 
 **What the edit does not move** (stated in the panel's help text and in the spec):
@@ -278,9 +391,52 @@ re-registration is needed, because a firing reads the job back by id (`_fire_job
 - Tasks already assigned keep their assignee (agent-loops: staffing "never takes work away").
 - Input already queued for the old agent stays with it.
 - The flow's checkpoint lineage is keyed by the loop (`Checkpoint.loop_id`), so it survives.
-- **`control="creator"` follows the new agent.** The creator *is* `job.agent` (`api/v1/tasks.py:611,
-  678-704`); there is no separate column. Adding one to preserve the original creator is not this
-  change. The panel says so when control is `creator`.
+- A task the old agent was working when it was held stays that agent's. So a switch away from a
+  held agent frees only new, unassigned work, and the loop still waits on the old agent for a task
+  it already holds (Opus review, 9). The panel's help text beside the agent select says: *"Tasks
+  already assigned stay with their agent. The new agent takes only work nobody holds yet."*
+
+**Control returns to the operator *(operator, review)*.** A delegation to A is not a delegation to
+B. The Hub keeps no creator apart from `job.agent`. `_authorize_loop_task_creation` measures the
+caller against `job.agent` (`api/v1/tasks.py:611`, `:678-686`), and `loop.control == "creator"`
+then lets that agent extend the queue (`:701-703`). Without a reset, applying B would hand B the
+queue authority the operator delegated to A.
+
+- **Where.** In `_stage_pending_loop_edit(loop, job)`: when `pending_agent` is applied **and differs
+  from `job.agent`**, and `loop.control == "creator"`, set `loop.control = None`. It is `None`, never
+  `"operator"`, because `Loop.control`'s comment (`models.py:1527-1534`) and `set_loop_control`
+  (`api/v1/loops.py:215-216`) store the default as NULL. A revert that stages A while A is in force
+  changes nothing, so it leaves control alone. So does a staged B that is dropped because B was
+  archived (D2a).
+- **The immediate path has no control to reset.** A plain job has no `Loop` row, and `control` is a
+  `Loop` column (`models.py:1534`). A PATCH that opts a job into being a loop and names an agent
+  creates a loop whose `control` is already `None`.
+- **What records it.** `loop_edit_applied`'s `changes` gains `"control": {"from": "creator", "to":
+  "operator"}`. The payload already carries `actor` and `staged_at` (`scheduler.py:2396-2402`), so
+  the reset is recorded against the loop with its actor and time. That is what "A loop has a
+  controller…" requires of each change of control. The actor is always the operator, because only
+  the operator may stage an agent (D2). No separate `loop_control_changed` is emitted beside it.
+  That event records the operator's direct act through `POST /loops/{id}/control`
+  (`loops.py:218-229`), and two events for one applied edit would record one change twice. Both
+  event types already invalidate the loop keys in `useSSE` (`useSSE.ts:547-549`).
+- **What the panel says before saving.** When `control == "creator"` and the agent select differs
+  from what it opened on, the Settings section shows this above **Save**: *"This loop's queue
+  control is delegated to its agent. Changing the agent gives control back to you when the change
+  applies. Delegate again from the loop's control setting if you want the new agent to have it."*
+  This replaces R1's "creator control follows the agent" note, which said the opposite.
+- **What it does not reach.** `_authorize_loop_task_creation` lets the creator add to a loop that
+  has never fired, whatever `control` says (`tasks.py:704-712`, `job.run_count > 0`). That window
+  is keyed to `run_count`, not to delegation. B inherits it if a staged change is applied at a
+  firing that does not proceed (busy, skipped or stalled) on a loop that has never fired. That is
+  the creator's definition window, not a delegation, and this change leaves it as it is.
+- **Spec.** There are MODIFIED deltas on two requirements. "A loop has a controller…" gains that
+  control returns to the operator when an agent change is applied. "Only a loop's creator, or the
+  operator, may add to its queue directly" also needs one. The shipped text defines the creator as
+  *"the agent that created it"*, while the code measures the caller against the agent the job
+  names, both before and after this change. Once the agent is editable, the two give different
+  answers for A and B. The delta says that the creator is the agent the loop's job names, that an
+  operator's change of that agent makes the new agent the creator from the moment it applies, and
+  that the change carries no delegation.
 
 ### D2a — A staged edit is also applied before the busy guard, when no firing of the job is active (R2)
 
@@ -298,24 +454,68 @@ switch the operator makes *because* A cannot work is the one that cannot take ef
 `_stage_pending_loop_edit(loop, job)` there. The guard, the skip check and `decide_firing` then all
 ask about the agent that will run. "A firing is active" is `_batch_loop_summaries`' existing
 `firing_active` fact: a `JobRun` in `in_progress` whose conversation has a `Run` in `running`
-(`jobs.py:454-466`, read at `:487`). That query moves into one helper that both call, so the panel's "Running now"
-and this gate cannot disagree. The helper lives in `scheduler.py` (`_jobs_with_active_firing(session,
-job_ids) -> set[str]`), because `api/v1/jobs.py` imports `scheduler` at module level (`:19`) and the
-reverse import would be a cycle (R3). While a firing is active the edit is left for `:3179`, exactly as
-today. For a documentless loop that means the guard still asks about A, A is running, and the
-firing is refused, which is the protection D2 exists for.
+(`jobs.py:454-466`, read at `:487`). That query moves into one helper that both call, so the
+panel's "Running now" and this gate cannot disagree. The helper lives in `scheduler.py`
+(`_jobs_with_active_firing(session, job_ids) -> set[str]`), because `api/v1/jobs.py` imports
+`scheduler` at module level (`:19`) and the reverse import would be a cycle (R3). While a firing is
+active the edit is left for `:3179`, exactly as today. For a documentless loop that means the guard
+still asks about A, A is running, and the firing is refused, which is the protection D2 exists for.
 
 - `pending_edit_payload` is bound before the guard. `:3179` becomes
   `pending_edit_payload = pending_edit_payload or _stage_pending_loop_edit(loop, job)`. The two
   early returns that follow an early application also emit `loop_edit_applied` after their commit:
-  the busy refusal (commit at `:3089`) and the skip (commit at `:3114`). Every later return already does.
-- **The `except` path (R3).** `pending_edit_payload = None` and `acting_agent = job.agent` are
-  bound before the first statement in the `try` that can raise. Today `acting_agent` is first bound
-  at `:3254`, and the handler reads it (`:3563`, `:3568`), so an exception between `:3095` and
-  `:3254` raises `UnboundLocalError` out of the handler. After its commit, the handler emits
-  `loop_edit_applied` when a payload was made, so the applied edit it commits is recorded. When no
-  `JobRun` exists yet, the handler commits nothing, the session rolls back, and the edit stays
-  staged. That is consistent as it stands.
+  the busy refusal (commit at `:3089`) and the skip (commit at `:3114`). Every later return already
+  does.
+- **Each emit clears the payload (Opus review, 3).** Every normal path emits after its own commit,
+  and something can still raise after that emit. On the stop path, `persist_event(job_run_skipped)`
+  follows the emit at `scheduler.py:3190-3192`. The stall path has the same shape at `:3339-3341`.
+  On the proceed path, `queue_entry_queued`, `schedule_agent` and `job_fired` follow the emit at
+  `:3491-3492`. Any of these raising reaches the handler, which would emit a second time. So every
+  emit site, the two new ones included, is followed at once by `pending_edit_payload = None`. A
+  small `_emit_and_clear` is not worth it: the clear is one line beside each of seven emits.
+- **The `except` path (R3; rule restated by the Opus review, 2).** `pending_edit_payload = None` and
+  `acting_agent = job.agent` are bound before the first statement in the `try` that can raise.
+  Today `acting_agent` is first bound at `:3254`, and the handler reads it (`:3563`, `:3568`). So an
+  exception between `:3095` and `:3254` raises `UnboundLocalError` out of the handler. **The rule:
+  the handler emits `loop_edit_applied` only when its own commit included the edit.** In today's
+  tree the handler commits whatever the session holds (`:3549-3571`). So when a `JobRun` exists and
+  `pending_edit_payload` is still set (no path emitted it yet), the handler emits after that commit.
+  When no `JobRun` exists, the handler commits nothing, the session rolls back, the edit stays
+  staged, and nothing is emitted.
+  **After F349** (`input-the-hub-accepted-is-answered-as-accepted`, D6), the handler rolls the
+  session back before recording `failed` when the raise comes before the accepting commit
+  (`:3479` here). That rollback discards an edit D2a applied early, and the edit stays staged. So
+  the handler sets `pending_edit_payload = None` at its rollback and emits nothing. A raise after
+  the accepting commit finds the edit already committed and already emitted, with the payload
+  cleared. Whichever change lands second applies this rule to the other's handler. The two new emit
+  sites also go through `persist_accepted_event` once F349 is in, as F349's D6 does for the other
+  emits.
+- **A staged agent that has since been archived is dropped (Opus review, 7).** The PATCH checks the
+  agent when it is staged, but nothing checks it again at application, and `agent_archivable`
+  (`agent_lifecycle.py:25`, called at `api/v1/agents.py:2797`) never looks at jobs. So B can be
+  archived while it waits. Before either application point, `_do_fire_job` asks
+  `_agent_archived(session, project_id, name)`: does an `Agent` row with that name read `archived`? That is the one state `_check_agent_exists`
+  refuses positively. It passes the answer to `_stage_pending_loop_edit(loop, job, *,
+  agent_archived)`. When it is true, the helper does not apply `pending_agent`, clears it with the
+  other pending fields, leaves `control` alone, and records `"agent_dropped": {"name": "B",
+  "reason": "archived"}` in `loop_edit_applied`'s `changes`. The rest of the edit applies. A name
+  with no `Agent` row at all is applied, on the same lenient terms as the PATCH check.
+- **Who the summary asks about (Opus review, 1).** `_batch_loop_summaries` asks `decide_firing` and
+  `_loop_flow_busy_reason` about the live `job.agent` (`api/v1/jobs.py:377-389`). Under this rule
+  the next firing asks about `pending_agent` whenever no firing is active. With A held and B
+  staged, the tab would therefore report A's hold while the next tick proceeds under B. That breaks
+  the shipped *"the summary SHALL report this refusal's reason"* in `agent-loops` "A firing is
+  refused while its loop's agent is already running", and the `stall_reason` promise quoted at
+  `jobs.py:381-385`. The per-task "next: A" attribution, which comes from the same decision, goes
+  stale the same way. **Fix:** one helper,
+  `scheduler._agent_for_next_firing(session, loop, job_agent, firing_active) -> str`, which returns
+  `loop.pending_agent` when `loop.pending_edit_at` and `loop.pending_agent` are set, `firing_active`
+  is false, and `_agent_archived` is false; otherwise `job_agent`. `_batch_loop_summaries` passes
+  its result to both calls. `_do_fire_job` decides early application on the same terms, so the tab
+  and the tick cannot disagree. The summary's firing-active set is computed at `:454-465` today,
+  after the decide loop at `:378`. It moves ahead of that loop, via `_jobs_with_active_firing`.
+  `LoopSummary.agent` still reports `job.agent`, the agent in force. The staged one shows under
+  `pending_edit`.
 - This moves purpose and stop too, not only the agent. That is deliberate. Applying them at a tick
   where no firing of the loop is running is still "between firings". Splitting the agent from the
   others would need a second sentinel and two `loop_edit_applied` events for one edit.
@@ -454,9 +654,39 @@ additive, no backfill. On `:8000`'s next restart it adds an empty column.
 - **Skew on `:8000`:** the bundle reaches the live app on the next reload. Before `:8000` restarts, an
   agent edit answers 422 and changes nothing, `LoopSummary` has no `spec_document_id` (so the phase
   bar shows **Start a flow…** even for a document with a flow, and the POST answers 409 with the
-  claim sentence), and the other fields work. The restart then runs migration `0108` on their data.
-  Tell the operator before the bundle commit.
+  claim sentence), and the other fields work. The restart then runs migration `0108` on their data,
+  and `0106` and `0107` before it: the review measured `:8000` at `0105` (read-only). Tell the
+  operator before the bundle commit.
 - **`_do_fire_job`'s `except` path** (`scheduler.py:3549-3572`) is fixed here after all (R3, D2a).
   R2 had it as a residual.
 - **Residual, not fixed:** the firing-active window between a firing's commit and its `Run`
   starting (Round 3, "Residual").
+- **F349, `input-the-hub-accepted-is-answered-as-accepted` (approved; Opus review, 2).** Its D6
+  rewrites the same `except`: a rollback before `failed` is recorded when the raise comes before the
+  accepting commit, and `_emit_loop_edit_applied` goes through `persist_accepted_event`. It lists
+  the emit sites that exist today, not the two this change adds (busy refusal, skip). Whichever
+  lands second applies D2a's rule: the handler emits only when its own commit included the edit, a
+  rollback clears `pending_edit_payload`, and the two new emits use `persist_accepted_event`. Test
+  1.3c asserts the behaviour of the tree it runs in (see task 1.3c).
+- **Other open changes that edit `_do_fire_job` or `update_job` (Opus review, 11).**
+  `agents-no-longer-register-themselves` deletes the skip path at `scheduler.py:3110`, where D2a
+  adds an emit. If it lands first, that emit goes with it.
+  `an-at-mention-an-agent-wrote-reads-no-file` edits the firing's content line; the regions differ.
+  `a-task-is-attended-only-by-a-turn-that-will-reach-it` is first in ORDER. It edits
+  `_loop_flow_busy_reason` and `run_job`'s re-ask, and test 1.3b's 409 wording relies on both, so
+  re-read that wording after it lands. `update_job` inherits B10's `commit=False`
+  `loop_edit_staged`. Every broadcast in `update_job` must then be a `defer_broadcast`, or the
+  shipped guard `test_an_event_is_announced_after_commit.py` fails. B10 owns that conversion, and
+  this change adds no new broadcast to `update_job`.
+- **Pre-existing pending-edit race (Opus review, 8; not fixed here; filed as **F457**).** A firing that loaded the loop before a PATCH staged an edit still clears
+  `pending_edit_at` when it commits, because SQLAlchemy writes only the columns it changed. The
+  staged `pending_agent` (and today `pending_purpose` and the stop fields) then sits behind a NULL
+  sentinel. It is never applied and never shown, until some unrelated later edit applies it.
+  `pending_edit_actor` is also last-writer-wins. An agent staging `purpose` after the operator
+  staged an agent change would be recorded as the actor of the applied agent change, which weakens
+  D2's operator-only audit. D2a moves application earlier, but this is the same race purpose and
+  stop already have. The review's suggested cure is a conditional UPDATE keyed on the loaded
+  `pending_edit_at`.
+- **Agent validation (Opus review, 7).** The PATCH uses `_check_agent_exists`, which accepts any
+  name while the roster is empty, and a legacy session name whose `Agent` row is archived
+  (`jobs.py:209-215`). When change 2 lands its `delivery_agent_state`, switch this check to it.

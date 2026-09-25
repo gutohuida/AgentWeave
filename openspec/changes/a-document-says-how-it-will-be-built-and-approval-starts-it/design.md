@@ -1,5 +1,66 @@
 # Design — a document says how it will be built, and approval starts it
 
+## Opus review, 2026-09-25
+
+An adversarial Opus review (`spec-queue/tracks/reviews/R1-2026-09-25.md`, "Change 2") found one
+blocker, two fixes for before the build, and four notes. Each citation was re-checked against the
+code before anything here was changed. All seven hold, and all were applied. The operator decided
+finding 2 and R2's past-`stop_at` choice on 2026-09-25; those are marked *(operator, review)*.
+
+1. **Blocker: `set_phase` as designed fails a shipped guard test. Applied (D6).**
+   `test_an_event_is_announced_after_commit.py::test_no_staged_event_is_broadcast_before_commit`
+   (`rule1`, `:177-192`) walks every function under `hub/hub` and fails any function that calls
+   `persist_event(..., commit=False)` and also calls anything whose name contains `broadcast`, or
+   `publish`. R3's `job_created` step (D6 step 3b) puts the first into `set_phase`, which already calls
+   `sse_manager.broadcast` twice (`spec.py:1634-1638`), so task 4.1 could never pass. The obvious
+   swap is also wrong. `defer_broadcast` knows nothing of savepoints: `_publish_deferred` skips a
+   nested commit, and `_drop_deferred` clears the list only when the **root** transaction ends
+   (`sse.py:138-155`). A defer staged inside the flow's savepoint would still publish `job_created`
+   after that savepoint rolled back. So every broadcast in `set_phase` becomes a `defer_broadcast`,
+   staged before `session.commit()`, in today's frame order (`spec_updated`, then `task_updated`,
+   then `job_created`). The `job_created` defer is staged only after the `async with
+   session.begin_nested()` block has exited cleanly. `rule2` (`:195-209`) also holds, since every
+   defer comes before the function's only commit. Tests 1.4 and 1.6 spy on `SSEManager.publish`:
+   exactly one `job_created` frame in 1.4, none in 1.6.
+2. **An approval that would leave the new flow no open task creates no flow and says so. Applied
+   (D6).** *(operator, review)* A loop whose queue was never filled fires a real turn on every
+   tick: `_loop_stall_reason`'s rule is "never filled → fire; the agent's job is to fill it"
+   (`scheduler.py:2153`), and `_loop_stop_reason` never ends it, because `ever_count` is 0
+   (`scheduler.py:438-442`). Two causes reach this at approval: the board failed
+   (`outcome.failed`), or every declared entry was skipped as already served and adoption found
+   nothing to take. Either way the result would be one agent turn every 5 minutes, indefinitely,
+   from an approval whose report said the board had failed. Now, inside the flow's savepoint and
+   after adoption, a count of the new loop's open tasks of 0 rolls the savepoint back, and the report
+   says *"No flow was started: the approval gave it no tasks. Start a flow… once there is work."*
+   Test 1.6c covers both causes, with a named mutation.
+3. **`approval_outcome` could tie on `created_at`. Applied (D7).** Re-measured on this machine with
+   `py -3.11`: `time.get_clock_info('time')` is `GetSystemTimeAsFileTime()` at 0.015625 s, and
+   200,000 calls to `datetime.now()` gave 53 distinct values. `SpecDocumentEvent.created_at` is
+   `_now()` (`models.py:24-25`), so test 1.8's two approvals can share one. The newest report is now
+   the one first by `created_at DESC, rowid DESC`, the tie-break B11 chose for F177
+   (`spec-queue/ROUNDS.md`, B11 row). `spec_document_events` has a `String` primary key, so it is a
+   rowid table. Test 1.8 gains a frozen-clock case.
+4. **Note: on a re-approval that finds an existing flow, `delivery_agent` was silently dropped.
+   Applied (D6).** The stale strip is computed from the file, so it still appears and still offers a
+   choice, and D6's existing-flow branch then used nothing. The report now says the choice was not
+   applied because flow F already declares the document, and says so too when F's agent differs from
+   the delivery's.
+5. **Note: the interview promised review "by another agent" to a single-agent project. Applied
+   (D2).** The line now says "…when there is another agent".
+6. **Note: Start a flow… would appear twice. Applied (D7, the delta), resolved to one place.**
+   *(operator, review)* The control lives only in the phase bar (change 1, D4). The report carries no
+   button: while no unarchived flow declares the document, it says *"No flow was started … use Start
+   a flow… above."* The ADDED scenario is renamed, and the offer is on the document, beside the
+   report.
+7. **Note: a later submission without `delivery` drops it. Applied (D2, D3).** `submit_spec_document`
+   sends the whole document (`mcp_server.py:1856-1883`), so a resubmission without `delivery` loses
+   it and propose is refused again. The docstring and the interview line both say to include
+   `delivery` in every later submission.
+
+**Decided with the review:** R2's choice that a `stop_at` already past at approval creates no flow is
+**accepted** *(operator, review)*. Task 0.3 is closed on that, on `R1-stale-replace` and
+`R1-ended-flow-report` (`spec-queue/DECISIONS.md`, 2026-09-25), and on the review's decisions.
+
 ## Round 3, 2026-09-25
 
 A second independent re-derivation against HEAD `3f15bae`, with neither B5 nor B11 in the tree
@@ -30,7 +91,8 @@ aiosqlite, Python 3.11), with a partial unique index shaped like `ux_loops_spec_
 3. **D6: the `job_created` event is written inside the flow's savepoint** with
    `persist_event(..., commit=False)`, after `build_flow_rows` succeeds. R2 had it after the commit,
    where a failure is a 500 on an approval that already stands. Only the broadcast and the scheduler
-   hand-off follow the commit. `_hand_job_to_scheduler`'s own `commit()` is then a commit of an empty
+   hand-off follow the commit. (Superseded by the Opus review, finding 1: the broadcast is now a
+   `defer_broadcast` staged before the commit.) `_hand_job_to_scheduler`'s own `commit()` is then a commit of an empty
    transaction, and its failures are logged, not raised. A flow that is committed and could not be
    registered fires from the next restart, as a `POST /jobs` job already does. The report says the
    flow was created, which is true.
@@ -256,7 +318,7 @@ proposed ── the page shows Delivery; STALE if its agent is not open (D5)
              does not undo approval (D6)
           ── an approval report is written (D7)
    ▼
-approved ── the report is on the page; "Start a flow…" while no flow declares it (change 1)
+approved ── the report is on the page; the phase bar offers "Start a flow…" while no flow declares it (change 1)
 ```
 
 ## D1 — `delivery` is an optional payload field; "required" is a completeness finding
@@ -300,15 +362,18 @@ is asked. `SPEC_PHASE_DUTIES` is keyed by phase alone, so the duty is **not** ad
   "change-spec"` and its phase is `exploring`, one more line follows `SPEC_PHASE_DUTIES[phase]`:
   *"- Before the document is ready to propose, ask how it will be built. Recommend a flow when the
   work splits into tasks: a flow starts every task whose prerequisites are met, has finished work
-  reviewed by another agent, and can stop when its queue empties. If the operator wants a flow, ask
-  which agent works it by default (from the open agents listed here), when it stops, and how often
-  it fires (every 5 minutes unless they say otherwise). Record the answer as `delivery`. 'No flow'
-  is a valid answer: the tasks still go on the board."* The block already reads the row
+  reviewed by another agent when there is another agent, and can stop when its queue empties. If
+  the operator wants a flow, ask which agent works it by default (from the open agents listed here),
+  when it stops, and how often it fires (every 5 minutes unless they say otherwise). Record the
+  answer as `delivery`, and include `delivery` in every later submission of this document: a
+  submission replaces the whole document, so one without it drops the answer. 'No flow' is a valid
+  answer: the tasks still go on the board."* (Opus review, notes 5 and 7.) The block already reads the row
   (`:1876-1879`); it reads `row.kind` beside `row.phase`.
 - **Turn notice** (`launchability.spec_turn_notice`, `:316-373`) gains a keyword `kind:
   Optional[str] = None`. For `phase == "exploring"` and `kind == "change-spec"`, one line is
   appended to the exploring lines, **before** the unwritten-path line: *"Ask how it will be built (a
-  flow, recommended, or no flow) before it is ready to propose; record the answer as `delivery`."*
+  flow, recommended, or no flow) before it is ready to propose; record the answer as `delivery`, and
+  include it in every later submission."*
   `agent_trigger._spec_phase_for` (`agent_trigger.py:385`) returns the row's kind too, and the one
   call site (`:1183`) passes it. With `kind=None` the output is byte-identical to today's.
 
@@ -327,7 +392,10 @@ query. It is not a `### Team` heading, so `test_agents_self_registered.py:726` s
 ## D3 — The tool surface carries `delivery`
 
 - `mcp_server.submit_spec_document` gains `delivery: Optional[Dict[str, Any]] = None`, passed into
-  the `optional` dict (`:1867-1880`), and a docstring paragraph describing its two shapes. It is
+  the `optional` dict (`:1867-1880`), and a docstring paragraph describing its two shapes. The
+  paragraph also says to include `delivery` in **every** later submission (Opus review, note 7): the
+  tool sends the whole document (`:1856-1883`), so a resubmission without it drops the answer and
+  propose is refused again with `delivery_unanswered`. The HTTP prose (next item) says the same. It is
   typed `Dict`, like `scope` and `evidence`, not `Any` (the F35 reversal, `:1774-1788`) and not a
   TypedDict (`test_structured_parameters_do_not_use_a_closed_object_type`).
 - `agents.py`'s HTTP prose for `submit_spec_document` (`:1194-1222`) names `delivery` in its
@@ -386,8 +454,8 @@ author sees them while drafting, as the next thing to ask.
   (`useSSE.ts:465, 569-570`) also invalidate `['project', pid, 'spec']`, so the strip appears or
   clears without a reload.
 
-**D5b — at approval, the operator may choose the agent for a stale delivery (R1's decision, not the
-operator's; confirm).** The strip carries a select of open agents and "No flow". The choice is sent
+**D5b — at approval, the operator may choose the agent for a stale delivery (R1's decision; confirmed
+by the operator, `R1-stale-replace`, 2026-09-25).** The strip carries a select of open agents and "No flow". The choice is sent
 as `delivery_agent` (or `delivery_agent: ""` for no flow) in the phase request body (`PhaseRequest`).
 It is used for this flow only and recorded in the report. The document is not edited: approving
 never rewrites the author's content. The alternative is to send the document back to the author to
@@ -436,11 +504,25 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   but has ended; the new tasks wait for it. Archive it and start a flow."* An ended loop cannot be
   re-enabled (`jobs.py:930-965`, `loop_ended`), and archiving it lets B11's adoption hand its
   unfinished tasks to the next flow, so that is the remedy the report names.
+  **A `delivery_agent` sent with such an approval is not applied, and the report says so (Opus
+  review, note 4).** The stale strip reads the file, so on a re-approval it still offers a choice.
+  The report adds *"The agent you chose, <x>, was not applied: the flow <name> already declares this
+  document."* When the existing flow's agent differs from the delivery's, it also says *"The flow
+  <name> runs as <agent>, not <delivery agent>."*, whether or not `delivery_agent` was sent.
   Materialise has already stamped the new tasks with that loop's id (`spec_tasks.py:176-180, 284`;
   B11 restricts that lookup to live loops, and "live" there means unarchived, ended or not).
 - **Not created, and reported (R2):** a flow delivery with no agent, or with no stop condition
   (possible for a document proposed before B5, or through D4's approval-time exclusion), and a
-  `stop_at` that has already passed.
+  `stop_at` that has already passed. The last is **decided** *(operator, review)*: such a flow would
+  end at its first firing.
+- **Not created, and reported: a flow that would own no open task** *(operator, review; Opus review,
+  finding 2)*. A loop whose queue was never filled fires an agent turn on every tick
+  (`_loop_stall_reason`, `scheduler.py:2153`: "never filled → fire"), and `_loop_stop_reason` never
+  stops it, since `ever_count` is 0 (`scheduler.py:438-442`). At approval that happens when the board
+  failed (`outcome.failed`), or when every declared entry was skipped as already served and adoption
+  found no open task of the document to take. The check runs after adoption, inside the flow's
+  savepoint (step 3a), because only then is the loop's queue known. The report says *"No flow was
+  started: the approval gave it no tasks. Start a flow… once there is work."*
 - **In `set_phase`**, after `materialise_quietly` (`spec.py:1628-1631`) and before the commit
   (`:1633`), when `document.phase == "approved"`, the document is a change-spec, `delivery.mode ==
   "flow"`, and none of the cases above applies:
@@ -454,13 +536,33 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   3. `_adopt_document_tasks`, inside it and after the loop's flush, stamps `loop_id` on the tasks
      just materialised. For a document with no earlier loop they carry `NULL` at this point, so
      adoption is what binds them.
-  3a. On success, still inside the savepoint: `persist_event(session, project_id, "job_created",
-     {...}, agent=..., commit=False)` (R3), so the event commits with the flow or not at all, and
-     nothing after the commit can turn a standing approval into a 500. The job's id and name are
-     captured as plain values here.
+  3a. Still inside the savepoint, after adoption: count the loop's open tasks (`Task.loop_id ==
+     loop.id` and `status` not in `TERMINAL_FOR_BINDING`, the count `_loop_stop_reason` uses). If
+     it is 0, raise a private `_FlowWouldBeEmpty` inside the block, so the `async with` rolls the
+     savepoint back, and catch it outside as a not-created reason (*"No flow was started: the
+     approval gave it no tasks. Start a flow… once there is work."*). It is an outcome, not a fault,
+     so it is not logged as an error.
+  3b. On success, still inside the savepoint and after 3a: `persist_event(session, project_id,
+     "job_created", {...}, agent=..., commit=False)` (R3), so the event row commits with the flow or
+     not at all, and nothing after the commit can turn a standing approval into a 500. The job's id
+     and name are captured as plain values here. **No broadcast and no defer is issued inside the
+     block** (Opus review, finding 1): a `defer_broadcast` staged in a savepoint that later rolls
+     back is still published, because `_drop_deferred` clears the list only when the root
+     transaction ends and `_publish_deferred` waits for the root commit (`sse.py:138-155`).
   4. `HTTPException` (the 400s and 409s above) rolls back to the savepoint, and its `detail`
      becomes the reason (`str()` if not a string). Any other exception rolls back to the savepoint,
      is logged with its traceback, and records *"The flow could not be created."*
+  5. **The frames are staged, not sent (Opus review, finding 1).** `set_phase` now stages a
+     `persist_event(..., commit=False)`, so the shipped guard
+     `test_an_event_is_announced_after_commit.py` (`rule1`) refuses any call in it whose name
+     contains `broadcast`, or is `publish`. After the report event is recorded and `rerender_phase`
+     has run, and before `session.commit()`, `set_phase` calls `defer_broadcast` in today's frame
+     order: `spec_updated` (`{"path", "phase"}`), then `task_updated` (`{"created": n}`) when the
+     board created tasks, then `job_created` only when the flow's `begin_nested()` block exited
+     cleanly. All three are published by `_publish_deferred` after the root commit, in that order,
+     and none is published if the commit fails. Both of today's `sse_manager.broadcast` calls
+     (`spec.py:1634-1638`) are removed, and `rule2` holds because every defer precedes the
+     function's only commit.
 - **Nothing touched inside a rolled-back savepoint is read afterwards (R2, measured).** The response
   and the report are built from `MaterialiseOutcome`'s plain values (D7) and from the plain values
   `set_phase` captured before the flow's savepoint. `document` itself is not modified inside it.
@@ -468,8 +570,8 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   cron tick (`scheduler.py:2906-2944`). Nothing fires at once. *(operator: first scheduled tick)*
   Its own `commit()` finds nothing pending, and it logs rather than raises (`jobs.py:548-590`). A
   flow it could not register is committed and enabled, and fires from the next restart's `start()`,
-  as a `POST /jobs` job already does. `set_phase` then broadcasts `job_created`; the event row was
-  written in step 3a. `useSSE`'s `job_created` case invalidates
+  as a `POST /jobs` job already does. The `job_created` frame was staged before the commit (step 5)
+  and published by it; the event row was written in step 3b. `useSSE`'s `job_created` case invalidates
   `['project', pid, 'loops']` as well as jobs, and `useSetSpecPhase` invalidates both on success,
   so change 1's phase bar shows **Flow: <name>** rather than **Start a flow…**.
 - `a-loop-that-is-gone-lets-go-of-its-document` excludes archived loops from the claim and adoption
@@ -517,16 +619,25 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   board is hidden the same way for a roadmap. For a document that is not a change, the flow line
   says that only a change document declares a delivery.
 - **Returned** by `GET /spec` as `approval_outcome` for an approved document: the newest
-  such event by `created_at`, chosen by the Hub so the UI never picks. It is also returned in
+  such event, ordered by `created_at DESC, rowid DESC` and chosen by the Hub so the UI never picks
+  (Opus review, finding 3). `created_at` alone ties on this machine: the wall clock's resolution is
+  0.015625 s (`GetSystemTimeAsFileTime()`), and `_now()` (`models.py:24-25`) stamps the row, so two
+  approvals in one test can share a value. `rowid` is insertion order, the tie-break B11 chose for
+  F177; `spec_document_events` has a `String` primary key, so it is a rowid table. It is also returned in
   `set_phase`'s response beside `tasks_created`, which keeps its shape (ids) and is built from
   `outcome.created`.
 - **Shown** by a new `SpecApprovalReport.tsx`, mounted in `SpecDocumentPanel.tsx` under the phase
-  bar. It lists what was created, then each problem, in the order the Hub returns. It offers change
-  1's **Start a flow…** only while change 1's lookup finds no unarchived flow declaring the document
-  (R2), so it never contradicts the phase bar. It stays visible while the document is approved. It
-  is a record, not an alert; it has no dismiss.
+  bar. It lists what was created, then each problem, in the order the Hub returns. It stays visible
+  while the document is approved. It is a record, not an alert; it has no dismiss.
+- **The report has no Start a flow… button** *(operator, review; Opus review, note 6)*. The one
+  control is change 1's, in the phase bar directly above the report (change 1, D4), which shows it
+  for a change-spec at `approved` while no unarchived flow declares the document. Two buttons for one
+  action on one page was the review's note. The stored report records only what approval did (*"No
+  flow was started"* and the reason). While change 1's lookup finds no unarchived flow declaring the
+  document, the panel appends *"… use Start a flow… above."* as text. Once a flow exists, the pointer
+  goes, and the report still says no flow was started at approval, which stays true.
 - `useSpecEvents` (`api/spec.ts:151-177`) already invalidates `spec/<path>` on `spec_updated`, which
-  `set_phase` broadcasts. The report rides that key, and no new query key is needed.
+  `set_phase` publishes after its commit (D6 step 5). The report rides that key, and no new query key is needed.
 
 ## Risks and order
 

@@ -3,6 +3,8 @@
 **Round 1, 2026-09-25**, from an interactive explore with the operator on request **R1** (F377).
 **Round 2, same day**: re-derived against the code. See design.md "Round 2" for what changed.
 **Round 3, same day**: re-derived again. See design.md "Round 3".
+**Opus review, same day** (`spec-queue/tracks/reviews/R1-2026-09-25.md`, change 1): eleven items,
+all applied. See design.md "Opus review".
 First of two changes; the second is `a-document-says-how-it-will-be-built-and-approval-starts-it`,
 which builds on this one. **Nothing here is implemented yet.**
 
@@ -38,12 +40,21 @@ approval create the flow, and this panel is where anything about it is corrected
   (403), because `JobUpdate` is also the agent-plane body and a run could otherwise re-point a loop
   at itself (design D2). On a loop the change is **staged** like purpose and stop condition (new
   `Loop.pending_agent`, migration `0108`) and applied at the next firing. On a plain job it applies
-  at once and clears `last_session_id`, since the resumed session belonged to the old agent. A
-  firing that applies a staged agent resumes nothing of the old agent's either (R3).
+  at once and clears `last_session_id`, since the resumed session belonged to the old agent.
+  Applying a staged agent clears it too. Nothing in the Hub writes that column today, so each clear
+  is a one-line guard (Opus review).
+- **An applied agent change returns the loop's queue control to the operator** *(operator,
+  review)*. A delegation to A is not a delegation to B. The panel says so before saving, and
+  `loop_edit_applied` records it. A staged agent that has been archived by the firing is dropped,
+  and the record says so.
 - **A staged edit is applied before the busy guard when no firing of the loop is running** (design
   D2a, R2). Today staging runs after the guard, which asks about the old agent. A switch away from
   an agent whose allowance is spent would therefore wait for that agent's reset. A firing that
-  raises after applying an edit still records `loop_edit_applied` (R3).
+  raises after applying an edit records `loop_edit_applied` exactly once, and only when its commit
+  included the edit (R3, Opus review). The loop's summary asks about the agent the next firing will
+  use, so the tab and the tick agree.
+- **The stop time can be moved, not removed, and a flow cannot be saved with no stop condition**
+  (Opus review). The route reads a null `stop_at` as "not supplied".
 - **A loop's listing entry names the document it declares.** `LoopSummary` gains
   `spec_document_id`. One hook, `useDocumentFlow`, finds a document's flow for this change and
   change 2.
@@ -64,7 +75,9 @@ approval create the flow, and this panel is where anything about it is corrected
 ### Modified Capabilities
 
 - `agent-loops`: "An edit to a loop takes effect at its next firing and never during one" names the
-  default agent among the staged fields. "A project's loops are listable and individually
+  default agent among the staged fields. "A loop has a controller…" returns control to the operator
+  when an agent change is applied. "Only a loop's creator, or the operator, may add to its queue
+  directly" says the creator is the agent the job names. "A project's loops are listable and individually
   inspectable" has each entry carry its declared document and its agent. ADDS "The operator edits
   a loop's settings from the loop's own view", "A change of a job's agent does not resume the old
   agent's session" and "Only the operator changes which agent a job names".
@@ -91,4 +104,4 @@ approval create the flow, and this panel is where anything about it is corrected
 - **`:8000`:** the bundle reaches the operator's live app on their next reload. Until `:8000`
   restarts, an agent edit from that page answers 422 and changes nothing (the old route), a
   document with a flow still offers **Start a flow…** (which then answers 409), and every other field
-  works. The restart runs migration `0108` on their data.
+  works. The restart runs migrations `0106`, `0107` and `0108` on their data (`:8000` is at `0105`).

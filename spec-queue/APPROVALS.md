@@ -20,10 +20,10 @@ Newest day first. Days below the newest are history and are not read.
 
 No review page today (the day window is disabled; the newest page, `review/review-2026-09-23.html`,
 was fully decided on 09-24). **Written in an interactive session with the operator present**
-(DECIDE). No new approvals: the seven rows below are 09-24 approvals, restated so that tonight's
+(DECIDE). The first seven rows below are 09-24 approvals, restated so that tonight's
 window, which reads only today's section, builds the next link of each chain whose prerequisite
 landed last night (`c9873c4`). Each row's notes and constraints are the 09-24 row's, unchanged. Each
-re-validated `--strict` today. The other 09-24 APPROVED rows stay approved and are not tonight's.
+re-validated `--strict` today. The other 09-24 APPROVED rows stay approved and are not tonight's. The last two rows are new approvals from the afternoon session (request R1) and are not tonight's either.
 
 - APPROVED  a-task-is-attended-only-by-a-turn-that-will-reach-it   B1, 09-24 row. Its prerequisites (pressing-run, F133, flows-own-moves) are built and archived.
 - APPROVED  a-review-no-reviewer-can-approve-goes-to-the-operator   B1, 09-24 row. After the attended change. Check the gate-code overlap with B5's approval-preview change.
@@ -32,6 +32,9 @@ re-validated `--strict` today. The other 09-24 APPROVED rows stay approved and a
 - APPROVED  evidence-is-decided-after-the-run-that-recorded-it   B5 (F358, F426), 09-24 row. Before the coverage-bar change. Mind the F409 cross-change note.
 - APPROVED  the-coverage-bar-takes-the-evidence-decision-it-asks-for   B5 (F215), 09-24 row. After the evidence change.
 - APPROVED  a-footprint-names-the-line-of-work-its-commit-is-on   B5 (F165, F166), 09-24 row. Before B6's drift change (still REVISING).
+
+- APPROVED  a-flow-is-configured-from-its-own-tab   Request R1 (F377), approved in the afternoon session after R1 (an interactive explore), R2, R3 and an Opus review, APPROVE WITH FIXES (`tracks/reviews/R1-2026-09-25.md`), all fixes applied and re-validated `--strict`. Decisions: `DECISIONS.md` 2026-09-25 R1-*. **Not in tonight's ORDER.** Builds after B10's `a-loop-is-stopped-archived-and-delegated-from-its-own-tab`. Migration (next free number); UI bundle reaches `:8000` on reload.
+- APPROVED  a-document-says-how-it-will-be-built-and-approval-starts-it   Request R1 (F377), same rounds and review. **Not in tonight's ORDER.** Builds after `a-flow-is-configured-from-its-own-tab`, B5's `a-document-moves-forward-only-through-its-checks` and B11's `a-loop-that-is-gone-lets-go-of-its-document`. No migration; UI bundle.
 
 ORDER: a-task-is-attended-only-by-a-turn-that-will-reach-it, a-review-no-reviewer-can-approve-goes-to-the-operator, why-queued-input-waits-is-told-truthfully, a-live-view-that-fell-behind-is-told-and-catches-up, evidence-is-decided-after-the-run-that-recorded-it, the-coverage-bar-takes-the-evidence-decision-it-asks-for, a-footprint-names-the-line-of-work-its-commit-is-on
 

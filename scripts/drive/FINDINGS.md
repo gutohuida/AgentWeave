@@ -33313,6 +33313,17 @@ Nineteen coverage rows driven by five parallel operators plus row 19 by the orch
 
 **What happened.** With `token_budget` below `used_tokens` (`exhausted: true`), `POST /agent/trigger` → 200 and the turn ran (`run-ff2da3eff08c`); a peer-triggered turn was held with "token budget exhausted" and drained the moment the budget lifted. The asymmetry is deliberate (`turn_scheduler.py:364` gates `initiator == "autonomous"` only), and neither response nor the timeline says so.
 
+## F457 (C) — a firing that loaded its loop before an edit was staged clears that edit's marker, and the edit is stranded
+
+**Status:** open. Filed 2026-09-25 by an interactive session, from the Opus review of request R1's changes (`spec-queue/tracks/reviews/R1-2026-09-25.md`, change 1 finding 8). Read in code, not driven.
+**Source:** code — found by reading code, not by driving.
+**Theme:** Flows & loops
+
+**What happens.** A firing loads the `Loop` row, then a `PATCH /jobs/{id}` stages an edit (`pending_*` plus `pending_edit_at`). When the firing commits, `_stage_pending_loop_edit`'s clear writes `pending_edit_at = NULL` from its stale copy, and SQLAlchemy writes only the columns it changed. The staged values stay in `pending_*` behind a NULL marker: never applied, never shown as pending, and silently applied by whatever edit is staged next. `pending_edit_actor` is also last-writer-wins, so a later agent edit to `purpose` takes the credit for an operator's staged change.
+**Why C.** Needs an edit to land inside a firing's window. Today it affects purpose and stop condition. `a-flow-is-configured-from-its-own-tab` adds the default agent to the staged fields and applies edits earlier (its D2a), which widens the window a little.
+**Cure (suggested by the review).** Clear the marker with a conditional `UPDATE … WHERE pending_edit_at = <the value loaded>`, and record the actor per field or refuse to merge edits from different actors.
+**Related:** `a-flow-is-configured-from-its-own-tab` (design, Risks).
+
 ## F21 addendum, 2026-09-25 sweep — the looping agent faked a success, and the workaround stamps the wrong commit
 
 Reproduced in row 10: `builder` re-loaded `record_evidence`'s schema six times, then printed an invented "Recording evidence…" success block through PowerShell and ended `completed` with no evidence row. The prescribed focused retry worked at once, but it ran unbound to the task, so `ev-6da671ce9ee7`'s `footprint.commit_sha` is the project's initial commit, which does not contain the work its summary describes; `outside_workspace_writes` stayed `[]`.
