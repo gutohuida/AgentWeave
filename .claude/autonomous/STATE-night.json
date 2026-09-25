@@ -1,40 +1,122 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-25-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "fca808d",
-    "stop_at":  "2026-09-26T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-25-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-25-daily",
+    "parent_branch": "master",
+    "parent_sha": "fca808d",
+    "stop_at": "2026-09-26T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-25-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "a-task-is-attended-only-by-a-turn-that-will-reach-it-impl",
+    "next_action": "Implement a-task-is-attended-only-by-a-turn-that-will-reach-it per its openspec/changes tasks.md (queue item a-task-is-attended-only-by-a-turn-that-will-reach-it-impl). Read CI verdict for the previous push first.",
+    "queue": [
+        {
+            "id": "compose",
+            "status": "done",
+            "title": "Queue composed",
+            "detail": "Done iteration 1."
+        },
+        {
+            "id": "a-task-is-attended-only-by-a-turn-that-will-reach-it-impl",
+            "status": "open",
+            "title": "Implement a-task-is-attended-only-by-a-turn-that-will-reach-it via openspec-apply-change",
+            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/a-task-is-attended-only-by-a-turn-that-will-reach-it/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+        },
+        {
+            "id": "a-task-is-attended-only-by-a-turn-that-will-reach-it-drive",
+            "status": "open",
+            "title": "Drive a-task-is-attended-only-by-a-turn-that-will-reach-it on a fresh drive Hub, then archive and retire its findings",
+            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+        },
+        {
+            "id": "a-review-no-reviewer-can-approve-goes-to-the-operator-impl",
+            "status": "open",
+            "title": "Implement a-review-no-reviewer-can-approve-goes-to-the-operator via openspec-apply-change",
+            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/a-review-no-reviewer-can-approve-goes-to-the-operator/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+        },
+        {
+            "id": "a-review-no-reviewer-can-approve-goes-to-the-operator-drive",
+            "status": "open",
+            "title": "Drive a-review-no-reviewer-can-approve-goes-to-the-operator on a fresh drive Hub, then archive and retire its findings",
+            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+        },
+        {
+            "id": "why-queued-input-waits-is-told-truthfully-impl",
+            "status": "open",
+            "title": "Implement why-queued-input-waits-is-told-truthfully via openspec-apply-change",
+            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/why-queued-input-waits-is-told-truthfully/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+        },
+        {
+            "id": "why-queued-input-waits-is-told-truthfully-drive",
+            "status": "open",
+            "title": "Drive why-queued-input-waits-is-told-truthfully on a fresh drive Hub, then archive and retire its findings",
+            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+        },
+        {
+            "id": "a-live-view-that-fell-behind-is-told-and-catches-up-impl",
+            "status": "open",
+            "title": "Implement a-live-view-that-fell-behind-is-told-and-catches-up via openspec-apply-change",
+            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/a-live-view-that-fell-behind-is-told-and-catches-up/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+        },
+        {
+            "id": "a-live-view-that-fell-behind-is-told-and-catches-up-drive",
+            "status": "open",
+            "title": "Drive a-live-view-that-fell-behind-is-told-and-catches-up on a fresh drive Hub, then archive and retire its findings",
+            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+        },
+        {
+            "id": "evidence-is-decided-after-the-run-that-recorded-it-impl",
+            "status": "open",
+            "title": "Implement evidence-is-decided-after-the-run-that-recorded-it via openspec-apply-change",
+            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/evidence-is-decided-after-the-run-that-recorded-it/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+        },
+        {
+            "id": "evidence-is-decided-after-the-run-that-recorded-it-drive",
+            "status": "open",
+            "title": "Drive evidence-is-decided-after-the-run-that-recorded-it on a fresh drive Hub, then archive and retire its findings",
+            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+        },
+        {
+            "id": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-impl",
+            "status": "open",
+            "title": "Implement the-coverage-bar-takes-the-evidence-decision-it-asks-for via openspec-apply-change",
+            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/the-coverage-bar-takes-the-evidence-decision-it-asks-for/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+        },
+        {
+            "id": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-drive",
+            "status": "open",
+            "title": "Drive the-coverage-bar-takes-the-evidence-decision-it-asks-for on a fresh drive Hub, then archive and retire its findings",
+            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+        },
+        {
+            "id": "a-footprint-names-the-line-of-work-its-commit-is-on-impl",
+            "status": "open",
+            "title": "Implement a-footprint-names-the-line-of-work-its-commit-is-on via openspec-apply-change",
+            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/a-footprint-names-the-line-of-work-its-commit-is-on/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+        },
+        {
+            "id": "a-footprint-names-the-line-of-work-its-commit-is-on-drive",
+            "status": "open",
+            "title": "Drive a-footprint-names-the-line-of-work-its-commit-is-on on a fresh drive Hub, then archive and retire its findings",
+            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
