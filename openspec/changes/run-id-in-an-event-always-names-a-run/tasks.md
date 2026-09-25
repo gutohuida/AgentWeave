@@ -35,7 +35,7 @@ New file `hub/tests/test_run_id_names_a_run.py`.
 - [x] 2.3 `hub/ui/src/api/jobs.ts:252`: the response type. `npm run lint`; refresh the bundle only if
       the build output changes
 - [x] 2.4 Run group 1; full `py -3.11 -m pytest hub/tests/ -q` and `cd hub/ui && npm test -- --run`,
-      counts inline
+      counts: hub 4827 passed, 86 skipped at 033f1e1; UI 1622 passed
 - [x] 2.5 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, clean
 
 ## 3. Drive it

@@ -25,7 +25,7 @@ New file `hub/tests/test_an_event_is_announced_after_commit.py`. Spy on `SSEMana
 - [x] 2.3 `hub/hub/run_divergence.py:104`: replace the `await sse_manager.broadcast(...)` with `defer_broadcast(session, ...)`. Rewrite the docstring's `:82-83` sentence to say why the announcement waits for the caller's commit, naming F335
 - [x] 2.4 Update the note in `test_a_refused_review_does_not_close_an_open_divergence`'s docstring (`test_a_refused_review_leaves_nothing_behind.py:868-872`), which records the escaped broadcast as an accepted residual: it is closed by this change
 - [x] 2.4b (n/a: B10 has not landed on this branch; `update_job`, `archive_job`, `archive_loop`, `set_loop_control` unchanged, and rule 1 is green)  (D4, only if B10's change landed first) Convert every broadcast 1.6 lists in `update_job`, `archive_job`, `archive_loop` and `set_loop_control` to `defer_broadcast`, each placed above that function's own `session.commit()`, staged in the order the frames go out on the tree being changed (read it from that tree; do not reorder). Move any test spy on those kinds from `broadcast` to `SSEManager.publish`. An in-place conversion (the defer left where the broadcast was) is what rule 2 exists to fail
-- [x] 2.5 Run group 1 (all pass), then `py -3.11 -m pytest hub/tests -q`; record the count. `ruff check hub/`, `black --check --target-version py311 hub/hub hub/tests`
+- [x] 2.5 Run group 1 (all pass), then `py -3.11 -m pytest hub/tests -q`; record the count: 4822 passed, 86 skipped at e3f7272 (iteration 7, claude off PATH). `ruff check hub/`, `black --check --target-version py311 hub/hub hub/tests`
 
 ## 3. Close out
 
