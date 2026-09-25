@@ -23,7 +23,7 @@ from hub.checkpoint_cutover import (
 )
 from hub.checkpoint_generation import CheckpointBody, render_body
 from hub.checkpoint_trigger import consider
-from hub.checkpoints import compute_envelope, create_checkpoint
+from hub.checkpoints import compute_envelope, create_checkpoint, get_checkpoint_by_id
 from hub.conversations import get_conversation_by_id, peer_bound_conversation
 from hub.db.engine import async_session_factory
 from hub.db.models import (
@@ -417,8 +417,20 @@ async def test_a_conversation_archived_by_hand_is_not_cut_over_either(app):
             .scalars()
             .all()
         )
+        assert successors == []
 
-    assert successors == []
+        # The advice is true (design D4): nothing was handed over, so once reopened the same
+        # checkpoint cuts over.
+        conversation.lifecycle = "open"
+        await db.commit()
+        successor, _ = await cut_over(db, conversation, checkpoint)
+        successors = (
+            (await db.execute(select(Conversation).where(Conversation.origin == "handoff")))
+            .scalars()
+            .all()
+        )
+
+    assert [c.id for c in successors] == [successor.id]
 
 
 @pytest.mark.asyncio
@@ -619,6 +631,200 @@ async def test_no_configured_runner_means_no_guessed_spawn(app, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", explode)
     assert await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0) is None
+
+
+async def _handed_over_and_reopened(db, conversation_id="conv-1", warning=None):
+    """A conversation whose checkpoint was cut over, then reopened by hand, with a new run."""
+    conversation = await _conversation(db, conversation_id)
+    checkpoint = await _ready_checkpoint(db, conversation)
+    successor, _ = await cut_over(db, conversation, checkpoint)
+    conversation.lifecycle = "open"
+    conversation.checkpoint_warning = warning
+    db.add(
+        Run(
+            id=f"run-{conversation_id}",
+            project_id=PROJECT,
+            agent=AGENT,
+            conversation_id=conversation_id,
+            status="completed",
+        )
+    )
+    await db.commit()
+    return checkpoint.id, successor.id
+
+
+def _explode(*_a, **_k):  # pragma: no cover — nothing billed may spawn
+    raise AssertionError("a handed-over conversation must not spawn a checkpoint")
+
+
+async def _queued_checkpoint_entries(db, conversation_id):
+    return (
+        (
+            await db.execute(
+                select(InboundQueueEntry).where(
+                    InboundQueueEntry.conversation_id == conversation_id,
+                    InboundQueueEntry.origin_type == "checkpoint",
+                    InboundQueueEntry.state == "queued",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+async def _checkpoints_of(db, conversation_id):
+    return (
+        (await db.execute(select(Checkpoint).where(Checkpoint.conversation_id == conversation_id)))
+        .scalars()
+        .all()
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_trigger_does_not_spend_a_checkpoint_on_a_conversation_already_handed_over(
+    app, monkeypatch
+):
+    """D6: `cut_over` would refuse the new checkpoint, so it is not billed. The load-bearing
+    assertion is that no checkpoint row beyond the first exists."""
+    broadcasts = []
+
+    async def record(project_id, event, payload):
+        broadcasts.append((event, payload))
+
+    monkeypatch.setattr("hub.checkpoint_trigger.sse_manager.broadcast", record)
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", _explode)
+
+    for mode in ("automatic", "offered"):
+        conversation_id = f"conv-{mode}"
+        async with async_session_factory() as db:
+            project = await db.get(Project, PROJECT)
+            if project is None:
+                project = await _configured_project(db)
+            project.checkpoint_mode = mode
+            first_id, _ = await _handed_over_and_reopened(db, conversation_id)
+
+        for percent in (72.0, 85.0):
+            result = await consider(
+                PROJECT, AGENT, conversation_id, context_tokens=None, percent=percent
+            )
+            assert result is None
+
+        async with async_session_factory() as db:
+            checkpoints = await _checkpoints_of(db, conversation_id)
+            notes = await _queued_checkpoint_entries(db, conversation_id)
+            reopened = await get_conversation_by_id(db, conversation_id)
+        assert [c.id for c in checkpoints] == [first_id]
+        assert notes == []
+        assert reopened.checkpoint_warning is None
+
+    assert broadcasts == []
+
+
+@pytest.mark.asyncio
+async def test_an_automatic_cutover_that_loses_the_race_keeps_its_checkpoint_and_returns_its_id(
+    app, monkeypatch
+):
+    """The operator presses C1 while the trigger cuts over C2. The trigger's pre-checks have
+    passed; the claim or the index must refuse, and `consider` must still answer with C2's id
+    (task 2.6: reading `checkpoint.id` after the rollback raised MissingGreenlet)."""
+    from hub import checkpoint_cutover
+
+    def fake_run(cmd, **kwargs):
+        stdout = _claude_stdout(
+            GOOD_BODY
+            if "checkpoint" in cmd[-1] or "objective" in cmd[-1]
+            else {"files_changed": [], "task_ids": [], "unanswered_question_ids": []}
+        )
+        return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+
+    broadcasts = []
+
+    async def record(project_id, event, payload):
+        broadcasts.append((event, payload))
+
+    async with async_session_factory() as db:
+        await _configured_project(db)
+        conversation = await _conversation(db)
+        first_id = (await _ready_checkpoint(db, conversation)).id
+
+    real_archivable = checkpoint_cutover.archivable
+    fired = []
+    winners = []
+
+    async def racing_archivable(db, conversation):
+        if not fired:
+            fired.append(True)  # before the nested call, so its own archivable is the real one
+            async with async_session_factory() as other:
+                rival = await get_conversation_by_id(other, "conv-1")
+                first = await get_checkpoint_by_id(other, first_id)
+                winners.append((await cut_over(other, rival, first))[0].id)
+            return None
+        return await real_archivable(db, conversation)
+
+    monkeypatch.setattr("hub.checkpoint_cutover.archivable", racing_archivable)
+    monkeypatch.setattr("hub.checkpoint_trigger.sse_manager.broadcast", record)
+    monkeypatch.setattr("hub.worker.resolve_executable", lambda cmd: cmd)
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = await consider(PROJECT, AGENT, "conv-1", context_tokens=None, percent=85.0)
+
+    async with async_session_factory() as db:
+        checkpoints = await _checkpoints_of(db, "conv-1")
+        successors = (
+            (await db.execute(select(Conversation).where(Conversation.origin == "handoff")))
+            .scalars()
+            .all()
+        )
+        entries = (
+            (
+                await db.execute(
+                    select(InboundQueueEntry).where(InboundQueueEntry.origin_type == "checkpoint")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert result is not None and result != first_id
+    assert {c.id for c in checkpoints} == {first_id, result}
+    assert [c.id for c in successors] == winners
+    assert len(entries) == 1
+    [(_, payload)] = [b for b in broadcasts if b[0] == "checkpoint_ready"]
+    assert payload["checkpoint_id"] == result
+    assert winners[0] in payload["cutover_refused"]
+
+
+@pytest.mark.asyncio
+async def test_a_handed_over_conversation_still_gets_its_final_warning(app, monkeypatch):
+    """D6 as amended: the final warning is free and still owed, so the decline sits after it."""
+    broadcasts = []
+
+    async def record(project_id, event, payload):
+        broadcasts.append((event, payload))
+
+    monkeypatch.setattr("hub.checkpoint_trigger.sse_manager.broadcast", record)
+    monkeypatch.setattr(subprocess, "run", _explode)
+
+    async with async_session_factory() as db:
+        await _configured_project(db, checkpoint_mode="offered")
+        first_id, _ = await _handed_over_and_reopened(db, "conv-a", warning="dismissed")
+        await _handed_over_and_reopened(db, "conv-b", warning="dismissed")
+
+    assert await consider(PROJECT, AGENT, "conv-a", context_tokens=None, percent=99.0) is None
+    async with async_session_factory() as db:
+        conversation = await get_conversation_by_id(db, "conv-a")
+        rows = await _checkpoints_of(db, "conv-a")
+    assert conversation.checkpoint_warning == "final"
+    assert [c.id for c in rows] == [first_id]
+    assert [(e, p.get("final")) for e, p in broadcasts] == [("checkpoint_due", True)]
+
+    broadcasts.clear()
+    assert await consider(PROJECT, AGENT, "conv-b", context_tokens=None, percent=85.0) is None
+    async with async_session_factory() as db:
+        notes = await _queued_checkpoint_entries(db, "conv-b")
+        rows = await _checkpoints_of(db, "conv-b")
+    assert broadcasts == [] and notes == [] and len(rows) == 1
 
 
 @pytest.mark.asyncio

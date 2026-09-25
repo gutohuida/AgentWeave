@@ -133,7 +133,8 @@ class _BarrierArchivable:
         return await self.real(db, conversation)
 
 
-async def _race(monkeypatch, checkpoint_ids, conversation_id):
+async def _race(monkeypatch, checkpoint_ids, conversation_id, factory=None):
+    factory = factory or async_session_factory
     from hub import checkpoint_cutover
 
     monkeypatch.setattr(
@@ -142,7 +143,7 @@ async def _race(monkeypatch, checkpoint_ids, conversation_id):
     rollbacks = []
 
     async def press(checkpoint_id):
-        async with async_session_factory() as db:
+        async with factory() as db:
             conversation = await get_conversation_by_id(db, conversation_id)
             checkpoint = await get_checkpoint_by_id(db, checkpoint_id)
             real_rollback = db.rollback
@@ -194,3 +195,69 @@ async def test_two_checkpoints_raced_mint_one_successor(app, monkeypatch):
     async with async_session_factory() as db:
         assert len(await _successors(db)) == 1
         assert len(await _checkpoint_entries(db)) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_route_refuses_a_second_cutover_and_the_list_says_where_it_went(
+    app, auth_headers
+):
+    async with async_session_factory() as db:
+        conversation = await _conversation(db)
+        checkpoint_id = (await _ready_checkpoint(db, conversation)).id
+    base = f"/api/v1/projects/{PROJECT}"
+
+    first = await app.post(f"{base}/checkpoints/{checkpoint_id}/cutover", headers=auth_headers)
+    assert first.status_code == 200, first.text
+    successor_id = first.json()["successor_conversation_id"]
+    reopened = await app.post(
+        f"{base}/agent/{AGENT}/conversations/conv-1/unarchive", headers=auth_headers
+    )
+    assert reopened.status_code == 200, reopened.text
+
+    again = await app.post(f"{base}/checkpoints/{checkpoint_id}/cutover", headers=auth_headers)
+    assert again.status_code == 409
+    assert successor_id in again.json()["detail"]
+
+    listed = await app.get(f"{base}/conversations/conv-1/checkpoints", headers=auth_headers)
+    [row] = [r for r in listed.json() if r["id"] == checkpoint_id]
+    assert row["cut_over_to_conversation_id"] == successor_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_checkpoint", [True, False])
+async def test_simultaneous_presses_serialise_under_sqlites_default_journal(
+    app, monkeypatch, tmp_path, same_checkpoint
+):
+    """D3 in production's journal mode: the suite runs WAL, the shipped Hub runs SQLite's default
+    rollback journal, so the race is repeated on an engine built with `engine.py`'s arguments."""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from hub.db.models import Base
+
+    engine = create_async_engine(
+        f"sqlite+aiosqlite:///{tmp_path / 'delete-journal.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as db:
+            assert (await db.execute(text("PRAGMA journal_mode"))).scalar() == "delete"
+            conversation = await _conversation(db)
+            ids = [(await _ready_checkpoint(db, conversation)).id for _ in range(2)]
+        if same_checkpoint:
+            ids = [ids[0], ids[0]]
+
+        results, rollbacks = await _race(monkeypatch, ids, "conv-1", factory=factory)
+
+        wins = [r for r in results if not isinstance(r, BaseException)]
+        refusals = [r for r in results if isinstance(r, CutoverRefusedError)]
+        assert len(wins) == 1 and len(refusals) == 1, results
+        assert len(rollbacks) == 1
+        async with factory() as db:
+            assert len(await _successors(db)) == 1
+            assert len(await _checkpoint_entries(db)) == 1
+    finally:
+        await engine.dispose()

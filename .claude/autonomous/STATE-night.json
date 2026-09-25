@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "8a5d0ed",
     "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-24-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "checkpoint-handover-impl",
-    "next_action": "Do queue item checkpoint-handover-impl part 2 (see its detail in queue). First read CI verdict for the previous push sha via gh run list and write it on the log entry's first line. Trigger tests (1.8, 1.12, 1.13) live in hub/tests/test_checkpoint_cutover.py beside _configured_project. Run the full hub suite once (~37 min, run_in_background, nothing else concurrent) and record counts. Then mark the item done and move to event-announce-impl next firing.",
+    "current": "event-announce-impl",
+    "next_action": "Do queue item event-announce-impl (build per its tasks.md, 20 tasks; size to finish this turn, split into parts if needed and say so in the queue detail). First read CI verdict for the previous push sha via gh run list and write it on the log entry's first line. Run the full hub suite once (~36 min, run_in_background, nothing concurrent) only when the build is complete.",
     "queue": [
         {
             "id": "compose",
@@ -41,9 +41,9 @@
         },
         {
             "id": "checkpoint-handover-impl",
-            "status": "open",
+            "status": "done",
             "title": "a-checkpoint-is-handed-over-once-and-says-where-it-went",
-            "detail": "PART 2 of 2. Part 1 (iteration 5) built the fix, migration 0106 and race/sequential tests. Remaining in tasks.md: 1.7 extension, 1.8, 1.10, 1.11, 1.12, 1.13, then 2.7 tick, 3.7, 4.1-4.3 (4.4 drive belongs to night-drive; 4.5 footnote F293/F294)."
+            "detail": "Done iteration 6: code, migration 0106, all tests; full hub suite 4815 passed. 4.4 drive and 4.5 footnote left to night-drive."
         },
         {
             "id": "event-announce-impl",
