@@ -57,7 +57,7 @@ from .run_task_binding import (
     unanswered_blocking_question,
     wait_has_expired,
 )
-from .sse import sse_manager
+from .sse import defer_broadcast, sse_manager
 from .task_transitions import ACTOR_RUN, STATUS_BLOCKED, allowed_targets
 from .utils import persist_event, short_id
 
@@ -79,8 +79,9 @@ async def resolve_divergences_for_task(session: AsyncSession, task_id: str) -> i
     non-zero — closing nothing is not news (design D6). `commit=False`: this is reached from
     `apply_transition`, before its own `TaskTransition` and status write are committed by the
     caller (`task_transition_service.py`'s own docstring: "the caller commits") — committing here
-    would land that still-in-flight write early. `sse_manager.broadcast` needs no such care: its
-    payload is exactly what is already in memory, not a re-read of the database.
+    would land that still-in-flight write early. The announcement waits for that commit too
+    (`defer_broadcast`): a review refused at delivery rolls the resolution back, and a frame sent at
+    staging time would say "resolved" for a divergence that is still open (F335).
     """
     result = await session.execute(
         select(RunDivergence)
@@ -101,7 +102,7 @@ async def resolve_divergences_for_task(session: AsyncSession, task_id: str) -> i
             severity="info",
             commit=False,
         )
-        await sse_manager.broadcast(open_rows[0].project_id, "run_divergence_resolved", payload)
+        defer_broadcast(session, open_rows[0].project_id, "run_divergence_resolved", payload)
     return len(open_rows)
 
 

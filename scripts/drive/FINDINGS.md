@@ -28096,6 +28096,8 @@ human judgement this finding feeds.
 
 ## F335 (D) — a review refused on dispatch still broadcasts that it resolved the task's open divergence
 
+**Status (2026-09-25, night iteration 7): fixed in code** by `an-event-is-announced-only-once-its-write-is-committed` — `resolve_divergences_for_task` now announces through `defer_broadcast`, published from the session's `after_commit` listener, so a refused review publishes nothing (`hub/tests/test_an_event_is_announced_after_commit.py`; mutation to a staging-time `publish` fails three tests). F251's coupling is released: admitting the kind to the allowlist no longer surfaces a false line. Not driven on a live Hub yet (night-drive).
+
 **Status:** open, latent behind F251 — re-read 2026-09-15 (night `ledger-conflicts`): `resolve_divergences_for_task` still broadcasts at staging time (`hub/hub/run_divergence.py:104`, before its caller commits), and `SSE_EVENT_TYPES` (`hub/ui/src/hooks/useSSE.ts:21`) still omits the kind, so the false event is on the wire and in no UI surface; F251 has no fix either.
 
 **Narrowed by the 2026-09-13 day drive: the false broadcast is real on the wire,

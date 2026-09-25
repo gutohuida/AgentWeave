@@ -826,13 +826,14 @@ async def _divergence_leg(
     before = await _snapshot(task_id)
     await _queue_review(REVIEWER, task_id)
     broadcasts: list = []
-    real_broadcast = sse_module.sse_manager.broadcast
+    real_publish = sse_module.sse_manager.publish
 
-    async def spy(project_id, event_type, payload):
+    def spy(project_id, event_type, payload):
         broadcasts.append(event_type)
-        return await real_broadcast(project_id, event_type, payload)
+        return real_publish(project_id, event_type, payload)
 
-    monkeypatch.setattr(sse_module.sse_manager, "broadcast", spy)
+    # `publish`, not `broadcast`: a deferred announcement goes out through `publish` alone.
+    monkeypatch.setattr(sse_module.sse_manager, "publish", spy)
     with _which():
         await schedule_agent("proj-test", REVIEWER)
     return task_id, before, divergence_id, broadcasts
@@ -866,10 +867,9 @@ async def test_a_refused_review_does_not_close_an_open_divergence(
     `run_divergence_resolved` row says so. Mutation 4.1 must fail this.
 
     **What a rollback cannot take back, recorded and not asserted:** `resolve_divergences_for_task`
-    broadcasts `run_divergence_resolved` over SSE at staging time, so the live activity feed still
-    reads *"1 open divergence on T resolved"* after the rollback, until a reload drops it (its row
-    was rolled back). That is D8's accepted residual, and §8.5 files it as a finding once §2 makes
-    it real. `broadcasts` is captured for that record.
+    broadcast `run_divergence_resolved` over SSE at staging time (F335). That residual is closed by
+    `an-event-is-announced-only-once-its-write-is-committed`: the announcement now waits for the
+    commit, and `test_an_event_is_announced_after_commit.py` asserts nothing is published.
     """
     task_id, before, divergence_id, _broadcasts = await _divergence_leg(
         app, auth_headers, bind_runner, bind_project_workspace, tmp_path, monkeypatch
