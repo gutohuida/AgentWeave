@@ -4,6 +4,7 @@
 - [x] 0.1 R2 (2026-09-25; design.md "Round 2"): independent re-derivation against `spec_payload.py`, `spec_completeness.py`, `spec_service.py` (propose, save, rerender), `spec_lifecycle.py`, `api/v1/spec.py` (`set_phase`, `GET`), `spec_tasks.py`, `api/v1/jobs.py` (`create_job`), `launchability.py`, `api/v1/agents.py` (duties, open-document block, tool prose), `mcp_server.py` (`submit_spec_document`); savepoint behaviour measured on this machine's SQLAlchemy/aiosqlite
 - [x] 0.2 R3 (2026-09-25; design.md "Round 3"): second independent re-derivation against HEAD `3f15bae`; savepoint/autoflush/rollback behaviour and the `delivery: null` serialisation measured in scratch probes; `openspec validate a-document-says-how-it-will-be-built-and-approval-starts-it --strict` passes
 - [ ] 0.3 The operator confirms or replaces D5b (approve-time agent choice for a stale delivery), R2's choice that a `stop_at` already past at approval creates no flow (D6), and R3's choice that a re-approval finding an **ended** unarchived flow only reports it (the alternative: archive it and create the delivery's flow, as the operator's approval)
+  **2026-09-25:** D5b confirmed (`R1-stale-replace`) and the ended-flow report confirmed (`R1-ended-flow-report`). The past-`stop_at` choice is still open.
 - [ ] 0.4 Build only after `a-flow-is-configured-from-its-own-tab`, `a-document-moves-forward-only-through-its-checks` and `a-loop-that-is-gone-lets-go-of-its-document` are in the tree; stop and log if not
 
 ## 1. Tests first — `hub/tests/test_a_document_says_how_it_will_be_built.py`

@@ -700,6 +700,25 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-25 — request R1's two changes: four answers after R3
+
+**DECIDED by the operator in an interactive session, 2026-09-25**, after R1 (an interactive explore),
+R2 and R3 of `a-flow-is-configured-from-its-own-tab` and
+`a-document-says-how-it-will-be-built-and-approval-starts-it`. Neither change has an APPROVED row yet.
+
+- DECIDED   R1-stale-replace  **At approval the operator may pick a replacement agent, or no flow, for a
+  stale delivery** (change 2, D5b). The replacement applies to that flow only. The document is not
+  edited, and the approval report records the choice.
+- DECIDED   R1-agent-operator-only  **Only the operator changes which agent a job names.** An agent's run
+  is refused 403 (change 1, D2; task 0.1a).
+- DECIDED   R1-ended-flow-report  **Re-approval that finds an ended, unarchived flow only reports it**, and
+  says to archive it and start a new one. Approval never archives on its own (change 2, D6).
+- DECIDED   R1-bugs-inside  **The two defects R3 found are fixed inside change 1**, not filed separately:
+  a changed agent resuming the old agent's session, and `_do_fire_job`'s except path reading
+  `acting_agent` before it is set.
+- Still open, not asked: R2's choice that a `stop_at` already past at approval creates no flow;
+  R3's Spec-page link opening the loop agent's view with no document (Back returns to it).
+
 ### 2026-09-24 — two decisions already made, now written down
 
 **DECIDED by the operator; recorded 2026-09-24 in an interactive session** ("Record both"). Both
