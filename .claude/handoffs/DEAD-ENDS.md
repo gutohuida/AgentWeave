@@ -1703,3 +1703,25 @@ disappears is indistinguishable from one that was forgotten.
   `WinptyError: The system cannot find the file specified`, and pass 32/32 with the normal PATH.
   Run those two files separately with the normal PATH (or strip only the npm entry some other way)
   when reproducing CI's no-`claude` suite.
+
+- **2026-09-25 — a real agent turn cannot be held open with `Start-Sleep`**: Claude Code itself
+  refuses a standalone `Start-Sleep 90` ("Blocked: standalone Start-Sleep … use Monitor"), so the
+  run ends in ~12 s and a "kill the Hub mid-run" drive kills nothing. Hold a turn open with
+  `py -3.11 -c "import time\nfor i in range(120): time.sleep(1)"` under `permission_mode:
+  workspace`, and confirm the run is `running` and its tool call recorded before killing.
+- **2026-09-25 — the `e2e-loop` skill's `e2e.py` harness does not exist** in
+  `~/.claude/skills/e2e-loop/` although SKILL.md documents it. Use `scripts/drive/aw.py`
+  (`AW_HUB`, `AW_KEY`, `AW_PROJECT`; paths relative to `/api/v1`). A fresh profile's key comes from
+  `GET /api/v1/setup/token` (loopback only); fresh profiles write no `bootstrap-key.txt`.
+- **2026-09-25 — `scripts/backlog_page.py` reads only a line starting `**Status:**`** (the first
+  in the section). A dated form like `**Status (2026-09-25): fixed**` is invisible to it and the
+  finding stays counted open. Put the new state on a `**Status:**` line and relabel older ones.
+- **2026-09-25 — the auto-mode classifier refuses** `git push --force-with-lease` and
+  `git push origin --delete` of a branch git counts as unmerged (even when its work reached master
+  under other shas) until the operator says so in plain words. Deleting merged branches with
+  `git branch -d` / `push --delete` is allowed.
+- **2026-09-25 — waiting on CI with `gh run list -L 1`** can match the previous push's completed
+  run while the new one is still queued. Select the run by `headSha` of the commit you pushed.
+- **2026-09-25 — sweep agents' personal-skill reach (F454)**: a Hub-launched Haiku agent can
+  invoke skills from `~/.claude/skills` (it ran `e2e-loop` unprompted from a vague loop purpose).
+  Never leave a scratch loop enabled on a drive Hub; archive it the moment its row is done.
