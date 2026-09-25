@@ -1506,22 +1506,39 @@ the loop's queue holds no task in a non-terminal status.** It records nothing, d
 there is no firing record to read a reason from, and the most recent record is some earlier
 firing's.
 
+The answer SHALL name the condition that held, and SHALL NOT state a condition that did not hold or
+that was not the reason. Where more than one holds, the answer SHALL name only the first that holds
+in this order: the empty queue, then the loop declaring no specification document, then no other
+agent being free.
+
 Where the loop's queue holds no task in a non-terminal status, the answer SHALL say so, and SHALL
 NOT state that no other agent is free. Stating that no other agent is free when one is free tells
 the operator to free an agent, which would change nothing; what the loop lacks is work. Where the
-loop declares a specification document and its queue holds an open task, the guard refused because
-no other agent is free, and the answer SHALL say so.
+loop declares no specification document, the answer SHALL NOT describe the empty queue as work for
+another agent to take, because that loop gives its work to no other agent.
 
-This requirement does not state what the answer says, beyond the reason the guard gave, for a loop
-that declares no specification document and whose queue holds an open task. That loop is refused
-whether or not another agent is free, so the roster is not its reason; which sentence names that
-reason is not yet decided.
+Where the loop declares no specification document and its queue holds an open task, the answer SHALL
+say that the loop gives its work only to the agent its job names, and SHALL NOT state that no other
+agent is free. That loop is refused whether or not another agent is free, so the roster is not its
+reason, even where the roster is in fact empty.
 
-The route SHALL answer from a firing record only when the manual firing wrote that record. Where it
-wrote none, the route SHALL ask the guard again before anything else, because the guard is the
-first question the firing asked, and SHALL answer a refusal with the guard's reason. A record some
-earlier firing wrote is not this firing's answer, and the route SHALL NOT change that record's
-requester to whoever pressed Run.
+Where the loop declares a specification document and its queue holds an open task, the guard refused
+because no other agent is free, and the answer SHALL say so.
+
+The route SHALL answer from a firing record only when the manual firing wrote that record or counted
+itself into it. A continuing stall counts each firing into the record it already holds rather than
+writing another, so that record is this firing's answer. Where the firing did neither, the route
+SHALL ask the guard again before anything else, because the guard is the first question the firing
+asked, and SHALL answer a refusal with the guard's reason. A record some earlier firing wrote, and
+this firing did not count into, is not this firing's answer. The route SHALL NOT change a record's
+requester to whoever pressed Run unless the manual firing wrote that record.
+
+Where the manual firing wrote a record, that record SHALL be the answer whatever it says. A record of
+a failure SHALL be answered as a failure carrying that record's reason, and SHALL NOT be answered by
+deciding the loop again after the failure; the route SHALL NOT state that the work is already being
+worked, or that nothing is wrong. Where the firing wrote no record, counted into none, the guard does
+not refuse, and the queue is not in flight, the firing failed before it recorded anything, and the
+answer SHALL be a failure to fire. It SHALL NOT carry an earlier firing's reason.
 
 Where the firing declined because every task on the queue is in flight, and an agent those tasks are
 staffed to is held, the answer SHALL name that agent and the time its hold ends. It SHALL NOT state
@@ -1530,16 +1547,37 @@ start until the hold ends.
 
 #### Scenario: Run while the loop's agent is mid-turn and nobody else is free
 
-- **WHEN** a loop's agent is running a turn, no other agent in the project is free, and the operator presses Run
+- **WHEN** a loop that declares a specification document has its agent running a turn, the loop's queue holds an open task, no other agent in the project is free, and the operator presses Run
 - **THEN** the answer is a conflict naming the agent that is running
+- **AND** it states that no other agent is free
 - **AND** it is not a server error reading "Failed to fire job"
 
 #### Scenario: Run while the loop's agent is mid-turn and its queue is empty
 
 - **WHEN** a loop's agent is running a turn, the loop's queue holds no task in a non-terminal status, another agent in the project is free, and the operator presses Run
 - **THEN** the answer is a conflict naming the agent that is running
+- **AND** it says the loop's queue holds no open task
 - **AND** it does not state that no other agent is free
 - **AND** no inbound queue entry is created for the loop's agent
+
+#### Scenario: Run on a documentless loop with an empty queue
+
+- **WHEN** a loop that declares no specification document has its agent running a turn, its queue holds no task in a non-terminal status, and the operator presses Run
+- **THEN** the answer says the loop's queue holds no open task
+- **AND** it does not describe that as work for another agent to take
+
+#### Scenario: Run on a documentless loop while another agent is free
+
+- **WHEN** a loop that declares no specification document has its agent running a turn, its queue holds a pending task, another agent in the project is free, and the operator presses Run
+- **THEN** the answer is a conflict naming the agent that is running
+- **AND** it says the loop gives its work only to the agent its job names
+- **AND** it does not state that no other agent is free
+
+#### Scenario: Run on a documentless loop while nobody else is free
+
+- **WHEN** a loop that declares no specification document has its agent running a turn, its queue holds a pending task, no other agent in the project is free, and the operator presses Run
+- **THEN** the answer says the loop gives its work only to the agent its job names
+- **AND** it does not state that no other agent is free
 
 #### Scenario: Run while the loop's agent is held
 
@@ -1552,10 +1590,37 @@ start until the hold ends.
 - **THEN** the answer names that agent and the time its hold ends
 - **AND** it does not state that the work is already being worked, or that nothing is wrong
 
+#### Scenario: Run on a flow whose work is in flight, after an earlier firing stalled
+
+- **WHEN** an earlier firing of a flow recorded a skipped firing with a stall reason, every task now on the flow's queue is in flight and none of them waits on a hold, and the operator presses Run
+- **THEN** the answer says the work is already being worked
+- **AND** it does not carry the earlier firing's stall reason
+- **AND** the earlier record's count of firings and its requester are unchanged
+
 #### Scenario: A firing that recorded its own refusal is answered from that record
 
 - **WHEN** the operator presses Run on a loop, the firing records a skipped firing with its reason, and the loop's agent has become busy since
 - **THEN** the answer is a conflict carrying the recorded reason, not the busy guard's
+
+#### Scenario: A firing that fails after its turn started is answered as a failure
+
+- **WHEN** the operator presses Run on a loop, the firing writes its record, its turn starts, and a later step of the firing fails, so the record reads as failed
+- **THEN** the answer is a server error carrying the record's reason
+- **AND** it does not state that the work is already being worked, or that nothing is wrong
+
+#### Scenario: A firing that fails before recording anything is not answered with an earlier firing's reason
+
+- **WHEN** a loop's latest record is an earlier firing's skipped record, the operator presses Run, the loop's agent is idle, and the firing fails before it writes a record
+- **THEN** the answer is a server error reading that the job failed to fire
+- **AND** it does not carry the earlier record's reason
+- **AND** the earlier record's count of firings and its requester are unchanged
+
+#### Scenario: A continuing stall is answered from the record it counted into
+
+- **WHEN** a loop's latest record is a skipped firing whose stall reason is unchanged, and the operator presses Run
+- **THEN** the firing counts itself into that record
+- **AND** the answer is a conflict carrying that record's reason
+- **AND** that record's requester is unchanged
 
 #### Scenario: An earlier firing's record is not attributed to the press
 
@@ -1656,3 +1721,4 @@ the declared document and nothing else.
 - **WHEN** a loop declares a specification document, two of its tasks have all their dependencies
   met, and two eligible agents are available
 - **THEN** both tasks are started
+

@@ -1387,6 +1387,20 @@ was.
   completed` edge, because it leaves transition rows the verdict forbids. **(d)**, exempting flows
   in the main requirement, because it would define the verdict's intent away.
 
+- DECIDED   F354  **Pin the tool server at Hub start (D5 option a), under
+  `~/.agentweave/hub/tool-server/<digest>/`** (0700; old digests pruned after 7 idle days), not in
+  the shared temp directory. The operator approved it 2026-09-24 (`APPROVALS.md`, B11; review
+  `spec-queue/tracks/reviews/B11-2026-09-24.md`). Recorded 2026-09-25 at archive of
+  `an-agents-tool-server-is-the-one-its-hub-loaded`.
+- DECIDED   F149-D1b  **A `JobRun` id in an event is renamed `run_id` → `job_run_id` outright, with no
+  dual emission** (`run-id-in-an-event-always-names-a-run` D1, second half). The operator approved it
+  2026-09-24 (`APPROVALS.md`, B2: "the Opus review approved it as it stands"). Recorded 2026-09-25 at
+  archive.
+- DECIDED   B3-D8  **A flow's own moves carry a recorded cause, not a third actor kind**
+  (`a-flows-own-moves-are-recorded-as-the-flows` D8): a manual Run press reads "Loop X moved"; a review
+  staged late by a divergence restaff stays "You moved"; old rows are unchanged. Operator, 2026-09-24
+  (`spec-queue/tracks/reviews/B3-2026-09-24.md`). Recorded 2026-09-25 at archive.
+
 ### F306 and F312, decided 2026-09-10 evening — and the scope verdict's mechanism, amended
 
 **DECIDED 2026-09-10 ~18:50, by the operator, in session**, after a code exploration of both

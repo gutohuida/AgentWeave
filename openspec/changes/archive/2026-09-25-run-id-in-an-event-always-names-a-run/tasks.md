@@ -6,7 +6,7 @@
       reading it. Record in `spec-queue/tracks/B2.md`
 - [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent re-derivation. `openspec validate
       run-id-in-an-event-always-names-a-run --strict` passes. the ten sites and `run_job`'s answer re-grepped; the one reader (`agents.py:883-891`) and the MCP pass-through confirmed; no change
-- [ ] 0.3 The operator records D1's second half in `spec-queue/DECISIONS.md`
+- [x] 0.3 (DECIDED F149-D1b, recorded 2026-09-25) The operator records D1's second half in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — each must fail on today's code
 
@@ -40,6 +40,6 @@ New file `hub/tests/test_run_id_names_a_run.py`.
 
 ## 3. Drive it
 
-- [ ] 3.1 On a trial Hub from source (never `:8000`), fire a Haiku job, then read the project's event
+- [x] 3.1 On a trial Hub from source (never `:8000`), fire a Haiku job, then read the project's event — Driven (trial Hub 8026, profile `drive0925morning`, Haiku, 2026-09-25 morning): `job_fired` {job_id: job-47e4968d6005, agent: charlie, trigger: manual, job_run_id: run-4e71ebe43295} (no `run_id` key); `run_started` 0.13 s later {run_id: run-db9bc1a67314, runner: claude}. Job disabled
       history: the `job_fired` row names `job_run_id`, and the `run_started` row beside it names the
       real run under `run_id`. Disable the job afterwards

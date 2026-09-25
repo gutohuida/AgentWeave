@@ -29,5 +29,5 @@
 ## 3. Verify
 
 - [x] 3.1 Group 1 passes; full `hub/tests/` with `claude` stripped from PATH; CLAUDE.md lint block. Full hub suite 4841 passed, 86 skipped (38:05); UI vitest 5 passed on the history file, `npm run lint` clean; ruff, black, mypy clean
-- [ ] 3.2 Drive a two-task flow on a trial Hub with Haiku agents; open a task's history drawer and record the lines verbatim
-- [ ] 3.3 Sync the delta and archive
+- [x] 3.2 Drive a two-task flow on a trial Hub with Haiku agents; open a task's history drawer and record the lines verbatim — Driven (trial Hub 8026, profile `drive0925morning`, Haiku, 2026-09-25 morning): two-task flow job-1e7a353c946d; both tasks' first transition `origin=job, job_kind=flow, actor_kind=operator`, then `origin=runtime` for the run. Drawer (headless Playwright): "Flow drive5 two-task flow moved pending → assigned", "charlie was moved for assigned → in_progress"; beta identical with delta. Job disabled
+- [x] 3.3 Sync the delta and archive — Synced and archived 2026-09-25

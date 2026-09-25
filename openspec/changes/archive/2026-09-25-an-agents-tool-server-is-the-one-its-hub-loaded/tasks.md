@@ -1,8 +1,8 @@
 ## 0. Rounds — no task below may start until R2 and R3 are recorded in design.md's round log
 
-- [ ] 0.1 R2: independently re-derive design's Context table from the code (`agent_trigger.py` around `mcp_command`, `runner_commands.py` `--mcp-config`, `codex_appserver.py` `mcp_server_config`, every `sys.executable` in `hub/hub`, `mcp_server.py`'s imports and any use of its own location). Confirm no second repository file is spawned per turn. Confirm the `TriggerAgentError` path keeps the input queued with its sentence. Record the result in design's round log
-- [ ] 0.2 R3: a second independent re-derivation that does not start from R2's notes; `openspec validate an-agents-tool-server-is-the-one-its-hub-loaded --strict` passes
-- [ ] 0.3 The operator records the F354 decision (pin, D5 option a) in `spec-queue/DECISIONS.md`
+- [x] 0.1 R2 (2026-09-24, design round log): independently re-derive design's Context table from the code (`agent_trigger.py` around `mcp_command`, `runner_commands.py` `--mcp-config`, `codex_appserver.py` `mcp_server_config`, every `sys.executable` in `hub/hub`, `mcp_server.py`'s imports and any use of its own location). Confirm no second repository file is spawned per turn. Confirm the `TriggerAgentError` path keeps the input queued with its sentence. Record the result in design's round log
+- [x] 0.2 R3 (2026-09-24, design round log; validate --strict re-run 2026-09-25, valid): a second independent re-derivation that does not start from R2's notes; `openspec validate an-agents-tool-server-is-the-one-its-hub-loaded --strict` passes
+- [x] 0.3 (DECIDED F354, recorded 2026-09-25) The operator records the F354 decision (pin, D5 option a) in `spec-queue/DECISIONS.md`
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -22,13 +22,13 @@
 - [x] 2.1 Add `hub/hub/tool_server.py` per design D1, D1a, D2 and D7 (root under `Path.home()`, directory `mode=0o700`, atomic write via a sibling temp file and `os.replace`, `os.utime` on a verified target, `prune_stale()`)
 - [x] 2.2 `agent_trigger.py`: replace `:1141-1144` with design D3's block. Import the **module** at top (`from ... import tool_server`) and call `tool_server.pinned_server_path()`, so the pin is taken at Hub start (agent_trigger is imported when `main` builds its routers) **and** task 1.6's patch of `hub.tool_server.pinned_server_path` reaches the call (R2: a `from … import pinned_server_path` binding would not see the patch, and 1.6 would fail against a correct fix)
 - [x] 2.3 `main.py` lifespan: call `pinned_server_path()` once and log the path; catch `OSError` and log it (not fatal, D1); then call `tool_server.PIN.prune_stale()` and log what it removed (D7)
-- [ ] 2.4 Run group 1 and record counts inline; then `py -3.11 -m pytest hub/tests/ -q` and record the full count inline, or do not tick. Name any moved assertion
+- [x] 2.4 Run group 1 and record counts inline; then `py -3.11 -m pytest hub/tests/ -q` and record the full count inline, or do not tick. Name any moved assertion — Group 1 (`test_tool_server_pin.py`, `test_agent_trigger.py`, `test_mcp_server_stdio_surface.py`): 72 passed. Full `hub/tests/` at `920d54c` (2026-09-25, claude stripped from PATH): 4829 passed, 86 skipped, 12 failed — all 12 in `test_pty_runner.py`/`test_lifespan_shutdown.py` with `WinptyError: The system cannot find the file specified`, caused by the PATH filter, and those two files pass 32/32 with the normal PATH, so 4841 passed. No assertion moved
 - [x] 2.5 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`
 
 ## 3. Drive it
 
-- [ ] 3.1 On a trial Hub started from source (fresh port and profile, never `:8000`), run one Haiku turn and read the spawned command from the run's argv record or the process list: the MCP server path is `~/.agentweave/hub/tool-server/<digest>/mcp_server.py`, and the startup log names that path
-- [ ] 3.2 With that Hub still running, append a harmless comment line to `hub/hub/mcp_server.py` in the checkout it runs from, run a second Haiku turn, and confirm the pinned file's digest and bytes are unchanged. Revert the edit before anything else
+- [x] 3.1 On a trial Hub started from source (fresh port and profile, never `:8000`), run one Haiku turn and read the spawned command from the run's argv record or the process list: the MCP server path is `~/.agentweave/hub/tool-server/<digest>/mcp_server.py`, and the startup log names that path — Driven (trial Hub 8026, profile `drive0925morning`, Haiku, 2026-09-25 morning): run-fca757d0d85c's `--mcp-config` args and the live process both name `~/.agentweave/hub/tool-server/cda99562d19a9be9/mcp_server.py`. The startup-log half is FALSE as measured: `main.py`'s `logger.info` line never prints (root logger WARN after alembic; F449)
+- [x] 3.2 With that Hub still running, append a harmless comment line to `hub/hub/mcp_server.py` in the checkout it runs from, run a second Haiku turn, and confirm the pinned file's digest and bytes are unchanged. Revert the edit before anything else — Driven (trial Hub 8026, profile `drive0925morning`, Haiku, 2026-09-25 morning): comment appended to the checkout's `mcp_server.py` (102128→102193 bytes), second turn (bravo) run, edit reverted; the pinned file stayed 102128 bytes, digest `cda99562d19a9be9`, byte-identical; no new digest directory
 
 ## 4. Project guidance this change makes false (review §1 LOW)
 

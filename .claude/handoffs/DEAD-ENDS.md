@@ -1697,3 +1697,9 @@ disappears is indistinguishable from one that was forgotten.
   builds on stale code and the next merge is no longer a fast-forward. *(2026-09-24)*
 - **RESOLVED 2026-09-24:** `arm-cycle.ps1`'s dirty-tree refusal threw `ParameterBindingException`
   (`-Value @(..) + @(..)` unparenthesised) instead of logging and exiting 3; parenthesised in `90be828`.
+
+- **2026-09-25 — stripping `claude` from PATH in Git Bash with `tr ':' '\n' | grep -v | paste -sd:`
+  breaks winpty spawns**: 12 `test_pty_runner.py`/`test_lifespan_shutdown.py` tests fail with
+  `WinptyError: The system cannot find the file specified`, and pass 32/32 with the normal PATH.
+  Run those two files separately with the normal PATH (or strip only the npm entry some other way)
+  when reproducing CI's no-`claude` suite.

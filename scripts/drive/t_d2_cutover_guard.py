@@ -93,10 +93,19 @@ print(f"  first successor: {b1.get('successor_conversation_id') if isinstance(b1
 c2, b2 = cutover(CK1)
 detail = b2.get("detail") if isinstance(b2, dict) else str(b2)
 check("second cutover 409 (the night's result, reproduced independently)", c2 == 409, str(c2))
+# F293/F294 fix (a-checkpoint-is-handed-over-once-and-says-where-it-went, design D4): the
+# handover check now runs before the archived-lifecycle check, so an immediate second press on
+# the SAME checkpoint is refused as a spent checkpoint -- "already cut over to <successor>" --
+# not with the old "unarchive it first" text, because the conversation is not yet archived by
+# hand at this point in the sequence either way. That text is still reachable, but only for a
+# conversation archived by hand that was never handed over (probe 1 does not exercise it).
 check(
-    "and the refusal tells the operator to unarchive it first",
-    isinstance(detail, str) and "unarchive it first" in detail,
-    repr(detail)[:160],
+    "and the refusal names the spent checkpoint and the successor it already went to",
+    isinstance(detail, str)
+    and "was already cut over to" in detail
+    and "that conversation holds the work" in detail
+    and (str(b1.get("successor_conversation_id")) in detail if isinstance(b1, dict) else False),
+    repr(detail)[:200],
 )
 
 cu, bu = api("POST", f"/projects/{P}/agent/{AGENT}/conversations/{CONV1}/unarchive", {})
@@ -110,12 +119,20 @@ check(
 c3, b3 = cutover(CK1)
 show("cutover after following the refusal's own advice", c3, b3)
 second_successor = b3.get("successor_conversation_id") if isinstance(b3, dict) else None
+detail3 = b3.get("detail") if isinstance(b3, dict) else str(b3)
 succ1 = successors_of(CONV1)
 entries1 = checkpoint_entries_for({s["id"] for s in succ1})
 check(
     "THE PROBE: the spent checkpoint is still refused after the remedy",
     c3 == 409,
     f"status {c3}, successor {second_successor}",
+)
+check(
+    "and the third press's refusal names the successor by id",
+    isinstance(detail3, str)
+    and isinstance(b1, dict)
+    and str(b1.get("successor_conversation_id")) in detail3,
+    repr(detail3)[:200],
 )
 check(
     "exactly one successor exists for this lineage",

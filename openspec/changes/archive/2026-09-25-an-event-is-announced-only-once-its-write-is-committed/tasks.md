@@ -2,7 +2,7 @@
 
 - [x] 0.1 R2 (2026-09-24, recorded in `spec-queue/tracks/B9.md`; SQLAlchemy measurement re-run and matched): re-derive D1-D4 from the code without reading R1's argument first: `hub/hub/sse.py`, `hub/hub/run_divergence.py:66-107`, `hub/hub/task_transition_service.py:700-800`, every `persist_event(..., commit=False)` site, and the SQLAlchemy event order (re-run the measurement in design D1 in a scratch script outside the repo)
 - [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B9.md`): a second independent re-derivation; `openspec validate an-event-is-announced-only-once-its-write-is-committed --strict` passes
-- [ ] 0.3 Operator approval in `spec-queue/APPROVALS.md`
+- [x] 0.3 Operator approval in `spec-queue/APPROVALS.md` (APPROVED 2026-09-24, B9)
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
@@ -30,4 +30,4 @@ New file `hub/tests/test_an_event_is_announced_after_commit.py`. Spy on `SSEMana
 ## 3. Close out
 
 - [x] 3.1 Mark F335 fixed in `scripts/drive/FINDINGS.md` with the commit, and note that F251's coupling is released
-- [ ] 3.2 Reconcile the requirement into `openspec/specs/local-project-workspace/spec.md` on archive
+- [x] 3.2 Reconcile the requirement into `openspec/specs/local-project-workspace/spec.md` on archive

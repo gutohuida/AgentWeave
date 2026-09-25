@@ -3,9 +3,7 @@
 ## Purpose
 
 A checkpoint is the Hub's durable record of where a conversation got to: a structured envelope it computes and can therefore verify, carrying one markdown body only a model can write. It replaces a design in which the agent was asked to write a file — observed twice producing an artifact in an unreachable place and then producing nothing at all, both times reported as ready because readiness meant the run had ended.
-
 ## Requirements
-
 ### Requirement: A checkpoint is a durable Hub record, not a file an agent is asked to write
 
 The Hub SHALL persist each checkpoint as a durable record attached to the conversation it describes,
@@ -382,8 +380,8 @@ the person relying on it.
 ### Requirement: Crossing the threshold warns before it spends
 
 The Hub SHALL warn that a checkpoint is due, and SHALL NOT generate one, when a conversation
-configured to involve the operator crosses its threshold. Generation SHALL wait until the operator
-asks for it.
+configured to involve the operator crosses its threshold, unless that conversation has already been
+handed over. Generation SHALL wait until the operator asks for it.
 
 Generation is a billed model call. Producing one unasked means an operator who would rather keep
 working has already paid for a summary they are about to discard, and pays again on the turn after
@@ -405,6 +403,12 @@ order to have one would report a proportion the conversation does not have.
 
 Where checkpointing is configured to act alone, the threshold SHALL still generate and hand over
 without asking, because acting alone is what that configuration means.
+
+A conversation that has already been handed over and was then reopened can never be handed over
+again. The threshold SHALL NOT request notes for it, SHALL NOT warn that a checkpoint is due in it,
+and SHALL NOT generate a checkpoint for it, under either configuration: each of those spends a turn
+or a model call toward a handover that cannot happen. The final warning is free, and a reopened,
+handed-over conversation whose warning was dismissed SHALL still receive it.
 
 A checkpoint SHALL still be generated at the moment the operator asks for it rather than promised
 for later, because it can only be written from the context that is about to be lost.
@@ -447,6 +451,19 @@ for later, because it can only be written from the context that is about to be l
 - **WHEN** a conversation whose warning was dismissed is succeeded
 - **THEN** the successor may warn on its own threshold
 
+#### Scenario: A handed-over conversation spends nothing at the threshold
+
+- **WHEN** a conversation that has already been handed over is reopened
+- **AND** work in it crosses its threshold, under either configuration
+- **THEN** no notes are requested, no checkpoint is reported as due, and no checkpoint is generated
+
+#### Scenario: A handed-over conversation still receives its final warning
+
+- **WHEN** a reopened, handed-over conversation whose warning was dismissed approaches the point at
+  which the provider will compact it
+- **THEN** it is warned again, and that warning cannot be dismissed
+- **AND** no checkpoint is generated in order to raise it
+
 ### Requirement: A flow's checkpoint lineage is shared across the agents it fires
 
 The Hub SHALL keep one checkpoint lineage per flow rather than one per agent, so that a checkpoint
@@ -475,7 +492,6 @@ records is addressed to whoever continues the work rather than to itself.
 
 ### Requirement: A question whose wait ended without an answer is listed as such
 
-
 Where a checkpoint lists a conversation's open questions, a question whose bounded wait ended without an answer SHALL still be listed, and SHALL be listed as one whose wait ended rather than as one still awaiting a reply.
 
 Both halves matter and they pull in opposite directions. Dropping it would lose the most useful
@@ -498,3 +514,4 @@ it is stated here rather than left to the surfaces that report a wait to a perso
 
 - **WHEN** a checkpoint is generated while a run is still waiting on a question it asked
 - **THEN** that question is listed with no statement that its wait ended
+

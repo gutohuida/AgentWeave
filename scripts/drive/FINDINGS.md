@@ -2601,6 +2601,7 @@ of recording this separately.
 
 ## F47 (C) — the flow's own routing is recorded as the operator's
 
+**Status (2026-09-25): closed — fixed** by `1c2cf26`, archived 2026-09-25; driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): a two-task flow's drawer reads "Flow drive5 two-task flow moved pending → assigned".
 **Status (2026-09-25, night iteration 9): fixed in code** by `a-flows-own-moves-are-recorded-as-the-flows` — a scheduled job's staging move (loop, flow, manual Run press, and a review delivered late from a job-queued entry) is recorded `actor_kind=operator`, `origin="job"`, with `job_id`; not a third actor kind (D8). `GET /tasks/{id}/transitions` adds `job_id`/`job_name`/`job_kind`; the history drawer reads "Flow X moved" / "Loop X moved". Tests: `hub/tests/test_a_flows_moves_are_the_flows.py` (mutation to `actor` fails four), the AST scan in `test_task_transitions.py`, the un-pinned `test_flow_chain_end_to_end.py`. Old rows unchanged. Not driven on a live Hub yet (night-drive).
 
 **Status:** open — deliberately not fixed in F45's change; the honest repair is a third actor kind, and it is pinned by test_flow_chain_end_to_end.py
@@ -8791,6 +8792,7 @@ operator's call. **Open question for the operator: should the CLI's catch-all be
 
 ## F120 (C) — a flow's claim of a task is recorded as an operator's transition, by nobody
 
+**Status (2026-09-25): closed — fixed** by `1c2cf26`, archived 2026-09-25; driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): the flow's claim is recorded `origin=job, job_kind=flow` and shown as the flow's.
 **Status (2026-09-25, night iteration 9): fixed in code** by `a-flows-own-moves-are-recorded-as-the-flows` — a scheduled job's staging move (loop, flow, manual Run press, and a review delivered late from a job-queued entry) is recorded `actor_kind=operator`, `origin="job"`, with `job_id`; not a third actor kind (D8). `GET /tasks/{id}/transitions` adds `job_id`/`job_name`/`job_kind`; the history drawer reads "Flow X moved" / "Loop X moved". Tests: `hub/tests/test_a_flows_moves_are_the_flows.py` (mutation to `actor` fails four), the AST scan in `test_task_transitions.py`, the un-pinned `test_flow_chain_end_to_end.py`. Old rows unchanged. Not driven on a live Hub yet (night-drive).
 
 **Status:** open, filed not fixed. Confirms `SURVEY.md`'s code-read suspicion **S6**, unverified
@@ -12252,6 +12254,7 @@ the `finally` that denies leftover cards and closes the drive's task.
 
 ## F149 (C) — `job_fired` publishes a JobRun id under the key `run_id`, next to real run ids on the same stream
 
+**Status (2026-09-25): closed — fixed** by `033f1e1` (`run-id-in-an-event-always-names-a-run`, archived 2026-09-25); driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): `job_fired` carries `job_run_id` only, `run_started` beside it names the real run under `run_id`.
 **Status:** open — filed, not fixed. The fix is a rename on a published event payload, which is a
 compatibility decision (D5).
 
@@ -24478,6 +24481,7 @@ namely that the CI holder was a connection on the old file. That is the reading 
 
 ## F293 (B) — the F126 guard is on the predecessor's lifecycle, so following the refusal's own advice mints the duplicate successor it was built to prevent
 
+**Status (2026-09-25): closed — fixed** by `1f79ee8` + `35fe156` (`a-checkpoint-is-handed-over-once-and-says-where-it-went`, archived 2026-09-25); driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): `t_d2_cutover_guard.py` 21/21, probe 1's third press 409 naming the successor.
 **Status:** open. Found 2026-09-06 (day D-2) by driving the night's guard (`3142a91`)
 independently, on a fresh Hub on 8011 with a fresh database and a throwaway project. The guard is
 real and the night's own three-press drive reproduces exactly as recorded — this is a **different
@@ -24550,6 +24554,7 @@ Recommendation: (1), the same recommendation F126 made, now blocking two routes 
 
 ## F294 (B) — two cutover presses at the same instant both succeed: the guard reads the lifecycle it is about to write, with nothing serialising the two
 
+**Status (2026-09-25): closed — fixed** by `1f79ee8` + `35fe156` (`a-checkpoint-is-handed-over-once-and-says-where-it-went`, archived 2026-09-25); driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): two simultaneous presses gave one 200 and one 409.
 **Status:** open. Found 2026-09-06 (day D-2), same drive as F293. This is the case F126's own
 section named as how the defect reaches an operator in the wild — *"a second browser tab, a reload
 between the 201 and the cutover, a retried request after a network timeout, or any non-UI client"* —
@@ -29156,6 +29161,7 @@ reach.
 
 ## F354 (B) — the operator's live agents launch the MCP server from the development working tree, so an unattended loop's uncommitted edits reach them mid-edit
 
+**Status (2026-09-25): closed — fixed** by `06e0cec` (`an-agents-tool-server-is-the-one-its-hub-loaded`, archived 2026-09-25); driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): turns spawn `~/.agentweave/hub/tool-server/<digest>/mcp_server.py`, and an edit to the checkout's copy did not change the pinned bytes. **Takes effect on `:8000` only after its next restart.** The startup-log line is not emitted (F449).
 **Status:** open. Found 2026-09-13 on the operator's Hub.
 
 Port 8000 runs this checkout (CLAUDE.md), and every agent turn spawns its tool server fresh from
@@ -30043,6 +30049,7 @@ does not say *"no other agent is free"*.
 
 ## F373 (B) — pressing Run on a loop whose work is in flight answers with an earlier firing's stall reason
 
+**Status (2026-09-25): closed — fixed** by `8c6cb54` (`pressing-run-names-the-reason-that-held`, archived 2026-09-25); driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): the staged case answers 409 "Every task on this loop's queue is already being worked. Nothing was started, and nothing is wrong…", no JobRun row written; MCP `run_job` returns the same words.
 **Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r3`.
 **Measured** with a throwaway test through the real Run route, deleted before the commit. Not
 repaired by that change.
@@ -32185,6 +32192,7 @@ cutover, and the served UI bundle agreeing with source.
 
 ## F400 (B) -- Run on a documentless loop whose agent is busy answers "no other agent is free" while another agent is free
 
+**Status (2026-09-25): closed — fixed** by `8c6cb54` (`pressing-run-names-the-reason-that-held`, archived 2026-09-25); driven 2026-09-25 on a fresh trial Hub (8026, `drive0925morning`, Haiku): 409 "author is already running a turn, and this loop's work goes only to author, the agent its job names. Nothing was started."
 **Status:** open. Filed 2026-09-21 by an interactive session, **by operator decision**: this is
 `a-loop-staffs-the-agent-it-names` §5 (tasks 5.1-5.5, design D4), moved out of that change so the
 rest of it can be driven and archived (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). §5 was
@@ -33225,3 +33233,9 @@ Fresh Hub, profile `drive0925`, port 8025, Haiku (`author`). Measured: the fresh
 ## Night drive 2026-09-25, part 2 (`d8_0925_night_drive2.py`, `d8_0925_night_drive3.py`) — no new finding
 
 Same Hub (`drive0925`, 8025), real HTTP. Measured: a conversation with two ready checkpoints — first `POST /checkpoints/{c1}/cutover` 200 with a successor; the same checkpoint again 409 "already cut over to conv-…"; the other checkpoint of the same conversation 409 "already handed over to conv-… (checkpoint …)"; the checkpoint list carried the record. `POST /conversations/{id}/continue` answered `started: true` on the successor and `waiting_reason: "agent is already running"` on the predecessor (F133 route names a reason). The `conversation_cut_over` broadcast fired only after the 200 (event-after-commit exercised on that route only). UI (Playwright): the task drawer's history read "Loop drive loop moved pending → assigned"; the agent's own move read "author was moved for…" (screenshot `testbed/scratch/drawer0925.png`, not read visually). NOT driven live: the tool-server pin (covered by unit tests only), event-after-commit beyond the cutover route.
+
+## F449 (C) — the tool-server pin's startup line is never printed: `hub.*` INFO is below the root level
+
+**Status:** open. Found 2026-09-25 driving `an-agents-tool-server-is-the-one-its-hub-loaded` task 3.1 on a fresh trial Hub (8026).
+
+`main.py`'s lifespan logs `logger.info("Tool server pinned at %s", ...)` and `logger.info("Pruned stale tool server %s", ...)`. Neither appears in the Hub's output: zero hits over the whole startup log while the pin demonstrably ran (the file exists at the digest path and the spawned `--mcp-config` names it). Cause, already recorded in `main.py`'s own comment beside the database-path line (measured 2026-09-20): the root logger is WARN after `init_db()`'s alembic `fileConfig` (`alembic.ini`, `migrations/env.py:28`), and nothing lowers it, so every `hub.*` `logger.info` is dropped for the life of the process. Design D1's "the startup log names that path" is false as shipped; an operator cannot see which tool-server copy their Hub pinned without reading the process list. Fix candidates: log the pin at WARNING like its sibling, or give the Hub its own logging configuration so INFO reaches the operator (wider — it changes every `hub.*` INFO line).
