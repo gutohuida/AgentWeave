@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hub"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 if ":8000" in os.environ.get("AW_HUB", "") or ":8010" in os.environ.get("AW_HUB", ""):
     sys.exit("refusing")
-from sqlalchemy import select
 from hub.checkpoint_generation import CheckpointBody, render_body
 from hub.checkpoints import compute_envelope, create_checkpoint
 from hub.db.engine import async_session_factory
