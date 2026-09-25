@@ -14,7 +14,10 @@ that name. When the delivery's agent is not usable, the operator MAY name anothe
 at approval. That choice SHALL apply to the flow alone and MUST NOT edit the document.
 
 Where an unarchived flow already declares the document, as on a re-approval after a reopen, the Hub
-SHALL NOT create a second one, and the approval SHALL report the existing flow rather than a refusal.
+SHALL NOT create a second one, and the approval SHALL report the existing flow rather than a refusal,
+whatever the delivery says. The report SHALL state whether that flow is running, disabled or ended,
+and SHALL NOT report a flow that has ended or is disabled as building the document, since no one
+works the tasks the approval gave it.
 The Hub SHALL NOT create a flow whose delivery names no agent or no stop condition, or whose stop
 time has already passed, and SHALL report why.
 
@@ -55,6 +58,13 @@ the reason SHALL be reported with the approval.
 - **WHEN** the operator approves it
 - **THEN** no second flow is created, and the tasks the approval created belong to F
 - **AND** the approval reports that F already builds the document
+
+#### Scenario: Re-approval after the flow has ended says the new tasks wait
+
+- **GIVEN** an approved document whose flow F stopped when its queue emptied and is not archived
+- **WHEN** the document is reopened, revised with a new task, proposed and approved
+- **THEN** no second flow is created
+- **AND** the approval reports that F has ended and that the new task waits for it
 
 #### Scenario: A delivery of no flow creates none
 

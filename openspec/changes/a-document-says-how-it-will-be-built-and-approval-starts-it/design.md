@@ -1,5 +1,125 @@
 # Design — a document says how it will be built, and approval starts it
 
+## Round 3, 2026-09-25
+
+A second independent re-derivation against HEAD `3f15bae`, with neither B5 nor B11 in the tree
+(`grep -rn "phase_blockers\|loop_tasks_adopted" hub/hub` finds nothing). Every *(operator)* decision
+stands. Two claims were **measured** in a scratch probe on this machine's stack (SQLAlchemy 2.0.50,
+aiosqlite, Python 3.11), with a partial unique index shaped like `ux_loops_spec_document_live`.
+
+**Changed:**
+
+1. **D6: the loop is flushed before adoption, or the claim race is never a 409. (Measured.)**
+   `_adopt_document_tasks` is an ORM `update(Task)` run through `session.execute`, and that
+   **autoflushes** the pending loop first. So a claim race raises a raw `IntegrityError` out of the
+   adoption call, not out of R2's "adds the loop, adopts, and flushes". In `set_phase` that lands in
+   the "any other exception" branch (*"The flow could not be created."*) instead of the claim
+   sentence. It is also true of `POST /jobs` **today**: the `except IntegrityError` at
+   `jobs.py:765-770` cannot catch the loop's insert, because the adoption at `:762` has already
+   flushed it outside the `try`. A race answers 500, with the job committed at `:734`.
+   `build_flow_rows` now adds the loop and flushes it inside the `try` that maps `IntegrityError` to
+   the 409, and only then adopts. (B11's test 1.9 assumes the same unreachable handler; its
+   implementer should know.)
+2. **D6: `build_flow_rows` never calls `session.rollback()`. (Measured.)** The route's handlers do
+   today (`jobs.py:736`, `:766`). Moved verbatim, that call inside `set_phase`'s savepoint rolls back
+   the **outer** transaction: the approval and the board are discarded, the later commit succeeds
+   with nothing in it, and reading `document` for the response raises `MissingGreenlet`. The probe
+   stored `phase=proposed` and no tasks after a "successful" approval. Without the call, the
+   savepoint rolls back alone and the approval commits. `POST /jobs` loses nothing by dropping it:
+   the exception propagates, and `get_session` closes the session, which rolls back.
+3. **D6: the `job_created` event is written inside the flow's savepoint** with
+   `persist_event(..., commit=False)`, after `build_flow_rows` succeeds. R2 had it after the commit,
+   where a failure is a 500 on an approval that already stands. Only the broadcast and the scheduler
+   hand-off follow the commit. `_hand_job_to_scheduler`'s own `commit()` is then a commit of an empty
+   transaction, and its failures are logged, not raised. A flow that is committed and could not be
+   registered fires from the next restart, as a `POST /jobs` job already does. The report says the
+   flow was created, which is true.
+4. **D6: a flow that has ended is not reported as building the document.** A flow whose delivery
+   says "stop when the queue empties", the default the interview recommends, ends when its queue
+   drains: `loop_ending.end_loop` sets `ending_state` and disables its job (`scheduler.py:431-442`, `:3220`). It stays
+   unarchived, so it still claims the document. Reopen, revise and re-approve, and R2's report
+   said *"The flow X already builds this document"* while nothing would ever work the new tasks.
+   The report now states that flow's state (running, disabled, or ended), and for an ended or
+   disabled one it says that the new tasks are waiting on it. An ended loop cannot be re-enabled
+   (`jobs.py:930-965`, `loop_ended`), so the remedy named is to archive it and start a flow, which
+   B11's adoption makes work. Whether re-approval should instead archive the ended flow and create
+   the delivery's flow itself is a new decision for the operator (task 0.3). The delta gains a
+   scenario. Note for B11: its D3 stamps new tasks with an ended-but-unarchived loop, whose queue
+   D12 closes to every caller (`jobs.py:936-939`).
+5. **D6: the existing-flow lookup runs whatever the delivery says.** A document approved with
+   `mode: none`, then given a flow by **Start a flow…**, then reopened and re-approved, has a flow.
+   Materialise stamps the new tasks with it. R2's report would have said *"No flow was created"*
+   and named nothing.
+6. **D6: the flow request is built inside the guarded block.** `JobCreate` is a `RequestModel`
+   with `cron` capped at 128 and `name` at 256. Constructing it outside the savepoint's `try` turns
+   a `ValidationError` into a 500 after the transition. `Delivery.cron` now carries the same
+   128-character cap, and `Delivery.agent` the agent-name cap of 32, so that save refuses what
+   approval could not build. `purpose` is `""`, as `create_flow` and change 1's dialog send.
+7. **D1: `payload_to_dict` omits an absent `delivery`. (Measured.)** `payload_to_dict` is
+   `model_dump` with no exclusions (`spec_payload.py:301-308`), so an `Optional[Delivery] = None`
+   field writes `"delivery": null` into every payload saved after the upgrade. Two things then
+   break. Test 1.1's byte-identical render fails for any new save. Worse, the first resubmission to
+   a `contract`/`gate` document stored **before** the upgrade diffs `delivery: null` against a
+   missing key in `_metadata_bundle` (`spec_service.py:378-380`) and files a spurious metadata
+   proposal on an unchanged submission. `test_an_unchanged_resubmission_creates_zero_proposals`
+   stays green, because it stores its baseline with the new code: a passing test over a failure
+   that fires in production. `payload_to_dict` drops the `delivery` key when it is `None`. It drops
+   only that key, since dropping every `None` would change the bytes of every stored `reviewer` and
+   `from`. Test 1.1 gains the contract-document case.
+8. **D7: `materialise` keeps returning `List[Task]`.** Its direct callers read ORM rows from it
+   (`test_spec_criteria_reach_the_task.py:118-129` indexes by `spec_task_key`). The skipped entries
+   are collected through a new keyword, `already_served: Optional[List[ServedEntry]] = None`, and
+   only `materialise_quietly` returns `MaterialiseOutcome`, whose `created` it builds from the rows
+   right after the board's savepoint is released. The two `quietly=True` tests there (`:555`,
+   `:572`) are named as churn.
+9. **D7: dependencies are reported only when the board did not fail.** On a re-approval whose
+   board fails, `TaskDependencyReference` rows from the previous approval are still there, since
+   `_materialise_edges` did not run. They would be reported as this approval's.
+10. **D7 and the delta: every approval writes a report, not only a change document's.** Materialise
+    runs for every kind, and a failed board is hidden the same way for a roadmap. The savepoint
+    already applies to all kinds. The flow line of a document that is not a change says that only a
+    change document declares a delivery. The proposal already said "every approval".
+11. **Churn R2 undercounted:** with B5, `transition()` runs the completeness check on **every** move
+    to `proposed`, not only through `/documents/propose`. So change-spec fixtures that reach
+    `proposed` through `phase?to=proposed` or `transition()` also need a `delivery`:
+    `test_spec_capability_kind.py`, `test_spec_criteria_reach_the_task.py`,
+    `test_spec_declared_tasks.py`, `test_spec_task_dependencies.py`,
+    `test_task_spec_document_context.py` and `test_spec_adoption_identity.py`, as well as R2's seven.
+    Find them by grep, not from this list.
+12. **Test 1.6's race could not fail.** Making only the existing-flow lookup miss leaves
+    `_check_spec_document_conflict` to refuse before any write, so nothing is adopted and nothing
+    touched is rolled back, and the `MissingGreenlet` assertion passes with the bug present. It is
+    now two tests: the claim race, with the conflict check patched out too, so the insert reaches the
+    index; and a failure injected **after** a real adoption. The second is the one that fails if
+    `created` holds ORM rows.
+13. **Risks: pause is a column, not a lifecycle.** `an-agent-can-be-paused-and-keeps-its-input` adds
+    `Agent.paused_at`, and `lifecycle` stays `open | archived` under its CHECK constraint
+    (`models.py:307`). `delivery_agent_state` needs no change for it.
+
+**One precedence shift, stated:** `_check_agent_exists` and the cron checks move into
+`build_flow_rows`, after the `initial_tasks` parsing, F265 and `_check_initial_tasks`, which stay in
+the route. Today they run before those checks. Each refusal keeps its status and detail. Only a
+request with two faults gets a different one of them first. If an existing jobs test pins that
+order, the route also calls the two checks at their old position. They are reads, so running them
+twice is harmless.
+
+**Checked and held:** `expire_on_commit=False` (`db/engine.py:163`), so reading `document` and the
+job after the commit is safe, as `set_phase` already does. A savepoint rollback leaves `document`
+readable, because nothing modifies it inside either savepoint (probe: `doc.phase` readable,
+`approved`, after the flow's savepoint rolled back). `rerender_phase` runs after both savepoints and
+touches only `document`. B5's `phase_blockers` filters `import_not_approved` by code at `APPROVED`
+(its D1). Adding the two delivery codes to that filter is precise enough, and task 1.3 is the test
+that fails without it, provided its fixture reaches `proposed` without the check (now stated). The
+HTTP agent path needs no route change (`SpecDocumentSubmission.document: Any`,
+`agent_actions.py:1625-1635`), and `delivery` travels inside `document`. `_spec_phase_for` has one
+caller (`agent_trigger.py:1182`) and no test references it. `spec_turn_notice(kind=None)` is
+byte-identical when the line is gated on `kind == "change-spec"`, and the at-mention change's D6
+sentence is appended only in the unwritten branch, after it. A payload's `kind` equals its row's,
+because save refuses a change (`spec_service.py:153`). The metadata bundle gates `delivery` behind a
+proposal on `contract`/`gate` documents exactly as it gates `tasks`, which is consistent. Every
+requirement's first line carries SHALL. None duplicates *"Approval creates the work its document
+declares"* or *"Document validity is checked by the Hub"*, whose refusals are stated as a minimum.
+
 ## Round 2, 2026-09-25
 
 An independent re-derivation against HEAD `1cddc75`. Every *(operator)* decision stands; two of
@@ -144,13 +264,19 @@ approved ── the report is on the page; "Start a flow…" while no flow decla
 ```python
 class Delivery(_Part):
     mode: Literal["flow", "none"]
-    agent: Optional[str] = None               # flow: default agent, by name
+    agent: Optional[str] = Field(default=None, max_length=32)  # flow: default agent, by name
     stop_when_queue_empties: bool = False     # flow: at least one stop condition
     stop_at: Optional[str] = None             # flow: ISO-8601 with a timezone
-    cron: str = "*/5 * * * *"                 # flow: the create_flow default
+    cron: str = Field(default="*/5 * * * *", max_length=128)   # JobCreate.cron's cap (R3)
 ```
 
 `SpecPayload.delivery: Optional[Delivery] = None`. It must **not** be a required Pydantic field.
+**`payload_to_dict` drops the `delivery` key when it is `None` (R3, measured)**: `model_dump`
+would otherwise write `"delivery": null` into every payload saved from now on. That changes every
+new save's bytes, and on a `contract`/`gate` document stored before the upgrade it turns an
+unchanged resubmission into a metadata proposal (`_metadata_bundle`, `spec_service.py:378-380`).
+Only that key is dropped. `exclude_none` would also drop every stored `reviewer: null` and
+`from: null`.
 `validate_payload` re-runs on stored payloads in `propose` (`spec_service.py:768-772`), in
 `rerender_phase` (`:803-807`, which returns silently on error) and in the capability merge. A
 required field would make every existing document fail those. This is how `depends_on`, `from` and
@@ -283,10 +409,15 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   Optional[Loop]]`, beside the helpers in `api/v1/jobs.py`. It runs `_check_agent_exists`, the
   croniter and day-ambiguity checks, and `_check_spec_document_conflict` when the job opts in. It
   then adds the job and **flushes**; an `IntegrityError` there becomes today's 409 *"Job with ID …
-  already exists"*. When the job opts in, it adds the loop, runs `_adopt_document_tasks` (and B11's
-  `loop_tasks_adopted` events, which B11 already writes with `commit=False`), and **flushes**; an
-  `IntegrityError` there becomes today's 409 *"document … is already claimed by another loop"*. It
-  raises `HTTPException` as the helpers do and **never commits**. The route then commits once,
+  already exists"*. When the job opts in, it adds the loop and **flushes it before anything else**;
+  an `IntegrityError` there becomes today's 409 *"document … is already claimed by another loop"*.
+  Only then does it run `_adopt_document_tasks` (and B11's `loop_tasks_adopted` events, which B11
+  writes with `commit=False`). The order matters (R3, measured): adoption is an ORM `UPDATE`, which
+  autoflushes the pending loop, so a loop left unflushed raises its `IntegrityError` out of the
+  adoption call, past the handler. It raises `HTTPException` as the helpers do, **never commits, and
+  never calls `session.rollback()`** (R3, measured). Inside `set_phase`'s savepoint a
+  `session.rollback()` discards the whole transaction, approval included. In `POST /jobs` the
+  propagating exception is enough, because `get_session` closes the session and that rolls it back. The route then commits once,
   refreshes, seeds `initial_tasks`, builds the summary, hands the job to the scheduler and
   broadcasts, exactly as now. Every refusal keeps its status and detail. The one behaviour change is
   that a failed loop insert no longer leaves the job row committed.
@@ -295,10 +426,18 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   report states *"dev2 is archived"* or *"dev2 is not an agent on this project"*, with no call
   made.
 - **A flow already declaring the document is reported, not refused (R2).** Before creating
-  anything, `set_phase` looks for an unarchived loop whose `spec_document_id` is the document: the
-  re-approval after a reopen. If one exists, nothing is created, and the report names it: *"The flow
-  <name> already builds this document."* Materialise has already stamped the new tasks with that
-  loop's id (`spec_tasks.py:176-180, 284`; B11 restricts that lookup to live loops).
+  anything, and **whatever the delivery says** (R3: a `mode: none` document may have been given a
+  flow by **Start a flow…** since), `set_phase` looks for an unarchived loop whose
+  `spec_document_id` is the document: the re-approval after a reopen. If one exists, nothing is
+  created, and the report names it **with its state** (R3). A running flow gets *"The flow <name>
+  already builds this document."* A disabled one gets *"The flow <name> declares this document but
+  is disabled; the new tasks wait for it."* An ended one (`ending_state` set, which is where a
+  stop-when-empty flow is after its queue drained) gets *"The flow <name> declares this document
+  but has ended; the new tasks wait for it. Archive it and start a flow."* An ended loop cannot be
+  re-enabled (`jobs.py:930-965`, `loop_ended`), and archiving it lets B11's adoption hand its
+  unfinished tasks to the next flow, so that is the remedy the report names.
+  Materialise has already stamped the new tasks with that loop's id (`spec_tasks.py:176-180, 284`;
+  B11 restricts that lookup to live loops, and "live" there means unarchived, ended or not).
 - **Not created, and reported (R2):** a flow delivery with no agent, or with no stop condition
   (possible for a document proposed before B5, or through D4's approval-time exclusion), and a
   `stop_at` that has already passed.
@@ -306,12 +445,19 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   (`:1633`), when `document.phase == "approved"`, the document is a change-spec, `delivery.mode ==
   "flow"`, and none of the cases above applies:
   1. `async with session.begin_nested():` (SAVEPOINT).
-  2. `build_flow_rows` with `name=<title>[:256]`, `agent`, the default message, `cron`, the stop
-     condition, and `spec_document_id=document.id`, and `created_by_run_id=None`. The allowance
+  2. Build the `JobCreate` **inside** the guarded block (R3: a `ValidationError` outside it is a
+     500 after the transition), then `build_flow_rows` with `name=<title>[:256]`, `agent`, the
+     default message, `cron`, the stop condition, `purpose=""` (as `create_flow` sends),
+     `spec_document_id=document.id`, and `created_by_run_id=None`. The allowance
      gate is a request-level check that stays in the route, so it is never reached. `allow_agent_jobs`
      never applies, since the operator is the actor.
-  3. `_adopt_document_tasks`, inside it, stamps `loop_id` on the tasks just materialised. For a
-     document with no earlier loop they carry `NULL` at this point, so adoption is what binds them.
+  3. `_adopt_document_tasks`, inside it and after the loop's flush, stamps `loop_id` on the tasks
+     just materialised. For a document with no earlier loop they carry `NULL` at this point, so
+     adoption is what binds them.
+  3a. On success, still inside the savepoint: `persist_event(session, project_id, "job_created",
+     {...}, agent=..., commit=False)` (R3), so the event commits with the flow or not at all, and
+     nothing after the commit can turn a standing approval into a 500. The job's id and name are
+     captured as plain values here.
   4. `HTTPException` (the 400s and 409s above) rolls back to the savepoint, and its `detail`
      becomes the reason (`str()` if not a string). Any other exception rolls back to the savepoint,
      is logged with its traceback, and records *"The flow could not be created."*
@@ -320,8 +466,10 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   `set_phase` captured before the flow's savepoint. `document` itself is not modified inside it.
 - After the commit, a created job goes to `_hand_job_to_scheduler`, and the first firing is the next
   cron tick (`scheduler.py:2906-2944`). Nothing fires at once. *(operator: first scheduled tick)*
-  `set_phase` then does what the route does after its commit: it broadcasts `job_created` and calls
-  `persist_event(..., "job_created", ...)`. `useSSE`'s `job_created` case invalidates
+  Its own `commit()` finds nothing pending, and it logs rather than raises (`jobs.py:548-590`). A
+  flow it could not register is committed and enabled, and fires from the next restart's `start()`,
+  as a `POST /jobs` job already does. `set_phase` then broadcasts `job_created`; the event row was
+  written in step 3a. `useSSE`'s `job_created` case invalidates
   `['project', pid, 'loops']` as well as jobs, and `useSetSpecPhase` invalidates both on success,
   so change 1's phase bar shows **Flow: <name>** rather than **Start a flow…**.
 - `a-loop-that-is-gone-lets-go-of-its-document` excludes archived loops from the claim and adoption
@@ -342,7 +490,11 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   outermost transaction and its RELEASE commits. In `set_phase`, `begin_nested()` flushes the phase
   row and event `transition()` wrote, which satisfies it.
 - It returns `MaterialiseOutcome(created: List[CreatedTask], already_served: List[ServedEntry],
-  failed: Optional[str])`, plain dataclasses and not ORM rows. `CreatedTask` is `(id, key, title)`.
+  failed: Optional[str])`, plain dataclasses and not ORM rows. **`materialise` itself keeps
+  returning `List[Task]` (R3)**, because its direct callers read rows from it
+  (`test_spec_criteria_reach_the_task.py:118-129`). It gains a keyword collector,
+  `already_served: Optional[List[ServedEntry]] = None`, and `materialise_quietly` converts the
+  returned rows to `CreatedTask` values as soon as the board's savepoint is released. `CreatedTask` is `(id, key, title)`.
   `ServedEntry` is `(key, requirements)`: a declared entry skipped because a hand-made task already
   serves every requirement it names (`spec_tasks.py:263-268`). `failed` is the exception's class
   and message. Each list is in the payload's declaration order.
@@ -352,14 +504,19 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   `not_declared`, `local_task_not_materialised`, the import reasons (`malformed_import`,
   `document_not_found`, `document_not_approved`, `key_not_found`) and the writer's refusals
   (`missing`, `cycle`). Because `_materialise_edges` rewrites these rows per task on every approval,
-  they describe this approval's state.
+  they describe this approval's state. **They are read only when `failed` is `None` (R3):** when
+  the board failed, `_materialise_edges` did not run, and the rows left from the previous approval
+  would be reported as this one's.
 - **Stored** as one `SpecDocumentEvent` with `kind="approval_report"`, written by
   `spec_lifecycle.record_event` (`:98-119`) after the flow's savepoint and before the commit,
   outside any savepoint, actor operator. No migration: `kind` is `String(32)` with no CHECK
   constraint. The only kind-filtering reader is `run_divergence.py:651` (`kind == "content"`). It is
   named `approval_report` at the storage layer only. The API field is `approval_outcome`, because
   tasks already have an unrelated `approval_report` response field (`api/v1/tasks.py:91-104`).
-- **Returned** by `GET /spec` as `approval_outcome` for an approved change document: the newest
+- **Written for every approval, of every kind (R3).** Materialise runs for every kind, and a failed
+  board is hidden the same way for a roadmap. For a document that is not a change, the flow line
+  says that only a change document declares a delivery.
+- **Returned** by `GET /spec` as `approval_outcome` for an approved document: the newest
   such event by `created_at`, chosen by the Hub so the UI never picks. It is also returned in
   `set_phase`'s response beside `tasks_created`, which keeps its shape (ids) and is built from
   `outcome.created`.
@@ -386,9 +543,16 @@ only when `delivery_status` does, so a bundle talking to an un-restarted `:8000`
   (phase and `approval_report`). The earlier-events-unchanged half still holds. Change-spec
   fixtures that are proposed (`test_agent_created_documents.py`, `test_spec_archive.py`,
   `test_spec_board_task_convergence.py`, `test_spec_documents_api.py`, `test_spec_index_writer.py`,
-  `test_spec_merge.py`, `test_spec_rename.py`) gain `"delivery": {"mode": "none"}`.
-- `an-agent-can-be-paused-and-keeps-its-input` (REVISING) may add a paused state. If it lands,
-  `delivery_agent_state` answers `ok` for a paused agent; only archived and unknown agents are stale.
+  `test_spec_merge.py`, `test_spec_rename.py`) gain `"delivery": {"mode": "none"}`. **R3:** with B5,
+  so do change-spec fixtures that reach `proposed` through `phase?to=proposed` or `transition()`
+  (at least `test_spec_capability_kind.py`, `test_spec_criteria_reach_the_task.py`,
+  `test_spec_declared_tasks.py`, `test_spec_task_dependencies.py`,
+  `test_task_spec_document_context.py`, `test_spec_adoption_identity.py`; find them by grep). The two
+  `materialise_quietly` tests in `test_spec_criteria_reach_the_task.py` (`:555`, `:572`) read ORM
+  rows from its result, which is now a `MaterialiseOutcome`.
+- `an-agent-can-be-paused-and-keeps-its-input` (REVISING) adds `Agent.paused_at`, a column, and
+  leaves `lifecycle` at `open | archived` (R3). `delivery_agent_state` answers `ok` for a paused
+  agent unchanged; only archived and unknown agents are stale.
 - **`:8000` skew:** the bundle's report panel reads a field an un-restarted `:8000` does not return.
   It must render nothing when `approval_outcome` is absent, and the strip, absent
   `delivery_status`, never sends `delivery_agent`. Interview text and tool changes reach `:8000`'s

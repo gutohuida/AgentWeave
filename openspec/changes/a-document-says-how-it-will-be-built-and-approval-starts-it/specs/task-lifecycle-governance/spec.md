@@ -2,10 +2,11 @@
 
 ### Requirement: Approval reports what it created and what it could not
 
-Every approval of a change document SHALL record, with the document, a report of what the approval
-did: the tasks it created, the tasks it did not create because existing work already served their
+Every approval of a document SHALL record, with the document, a report of what the approval did: the
+tasks it created, the tasks it did not create because existing work already served their
 requirements, the declared dependencies it could not honour and why, whether creating the board failed
-entirely and why, and whether a flow was created, naming it, or why not. The report SHALL be returned
+entirely and why, and whether a flow was created, naming it, or why not. For a document that is not a
+change document, the report SHALL say that only a change document declares how it will be built. The report SHALL be returned
 when the document is read and shown on the document. Where it reports that no flow was created, it
 SHALL offer to start one only while no unarchived flow declares the document.
 

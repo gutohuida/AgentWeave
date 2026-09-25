@@ -2,8 +2,8 @@
 
 **Round 1, 2026-09-25**, from an interactive explore with the operator on request **R1** (F377).
 Second of two changes; it builds on `a-flow-is-configured-from-its-own-tab`. **Round 2,
-2026-09-25**, re-derived it against the code (design.md, "Round 2"). **Nothing here is
-implemented yet.**
+2026-09-25**, re-derived it against the code (design.md, "Round 2"), and **Round 3** did so again
+(design.md, "Round 3"). **Nothing here is implemented yet.**
 
 ## Why
 
@@ -46,7 +46,8 @@ The operator's decisions from the explore are marked *(operator)*.
   If the flow cannot be created (agent not open on the project, document claimed in a race, bad
   cadence, no stop condition, a stop time already past), **the document is still approved**, and
   the report says why. *(operator)* A flow that already declares the document, as on a re-approval,
-  is reported as the document's flow, not as a refusal (R2). At approval the operator may pick a
+  is reported as the document's flow, not as a refusal (R2), with its state: a flow that stopped
+  when its queue emptied is reported as ended, with the new tasks waiting on it (R3). At approval the operator may pick a
   replacement agent for a stale delivery. The document is not edited; the report records the choice.
 - **The board is always created**, flow or not, as today. *(operator)*
 - **Every approval writes an approval report:** tasks created, tasks skipped as already served,
@@ -79,8 +80,11 @@ The operator's decisions from the explore are marked *(operator)*.
     the stale state.
   - `spec_tasks.py`: savepoint and outcome.
   - `api/v1/jobs.py`: the flow-creation body is extracted into `build_flow_rows`, which flushes
-    and never commits and which both routes call. `POST /jobs` then commits once, so a failed loop
-    insert no longer leaves its job row behind.
+    and never commits or rolls back, and which both routes call. `POST /jobs` then commits once,
+    so a failed loop insert no longer leaves its job row behind, and a claim race answers its 409
+    rather than today's 500 (R3).
+  - `spec_payload.payload_to_dict`: drops an absent `delivery`, so stored payloads keep their bytes
+    (R3).
 - **UI:** `SpecPhaseBar.tsx` (the stale strip and the approve-time agent choice), a new
   `SpecApprovalReport.tsx` in `SpecDocumentPanel.tsx`, `api/spec.ts`, `hooks/useSSE.ts` (loops
   refresh on `job_created`, the document on agent archive), and a bundle refresh.
@@ -95,4 +99,5 @@ The operator's decisions from the explore are marked *(operator)*.
 - **Pinned text:** `hub/tests/test_spec_turn_notice.py` and `test_exploring_interview_medium.py` pin
   the interview wording, and the new question is added beside those pins, not in place of them.
 - **Test churn (R2):** `test_spec_documents_api.py:564` pins one event per approval, which becomes
-  two, and the change-spec fixtures that are proposed in seven test files gain a `delivery`.
+  two, and the change-spec fixtures that reach `proposed` gain a `delivery`: through `propose` in
+  seven files, and with B5 also through the phase route and `transition()` in at least six more (R3).
