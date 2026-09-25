@@ -61,11 +61,19 @@ changing.
 
 #### Scenario: A change of default agent waits for the next firing
 
-- **GIVEN** a loop whose job names agent A, with a firing in progress under A
+- **GIVEN** a loop that declares no specification document, whose job names agent A, with a firing in progress under A
 - **WHEN** the operator changes the default agent to B
 - **THEN** the change is accepted and reported as pending
-- **AND** the job still names A until the next firing, so a Run pressed meanwhile is refused as busy
-- **AND** the next firing applies B, and the change is no longer reported as pending
+- **AND** the job still names A while that firing runs, so a Run pressed meanwhile is refused as busy
+- **AND** the first firing after it applies B, and the change is no longer reported as pending
+
+#### Scenario: A change of default agent away from an agent that cannot work takes effect
+
+- **GIVEN** a loop that declares no specification document, whose job names agent A, with no firing in progress
+- **AND** A's queue is held by a refusal of the provider's usage allowance
+- **WHEN** the operator changes the default agent to B, and the loop's job next fires
+- **THEN** that firing applies B before it asks whether the loop's agent is busy
+- **AND** it proceeds under B rather than being refused because A is held
 
 #### Scenario: A change of default agent moves no work
 
@@ -129,6 +137,13 @@ MUST NOT be editable there. A loop that has ended or been archived SHALL show it
 - **THEN** the save is refused with a reason naming the agent
 - **AND** nothing about the loop changes
 
+#### Scenario: Putting a staged value back is saved as a change
+
+- **GIVEN** a loop whose job names agent A, with a change to B staged and not yet applied
+- **WHEN** the operator opens its settings, which show B as the agent from the next firing, sets A, and saves
+- **THEN** the change to A is sent and staged
+- **AND** the next firing leaves the loop naming A
+
 #### Scenario: An ended loop's settings are read-only
 
 - **GIVEN** a loop that has ended
@@ -146,3 +161,19 @@ agent.
 - **GIVEN** a job with no loop, in resume mode, holding a session from agent A
 - **WHEN** its agent is changed to B
 - **THEN** its next run is B's and does not resume A's session
+
+### Requirement: Only the operator changes which agent a job names
+
+The Hub SHALL refuse a change to the agent a job names when the request comes from an agent's run,
+and SHALL say that only the operator can make it. Other fields an agent may already edit on the same
+route are unaffected.
+
+A job's agent decides who works it, and for a loop whose queue control is delegated to its creator,
+who may add to that queue. An agent that could rename a job's agent could take both for itself.
+
+#### Scenario: An agent's run cannot re-point a loop
+
+- **GIVEN** a project that allows agents to manage jobs, and a loop whose job names agent A
+- **WHEN** a run of agent B asks to change that job's agent to B
+- **THEN** the request is refused, saying only the operator can change which agent a job names
+- **AND** the job still names A and nothing is staged
