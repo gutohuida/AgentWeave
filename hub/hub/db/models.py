@@ -635,6 +635,9 @@ class InboundQueueEntry(Base):
     #: one is the task the run is inspecting. Collapsing them would make a reviewer look like the
     #: task's author to every consumer of the binding.
     review_task_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: The scheduled job that queued this entry, so the cause survives to the dispatch that stages
+    #: the review (`a-flows-own-moves-are-recorded-as-the-flows`, D2). Not a ForeignKey.
+    job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     project: Mapped["Project"] = relationship(back_populates="queue_entries")
 
@@ -841,6 +844,11 @@ class TaskTransition(Base):
     origin: Mapped[str] = mapped_column(
         String(16), default="actor", server_default="actor", nullable=False
     )
+    # The scheduled job that made this move, set exactly when `origin == "job"`. The operator's
+    # authority, a job's cause (`a-flows-own-moves-are-recorded-as-the-flows`). The job and not
+    # the firing: `JobRun` rows are pruned and an append-only record must not name them. Not a
+    # ForeignKey, for the SQLite column-drop trap noted on `Task.spec_document_id`.
+    job_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # A digest of the policy that governed this move: the rigor of each document whose requirements
     # the task serves, and the coverage each of those requirements held.
     #

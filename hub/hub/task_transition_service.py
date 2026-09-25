@@ -562,7 +562,11 @@ def guard_entry_status(status: str) -> None:
 #: (`2026-08-10-run-task-binding`, design D5).
 ORIGIN_ACTOR = "actor"
 ORIGIN_RUNTIME = "runtime"
-ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME})
+#: A scheduled job made the move: the operator's authority (the actor stays the operator), a job's
+#: cause, recorded with the job's id (`a-flows-own-moves-are-recorded-as-the-flows`). The operator
+#: created the job, so it acts as them, as `runtime` acts as the run.
+ORIGIN_JOB = "job"
+ORIGINS = frozenset({ORIGIN_ACTOR, ORIGIN_RUNTIME, ORIGIN_JOB})
 
 
 async def apply_transition(
@@ -571,6 +575,7 @@ async def apply_transition(
     to_status: str,
     actor: Actor,
     origin: str = ORIGIN_ACTOR,
+    job_id: Optional[str] = None,
 ) -> Optional[TaskTransition]:
     """Move `task` to `to_status` as `actor`, recording it. Returns None when nothing changed.
 
@@ -588,6 +593,10 @@ async def apply_transition(
     """
     if origin not in ORIGINS:
         raise ValueError(f"origin must be one of {sorted(ORIGINS)}, got {origin!r}")
+    if (origin == ORIGIN_JOB) != (job_id is not None):
+        raise ValueError("job_id is required with origin 'job' and forbidden with any other origin")
+    if origin == ORIGIN_JOB and not actor.is_operator:
+        raise ValueError("origin 'job' acts as the operator; a run actor cannot carry it")
 
     from_status = task.status
 
@@ -689,6 +698,7 @@ async def apply_transition(
         run_id=actor.run_id,
         actor_agent=actor.agent,
         origin=origin,
+        job_id=job_id,
         # What governed this move. Null where no policy did — a fact about the transition rather
         # than a gap in it.
         policy_digest=policy or None,
@@ -698,7 +708,7 @@ async def apply_transition(
     transition.reported_advisories = reported
     session.add(transition)
 
-    if origin == ORIGIN_ACTOR:
+    if origin != ORIGIN_RUNTIME:
         # A divergence is an open condition, not a verdict: work reaching the ledger closes it,
         # whoever brought it there. Resolved here, inside the one function every accepted
         # transition passes through, so no caller can move a task by a route that leaves a stale

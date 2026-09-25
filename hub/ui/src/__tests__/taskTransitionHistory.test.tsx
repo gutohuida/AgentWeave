@@ -82,6 +82,34 @@ describe('a task’s transition history', () => {
     expect(text).not.toContain('under policy null')
   })
 
+  it('attributes a scheduled job’s move to the flow or loop, whatever order the rows arrive in', () => {
+    const job = (id: string, sequence: number, kind: 'flow' | 'loop', name: string) => ({
+      ...ROWS[0],
+      id,
+      sequence,
+      origin: 'job',
+      job_id: `job-${id}`,
+      job_name: name,
+      job_kind: kind,
+    })
+    const flowRow = job('ttr-f', 1, 'flow', 'Ship it')
+    const loopRow = job('ttr-l', 2, 'loop', 'Tidy')
+    for (const order of [
+      [flowRow, loopRow, ROWS[0]],
+      [ROWS[0], loopRow, flowRow],
+    ]) {
+      rows = order as typeof ROWS
+      render(<TaskTransitionHistory taskId="task-1" open />)
+      const lines = Array.from(
+        screen.getByTestId('task-transitions-task-1').querySelectorAll('li'),
+      ).map((li) => li.textContent ?? '')
+      expect(lines.filter((l) => l.includes('Flow Ship it moved'))).toHaveLength(1)
+      expect(lines.filter((l) => l.includes('Loop Tidy moved'))).toHaveLength(1)
+      expect(lines.filter((l) => l.includes('You moved'))).toHaveLength(1)
+      cleanup()
+    }
+  })
+
   it('renders nothing for a task whose history predates the table', () => {
     rows = []
     render(<TaskTransitionHistory taskId="task-1" open />)

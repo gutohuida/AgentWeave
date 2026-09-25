@@ -145,7 +145,11 @@ from ...scheduler import (
 from ...schemas.common import RequestModel
 from ...spec_manifest import SpecPathError, validate_spec_path
 from ...sse import sse_manager
-from ...task_transition_service import TransitionRefusedError
+from ...task_transition_service import (
+    ORIGIN_ACTOR,
+    ORIGIN_JOB,
+    TransitionRefusedError,
+)
 from ...usage_accounting import record_turn_usage
 from ...utils import persist_event, short_id
 
@@ -460,6 +464,37 @@ async def _review_task_from_entries(
             request_level=True,
         )
     return review_task_id
+
+
+async def _review_cause_from_entries(
+    session: AsyncSession, queue_entry_ids: Optional[List[str]], review_task_id: str
+) -> "tuple[str, Optional[str]]":
+    """The `(origin, job_id)` a review staged for `review_task_id` is recorded with.
+
+    Read off the delivered entries that name the task (`a-flows-own-moves-are-recorded-as-the-flows`,
+    D-context): an operator entry among them means the operator asked (`actor`, as before);
+    otherwise an entry a scheduled job queued means the job did. A divergence restaff, or a review
+    named by the request alone, stays the operator's request -- a cause this change does not name.
+    """
+    if not queue_entry_ids:
+        return ORIGIN_ACTOR, None
+    from sqlalchemy import select
+
+    from ...db.models import InboundQueueEntry
+
+    result = await session.execute(
+        select(InboundQueueEntry.origin_type, InboundQueueEntry.job_id).where(
+            InboundQueueEntry.id.in_(queue_entry_ids),
+            InboundQueueEntry.review_task_id == review_task_id,
+        )
+    )
+    rows = result.all()
+    if any(origin_type == "operator" for origin_type, _ in rows):
+        return ORIGIN_ACTOR, None
+    for origin_type, job_id in rows:
+        if origin_type == "job" and job_id:
+            return ORIGIN_JOB, job_id
+    return ORIGIN_ACTOR, None
 
 
 async def review_dispatch_refusal(
@@ -896,7 +931,17 @@ async def _trigger_agent_directly(
                 request_level=True,
             )
         try:
-            await enter_selected_task(session, review_task, agent=agent, is_review=True)
+            review_origin, review_job_id = await _review_cause_from_entries(
+                session, queue_entry_ids, review_task.id
+            )
+            await enter_selected_task(
+                session,
+                review_task,
+                agent=agent,
+                is_review=True,
+                origin=review_origin,
+                job_id=review_job_id,
+            )
         except TransitionRefusedError as exc:
             # The guard's own sentence, not a restatement of it: it already names the remedy for
             # whichever actor is asking (design D4), and the operator meets the same words here as

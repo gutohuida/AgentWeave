@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "8a5d0ed",
     "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-24-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "flows-own-moves-impl",
-    "next_action": "Do queue item flows-own-moves-impl (build per its tasks.md, 22 tasks, migration; size to finish this turn, split into parts if needed and say so in the queue detail). First read CI verdict for the previous push sha via gh run list and write it on the log entry's first line. Run the full hub suite once (~31 min, run_in_background, nothing concurrent; poll with bounded sleep loops so the process stays alive) only when the build is complete.",
+    "current": "night-drive",
+    "next_action": "Do queue item night-drive: fresh profile drive0925, port chosen after netstat (never 8000/8010 of the operator), Haiku only. Drive every changed surface tonight (F133 status route, tool-server pin, pressing Run reasons, checkpoint handover, event-after-commit, job_run_id, flow-moves history drawer); record in FINDINGS.md. Size it to this turn; split into parts and say so in the queue detail if needed. Read CI verdict for d4c7c73 and the new push sha first and write it on the log entry's first line. Set next_action to null when the queue is finished.",
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "flows-own-moves-impl",
-            "status": "open",
+            "status": "done",
             "title": "a-flows-own-moves-are-recorded-as-the-flows",
-            "detail": "Build per tasks.md (22 tasks). Migration. Signature enter_selected_task(..., origin, job_id)."
+            "detail": "Done iteration 9: code, migration 0107, tests, UI + bundle; full hub suite 4841 passed. 0.3 DECISIONS.md entry, 3.2 drive, 3.3 archive left to night-drive."
         },
         {
             "id": "night-drive",

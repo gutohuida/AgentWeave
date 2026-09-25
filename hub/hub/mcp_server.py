@@ -324,8 +324,9 @@ def task_history(task_id: str) -> Dict[str, Any]:
 
     Answers `{"transitions": [...]}`, oldest first. Each entry carries `from_status`, `to_status`,
     whether the operator or a run asked (`actor_kind`), which agent's run it was (`actor_agent`),
-    whether the Hub moved it on that run's behalf (`origin: "runtime"`), and the digest of the
-    policy that governed it. The task's own fields cannot answer this: they hold only the latest
+    whether the Hub moved it on that run's behalf (`origin: "runtime"`) or a scheduled loop or flow
+    did (`origin: "job"`, with `job_id`, `job_name` and `job_kind`), and the digest of the policy
+    that governed it. The task's own fields cannot answer this: they hold only the latest
     run that touched it, so "who completed this, and who approved it?" is unanswerable from them.
 
     Args:

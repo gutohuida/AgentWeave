@@ -339,19 +339,22 @@ async def test_no_judgement_in_the_chain_was_the_operators(
         f"{[(t.task_id, t.to_status) for t in judgements if t.actor_kind == ACTOR_OPERATOR]}"
     )
 
-    # And the operator-attributed rows are exactly the flow's own claims — the misattribution
-    # above, pinned so that fixing it, or a genuine operator action appearing, both fail here.
-    operator_rows = {
-        (t.task_id, t.to_status) for t in transitions if t.actor_kind == ACTOR_OPERATOR
-    }
-    assert operator_rows == {
+    # The flow's own claims are the *flow's*, not the operator's: still the operator's authority
+    # (`actor_kind`), but recorded with the cause and the job (`a-flows-own-moves-are-recorded-as-
+    # the-flows`, F47/F120). This pin used to assert the misattribution; it now fails if the
+    # attribution reverts, or if a genuine operator action appears in the chain.
+    job_rows = {(t.task_id, t.to_status) for t in transitions if t.origin == "job"}
+    assert job_rows == {
         ("task-chain-b", "assigned"),
         ("task-chain-a", "under_review"),
     }, (
-        "the only operator-attributed transitions should be the flow's own routing — claiming B, "
-        "and entering A's review (finding F45) — and anything else is either a real operator "
-        "action in the chain or the attribution having changed"
+        "the only job-caused transitions should be the flow's own routing — claiming B, and "
+        "entering A's review (finding F45)"
     )
+    assert all(t.job_id == job.id for t in transitions if t.origin == "job")
+    assert not [
+        t for t in transitions if t.actor_kind == ACTOR_OPERATOR and t.origin == "actor"
+    ], "an operator-attributed `actor` row in the chain is a real operator action, or the flow's move misrecorded"
 
 
 async def test_the_reviewer_reaches_its_verdict_from_the_checkout(

@@ -1613,7 +1613,9 @@ async def land_task(
     )
 
 
-def _transition_view(row) -> dict:  # noqa: ANN001 - a `TaskTransition` row
+def _transition_view(
+    row, jobs: Optional[dict] = None  # noqa: ANN001 - a `TaskTransition` row
+) -> dict:
     """One recorded move, in the words the table records it in.
 
     `sequence` is included because it, not `created_at`, is what orders the history: several
@@ -1630,6 +1632,11 @@ def _transition_view(row) -> dict:  # noqa: ANN001 - a `TaskTransition` row
         "actor_agent": row.actor_agent,
         "run_id": row.run_id,
         "origin": row.origin,
+        # The scheduled job behind an `origin == "job"` move, by name and kind: `"flow"` when its
+        # loop draws from a specification document, else `"loop"`. `None` where the job is gone.
+        "job_id": row.job_id,
+        "job_name": (jobs or {}).get(row.job_id, (None, None))[0],
+        "job_kind": (jobs or {}).get(row.job_id, (None, None))[1],
         # What governed the move: the rigor of each document the task serves and the coverage its
         # requirements held. Written on every gated transition and, until this route, readable by
         # nobody (F203).
@@ -1659,7 +1666,17 @@ async def task_transitions(
     if task is None or task.project_id != project_id:
         raise HTTPException(status_code=404, detail="Task not found")
     rows = await history_for(session, task_id)
-    return {"transitions": [_transition_view(row) for row in rows]}
+    job_ids = {row.job_id for row in rows if row.job_id}
+    jobs: dict = {}
+    if job_ids:
+        found = await session.execute(
+            select(AIJob.id, AIJob.name, Loop.spec_document_id)
+            .outerjoin(Loop, Loop.job_id == AIJob.id)
+            .where(AIJob.id.in_(job_ids))
+        )
+        for job_id, name, spec_document_id in found.all():
+            jobs[job_id] = (name, "flow" if spec_document_id else "loop")
+    return {"transitions": [_transition_view(row, jobs) for row in rows]}
 
 
 @router.get("/transitions/allowed")

@@ -494,3 +494,55 @@ def test_only_the_binding_module_may_record_a_runtime_transition():
     assert offenders == [], (
         "only the run→task binding may record a runtime-caused transition, " f"found: {offenders}"
     )
+
+
+def test_only_the_scheduler_and_the_dispatch_may_name_the_job_origin():
+    """1.5 — AST-based, not a text search: the MCP `task_history` docstring names `origin: "job"`.
+
+    (a) `ORIGIN_JOB` appears only where a job's cause is recorded or read; (b) no call passes
+    `origin=` the literal `"job"`; (c) every staging call and queue entry in `scheduler.py` carries
+    the job. A staging call that dropped `job_id` would raise at runtime only in the branch that
+    reaches it, which is why it is read here.
+    """
+    import ast
+    from pathlib import Path
+
+    hub_package = Path(__file__).resolve().parents[1] / "hub"
+    permitted = {"scheduler.py", "task_transition_service.py", "agent_trigger.py"}
+    symbol_offenders, literal_offenders, call_offenders = [], [], []
+    for path in hub_package.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Name):
+                names = [node.id]
+            elif isinstance(node, ast.Attribute):
+                names = [node.attr]
+            elif isinstance(node, ast.ImportFrom):
+                names = [alias.name for alias in node.names]
+            if "ORIGIN_JOB" in names and path.name not in permitted:
+                symbol_offenders.append(f"{path.name}:{node.lineno}")
+            if isinstance(node, ast.Call):
+                func = node.func
+                callee = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+                # `new_conversation(origin="job")` is a conversation's origin, a different thing.
+                for kw in (
+                    node.keywords if callee in ("apply_transition", "enter_selected_task") else ()
+                ):
+                    if (
+                        kw.arg == "origin"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value == "job"
+                    ):
+                        literal_offenders.append(f"{path.name}:{node.lineno}")
+                if path.name == "scheduler.py":
+                    keywords = {kw.arg for kw in node.keywords}
+                    if callee == "enter_selected_task" and not {"origin", "job_id"} <= keywords:
+                        call_offenders.append(f"enter_selected_task:{node.lineno}")
+                    if callee == "new_entry" and "job_id" not in keywords:
+                        call_offenders.append(f"new_entry:{node.lineno}")
+    assert symbol_offenders == [], f"ORIGIN_JOB outside the permitted modules: {symbol_offenders}"
+    assert (
+        literal_offenders == []
+    ), f"origin='job' as a literal, use ORIGIN_JOB: {literal_offenders}"
+    assert call_offenders == [], f"a scheduler staging call without the job: {call_offenders}"

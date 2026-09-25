@@ -37,8 +37,20 @@ export function TaskTransitionHistory({ taskId, open }: { taskId: string; open: 
         {rows.map((row) => {
           // "the operator" and "a run" are different claims, and `actor_kind` is recorded rather
           // than inferred from `run_id` being null, so it is what is shown.
+          //
+          // A scheduled job's move keeps the operator's authority (`actor_kind`) and records its own
+          // cause: read from `origin`, never from position (F190). `job_kind` says whether the
+          // job's loop draws from a specification, which is what makes it a flow.
           const who =
-            row.actor_kind === 'operator' ? 'You' : row.actor_agent ? row.actor_agent : 'A run'
+            row.origin === 'job'
+              ? row.job_name
+                ? `${row.job_kind === 'flow' ? 'Flow' : 'Loop'} ${row.job_name}`
+                : 'A scheduled job'
+              : row.actor_kind === 'operator'
+                ? 'You'
+                : row.actor_agent
+                  ? row.actor_agent
+                  : 'A run'
           // `runtime` means the Hub made the move on the run's behalf at a moment the run did not
           // choose. Saying "moved" for that would credit a decision nobody made.
           const verb = row.origin === 'runtime' ? 'was moved for' : 'moved'

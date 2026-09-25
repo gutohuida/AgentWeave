@@ -2601,6 +2601,8 @@ of recording this separately.
 
 ## F47 (C) — the flow's own routing is recorded as the operator's
 
+**Status (2026-09-25, night iteration 9): fixed in code** by `a-flows-own-moves-are-recorded-as-the-flows` — a scheduled job's staging move (loop, flow, manual Run press, and a review delivered late from a job-queued entry) is recorded `actor_kind=operator`, `origin="job"`, with `job_id`; not a third actor kind (D8). `GET /tasks/{id}/transitions` adds `job_id`/`job_name`/`job_kind`; the history drawer reads "Flow X moved" / "Loop X moved". Tests: `hub/tests/test_a_flows_moves_are_the_flows.py` (mutation to `actor` fails four), the AST scan in `test_task_transitions.py`, the un-pinned `test_flow_chain_end_to_end.py`. Old rows unchanged. Not driven on a live Hub yet (night-drive).
+
 **Status:** open — deliberately not fixed in F45's change; the honest repair is a third actor kind, and it is pinned by test_flow_chain_end_to_end.py
 
 Recorded 2026-08-25 while fixing F45, which **extended** this defect rather than introducing it.
@@ -8788,6 +8790,8 @@ operator's call. **Open question for the operator: should the CLI's catch-all be
 ---
 
 ## F120 (C) — a flow's claim of a task is recorded as an operator's transition, by nobody
+
+**Status (2026-09-25, night iteration 9): fixed in code** by `a-flows-own-moves-are-recorded-as-the-flows` — a scheduled job's staging move (loop, flow, manual Run press, and a review delivered late from a job-queued entry) is recorded `actor_kind=operator`, `origin="job"`, with `job_id`; not a third actor kind (D8). `GET /tasks/{id}/transitions` adds `job_id`/`job_name`/`job_kind`; the history drawer reads "Flow X moved" / "Loop X moved". Tests: `hub/tests/test_a_flows_moves_are_the_flows.py` (mutation to `actor` fails four), the AST scan in `test_task_transitions.py`, the un-pinned `test_flow_chain_end_to_end.py`. Old rows unchanged. Not driven on a live Hub yet (night-drive).
 
 **Status:** open, filed not fixed. Confirms `SURVEY.md`'s code-read suspicion **S6**, unverified
 since 2026-08-23.

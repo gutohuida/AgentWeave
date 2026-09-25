@@ -179,6 +179,10 @@ export interface TaskTransition {
   actor_agent: string | null
   run_id: string | null
   origin: string
+  /** Set with `origin: 'job'`: the scheduled job that made the move, and whether it is a flow. */
+  job_id?: string | null
+  job_name?: string | null
+  job_kind?: 'flow' | 'loop' | null
   policy_digest: string | null
   created_at: string | null
 }

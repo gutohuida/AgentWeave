@@ -46,7 +46,7 @@ from .run_task_binding import (
 )
 from .runner_events import redact_secrets
 from .sse import sse_manager
-from .task_transition_service import apply_transition
+from .task_transition_service import ORIGIN_ACTOR, ORIGIN_JOB, apply_transition
 from .task_transitions import (
     CLAIMABLE_STATUSES,
     CURRENT_ITEM_STATUSES,
@@ -868,7 +868,13 @@ async def _first_startable_candidate(
 
 
 async def enter_selected_task(
-    session: AsyncSession, task: Task, *, agent: str, is_review: bool
+    session: AsyncSession,
+    task: Task,
+    *,
+    agent: str,
+    is_review: bool,
+    origin: str = ORIGIN_ACTOR,
+    job_id: Optional[str] = None,
 ) -> None:
     """Move *task* into the status its selection implies, and record who holds it.
 
@@ -927,9 +933,11 @@ async def enter_selected_task(
             # the author, and no edge is travelled.
             pass
         elif task.status in REVIEWABLE_LOOP_TASK_STATUSES:
-            await apply_transition(session, task, "under_review", operator())
+            await apply_transition(
+                session, task, "under_review", operator(), origin=origin, job_id=job_id
+            )
     elif task.status == "pending":
-        await apply_transition(session, task, "assigned", operator())
+        await apply_transition(session, task, "assigned", operator(), origin=origin, job_id=job_id)
 
 
 async def _claim_loop_task(session: AsyncSession, loop: Loop, *, agent: str) -> "list[Task]":
@@ -3362,6 +3370,8 @@ class JobScheduler:
                         claimed_task,
                         agent=selection.agent,
                         is_review=selection.is_review,
+                        origin=ORIGIN_JOB,
+                        job_id=job.id,
                     )
                 # `selection` is None on the "never filled" queue — no task, but the firing still
                 # proceeds, because filling the queue is the agent's job (`_loop_stall_reason`).
@@ -3431,6 +3441,7 @@ class JobScheduler:
                 origin_type="job",
                 content=content,
                 hop_depth=0,
+                job_id=job.id,
                 session_mode=job.session_mode,
                 session_id=resume_session_id,
                 conversation_id=conversation.id,
@@ -3730,7 +3741,9 @@ class JobScheduler:
 
         # Shared with `_do_fire_job`'s primary path — see `enter_selected_task` for why the review
         # half cannot live in only one of the two (finding F45).
-        await enter_selected_task(session, task, agent=agent, is_review=is_review)
+        await enter_selected_task(
+            session, task, agent=agent, is_review=is_review, origin=ORIGIN_JOB, job_id=job.id
+        )
 
         conversation = new_conversation(project_id=job.project_id, agent=agent, origin="job")
         session.add(conversation)
@@ -3763,6 +3776,7 @@ class JobScheduler:
             origin_type="job",
             content=f"{briefing}\n{job.message}",
             hop_depth=0,
+            job_id=job.id,
             session_mode=job.session_mode,
             session_id=None,
             conversation_id=conversation.id,

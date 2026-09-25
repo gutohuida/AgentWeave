@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0106"
+HEAD_REVISION = "0107"
 
 
 # ---------------------------------------------------------------------------
@@ -1293,6 +1293,7 @@ def test_task_transitions_lands_on_the_real_startup_path(tmp_path) -> None:
             "run_id",
             "actor_agent",
             "origin",
+            "job_id",
             # What governed the move, added by 0069. Null except on an approval a gate evaluated.
             "policy_digest",
             "created_at",
@@ -3754,6 +3755,74 @@ def test_migration_0106_downgrade_drops_the_column_and_the_index(tmp_path) -> No
         indexes = {r[1] for r in conn.execute("PRAGMA index_list(checkpoints)")}
     assert "cut_over_to_conversation_id" not in columns
     assert "ix_checkpoints_one_handover_per_conversation" not in indexes
+
+
+# ---------------------------------------------------------------------------
+# 0107 — a job's move records the job (F47, F120)
+# ---------------------------------------------------------------------------
+
+
+def _database_at_0106(tmp_path, name: str) -> tuple:
+    """Every table from the models, minus what 0107 adds, stamped at 0106."""
+    db_file = tmp_path / name
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("ALTER TABLE task_transitions DROP COLUMN job_id")
+        conn.execute("ALTER TABLE inbound_queue_entries DROP COLUMN job_id")
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0106')")
+        conn.commit()
+    return db_file, db_url
+
+
+def _job_id_columns_0107(db_file: Path) -> dict:
+    with sqlite3.connect(db_file) as conn:
+        return {
+            table: "job_id" in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            for table in ("task_transitions", "inbound_queue_entries")
+        }
+
+
+def test_migration_0107_adds_job_id_to_both_tables_and_keeps_the_rows(tmp_path) -> None:
+    db_file, db_url = _database_at_0106(tmp_path, "up_0107.db")
+    assert _job_id_columns_0107(db_file) == {
+        "task_transitions": False,
+        "inbound_queue_entries": False,
+    }
+    _upgrade_to(db_url, "0107")
+    assert _job_id_columns_0107(db_file) == {
+        "task_transitions": True,
+        "inbound_queue_entries": True,
+    }
+
+
+def test_migration_0107_is_guarded_when_the_tables_do_not_exist(tmp_path) -> None:
+    db_file = tmp_path / "no_tables_0107.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    with sqlite3.connect(db_file) as conn:
+        conn.execute("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)")
+        conn.execute("INSERT INTO alembic_version (version_num) VALUES ('0106')")
+        conn.commit()
+    _upgrade_to(db_url, "0107")
+    with sqlite3.connect(db_file) as conn:
+        assert conn.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0107"
+
+
+def test_migration_0107_downgrade_drops_both_columns(tmp_path) -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    db_file, db_url = _database_at_0106(tmp_path, "down_0107.db")
+    _upgrade_to(db_url, "0107")
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0106")
+    assert _job_id_columns_0107(db_file) == {
+        "task_transitions": False,
+        "inbound_queue_entries": False,
+    }
 
 
 # ---------------------------------------------------------------------------
