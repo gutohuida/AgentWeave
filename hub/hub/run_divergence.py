@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +60,9 @@ from .run_task_binding import (
 from .sse import defer_broadcast, sse_manager
 from .task_transitions import ACTOR_RUN, STATUS_BLOCKED, allowed_targets
 from .utils import persist_event, short_id
+
+if TYPE_CHECKING:
+    from .requirement_gate import ApprovalHold
 
 logger = logging.getLogger(__name__)
 
@@ -420,10 +423,24 @@ async def _answer_failed_review(
     # Local imports, matching `scheduler._task_is_claimable_by`'s own: this module is imported by
     # the trigger path that `scheduler` also reaches, and the module docstring's line about keeping
     # the deciding half free of the spawning half is what these keep true.
+    from .requirement_gate import approval_held_for_operator
     from .scheduler import resolve_reviewer
     from .task_transition_service import agents_that_may_have_authored, completion_attribution
 
+    # A refused approval is not "no verdict" (`F374-fix`): where the gate refuses for a reason only
+    # the operator can remove, a second reviewer would meet the same refusal, so nobody is asked.
+    held_any = await approval_held_for_operator(session, task, candidate=None)
+
     if await _review_was_declared(session, run, task):
+        if held_any is not None:
+            held_declared = await approval_held_for_operator(session, task, candidate=run.agent)
+            if held_declared is not None:
+                return (
+                    OUTCOME_SURFACED,
+                    None,
+                    None,
+                    _held_review_reason(run, task, held_declared),
+                )
         return (
             OUTCOME_SURFACED,
             None,
@@ -461,6 +478,16 @@ async def _answer_failed_review(
         project_id=run.project_id,
         exclude=exclude,
     )
+    if held_any is not None:
+        # Restaff only where the chosen agent can itself decide the evidence.
+        held_chosen = (
+            await approval_held_for_operator(session, task, candidate=choice.agent)
+            if choice.agent is not None
+            else held_any
+        )
+        if held_chosen is not None:
+            return OUTCOME_SURFACED, None, None, _held_review_reason(run, task, held_chosen)
+
     if choice.agent is None:
         # Rung 3, or a declaration that appeared since. Either way nobody is fired and the reason
         # comes from the resolver unchanged, so the operator reads why rather than that something
@@ -486,6 +513,14 @@ async def _answer_failed_review(
         diverged_run=run,
     )
     return OUTCOME_RESTAFFED, choice.agent, previous_assignee, None
+
+
+def _held_review_reason(run: Run, task: Task, hold: "ApprovalHold") -> str:
+    """D4: a review that ended without a verdict where no reviewer can approve until the operator acts."""
+    return (
+        f"{run.agent}'s review of {task.id} ended without a verdict, and no reviewer can approve "
+        f"it until you act: {hold.detail} Nobody else has been asked to review it."
+    )
 
 
 def _failed_review_prompt(task: Task, diverging_run: Run) -> str:

@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Mapping, NamedTuple, Optional, Sequence, Set
+from typing import TYPE_CHECKING, Any, Dict, Mapping, NamedTuple, Optional, Sequence, Set
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -54,6 +54,9 @@ from .task_transitions import (
     operator,
 )
 from .utils import persist_event, short_id
+
+if TYPE_CHECKING:
+    from .requirement_gate import ApprovalHold
 
 logger = logging.getLogger(__name__)
 
@@ -1845,21 +1848,27 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                         # one task. The F64 promotion replaces it before the decision is built.
                         surfaced_rows.add(task.id)
                         refusal = attendance.refusal(task.id, task.assignee)
-                        unstaffed.append(
-                            (
-                                task.id,
-                                (
-                                    _wedged_review_reason(task, task.assignee)
-                                    if refusal is None
-                                    else _refused_review_reason(
-                                        task,
-                                        task.assignee,
-                                        refusal,
-                                        attendance.refused_here(task.id, task.assignee),
-                                    )
-                                ),
+                        # A refused delivery first, then approval held for the operator, then the
+                        # generic wedge: "ask them again" would meet the same refusal.
+                        if refusal is not None:
+                            reason = _refused_review_reason(
+                                task,
+                                task.assignee,
+                                refusal,
+                                attendance.refused_here(task.id, task.assignee),
                             )
-                        )
+                        else:
+                            from .requirement_gate import approval_held_for_operator
+
+                            hold = await approval_held_for_operator(
+                                session, task, candidate=task.assignee
+                            )
+                            reason = (
+                                _wedged_review_reason(task, task.assignee)
+                                if hold is None
+                                else _approval_held_reason(task, task.assignee, hold)
+                            )
+                        unstaffed.append((task.id, reason))
             if not wedged_review:
                 continue
 
@@ -2312,6 +2321,26 @@ def _refused_work_reason(task: Task, agent: str, refusal: str, refused_here: boo
         )
 
     return _fit_sentence(_sentence, task.title, refusal)
+
+
+def _approval_held_reason(task: Task, reviewer: str, hold: "ApprovalHold") -> str:
+    """A review nobody is doing because the gate's refusal is the operator's to lift (D3).
+
+    Remedy first, and never the part cut: the fit trims the title, not the remedy.
+    """
+
+    def _sentence(title: str) -> str:
+        return (
+            f"Approval of {task.id} ({title!r}) waits on you: {hold.remedy}. {reviewer} is named "
+            f"as its reviewer and cannot approve it until then."
+        )
+
+    title = task.title
+    text = _sentence(title)
+    while len(text) > JOB_RUN_ERROR_SUMMARY_CHARS and title:
+        title = title[:-1]
+        text = _sentence(title + "…")
+    return text
 
 
 def _wedged_review_reason(task: Task, reviewer: str) -> str:

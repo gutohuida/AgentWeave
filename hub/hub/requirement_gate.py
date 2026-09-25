@@ -23,6 +23,9 @@ one.
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -406,9 +409,11 @@ async def _merge_situation(session: AsyncSession, task: Task) -> Optional["_Merg
         return None
 
     root = workspace.root
-    if not task_integration.is_repository(root):
+    # Off the event loop: a hung git must delay the request that asked, not the Hub (the four git
+    # call sites `approval_held_for_operator` reaches). None of them touches the session.
+    if not await asyncio.to_thread(task_integration.is_repository, root):
         return None
-    if not task_integration.branch_exists(root, project.main_branch):
+    if not await asyncio.to_thread(task_integration.branch_exists, root, project.main_branch):
         return None
 
     return _MergeSituation(
@@ -434,8 +439,11 @@ async def _check_mergeable(
     from . import task_integration
 
     for target in situation.will_merge:
-        paths = task_integration.would_conflict(
-            situation.root, target.commit_sha, situation.main_branch
+        paths = await asyncio.to_thread(
+            task_integration.would_conflict,
+            situation.root,
+            target.commit_sha,
+            situation.main_branch,
         )
         if not paths:
             continue
@@ -701,3 +709,103 @@ async def evaluate(
             )
 
     return refusal, spec_rigor.policy_digest(policy)
+
+
+# --------------------------------------------------------------------------------------
+# Approval held for the operator (`a-review-no-reviewer-can-approve-goes-to-the-operator`, D1)
+# --------------------------------------------------------------------------------------
+
+logger = logging.getLogger(__name__)
+
+EVIDENCE_HOLD_REMEDY = (
+    "accept or reject the evidence waiting on it, or grant an agent the decision on evidence"
+)
+DIAGNOSTIC_HOLD_REMEDY = (
+    "a requirement it serves cannot be satisfied as written; correct the document"
+)
+DRIFT_HOLD_REMEDY = "resolve the drift candidate on a requirement it serves"
+
+
+@dataclass(frozen=True)
+class ApprovalHold:
+    """A refusal of approval that no reviewer can remove — only the operator can."""
+
+    detail: str  # the gate's own `refusal.detail()`, or the could-not-ask-git sentence
+    remedy: str  # the remedy clause for the category that holds it
+    refusal: Optional[GateRefusal]  # None only for the could-not-ask-git hold
+
+
+def _could_not_ask_git(reason: str) -> ApprovalHold:
+    return ApprovalHold(
+        detail=("the Hub could not ask git whether this task's work would merge: " f"{reason}"),
+        remedy=(
+            f"the Hub could not ask git whether its work would merge ({reason}); check the "
+            "project's repository, then approve it yourself or send it back"
+        ),
+        refusal=None,
+    )
+
+
+def _operator_only_remedy(refusal: GateRefusal, *, may_accept: bool) -> Optional[str]:
+    """The remedy of the first category of *refusal* the candidate cannot remove, else `None`."""
+    if refusal.diagnostics:
+        return DIAGNOSTIC_HOLD_REMEDY
+    for entry in refusal.blocking:
+        if entry.get("state") == requirement_coverage.DRIFTING:
+            return DRIFT_HOLD_REMEDY
+    if may_accept:
+        return None
+    if refusal.unaccepted:
+        return EVIDENCE_HOLD_REMEDY
+    for entry in refusal.blocking:
+        if entry.get("state") == requirement_coverage.AWAITING_REVIEW:
+            return EVIDENCE_HOLD_REMEDY
+    return None
+
+
+async def approval_held_for_operator(
+    session: AsyncSession, task: Task, *, candidate: Optional[str]
+) -> Optional[ApprovalHold]:
+    """A hold where approval of *task* is refused for a reason only the operator can remove.
+
+    Asks `evaluate`, the function the transition asks, so the two cannot disagree. Read-only, run
+    inside a savepoint, and bounded: each git spawn on its path is capped at
+    `DIAGNOSTIC_GIT_TIMEOUT_SECONDS` and runs off the event loop. Answers `None` without calling
+    `evaluate` where nothing could hold it — no evidence awaiting, no `gate`-rigor document.
+
+    Three answers to a raise: git could not be asked (`TimeoutExpired`, `OSError`) is held for the
+    operator whatever the candidate is granted; anything else is logged at warning and is "not
+    held", so no caller fails because a diagnostic could not be computed.
+    """
+    from . import requirement_evidence, task_integration
+    from .spec_lifecycle import Actor
+
+    try:
+        awaiting = await task_integration.awaiting_targets(session, task)
+        _, rigors = await _enforced_requirements(session, task)
+        if not awaiting and spec_rigor.GATE not in rigors.values():
+            return None
+
+        token = task_integration.GIT_TIMEOUT_SECONDS.set(
+            task_integration.DIAGNOSTIC_GIT_TIMEOUT_SECONDS
+        )
+        try:
+            async with session.begin_nested():
+                refusal, _ = await evaluate(session, task, acting_run_id=None)
+        finally:
+            task_integration.GIT_TIMEOUT_SECONDS.reset(token)
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return _could_not_ask_git(f"{type(exc).__name__}: {exc}")
+    except Exception:
+        logger.warning("approval hold for task %s could not be computed", task.id, exc_info=True)
+        return None
+
+    if not refusal.refuses:
+        return None
+    granted = bool(candidate) and await requirement_evidence.may_accept(
+        session, task.project_id, Actor(kind="agent", name=candidate or "")
+    )
+    remedy = _operator_only_remedy(refusal, may_accept=granted)
+    if remedy is None:
+        return None
+    return ApprovalHold(detail=refusal.detail(), remedy=remedy, refusal=refusal)

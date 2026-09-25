@@ -23,6 +23,8 @@ feature unable to damage anything shared, and it is asserted by test as well as 
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import logging
 import subprocess
 from dataclasses import dataclass, field
@@ -133,13 +135,23 @@ def is_retryable(outcome: str, reason: str) -> bool:
     return any(stem in reason for stem in _RETRYABLE_STEMS)
 
 
+# How long one git spawn may take. A `ContextVar` so a diagnostic read (the approval-hold predicate,
+# `requirement_gate.approval_held_for_operator`) can bound its own spawns at
+# `DIAGNOSTIC_GIT_TIMEOUT_SECONDS` without changing the transition's or `integrate`'s 60 seconds.
+# `asyncio.to_thread` copies the context, so a spawn moved off the loop reads the caller's value.
+GIT_TIMEOUT_SECONDS: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "git_timeout_seconds", default=60
+)
+DIAGNOSTIC_GIT_TIMEOUT_SECONDS = 5
+
+
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args],
         cwd=str(root),
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=GIT_TIMEOUT_SECONDS.get(),
         check=False,
         **no_console_kwargs(),
     )
@@ -399,7 +411,7 @@ async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[T
     """
     if await evidence_governs(session, task):
         return await integration_targets(session, task)
-    tip = task_branch_tip(root, task.id)
+    tip = await asyncio.to_thread(task_branch_tip, root, task.id)
     if tip is None:
         return []
     # The three evidence fields stay None: there is no evidence row to point at, and `Target`'s
