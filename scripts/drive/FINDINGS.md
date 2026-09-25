@@ -29885,7 +29885,7 @@ product can actually produce.
 
 ## F368 (B) — a flow re-briefs an assigned, idle agent on every tick while that agent's queued turn cannot start
 
-**Status:** open. Filed 2026-09-14 by the day window's `f355-r2`. **Code read, not driven.** The held
+**Status:** fixed 9fbfb96 (driven live 2026-09-26, drive0926 :8031: an idle assignee whose head was refused is surfaced with the refusal's words and the remedy, 3 presses added no entry, and withdrawing the entry then pressing bound a new run to the task). Was: open. Filed 2026-09-14 by the day window's `f355-r2`. **Code read, not driven.** The held
 instance is repaired by `a-spent-allowance-holds-the-queue` (design D6). The rest is not.
 
 **The mechanism.** In `decide_firing`, the ordinary-work arm re-selects an already-assigned task
@@ -29932,7 +29932,7 @@ firing wrote. The same comparison tells the route which row is this firing's ans
 
 ## F370 (B) — a held assignee is re-briefed every firing when input for an agent whose name sorts first also names its task
 
-**Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r2`.
+**Status:** fixed 9fbfb96 (driven live 2026-09-26, drive0926 :8031: held assignee with a peer entry queued first, 3 presses, dev's job entries stayed 1; before the change 4 by R1's measurement). Was: open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r2`.
 **The helper's answer is measured. The consequence at the arm is by reading, not driven.**
 
 **The mechanism.** `run_task_binding.tasks_with_a_turn_pending_or_running`
@@ -29975,7 +29975,7 @@ sorting first, in both insertion orders.
 
 ## F371 (C) — a review nobody is doing reads as attended while any agent has input naming the task, including input nothing will deliver
 
-**Status:** open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r2`.
+**Status:** fixed 9fbfb96 in code and by 25 tests through the real firing; NOT driven live (the review arm needs a wedged under_review flow). Was: open. Filed 2026-09-15 by the night window's `a-task-nothing-will-move-holds-nobody-r2`.
 **Code read, not driven.**
 
 **The mechanism.** F154's repair records an `under_review` task as *"a review nobody is doing"*

@@ -1355,9 +1355,17 @@ A refusal arising at any step SHALL leave the task as the action found it, and t
 
 ### Requirement: A task reported as in flight is one an agent is actually working
 
-A firing SHALL classify a task as in flight only where an agent is actually working it: a turn bound to that task is running, or input naming that task is queued for delivery and has not yet been delivered. A name written in the task's assignee SHALL NOT by itself be sufficient.
+A firing SHALL classify a task as in flight only where an agent is actually working it: a turn bound to that task is running; or, for a task assigned for work rather than under review, the agent whose name is on it is running any turn; or input naming that task is waiting to be delivered to the agent whose name is on it. A name written in the task's assignee SHALL NOT by itself be sufficient.
 
-Where a non-terminal task has an assignee and neither condition holds, the firing SHALL record it as a step it could not staff, naming the task and the agent whose name is on it, and that reason SHALL reach the loop's stall reason and the loop's own state surface. The refusal's sentence SHALL NOT state or imply that the work is being done, that nothing is wrong, or that a later firing will pick it up.
+The second condition is agent-wide on purpose. A run that carries no task, or carries another, is still work that agent is doing, and no turn of theirs can start until it ends, so briefing them again queues one more copy and nothing else. It does not reach a review: a reviewer running some other turn is not reviewing this task.
+
+Input counts as waiting to be delivered to an agent only where all of these hold: it is queued for that agent, not for any other; it is within the project's hop budget; and the input that agent's next turn would start with was not refused on its last delivery. Input queued for another agent is that agent's turn, not the named agent's, and SHALL NOT count however the Hub happens to read the rows. Input past the hop budget is delivered only if the operator releases it, so it is a turn nobody will take unless they act. Input whose last delivery was refused waits for an attempt that the same refusal may answer again, so it is not a turn being taken either; the refusal's own sentence is what the operator is owed instead. Input queued behind it for the same agent is not delivered before it is, so it SHALL NOT count either, however recently it was queued.
+
+Where an assigned task is in flight by this definition, the firing SHALL NOT brief its agent on it again, whatever the reason the waiting input has not started. A second briefing does not start the first one; it queues one more copy that is delivered as a separate turn once a turn can start.
+
+Where a non-terminal task has an assignee and no condition holds, the firing SHALL record it as a step it could not staff, naming the task and the agent whose name is on it, and that reason SHALL reach the loop's stall reason and the loop's own state surface. The one exception is a task assigned for work with no input naming it queued for its agent within the hop budget: the firing briefs that agent on it once, as it resumes any assigned task, and the task is in flight from then on.
+
+Where the reason no condition holds is that the input that agent's next turn would start with was refused on its last delivery, the recorded reason SHALL contain that refusal's own words, for a task under review and for one assigned for work alike, and the firing SHALL NOT brief the agent on the task again. The refusal names what has to change; another briefing meets the same refusal, or, where nothing reaches the refused input, piles up behind it. Whatever next delivers input to that agent still retries the refused input, and still gives it up after repeated failure. The refusal's sentence SHALL NOT state or imply that the work is being done, that nothing is wrong, or that a later firing will pick it up.
 
 An assignee is a record of who holds a task, not evidence that a turn exists. Reading it as evidence lets a firing report a queue as busy while every agent in the project is idle, which is worse than silence: the operator is not merely uninformed, they are told the flow is healthy, and the remedy is theirs alone to apply.
 
@@ -1394,6 +1402,63 @@ An assignee is a record of who holds a task, not evidence that a turn exists. Re
 
 - **WHEN** a loop's state is read while it holds a review nobody is doing
 - **THEN** the task's agent capacity still reports that the agent holds it, distinct from the value used when a turn is running and distinct from the value used for a task's own assignee
+
+#### Scenario: Input for another agent does not make a review attended
+
+- **WHEN** a task is under review with an agent named on it, no turn is running on it, and the only input naming it is queued for a different agent
+- **THEN** the firing does not report the task as in flight
+- **AND** the recorded reason names the task and the agent whose name is on it
+
+#### Scenario: Input past the hop budget does not make a review attended
+
+- **WHEN** a task is under review with an agent named on it, no turn is running on it, and the only input naming it that is queued for that agent is past the project's hop budget
+- **THEN** the firing does not report the task as in flight
+
+#### Scenario: Input whose delivery was refused does not make a review attended
+
+- **WHEN** a task is under review with an agent named on it, no turn is running on it, and the only input naming it that is queued for that agent was refused on its last delivery
+- **THEN** the firing does not report the task as in flight
+- **AND** the recorded reason contains the refusal's own sentence
+
+#### Scenario: The named agent's own input is found whichever agent's input is read first
+
+- **WHEN** an assigned task has input naming it queued for its assignee, and input naming it is also queued for an agent whose name sorts before the assignee's
+- **AND** the flow fires three times
+- **THEN** no further input is queued for the assignee
+- **AND** the task is reported in flight on every firing
+
+#### Scenario: An idle assignee whose queued turn cannot start is not briefed again
+
+- **WHEN** an assigned task's agent is running no turn, is not held, and has input naming the task queued within the hop budget that the scheduler has not started
+- **AND** the flow fires three times
+- **THEN** no further input is queued for that agent
+- **AND** the task is reported in flight
+
+#### Scenario: An assignee whose input was refused is surfaced with the refusal, not briefed again
+
+- **WHEN** an assigned task's agent is running no turn, and the only input naming the task queued for it was refused on its last delivery
+- **AND** the flow fires three times
+- **THEN** no further input is queued for that agent
+- **AND** the firing records the task as a step it could not staff, and the recorded reason contains the refusal's own words
+
+#### Scenario: A held or budget-stopped assignee with a refused input is not briefed again
+
+- **WHEN** an assigned task's agent is held by the provider's usage limit, or stopped by a spent token budget, and the input its next turn would start with was refused on its last delivery
+- **AND** the flow fires three times
+- **THEN** no further input is queued for that agent
+- **AND** the recorded reason contains the refusal's own words
+
+#### Scenario: A running assignee's task is in flight, whatever its run is bound to
+
+- **WHEN** an assigned task's agent is running a turn that is bound to no task
+- **THEN** the firing reports that task as in flight and does not brief the agent on it
+
+#### Scenario: A briefing queued behind a refused delivery does not make the task in flight
+
+- **WHEN** an assigned task's agent is running no turn, the first input queued for it was refused on its last delivery, and a later briefing naming the task is queued behind that input in another conversation
+- **THEN** the firing does not report the task as in flight
+- **AND** the recorded reason says the briefing waits behind input whose delivery was refused, and contains that refusal's words
+- **AND** no further input is queued for that agent
 
 #### Scenario: A busy flow is still not reported as stalled
 

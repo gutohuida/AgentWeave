@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "fca808d",
     "stop_at": "2026-09-26T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-25-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-task-is-attended-only-by-a-turn-that-will-reach-it-drive",
-    "next_action": "Drive a-task-is-attended-only-by-a-turn-that-will-reach-it per queue item a-task-is-attended-only-by-a-turn-that-will-reach-it-drive (fresh port, profile drive0925, Haiku only; scheduler change, no UI). Read CI verdict for the previous push first. Then archive the change and set F368/F370/F371 statuses in FINDINGS.md.",
+    "current": "a-review-no-reviewer-can-approve-goes-to-the-operator-impl",
+    "next_action": "Implement a-review-no-reviewer-can-approve-goes-to-the-operator per queue item a-review-no-reviewer-can-approve-goes-to-the-operator-impl. Read CI verdict for the previous push first.",
     "queue": [
         {
             "id": "compose",
@@ -29,9 +29,9 @@
         },
         {
             "id": "a-task-is-attended-only-by-a-turn-that-will-reach-it-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-task-is-attended-only-by-a-turn-that-will-reach-it on a fresh drive Hub, then archive and retire its findings",
-            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+            "detail": "Done iteration 3 (see log); archived."
         },
         {
             "id": "a-review-no-reviewer-can-approve-goes-to-the-operator-impl",
