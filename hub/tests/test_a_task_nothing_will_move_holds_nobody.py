@@ -39,7 +39,6 @@ from hub.db.models import (
     Task,
 )
 from hub.inbound_queue import new_entry, release_entry
-from hub.run_task_binding import tasks_with_a_turn_pending_or_running
 from hub.scheduler import (
     JobScheduler,
     _agents_that_are_free,
@@ -315,11 +314,7 @@ async def test_input_for_somebody_else_does_not_hide_the_assignees_own(
         await _entry(db, agent="architect", task_id=task.id)
         await _entry(db, agent=DEV, task_id=task.id)
         await _entry(db, agent="zeta", task_id=task.id)
-        helper = await tasks_with_a_turn_pending_or_running(db, PROJECT)
 
-    # The premise the mutation needs, asserted so a change in the helper re-stages this test
-    # instead of leaving it asserting over nothing.
-    assert helper.get(task.id) in {"architect", "zeta"}, helper
     assert DEV not in await _free()
 
 

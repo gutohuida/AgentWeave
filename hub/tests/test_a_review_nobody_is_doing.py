@@ -38,10 +38,7 @@ from hub.db.models import (
     SpecDocument,
     Task,
 )
-from hub.run_task_binding import (
-    tasks_held_by_a_running_turn,
-    tasks_with_a_turn_pending_or_running,
-)
+from hub.run_task_binding import task_attendance, tasks_held_by_a_running_turn
 from hub.scheduler import (
     DECISION_IN_FLIGHT,
     DECISION_PROCEED_EMPTY,
@@ -450,9 +447,9 @@ async def test_the_predicate_counts_a_running_turn(app):
         _job, loop = await _flow(db, suffix="predrun")
         task = await _wedged(db, loop, suffix="predrun", assignee=REVIEWER)
         await _running_turn(db, task, agent=REVIEWER)
-        answer = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+        answer = await task_attendance(db, "proj-test")
 
-    assert answer.get(task.id) == REVIEWER
+    assert answer.attends(task.id, REVIEWER)
 
 
 async def test_the_predicate_counts_a_queued_entry_by_either_column(app):
@@ -464,15 +461,15 @@ async def test_the_predicate_counts_a_queued_entry_by_either_column(app):
         entry = await _queued_review(db, task, agent=REVIEWER)
         entry.review_task_id = None
         await db.commit()
-        by_task = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+        by_task = (await task_attendance(db, "proj-test")).attends(task.id, REVIEWER)
 
         entry.task_id = None
         entry.review_task_id = task.id
         await db.commit()
-        by_review = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+        by_review = (await task_attendance(db, "proj-test")).attends(task.id, REVIEWER)
 
-    assert by_task.get(task.id) == REVIEWER
-    assert by_review.get(task.id) == REVIEWER
+    assert by_task
+    assert by_review
 
 
 async def test_the_predicate_ignores_a_withdrawn_or_delivered_entry(app):
@@ -482,24 +479,24 @@ async def test_the_predicate_ignores_a_withdrawn_or_delivered_entry(app):
         _job, loop = await _flow(db, suffix="predw")
         task = await _wedged(db, loop, suffix="predw", assignee=REVIEWER)
         entry = await _queued_review(db, task, agent=REVIEWER, state="withdrawn")
-        withdrawn = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+        withdrawn = await task_attendance(db, "proj-test")
 
         entry.state = "delivered"
         entry.delivered_in_run_id = "run-gone"
         await db.commit()
-        delivered = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+        delivered = await task_attendance(db, "proj-test")
 
-    assert task.id not in withdrawn
-    assert task.id not in delivered
+    assert not withdrawn.attended(task.id)
+    assert not delivered.attended(task.id)
 
 
 async def test_the_predicate_is_empty_for_a_task_with_neither(app):
     async with async_session_factory() as db:
         _job, loop = await _flow(db, suffix="predn")
         task = await _wedged(db, loop, suffix="predn", assignee=REVIEWER)
-        answer = await tasks_with_a_turn_pending_or_running(db, "proj-test")
+        answer = await task_attendance(db, "proj-test")
 
-    assert task.id not in answer
+    assert not answer.attended(task.id)
 
 
 async def test_held_is_unchanged_by_this_change(app):

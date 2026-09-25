@@ -22,14 +22,15 @@ both decides and spawns would be impossible to test without one.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, Iterable, NamedTuple, Optional, Set, Tuple
+from typing import Dict, FrozenSet, Iterable, List, Mapping, NamedTuple, Optional, Set, Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import InboundQueueEntry, Question, Run, SpecDocument, Task, TaskTransition
-from .inbound_queue import project_limits
+from .inbound_queue import project_limits, select_turn
 from .sse import sse_manager
 from .task_transition_service import (
     ORIGIN_ACTOR,
@@ -265,94 +266,137 @@ async def binding_for_delivery(
     return binding_from_entries(result.scalars().all())
 
 
-async def tasks_with_a_turn_pending_or_running(
-    session: AsyncSession, project_id: str
-) -> Dict[str, str]:
-    """`task_id -> the agent who is on it`, counting a turn that has not started yet.
+ATTENDING_RUNNING = "running"
+ATTENDING_QUEUED = "queued"
+ATTENDING_REFUSED = "refused"
 
-    The question is *is anybody on this task*, and it is asked by `decide_firing` about a task
-    already in `under_review`: nobody can be staffed onto one, so the only thing left to establish
-    is whether the agent named on it is actually doing it (finding F154). A firing that answered
-    from `Task.assignee` alone reported the queue as busy while every agent in the project was idle.
 
-    **A second function rather than a widening of `tasks_held_by_a_running_turn`.** That one's
-    docstring records that its two callers ask two different questions of one query, and the
-    trigger path's question is *may this turn start* — an undelivered queue entry must not stop a
-    turn starting, so it must not enter that answer. A third caller with a third meaning is exactly
-    what that note warns against.
+@dataclass(frozen=True)
+class Attending:
+    """How one `(task, agent)` pair is attended (`task_attendance`)."""
 
-    **Why a queued entry counts.** `turn_scheduler.schedule_agent` leaves correctly staffed work
-    durably queued rather than running whenever the chosen agent is already running, the hop budget
-    or token budget is spent, or the conversation is unavailable; `run_divergence` queues a
-    substituted reviewer's turn the same way. Between the assignee being written and the run
-    reaching `running` there is a moment where only the entry exists, and a predicate blind to it
-    would call a review abandoned on the tick immediately after staffing it correctly.
+    how: str  # ATTENDING_RUNNING, ATTENDING_QUEUED or ATTENDING_REFUSED
+    review: bool  # queued input names the task as the one it reviews (`review_task_id`)
+    refusal: Optional[str] = None  # the refused head's words, only when how == ATTENDING_REFUSED
+    refused_here: bool = False  # that refused head is one of this pair's own entries
 
-    `state == "queued"` is the right test and `delivered_in_run_id is None` is not: `"withdrawn"`
-    already means *"this will never be delivered"* (`models.py`'s own comment), so an abandoned
-    entry stops counting as attendance, which is what makes the answer decay correctly rather than
-    hiding the wedge forever.
+
+@dataclass(frozen=True)
+class TaskAttendance:
+    """Who is on which task, by `(task_id, agent)` pair."""
+
+    pairs: Mapping[Tuple[str, str], Attending]
+    queued_pairs: FrozenSet[Tuple[str, str]] = frozenset()
+
+    def attends(self, task_id: str, agent: str) -> bool:
+        """A turn of *agent*'s is running on the task, or will reach it: queued, not refused."""
+        found = self.pairs.get((task_id, agent))
+        return found is not None and found.how != ATTENDING_REFUSED
+
+    def attended(self, task_id: str) -> bool:
+        """Some agent attends the task (`attends`)."""
+        return any(
+            key[0] == task_id and value.how != ATTENDING_REFUSED
+            for key, value in self.pairs.items()
+        )
+
+    def has_turn(self, task_id: str, agent: str) -> bool:
+        """Input within the hop budget is queued for *agent* naming the task, refused or not.
+
+        From the queued rows alone, never a running pair: availability asks *will something move
+        this agent onto this task*, and a running agent's task on a non-live loop with nothing
+        queued must stay unreachable (design D1, D5).
+        """
+        return (task_id, agent) in self.queued_pairs
+
+    def refusal(self, task_id: str, agent: str) -> Optional[str]:
+        found = self.pairs.get((task_id, agent))
+        if found is None or found.how != ATTENDING_REFUSED:
+            return None
+        return found.refusal
+
+    def refused_here(self, task_id: str, agent: str) -> bool:
+        found = self.pairs.get((task_id, agent))
+        return found is not None and found.how == ATTENDING_REFUSED and found.refused_here
+
+
+def _is_refused(entry: InboundQueueEntry) -> bool:
+    """A delivery that was refused and counted: both columns, because each alone means else.
+
+    `return_run_entries` raises `delivery_attempts` for a run that crashed and leaves
+    `waiting_reason` clear (the run-end re-drain redelivers it); a transient refusal writes
+    `waiting_reason` and counts nothing.
     """
-    held = await tasks_held_by_a_running_turn(session, project_id)
-    rows = await session.execute(
-        select(InboundQueueEntry.task_id, InboundQueueEntry.review_task_id, InboundQueueEntry.agent)
-        .where(InboundQueueEntry.project_id == project_id)
-        .where(InboundQueueEntry.state == "queued")
-    )
-    pending: Dict[str, str] = {}
-    for task_id, review_task_id, agent in rows.all():
-        if not agent:
-            continue
-        for candidate in (task_id, review_task_id):
-            if candidate:
-                pending.setdefault(candidate, agent)
-    # A running turn is the stronger statement, so it wins where both exist.
-    return {**pending, **held}
+    return bool(entry.delivery_attempts and entry.delivery_attempts > 0 and entry.waiting_reason)
 
 
-async def task_agent_pairs_with_a_turn_queued(
-    session: AsyncSession, project_id: str
-) -> Set[Tuple[str, str]]:
-    """`(task_id, agent)` for every queued input that will move *agent* onto *task_id*.
+async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttendance:
+    """Who is on which task, as `(task_id, agent)` pairs and how (design D1).
 
-    The question is *will input already queued for this agent move it onto this task*, and it is
-    asked by `scheduler._agents_that_are_free` about an assignee whose task no live loop will walk
-    (`a-task-nothing-will-move-holds-nobody`, design D4). Such a task holds its assignee only if a
-    turn is coming for that assignee on it.
+    Replaces two helpers that answered one question two ways: a `task -> one agent` map built with
+    `setdefault` over an unordered select (F370, F371, F368) and a set of queued pairs.
 
-    **Not `tasks_with_a_turn_pending_or_running`, and not a narrowing of it.** That helper answers
-    *is anybody on this task*, as a map with one agent per task, and it keeps whichever row comes
-    back first (`setdefault` over an unordered select). Where two agents have input naming one task,
-    it has already dropped one of them, so asking it *is the agent on this task the assignee* hides
-    the assignee's own input whenever a row for somebody else is returned first. The pool needs the
-    pair, so this returns pairs. Widening the helper instead would change F154's answer as a side
-    effect; whether that answer is right about a third agent's input, or input past the hop budget,
-    is its own question (finding F371). The held-resume arm of `decide_firing` reads the helper's
-    map the same masked way (finding F370); it is not repaired here.
-
-    **Bounded by the hop budget**, read through `inbound_queue.project_limits`, the reader
-    `turn_scheduler._attempt_turn` uses, so the two cannot disagree about which budget applies.
-    `_attempt_turn` never selects an entry past it; only the operator's `release_entry` delivers one,
-    and an operator who might get round to it is not something that moves a task. Counting such an
-    entry would re-create, one table over, the ratchet the pool's rule exists to remove.
-
-    `state == "queued"` for the reason the helper above gives: `"withdrawn"` already means *this
-    will never be delivered*. An entry with no agent is nobody's turn.
+    - **Running**: a `Run` in `running` bound to the task (`tasks_held_by_a_running_turn`'s query).
+    - **Queued**: input naming the task (`task_id` or `review_task_id`) for the agent, within the
+      hop budget read through `project_limits`, the reader `_attempt_turn` uses. Suspended input
+      past the budget is not a pair. `state == "queued"`: `"withdrawn"` means it will never be
+      delivered.
+    - **Refused**: read at the agent's *head*, `select_turn(...).controlling`, the entry its next
+      turn starts with. Nothing behind a refused head is delivered before it is delivered or given
+      up, so where the head is refused every queued pair of that agent is refused, carrying the
+      head's words. A head is refused when `delivery_attempts > 0` and `waiting_reason` is set.
+    - The strongest statement wins per pair: running, then queued, then refused.
     """
-    hop_budget, _ = await project_limits(session, project_id)
+    hop_budget, cap = await project_limits(session, project_id)
     rows = await session.execute(
-        select(InboundQueueEntry.task_id, InboundQueueEntry.review_task_id, InboundQueueEntry.agent)
+        select(InboundQueueEntry)
         .where(InboundQueueEntry.project_id == project_id)
         .where(InboundQueueEntry.state == "queued")
         .where(InboundQueueEntry.agent.isnot(None))
-        .where(InboundQueueEntry.hop_depth <= hop_budget)
+        .order_by(InboundQueueEntry.sequence)
     )
-    pairs: Set[Tuple[str, str]] = set()
-    for task_id, review_task_id, agent in rows.all():
-        for candidate in (task_id, review_task_id):
-            if candidate:
-                pairs.add((candidate, agent))
-    return pairs
+    by_agent: "Dict[str, List[InboundQueueEntry]]" = {}
+    for entry in rows.scalars().all():
+        by_agent.setdefault(entry.agent, []).append(entry)
+
+    pairs: "Dict[Tuple[str, str], Attending]" = {}
+    queued_pairs: "Set[Tuple[str, str]]" = set()
+    for agent, entries in by_agent.items():
+        controlling, _ = select_turn(entries, hop_budget, cap)
+        head_refused = controlling is not None and _is_refused(controlling)
+        review_by_task: "Dict[str, bool]" = {}
+        own_refused: "Set[str]" = set()
+        for entry in entries:
+            if entry.hop_depth > hop_budget:
+                continue
+            for candidate, is_review in (
+                (entry.task_id, False),
+                (entry.review_task_id, True),
+            ):
+                if not candidate:
+                    continue
+                review_by_task[candidate] = review_by_task.get(candidate, False) or is_review
+                if entry is controlling:
+                    own_refused.add(candidate)
+        for task_id, review in review_by_task.items():
+            queued_pairs.add((task_id, agent))
+            if head_refused:
+                pairs[(task_id, agent)] = Attending(
+                    how=ATTENDING_REFUSED,
+                    review=review,
+                    refusal=controlling.waiting_reason,
+                    refused_here=task_id in own_refused,
+                )
+            else:
+                pairs[(task_id, agent)] = Attending(how=ATTENDING_QUEUED, review=review)
+
+    running = await tasks_held_by_a_running_turn(session, project_id)
+    for task_id, agent in running.items():
+        previous = pairs.get((task_id, agent))
+        pairs[(task_id, agent)] = Attending(
+            how=ATTENDING_RUNNING, review=bool(previous and previous.review)
+        )
+    return TaskAttendance(pairs=pairs, queued_pairs=frozenset(queued_pairs))
 
 
 async def tasks_held_by_a_running_turn(session: AsyncSession, project_id: str) -> Dict[str, str]:

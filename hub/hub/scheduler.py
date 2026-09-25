@@ -40,9 +40,8 @@ from .loop_ending import QUEUE_DRAINED_REASON, end_loop
 from .provider_allowance import agents_held, hold_busy_reason, hold_coalesce_reason, provider_hold
 from .run_task_binding import (
     TERMINAL_FOR_BINDING,
-    task_agent_pairs_with_a_turn_queued,
+    task_attendance,
     tasks_held_by_a_running_turn,
-    tasks_with_a_turn_pending_or_running,
 )
 from .runner_events import redact_secrets
 from .sse import sse_manager
@@ -1191,7 +1190,7 @@ async def _roster_availability(session: AsyncSession, project_id: str) -> "list[
         .scalars()
         .all()
     )
-    queued = await task_agent_pairs_with_a_turn_queued(session, project_id)
+    attendance = await task_attendance(session, project_id)
     holdings = (
         await session.execute(
             select(Task.id, Task.assignee, Task.loop_id, Task.status).where(
@@ -1208,7 +1207,7 @@ async def _roster_availability(session: AsyncSession, project_id: str) -> "list[
                 task_id=task_id,
                 status=status,
                 loop_id=loop_id,
-                reachable=loop_id in live or (task_id, assignee) in queued,
+                reachable=loop_id in live or attendance.has_turn(task_id, assignee),
             )
         )
     roster = (
@@ -1243,7 +1242,7 @@ async def _agents_that_are_free(session: AsyncSession, project_id: str) -> "list
     (`a-task-nothing-will-move-holds-nobody`, design D1). Two things in the Hub move a task on
     their own: a loop that has not ended, whose firing walks every live task carrying its
     `loop_id`; and a turn queued for the assignee naming the task, within the hop budget
-    (`task_agent_pairs_with_a_turn_queued`). A running turn needs no arm of its own, because a
+    (`task_attendance().has_turn`). A running turn needs no arm of its own, because a
     running assignee is excluded by `running` whatever it holds. Anything else -- the assignee
     field, the status, a plain job, an operator who might get round to it -- moves nothing, and a
     task nothing will move used to withdraw its assignee from every flow in the project until
@@ -1707,7 +1706,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # in flight only where `held` names a turn on the task or the assignee is mid-turn, and its
     # second form is agent-level, so a run carrying no `task_id` still counts there and must keep
     # counting. Re-asking a per-task predicate at the decision would silently drop exactly those.
-    wedged_reviews: "Set[str]" = set()
+    surfaced_rows: "Set[str]" = set()
 
     # Both asked once, before the walk. `_agents_that_are_free` excludes agents that are running a
     # turn *or* holding work something will move, which is right for staffing something new and
@@ -1724,11 +1723,12 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     held = await tasks_held_by_a_running_turn(session, loop.project_id)
     # The same question one band wider, and asked for the opposite purpose (finding F154). `held`
     # answers *may a turn start on this checkout*, so it counts only running turns; this answers
-    # *is anybody on this task at all*, so it also counts a turn that is staffed and still queued.
-    # A review already in `under_review` cannot be staffed onto anybody, so its assignee is the
-    # only thing left to check -- and an assignee is a record of who holds a task, never evidence
-    # that a turn exists.
-    on_it = await tasks_with_a_turn_pending_or_running(session, loop.project_id)
+    # *is this agent on this task*, by pair, so it also counts a turn that is staffed and still
+    # queued within the hop budget, and separates input whose delivery was refused. A review
+    # already in `under_review` cannot be staffed onto anybody, so its assignee is the only thing
+    # left to check -- and an assignee is a record of who holds a task, never evidence that a turn
+    # exists (F370, F371, F368).
+    attendance = await task_attendance(session, loop.project_id)
     # Agents whose provider refused their last turn on usage grounds (`a-spent-allowance-holds-the-
     # queue`, D6). `schedule_agent` will start nothing for them before the reset, so briefing them
     # again only piles up queued input. Kept apart from `running` on purpose: a held agent has no
@@ -1821,11 +1821,15 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 # reachable -- an author's turn recording as it finishes, or a staffed reviewer
                 # recording evidence mid-review -- so the recovery waits for the turn to end, and
                 # the next firing decides.
-                if wedged_review and task.id in on_it:
+                # `wedge_deferred` (R3): the surfacing below asks the pair question, and a wedge
+                # this guard defers must not then be surfaced as the author being a reviewer.
+                wedge_deferred = False
+                if wedged_review and attendance.attended(task.id):
                     wedged_review = False
+                    wedge_deferred = True
                 if not wedged_review:
                     in_flight.append((task.id, task.assignee))
-                    if task.id not in on_it:
+                    if not wedge_deferred and not attendance.attends(task.id, task.assignee):
                         # **Both collections, deliberately** (finding F154). The row stays in
                         # `in_flight` because `_cannot_staff` is where `task_attribution` reads the
                         # board's `held` capacity from, and F63 split that word out of `working` to
@@ -1839,8 +1843,23 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                         # records as the pre-F45 defect -- "no claimable task among 1 open
                         # (1 under_review)", a fact about the queue standing in for a fact about
                         # one task. The F64 promotion replaces it before the decision is built.
-                        wedged_reviews.add(task.id)
-                        unstaffed.append((task.id, _wedged_review_reason(task, task.assignee)))
+                        surfaced_rows.add(task.id)
+                        refusal = attendance.refusal(task.id, task.assignee)
+                        unstaffed.append(
+                            (
+                                task.id,
+                                (
+                                    _wedged_review_reason(task, task.assignee)
+                                    if refusal is None
+                                    else _refused_review_reason(
+                                        task,
+                                        task.assignee,
+                                        refusal,
+                                        attendance.refused_here(task.id, task.assignee),
+                                    )
+                                ),
+                            )
+                        )
             if not wedged_review:
                 continue
 
@@ -1873,11 +1892,12 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 # assignee with the job's default here is the defect group 5's spec review found:
                 # under width it hands one agent's running task to another and briefs them for it.
                 agent = task.assignee
-                # A held assignee with its briefing already queued is the held form of the same
-                # case: the briefing waits for the reset, and another would be one more copy. One
-                # with nothing queued for this task falls through and is briefed once, and that
-                # briefing names the task, so the next firing finds it here.
-                if agent in running or (agent in held_agents and on_it.get(task.id) == agent):
+                # An assignee with its briefing already queued for it, whatever holds that turn
+                # (a hold, a spent budget, an unavailable conversation), is attended: another
+                # briefing would be one more copy (F370, F368). One with nothing queued for this
+                # task falls through and is briefed once, and that briefing names the task, so the
+                # next firing finds it here.
+                if agent in running or attendance.attends(task.id, agent):
                     # That agent's turn is still going, so this firing cannot start it -- the old
                     # whole-firing busy guard, scoped to the one selection it is actually about.
                     #
@@ -1886,6 +1906,23 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                     # function to ask what the loop is *working on* -- saw no current item and then
                     # reported a stall, for a flow whose agents were all mid-turn.
                     in_flight.append((task.id, agent))
+                    continue
+                refusal = attendance.refusal(task.id, agent)
+                if refusal is not None:
+                    # Input for this agent whose delivery was refused is not a turn on the task,
+                    # and briefing again would only queue a copy behind it (operator, 2026-09-24).
+                    # Recorded in flight (F63) and surfaced with the refusal's words; the operator
+                    # fixes what it names and withdraws the input.
+                    in_flight.append((task.id, agent))
+                    surfaced_rows.add(task.id)
+                    unstaffed.append(
+                        (
+                            task.id,
+                            _refused_work_reason(
+                                task, agent, refusal, attendance.refused_here(task.id, agent)
+                            ),
+                        )
+                    )
                     continue
                 if agent in taken:
                     deferred.append(
@@ -2068,7 +2105,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
             deferred=tuple(deferred),
         )
 
-    if in_flight and any(task_id not in wedged_reviews for task_id, _ in in_flight):
+    if in_flight and any(task_id not in surfaced_rows for task_id, _ in in_flight):
         # **Checked before the stall, and that order is the fix** (finding F23). A queue whose work
         # is being done is not waiting on anything; asking `_stall_reason_from_walk` here would
         # count those very tasks as "open" and report the flow stalled at its busiest.
@@ -2080,7 +2117,7 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
         # firing falls through to the stall path, where the `unstaffed` entries recorded on the
         # walk name the task and the agent.
         #
-        # Asked of `wedged_reviews` rather than of the predicate again, and that distinction has
+        # Asked of `surfaced_rows` rather than of the predicate again, and that distinction has
         # teeth: the ordinary-work arm records in flight from `agent in running` as well as from
         # `held`, so a run bound to no task at all is still work being done. A decision that
         # re-asked a per-task question here would report three agents mid-turn as a stall.
@@ -2224,6 +2261,59 @@ def own_review_remedy(task: Task) -> str:
     return "Decide it yourself: approve, reject, or send it back with revision_needed."
 
 
+def _fit_sentence(build, title: str, refusal: str) -> str:
+    """Shortens the quoted title, then the refusal, so the remedy is never the part cut.
+
+    The sentence reaches `JobRun.error_summary` through the stall write; `!r`'s escapes can grow a
+    long title well past what the model-level fit would leave room for.
+    """
+    text = build(title, refusal)
+    while len(text) > JOB_RUN_ERROR_SUMMARY_CHARS and title:
+        title = title[:-1]
+        text = build(title + "…", refusal)
+    while len(text) > JOB_RUN_ERROR_SUMMARY_CHARS and refusal:
+        refusal = refusal[:-1]
+        text = build(title + "…", refusal + "…")
+    return text
+
+
+def _refused_review_reason(task: Task, reviewer: str, refusal: str, refused_here: bool) -> str:
+    """A review whose delivery to the named reviewer was refused (design D4)."""
+
+    def _sentence(title: str, words: str) -> str:
+        if refused_here:
+            return (
+                f"{reviewer} is named on {task.id} ({title!r}) as its reviewer, and delivering "
+                f"the review to them was refused: {words} Fix what it names, review it yourself, "
+                f"or send it back with revision_needed."
+            )
+        return (
+            f"{reviewer} is named on {task.id} ({title!r}) as its reviewer, and the review is "
+            f"queued behind refused input: {words} Fix what it names or withdraw that "
+            f"input, review it yourself, or send it back with revision_needed."
+        )
+
+    return _fit_sentence(_sentence, task.title, refusal)
+
+
+def _refused_work_reason(task: Task, agent: str, refusal: str, refused_here: bool) -> str:
+    """Ordinary work whose turn was refused delivery; no firing will retry it (design D4)."""
+
+    def _sentence(title: str, words: str) -> str:
+        middle = (
+            "and delivering its turn to them was refused"
+            if refused_here
+            else "and its briefing waits behind refused input"
+        )
+        return (
+            f"{agent} holds {task.id} ({title!r}), {middle}: {words} No firing will retry it. "
+            f"Fix it, then withdraw that input so the next firing briefs {agent} again, or reject "
+            f"the task."
+        )
+
+    return _fit_sentence(_sentence, task.title, refusal)
+
+
 def _wedged_review_reason(task: Task, reviewer: str) -> str:
     """What a firing says about a review with a name on it and nobody doing it (finding F154).
 
@@ -2245,7 +2335,8 @@ def _wedged_review_reason(task: Task, reviewer: str) -> str:
     def _sentence(title: str) -> str:
         return (
             f"{reviewer} is named on {task.id} ({title!r}) as its reviewer and is not reviewing "
-            f"it: no turn is running on that task and none is queued. Nothing will move it on its own. "
+            f"it: no turn of theirs is running on that task and none queued for them will start "
+            f"on its own. Nothing will move it on its own. "
             f"Ask {reviewer} again, review it yourself, or send it back with revision_needed."
         )
 
