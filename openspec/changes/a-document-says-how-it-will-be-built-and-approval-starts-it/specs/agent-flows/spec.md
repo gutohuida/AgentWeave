@@ -8,8 +8,15 @@ delivery's default agent, stop condition and schedule, and owning the tasks the 
 flow's first firing SHALL be at its next scheduled time. Creating it SHALL NOT depend on the project
 allowing agents to create scheduled work, since the operator is the actor.
 
-When the delivery's agent is not usable, the operator MAY name another agent, or no flow, at approval.
-That choice SHALL apply to the flow alone and MUST NOT edit the document.
+A delivery's agent is usable only when it is an open agent on the project. The Hub SHALL NOT create a
+flow naming an agent that is archived or that the project does not have, whatever else it knows of
+that name. When the delivery's agent is not usable, the operator MAY name another agent, or no flow,
+at approval. That choice SHALL apply to the flow alone and MUST NOT edit the document.
+
+Where an unarchived flow already declares the document, as on a re-approval after a reopen, the Hub
+SHALL NOT create a second one, and the approval SHALL report the existing flow rather than a refusal.
+The Hub SHALL NOT create a flow whose delivery names no agent or no stop condition, or whose stop
+time has already passed, and SHALL report why.
 
 If the flow cannot be created, the document SHALL still be approved and its board still created, and
 the reason SHALL be reported with the approval.
@@ -28,12 +35,26 @@ the reason SHALL be reported with the approval.
 - **THEN** the document is approved and its board is created
 - **AND** no flow is created, and the approval reports that the agent is archived
 
+#### Scenario: An agent the project does not have is not given a flow
+
+- **GIVEN** a proposed document whose delivery names an agent that is not one of the project's agents
+- **WHEN** the operator approves it
+- **THEN** the document is approved and no flow is created
+- **AND** the approval reports that the agent is not on the project
+
 #### Scenario: The operator replaces a stale agent at approval
 
 - **GIVEN** a proposed document whose delivery names an archived agent
 - **WHEN** the operator approves it choosing agent dev
 - **THEN** the flow is created naming dev
 - **AND** the document still names the archived agent, and the approval records the replacement
+
+#### Scenario: Re-approval does not create a second flow
+
+- **GIVEN** an approved document whose delivery created flow F, reopened and proposed again
+- **WHEN** the operator approves it
+- **THEN** no second flow is created, and the tasks the approval created belong to F
+- **AND** the approval reports that F already builds the document
 
 #### Scenario: A delivery of no flow creates none
 

@@ -42,7 +42,8 @@ how the change will be built, recommending a flow where the work splits into tas
 flow does. If the operator chooses a flow, the agent SHALL be instructed to ask for its default agent,
 its stop condition and its schedule. The agent SHALL be told the project's open agents by name, whether
 or not the project has more than one. The question SHALL be asked in the reply, like the rest of the
-interview.
+interview. An author exploring a document of any other kind SHALL NOT be asked it, since only a change
+document is required to answer it.
 
 #### Scenario: A single-agent project's author can name an agent
 
@@ -51,12 +52,20 @@ interview.
 - **THEN** its context names the project's open agents, the author among them
 - **AND** it is instructed to ask how the change will be built
 
+#### Scenario: A document that is not a change is not asked how it will be built
+
+- **GIVEN** a roadmap document being explored
+- **WHEN** its author's exploring turn starts
+- **THEN** its context and its turn notice do not ask how the work will be built
+
 ### Requirement: A document's delivery is checked against the roster when it is read
 
 Where a document not yet approved declares a flow delivery, the Hub SHALL report on each read whether
 the named default agent is an open agent on the project, and SHALL report it as stale, with the reason,
 when the agent is archived or does not exist. The report MUST NOT be written into the document, since
-the roster changes independently of it. The app SHALL show a stale delivery beside the approval action.
+the roster changes independently of it. The test SHALL be the one approval applies before creating a
+flow, so that a delivery read as usable is one approval will act on. The app SHALL show a stale
+delivery beside the approval action.
 
 #### Scenario: An archived agent makes the delivery stale
 
