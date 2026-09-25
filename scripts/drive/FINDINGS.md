@@ -33217,3 +33217,7 @@ F416 fix in Round 6. `list_evidence` (`hub/hub/api/v1/spec.py`) dropped `documen
 `hub/tests/test_agent_evidence_plane.py::test_the_operator_read_narrowed_to_a_document_alone_excludes_the_other`,
 which fails on the previous route. No UI code calls the route with `document` today, so the reach is the
 API and scripts.
+
+## Night drive 2026-09-25, part 1 (`scripts/drive/d8_0925_night_drive.py`) — no new finding
+
+Fresh Hub, profile `drive0925`, port 8025, Haiku (`author`). Measured: the fresh database migrated to `0107` and `task_transitions` carries `job_id`; `POST /jobs/{id}/run` on a loop answered `{success, job_id, job_run_id}` (`job_run_id`, not `run_id`); a second press while `author` ran answered 409 "author is already running a turn, and this loop's work goes only to author... Nothing was started."; the task's first transition read `pending→assigned, origin=job, job_id, job_name="drive loop", job_kind="loop"`, the next `origin=runtime` for the run. The run completed; the job was disabled afterwards. NOT yet driven: the UI history drawer render, checkpoint handover, tool-server pin, F133 status route, event-after-commit ordering.
