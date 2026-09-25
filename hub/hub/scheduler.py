@@ -3113,7 +3113,7 @@ class JobScheduler:
                         "job_name": job.name,
                         "agent": job.agent,
                         "trigger": trigger,
-                        "run_id": run_id,
+                        "job_run_id": run_id,
                         "reason": skip_reason,
                     },
                     agent=job.agent,
@@ -3155,7 +3155,7 @@ class JobScheduler:
                             "job_name": job.name,
                             "agent": job.agent,
                             "trigger": trigger,
-                            "run_id": run_id,
+                            "job_run_id": run_id,
                             "reason": coalesce_reason,
                         },
                         agent=job.agent,
@@ -3190,7 +3190,7 @@ class JobScheduler:
                         "job_name": job.name,
                         "agent": job.agent,
                         "trigger": trigger,
-                        "run_id": run_id,
+                        "job_run_id": run_id,
                         "reason": loop_stop_reason,
                     },
                     agent=job.agent,
@@ -3339,7 +3339,7 @@ class JobScheduler:
                                 "job_name": job.name,
                                 "agent": job.agent,
                                 "trigger": trigger,
-                                "run_id": run_id,
+                                "job_run_id": run_id,
                                 "reason": stall_reason,
                             },
                             agent=job.agent,
@@ -3509,7 +3509,7 @@ class JobScheduler:
                     "name": job.name,
                     "agent": acting_agent,
                     "trigger": trigger,
-                    "run_id": run_id,
+                    "job_run_id": run_id,
                 },
             )
 
@@ -3522,7 +3522,7 @@ class JobScheduler:
                     "job_name": job.name,
                     "agent": acting_agent,
                     "trigger": trigger,
-                    "run_id": run_id,
+                    "job_run_id": run_id,
                 },
                 agent=acting_agent,
             )
@@ -3551,7 +3551,7 @@ class JobScheduler:
                         "job_name": job.name,
                         "agent": acting_agent,
                         "trigger": trigger,
-                        "run_id": run.id,
+                        "job_run_id": run.id,
                         "error_summary": error_summary,
                     },
                     agent=acting_agent,
@@ -3798,7 +3798,7 @@ class JobScheduler:
             "job_name": job.name,
             "agent": agent,
             "trigger": trigger,
-            "run_id": run_id,
+            "job_run_id": run_id,
         }
         await sse_manager.broadcast(
             job.project_id,
@@ -3808,7 +3808,7 @@ class JobScheduler:
                 "name": job.name,
                 "agent": agent,
                 "trigger": trigger,
-                "run_id": run_id,
+                "job_run_id": run_id,
             },
         )
         await persist_event(session, job.project_id, "job_fired", fired_payload, agent=agent)

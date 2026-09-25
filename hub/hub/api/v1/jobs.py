@@ -93,7 +93,7 @@ async def _record_job_run_failure(
             "job_name": job.name,
             "agent": job.agent,
             "trigger": trigger,
-            "run_id": run_id,
+            "job_run_id": run_id,
             "error_summary": error_summary,
         },
         agent=job.agent,
@@ -1423,7 +1423,7 @@ async def run_job(
 
         latest_run = await _newest_job_run(session, job_id)
         wrote_row = latest_run is not None and latest_run.id != earlier_run_id
-        run_id = latest_run.id if latest_run is not None and wrote_row else "unknown"
+        job_run_id = latest_run.id if latest_run is not None and wrote_row else "unknown"
         if latest_run is not None and wrote_row:
             # Only a row this firing wrote. Stamping an earlier one erased an agent's attribution
             # with an operator's `None`, or claimed another firing for the agent pressing Run.
@@ -1538,4 +1538,4 @@ async def run_job(
 
     # Note: sse_manager.broadcast("job_fired") is already done by _fire_job_internal
     # We only return the success response here to avoid duplicate events
-    return {"success": True, "job_id": job_id, "run_id": run_id}
+    return {"success": True, "job_id": job_id, "job_run_id": job_run_id}

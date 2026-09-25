@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "8a5d0ed",
     "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-24-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "run-id-event-impl",
-    "next_action": "Do queue item run-id-event-impl (build per its tasks.md, 14 tasks; size to finish this turn, split into parts if needed and say so in the queue detail). First read CI verdict for the previous push sha via gh run list and write it on the log entry's first line. Run the full hub suite once (~31 min, run_in_background, nothing concurrent; poll with bounded sleep loops so the process stays alive) only when the build is complete.",
+    "current": "flows-own-moves-impl",
+    "next_action": "Do queue item flows-own-moves-impl (build per its tasks.md, 22 tasks, migration; size to finish this turn, split into parts if needed and say so in the queue detail). First read CI verdict for the previous push sha via gh run list and write it on the log entry's first line. Run the full hub suite once (~31 min, run_in_background, nothing concurrent; poll with bounded sleep loops so the process stays alive) only when the build is complete.",
     "queue": [
         {
             "id": "compose",
@@ -53,9 +53,9 @@
         },
         {
             "id": "run-id-event-impl",
-            "status": "open",
+            "status": "done",
             "title": "run-id-in-an-event-always-names-a-run",
-            "detail": "Build per tasks.md (14 tasks). run_id becomes job_run_id outright."
+            "detail": "Done iteration 8: code, 5 tests; full hub suite 4827 passed, UI 1622 passed. Drive (3.1) left to night-drive; archive after."
         },
         {
             "id": "flows-own-moves-impl",

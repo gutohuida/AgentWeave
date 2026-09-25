@@ -249,7 +249,7 @@ export function useRunJob() {
   const { selectedProjectId: projectId } = useConfigStore()
   return useMutation({
     mutationFn: (id: string) =>
-      postJson<{ success: boolean; job_id: string; run_id: string }>(
+      postJson<{ success: boolean; job_id: string; job_run_id: string }>(
         `/api/v1/projects/${projectId}/jobs/${id}/run`,
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] }),
