@@ -2,6 +2,7 @@
 
 **Round 1, 2026-09-25**, from an interactive explore with the operator on request **R1** (F377).
 **Round 2, same day**: re-derived against the code. See design.md "Round 2" for what changed.
+**Round 3, same day**: re-derived again. See design.md "Round 3".
 First of two changes; the second is `a-document-says-how-it-will-be-built-and-approval-starts-it`,
 which builds on this one. **Nothing here is implemented yet.**
 
@@ -37,10 +38,12 @@ approval create the flow, and this panel is where anything about it is corrected
   (403), because `JobUpdate` is also the agent-plane body and a run could otherwise re-point a loop
   at itself (design D2). On a loop the change is **staged** like purpose and stop condition (new
   `Loop.pending_agent`, migration `0108`) and applied at the next firing. On a plain job it applies
-  at once and clears `last_session_id`, since the resumed session belonged to the old agent.
+  at once and clears `last_session_id`, since the resumed session belonged to the old agent. A
+  firing that applies a staged agent resumes nothing of the old agent's either (R3).
 - **A staged edit is applied before the busy guard when no firing of the loop is running** (design
   D2a, R2). Today staging runs after the guard, which asks about the old agent. A switch away from
-  an agent whose allowance is spent would therefore wait for that agent's reset.
+  an agent whose allowance is spent would therefore wait for that agent's reset. A firing that
+  raises after applying an edit still records `loop_edit_applied` (R3).
 - **A loop's listing entry names the document it declares.** `LoopSummary` gains
   `spec_document_id`. One hook, `useDocumentFlow`, finds a document's flow for this change and
   change 2.
@@ -50,9 +53,11 @@ approval create the flow, and this panel is where anything about it is corrected
   cadence) that posts a flow through `POST /jobs`. This is R1's original button, kept as the fallback
   for documents change 2 does not cover.
 - The link opens the loop's tab through the panel-tab store the sidebar already uses. On the Spec
-  destination, where no panel is mounted, it also opens the loop agent's view (design D4).
+  destination, where no panel is mounted, it also opens the loop agent's view with no document
+  attached, so the loop tab is the one in front (design D4).
 - Starting a flow, and `job_created`/`job_updated`/`job_deleted`, refresh the loop caches, so the
-  document names its new flow at once and another open window sees an edit.
+  document names its new flow at once and another open window sees an edit. `loop_edit_applied`
+  also refreshes the job caches, because it can now change a job's agent.
 
 ## Capabilities
 
@@ -61,16 +66,18 @@ approval create the flow, and this panel is where anything about it is corrected
 - `agent-loops`: "An edit to a loop takes effect at its next firing and never during one" names the
   default agent among the staged fields. "A project's loops are listable and individually
   inspectable" has each entry carry its declared document and its agent. ADDS "The operator edits
-  a loop's settings from the loop's own view", "A plain job's change of agent does not resume the
-  old agent's session" and "Only the operator changes which agent a job names".
+  a loop's settings from the loop's own view", "A change of a job's agent does not resume the old
+  agent's session" and "Only the operator changes which agent a job names".
 - `agent-flows`: ADDS "An approved document offers the operator its flow, or a way to start one".
 
 ## Impact
 
 - **Backend:** `schemas/jobs.py` (`JobUpdate.agent`), `api/v1/jobs.py` (PATCH agent handling,
-  `LoopSummary.spec_document_id`, `_pending_loop_edit`, a shared "firing active" helper),
+  `LoopSummary.spec_document_id`, `_pending_loop_edit`),
   `schemas/jobs.py` (`LoopSummary.spec_document_id`), `scheduler.py` (`_stage_pending_loop_edit(loop,
-  job)` applies `pending_agent`; D2a's early application), `db/models.py` plus migration `0108`
+  job)` applies `pending_agent`; D2a's early application; the shared "firing active" helper
+  `_jobs_with_active_firing`; the `except` path), `db/models.py` plus migration `0108` (the next
+  free revision at build time)
   (`loops.pending_agent`, nullable), and the head assertions in `test_migrations.py` and
   `test_project_persistence.py`.
 - **UI:** `api/jobs.ts`, `api/loops.ts`, `LoopTab.tsx`, a new `StartFlowDialog.tsx`,

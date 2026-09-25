@@ -4,7 +4,9 @@
 
 The Hub SHALL accept an edit to a loop at any time, including while one of its firings is running,
 and SHALL apply that edit at the loop's next firing. This holds for the loop's purpose, its stop
-condition, and the agent its job names by default.
+condition, and the agent its job names by default. The next firing is the next time the loop's job
+fires, whether or not that firing then starts any work. A firing that finds the loop's agent busy
+SHALL apply the edit before asking, but only when none of the loop's own firings is running.
 
 A firing already running SHALL continue under the definition it was briefed with. The Hub SHALL
 report an edit that is pending separately from the definition currently in force, so that an operator
@@ -74,6 +76,13 @@ changing.
 - **WHEN** the operator changes the default agent to B, and the loop's job next fires
 - **THEN** that firing applies B before it asks whether the loop's agent is busy
 - **AND** it proceeds under B rather than being refused because A is held
+
+#### Scenario: An edit applied by a firing that is then refused is recorded as applied
+
+- **GIVEN** a loop with a staged edit and none of its firings running
+- **WHEN** its job fires, applies the edit, and is then refused because the loop's agent is busy
+- **THEN** the edit is in force and no longer reported as pending
+- **AND** its application is recorded against the loop with the actor who staged it
 
 #### Scenario: A change of default agent moves no work
 
@@ -150,17 +159,24 @@ MUST NOT be editable there. A loop that has ended or been archived SHALL show it
 - **WHEN** the operator opens its view
 - **THEN** its settings are shown with no way to edit them
 
-### Requirement: A plain job's change of agent does not resume the old agent's session
+### Requirement: A change of a job's agent does not resume the old agent's session
 
-When the agent a job without a loop names is changed, the Hub SHALL apply the change at once and
-SHALL discard the session that job would otherwise resume, since that session belongs to the previous
-agent.
+When the agent a job names is changed, the Hub SHALL discard the session that job would otherwise
+resume, since that session belongs to the previous agent. For a job without a loop the change SHALL
+apply at once. For a loop it applies at the next firing, and that firing SHALL NOT resume, or
+continue the conversation of, the previous agent's session.
 
 #### Scenario: A resume-mode job starts fresh under its new agent
 
 - **GIVEN** a job with no loop, in resume mode, holding a session from agent A
 - **WHEN** its agent is changed to B
 - **THEN** its next run is B's and does not resume A's session
+
+#### Scenario: A loop's first firing under a new agent starts fresh
+
+- **GIVEN** a loop whose job is in resume mode, holding a session from agent A, with a change to B staged
+- **WHEN** the loop's job next fires and applies B
+- **THEN** that firing is B's, in a conversation of B's own, and resumes no session of A's
 
 ### Requirement: Only the operator changes which agent a job names
 

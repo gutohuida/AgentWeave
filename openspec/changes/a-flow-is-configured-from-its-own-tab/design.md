@@ -3,6 +3,88 @@
 **Round 1, 2026-09-25.** Decisions made with the operator in an interactive explore are marked
 **(operator)**; the rest are this round's and are open to R2/R3.
 
+## Round 3, 2026-09-25
+
+Re-derived against HEAD `3f15bae`, from the code rather than from Round 2's notes. **Changed:**
+
+1. **The shared "firing active" helper must live in `scheduler.py`, not `jobs.py`.** `api/v1/jobs.py`
+   imports `scheduler` at module level (`jobs.py:19`). `_do_fire_job` importing a helper back from
+   `api.v1.jobs` would be a cycle. The query leaves `_batch_loop_summaries` (`jobs.py:454-465`)
+   for `scheduler._jobs_with_active_firing(session, job_ids) -> set[str]`, and both call it (D2a,
+   task 2.3a).
+2. **A staged agent change could resume the old agent's provider session.** `_do_fire_job` looks
+   up the resumed conversation for `job.agent` at `:3056-3064`, before the loop is loaded, and both
+   D2a's early application and the late one at `:3179` come after it. A loop in resume mode would
+   then hand A's session and thread to B. D4 of `many-named-loops` stops a loop being *set* to
+   resume, but only when `session_mode` is in the same PATCH (`jobs.py:1083-1092`). A resume-mode
+   plain job opted into a loop by a later `{"purpose": ...}` keeps `resume`. D2 now says a firing
+   that applies an agent change drops what it looked up for the old agent. The ADDED requirement
+   is widened from "a plain job" to any job, and test 1.2a is added.
+3. **The Spec-destination link would land on the document, not the loop.** On mount,
+   `ConversationView`'s destination-to-store effect (`ConversationView.tsx:220-233`) calls
+   `openTab(specTabId(...))` for the attached document. That makes the document tab active, so
+   `openTab(loop)` followed by a navigation *with* the document leaves the loop tab behind it.
+   D4 now navigates with `document: null`. The shell is open because `openTab` set `isOpen`, and
+   the loop tab is the active one. Back returns to the Spec page and its document.
+4. **The `except` path of `_do_fire_job` is now handled here rather than filed.** Round 2 left
+   this as a residual, but D2a makes it this change's problem. That path commits whatever the
+   session holds (`scheduler.py:3549-3571`). D2a applies the edit earlier, so a firing that raises
+   anywhere after that point commits an applied edit and emits no `loop_edit_applied`. The same
+   block also reads `acting_agent`, which is first bound at `:3254`. An exception between the
+   `JobRun`'s creation (`:3095`) and `:3254` (the skip check, `_loop_stop_reason`) therefore
+   raises `UnboundLocalError` out of the handler. On a Run press, `run_job`'s own `except`
+   (`jobs.py:1532-1537`) then commits through `_record_job_run_failure`, taking the half-updated
+   run and the applied edit with it. Task 2.3a binds `acting_agent` and `pending_edit_payload`
+   before the first statement that can raise, and emits `loop_edit_applied` after the handler's
+   commit. Test 1.3c covers it. The fix is three lines in a block this change already rewrites.
+5. **`loop_edit_applied` now changes a job column**, so `useSSE` also invalidates the jobs keys on
+   it (D6). Today it invalidates only loops (`useSSE.ts:543-556`), so `useJob` and the jobs list
+   would keep naming A after B is in force.
+6. **An `agent` in the same PATCH that opts a job into being a loop.** The loop is looked up
+   *before* the loop-fields branch creates one. A loop created by this call has no firing to
+   protect, so it takes the agent at once, as it does its other fields (`jobs.py:1029-1035`). One
+   PATCH makes one `loop_edit_staged`, whose `changes` carry every staged field.
+7. **Test 1.4's claimed mutation could not fail.** `update_job` commits once (`:1145`), and
+   `get_session` commits nothing on a raise (`db/engine.py:166-169`). A check placed after the name
+   is set, but before the commit, therefore leaves the name unchanged too. The named mutation is
+   now "check after the commit".
+8. **The requirement says what "next firing" means under D2a.** An edit applied at a firing that
+   is then refused as busy, or skipped, was already the behaviour for the stall and in-flight
+   paths (`:3295`, `:3329`, `:3339`). Adding the busy refusal needed a sentence in the MODIFIED
+   requirement, so it no longer reads as though a briefing must follow.
+9. **Migration number.** Many open changes add migrations, so this change takes the next free
+   revision at build time: `0108` if it builds first, with `down_revision` set to the head at
+   build time. D5's default name is the document title truncated to `JobCreate.name`'s 256.
+10. Test 1.3a names its setup: an open, unassigned task and a future `stop_at`. Without them the
+    documentless loop's firing stops or proceeds empty, and "queued for B" is not what gets tested.
+
+**Checked and held:** the agent plane's `PATCH /agent-actions/jobs/{job_id}` passes `actor.agent`/
+`actor.run_id` as `agent_identity`/`run_identity` (`agent_actions.py:857-871`). The operator
+route needs an operator credential (`auth.py:134-159`), so "headers present" means an agent's run.
+`_require_agent_job_allowance` is `update_job`'s first statement and refuses incomplete or stale
+attribution itself. The 403 for `agent` therefore sits after it, and before the first mutation at
+`:1010`. The busy guard, the skip check, the late staging at `:3179`, every `loop_edit_applied`
+emit site, and the fact that the busy path records no `JobRun` all hold. `run_job` re-asks
+`_loop_flow_busy_refusal` with the same in-memory `job` (`jobs.py:1473`), so after an early
+application its 409 names B, which is what 1.3b expects. The only `loop_edit_*` consumer is
+`useSSE`. `_batch_loop_summaries`' firing-active join (`JobRun` `in_progress` joined to a
+`running` `Run` on the same conversation) also covers a flow's extra selections, each of which has
+its own `JobRun` and conversation. `openTab` sets `isOpen` (`panelTabsStore.ts:326-348`).
+`SpecPhaseBar` reads `kind`/`phase`/`id` from `useSpecDocuments`. `loopTabId`, `agentDestination`
+and the `onOpenTasks` threading are where Round 2 said. Both MODIFIED blocks carry the complete
+current text of `openspec/specs/agent-loops/spec.md`, line for line, and no other open change
+modifies either requirement. Every requirement's first line has SHALL. `0080` is the right model,
+and `HEAD_REVISION` (`test_migrations.py:40`) and `test_project_persistence.py:227` are the two
+head assertions.
+
+**Residual, recorded rather than closed:** "a firing is active" is `JobRun in_progress` with a
+`running` `Run`. Between a firing's commit at `:3479` and `schedule_agent` creating its `Run`,
+several awaits can interleave with a concurrent tick or Run press. That press sees no active firing,
+applies B, and can start B's firing beside A's on a documentless loop. Today the same window
+yields a duplicate briefing for A, because the guard also reads only `running` `Run`s. Counting an
+`in_progress` `JobRun` with no `Run` yet as active would close it, but would also count A's held,
+queued firing, and that brings back the defect D2a fixes. File it as a finding if it is ever seen.
+
 ## Round 2, 2026-09-25
 
 Re-derived against HEAD `1cddc75`. **Changed:**
@@ -142,8 +224,11 @@ refusal (`:979`), before anything is mutated, so a 400 leaves nothing half-appli
 
 `agent` does **not** join `loop_fields_supplied` (`:989-995`). That set opts a plain job into being
 a loop (`:1000-1016`), and an agent is not a loop field. The loop is looked up on its own when
-`body.agent` is given (`_job_loop`, `:1360`). With a loop the edit is staged; without one it is
-applied.
+`body.agent` is given (`_job_loop`, `:1360`), **before** the loop-fields branch can create one (R3).
+A loop that already existed stages the edit. Without one, including a loop this same PATCH opts
+into existence, the agent is applied at once, as that new loop's other fields are
+(`:1029-1035`). One PATCH makes at most one `loop_edit_staged`, and its `changes` carry every
+field staged, `agent` included.
 
 **Operator-only (R2; needs the operator's confirmation).** `JobUpdate` is also the body of the
 agent-plane `PATCH /agent-actions/jobs/{job_id}` (`agent_actions.py:857-871`), gated only by
@@ -167,6 +252,15 @@ and never during one" states one rule for a loop's definition, and the agent joi
 - `_stage_pending_loop_edit(loop, job)` applies it to `job.agent` with the other pending fields, and
   `loop_edit_applied` carries `{"agent": {"from", "to"}}`. `_stage_pending_loop_edit` has one caller
   (`:3179`); the signature change adds the job.
+- **A firing that applies an agent change resumes nothing of the old agent's (R3).** `_do_fire_job`
+  looks up the resumed conversation for `job.agent` at `:3056-3064`, before either application
+  point. When the applied payload carries `agent`, `_stage_pending_loop_edit` sets
+  `job.last_session_id = None`, and `_do_fire_job` drops the `conversation` and
+  `resume_session_id` it looked up for A. On the late path it also clears `run.session_id`,
+  because the `JobRun` was built with A's session at `:3102`. A loop is meant never to resume (D4
+  of `many-named-loops`), but `jobs.py:1083-1092` checks that only when `session_mode` is in the
+  same PATCH. So a resume-mode plain job later opted into a loop keeps `resume`, and this is
+  reachable.
 - `loop_edit_staged`'s `changes`, `_pending_loop_edit` (`jobs.py:528-545`) and so
   `LoopSummary.pending_edit` include `agent`. The TS `LoopPendingEdit` (`jobs.ts:29-35`) gains
   `agent?`, and `LoopTab`'s `stagedFields` gains a "Default agent" row.
@@ -205,7 +299,9 @@ switch the operator makes *because* A cannot work is the one that cannot take ef
 ask about the agent that will run. "A firing is active" is `_batch_loop_summaries`' existing
 `firing_active` fact: a `JobRun` in `in_progress` whose conversation has a `Run` in `running`
 (`jobs.py:454-466`, read at `:487`). That query moves into one helper that both call, so the panel's "Running now"
-and this gate cannot disagree. While a firing is active the edit is left for `:3179`, exactly as
+and this gate cannot disagree. The helper lives in `scheduler.py` (`_jobs_with_active_firing(session,
+job_ids) -> set[str]`), because `api/v1/jobs.py` imports `scheduler` at module level (`:19`) and the
+reverse import would be a cycle (R3). While a firing is active the edit is left for `:3179`, exactly as
 today. For a documentless loop that means the guard still asks about A, A is running, and the
 firing is refused, which is the protection D2 exists for.
 
@@ -213,6 +309,13 @@ firing is refused, which is the protection D2 exists for.
   `pending_edit_payload = pending_edit_payload or _stage_pending_loop_edit(loop, job)`. The two
   early returns that follow an early application also emit `loop_edit_applied` after their commit:
   the busy refusal (commit at `:3089`) and the skip (commit at `:3114`). Every later return already does.
+- **The `except` path (R3).** `pending_edit_payload = None` and `acting_agent = job.agent` are
+  bound before the first statement in the `try` that can raise. Today `acting_agent` is first bound
+  at `:3254`, and the handler reads it (`:3563`, `:3568`), so an exception between `:3095` and
+  `:3254` raises `UnboundLocalError` out of the handler. After its commit, the handler emits
+  `loop_edit_applied` when a payload was made, so the applied edit it commits is recorded. When no
+  `JobRun` exists yet, the handler commits nothing, the session rolls back, and the edit stays
+  staged. That is consistent as it stands.
 - This moves purpose and stop too, not only the agent. That is deliberate. Applying them at a tick
   where no firing of the loop is running is still "between firings". Splitting the agent from the
   others would need a second sentinel and two `loop_edit_applied` events for one edit.
@@ -263,7 +366,7 @@ and `LoopFiringGroup.tsx:94` already call it from outside `ConversationView`. `S
 | Host | Panel shell mounted? | What the link does |
 |---|---|---|
 | Conversation view's panel, a `spec:` tab (`ConversationView.tsx:384`) | yes | `openTab`; the loop tab appears beside the document |
-| Spec destination (`SpecPage`, `App.tsx:428-446`) | no | `openTab`, then `navigateTo(agentDestination(projectId, loop.agent, null, path))` (`lib/navigation.ts:152`), the sidebar's own "open agent" navigation, so the panel is mounted with the tab open and the document still attached |
+| Spec destination (`SpecPage`, `App.tsx:428-446`) | no | `openTab`, then `navigateTo(agentDestination(projectId, loop.agent, null, null))` (`lib/navigation.ts:152`), so the panel is mounted with the loop tab open **and active**. **No document is passed (R3).** `ConversationView`'s destination-to-store effect (`:220-233`) opens the attached document's tab on mount, and that tab would then be the active one, in front of the loop. Back returns to the Spec page and its document |
 
 So `SpecPhaseBar` takes an `onOpenLoop?: (loop: LoopSummary) => void`. `SpecDocumentPanel` threads it
 the way it already threads `onOpenTasks` (`SpecDocumentPanel.tsx:42`, `:66`, `:240`). Each host
@@ -282,7 +385,7 @@ A flow needs five things, so it gets its own dialog. It takes `document: {id, ti
 
 | Field | Default |
 |---|---|
-| Name | the document's title |
+| Name | the document's title, truncated to `JobCreate.name`'s 256 characters |
 | Default agent | required select of **open** agents (`useAgents()`), no preselection when there is more than one |
 | Message | `Work the next task of "<title>".` |
 | Stop | **when the queue empties** (checked); optional stop-at time. At least one is required, and the dialog refuses to submit without one, as `create_flow` does (`mcp_server.py:821-827`) |
@@ -310,11 +413,16 @@ requirement then covers this dialog too.
 - `useSSE.ts` (`:521-536`): `job_created`, `job_updated` and `job_deleted` also invalidate
   `['project', pid, 'loops']`, as `job_fired` already does. A second window then sees an edit or a
   new flow. `useSSE`'s loop-event branch (`:544-556`) already covers `loop_edit_staged` and
-  `loop_edit_applied`.
+  `loop_edit_applied` for the loop keys. **`loop_edit_applied` also invalidates
+  `['project', pid, 'jobs']` (R3)**, since applying a staged agent now writes `job.agent`. The
+  prefix covers `useJob`'s `['project', pid, 'jobs', id]`. A busy-refused or skipped tick
+  broadcasts no `job_fired`, so nothing else would refresh them.
 - TS `JobUpdate.agent` stops being drift: it is now accepted.
 
 ### D7 — Migration `0108` (R2)
 
+The next free revision at build time. It is `0108` if this change lands first; several open changes
+add migrations, so `down_revision` is whatever the head is then (R3).
 `0108_loop_pending_agent.py`, following `0080_loop_pending_edit.py`: a guard for a missing `loops`
 table and for the column already existing, then `op.add_column("loops", sa.Column("pending_agent",
 sa.String(64), nullable=True))`. Downgrade drops it the same way `0080` does. Bump
@@ -348,7 +456,7 @@ additive, no backfill. On `:8000`'s next restart it adds an empty column.
   bar shows **Start a flow…** even for a document with a flow, and the POST answers 409 with the
   claim sentence), and the other fields work. The restart then runs migration `0108` on their data.
   Tell the operator before the bundle commit.
-- **Residual, not fixed:** `_do_fire_job`'s `except` path (`scheduler.py:3549-3572`) commits an edit
-  already applied in memory without `loop_edit_applied`. That is true today of purpose and stop. D2a
-  makes early application more frequent, so a firing that raises after it leaves an applied edit
-  with no event. File it as a finding if R3 agrees. Do not widen this change.
+- **`_do_fire_job`'s `except` path** (`scheduler.py:3549-3572`) is fixed here after all (R3, D2a).
+  R2 had it as a residual.
+- **Residual, not fixed:** the firing-active window between a firing's commit and its `Run`
+  starting (Round 3, "Residual").
