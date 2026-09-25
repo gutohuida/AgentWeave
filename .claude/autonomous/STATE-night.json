@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "8a5d0ed",
     "stop_at": "2026-09-25T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-09-24-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "night-drive",
-    "next_action": "Continue queue item night-drive, part 2, on the SAME drive Hub if still up (port 8025, profile drive0925, project proj-45cf24ffe51b, key from /api/v1/setup/token; else restart it from hub/ with DATABASE_URL for that profile): drive the flow-moves history drawer in the UI (scripts/uishot.py), checkpoint handover (second cut_over refused), tool-server pin, F133 status route, event-after-commit. Record in FINDINGS.md. Then per-change archive items. Read CI verdict for 1c2cf26 and the new push sha first. Set next_action to null when the queue is finished.",
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -65,9 +65,9 @@
         },
         {
             "id": "night-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive tonight's changes on a fresh drive Hub",
-            "detail": "Part 1 done iteration 10: pressing Run, job_run_id, flow-move origin driven (FINDINGS). Part 2 open: UI drawer, checkpoint handover, tool-server pin, F133, event-after-commit."
+            "detail": "Parts 1 and 2 done (iterations 10, 11). Tool-server pin not driven live (unit tests only)."
         }
     ],
     "decisions_for_user": [],
