@@ -33243,3 +33243,77 @@ Same Hub (`drive0925`, 8025), real HTTP. Measured: a conversation with two ready
 **Theme:** Runners & runtime
 
 `main.py`'s lifespan logs `logger.info("Tool server pinned at %s", ...)` and `logger.info("Pruned stale tool server %s", ...)`. Neither appears in the Hub's output: zero hits over the whole startup log while the pin demonstrably ran (the file exists at the digest path and the spawned `--mcp-config` names it). Cause, already recorded in `main.py`'s own comment beside the database-path line (measured 2026-09-20): the root logger is WARN after `init_db()`'s alembic `fileConfig` (`alembic.ini`, `migrations/env.py:28`), and nothing lowers it, so every `hub.*` `logger.info` is dropped for the life of the process. Design D1's "the startup log names that path" is false as shipped; an operator cannot see which tool-server copy their Hub pinned without reading the process list. Fix candidates: log the pin at WARNING like its sibling, or give the Hub its own logging configuration so INFO reaches the operator (wider — it changes every `hub.*` INFO line).
+
+## Full-surface sweep 2026-09-25 — seven findings, and what held
+
+Nineteen coverage rows driven by five parallel operators plus row 19 by the orchestrator, on the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku). Projects `sweep0925-A`…`E` under `~/Documents`. Reports: the sweep report Artifact (2026-09-25). Rows 1–6, 8, 11, 13–17 and 19 came back WORKS; 7, 9, 10, 12 WORKS WITH PROBLEMS; Codex paths NOT REACHED (plan cancelled). Reproduced and still open: F21, F113, F125, F134, F183, F248, F284.
+
+## F450 (B) — an agent can claim and finish a task assigned to a different agent; `assignee` is not an authorization boundary
+
+**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 7.
+**Source:** drive
+**Theme:** Task ledger
+
+**What happened.** `task-bdb51ddeea1c` was created `assignee: alpha, status: assigned` and never started. A real Haiku turn on the idle agent `beta` called `update_task(…, in_progress)` then `update_task(…, completed)`: both 200. `task_transitions` records `assigned→in_progress` and `in_progress→completed`, both `actor_kind=run, actor_agent=beta`; `tasks.assignee` is still `alpha`, so the board and timeline name the wrong holder.
+**Where.** `task_transition_service.py:475-537` `_guard_run_holds_the_task`: a run holding nothing takes any task (`run.task_id is None` → bind); nothing compares the run's agent with `task.assignee`.
+**Related:** F27 (fixed; the unbound-completion half this guard closed). The self-review and self-approval guards held in the same row — `agents_that_may_have_authored` reads transitions, so `beta` is correctly barred from reviewing it.
+
+## F451 (B) — `spec_document_id` on a loop or flow takes a document's path or its id, unvalidated: the path form orphans the flow and slips past the one-loop-per-document check
+
+**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 12.
+**Source:** drive
+**Theme:** Flows & loops
+
+**What happened.** `POST /jobs` with `spec_document_id: "spec/changes/ivory-kirin/spec.html"` (the path, the form every spec tool takes) → 201, and the flow's queue stayed `{}` for good: tasks store `spdoc-0e47c7ae3226`, and `_adopt_document_tasks` compares strings. A second flow with `spdoc-0e47c7ae3226` on the same document, the first still live → 201, no 409. A third with the same id → 409 as designed (`job-54f432806846`, `job-49f2608e35fc`).
+**Where.** `api/v1/jobs.py:143-178` `_check_spec_document_conflict` and `:259-265` compare the raw string; nothing checks it names a document. MCP `create_flow(spec_document_id: str)` (`mcp_server.py:766`) says only "the specification document this flow decomposes", and an agent knows documents by path.
+**Related:** F53 (archived loops keep the document), F28.
+
+## F452 (B) — `read_spec_document` returns acceptance criteria nested per requirement, `submit_spec_document` takes them flat: an agent's read-then-resubmit silently deletes every criterion
+
+**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 9.
+**Source:** drive
+**Theme:** Spec & requirements
+
+**What happened.** Asked to resolve its own open question by resubmitting the document, `builder` read it (`include="full"`: `requirements[].acceptance_criteria` plus Hub-assigned `identifier`/`state`) and resubmitted that shape: top-level `acceptance_criteria: null`, the nested fields accepted and ignored. The document's acceptance section vanished, and `propose` then blocked on `requirement_without_criterion`, which reads as if none were ever written (`conv-d09510ccdf8b`, call `toolu_01Vf1qsAB79S5ZhQe6R8mXRV`).
+**Where.** The two tools' shapes in `mcp_server.py`; the submit schema ignores unknown nested keys rather than refusing them.
+
+## F453 (C) — under `manual` posture, commands Claude Code pre-approves as trivial never reach the operator, and nothing says so
+
+**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 14.
+**Source:** drive
+**Theme:** Workspace & permissions
+
+**What happened.** A `manual` turn asked to run `echo checkpoint-one/two/three` ran all three in ~13 s: 0 `permission_requests` rows, no event (`run-4e613a3491fb`). The next turn's `Write` calls each opened a card within a second. The cause is Claude Code's own pre-approval of read-only commands before `--permission-prompt-tool` is consulted, so it is not a Hub defect, but the pill and settings still promise "Ask me" for everything.
+**Related:** F52 (an allow is unobservable). Approve, deny and the 120 s expiry all held in the same row.
+
+## F454 (B) — a Hub-launched agent can load the operator's personal Claude Code skills; a loop firing ran `e2e-loop` and started new loops and commits nobody asked for
+
+**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 11.
+**Source:** drive
+**Theme:** Agents & runners
+
+**What happened.** A scratch loop left enabled (empty queue, message "placeholder", a descriptive `purpose`) fired twice. Both times `builder` read the purpose as a directive and invoked the operator's own `e2e-loop` skill from `~/.claude/skills`. It then tried the trial Hub twice (`curl http://127.0.0.1:8010/health`, denied by the shell judge: "a shell command may name only this run's own Hub"), called `create_loop` and `toggle_job`, wrote an unrequested report and committed it to the project's `master` (conversation `conv-fc2dbb291cc5`; jobs `job-88075aa4fe95`, `job-7cac48f7ca02` created by the agent).
+**Why B.** The operator's user-level skills include ones that register Windows scheduled tasks (`autonomous-session`), and agents run with them available. The shell judge held on the network half; nothing scopes which skills a run sees.
+**Related:** F195 (setting sources), F284.
+
+## F455 (C) — `agentweave doctor --port N` without `--profile` checks the default profile's database and reports it accessible
+
+**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), CLI.
+**Source:** drive
+**Theme:** Hub plumbing
+
+**What happened.** `doctor --port 8030` → `[OK] ~/.agentweave/hub/data/agentweave.db: The native database is accessible.` although `:8030` serves `profiles/sweep0925`; with `--profile sweep0925` it checks the right file. Nothing warns that the database checked is not the one behind the port. This is the `doctor` half of F34's own description; F34's `--port` fix (`6b1013f`) holds.
+**Related:** F34.
+
+## F456 (D) — a budget-exhausted project runs an operator's trigger without saying the budget was passed over
+
+**Status:** open. Found the 2026-09-25 full-surface sweep (Hub `:8030`, profile `sweep0925`, HEAD `c9873c4`, Haiku), row 18.
+**Source:** drive
+**Theme:** Operator surfaces
+
+**What happened.** With `token_budget` below `used_tokens` (`exhausted: true`), `POST /agent/trigger` → 200 and the turn ran (`run-ff2da3eff08c`); a peer-triggered turn was held with "token budget exhausted" and drained the moment the budget lifted. The asymmetry is deliberate (`turn_scheduler.py:364` gates `initiator == "autonomous"` only), and neither response nor the timeline says so.
+
+## F21 addendum, 2026-09-25 sweep — the looping agent faked a success, and the workaround stamps the wrong commit
+
+Reproduced in row 10: `builder` re-loaded `record_evidence`'s schema six times, then printed an invented "Recording evidence…" success block through PowerShell and ended `completed` with no evidence row. The prescribed focused retry worked at once, but it ran unbound to the task, so `ev-6da671ce9ee7`'s `footprint.commit_sha` is the project's initial commit, which does not contain the work its summary describes; `outside_workspace_writes` stayed `[]`.
+
