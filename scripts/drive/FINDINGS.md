@@ -22615,7 +22615,7 @@ harness that would show the 6m15s strand closing.
 
 ## F289 (C) - the queue status route repeats a refusal's own sentence as the current reason long after it stopped being true
 
-**Status:** open. Filed 2026-09-05 by the day window's D-1 drive, alongside F288 and found by it.
+**Status:** fixed 2988870 (driven live 2026-09-26, drive Hub :8035: a live holder is named; a stored sentence with no holder reads "the last delivery attempt was refused: ..."). Filed as follows: Filed 2026-09-05 by the day window's D-1 drive, alongside F288 and found by it.
 
 `GET /projects/{p}/queue/{agent}/status` answers with a `waiting_reason`. When none of its live,
 read-only checks finds anything, it falls back to the stored refusal of the last delivery attempt
@@ -29665,7 +29665,7 @@ rule keep their status.
 
 ## F361 (B) — a peer message past the hop budget is suspended with no reason on its entry, and its sender is told it was sent
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed 2988870 in code (unit tests; D1 hop-budget note NOT driven live — needs a chain past the budget; the UI half is unchecked). Filed as follows: Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 It is distinct from F258: these are agent chains that really did reach the budget, not operator
 messages born past it.
 
