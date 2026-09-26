@@ -1013,6 +1013,41 @@ async def test_a_released_workspace_falls_back_rather_than_naming_a_missing_dire
 
 
 @pytest.mark.asyncio
+async def test_a_task_bound_agent_whose_checkout_was_released_is_footprinted_at_the_task_branch(
+    app, auth_headers, builder, bind_project_workspace, tmp_path
+):
+    """F166, a-footprint-names-the-line-of-work-its-commit-is-on (D3). Same staging as the unbound
+    test above plus `Run.task_id`: release snapshotted the work onto the task branch, so the
+    footprint names that branch's tip - not the agent's own checkout, and not the main branch."""
+    repo = init_repo(tmp_path / "repo")
+    await bind_project_workspace(repo)
+
+    own = worktrees.ensure_worktree(repo, "builder")
+    own_commit = commit_in(own, "agent_work.py", "not the task's\n")
+
+    task_id = "task-aa11bb22cc33"
+    task_checkout = _REAL_ENSURE_TASK_WORKTREE(repo, task_id, head_of(repo), ())
+    task_commit = commit_in(task_checkout, "the_work.py", "the work\n")
+    await _record_workspace_dir("run-fp", task_checkout)
+    async with async_session_factory() as session:
+        (await session.get(Run, "run-fp")).task_id = task_id
+        await session.commit()
+    _REAL_RELEASE_TASK_WORKTREE(repo, task_id)
+    assert not task_checkout.exists()
+
+    await make_document(app, auth_headers, builder)
+    recorded = await app.post(
+        AGENT_EVIDENCE, json={"identifier": "FR-1", "summary": "ran the tests"}, headers=builder
+    )
+    assert recorded.status_code == 201, recorded.text
+
+    footprint = await only_footprint()
+    assert footprint.commit_sha == task_commit
+    assert footprint.commit_sha not in (own_commit, head_of(repo, "main"))
+    assert footprint.branch == worktrees.task_branch_name(task_id)
+
+
+@pytest.mark.asyncio
 async def test_a_run_predating_the_column_keeps_the_behaviour_it_had(
     app, auth_headers, builder, bind_project_workspace, tmp_path
 ):

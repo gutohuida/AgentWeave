@@ -298,6 +298,43 @@ async def integration_targets(session: AsyncSession, task: Task) -> List[Target]
     return list(newest.values())
 
 
+def _is_proper_ancestor(root: Path, commit: str, of: str) -> bool:
+    """Whether *commit* is a different commit that *of* contains. An unanswerable probe is False."""
+    return commit != of and requirement_evidence.is_reachable_from(root, commit, of) is True
+
+
+def reduce_by_ancestry(root: Path, accepted: List[Target]) -> List[Target]:
+    """The accepted targets (oldest observation first) reduced the way approval merges them.
+
+    A named line of work keeps one target: an incoming commit replaces the incumbent unless it is a
+    proper ancestor of it (a reviewer's later footprint at an older commit must not displace the
+    author's newer one); where neither contains the other, the later observation wins, as
+    `integration_targets` does. Footprints naming no line of work (`""` or NULL) share nothing but
+    a missing name, so only a proper ancestor of another kept commit is dropped and every other
+    commit is kept; an unanswerable probe keeps both.
+    """
+    named: Dict[str, Target] = {}
+    unnamed: List[Target] = []
+    for target in accepted:
+        if target.branch:
+            incumbent = named.get(target.branch)
+            if incumbent is None or not _is_proper_ancestor(
+                root, target.commit_sha, incumbent.commit_sha
+            ):
+                named[target.branch] = target
+            continue
+        if any(_is_proper_ancestor(root, target.commit_sha, kept.commit_sha) for kept in unnamed):
+            continue
+        unnamed = [
+            kept
+            for kept in unnamed
+            if kept.commit_sha != target.commit_sha
+            and not _is_proper_ancestor(root, kept.commit_sha, target.commit_sha)
+        ]
+        unnamed.append(target)
+    return [*named.values(), *unnamed]
+
+
 async def awaiting_targets(session: AsyncSession, task: Task) -> List[Target]:
     """Every piece of *task*'s evidence that names a commit and is still waiting to be judged.
 
@@ -397,7 +434,8 @@ async def evidence_governs(session: AsyncSession, task: Task) -> bool:
 async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[Target]:
     """What approving *task* would actually merge — the commits, whatever their source (design D5).
 
-    `integration_targets` where evidence governs, and at most one branch-tip `Target` where it does
+    `integration_targets`' accepted footprints, reduced by ancestry (`reduce_by_ancestry`, so a
+    descendant commit outranks a later observation of an older one), where evidence governs, and at most one branch-tip `Target` where it does
     not. `integration_targets` itself is **not** modified and stays a pure database query; the
     branch-tip answer needs a `rev-parse`, which is why this one takes a repository root and that
     one does not.
@@ -410,7 +448,8 @@ async def merge_targets(session: AsyncSession, task: Task, root: Path) -> List[T
     collapsing them: `NOTHING_TO_MERGE` where evidence governs, `NO_TASK_BRANCH` where it does not.
     """
     if await evidence_governs(session, task):
-        return await integration_targets(session, task)
+        accepted = await _targets(session, task, requirement_evidence.ACCEPTED)
+        return await asyncio.to_thread(reduce_by_ancestry, root, accepted)
     tip = await asyncio.to_thread(task_branch_tip, root, task.id)
     if tip is None:
         return []

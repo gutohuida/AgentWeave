@@ -1118,17 +1118,17 @@ async def task_integration_preview(
     main_branch = project_row.main_branch if project_row else None
 
     governed = await task_integration.evidence_governs(session, task)
-    if governed:
-        targets = await task_integration.integration_targets(session, task)
-        empty_reason = task_integration.NOTHING_TO_MERGE
+    empty_reason = (
+        task_integration.NOTHING_TO_MERGE if governed else task_integration.NO_TASK_BRANCH
+    )
+    try:
+        workspace = await project_workspace.resolve_project_workspace(session, project_id)
+    except Exception:  # noqa: BLE001 - not knowing is an answer here, a 500 is not
+        # Governed, the database still answers (observation order, no ancestry); ungoverned there is
+        # no answer without a repository.
+        targets = await task_integration.integration_targets(session, task) if governed else []
     else:
-        empty_reason = task_integration.NO_TASK_BRANCH
-        try:
-            workspace = await project_workspace.resolve_project_workspace(session, project_id)
-        except Exception:  # noqa: BLE001 - not knowing is an answer here, a 500 is not
-            targets = []
-        else:
-            targets = await task_integration.merge_targets(session, task, workspace.root)
+        targets = await task_integration.merge_targets(session, task, workspace.root)
 
     if not main_branch:
         reason = task_integration.NO_MAIN_BRANCH

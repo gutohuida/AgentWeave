@@ -344,25 +344,19 @@ async def test_evidence_recorded_from_the_branch_supersedes_and_clears_it(
 
 
 @pytest.mark.asyncio
-async def test_an_operator_naming_the_resolved_sha_does_not_supersede(
+async def test_an_operator_naming_the_resolved_sha_supersedes_and_approval_merges(
     app, auth_headers, builder, tmp_path
 ):
-    """1.3a — the operator hazard round 2 found, asserted as a **non-guarantee**.
+    """1.3a, flipped by a-footprint-names-the-line-of-work-its-commit-is-on (F165).
 
-    An operator who reads the remedy and records evidence whose `locator` is the resolved sha gets
-    its branch from `_branch_at`, which answers `""` unless that commit is exactly one branch's tip
-    (`requirement_evidence.py:516-529`). Here it is not — a later commit has moved the branch on —
-    so the fresh row lands under a second key in `integration_targets`' per-branch reduction and
-    the stale accepted row survives beside it.
-
-    This change is prose-only and does not fix that. The test is here so the wording cannot promise
-    it away, and so a later reader finds the state named rather than having to rediscover it. The
-    remedy's phrasing — *recorded from a checkout of that branch* — is what steers around it.
+    An operator who reads the remedy and records evidence whose `locator` is the resolved sha names
+    a commit that is no longer any branch's tip (the branch has moved on). Its footprint used to
+    land under `""` beside the stale row under the branch, and the refusal stood. `line_of_work`
+    now resolves the one branch containing the commit, so the fresh row supersedes the stale one
+    and approval merges.
     """
     task, judged = await conflicted(app, auth_headers, builder, tmp_path)
     resolved = resolve_on_branch(tmp_path)
-    # The branch moves on, so `resolved` is no longer any branch's tip. Ordinary: an agent keeps
-    # working, or the operator writes the resolution and then a follow-up.
     (tmp_path / "notes.md").write_text("more\n", encoding="utf-8")
     git(tmp_path, "add", "notes.md")
     git(tmp_path, "commit", "-q", "-m", "carry on")
@@ -376,18 +370,16 @@ async def test_an_operator_naming_the_resolved_sha_does_not_supersede(
     assert recorded.status_code == 201, recorded.text
     footprint = recorded.json()["footprint"]
     assert footprint["commit_sha"] == resolved
-    assert footprint["branch"] == "", footprint
+    assert footprint["branch"] == "agentweave/builder", footprint
 
     async with async_session_factory() as session:
         row = await session.get(Task, task)
         targets = await task_integration.integration_targets(session, row)
-    shas = sorted(target.commit_sha for target in targets)
-    assert shas == sorted([judged, resolved]), targets
+    assert [target.commit_sha for target in targets] == [resolved], targets
 
-    # And so the refusal stands: the stale row is still one of the things approval would merge.
-    refused = await approve(app, auth_headers, task)
-    assert refused.status_code == 409, refused.text
-    assert judged[:12] in str(refused.json()["detail"]["unmergeable"])
+    approved = await approve(app, auth_headers, task)
+    assert approved.status_code == 200, approved.text
+    assert resolved in commits_on(tmp_path, "main")
 
 
 @pytest.mark.asyncio

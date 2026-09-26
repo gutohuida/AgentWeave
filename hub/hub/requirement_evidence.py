@@ -133,7 +133,11 @@ async def record(
     if workspace is not None:
         # Design D7: the directory this actor's run was actually given, when there was a run.
         taken = _take_footprint(
-            workspace, actor, locator, await recorded_workspace_dir(session, actor.run_id)
+            workspace,
+            actor,
+            locator,
+            await recorded_workspace_dir(session, actor.run_id),
+            task_id,
         )
         own: Optional[RequirementEvidence] = None
         if actor.kind == "agent" and actor.run_id:
@@ -351,6 +355,7 @@ def _take_footprint(
     actor: Actor,
     locator: str,
     recorded_dir: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> Footprint:
     """The footprint this evidence should carry, given who is recording it and what they named.
 
@@ -379,10 +384,48 @@ def _take_footprint(
     and all, and `restamp_run_footprints` corrects it once the commit exists — a locator-named
     commit would fight that mechanism rather than improve it.
     """
-    root = footprint_root(workspace, actor.kind, actor.name or "", recorded_dir)
     named = locator_commit(locator) if actor.kind == "operator" else None
+    return read_evidence_footprint(
+        workspace, actor.kind, actor.name or "", recorded_dir, task_id, named=named
+    )
+
+
+def _task_branch_of(task_id: Optional[str]) -> Optional[str]:
+    """The branch a task's work is kept on, or None for no task or an id the product did not mint."""
+    if not task_id:
+        return None
+    try:
+        return worktrees.task_branch_name(task_id)
+    except ValueError:
+        return None
+
+
+def read_evidence_footprint(
+    workspace: ProjectWorkspace,
+    actor_kind: str,
+    actor: str,
+    recorded_dir: Optional[str],
+    task_id: Optional[str],
+    *,
+    named: Optional[str] = None,
+) -> Footprint:
+    """The one place a piece of evidence's footprint is read, so record and capture cannot disagree.
+
+    In order (design D3): (1) the run's recorded directory, while it exists; (2) for an agent bound
+    to a task whose directory is gone, the project root read at the tip of the task's own branch,
+    where `release_task_workspace` snapshotted the work (F166); (3) `footprint_root`'s fallback, as
+    it always was. `named` is an operator's locator commit (F71); it is verified in whichever root
+    was chosen and refused, never fallen back from.
+    """
+    task_branch = _task_branch_of(task_id)
+    root = footprint_root(workspace, actor_kind, actor, recorded_dir)
+    at: Optional[str] = None
+    if not (recorded_dir and Path(recorded_dir).is_dir()) and actor_kind == "agent" and task_branch:
+        tip = _git(workspace.root, "rev-parse", "--verify", f"refs/heads/{task_branch}")
+        if tip:
+            root, at = workspace.root, tip
     if named is None:
-        return read_footprint(root)
+        return read_footprint(root, at=at, task_branch=task_branch)
 
     resolved = _git(root, "rev-parse", "--verify", f"{named}^{{commit}}")
     if resolved is None:
@@ -394,7 +437,7 @@ def _take_footprint(
             f"first, or name something other than a commit in the locator.",
             code="locator_commit_unknown",
         )
-    return read_footprint(root, at=resolved)
+    return read_footprint(root, at=resolved, task_branch=task_branch)
 
 
 def footprint_root(
@@ -562,13 +605,12 @@ async def capture_footprint(
     if taken is None:
         # Resolved from the evidence row, keeping this function's stated principle: a later caller
         # gets the right answer without knowing the rule exists (design D7).
-        taken = read_footprint(
-            footprint_root(
-                workspace,
-                evidence.actor_kind,
-                evidence.actor,
-                await recorded_workspace_dir(session, evidence.run_id),
-            )
+        taken = read_evidence_footprint(
+            workspace,
+            evidence.actor_kind,
+            evidence.actor,
+            await recorded_workspace_dir(session, evidence.run_id),
+            evidence.task_id,
         )
     return _apply_footprint(session, evidence, taken, outside_writes=outside_writes)
 
@@ -610,7 +652,9 @@ def tree_entries(root: Path, ref: str) -> Optional[Dict[str, str]]:
     return entries
 
 
-def read_footprint(root: Path, *, at: Optional[str] = None) -> Footprint:
+def read_footprint(
+    root: Path, *, at: Optional[str] = None, task_branch: Optional[str] = None
+) -> Footprint:
     """The footprint of a workspace, by whichever of the two shapes applies.
 
     A project without a repository is a supported first-class case
@@ -628,11 +672,11 @@ def read_footprint(root: Path, *, at: Optional[str] = None) -> Footprint:
     """
     commit = _git(root, "rev-parse", at or "HEAD")
     if commit:
-        branch = (
-            _branch_at(root, commit)
-            if at
-            else (_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "")
-        )
+        branch = "" if at else (_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "")
+        if at or branch in ("", "HEAD"):
+            # A named commit, or a detached checkout (`--abbrev-ref` answers the literal `HEAD`):
+            # resolve the line of work rather than record git's spelling of "none" (D1, D2).
+            branch = line_of_work(root, commit, task_branch=task_branch)
         return Footprint(
             kind="git",
             commit_sha=commit,
@@ -663,20 +707,27 @@ def locator_commit(locator: str) -> Optional[str]:
     return candidate if _COMMIT_ISH.match(candidate) else None
 
 
-def _branch_at(root: Path, commit: str) -> str:
-    """The local branch whose tip is exactly *commit*, or `""` when that is not one branch.
+def line_of_work(root: Path, commit: str, *, task_branch: Optional[str] = None) -> str:
+    """The local branch *commit* is on, or `""` when git cannot say which one (design D2).
 
-    Only an exact tip counts. A commit in the middle of a branch's history belongs to every branch
-    that descends from it, and picking one would put a guess into the field
-    `task_integration.integration_targets` groups by. `""` is already this module's word for "names
-    no line of work" — `evidence_drift` skips such a footprint rather than treating it as drift —
-    so the unknown case has an established, honest meaning rather than a new one.
+    The one branch whose tip is the commit; else the task's own branch if it contains the commit;
+    else the one local branch containing it; else `""`. `""` is the only spelling of "no known line
+    of work" — never git's `HEAD` — because `task_integration` groups by this string. Built on
+    `for-each-ref refs/heads`, which lists only real branches: `branch --points-at` also lists
+    `(HEAD detached at …)` when the checkout is detached at the commit.
     """
-    listed = _git(root, "branch", "--format=%(refname:short)", "--points-at", commit)
-    if not listed:
-        return ""
-    names = [line.strip() for line in listed.splitlines() if line.strip()]
-    return names[0] if len(names) == 1 else ""
+
+    def _names(*args: str) -> List[str]:
+        listed = _git(root, "for-each-ref", "--format=%(refname:short)", *args, "refs/heads")
+        return [line.strip() for line in (listed or "").splitlines() if line.strip()]
+
+    tips = _names("--points-at", commit)
+    if len(tips) == 1:
+        return tips[0]
+    if task_branch and is_reachable_from(root, commit, f"refs/heads/{task_branch}") is True:
+        return task_branch
+    containing = _names("--contains", commit)
+    return containing[0] if len(containing) == 1 else ""
 
 
 # The names a project's main line of work goes by, in the order they are tried. Nothing here guesses
@@ -1085,10 +1136,14 @@ async def restamp_run_footprints(
     # Deliberately a *fresh* answer, and free to be `False`. `refresh_reachability` is upgrade-only
     # because for a fixed commit the answer only travels one way — but this is a different commit,
     # and carrying over its predecessor's `True` is precisely the poison being removed here.
+    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD") or ""
+    if branch in ("", "HEAD"):
+        task_id = await task_bound_to_run(session, run_id)
+        branch = line_of_work(root, target, task_branch=_task_branch_of(task_id))
     taken = Footprint(
         kind="git",
         commit_sha=target,
-        branch=_git(root, "rev-parse", "--abbrev-ref", "HEAD") or "",
+        branch=branch,
         entries=tree_entries(root, target) or {},
         reachable_from_main=(
             is_reachable_from(root, target, main_branch)
