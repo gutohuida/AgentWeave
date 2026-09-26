@@ -1,40 +1,140 @@
 {
-    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook":  ".claude/loops/night-window.md",
-    "runner":  "claude",
-    "model":  "opus",
-    "permission_mode":  "unattended-full-access",
-    "branch":  "autonomous/2026-09-26-daily",
-    "parent_branch":  "master",
-    "parent_sha":  "926eeeb",
-    "stop_at":  "2026-09-27T07:00:00+01:00",
-    "iteration":  0,
-    "log_file":  ".claude/autonomous/2026-09-26-night-log.md",
-    "findings_file":  "scripts/drive/FINDINGS.md",
-    "approvals_file":  "spec-queue/APPROVALS.md",
-    "current":  "compose",
-    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
-    "queue":  [
-                  {
-                      "id":  "compose",
-                      "status":  "open",
-                      "title":  "Compose this window\u0027s queue from the playbook",
-                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
-                  }
-              ],
-    "decisions_for_user":  [
-
-                           ],
-    "limits":  [
-                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
-                   "Every claim is measured or labelled unverified.",
-                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
-                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
-                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-               ]
+    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook": ".claude/loops/night-window.md",
+    "runner": "claude",
+    "model": "opus",
+    "permission_mode": "unattended-full-access",
+    "branch": "autonomous/2026-09-26-daily",
+    "parent_branch": "master",
+    "parent_sha": "926eeeb",
+    "stop_at": "2026-09-27T07:00:00+01:00",
+    "iteration": 1,
+    "log_file": ".claude/autonomous/2026-09-26-night-log.md",
+    "findings_file": "scripts/drive/FINDINGS.md",
+    "approvals_file": "spec-queue/APPROVALS.md",
+    "current": "at-mention-impl",
+    "next_action": "Do queue item at-mention-impl: Implement an-at-mention-an-agent-wrote-reads-no-file (tests first, then fix). First line of log: read CI verdict for previous pushed sha (gh run list). Tree-green check: run CLI suite py -3.11 -m pytest tests/ -q before starting.",
+    "queue": [
+        {
+            "id": "at-mention-impl",
+            "status": "open",
+            "title": "Implement an-at-mention-an-agent-wrote-reads-no-file (tests first, then fix)",
+            "detail": "openspec/changes/an-at-mention-an-agent-wrote-reads-no-file/tasks.md is the authority. F409 sev A; also CLI evidence group 3. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+        },
+        {
+            "id": "at-mention-drive",
+            "status": "open",
+            "title": "Drive an-at-mention-an-agent-wrote-reads-no-file live (UI in Chromium)",
+            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+        },
+        {
+            "id": "at-mention-archive",
+            "status": "open",
+            "title": "Archive an-at-mention-an-agent-wrote-reads-no-file",
+            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+        },
+        {
+            "id": "b10-impl",
+            "status": "open",
+            "title": "Implement a-loop-is-stopped-archived-and-delegated-from-its-own-tab (tests first, then fix)",
+            "detail": "openspec/changes/a-loop-is-stopped-archived-and-delegated-from-its-own-tab/tasks.md is the authority. F225; UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+        },
+        {
+            "id": "b10-drive",
+            "status": "open",
+            "title": "Drive a-loop-is-stopped-archived-and-delegated-from-its-own-tab live (UI in Chromium)",
+            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+        },
+        {
+            "id": "b10-archive",
+            "status": "open",
+            "title": "Archive a-loop-is-stopped-archived-and-delegated-from-its-own-tab",
+            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+        },
+        {
+            "id": "r1a-impl",
+            "status": "open",
+            "title": "Implement a-flow-is-configured-from-its-own-tab (tests first, then fix)",
+            "detail": "openspec/changes/a-flow-is-configured-from-its-own-tab/tasks.md is the authority. F377; migration 0110 (tasks.md says 0108); UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+        },
+        {
+            "id": "r1a-drive",
+            "status": "open",
+            "title": "Drive a-flow-is-configured-from-its-own-tab live (UI in Chromium)",
+            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+        },
+        {
+            "id": "r1a-archive",
+            "status": "open",
+            "title": "Archive a-flow-is-configured-from-its-own-tab",
+            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+        },
+        {
+            "id": "b5-impl",
+            "status": "open",
+            "title": "Implement a-document-moves-forward-only-through-its-checks (tests first, then fix)",
+            "detail": "openspec/changes/a-document-moves-forward-only-through-its-checks/tasks.md is the authority. F207,F113. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+        },
+        {
+            "id": "b5-drive",
+            "status": "open",
+            "title": "Drive a-document-moves-forward-only-through-its-checks live (UI in Chromium)",
+            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+        },
+        {
+            "id": "b5-archive",
+            "status": "open",
+            "title": "Archive a-document-moves-forward-only-through-its-checks",
+            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+        },
+        {
+            "id": "b11-impl",
+            "status": "open",
+            "title": "Implement a-loop-that-is-gone-lets-go-of-its-document (tests first, then fix)",
+            "detail": "openspec/changes/a-loop-that-is-gone-lets-go-of-its-document/tasks.md is the authority. F53,F157. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+        },
+        {
+            "id": "b11-drive",
+            "status": "open",
+            "title": "Drive a-loop-that-is-gone-lets-go-of-its-document live (UI in Chromium)",
+            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+        },
+        {
+            "id": "b11-archive",
+            "status": "open",
+            "title": "Archive a-loop-that-is-gone-lets-go-of-its-document",
+            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+        },
+        {
+            "id": "r1b-impl",
+            "status": "open",
+            "title": "Implement a-document-says-how-it-will-be-built-and-approval-starts-it (tests first, then fix)",
+            "detail": "openspec/changes/a-document-says-how-it-will-be-built-and-approval-starts-it/tasks.md is the authority. F377; edits mcp_server.py; UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+        },
+        {
+            "id": "r1b-drive",
+            "status": "open",
+            "title": "Drive a-document-says-how-it-will-be-built-and-approval-starts-it live (UI in Chromium)",
+            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+        },
+        {
+            "id": "r1b-archive",
+            "status": "open",
+            "title": "Archive a-document-says-how-it-will-be-built-and-approval-starts-it",
+            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+        }
+    ],
+    "decisions_for_user": [],
+    "limits": [
+        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
+        "Every claim is measured or labelled unverified.",
+        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+        "Tests under py -3.11, never bare python. black needs --target-version py311.",
+        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
+        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+    ]
 }
