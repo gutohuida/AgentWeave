@@ -16,6 +16,29 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-26
+
+No review page today. **Written in an interactive session with the operator present** (DECIDE).
+The six rows below restate earlier approvals (09-23, 09-24, 09-25) so that tonight's window, which
+reads only today's section, builds R1's flow changes and the three changes they build after. Each
+row's notes and constraints are the original row's, unchanged. The 2026-09-25 night built and
+archived its whole ORDER (`9fbfb96`..`f2c970e`, merged to master fast-forward).
+
+- APPROVED  an-at-mention-an-agent-wrote-reads-no-file   09-23 (F409, severity A), 09-24 row. First: the one severity-A item.
+- APPROVED  a-loop-is-stopped-archived-and-delegated-from-its-own-tab   B10 (F225), 09-24 row. `a-flow-is-configured-from-its-own-tab` builds after it. UI bundle.
+- APPROVED  a-flow-is-configured-from-its-own-tab   R1 (F377), 09-25 row. Carries the operator's **Start a flow…** button. Its tasks.md names migration `0108`: HEAD is now `0109`, so it takes `0110`. UI bundle.
+- APPROVED  a-document-moves-forward-only-through-its-checks   B5 (F207, F113), 09-24 row. A prerequisite of R1's second change.
+- APPROVED  a-loop-that-is-gone-lets-go-of-its-document   B11 (F53, F157), 09-24 row. A prerequisite of R1's second change; shares the staffing walk with the archived attended change (textual overlap only).
+- APPROVED  a-document-says-how-it-will-be-built-and-approval-starts-it   R1 (F377), 09-25 row. Last: builds after the three above. Edits `mcp_server.py` (`submit_spec_document` gains `delivery`): **the operator was told on 2026-09-26** that until `:8000` restarts onto F354's pin, `:8000`'s live agents run the checked-out tool server. UI bundle.
+
+Not tonight, deliberately: B4's `the-shell-judge-reads-a-word-whole` and
+`a-drive-or-a-home-variable-names-a-directory-by-itself` (one window of their own, also
+`mcp_server.py`), and B10's `a-loops-outstanding-mail-is-mail-not-yet-delivered` (size). F336 (no
+control dispatches a review), listed with F377 in `ROUNDS.md`, is covered by neither R1 change and
+needs its own round.
+
+ORDER: an-at-mention-an-agent-wrote-reads-no-file, a-loop-is-stopped-archived-and-delegated-from-its-own-tab, a-flow-is-configured-from-its-own-tab, a-document-moves-forward-only-through-its-checks, a-loop-that-is-gone-lets-go-of-its-document, a-document-says-how-it-will-be-built-and-approval-starts-it
+
 ## 2026-09-25
 
 No review page today (the day window is disabled; the newest page, `review/review-2026-09-23.html`,
