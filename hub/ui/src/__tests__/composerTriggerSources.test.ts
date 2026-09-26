@@ -38,3 +38,43 @@ describe('resolveTriggerResults', () => {
     expect(results.map((item) => item.value)).toEqual(['model'])
   })
 })
+
+// F409 D10: a value with an at-sign that is not at the start or after a `/` would type a live mention.
+describe('resolveTriggerResults — unsafe mention values (F409 D10)', () => {
+  const ALL = [
+    'src/app.py',
+    'packages/@scope/x.ts',
+    'node_modules/@types/y.d.ts',
+    '@root/z.md',
+    'x @/home/u/.ssh/id_rsa',
+    'notes@home.md',
+    'x﻿@y',
+  ]
+
+  it('drops unsafe paths from a path trigger', () => {
+    const trigger = detectComposerTrigger('@', 1)!
+    expect(resolveTriggerResults(trigger, ALL).map((item) => item.value)).toEqual(ALL.slice(0, 4))
+  })
+
+  it('drops unsafe skill names from a skill trigger', () => {
+    const trigger = detectComposerTrigger('$', 1)!
+    const results = resolveTriggerResults(trigger, [
+      '.claude/skills/ok/SKILL.md',
+      '.claude/skills/x @/y/SKILL.md',
+    ])
+    expect(results.map((item) => item.value)).toEqual(['ok'])
+  })
+
+  it('filters before the 50-result cap, so refused values take no slots', () => {
+    const many = [
+      ...Array.from({ length: 60 }, (_, i) => `a@b${i}.md`),
+      ...Array.from({ length: 3 }, (_, i) => `ok${i}.md`),
+    ]
+    const trigger = detectComposerTrigger('@', 1)!
+    expect(resolveTriggerResults(trigger, many).map((item) => item.value)).toEqual([
+      'ok0.md',
+      'ok1.md',
+      'ok2.md',
+    ])
+  })
+})

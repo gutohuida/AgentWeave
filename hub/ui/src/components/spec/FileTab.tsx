@@ -1,3 +1,4 @@
+import { isSafeMentionValue } from '@/lib/fileMentions'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
 import { readableApiError } from '@/api/client'
@@ -27,7 +28,8 @@ export function FileTab({ path, onInsertIntoComposer, onClose }: FileTabProps) {
   // stacked, both naming the same file, in a panel that is always on screen.
   const tabActions = (
     <>
-      {onInsertIntoComposer && (
+      {/* F409 D10: an unsafe path would type a live mention, so it gets no insert action. */}
+      {onInsertIntoComposer && isSafeMentionValue(path) && (
         <Button
           variant="ghost"
           size="sm"

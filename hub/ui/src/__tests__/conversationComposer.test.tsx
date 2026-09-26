@@ -262,6 +262,17 @@ describe('Composer — insertPathRequest (task 5.4, 2026-08-18-one-shell-three-p
     expect(screen.getByRole('textbox')).toHaveValue('@src/a.ts ')
   })
 
+  it('ignores an unsafe path (F409 D10) and inserts a safe one as today', () => {
+    const { view, props } = renderComposer({ insertPathRequest: null })
+    view.rerender(
+      <Composer {...props} insertPathRequest={{ path: 'x @/home/u/.ssh/id_rsa', requestId: 1 }} />,
+    )
+    expect(screen.getByRole('textbox')).toHaveValue('')
+
+    view.rerender(<Composer {...props} insertPathRequest={{ path: 'src/app.py', requestId: 2 }} />)
+    expect(screen.getByRole('textbox')).toHaveValue('@src/app.py ')
+  })
+
   it('a new requestId for the same path inserts again', () => {
     const { view, props } = renderComposer({ insertPathRequest: { path: 'src/a.ts', requestId: 1 } })
 

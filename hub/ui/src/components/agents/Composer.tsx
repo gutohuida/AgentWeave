@@ -1,3 +1,4 @@
+import { isSafeMentionValue } from '@/lib/fileMentions'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { Button } from '@/components/ui/button'
@@ -173,6 +174,8 @@ export function Composer({
   useEffect(() => {
     if (!insertPathRequest || insertPathRequest.requestId === lastInsertedRequestId.current) return
     lastInsertedRequestId.current = insertPathRequest.requestId
+    // F409 D10: an unsafe path would type a live second mention.
+    if (!isSafeMentionValue(insertPathRequest.path)) return
     const mention = formatMention('path', insertPathRequest.path)
     setText((prev) => {
       const needsLeadingSpace = prev.length > 0 && !/\s$/.test(prev)

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { neutraliseFileMentions } from '@/lib/fileMentions'
 
 /**
  * One thing the Hub decided to tell the operator at approval rather than refuse (F169):
@@ -460,6 +461,12 @@ export function useDivergences(openOnly = false) {
   })
 }
 
+/** The trigger message for "start work"; the title is neutralised (F409 D8) so an at-sign in it
+ *  cannot expand into a file attachment. */
+export function startWorkMessage(taskId: string, title: string): string {
+  return `Work on task ${taskId}: ${neutraliseFileMentions(title)}`
+}
+
 /**
  * Start a run bound to a task.
  *
@@ -476,7 +483,7 @@ export function useStartWorkOnTask() {
         `/api/v1/projects/${projectId}/agent/trigger`,
         {
           agent,
-          message: `Work on task ${taskId}: ${title}`,
+          message: startWorkMessage(taskId, title),
           task_id: taskId,
         },
       ),

@@ -1,5 +1,6 @@
 import type { ComposerTriggerMatch } from './composerTrigger'
 import type { ComposerTriggerMenuItem } from '@/components/agents/ComposerTriggerMenu'
+import { isSafeMentionValue } from './fileMentions'
 
 const SKILLS_DIR_PREFIX = '.claude/skills/'
 const MAX_RESULTS = 50
@@ -39,13 +40,14 @@ export function resolveTriggerResults(
     return workspacePaths
       .filter((path) => path.startsWith(SKILLS_DIR_PREFIX))
       .map(skillNameFromPath)
-      .filter((name) => name.toLowerCase().includes(query))
+      // F409 D10: refuse an unsafe name before the cap, so refused values take no slots.
+      .filter((name) => isSafeMentionValue(name) && name.toLowerCase().includes(query))
       .slice(0, MAX_RESULTS)
       .map((name) => ({ value: name, label: name }))
   }
 
   return workspacePaths
-    .filter((path) => path.toLowerCase().includes(query))
+    .filter((path) => isSafeMentionValue(path) && path.toLowerCase().includes(query))
     .slice(0, MAX_RESULTS)
     .map((path) => ({ value: path, label: path }))
 }

@@ -104,3 +104,20 @@ describe('FileTab — the files tab detail kind (tasks 5.3-5.4, 2026-08-18-one-s
     expect(onClose).toHaveBeenCalled()
   })
 })
+
+describe('FileTab — insert control refuses an unsafe path (F409 D10)', () => {
+  const file = (path: string) =>
+    ({ data: { path, binary: false, size: 1, content: 'x' }, isLoading: false, error: null }) as never
+
+  it('has no insert control for a path with a mid-name at-sign', () => {
+    mockedUseWorkspaceFile.mockReturnValue(file('x @/home/u/.ssh/id_rsa'))
+    render(<FileTab path="x @/home/u/.ssh/id_rsa" onInsertIntoComposer={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.queryByTestId('file-tab-insert')).toBeNull()
+  })
+
+  it('keeps the insert control for a safe path', () => {
+    mockedUseWorkspaceFile.mockReturnValue(file('src/app.py'))
+    render(<FileTab path="src/app.py" onInsertIntoComposer={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByTestId('file-tab-insert')).toBeInTheDocument()
+  })
+})
