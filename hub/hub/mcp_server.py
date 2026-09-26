@@ -1971,6 +1971,10 @@ def record_evidence(
         document: Only needed when the same identifier exists in more than one document.
         task_id: The task this came out of, when there is one.
 
+    Recording the same requirement again in the same turn, on the same task, **revises** your
+    undecided row rather than adding a second: the answer carries the same `id` and
+    `revised: true`.
+
     Returns the evidence `id`, its `identifier`, its `review_state` and the `footprint` captured for
     it — the branch and commit your evidence has been attached to. Read it. If its
     `outside_workspace_writes` is a non-empty list, your turn wrote into a directory that footprint
@@ -2036,6 +2040,10 @@ def decide_evidence(
 
     **You cannot decide evidence you produced yourself.** Another agent, or the operator, decides
     on yours.
+
+    **A decision waits for the run that recorded the evidence.** While that run is still running its
+    commit is about to be replaced, so the Hub refuses with `recording_run_live` (HTTP 409). Decide
+    after the run has ended; the Hub sends you a note in this conversation when it does.
 
     Args:
         evidence_id: From `list_evidence`.

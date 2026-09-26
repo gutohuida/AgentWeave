@@ -9,10 +9,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import run_liveness
 from ...agent_auth import AgentActor, get_agent_actor
 from ...checkpoint_access import (
     AccessDeniedError,
@@ -1236,13 +1238,18 @@ async def record_evidence(
     from .spec import _footprints_for, footprint_view
 
     prints = await _footprints_for(session, [evidence.id])
-    return {
+    body_out = {
         "id": evidence.id,
         "identifier": requirement.identifier,
         "review_state": evidence.review_state,
         "digest": evidence.digest,
+        "recording_run_live": bool(evidence.run_id and run_liveness.run_is_live(evidence.run_id)),
         "footprint": footprint_view(prints.get(evidence.id)),
     }
+    if getattr(evidence, "revised", False):
+        # A re-record in the same live run revised its own undecided row: 200, not 201.
+        return JSONResponse(status_code=status.HTTP_200_OK, content={**body_out, "revised": True})
+    return body_out
 
 
 @router.get("/spec/evidence")
@@ -1364,6 +1371,9 @@ async def decide_evidence(
         ) from exc
 
     await session.commit()
+    # Read before the integration below, which rolls back when it fails and expires every loaded
+    # row: the decision has committed and the answer must not depend on the merge (F426).
+    answer = {"id": evidence.id, "review_state": evidence.review_state}
     # Both routes, or the granted agent's acceptance — which is the whole point of the grant —
     # merges nothing. The actor is the agent that decided, not `operator()`: the integration
     # happened because of *that* decision, and a record naming the operator for it would be a false
@@ -1375,7 +1385,7 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, run_actor(actor.run_id, actor.agent)
     )
-    return {"id": evidence.id, "review_state": evidence.review_state}
+    return answer
 
 
 class SpecDocumentRename(RequestModel):

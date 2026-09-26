@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -2128,6 +2129,129 @@ async def _record_run_failure_tail(
     await redrain_queued_agents(project_id)
 
 
+# Wake tasks in flight, held so the event loop does not drop a task nobody references.
+_decision_wake_tasks: "set[asyncio.Task[None]]" = set()
+
+
+def _wake_decision_waiters(project_id: str, run_id: str) -> None:
+    """Tell each agent held from a decision on *run_id*'s rows that they are open now (design D7).
+
+    Called right after the registry release, on both transports, and **synchronous**: it takes the
+    waiters in the same stretch as the pop, so a refusal cannot fall between them, and hands the
+    queue writes to a background task. Nothing here may raise into a finished run.
+    """
+    waiters = run_liveness.take_decision_waiters(run_id)
+    if not waiters:
+        return
+    try:
+        task = asyncio.get_running_loop().create_task(
+            _queue_decision_notes(project_id, run_id, waiters)
+        )
+    except RuntimeError:
+        return
+    _decision_wake_tasks.add(task)
+    task.add_done_callback(_decision_wake_tasks.discard)
+
+
+async def _queue_decision_notes(
+    project_id: str, recording_run_id: str, waiters: Dict[str, run_liveness.DecisionWaiter]
+) -> None:
+    from ...db.models import EvidenceFootprint, InboundQueueEntry, RequirementEvidence
+    from ...turn_scheduler import schedule_agent
+
+    for agent, waiter in waiters.items():
+        try:
+            async with async_session_factory() as db:
+                rows = (
+                    (
+                        await db.execute(
+                            select(RequirementEvidence)
+                            .where(RequirementEvidence.id.in_(waiter.evidence_ids))
+                            .where(RequirementEvidence.review_state == "awaiting")
+                            .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if not rows:
+                    continue
+                refusing = await db.get(Run, waiter.refusing_run_id)
+                conversation = (
+                    await get_conversation_by_id(db, refusing.conversation_id) if refusing else None
+                )
+                if (
+                    conversation is None
+                    or conversation.lifecycle != "open"
+                    or conversation.agent != agent
+                ):
+                    logger.warning(
+                        "no open conversation to tell %s that %s are decidable",
+                        agent,
+                        ", ".join(r.id for r in rows),
+                    )
+                    continue
+                delivered = (
+                    (
+                        await db.execute(
+                            select(InboundQueueEntry)
+                            .where(InboundQueueEntry.delivered_in_run_id == waiter.refusing_run_id)
+                            .order_by(InboundQueueEntry.sequence)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                # The workspace of the turn that was refused: a reviewer resumes in its review
+                # checkout. A directly-triggered turn has no delivered entry and carries neither.
+                carrying = next((e for e in delivered if e.review_task_id), None) or next(
+                    (e for e in delivered if e.task_id), None
+                )
+                prints = {
+                    fp.evidence_id: fp
+                    for fp in (
+                        await db.execute(
+                            select(EvidenceFootprint).where(
+                                EvidenceFootprint.evidence_id.in_([r.id for r in rows])
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                }
+                named = ", ".join(
+                    f"{r.id} now names commit "
+                    f"{(prints[r.id].commit_sha or 'none')[:7] if r.id in prints else 'none'}"
+                    for r in rows
+                )
+                ids = ", ".join(r.id for r in rows)
+                entry = new_entry(
+                    project_id=project_id,
+                    agent=agent,
+                    origin_type="evidence",
+                    content=(
+                        f"You tried to decide {ids} while run {recording_run_id} was still "
+                        "recording them, and the Hub held the decision. That run has ended; "
+                        f"{named}. They are open for a decision now — read them again first if "
+                        "the commit changed what you were judging."
+                    ),
+                    hop_depth=0,
+                    conversation_id=conversation.id,
+                    task_id=carrying.task_id if carrying else None,
+                    review_task_id=carrying.review_task_id if carrying else None,
+                )
+                db.add(entry)
+                await db.commit()
+            await schedule_agent(project_id, agent)
+        except Exception:  # noqa: BLE001 -- never worth failing a finished turn over
+            logger.warning(
+                "could not tell %s that evidence from run %s is decidable",
+                agent,
+                recording_run_id,
+                exc_info=True,
+            )
+
+
 async def _execute_run(
     *,
     project_id: str,
@@ -2756,6 +2880,7 @@ async def _execute_run(
             raise
     finally:
         run_liveness.active_ptys.pop(run_id, None)
+        _wake_decision_waiters(project_id, run_id)
         _stop_requested.discard(run_id)
         # Last, and after the two synchronous releases above, deliberately. This is the only
         # `await` in this block: a cancelled task raises `CancelledError` at its first await
@@ -3300,6 +3425,7 @@ async def _execute_codex_appserver_run(
             raise
     finally:
         run_liveness.active_app_server_runs.discard(run_id)
+        _wake_decision_waiters(project_id, run_id)
         _stop_requested.discard(run_id)
         # See `_execute_run`'s identical last line, including why it is last.
         await outside_writes.flush()

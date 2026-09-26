@@ -40,9 +40,10 @@ def new_entry(
     review_task_id: Optional[str] = None,
     job_id: Optional[str] = None,
 ) -> InboundQueueEntry:
-    if origin_type not in ("operator", "agent", "job", "checkpoint", "divergence"):
+    if origin_type not in ("operator", "agent", "job", "checkpoint", "divergence", "evidence"):
         raise ValueError(
-            "origin_type must be 'operator', 'agent', 'job', 'checkpoint', or 'divergence'"
+            "origin_type must be 'operator', 'agent', 'job', 'checkpoint', 'divergence', "
+            "or 'evidence'"
         )
     if (origin_type == "agent") != bool(origin_agent):
         raise ValueError("agent origins require origin_agent; operator origins forbid it")
@@ -164,6 +165,8 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
             origin = "Checkpoint"
         elif entry.origin_type == "divergence":
             origin = "Divergence"
+        elif entry.origin_type == "evidence":
+            origin = "AgentWeave"
         else:
             origin = f'Agent "{entry.origin_agent}"'
         # Per entry rather than in the preamble, because `delivery_attempts` is per entry: one turn

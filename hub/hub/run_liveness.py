@@ -30,8 +30,8 @@ waiting for. So the entry's presence is the answer and its `isalive()` is not co
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Optional, Set
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Set
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,6 +59,46 @@ class LiveTurn:
 
     run_id: str
     agent: str
+
+
+@dataclass
+class DecisionWaiter:
+    """An agent refused an evidence decision because the recording run was live.
+
+    `refusing_run_id` is the run the refusal happened in, so the note continues that thread; it is
+    the latest one when the agent is refused twice. `evidence_ids` are the rows it tried to decide.
+    """
+
+    refusing_run_id: str
+    evidence_ids: List[str] = field(default_factory=list)
+
+
+#: recording run id -> {refused agent -> DecisionWaiter}. In memory, beside the registry, because
+#: the fact is *about the registry entry*: it means "this agent is waiting for that entry to go" and
+#: dies with it on a restart, when the recording run is no longer live and the decision is open
+#: already (`evidence-is-decided-after-the-run-that-recorded-it`, D7).
+decision_waiters: Dict[str, Dict[str, DecisionWaiter]] = {}
+
+
+def note_decision_waiter(
+    recording_run_id: str, *, agent: str, refusing_run_id: str, evidence_id: str
+) -> None:
+    """Remember that *agent* was refused a decision on a row *recording_run_id* recorded."""
+    waiter = decision_waiters.setdefault(recording_run_id, {}).get(agent)
+    if waiter is None:
+        decision_waiters[recording_run_id][agent] = DecisionWaiter(
+            refusing_run_id=refusing_run_id, evidence_ids=[evidence_id]
+        )
+        return
+    waiter.refusing_run_id = refusing_run_id
+    if evidence_id not in waiter.evidence_ids:
+        waiter.evidence_ids.append(evidence_id)
+
+
+def take_decision_waiters(recording_run_id: str) -> Dict[str, DecisionWaiter]:
+    """Pop and return the agents waiting on *recording_run_id*. Synchronous, so it cannot interleave
+    with a refusal: either that refusal saw the run live and is taken here, or it came after."""
+    return decision_waiters.pop(recording_run_id, {})
 
 
 def live_run_ids() -> Set[str]:

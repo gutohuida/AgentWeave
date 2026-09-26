@@ -29,6 +29,7 @@ from ... import (
     requirement_coverage,
     requirement_evidence,
     requirement_links,
+    run_liveness,
     spec_adoption,
     spec_documents,
     spec_index,
@@ -920,6 +921,9 @@ async def decide_evidence(
             status_code=exc.http_status or 403, detail={"message": str(exc), "code": exc.code}
         ) from exc
     await session.commit()
+    # Built before the integration below, which rolls back when it fails and expires every loaded
+    # row: the decision has committed, and the answer must not depend on what the merge did (F426).
+    view = _evidence_view(evidence, latest_review=review)
     # After the commit, and wrapped inside: accepting is a judgement about the evidence, and a
     # repository failure must not reverse it. This is what makes the approval refusal's instruction
     # — "accept the evidence" — actually land the work, rather than asking for something and then
@@ -927,7 +931,7 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, task_transitions.operator()
     )
-    return _evidence_view(evidence, latest_review=review)
+    return view
 
 
 @router.get("/spec/evidence/{evidence_id}/reviews")
@@ -1111,6 +1115,9 @@ async def set_retention(
 
 def _evidence_view(evidence, footprint=None, latest_review=None) -> dict:
     return {
+        # Still being recorded: the run that recorded it is running, so its commit is about to be
+        # replaced and a decision is held (`recording_run_live`). A registry lookup, no query.
+        "recording_run_live": bool(evidence.run_id and run_liveness.run_is_live(evidence.run_id)),
         "id": evidence.id,
         "requirement_id": evidence.requirement_id,
         "digest": evidence.digest,

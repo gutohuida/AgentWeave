@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from . import worktrees
+from . import run_liveness, worktrees
 from .db.models import (
     EVIDENCE_RETENTION_POLICIES,
     Agent,
@@ -135,21 +135,82 @@ async def record(
         taken = _take_footprint(
             workspace, actor, locator, await recorded_workspace_dir(session, actor.run_id)
         )
-        already = await duplicate_of(
-            session,
-            requirement,
-            task_id=task_id,
-            commit_sha=taken.commit_sha,
-            actor=actor,
-        )
+        own: Optional[RequirementEvidence] = None
+        if actor.kind == "agent" and actor.run_id:
+            # D2: this run's own matching row, looked up by run rather than taken from the oldest
+            # match, which in a new turn that starts at the previous turn's snapshot is the
+            # previous run's row.
+            own = await duplicate_of(
+                session,
+                requirement,
+                task_id=task_id,
+                commit_sha=taken.commit_sha,
+                actor=actor,
+                run_id=actor.run_id,
+            )
+        if own is not None and own.review_state == AWAITING and own.digest == requirement.digest:
+            # Same run, same checkout, same task, same actor, and under `decide`'s live-run
+            # refusal nobody can have decided it. Revise it in place. `outside_writes` is passed
+            # because `_apply_footprint` writes the column on every mapping and `None` means not
+            # observed: omitting it would erase what `capture_footprint` recorded.
+            own.kind = kind
+            own.locator = locator
+            own.summary = summary
+            own.produced_at = datetime.now(timezone.utc)
+            footprint = (
+                (
+                    await session.execute(
+                        select(EvidenceFootprint).where(EvidenceFootprint.evidence_id == own.id)
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            _apply_footprint(
+                session,
+                own,
+                taken,
+                footprint,
+                outside_writes=await outside_writes_for_run(session, own.run_id),
+            )
+            own.revised = True  # type: ignore[attr-defined]  # a marker for the route, not a column
+            return own
+
+        # A same-run row recorded against another wording is not this demonstration: the old one
+        # goes stale through the digest, and this records a new row.
+        already = None
+        if own is None or own.digest == requirement.digest:
+            already = await duplicate_of(
+                session,
+                requirement,
+                task_id=task_id,
+                commit_sha=taken.commit_sha,
+                actor=actor,
+            )
+        if already is not None and await _checkout_will_be_snapshotted_dirty(
+            session, actor, workspace
+        ):
+            # D5: the turn's changed checkout is committed when it ends, and this row is re-pointed
+            # at that commit, which is not the commit `already` names.
+            already = None
         if already is not None:
+            if actor.kind == "agent":
+                remedy = (
+                    "If the work has changed since, record again once it has: the Hub commits "
+                    "your changed checkout when this turn ends, and evidence recorded after a "
+                    "change names the new commit."
+                )
+            else:
+                remedy = (
+                    "If the work has moved on, commit it first so the new evidence names the "
+                    "commit it demonstrates."
+                )
             raise EvidenceRefusedError(
                 f"{already.id} already records evidence for {requirement.identifier} on this task "
                 f"at this commit, and is {already.review_state}. Recording the same demonstration "
                 f"twice makes the reviewer decide once per copy and overstates "
                 f"{requirement.identifier}'s evidence count. If the wording is wrong, say so on "
-                f"that piece; if the work has moved on, commit it first so the new evidence names "
-                f"the commit it demonstrates.",
+                f"that piece; {remedy[0].lower()}{remedy[1:]}",
                 code="duplicate_evidence",
             )
 
@@ -198,8 +259,12 @@ async def duplicate_of(
     task_id: Optional[str],
     commit_sha: Optional[str],
     actor: Optional[Actor] = None,
+    run_id: Optional[str] = None,
 ) -> Optional[RequirementEvidence]:
     """The evidence a new piece would merely repeat, if there is one.
+
+    `run_id` narrows the match to rows that run recorded: `record` asks for a run's own row first,
+    since the oldest match may be another run's.
 
     Same requirement, same task, same commit, **same actor** is the narrowest key that means "this
     demonstrates nothing the record does not already hold": the requirement fixes what is being
@@ -230,7 +295,7 @@ async def duplicate_of(
     """
     if not task_id or not commit_sha or actor is None:
         return None
-    result = await session.execute(
+    query = (
         select(RequirementEvidence)
         .join(EvidenceFootprint, EvidenceFootprint.evidence_id == RequirementEvidence.id)
         .where(RequirementEvidence.requirement_id == requirement.id)
@@ -239,10 +304,46 @@ async def duplicate_of(
         .where(RequirementEvidence.actor_kind == actor.kind)
         .where(RequirementEvidence.actor == (actor.name or ""))
         .where(RequirementEvidence.review_state != REJECTED)
-        .order_by(RequirementEvidence.produced_at, RequirementEvidence.id)
-        .limit(1)
+    )
+    if run_id is not None:
+        query = query.where(RequirementEvidence.run_id == run_id)
+    result = await session.execute(
+        query.order_by(RequirementEvidence.produced_at, RequirementEvidence.id).limit(1)
     )
     return result.scalars().first()
+
+
+async def _checkout_will_be_snapshotted_dirty(
+    session: AsyncSession, actor: Actor, workspace: ProjectWorkspace
+) -> bool:
+    """Does this agent's run hold uncommitted changes the Hub will commit when the turn ends?
+
+    Only where the turn is snapshotted: the run's recorded directory (`Run.workspace_dir`) still
+    exists and lies under the task or agent checkouts, never the review checkouts or the project's
+    own directory, which `_execute_run` does not commit. `False` where the question cannot be
+    answered, so the fallback is today's refusal. Agents only: an operator's sentence says to
+    commit.
+    """
+    if actor.kind != "agent" or not actor.run_id:
+        return False
+    recorded = await recorded_workspace_dir(session, actor.run_id)
+    if not recorded:
+        return False
+    directory = Path(recorded)
+    if not directory.is_dir():
+        return False
+    resolved = directory.resolve(strict=False)
+    for root in (
+        worktrees.task_root(workspace.root),
+        worktrees.worktree_root(workspace.root),
+    ):
+        try:
+            resolved.relative_to(root.resolve(strict=False))
+        except ValueError:
+            continue
+        status = _git(directory, "status", "--porcelain")
+        return bool(status and status.strip())
+    return False
 
 
 def _take_footprint(
@@ -718,6 +819,28 @@ async def decide(
         raise EvidenceRefusedError(
             "an agent cannot accept evidence it produced; another agent or the operator decides",
             code="self_acceptance",
+        )
+
+    if evidence.run_id and run_liveness.run_is_live(evidence.run_id):
+        # After the three refusals above: an ungranted or self-deciding agent is told the refusal
+        # that does not clear with time first. Noted in the same synchronous stretch as the check,
+        # so the pop that clears the run cannot fall between them (D7).
+        if actor.kind == "agent" and actor.name and actor.run_id:
+            run_liveness.note_decision_waiter(
+                evidence.run_id,
+                agent=actor.name,
+                refusing_run_id=actor.run_id,
+                evidence_id=evidence.id,
+            )
+        raise EvidenceRefusedError(
+            f"{evidence.id} was recorded by run {evidence.run_id}, which is still running. Its "
+            "commit is re-pointed at the work when that run ends, so a decision now would judge a "
+            "commit the Hub is about to replace. Decide once the run has ended"
+            + ("; you will be sent a note when it does." if actor.kind == "agent" else ".")
+            + " If that run is stuck — hung, or waiting on an answer nobody is giving — stopping "
+            "it ends it, and the decision is then open.",
+            code="recording_run_live",
+            http_status=409,
         )
 
     review = EvidenceReview(

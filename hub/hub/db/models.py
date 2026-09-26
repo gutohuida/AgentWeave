@@ -651,8 +651,11 @@ class InboundQueueEntry(Base):
         # a retry of the same agent, or an escalation to a stronger one. Its own value for the
         # same reason `checkpoint` is: no operator asked for it and no agent sent it, so both
         # would misstate where it came from, in the queue the operator reads.
+        # `evidence` is the Hub telling an agent that a decision it was refused, because the run
+        # that recorded the evidence was still running, is open now. Its own value for the same
+        # reason: no operator asked for it and no agent sent it.
         CheckConstraint(
-            "origin_type IN ('operator', 'agent', 'job', 'checkpoint', 'divergence')",
+            "origin_type IN ('operator', 'agent', 'job', 'checkpoint', 'divergence', 'evidence')",
             name="ck_inbound_queue_origin_type",
         ),
         CheckConstraint(
@@ -664,7 +667,8 @@ class InboundQueueEntry(Base):
             "(origin_type = 'agent' AND origin_agent IS NOT NULL) OR "
             "(origin_type = 'job' AND origin_agent IS NULL) OR "
             "(origin_type = 'checkpoint' AND origin_agent IS NULL) OR "
-            "(origin_type = 'divergence' AND origin_agent IS NULL)",
+            "(origin_type = 'divergence' AND origin_agent IS NULL) OR "
+            "(origin_type = 'evidence' AND origin_agent IS NULL)",
             name="ck_inbound_queue_origin_agent",
         ),
         Index(

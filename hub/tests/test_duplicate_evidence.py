@@ -84,6 +84,24 @@ async def builder():
     return {"Authorization": "Bearer aw_run_dupe-secret"}
 
 
+async def a_later_run_of_the_builder() -> dict:
+    """A second run of the same agent. A re-record inside the *same* run revises its row
+    (`evidence-is-decided-after-the-run-that-recorded-it`, D2); a duplicate is another run's."""
+    async with async_session_factory() as session:
+        session.add(
+            Run(
+                id="run-dupe-later",
+                project_id="proj-test",
+                agent="builder",
+                status="running",
+                turn_depth=0,
+                capability_token_hash=hash_run_token("aw_run_dupe-later-secret"),
+            )
+        )
+        await session.commit()
+    return {"Authorization": "Bearer aw_run_dupe-later-secret"}
+
+
 async def make_document(app, auth_headers, run_headers):
     created = await app.post(
         f"{BASE}/documents", json={"path": PATH, "title": "Duplicate demo"}, headers=auth_headers
@@ -144,7 +162,7 @@ async def test_the_same_fact_recorded_twice_is_refused(app, worked):
     second = await app.post(
         AGENT_EVIDENCE,
         json={"identifier": "FR-1", "summary": "I ran the tests", "task_id": TASK_ID},
-        headers=headers,
+        headers=await a_later_run_of_the_builder(),
     )
 
     assert second.status_code == 409, second.text
@@ -342,7 +360,7 @@ async def test_the_same_actor_is_still_refused_when_another_has_recorded_too(app
     again = await app.post(
         AGENT_EVIDENCE,
         json={"identifier": "FR-1", "summary": "ran it again", "task_id": TASK_ID},
-        headers=headers,
+        headers=await a_later_run_of_the_builder(),
     )
 
     assert again.status_code == 409, again.text
