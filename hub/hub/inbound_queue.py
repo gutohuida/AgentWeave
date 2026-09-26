@@ -12,6 +12,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 
 from .conversations import get_conversation_by_id
 from .db.models import InboundQueueEntry, Project, Run
+from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
 from .utils import short_id
 
 if TYPE_CHECKING:
@@ -188,7 +189,17 @@ def format_turn_prompt(entries: Iterable[InboundQueueEntry]) -> str:
                 f" — delivery attempt {earlier + 1}; "
                 f"an earlier attempt was cut off before it finished"
             )
-        blocks.append(f"{origin} (hop {entry.hop_depth}){retry}:\n{entry.content}")
+        # Default-deny (design D3): only the operator's own text keeps an at-sign that expands.
+        # A peer, a job, a checkpoint, a divergence or an origin not yet invented is text an agent
+        # may have written.
+        content = entry.content
+        if entry.origin_type != "operator":
+            content = neutralise_file_mentions(content)
+        blocks.append(f"{origin} (hop {entry.hop_depth}){retry}:\n{content}")
+    # Design D6. Read from the blocks, not from what this function escaped: the question echo and
+    # Start work arrive already escaped, inside operator entries this function passes through.
+    if any("\\@" in block for block in blocks[1:]):
+        blocks.insert(1, MENTION_NOTICE)
     return "\n\n".join(blocks)
 
 

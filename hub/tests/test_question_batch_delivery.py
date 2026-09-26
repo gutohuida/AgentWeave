@@ -254,3 +254,91 @@ async def test_an_answer_is_recorded_before_its_batch_completes(app, auth_header
         assert row.answered is True
         assert row.answer == "written-down"
     assert await _entries() == [], "recorded, but not yet delivered"
+
+
+# --- an-at-mention-an-agent-wrote-reads-no-file (F409), task 1.6 ---
+
+
+def _row(question: str, answer, labels=(), answered: bool = True) -> Question:
+    return Question(
+        id="q-x",
+        project_id=PROJECT,
+        from_agent="asker",
+        question=question,
+        answer=answer,
+        answer_labels=list(labels),
+        answered=answered,
+    )
+
+
+def _both_forms(*rows: Question) -> list[str]:
+    from hub.api.v1.questions import _batch_delivery_text
+
+    other = _row("filler", "ok")
+    return [_batch_delivery_text([r]) for r in rows] + [_batch_delivery_text([*rows, other])]
+
+
+def test_an_at_sign_in_the_question_is_escaped_and_a_typed_answer_is_not():
+    single, batch = _both_forms(_row("does @src/a.py exist?", "see @src/app.py"))
+    assert r"does \@src/a.py exist?" in single
+    assert "Answer: see @src/app.py" in single
+    assert r"1. does \@src/a.py exist?" in batch
+    assert "   Answer: see @src/app.py" in batch
+
+
+def test_a_chosen_option_is_escaped_in_the_answer():
+    single, batch = _both_forms(
+        _row("q", "Use @/home/u/.ssh/id_rsa", labels=["Use @/home/u/.ssh/id_rsa"])
+    )
+    assert r"Answer: Use \@/home/u/.ssh/id_rsa" in single
+    assert r"Answer: Use \@/home/u/.ssh/id_rsa" in batch
+    multi, _ = _both_forms(_row("q", "Keep it, Use @/x", labels=["Keep it", "Use @/x"]))
+    assert r"Answer: Keep it, Use \@/x" in multi
+
+
+def test_a_mixed_answer_is_escaped_whole():
+    single, _ = _both_forms(_row("q", "Option A, and see @/x", labels=["Option A"]))
+    assert r"Answer: Option A, and see \@/x" in single
+
+
+def test_a_declined_row_keeps_its_wording_beside_an_escaped_answer():
+    from hub.api.v1.questions import _batch_delivery_text
+
+    text = _batch_delivery_text(
+        [
+            _row("first @a", "Use @/x", labels=["Use @/x"]),
+            _row("second", None, answered=False),
+        ]
+    )
+    assert r"Answer: Use \@/x" in text
+    assert "Declined — the operator saw this and chose not to answer it." in text
+
+
+def test_a_none_answer_does_not_raise_and_renders_as_today():
+    for labels in (["x"], []):
+        single, batch = _both_forms(_row("q", None, labels=labels))
+        assert "Answer: None" in single
+        assert "   Answer: None" in batch
+
+
+@pytest.mark.asyncio
+async def test_an_option_answered_through_the_route_reaches_the_queue_escaped(app, auth_headers):
+    """The UI's payload shape: `labels` and `answer` both the clicked option. Only a route test
+    proves the stored `answer_labels` reach `_batch_delivery_text` (F190)."""
+    run_headers = await _asking_run("run-opt")
+    ids = await _ask(app, run_headers, "Which?", blocking=False)
+    await _end_run("run-opt")
+
+    resp = await app.patch(
+        f"/api/v1/projects/{PROJECT}/questions/{ids[0]}",
+        json={"answer": "Use @/x", "labels": ["Use @/x"]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    entries = await _entries()
+    assert entries[-1].content == "Question: Which?\n\nAnswer: Use \\@/x"
+    async with async_session_factory() as db:
+        stored = (await db.execute(select(Question).where(Question.id == ids[0]))).scalar_one()
+    assert stored.answer == "Use @/x"
+    assert stored.answer_labels == ["Use @/x"]

@@ -7,6 +7,11 @@ from sqlalchemy import select
 import hub.api.v1.agent_trigger as agent_trigger
 from hub.db.engine import async_session_factory
 from hub.db.models import Conversation, InboundQueueEntry, Run
+from hub.file_mentions import (
+    MENTION_NOTICE,
+    neutralise_file_mentions,
+    restore_file_mentions,
+)
 from hub.inbound_queue import (
     can_start,
     deliver_entries_with_run,
@@ -626,3 +631,77 @@ async def test_queue_status_names_no_hold_once_it_has_ended(app, auth_headers, m
     reason = await _status_reason(app, auth_headers, agent)
 
     assert reason is None
+
+
+# --- an-at-mention-an-agent-wrote-reads-no-file (F409), tasks 1.1 to 1.5 ---
+
+
+def _raw_entry(origin_type: str, content: str) -> InboundQueueEntry:
+    # Built directly, so the unknown-origin row bypasses `new_entry`'s closed set.
+    return InboundQueueEntry(
+        id="e1",
+        project_id="p",
+        agent="a",
+        origin_type=origin_type,
+        origin_agent="peer" if origin_type == "agent" else None,
+        content=content,
+        hop_depth=0,
+    )
+
+
+@pytest.mark.parametrize("origin", ["agent", "job", "checkpoint", "divergence", "some-new-origin"])
+def test_non_operator_content_reaches_the_prompt_with_its_at_signs_escaped(origin):
+    prompt = format_turn_prompt([_raw_entry(origin, "see @/etc/passwd and a@b.com")])
+    assert r"see \@/etc/passwd and a\@b.com" in prompt
+    assert "see @/etc" not in prompt
+
+
+def test_operator_content_reaches_the_prompt_byte_identical():
+    prompt = format_turn_prompt([_raw_entry("operator", "see @/etc/passwd and a@b.com")])
+    assert prompt.endswith("Operator (hop 0):\nsee @/etc/passwd and a@b.com")
+    assert MENTION_NOTICE not in prompt
+
+
+def test_a_mixed_turn_escapes_only_the_agent_block_and_says_so_once():
+    prompt = format_turn_prompt(
+        [_raw_entry("operator", "@src/app.py"), _raw_entry("agent", "@../x")]
+    )
+    assert "Operator (hop 0):\n@src/app.py" in prompt
+    assert "(hop 0):\n\\@../x" in prompt
+    assert prompt.count(MENTION_NOTICE) == 1
+    lines = prompt.split("\n\n")
+    assert lines[1] == MENTION_NOTICE
+
+
+@pytest.mark.parametrize(
+    "echo",
+    [
+        "Question: does \\@x exist\n\nAnswer: yes",  # (a) question with an at-sign
+        "Question: pick\n\nAnswer: Use \\@/x",  # (b) chosen option
+    ],
+)
+def test_the_question_echo_carries_the_notice(echo):
+    assert MENTION_NOTICE in format_turn_prompt([_raw_entry("operator", echo)])
+
+
+def test_an_echo_with_no_at_sign_is_byte_identical():
+    prompt = format_turn_prompt([_raw_entry("operator", "Question: q\n\nAnswer: a")])
+    assert prompt.endswith("Operator (hop 0):\nQuestion: q\n\nAnswer: a")
+    assert MENTION_NOTICE not in prompt
+
+
+def test_the_notice_has_no_at_sign_and_is_absent_without_an_escape():
+    assert "@" not in MENTION_NOTICE
+    assert MENTION_NOTICE not in format_turn_prompt([_raw_entry("agent", "plain")])
+
+
+def test_escaping_does_not_collapse_an_existing_escape():
+    text = "a\\@b \ufeff@c \u3000@d \n@e"
+    out = neutralise_file_mentions(text)
+    assert out.startswith("a\\\\@b")
+    for i, ch in enumerate(out):
+        if ch == "@":
+            assert out[i - 1] == "\\"
+    assert restore_file_mentions(out) == text
+    prompt = format_turn_prompt([_raw_entry("agent", text)])
+    assert out in prompt

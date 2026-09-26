@@ -17,6 +17,7 @@ from ...conversations import (
 )
 from ...db.engine import get_session
 from ...db.models import Conversation, InboundQueueEntry, Question, Run
+from ...file_mentions import neutralise_file_mentions
 from ...inbound_queue import new_entry
 from ...run_task_binding import release_block_for_question
 from ...schemas.questions import QuestionAnswer, QuestionCreate, QuestionResponse
@@ -215,6 +216,15 @@ async def announce_queued_answer(
     await schedule_agent(project_id, from_agent)
 
 
+def _delivered_answer(row: Question) -> str:
+    """The answer as the echo carries it (design D4). A chosen option's label is the agent's text,
+    so an answer with labels is neutralised whole; a typed answer is the operator's and is not.
+    Takes the string the f-string would have rendered, so a `None` answer cannot raise here -- the
+    route has already committed the answer by the time this runs."""
+    text = f"{row.answer}"
+    return neutralise_file_mentions(text) if row.answer_labels else text
+
+
 def _batch_delivery_text(rows: List[Question]) -> Optional[str]:
     """What the agent reads when a batch reaches it as new input.
 
@@ -229,13 +239,16 @@ def _batch_delivery_text(rows: List[Question]) -> Optional[str]:
     if not any(row.answered for row in rows):
         return None
     if len(rows) == 1:
-        return f"Question: {rows[0].question}\n\nAnswer: {rows[0].answer}"
+        return (
+            f"Question: {neutralise_file_mentions(rows[0].question)}"
+            f"\n\nAnswer: {_delivered_answer(rows[0])}"
+        )
 
     parts = [f"You asked {len(rows)} questions. The operator has now resolved all of them.", ""]
     for position, row in enumerate(rows, start=1):
-        parts.append(f"{position}. {row.question}")
+        parts.append(f"{position}. {neutralise_file_mentions(row.question)}")
         if row.answered:
-            parts.append(f"   Answer: {row.answer}")
+            parts.append(f"   Answer: {_delivered_answer(row)}")
         else:
             # Named rather than omitted: an agent cannot otherwise tell "the operator saw this and
             # passed" from "this was never asked", and those call for opposite behaviour (D4).
