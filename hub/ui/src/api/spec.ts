@@ -134,6 +134,76 @@ export interface CoverageResponse {
   unserved: UnservedRequirement[]
 }
 
+/** One piece of evidence, as the Hub's `_evidence_view` reports it. `recording_run_live` is absent
+ *  from a Hub that predates the change that added it, and reads as `false` there. */
+export interface EvidencePiece {
+  id: string
+  summary: string
+  kind: string
+  locator: string | null
+  actor_kind: string
+  actor: string
+  run_id: string | null
+  task_id: string | null
+  review_state: string
+  recording_run_live?: boolean
+  latest_review: { decision: string; reason: string; actor_kind: string; actor: string } | null
+  produced_at: string
+  footprint: {
+    kind: string
+    branch: string | null
+    commit_sha: string | null
+    outside_workspace_writes: string[] | null
+  } | null
+}
+
+/** Oldest first — the order the route returns (`requirement_evidence.for_requirement`). */
+export function useSpecEvidence(path: string, identifier: string, enabled: boolean) {
+  const { isConfigured, selectedProjectId: projectId } = useConfigStore()
+  return useQuery<{ evidence: EvidencePiece[] }>({
+    queryKey: ['project', projectId, 'specEvidence', path, identifier],
+    queryFn: () =>
+      getJson<{ evidence: EvidencePiece[] }>(
+        `/api/v1/projects/${projectId}/project/spec/evidence?identifier=${encodeURIComponent(
+          identifier,
+        )}&document=${encodeURIComponent(path)}`,
+      ),
+    enabled: isConfigured && !!projectId && enabled,
+  })
+}
+
+export function useDecideEvidence(path: string, identifier: string) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      id,
+      decision,
+      reason,
+    }: {
+      id: string
+      decision: 'accepted' | 'rejected'
+      reason: string
+    }) =>
+      postJson<EvidencePiece>(`/api/v1/projects/${projectId}/project/spec/evidence/${id}/decision`, {
+        decision,
+        reason,
+      }),
+    onSuccess: () => {
+      // Accepting can merge a commit for a waiting task, so the task-scoped keys move too
+      // (`task` covers integrations/transitions/preview, `tasks` the lists and boards).
+      for (const key of [
+        ['specCoverage'],
+        ['specEvidence', path, identifier],
+        ['task'],
+        ['tasks'],
+      ]) {
+        queryClient.invalidateQueries({ queryKey: ['project', projectId, ...key] })
+      }
+    },
+  })
+}
+
 export function useSpecCoverage(path: string | null) {
   const { isConfigured, selectedProjectId: projectId } = useConfigStore()
   return useQuery<CoverageResponse>({
@@ -161,6 +231,9 @@ export function useSpecEvents() {
       // Coverage moves on a save (a rewording makes evidence stale) and on evidence arriving,
       // and both arrive as `spec_updated`.
       queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specCoverage'] })
+      // A piece an agent records while a row is open, and a recording run's end (`{run_ended}`,
+      // which un-greys a piece held as still being recorded), both arrive here with no path.
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specEvidence'] })
       // An accepted/rejected proposal, or a fresh one from a gated submission, changes what this
       // document's pending list looks like — the same broadcast covers all three (accept/reject
       // routes and submit_spec_document all emit `spec_updated`).

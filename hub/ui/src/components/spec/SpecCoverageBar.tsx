@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
+import { EvidencePieces } from './EvidencePieces'
 import { useSpecCoverage, type CoverageEntry } from '@/api/spec'
 
 /** Order and wording, highest precedence first. The labels say what the state *means* rather than
@@ -83,6 +84,7 @@ interface SpecCoverageBarProps {
 export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
   const { data } = useSpecCoverage(path)
   const [open, setOpen] = useState(false)
+  const [evidenceOpen, setEvidenceOpen] = useState<string | null>(null)
 
   if (!data || (data.requirements.length === 0 && data.diagnostics.length === 0)) return null
 
@@ -184,7 +186,37 @@ export function SpecCoverageBar({ path, onOpenTasks }: SpecCoverageBarProps) {
                     )}
                   </>
                 )}
+                {entry.evidence_count > 0 && (
+                  <>
+                    {' · '}
+                    <button
+                      type="button"
+                      data-testid={`coverage-evidence-toggle-${entry.identifier}`}
+                      aria-expanded={evidenceOpen === entry.requirement_id}
+                      onClick={() =>
+                        setEvidenceOpen((current) =>
+                          current === entry.requirement_id ? null : entry.requirement_id,
+                        )
+                      }
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        color: 'var(--blue)',
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      Evidence ({entry.evidence_count})
+                    </button>
+                  </>
+                )}
                 {state ? <div style={{ paddingLeft: 12 }}>{state.why}</div> : null}
+                {evidenceOpen === entry.requirement_id && (
+                  <div style={{ paddingLeft: 12 }}>
+                    <EvidencePieces path={path} identifier={entry.identifier} />
+                  </div>
+                )}
               </li>
             )
           })}

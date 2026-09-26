@@ -53,6 +53,13 @@ active_ptys: Dict[str, PipeSession | PtySession] = {}
 active_app_server_runs: Set[str] = set()
 
 
+# Runs that recorded evidence this process. Only they can have greyed a piece as "still being
+# recorded" (`recording_run_live`), so only their end is announced to an open view
+# (`the-coverage-bar-takes-the-evidence-decision-it-asks-for`, D4). In memory beside the registries,
+# and emptied by a restart, which also ends every live run.
+runs_that_recorded_evidence: Set[str] = set()
+
+
 @dataclass(frozen=True)
 class LiveTurn:
     """A run this process is executing that is bound to the task in question."""

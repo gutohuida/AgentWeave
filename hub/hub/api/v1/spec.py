@@ -894,6 +894,15 @@ async def list_evidence(
     }
 
 
+async def _decision_announcement(session: AsyncSession, evidence) -> Dict[str, Any]:
+    """The `spec_updated` payload for a decided piece: the shape the record route already sends."""
+    requirement = await session.get(SpecRequirement, evidence.requirement_id)
+    return {
+        "evidence": evidence.id,
+        "requirement": requirement.identifier if requirement is not None else None,
+    }
+
+
 @router.post("/spec/evidence/{evidence_id}/decision")
 async def decide_evidence(
     evidence_id: str,
@@ -924,6 +933,9 @@ async def decide_evidence(
     # Built before the integration below, which rolls back when it fails and expires every loaded
     # row: the decision has committed, and the answer must not depend on what the merge did (F426).
     view = _evidence_view(evidence, latest_review=review)
+    # Captured here for the same reason: the broadcast below goes after the integration, and reading
+    # `evidence.id` then is the 500 F426 fixed.
+    announced = await _decision_announcement(session, evidence)
     # After the commit, and wrapped inside: accepting is a judgement about the evidence, and a
     # repository failure must not reverse it. This is what makes the approval refusal's instruction
     # — "accept the evidence" — actually land the work, rather than asking for something and then
@@ -931,6 +943,8 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, task_transitions.operator()
     )
+    # After the integration, so a view refetching on it sees any merge the decision caused.
+    await sse_manager.broadcast(project_id, "spec_updated", announced)
     return view
 
 

@@ -1224,6 +1224,8 @@ async def record_evidence(
         ) from exc
 
     await session.commit()
+    if actor.run_id:
+        run_liveness.runs_that_recorded_evidence.add(actor.run_id)
     await sse_manager.broadcast(
         actor.project_id,
         "spec_updated",
@@ -1348,7 +1350,7 @@ async def decide_evidence(
     a run-based check is satisfied by an agent simply continuing.
     """
     from ... import requirement_evidence, spec_lifecycle
-    from ...db.models import RequirementEvidence
+    from ...db.models import RequirementEvidence, SpecRequirement
 
     evidence = await session.get(RequirementEvidence, evidence_id)
     if evidence is None or evidence.project_id != actor.project_id:
@@ -1374,6 +1376,11 @@ async def decide_evidence(
     # Read before the integration below, which rolls back when it fails and expires every loaded
     # row: the decision has committed and the answer must not depend on the merge (F426).
     answer = {"id": evidence.id, "review_state": evidence.review_state}
+    requirement = await session.get(SpecRequirement, evidence.requirement_id)
+    announced = {
+        "evidence": evidence.id,
+        "requirement": requirement.identifier if requirement is not None else None,
+    }
     # Both routes, or the granted agent's acceptance — which is the whole point of the grant —
     # merges nothing. The actor is the agent that decided, not `operator()`: the integration
     # happened because of *that* decision, and a record naming the operator for it would be a false
@@ -1385,6 +1392,9 @@ async def decide_evidence(
     await task_integration.integrate_what_was_waiting_for_this_evidence(
         session, evidence, run_actor(actor.run_id, actor.agent)
     )
+    # After the integration, and from the values read before it: the operator's screen shows this
+    # piece, and an agent's decision moved it exactly as the operator's own would.
+    await sse_manager.broadcast(actor.project_id, "spec_updated", announced)
     return answer
 
 

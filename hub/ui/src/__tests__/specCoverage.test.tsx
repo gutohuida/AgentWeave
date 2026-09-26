@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
 
@@ -68,6 +68,22 @@ describe('coverage on the spec view', () => {
       isConfigured: true,
       bootstrapState: 'ready',
     })
+  })
+
+  it('offers the Evidence toggle only on a row that has evidence', async () => {
+    mount({
+      requirements: [
+        entry({ evidence_count: 2 }),
+        entry({ identifier: 'FR-2', requirement_id: 'spreq-2', evidence_count: 0, accepted_count: 0 }),
+      ],
+      diagnostics: [],
+      totals: { verified: 2 },
+      integration: { integrated: 2 },
+      unserved: [],
+    })
+    fireEvent.click(await screen.findByTestId('coverage-count-verified'))
+    expect(await screen.findByTestId('coverage-evidence-toggle-FR-1')).toHaveTextContent('Evidence (2)')
+    expect(screen.queryByTestId('coverage-evidence-toggle-FR-2')).toBeNull()
   })
 
   it('counts each state the document is actually in', async () => {

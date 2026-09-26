@@ -2153,6 +2153,19 @@ def _wake_decision_waiters(project_id: str, run_id: str) -> None:
     task.add_done_callback(_decision_wake_tasks.discard)
 
 
+async def _announce_run_end_to_open_views(project_id: str, run_id: str) -> None:
+    """Tell an open view that *run_id*, which recorded evidence, has ended (D4).
+
+    Sent after the registry release, never at `run_completed`, which fires before it: a view
+    refetching there could read `recording_run_live: true` again and nothing would refresh it a
+    second time. Never raises into a finished run.
+    """
+    try:
+        await sse_manager.broadcast(project_id, "spec_updated", {"run_ended": run_id})
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not announce run %s's end to open views", run_id, exc_info=True)
+
+
 async def _queue_decision_notes(
     project_id: str, recording_run_id: str, waiters: Dict[str, run_liveness.DecisionWaiter]
 ) -> None:
@@ -2881,6 +2894,8 @@ async def _execute_run(
     finally:
         run_liveness.active_ptys.pop(run_id, None)
         _wake_decision_waiters(project_id, run_id)
+        recorded_evidence = run_id in run_liveness.runs_that_recorded_evidence
+        run_liveness.runs_that_recorded_evidence.discard(run_id)
         _stop_requested.discard(run_id)
         # Last, and after the two synchronous releases above, deliberately. This is the only
         # `await` in this block: a cancelled task raises `CancelledError` at its first await
@@ -2888,6 +2903,8 @@ async def _execute_run(
         # it. Every destination is already on the row; this only makes `calls` exact, and losing
         # it is what `OutsideWriteRecorder.flush` documents as safe to lose.
         await outside_writes.flush()
+        if recorded_evidence:
+            await _announce_run_end_to_open_views(project_id, run_id)
 
 
 # How Codex's approval methods read on the operator's card. The raw method names
@@ -3426,9 +3443,13 @@ async def _execute_codex_appserver_run(
     finally:
         run_liveness.active_app_server_runs.discard(run_id)
         _wake_decision_waiters(project_id, run_id)
+        recorded_evidence = run_id in run_liveness.runs_that_recorded_evidence
+        run_liveness.runs_that_recorded_evidence.discard(run_id)
         _stop_requested.discard(run_id)
         # See `_execute_run`'s identical last line, including why it is last.
         await outside_writes.flush()
+        if recorded_evidence:
+            await _announce_run_end_to_open_views(project_id, run_id)
 
 
 @router.get("/sessions/{agent}")

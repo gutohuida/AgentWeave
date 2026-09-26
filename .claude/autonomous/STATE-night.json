@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "fca808d",
     "stop_at": "2026-09-26T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-09-25-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-impl",
-    "next_action": "Implement the-coverage-bar-takes-the-evidence-decision-it-asks-for (queue item ...-impl) via openspec-apply-change: read its tasks.md and the APPROVALS row note; F392 rules 1-2; run tests/ before commit. Read CI verdict first (6268b0e and this iteration's commit).",
+    "current": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-drive",
+    "next_action": "Drive the-coverage-bar-takes-the-evidence-decision-it-asks-for (queue item ...-drive) per tasks.md 3.1: fresh port (netstat), profile drive0926f, AW_HUB/AW_KEY exported, Haiku only, from hub/ with DATABASE_URL. Agent records evidence, open bar in a browser against the served bundle, Accept; also check a run_ended broadcast greys/un-greys a live row. Then archive (openspec-archive-change) and set F215 status in scripts/drive/FINDINGS.md. Read CI verdict first.",
     "queue": [
         {
             "id": "compose",
@@ -83,9 +83,9 @@
         },
         {
             "id": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement the-coverage-bar-takes-the-evidence-decision-it-asks-for via openspec-apply-change",
-            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/the-coverage-bar-takes-the-evidence-decision-it-asks-for/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+            "detail": "Done iteration 12 (see log); 1.9 stub-runner run unwritten; drive unwritten."
         },
         {
             "id": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-drive",
