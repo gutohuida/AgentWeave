@@ -242,3 +242,19 @@ reports `FAILED` on a page with three real finding items and nothing duplicated.
 that page since the page was written at D-5. **The other eight checks pass**, and this one says
 nothing about the page. Same class as F296: an assertion that cannot mean what it is read to mean.
 Fixing it is counting `<h3>` finding headings rather than every `.fid` in the slice.
+
+## The `@`-mention probes — rerun both after a `claude` upgrade
+
+`d2_0923_at_mention_tokeniser.py` (which spellings the CLI expands into a file read) and
+`d3_0923_worker_at_mention.py` (the Hub's one-shot workers) pin what F409's `\@` rule assumes about
+the harness, measured on `claude` 2.1.280. A CLI upgrade reruns both; each prints `CHANGED` or a
+different `expanded=` where the harness moved.
+
+- D2 depends on `escaped` and `escaped_twice`: a backslash before the `@` is what stops the read.
+- D10 depends on `after_002f`, `picker_quoted_slash_at`, `double_at`, `skill_dollar_at` and
+  `picker_quoted_index0`: the shapes the picker and the skill insert are allowed to leave unescaped.
+- The `system_prompt_file` row in D3 is a control: a context file passed by
+  `--append-system-prompt-file` is not expanded, which is why the context file is left alone.
+
+Last run (2026-09-27, 2.1.280): the 18 rows added for R4 and R5 all matched their measurement, and
+both workers, which expanded before F409's fix, now show `expanded=False`.

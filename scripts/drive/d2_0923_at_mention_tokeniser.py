@@ -65,7 +65,45 @@ def _variants(sec: str) -> dict[str, tuple[str, bool]]:
     }
     for pre in ":,;=[{<'|*-/_1#!(x":
         rows[f"after_{ord(pre):04x}"] = (f"{pre}@{sec}", False)
+    # R4 and R5 rows (design.md, "R4's rows" and "R5's rows"). The token sits in the inbound-queue
+    # shape `please look at <token> .`, like the rows above.
+    bom = "\ufeff"
+    rows.update(
+        {
+            "picker_quoted_nested": (f'@"x @{sec}" now', True),
+            "picker_unquoted_bom": (f"@x{bom}@{sec} now", True),
+            "picker_quoted_slash_at": (f'@"x y/@{sec}" now', False),
+            "picker_quoted_bom": (f'@"x{bom}@{sec}"', True),
+            "skill_dollar_at": (f"$@{sec}", False),
+            "skill_dollar_quoted_index0": (f'$"@{sec} y"', False),
+            "picker_quoted_index0": (f'@"@{sec} y"', False),
+            "small_commercial_at": (f"\ufe6b{sec}", False),
+            "escaped_quoted": (f'{bs}@"{sec}"', False),
+            "bom_then_escaped": (f"{bom}{bs}@{sec}", False),
+        }
+    )
     return rows
+
+
+def _shaped(sec: str) -> dict[str, tuple[str, bool]]:
+    """name -> (whole message body after the header, expanded as measured). Shapes the Hub composes."""
+    bs = chr(92)
+    question = "Operator (hop 0):\nQuestion: Which key should I use?\n\n"
+    return {
+        "label_answer": (f"{question}Answer: Use @{sec}", True),
+        "label_answer_escaped": (f"{question}Answer: Use {bs}@{sec}", False),
+        "multi_label_answer": (f"{question}Answer: Keep it, Use @{sec}", True),
+        "batch_label_answer": (f"1. Which?\n   Answer: Use @{sec}", True),
+        "spec_notice_path": (
+            f"This document (`spec/a @{sec}`) is under review; pass `path='spec/a @{sec}'`",
+            True,
+        ),
+        "spec_notice_path_escaped": (
+            f"This document (`spec/a {bs}@{sec}`) is under review; "
+            f"pass `path='spec/a {bs}@{sec}'`",
+            False,
+        ),
+    }
 
 
 def main() -> int:
@@ -80,6 +118,8 @@ def main() -> int:
     transcripts = pathlib.Path.home() / ".claude" / "projects"
     claude = _claude()
     variants = _variants(sec)
+    shaped = _shaped(sec)
+    variants.update(shaped)
     wanted = sys.argv[1:] or list(variants)
     wrong = 0
     for name in wanted:
