@@ -49,7 +49,7 @@ from ...utils import persist_event, short_id
 from .agent_trigger import effective_question_wait
 from .agents import AgentRequest, request_agent
 from .jobs import archive_job, create_job, delete_job, run_job, update_job
-from .messages import create_message_for_actor
+from .messages import create_message_for_actor, message_response
 from .questions import announce_queued_answer, ask_question_for_actor, deliver_batch_if_complete
 from .tasks import (
     create_task_for_actor,
@@ -215,13 +215,14 @@ async def send_peer_message(
         conversation_id=body.conversation_id,
         start_new_thread=body.start_new_thread,
     )
-    return await create_message_for_actor(
+    msg, held = await create_message_for_actor(
         message,
         project_id=actor.project_id,
         sender=actor.agent,
         run_id=actor.run_id,
         session=session,
     )
+    return message_response(msg, held)
 
 
 @router.post("/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)

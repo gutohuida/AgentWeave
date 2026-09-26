@@ -241,7 +241,12 @@ def send_message(
             "start_new_thread": start_new_thread,
         },
     )
-    return {"success": True, "message_id": result.get("id")}
+    reply = {"success": True, "message_id": result.get("id")}
+    if result.get("held_by_hop_budget"):
+        # Recorded, so `success` stays true, but the sender must not report it delivered (F361).
+        reply["held_by_hop_budget"] = True
+        reply["delivery_note"] = result.get("delivery_note")
+    return reply
 
 
 @mcp.tool()

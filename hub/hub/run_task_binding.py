@@ -399,6 +399,18 @@ async def task_attendance(session: AsyncSession, project_id: str) -> TaskAttenda
     return TaskAttendance(pairs=pairs, queued_pairs=frozenset(queued_pairs))
 
 
+def checkout_held_sentence(holder: str, task_id: str) -> str:
+    """The refusal's words when *holder*'s running turn has *task_id*'s checkout (design D8).
+
+    One sentence for the trigger that refuses and the status route that checks the same fact live,
+    so the two cannot word it differently (F289).
+    """
+    return (
+        f"{holder} is already running a turn on task {task_id}; "
+        f"a task's checkout takes one writing turn at a time."
+    )
+
+
 async def tasks_held_by_a_running_turn(session: AsyncSession, project_id: str) -> Dict[str, str]:
     """`task_id -> the agent whose running turn is bound to it`, for one project (design D8).
 

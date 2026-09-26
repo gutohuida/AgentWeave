@@ -61,5 +61,9 @@ class MessageResponse(BaseModel):
     read: bool
     read_at: Optional[datetime] = None
     task_id: Optional[str] = Field(default=None, max_length=128)
+    # Set only on a send answer, where the hop budget is known to be holding the message (F361).
+    # `None` on every listed message: the list routes do not compute it, and `False` would be a claim.
+    held_by_hop_budget: Optional[bool] = None
+    delivery_note: Optional[str] = Field(default=None, max_length=2000)
 
     model_config = {"populate_by_name": True, "from_attributes": True}

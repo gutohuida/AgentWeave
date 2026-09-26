@@ -1,6 +1,9 @@
 """Inbound queue inspection, configuration, and withdrawal endpoints."""
 
+import asyncio
+import logging
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -8,12 +11,15 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ... import task_workspace, worktrees
 from ...agent_roster import require_known_agent
 from ...auth import get_project
+from ...conversations import get_conversation_by_id
 from ...db.engine import get_session
 from ...db.models import InboundQueueEntry, Project
 from ...inbound_queue import (
     DELIVERY_ATTEMPT_LIMIT,
+    entry_kind,
     not_queued_reason,
     release_entry,
     select_turn,
@@ -21,9 +27,16 @@ from ...inbound_queue import (
 )
 from ...launchability import get_agent_config, probe_agent
 from ...provider_allowance import hold_sentence, operator_would_probe, provider_hold
+from ...run_task_binding import (
+    checkout_held_sentence,
+    resolve_bound_task,
+    tasks_held_by_a_running_turn,
+)
 from ...sse import sse_manager
 from ...usage_accounting import project_budget_state
 from ...utils import persist_event
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/queue", tags=["inbound-queue"])
 
@@ -93,6 +106,52 @@ async def get_queue_settings(
         agent_budget=row.agent_budget,
         allow_agent_jobs=row.allow_agent_jobs,
     )
+
+
+async def _checkout_holder_reason(
+    session: AsyncSession,
+    project_id: str,
+    agent: str,
+    entries: List[InboundQueueEntry],
+    project_row: Optional[Project],
+    config: dict,
+    repo_root: Path,
+) -> Optional[str]:
+    """The trigger's one-writing-turn-per-checkout refusal, asked now rather than read back (F289).
+
+    The trigger refuses when the turn's task takes its own checkout and another agent's running turn
+    holds it (design D8). The stored copy of that sentence outlives the holder, so this asks the same
+    two questions of the turn the scheduler would build. `takes_own_checkout` answers from the row
+    alone, so no base or prerequisite git runs on this polled route. It is a diagnostic: anything
+    that goes wrong here is logged and the caller falls back to the stored record.
+    """
+    if project_row is None:
+        return None
+    try:
+        controlling, selected = select_turn(
+            entries, project_row.hop_budget, project_row.turn_delivery_cap
+        )
+        # A review turn never reaches the checkout check (`agent_trigger`'s review branch pre-empts it).
+        if controlling is None or entry_kind(controlling) == "review":
+            return None
+        conversation = await get_conversation_by_id(session, controlling.conversation_id)
+        binding = await resolve_bound_task(
+            session,
+            project_id=project_id,
+            conversation=conversation,
+            queue_entry_ids=[entry.id for entry in selected],
+        )
+        if not task_workspace.takes_own_checkout(binding.task):
+            return None
+        task_id = binding.task.id
+        if not await asyncio.to_thread(worktrees.takes_task_workspace, repo_root, config, task_id):
+            return None
+        holder = (await tasks_held_by_a_running_turn(session, project_id)).get(task_id)
+        if holder is not None and holder != agent:
+            return checkout_held_sentence(holder, task_id)
+    except Exception:  # noqa: BLE001 - a diagnostic must not 500 on one failed check
+        logger.warning("queue status: checkout holder check failed for %s", agent, exc_info=True)
+    return None
 
 
 @router.get("/{agent}/status", response_model=QueueStatus)
@@ -176,16 +235,32 @@ async def get_queue_status(
                 from ... import project_workspace
 
                 try:
-                    await project_workspace.resolve_project_workspace(session, project_id)
+                    workspace_root = await project_workspace.resolve_project_workspace(
+                        session, project_id
+                    )
                 except project_workspace.ProjectWorkspaceError as exc:
                     reason = f"project workspace is unavailable: {exc}"
+                else:
+                    reason = await _checkout_holder_reason(
+                        session,
+                        project_id,
+                        agent,
+                        entries,
+                        project_row,
+                        config,
+                        workspace_root.root,
+                    )
     if reason is None:
         # What the last attempt was actually refused with, when none of the read-only questions
         # above found anything (F97). Below them deliberately: those describe the agent's state
         # *now*, and this is a record of the last attempt, which a repair since then may already
         # have cleared. Above the attempt counter for the reason the counter's own comment gives —
         # every reason explains the wait better than a retry count does.
-        reason = next((entry.waiting_reason for entry in entries if entry.waiting_reason), None)
+        stored = next((entry.waiting_reason for entry in entries if entry.waiting_reason), None)
+        if stored is not None:
+            # Said as a record, because it is one (F289): the sentence was true when the trigger
+            # raised it, and nothing here re-checks it. A live cause is named above instead.
+            reason = f"the last delivery attempt was refused: {stored}"
     attempts = max((entry.delivery_attempts or 0 for entry in entries), default=0)
     if reason is None and attempts:
         # Last, deliberately. Every reason above explains the wait better than a retry count does —

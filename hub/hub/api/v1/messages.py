@@ -29,6 +29,29 @@ from ...utils import persist_event, short_id
 router = APIRouter(prefix="/messages", tags=["messages"])
 
 
+def held_note(msg_id: str, recipient: str, depth: int, budget: int) -> str:
+    """What the sender of a message held by the hop budget is told, in one place (F361).
+
+    Built here so the send routes and the `send_message` tool cannot word it differently. It is the
+    moment the sender reads; nothing later tells them what became of the message.
+    """
+    return (
+        f"Recorded as {msg_id}, but not delivered: this chain of messages has reached the "
+        f"project's hop budget ({depth} of {budget}). {recipient} receives it only if the operator "
+        "continues the chain or raises the budget. Sending it again queues it at the same depth. "
+        "Do not tell anyone it was delivered; if it matters now, ask the operator with ask_user."
+    )
+
+
+def message_response(msg: Message, held: Optional[str]) -> MessageResponse:
+    """The send answer: the message, and whether the hop budget is holding it (`None` = not)."""
+    response = MessageResponse.model_validate(msg)
+    if held is not None:
+        response.held_by_hop_budget = True
+        response.delivery_note = held
+    return response
+
+
 async def create_message_for_actor(
     body: MessageCreate,
     *,
@@ -36,7 +59,7 @@ async def create_message_for_actor(
     sender: str,
     run_id: Optional[str],
     session: AsyncSession,
-) -> Message:
+) -> Tuple[Message, Optional[str]]:
     if body.task_id:
         # Validated here, at the moment of the call, rather than at spawn. A task the sender cannot
         # see is a mistake worth learning about in the tool result they are already reading — not
@@ -316,7 +339,10 @@ async def create_message_for_actor(
     from ...turn_scheduler import schedule_agent
 
     await schedule_agent(project_id, body.recipient)
-    return msg
+    held_by_budget = (
+        held_note(msg.id, body.recipient, hop_depth, hop_budget) if hop_depth > hop_budget else None
+    )
+    return msg, held_by_budget
 
 
 @router.post("", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
@@ -343,13 +369,14 @@ async def create_message(
     except project_workspace.ProjectWorkspaceError as exc:
         project_workspace.raise_workspace_http_error(exc)
 
-    return await create_message_for_actor(
+    msg, held = await create_message_for_actor(
         body,
         project_id=project_id,
         sender=body.sender,
         run_id=body.run_id,
         session=session,
     )
+    return message_response(msg, held)
 
 
 @router.get("", response_model=List[MessageResponse])

@@ -115,6 +115,7 @@ from ...run_divergence import evaluate_run_end, record_response_run
 from ...run_task_binding import (
     TaskBindingError,
     bind_run_to_task,
+    checkout_held_sentence,
     decided_task_refusal,
     rebind_conversation,
     resolve_bound_task,
@@ -1039,8 +1040,7 @@ async def _trigger_agent_directly(
             if holder is not None and holder != agent:
                 raise TriggerAgentError(
                     status.HTTP_409_CONFLICT,
-                    f"{holder} is already running a turn on task {turn_workspace.task_id}; "
-                    f"a task's checkout takes one writing turn at a time.",
+                    checkout_held_sentence(holder, turn_workspace.task_id),
                     # It clears when that turn ends, so the queue entry waits rather than counting
                     # a delivery attempt towards abandonment (design D8, and `turn_scheduler`).
                     transient=True,
