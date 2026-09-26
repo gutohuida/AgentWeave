@@ -6,7 +6,7 @@ mid-turn -> 409 recording_run_live (body verbatim); after the run ends, decide -
 builder still runs -> refused 409; after the run ends it is woken with the `evidence` note.
 Needs AW_HUB, AW_KEY. Everything goes through operator routes and real agent turns.
 """
-import json, os, pathlib, sqlite3, subprocess, sys, time
+import os, pathlib, sqlite3, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
