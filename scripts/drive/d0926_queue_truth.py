@@ -7,7 +7,7 @@ states a real refusal leaves (a peer's entry sorted first; an entry with deliver
 a waiting_reason). Needs AW_HUB, AW_KEY, AW_DB.
 """
 import json, os, pathlib, sqlite3, subprocess, sys, time, uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")

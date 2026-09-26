@@ -19086,7 +19086,7 @@ with the wrong invalidation; here there is no event to answer.
 
 ## F251 (B) — the Hub broadcasts 17 event names the client discards before any listener, 9 of them into handling code written for them
 
-**Status:** open. Filed by the row-16 drive (`00b5dd9`), never fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** fixed 8179c93 (driven live 2026-09-26, drive Hub :8037, `d0926_stream_gap.py`: a stalled operator-stream subscriber, 3,000 events, one `stream_gap` frame `{dropped: 1362, severity: warn}`, no `project_id`; received 1638 + dropped 1362 = 3000. The UI half, tasks.md 3.2, NOT driven in a browser -- unit tests only). Filed as follows: Filed by the row-16 drive (`00b5dd9`). [classified 2026-09-09, D-2]
 **Re-measured 2026-09-13 (day `d1-drive`), and now coupled to F335.** A live Chromium session
 received `task_updated` and rendered it. It rendered nothing for the `run_divergence_resolved`
 the wire carried in the same instant (captured with `curl -N /api/v1/events`). A static diff of

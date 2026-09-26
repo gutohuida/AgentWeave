@@ -28,6 +28,6 @@
 
 ## 3. Drive and close out
 
-- [ ] 3.1 On a trial Hub from source (never `:8000`): re-run `t_sweep_row16_logs_events_sse.py` leg 6 (a stalled operator-stream subscriber, 3,000 events). Record the `stream_gap` frame(s) and that `dropped` plus the events received equals 3,000
-- [ ] 3.2 Human-only check from `test-guide.md`
-- [ ] 3.3 Mark F253 fixed in `scripts/drive/FINDINGS.md`; reconcile the requirement into `openspec/specs/local-project-workspace/spec.md` on archive
+- [x] 3.1 On a trial Hub from source (never `:8000`): re-run `t_sweep_row16_logs_events_sse.py` leg 6 (a stalled operator-stream subscriber, 3,000 events). Record the `stream_gap` frame(s) and that `dropped` plus the events received equals 3,000
+- [ ] 3.2 (not driven: no browser) Human-only check from `test-guide.md`
+- [x] 3.3 Mark F253 fixed in `scripts/drive/FINDINGS.md`; reconcile the requirement into `openspec/specs/local-project-workspace/spec.md` on archive
