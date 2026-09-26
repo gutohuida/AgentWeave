@@ -33,4 +33,4 @@
 
 ## 3. Drive
 
-- [ ] 3.1 Trial Hub `:8010`: one agent records evidence; open the document, open the bar, open the row, Accept. The row reads accepted, the bar's *awaiting* count drops, and a task waiting on that evidence shows its integration. Screenshot
+- [x] 3.1 (driven 2026-09-26 on :8043, real Haiku builder, Chromium; scripts/drive/d0926_coverage_bar*.py) Trial Hub `:8010`: one agent records evidence; open the document, open the bar, open the row, Accept. The row reads accepted, the bar's *awaiting* count drops, and a task waiting on that evidence shows its integration. Screenshot

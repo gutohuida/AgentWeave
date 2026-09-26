@@ -17318,7 +17318,7 @@ Four fixture projects, all deleted afterwards.
 
 ## F215 (B) — the operator's screen tells them evidence is waiting for them and gives them nothing to press
 
-**Status:** open, and confirmed open by sampling. `spec-queue/ROADMAP.md` drew four
+**Status:** fixed (ea9cdd8 + drive 2026-09-26, see log iteration 13). Was: open, and confirmed open by sampling. `spec-queue/ROADMAP.md` drew four
 unclassified findings at random to test whether the population was noise; this was one of the four,
 and all four were *"real, unfixed, and none is anywhere in this plan"*. [classified 2026-09-09, D-2]
 
