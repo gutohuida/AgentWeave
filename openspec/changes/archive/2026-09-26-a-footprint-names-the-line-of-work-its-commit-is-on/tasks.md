@@ -39,4 +39,4 @@ New file `hub/tests/test_a_footprint_names_its_line_of_work.py`, reusing the git
 
 ## 3. Drive
 
-- [ ] 3.1 Trial Hub: F155's reproduction (`scripts/drive/t_row17_integration.py` shape), then the operator records evidence naming the resolved sha after the branch has moved on; approval now merges. Record the before/after bodies
+- [x] 3.1 Trial Hub: F155's reproduction (`scripts/drive/t_row17_integration.py` shape), then the operator records evidence naming the resolved sha after the branch has moved on; approval now merges. Record the before/after bodies

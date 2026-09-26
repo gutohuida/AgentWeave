@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "fca808d",
     "stop_at": "2026-09-26T07:00:00+01:00",
-    "iteration": 14,
+    "iteration": 15,
     "log_file": ".claude/autonomous/2026-09-25-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-footprint-names-the-line-of-work-its-commit-is-on-drive",
-    "next_action": "Drive a-footprint-names-the-line-of-work-its-commit-is-on (queue item ...-drive) on a fresh drive Hub (task 3.1: F155 reproduction shape scripts/drive/t_row17_integration.py; operator records evidence naming the resolved sha after the branch moved on; approval now merges; record before/after bodies; also the preview lists the descendant), then archive and set F165/F166 statuses in FINDINGS.md. Read CI verdict first.",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "compose",
@@ -101,9 +101,9 @@
         },
         {
             "id": "a-footprint-names-the-line-of-work-its-commit-is-on-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-footprint-names-the-line-of-work-its-commit-is-on on a fresh drive Hub, then archive and retire its findings",
-            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+            "detail": "Done iteration 15 (see log); archived."
         }
     ],
     "decisions_for_user": [],

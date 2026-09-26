@@ -13518,6 +13518,8 @@ the same `ACCEPT_OR_GRANT` clause the sibling refusal uses.
 
 ### F165 (new, severity **B**) — an operator's locator-named commit silently fails to supersede
 
+**Status:** fixed 2026-09-26 by `a-footprint-names-the-line-of-work-its-commit-is-on` (`line_of_work`, `reduce_by_ancestry`, migration 0109); driven on Hub :8051: operator evidence at C then D with the checkout detached at C -> both footprints `agentweave/builder`, preview one target (D), approval merged D with C riding along.
+
 Reachable, and proven reachable in `hub/tests/test_conflict_refusal_names_what_clears_it.py`
 (`test_an_operator_naming_the_resolved_sha_does_not_supersede`), which is what task 1.3a asked for.
 
@@ -13553,6 +13555,8 @@ one task are reachable through the product's own routes rather than constructibl
 needs a drive. Severity stays B, still unqueued.
 
 ### F166 (new, severity **C**) — the same hole on the agent route, via `footprint_root`'s fallbacks
+
+**Status:** fixed 2026-09-26 by `a-footprint-names-the-line-of-work-its-commit-is-on` (D2/D3: `read_evidence_footprint` seam, task-bound agent falls back to the task branch's tip); driven live with F165, archived.
 
 **Status:** open. `spec-queue/ROADMAP.md:190` records this entry and its sibling as
 standing after their parent was withdrawn, and `requirement_evidence.footprint_root`'s three answers
