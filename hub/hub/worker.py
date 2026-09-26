@@ -46,6 +46,7 @@ from pydantic import BaseModel, ValidationError
 
 from .db.engine import async_session_factory
 from .db.models import WorkerInvocation
+from .file_mentions import neutralise_file_mentions, restore_file_mentions
 from .model_catalog import get_provider, undeclared_model_reason
 from .pty_runner import resolve_executable
 from .subprocess_windows import no_console_kwargs
@@ -142,7 +143,7 @@ def build_worker_command(
         cmd = ["claude", "--tools", "", "--strict-mcp-config", "--output-format", "json"]
         if model:
             cmd += ["--model", model]
-        return cmd + ["-p", prompt]
+        return cmd + ["-p", neutralise_file_mentions(prompt)]
     if cli == "codex":
         cmd = ["codex", "exec", "--skip-git-repo-check", "--json"]
         cmd += ["--ephemeral", "--sandbox", "read-only"]
@@ -150,7 +151,7 @@ def build_worker_command(
             cmd += ["--output-schema", output_schema_path]
         if model:
             cmd += ["--model", model]
-        return cmd + [prompt]
+        return cmd + [neutralise_file_mentions(prompt)]
     return None
 
 
@@ -492,6 +493,22 @@ async def run_worker(
     )
 
 
+def _restore_mentions(value: Any) -> Any:
+    """`restore_file_mentions` over every string in a parsed answer, and nothing else (F409, D7).
+
+    The prompt was neutralised on the way in, so a model that echoes a path puts a backslash before the at-sign; the
+    stored record is the operator's text, so the escape comes off before validation. Numbers,
+    booleans and `null` pass through untouched.
+    """
+    if isinstance(value, str):
+        return restore_file_mentions(value)
+    if isinstance(value, list):
+        return [_restore_mentions(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _restore_mentions(item) for key, item in value.items()}
+    return value
+
+
 def _interpret(
     spawn: _Spawn, cli: str, output_model: Type[BaseModel], duration_ms: int
 ) -> WorkerResult:
@@ -528,7 +545,7 @@ def _interpret(
         )
 
     try:
-        parsed = output_model.model_validate(payload)
+        parsed = output_model.model_validate(_restore_mentions(payload))
     except ValidationError as exc:
         return WorkerResult(
             "schema_invalid",

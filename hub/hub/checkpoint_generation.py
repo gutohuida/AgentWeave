@@ -25,6 +25,7 @@ envelope on the way out.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -373,8 +374,12 @@ def render_checkpoint(checkpoint: Checkpoint) -> str:
 
 
 def _normalise(values: List[str]) -> set:
+    # `re.sub` drops the separator a Windows-style or escaped at-sign leaves ahead of it, so
+    # `node_modules\@types` and `packages/\@scope` meet the plain `@` form (F409, D7).
     return {
-        str(value).strip().replace("\\", "/").lstrip("./") for value in values if str(value).strip()
+        re.sub(r"/+@", "@", str(value).strip().replace("\\", "/")).lstrip("./")
+        for value in values
+        if str(value).strip()
     }
 
 

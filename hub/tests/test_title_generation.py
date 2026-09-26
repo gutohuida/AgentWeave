@@ -626,3 +626,21 @@ async def test_another_conversations_title_does_not_count_as_this_ones(
 
     assert len(calls) == 1
     assert (await _title(conversation_id))[0] == "Checkout flake investigation"
+
+
+@pytest.mark.asyncio
+async def test_a_title_the_model_escaped_is_stored_restored(
+    app, auth_headers, bind_runner, monkeypatch
+) -> None:
+    """F409 D7: the prompt was neutralised, so the model may echo a backslash-at; none is stored."""
+    await _sync_agent(app, auth_headers)
+    conversation_id = await _conversation(app, auth_headers, bind_runner)
+    await _set_mode("generate")
+    _fake_spawn(monkeypatch, r"Fix \@scope build")
+
+    result = await conversation_titles.generate_conversation_title(
+        project_id="proj-test", conversation_id=conversation_id
+    )
+
+    assert result == "Fix @scope build"
+    assert (await _title(conversation_id)) == ("Fix @scope build", False)

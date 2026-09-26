@@ -35,6 +35,7 @@ from .db.models import (
     Project,
     Runner,
 )
+from .file_mentions import neutralise_file_mentions, restore_file_mentions
 from .pty_runner import resolve_executable
 from .subprocess_windows import no_console_kwargs
 from .utils import persist_event
@@ -86,12 +87,12 @@ def build_title_command(*, cli: str, model: Optional[str], prompt: str) -> Optio
         cmd = [cli, "--tools", "", "--strict-mcp-config"]
         if model:
             cmd += ["--model", model]
-        return cmd + ["-p", prompt]
+        return cmd + ["-p", neutralise_file_mentions(prompt)]
     if cli == "codex":
         cmd = [cli, "exec", "--skip-git-repo-check", "--sandbox", "read-only"]
         if model:
             cmd += ["--model", model]
-        return cmd + [prompt]
+        return cmd + [neutralise_file_mentions(prompt)]
     return None
 
 
@@ -273,7 +274,7 @@ async def generate_conversation_title(*, project_id: str, conversation_id: str) 
     async with _gate:
         output = await asyncio.to_thread(_run_titler, cmd, cwd)
 
-    title = title_from_output(output)
+    title = title_from_output(restore_file_mentions(output))
     if not title:
         return None
 

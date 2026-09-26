@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .file_mentions import MENTION_NOTICE, neutralise_file_mentions
+
 # DEAD (2026-09-20): 7 of these 9 keys name runner kinds no agent can be bound to any more.
 # Why: a Runner's `cli` is validated against RUNNER_CLIS = ("claude", "codex")
 #   (db/models.py:311, schemas/runners.py:22) and RunnerUpdate has no `cli` field at all
@@ -367,11 +369,17 @@ def spec_turn_notice(
             "document is about, and use the path it returns from then on.",
         ]
         if path and is_unwritten:
+            # F409 D9: the path is derived from the operator's document subject, and this notice
+            # is composed into the turn prompt, so an at-sign in it would expand into a file
+            # attachment. The D6 sentence follows only when the path changed.
+            safe_path = neutralise_file_mentions(path)
             lines.append(
-                f"This document (`{path}`) is empty and is what you are interviewing for. When "
-                f"you call `submit_spec_document`, pass `path='{path}'` — do not call "
+                f"This document (`{safe_path}`) is empty and is what you are interviewing for. "
+                f"When you call `submit_spec_document`, pass `path='{safe_path}'` — do not call "
                 "`create_spec_document`, one already exists for this turn."
             )
+            if safe_path != path:
+                lines.append(MENTION_NOTICE)
     else:
         lines.append(
             "Write the document only with `submit_spec_document`. Never author specification "

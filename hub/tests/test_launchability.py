@@ -723,3 +723,23 @@ async def test_get_agent_config_reports_the_bound_runner_and_names_the_unbound_c
     # And the verdict the operator actually reads.
     assert probe_agent("unbound-agent", unbound)["runnable"] is False
     assert "no runner is bound" in probe_agent("unbound-agent", unbound)["reason"].lower()
+
+
+def test_spec_turn_notice_neutralises_a_path_with_an_at_sign() -> None:
+    """F409 D9: the path comes from the operator's subject and is composed into the turn prompt."""
+    from hub.file_mentions import MENTION_NOTICE
+    from hub.launchability import spec_turn_notice
+
+    notice = spec_turn_notice("exploring", path="spec/a @x/y.html", is_unwritten=True)
+    assert notice.count(r"spec/a \@x/y.html") == 2
+    assert notice.replace(r"\@", "").count("@") == 0
+    assert notice.endswith(MENTION_NOTICE)
+
+
+def test_spec_turn_notice_is_unchanged_for_a_path_without_an_at_sign() -> None:
+    from hub.file_mentions import MENTION_NOTICE
+    from hub.launchability import spec_turn_notice
+
+    notice = spec_turn_notice("exploring", path="spec/pale-otter.html", is_unwritten=True)
+    assert MENTION_NOTICE not in notice
+    assert "`spec/pale-otter.html`" in notice and "path='spec/pale-otter.html'" in notice
