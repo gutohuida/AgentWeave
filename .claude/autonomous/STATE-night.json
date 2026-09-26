@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "fca808d",
     "stop_at": "2026-09-26T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-25-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-live-view-that-fell-behind-is-told-and-catches-up-impl",
-    "next_action": "Implement a-live-view-that-fell-behind-is-told-and-catches-up via openspec-apply-change (queue item a-live-view-that-fell-behind-is-told-and-catches-up-impl). Read CI verdict for the previous push first.",
+    "current": "a-live-view-that-fell-behind-is-told-and-catches-up-drive",
+    "next_action": "Drive a-live-view-that-fell-behind-is-told-and-catches-up on a fresh drive Hub (queue item a-live-view-that-fell-behind-is-told-and-catches-up-drive): tasks.md 3.1 stalled operator-stream subscriber, 3,000 events, record stream_gap frames and dropped+received==3000; UI in browser against the served bundle. Then archive and mark F253 fixed. Read CI verdict first.",
     "queue": [
         {
             "id": "compose",
@@ -59,9 +59,9 @@
         },
         {
             "id": "a-live-view-that-fell-behind-is-told-and-catches-up-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-live-view-that-fell-behind-is-told-and-catches-up via openspec-apply-change",
-            "detail": "APPROVED row in APPROVALS 2026-09-25 (tonight's ORDER, verbatim order). Read openspec/changes/a-live-view-that-fell-behind-is-told-and-catches-up/ tasks.md; honour the APPROVALS row note. F392 rules 1-2 apply (union of guard files, inline counts). Run tests/ before commit."
+            "detail": "Done iteration 8 (see log); drive unwritten."
         },
         {
             "id": "a-live-view-that-fell-behind-is-told-and-catches-up-drive",

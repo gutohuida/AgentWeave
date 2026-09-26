@@ -6,6 +6,10 @@ export function summaryForEvent(type: string, data: Record<string, unknown>): st
       const subject = data.subject ? `"${data.subject}"` : ''
       return [route, subject].filter(Boolean).join(': ')
     }
+    // Written by the Hub's stream itself when this client's queue overflowed (F253); the app has
+    // already refetched its views. The feed is not refetched: live and history rows carry
+    // different timestamps, so de-duplicating them would double rows.
+    case 'stream_gap': return `The live connection fell behind and ${data.dropped ?? 'some'} events were not delivered. Views were refreshed; this feed may be missing lines until Activity is reopened.`
     case 'message_read': return `msg ${data.id} read`
     case 'task_created': return `"${data.title}" assigned to ${data.assignee ?? 'unassigned'}`
     case 'task_updated': {

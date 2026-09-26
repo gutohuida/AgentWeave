@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useConfigStore } from '@/store/configStore'
-import { useSSE, getBufferedEvents, __resetSSEStateForTest } from '@/hooks/useSSE'
+import { useSSE, getBufferedEvents, onSseReconnect, __resetSSEStateForTest } from '@/hooks/useSSE'
 import type { ReactNode } from 'react'
 
 function makeSSEResponse(chunks: string[]): Response {
@@ -353,5 +353,67 @@ describe('S3 — useSSE auth: Authorization header, no ?token= in URL', () => {
     render(withQueryClient(<Probe />))
 
     await waitFor(() => expect(seen).toEqual(expect.arrayContaining(types)))
+  })
+})
+
+// F253: the Hub tells a client whose queue overflowed with a `stream_gap` frame (no project_id);
+// the client dispatches it, then runs its reconnect catch-ups.
+describe('useSSE — a stream_gap frame', () => {
+  const CONNECTED = 'event: connected\ndata: connected\n\n'
+  const TASK = 'event: task_updated\ndata: {"id":"t-1","status":"completed","project_id":"proj-a"}\n\n'
+  const GAP = 'event: stream_gap\ndata: {"dropped":10,"severity":"warn"}\n\n'
+
+  beforeEach(() => {
+    __resetSSEStateForTest()
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY123',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-a',
+      isConfigured: true,
+    })
+  })
+
+  afterEach(() => {
+    __resetSSEStateForTest()
+  })
+
+  async function runStream(chunks: string[]) {
+    globalThis.fetch = vi.fn().mockResolvedValue(makeSSEResponse(chunks)) as unknown as typeof fetch
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const invalidate = vi.spyOn(client, 'invalidateQueries')
+    const reconnects = vi.fn()
+    const off = onSseReconnect(reconnects)
+    const seen: string[] = []
+    // Exactly ONE useSSE() is mounted: each mounted hook registers its own invalidate-everything
+    // reconnect listener, so the once-counts below are exact only with a single hook.
+    function Probe() {
+      useSSE((e) => {
+        seen.push(e.type)
+      })
+      return null
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Probe />
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(seen).toContain('stream_gap'))
+    off()
+    return { seen, invalidate, reconnects }
+  }
+
+  it('is dispatched after the event it follows and triggers one catch-up', async () => {
+    const { seen, invalidate, reconnects } = await runStream([CONNECTED, TASK, GAP])
+    expect(seen.indexOf('stream_gap')).toBeGreaterThan(seen.indexOf('task_updated'))
+    expect(reconnects).toHaveBeenCalledTimes(1)
+    const everything = invalidate.mock.calls.filter((c) => c.length === 0)
+    expect(everything).toHaveLength(1)
+  })
+
+  it('still catches up once when the gap arrives before the event', async () => {
+    const { seen, invalidate, reconnects } = await runStream([CONNECTED, GAP, TASK])
+    await waitFor(() => expect(seen).toContain('task_updated'))
+    expect(reconnects).toHaveBeenCalledTimes(1)
+    expect(invalidate.mock.calls.filter((c) => c.length === 0)).toHaveLength(1)
   })
 })

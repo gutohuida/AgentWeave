@@ -136,7 +136,8 @@ export function ActivityLog() {
   useSSE((event) => {
     if (pausedRef.current) return
     const d = (event.data ?? {}) as { project_id?: string }
-    if (d.project_id !== projectId) return
+    // A gap is stream metadata with no project: it concerns the whole connection, so it passes.
+    if (event.type !== 'stream_gap' && d.project_id !== projectId) return
     // The id is minted outside the updater: React may invoke an updater twice, and a doubled
     // counter would break the arrival flag's pairing with the row it belongs to.
     const localId = counterRef.current++

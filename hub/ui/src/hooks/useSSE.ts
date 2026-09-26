@@ -128,9 +128,10 @@ export function getBufferedEvents(): SSEEvent[] {
   return eventBuffer.slice()
 }
 
-/** Subscribe to SSE stream reconnect events. The callback fires every time
- * the underlying stream reconnects (NOT on the initial connect). Returns
- * an unsubscribe function. */
+/** Subscribe to "the client may have missed events". The callback fires after
+ * every reconnect (NOT the initial connect) and whenever the Hub reports a
+ * `stream_gap`, i.e. that it dropped events this client's queue had no room
+ * for. Returns an unsubscribe function. */
 export function onSseReconnect(cb: () => void): () => void {
   reconnectListeners.add(cb)
   return () => {
@@ -332,6 +333,19 @@ async function connect(hubUrl: string, apiKey: string): Promise<void> {
           // Only dispatch known event types and the unnamed "message" / "connected" keepalive
           if (evt.type === 'message') {
             // keepalive / connected — ignore
+            continue
+          }
+          if (evt.type === 'stream_gap') {
+            // Stream metadata, not a project's event: the Hub dropped events for this
+            // client. Tell listeners, then run every catch-up (F253).
+            let gap: unknown = evt.data
+            try {
+              gap = JSON.parse(evt.data)
+            } catch {
+              // keep raw string
+            }
+            dispatchEvent('stream_gap', gap)
+            fireReconnect()
             continue
           }
           if (SSE_EVENT_TYPES.includes(evt.type)) {

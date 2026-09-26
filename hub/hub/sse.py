@@ -23,7 +23,7 @@ this once and for all.
 import asyncio
 import contextlib
 import logging
-from typing import Any, Dict, List
+from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,24 +35,36 @@ logger = logging.getLogger(__name__)
 _PENDING_KEY = "aw_pending_broadcasts"
 
 
+class SubscriberQueue(asyncio.Queue):
+    """A subscriber's queue, counting the events `publish` dropped because it was full.
+
+    Still an `asyncio.Queue`, so callers that `get_nowait()` are unchanged. `stream_frames` reads
+    and resets `dropped`, and tells the client (F253).
+    """
+
+    def __init__(self, maxsize: int = 0) -> None:
+        super().__init__(maxsize=maxsize)
+        self.dropped = 0
+
+
 class SSEManager:
     def __init__(self) -> None:
         # project_id -> list of asyncio.Queue
-        self._subscribers: Dict[str, List[asyncio.Queue]] = {}
+        self._subscribers: Dict[str, List[SubscriberQueue]] = {}
         # one instance-level operator stream, fed by every project's broadcasts
-        self._operator_subscribers: List[asyncio.Queue] = []
+        self._operator_subscribers: List[SubscriberQueue] = []
 
-    def subscribe(self, project_id: str) -> asyncio.Queue:
+    def subscribe(self, project_id: str) -> SubscriberQueue:
         """Register a new SSE subscriber for a project. Returns the queue.
 
         The queue carries `sse_starlette.ServerSentEvent` (or subclass)
         instances, NOT pre-formatted SSE wire strings. See module docstring.
         """
-        q: asyncio.Queue = asyncio.Queue(maxsize=256)
+        q = SubscriberQueue(maxsize=256)
         self._subscribers.setdefault(project_id, []).append(q)
         return q
 
-    def unsubscribe(self, project_id: str, queue: asyncio.Queue) -> None:
+    def unsubscribe(self, project_id: str, queue: SubscriberQueue) -> None:
         """Remove a subscriber queue (called on client disconnect)."""
         subscribers = self._subscribers.get(project_id, [])
         with contextlib.suppress(ValueError):
@@ -60,7 +72,7 @@ class SSEManager:
         if not subscribers:
             self._subscribers.pop(project_id, None)
 
-    def subscribe_operator(self) -> asyncio.Queue:
+    def subscribe_operator(self) -> SubscriberQueue:
         """Register a new subscriber for the one instance-level operator stream.
 
         Every project's broadcast also fans out here, envelope-stamped with
@@ -68,11 +80,11 @@ class SSEManager:
         including a project with no open tab and no `subscribe(project_id)`
         listener of its own.
         """
-        q: asyncio.Queue = asyncio.Queue(maxsize=256)
+        q = SubscriberQueue(maxsize=256)
         self._operator_subscribers.append(q)
         return q
 
-    def unsubscribe_operator(self, queue: asyncio.Queue) -> None:
+    def unsubscribe_operator(self, queue: SubscriberQueue) -> None:
         with contextlib.suppress(ValueError):
             self._operator_subscribers.remove(queue)
 
@@ -103,7 +115,7 @@ class SSEManager:
             try:  # noqa: SIM105
                 q.put_nowait(event)
             except asyncio.QueueFull:
-                pass
+                q.dropped += 1
 
         if self._operator_subscribers:
             stamped_data = {**data, "project_id": project_id}
@@ -112,7 +124,7 @@ class SSEManager:
                 try:  # noqa: SIM105
                     q.put_nowait(operator_event)
                 except asyncio.QueueFull:
-                    pass
+                    q.dropped += 1
 
 
 def defer_broadcast(session: AsyncSession, project_id: str, event_type: str, data: Any) -> None:
@@ -162,6 +174,36 @@ def make_connected_event() -> ServerSentEvent:
     (which sse_starlette was double-wrapping as `data: data: connected`).
     """
     return ServerSentEvent(data="connected", event="connected")
+
+
+def make_gap_event(dropped: int) -> JSONServerSentEvent:
+    """The frame that tells a client its queue overflowed and `dropped` events never reached it.
+
+    Carries no `project_id`: a gap is stream metadata, like `connected`, and the operator queue's
+    count mixes every project.
+    """
+    return JSONServerSentEvent(data={"dropped": dropped, "severity": "warn"}, event="stream_gap")
+
+
+async def stream_frames(
+    queue: SubscriberQueue, is_disconnected: Callable[[], Awaitable[bool]]
+) -> AsyncGenerator:
+    """The frames of one SSE connection: `connected`, then the queue's events, and a gap frame.
+
+    After each yielded message, if `publish` dropped events meanwhile, the count is taken and reset
+    and `stream_gap` goes out next. Drops only happen while the queue is full, so a full queue
+    means messages are still to send and the check always runs -- a burst followed by silence
+    cannot lose the gap. Callers keep their own `try/finally` unsubscribe.
+    """
+    yield make_connected_event()
+    while True:
+        if await is_disconnected():
+            break
+        # Block forever: EventSourceResponse produces keepalives via `ping`.
+        yield await queue.get()
+        if queue.dropped:
+            count, queue.dropped = queue.dropped, 0
+            yield make_gap_event(count)
 
 
 sse_manager = SSEManager()

@@ -194,3 +194,38 @@ describe('ActivityLog follows the newest end of a newest-first feed', () => {
     expect(screen.getByText('backfilled_event').closest('.feed-card')).not.toHaveClass('is-new')
   })
 })
+
+describe('ActivityLog and a stream_gap', () => {
+  beforeEach(() => {
+    capturedCallback.current = null
+    vi.mocked(getJson).mockResolvedValue([])
+    useConfigStore.setState({
+      apiKey: 'aw_live_TESTKEY',
+      hubUrl: 'http://hub.test',
+      selectedProjectId: 'proj-a',
+      isConfigured: true,
+      bootstrapState: 'ready',
+    })
+  })
+
+    it('shows a gap that names no project, and drops another project event', async () => {
+    render(withQueryClient(<ActivityLog />))
+    await waitFor(() => expect(capturedCallback.current).not.toBeNull())
+
+    act(() => {
+      capturedCallback.current?.({
+        type: 'stream_gap',
+        data: { dropped: 10, severity: 'warn' },
+        timestamp: new Date().toISOString(),
+      })
+      capturedCallback.current?.({
+        type: 'task_updated',
+        data: { project_id: 'proj-b', id: 't-9' },
+        timestamp: new Date().toISOString(),
+      })
+    })
+
+    expect(screen.getByText('stream_gap')).toBeInTheDocument()
+    expect(screen.queryByText('task_updated')).not.toBeInTheDocument()
+  })
+})

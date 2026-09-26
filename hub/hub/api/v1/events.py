@@ -18,7 +18,7 @@ from ...auth import (
 )
 from ...db.engine import get_session
 from ...db.models import EventLog, OperatorCredential
-from ...sse import make_connected_event, sse_manager
+from ...sse import sse_manager, stream_frames
 from .logs import require_known_severity
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -94,15 +94,8 @@ async def event_stream(
 
     async def generator() -> AsyncGenerator:
         try:
-            yield make_connected_event()
-            while True:
-                if await request.is_disconnected():
-                    break
-                # Block forever (no timeout) — EventSourceResponse handles
-                # keepalives on its own via the `ping` parameter, so a stalled
-                # stream can never silently time out the connection.
-                message = await queue.get()
-                yield message
+            async for frame in stream_frames(queue, request.is_disconnected):
+                yield frame
         finally:
             sse_manager.unsubscribe(project_id, queue)
 
@@ -143,12 +136,8 @@ async def operator_event_stream(
 
     async def generator() -> AsyncGenerator:
         try:
-            yield make_connected_event()
-            while True:
-                if await request.is_disconnected():
-                    break
-                message = await queue.get()
-                yield message
+            async for frame in stream_frames(queue, request.is_disconnected):
+                yield frame
         finally:
             sse_manager.unsubscribe_operator(queue)
 
