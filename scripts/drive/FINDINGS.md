@@ -29536,7 +29536,7 @@ F374/D9's divergence-reason question.
 
 ## F358 (B) — evidence can be decided while the run that recorded it is still live, so the reviewer judges a commit the Hub is about to replace
 
-**Status:** open. Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
+**Status:** fixed 6268b0e (driven live 2026-09-26, drive Hub :8041, `d0926_evidence_waits.py`: operator mid-turn decide 409 `recording_run_live`, after the run ended 200; a granted second agent refused mid-turn, woken after with the `evidence` note in the same conversation, decision recorded). Filed 2026-09-14 by the day window's O-3, from LoopEngine on `:8000` (read-only).
 
 **What happened.** `dev`'s `run-13096fbb3cc8` ran from 05:35:45 to 05:53:05. During it, `dev`
 messaged `tester` to re-check the rework. `tester` woke at 05:51:59 (`run-9f7ae8cfe645`) and read
@@ -33062,7 +33062,7 @@ Collides with `isolation-does-not-change-under-held-work`, which touches `read_o
 
 ## F426 (B) — an evidence decision whose merge then fails answers a bare 500 after the decision is saved
 
-**Status:** open; **carried by B5's `evidence-is-decided-after-the-run-that-recorded-it` (its D6),
+**Status:** fixed 6268b0e (unit tests only; the merge-failure 500 was NOT driven live); **carried by B5's `evidence-is-decided-after-the-run-that-recorded-it` (its D6),
 approved 2026-09-24.** Filed 2026-09-24 (daily review, operator-accepted), surfaced by the B5 rounds (`spec-queue/tracks/B5.md` Final); measured by R3. With an approved task waiting and `retry_integration`
 raising, the wrapper rolls back (`task_integration.py:702-707`), which expires every loaded row. The
 route then reads `evidence`/`review` to build its answer and raises `MissingGreenlet` (`spec.py:926`

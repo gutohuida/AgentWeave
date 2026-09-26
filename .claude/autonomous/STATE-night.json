@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "fca808d",
     "stop_at": "2026-09-26T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-09-25-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "evidence-is-decided-after-the-run-that-recorded-it-drive",
-    "next_action": "Drive evidence-is-decided-after-the-run-that-recorded-it on a fresh drive Hub (queue item ...-drive): tasks 3.1/3.2 (Haiku records evidence, operator decides mid-turn -> 409 body verbatim, after end 200; D7 note to a second granted agent), then archive and set F358/F426 statuses in FINDINGS.md. Read CI verdict first.",
+    "current": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-impl",
+    "next_action": "Implement the-coverage-bar-takes-the-evidence-decision-it-asks-for (queue item ...-impl) via openspec-apply-change: read its tasks.md and the APPROVALS row note; F392 rules 1-2; run tests/ before commit. Read CI verdict first (6268b0e and this iteration's commit).",
     "queue": [
         {
             "id": "compose",
@@ -77,9 +77,9 @@
         },
         {
             "id": "evidence-is-decided-after-the-run-that-recorded-it-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive evidence-is-decided-after-the-run-that-recorded-it on a fresh drive Hub, then archive and retire its findings",
-            "detail": "Fresh port (netstat), profile drive0925, AW_HUB/AW_KEY exported, Haiku only. UI change: browser against served bundle. Then archive + set F<n> statuses in FINDINGS.md."
+            "detail": "Done iteration 11 (see log); archived."
         },
         {
             "id": "the-coverage-bar-takes-the-evidence-decision-it-asks-for-impl",

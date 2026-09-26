@@ -51,5 +51,5 @@ New file `hub/tests/test_evidence_waits_for_its_run.py`. Stage liveness the way 
 
 ## 3. Drive
 
-- [ ] 3.1 On a trial Hub (`:8010`, from source), one Haiku turn records evidence and, mid-turn, the operator decides it through the route: record the 409 body verbatim. After the run ends, decide again: 200
-- [ ] 3.2 (D7) On the trial Hub, a second Haiku agent granted acceptance is sent a message to decide the row while the first's turn is still running: it is refused 409, and after the first turn ends it is woken with the `evidence` note in the same conversation and its decision is recorded. Record the note's text verbatim
+- [x] 3.1 (driven 2026-09-26, drive Hub :8041, `scripts/drive/d0926_evidence_waits.py`: mid-turn 409 `recording_run_live`, after end 200) On a trial Hub (`:8010`, from source), one Haiku turn records evidence and, mid-turn, the operator decides it through the route: record the 409 body verbatim. After the run ends, decide again: 200
+- [x] 3.2 (driven 2026-09-26: tester's mid-turn decide 409, woken after the run ended with the `evidence` note in the same conversation, then decided 200) (D7) On the trial Hub, a second Haiku agent granted acceptance is sent a message to decide the row while the first's turn is still running: it is refused 409, and after the first turn ends it is woken with the `evidence` note in the same conversation and its decision is recorded. Record the note's text verbatim
