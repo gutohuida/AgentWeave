@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 4,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "at-mention-impl",
-    "next_action": "Continue queue item at-mention-impl, part 2: tasks 1.7-1.14 and 2.3a-2.3e (worker builders, worker._interpret restore, titler, _normalise, useStartWorkOnTask, spec_turn_notice, isSafeMentionValue + UI bundle) then 2.4-2.6 and group 3. Part 1 (file_mentions.py, format_turn_prompt, _batch_delivery_text; tasks 1.0-1.6, 2.1-2.3) is committed. Tick tasks.md boxes for what is done. First line of log: read CI verdict for previous pushed sha (gh run list). Do NOT write backslash-heavy code through bash heredocs: use Edit/Write.",
+    "next_action": "Continue queue item at-mention-impl, group 3 only: 3.1 (rerun py -3.11 scripts/drive/d3_0923_worker_at_mention.py, record after-run beside task 1.0's before-run; workers must show expanded=False), 3.1a (probe rows), 3.2 (scripts/drive/README.md note). Tasks 1.x and 2.x are all done and committed; full hub suite 4972 passed. Then mark at-mention-impl done and move to at-mention-drive. First line of log: read CI verdict for previous pushed sha (gh run list). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
     "queue": [
         {
             "id": "at-mention-impl",
             "status": "open",
             "title": "Implement an-at-mention-an-agent-wrote-reads-no-file (tests first, then fix)",
-            "detail": "openspec/changes/an-at-mention-an-agent-wrote-reads-no-file/tasks.md is the authority. F409 sev A; also CLI evidence group 3. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not. Part 1 done in iteration 2; see log."
+            "detail": "openspec/changes/an-at-mention-an-agent-wrote-reads-no-file/tasks.md is the authority. F409 sev A; also CLI evidence group 3. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not. Part 1 done in iteration 2; see log. Iteration 4: groups 1 and 2 done; only group 3 (CLI evidence) remains."
         },
         {
             "id": "at-mention-drive",

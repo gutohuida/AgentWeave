@@ -52,9 +52,9 @@
 - [x] 2.3c (D9) `spec_turn_notice`: neutralise `path` at both interpolations, and when that changed it, append the D6 constant as the notice's last line
 - [x] 2.3d (D10) Add `isSafeMentionValue(value)` to `hub/ui/src/lib/fileMentions.ts`: true when every at-sign in `value` is at index 0 or directly after `/`. Filter `path` and `skill` results in `resolveTriggerResults` with it, applied to the value that is inserted (for `path`, the path; for `skill`, the name `skillNameFromPath` returns), and **before** `.slice(0, MAX_RESULTS)`, so refused values do not take up the 50 slots. In `FileTab`, render the insert action only for a safe path. In `Composer`'s `insertPathRequest` effect, ignore an unsafe path. Comment each use with design D10 and the measured `picker_quoted_nested` row
 - [x] 2.3e UI: run `cd hub/ui && npm run lint` and the UI tests. Run `cd hub/ui && npm run build` (the refresh script copies `dist/` and does not build it). Then refresh the bundle (`make ui` or `scripts/refresh_ui_bundle.py`) and commit `hub/ui/src` and `hub/hub/static/ui` together, per `.claude/rules/`
-- [ ] 2.4 Run group 1; every row passes. Record the counts inline
-- [ ] 2.5 Run `py -3.11 -m pytest hub/tests/ -q` and record the full-suite count inline, or do not tick. Any existing assertion that moves is named and explained. Any unexplained move is a defect
-- [ ] 2.6 Run `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`. Both are clean
+- [x] 2.4 Run group 1; every row passes. Record the counts inline (hub: test_inbound_queue, test_question_batch_delivery, test_worker_at_mention, test_launchability, test_title_generation 134 pass; UI 46 pass across the four touched files)
+- [x] 2.5 Run `py -3.11 -m pytest hub/tests/ -q` and record the full-suite count inline, or do not tick. Any existing assertion that moves is named and explained. Any unexplained move is a defect (4972 passed, 86 skipped, 2026-09-27)
+- [x] 2.6 Run `ruff check src/ hub/ tests/` and `black --check --target-version py311 src/ hub/hub/ hub/tests/ tests/`. Both are clean (both clean)
 
 ## 3. The CLI: evidence that the rule matches what the harness does
 
