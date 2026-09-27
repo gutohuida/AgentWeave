@@ -30296,7 +30296,7 @@ F361 and F363 (both reproduced by this same run).
 
 ## F377 (B) — no operator surface creates a flow, and the one loop form cannot name a specification document
 
-**Status:** partly fixed `45e84fd` (change `a-flow-is-configured-from-its-own-tab`: Start a flow dialog, flow link, loop settings tab). The approval-starts-it half remains for `a-document-says-how-it-will-be-built-and-approval-starts-it`. Filed 2026-09-17 by an interactive session, alongside F376.
+**Status:** fixed `72d2e8b` (2026-09-27, interactive). `a-flow-is-configured-from-its-own-tab` (`45e84fd`) shipped the Start a flow dialog, flow link and loop settings tab; `a-document-says-how-it-will-be-built-and-approval-starts-it` (`72d2e8b`) makes approval start the flow the document's delivery declares. Driven 2026-09-27 ("r1b drive"). Filed 2026-09-17 by an interactive session, alongside F376.
 
 **Source:** operator — the operator asked for this in session; it is a requested improvement, not a defect found by driving.
 **Theme:** Flows & loops
