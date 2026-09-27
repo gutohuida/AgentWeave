@@ -16,6 +16,56 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-27
+
+No review page today. **Written in an interactive session with the operator present** (DECIDE).
+The operator asked for an aggressive night: *"build a queue for tonight of the approved changes. Be
+agressive."* The rows below restate the approvals of 2026-09-24 so that tonight's window, which
+reads only today's section, builds every approved change that nothing outside the window gates.
+Each row's notes and constraints are the original row's, unchanged. The 2026-09-26 night and the
+session after it built and archived that night's whole ORDER (master fast-forwarded to `e60dcdf`).
+
+Each change is still built, driven and archived before the next one starts. Being aggressive means
+a long ORDER, not skipped steps. The ORDER is arranged so that stopping anywhere leaves only
+complete changes behind: small, independent changes first, the migration-bearing and larger ones
+later, and the lowest priority last. Migrations take numbers in build order from `0111`.
+
+- APPROVED  a-runner-choice-names-its-model   B7 (F268), 09-24 row.
+- APPROVED  an-estimate-that-misses-turns-says-so   B7 (F62), 09-24 row.
+- APPROVED  a-model-alias-is-a-model-choice   B7 (F221), 09-24 row.
+- APPROVED  the-codex-models-offered-are-the-ones-its-cli-lists   B7 (F267, F174), 09-24 row. Codex is undrivable (plan cancelled 2026-08-29): drive the UI and the cache read with a fixture CLI cache, and never start a Codex run.
+- APPROVED  a-firing-is-counted-once-however-many-agents-it-starts   B2 (F121), 09-24 row.
+- APPROVED  an-undelivered-message-says-how-its-last-attempt-ended   B2 (F291, F273), 09-24 row.
+- APPROVED  the-checkpoint-grant-says-it-reaches-every-checkpoint   B2 (F235), 09-24 row. Table rebuild; migration renumbers in build order.
+- APPROVED  the-operator-can-rename-a-task   B3 (F125), 09-24 row. UI bundle together with its backend.
+- APPROVED  a-message-to-the-operator-is-told-where-the-operator-reads   B3 (F77), 09-24 row. A refusal only; the retired backstop stays retired.
+- APPROVED  an-agent-updates-a-task-with-what-its-tool-carries   B3 (F366), 09-24 row. Edits MCP `update_task` in `mcp_server.py`.
+- APPROVED  a-claude-run-is-told-its-agentweave-tools-by-their-full-names   B3 (F139), 09-24 row.
+- APPROVED  request-agent-models-the-new-agent-on-one-the-operator-made   B3 (F378), 09-24 row.
+- APPROVED  a-runner-that-cannot-collaborate-says-so-where-it-is-bound   B10 (F178), 09-24 row. **Before `agents-no-longer-register-themselves`**: both edit `AgentCard`, and this one deletes it.
+- APPROVED  agents-no-longer-register-themselves   B3 (F111, F136, F3), 09-24 row. After the runner change above. Its own migration, seeded from `:8000`'s real `agents` DDL through a `mode=ro` read only.
+- APPROVED  a-loops-outstanding-mail-is-mail-not-yet-delivered   B10 (F259), 09-24 row. No migration.
+- APPROVED  the-permissions-pill-shows-the-posture-the-run-gets   B4 (F283), 09-24 row. UI bundle.
+- APPROVED  an-ask-me-card-says-what-workspace-only-would-decide   B4 (F230, F284), 09-24 row. Migration. Its `mcp_server.py` half: **the operator was told on 2026-09-27** that `:8000`, when it is next started, serves this checkout's tool server.
+- APPROVED  the-approval-preview-asks-the-gates-merge-question   B5 (F141), 09-24 row.
+- APPROVED  isolation-does-not-change-under-held-work   B5 (F242), 09-24 row.
+- APPROVED  a-documents-rigor-history-and-retired-requirements-are-on-screen   B6 (F211, F429), 09-24 row.
+- APPROVED  a-pending-proposal-can-be-withdrawn   B6 (F213, F428, F431), 09-24 row.
+- APPROVED  the-corpus-is-indexed-arranged-and-adopted-from-the-app   B6 (F206), 09-24 row. Carries F434.
+- APPROVED  a-specification-is-read-in-results-that-fit   B12 (F363), 09-24 row. Its preferred predecessor `an-agents-tool-server-is-the-one-its-hub-loaded` is archived.
+- APPROVED  input-the-hub-accepted-is-answered-as-accepted   B11 (F349), 09-24 row.
+- APPROVED  charters-are-named-once-and-an-empty-one-says-so   B11 (F134, F183), 09-24 row. One migration, no table rebuild.
+- APPROVED  a-dialog-takes-the-keyboard-when-it-opens   B11 (F307), 09-24 row. UI bundle.
+- APPROVED  the-app-window-keeps-the-operators-preferences   B11 (F385), 09-24 row.
+- APPROVED  a-run-records-that-its-calls-were-allowed   B11 (F389), 09-24 row. Lowest priority, so last. Migration.
+
+Not tonight, deliberately. Each is held by something the window cannot do:
+- `every-event-the-hub-sends-reaches-the-app` and `a-refused-first-send-leaves-no-exploration-behind`: their UI commits wait for an operator restart of `:8000`.
+- `drift-is-scanned-and-answered-on-the-document`: it waits for `drift-watches-the-files-its-evidence-is-about`, which is REVISING.
+- B4's `the-shell-judge-reads-a-word-whole` and `a-drive-or-a-home-variable-names-a-directory-by-itself`: they must be built in one window together, and at 72 tasks they would take the whole night.
+
+ORDER: a-runner-choice-names-its-model, an-estimate-that-misses-turns-says-so, a-model-alias-is-a-model-choice, the-codex-models-offered-are-the-ones-its-cli-lists, a-firing-is-counted-once-however-many-agents-it-starts, an-undelivered-message-says-how-its-last-attempt-ended, the-checkpoint-grant-says-it-reaches-every-checkpoint, the-operator-can-rename-a-task, a-message-to-the-operator-is-told-where-the-operator-reads, an-agent-updates-a-task-with-what-its-tool-carries, a-claude-run-is-told-its-agentweave-tools-by-their-full-names, request-agent-models-the-new-agent-on-one-the-operator-made, a-runner-that-cannot-collaborate-says-so-where-it-is-bound, agents-no-longer-register-themselves, a-loops-outstanding-mail-is-mail-not-yet-delivered, the-permissions-pill-shows-the-posture-the-run-gets, an-ask-me-card-says-what-workspace-only-would-decide, the-approval-preview-asks-the-gates-merge-question, isolation-does-not-change-under-held-work, a-documents-rigor-history-and-retired-requirements-are-on-screen, a-pending-proposal-can-be-withdrawn, the-corpus-is-indexed-arranged-and-adopted-from-the-app, a-specification-is-read-in-results-that-fit, input-the-hub-accepted-is-answered-as-accepted, charters-are-named-once-and-an-empty-one-says-so, a-dialog-takes-the-keyboard-when-it-opens, the-app-window-keeps-the-operators-preferences, a-run-records-that-its-calls-were-allowed
+
 ## 2026-09-26
 
 No review page today. **Written in an interactive session with the operator present** (DECIDE).
