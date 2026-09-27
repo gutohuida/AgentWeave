@@ -4,6 +4,7 @@ import { useSpecDocumentRename, useSpecEvents, useSpecList } from '@/api/spec'
 import { SpecDocumentPanel } from './SpecDocumentPanel'
 import { SpecDocumentPicker } from './SpecDocumentPicker'
 import { buildInventory, resolveSelection } from './specNavigation'
+import type { LoopSummary } from '@/api/loops'
 
 interface SpecPageProps {
   /** The document open, from the destination — so this screen is linkable and survives a reload
@@ -15,6 +16,8 @@ interface SpecPageProps {
   onOpenDocument: (path: string | null) => void
   /** Switches to the Tasks tab, filtered to a coverage row's linked tasks. */
   onOpenTasks?: (taskIds: string[]) => void
+  /** Opens a flow's loop tab; the Spec screen has no panel shell, so the host navigates too. */
+  onOpenLoop?: (loop: LoopSummary) => void
 }
 
 /**
@@ -31,7 +34,7 @@ interface SpecPageProps {
  * that needs navigation uses the rail rather than growing a second one beside it. So what is left
  * here is the document, which is the whole point of the screen.
  */
-export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks }: SpecPageProps) {
+export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpenTasks, onOpenLoop }: SpecPageProps) {
   const { data: specList, isLoading, refetch } = useSpecList()
   useSpecEvents()
   /* The agent renames the document it is exploring, so the open path can move under this screen. */
@@ -123,6 +126,7 @@ export function SpecPage({ document: openDocument, anchor, onOpenDocument, onOpe
             // is what the conversation view offers, because there the conversation is underneath.
             initialAnchor={anchor}
             onOpenTasks={onOpenTasks}
+            onOpenLoop={onOpenLoop}
           />
         ) : (
           <div className="spec-loading-card flex flex-col gap-3" aria-label="Loading specification">

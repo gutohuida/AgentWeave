@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 16,
+    "iteration": 17,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "r1a-impl",
-    "next_action": "Queue item r1a-impl part 3b (UI). 3.2 and 3.3 (hooks, SSE, LoopSettings) are committed. Read CI verdict (gh run list), then build tasks.md 3.1 (navigation: onOpenLoop through SpecDocumentPanel/SpecPhaseBar/SpecPage/App), 3.4 (StartFlowDialog.tsx, SpecPhaseBar Flow link / Start a flow, change-spec at approved only), remaining vitest 3.5 d/e/e2/f, 3.6 (npm lint/test, make ui via scripts/refresh_ui_bundle.py, commit hub/ui/src and hub/hub/static/ui together; add StartFlowDialog to hubTime EXEMPT if it uses new Date). Then 4.1 full hub suite with claude stripped from PATH. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
+    "next_action": "Queue item r1a-impl close-out then r1a-drive. Read CI verdict for the iteration 17 commit (gh run list); if success, tick tasks.md 4.1 (full hub suite = CI, 4999+ passed) and mark r1a-impl done. Then r1a-drive (tasks.md 4.2): fresh throwaway Hub (new profile, free port, never 8000/8010), Chromium on the served bundle, Haiku only, start a flow from an approved document on the Spec destination, change the agent on the loop tab, record in FINDINGS.md. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",

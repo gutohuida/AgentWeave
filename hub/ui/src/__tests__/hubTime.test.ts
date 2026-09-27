@@ -26,6 +26,7 @@ const EXEMPT = new Set([
   // Wall-clock time the operator typed into a `datetime-local` input.
   'components/jobs/JobForm.tsx',
   'components/spec/LoopSettings.tsx',
+  'components/spec/StartFlowDialog.tsx',
   // React Query's own epoch milliseconds, measured in this browser.
   'components/logs/LogsView.tsx',
   // Epoch milliseconds this module computed itself while walking a cron expression forward —

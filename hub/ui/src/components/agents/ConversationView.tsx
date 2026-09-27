@@ -394,6 +394,7 @@ export function ConversationView({
            * `ComposerSpecControl`'s `onStopExploring`, wired below, still calls `onOpenDocument(null)`. */
           onClose={() => closeTab(projectId, tab.id)}
           onRefresh={handleRefresh}
+          onOpenLoop={(loop) => openTab(projectId, loopTabId(loop.id))}
         />
       )
     },

@@ -10,6 +10,7 @@ import { useConfigStore } from '@/store/configStore'
 import { SpecFrame, type SpecFrameHandle } from './SpecFrame'
 import type { SpecInventory } from './specNavigation'
 import type { TocAnchor } from './specBridge'
+import type { LoopSummary } from '@/api/loops'
 
 const REJECTION_TEXT: Record<string, string> = {
   external: 'That link points outside the specification and was not opened.',
@@ -40,6 +41,8 @@ interface SpecDocumentPanelProps {
   initialAnchor?: string | null
   /** Threaded down to `SpecCoverageBar` — switches to the Tasks tab, filtered. */
   onOpenTasks?: (taskIds: string[]) => void
+  /** Threaded down to `SpecPhaseBar` — opens the loop tab of the document's flow. */
+  onOpenLoop?: (loop: LoopSummary) => void
 }
 
 /**
@@ -64,6 +67,7 @@ export function SpecDocumentPanel({
   onRefresh,
   initialAnchor,
   onOpenTasks,
+  onOpenLoop,
 }: SpecDocumentPanelProps) {
   const { mode } = useConfigStore()
   const { data: specDoc } = useSpec(path)
@@ -232,7 +236,7 @@ export function SpecDocumentPanel({
       {/* Phase and the operator's decisions. Above the document, because what an operator may
           do next is part of reading it — and because none of these controls exists on the
           agent's side, which is what makes the approval gate real. */}
-      <SpecPhaseBar path={path} />
+      <SpecPhaseBar path={path} onOpenLoop={onOpenLoop} />
 
       {/* Which requirements this document has work for, and which of that work is actually in the
           product. Under the phase bar because it is about what the document *says*, not about

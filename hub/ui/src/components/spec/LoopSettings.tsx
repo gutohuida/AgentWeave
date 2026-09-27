@@ -49,8 +49,8 @@ function openingValues(loop: LoopSummary & { job_id: string }, job: { name: stri
  * been archived: an edit to a loop that will not fire again would be staged for nothing.
  */
 export function LoopSettings({ loop }: { loop: LoopSummary & { job_id: string } }) {
-  const { data: job } = useJob(loop.job_id)
-  const { data: agents } = useAgents()
+  const { data: job, isError: jobFailed } = useJob(loop.job_id)
+  const { data: agents, isError: agentsFailed } = useAgents()
   const update = useUpdateLoopSettings(loop.job_id)
   type Values = ReturnType<typeof openingValues>
   // `opened` is what the inputs opened on, frozen at Edit: a refresh mid-edit must not move the
@@ -58,7 +58,13 @@ export function LoopSettings({ loop }: { loop: LoopSummary & { job_id: string } 
   const [edit, setEdit] = useState<{ opened: Values; form: Values } | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
 
-  if (!job) return null
+  if (!job) {
+    return jobFailed ? (
+      <p role="alert" style={{ fontSize: 11, color: 'var(--amber)' }}>
+        Could not load this loop's settings.
+      </p>
+    ) : null
+  }
 
   const editing = edit !== null
   const opening = edit?.opened ?? openingValues(loop, job)
@@ -125,6 +131,12 @@ export function LoopSettings({ loop }: { loop: LoopSummary & { job_id: string } 
           </Button>
         )}
       </div>
+
+      {agentsFailed && (
+        <p role="alert" style={{ fontSize: 11, color: 'var(--amber)' }}>
+          Could not load the agent list; only the current agent is offered.
+        </p>
+      )}
 
       {!editing ? (
         <div className="mt-1 space-y-0.5" style={{ fontSize: 11, color: 'var(--text)' }} data-testid="loop-tab-settings-read">

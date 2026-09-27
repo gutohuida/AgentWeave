@@ -58,7 +58,9 @@ function mount(record: Record<string, unknown>, postResponse?: { ok: boolean; te
           headers: new Headers({ 'content-type': 'application/json' }),
         }
       }
-      const payload = { documents: [record] }
+      // The phase bar also asks for the loops (to find the document's flow); a real route answers
+      // that with a list, and this test has no flows.
+      const payload = url.includes('/loops') ? [] : { documents: [record] }
       return {
         ok: true,
         status: 200,

@@ -3,6 +3,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useConfigStore } from '@/store/configStore'
+import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 
 // Stub useSSE so it doesn't try to connect. The module is mocked globally for
 // the test file — we just need to confirm the App's tree wiring is right.
@@ -131,7 +132,11 @@ vi.mock('@/components/agents/AgentOutputPanel', () => ({
   AgentOutputPanel: () => <div data-testid="page-conversation" />,
 }))
 vi.mock('@/components/spec/SpecPage', () => ({
-  SpecPage: () => <div data-testid="page-spec" />,
+  SpecPage: ({ onOpenLoop }: { onOpenLoop?: (loop: { id: string; agent: string }) => void }) => (
+    <div data-testid="page-spec">
+      <button onClick={() => onOpenLoop?.({ id: 'loop-9', agent: 'claude' })}>open flow</button>
+    </div>
+  ),
 }))
 
 // Stub the layout chrome too so the test focuses on routing.
@@ -234,6 +239,21 @@ describe('phase 5 App.tsx: rail-only navigation, tabs own project content', () =
     expect(screen.getByTestId('page-spec')).toBeInTheDocument()
     // No conversation on this screen — that is the whole point of it.
     expect(screen.queryByTestId('page-conversation')).not.toBeInTheDocument()
+  })
+
+  it('the Spec screen opens the flow loop tab and goes to its agent with no document (F377 e2)', () => {
+    // The loop tab lives in the conversation panel, which the Spec screen does not mount. Passing
+    // the document along would let ConversationView's mount effect open the document's tab in
+    // front of the loop, so the destination carries none.
+    window.history.pushState(null, '', '/?project=proj-test&tab=spec&document=spec%2Fchanges%2Fx%2Fspec.html')
+    render(withQueryClient(<App />))
+    fireEvent.click(screen.getByText('open flow'))
+
+    const panel = usePanelTabsStore.getState().projects['proj-test']
+    expect(panel.activeTabId).toBe(loopTabId('loop-9'))
+    expect(panel.isOpen).toBe(true)
+    expect(window.location.search).toContain('agent=claude')
+    expect(window.location.search).not.toContain('document=')
   })
 
   it('Overview surfaces Questions inline without changing tab', () => {

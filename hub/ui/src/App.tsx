@@ -56,6 +56,7 @@ import { ArchivedAgentNotice } from '@/components/agents/ArchivedAgentNotice'
 import { useProjectConversations } from '@/api/agentChat'
 import { useConfigStore } from '@/store/configStore'
 import { useTaskFilterStore } from '@/store/taskFilterStore'
+import { usePanelTabsStore, loopTabId } from '@/store/panelTabsStore'
 import { CheckpointStatusBanner } from '@/components/checkpoints/CheckpointStatusBanner'
 
 export function HubConnectionState({ state, onRetry }: { state: 'pending' | 'unreachable'; onRetry?: () => void }) {
@@ -441,6 +442,14 @@ export default function App() {
           onOpenTasks={(taskIds) => {
             useTaskFilterStore.getState().setActiveTaskIds(taskIds)
             navigateTo(projectDestination(destination.projectId, 'tasks'))
+          }}
+          // A flow's tab lives in the conversation panel, which this screen does not mount. Open
+          // the tab, then go to the flow's agent with NO document: the conversation view's mount
+          // effect opens the attached document's tab, which would sit in front of the loop.
+          onOpenLoop={(loop) => {
+            if (!loop.agent) return
+            usePanelTabsStore.getState().openTab(destination.projectId, loopTabId(loop.id))
+            navigateTo(agentDestination(destination.projectId, loop.agent, null, null))
           }}
         />
       )

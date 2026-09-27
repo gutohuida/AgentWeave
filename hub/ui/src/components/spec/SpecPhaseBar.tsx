@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
+import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
+import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
 import {
   useCloseExploration,
@@ -20,7 +22,16 @@ import {
  * gate it replaced was a skill instructing the agent to read the document's own
  * status and stop, which is the agent checking its own permission slip.
  */
-export function SpecPhaseBar({ path }: { path: string }) {
+export function SpecPhaseBar({
+  path,
+  onOpenLoop,
+}: {
+  path: string
+  /** Opens a loop's tab. Each host supplies its own: the conversation panel opens the tab beside
+   *  the document; the Spec destination has no panel shell and must navigate to one. Without it
+   *  the flow's label is text rather than a link that does nothing. */
+  onOpenLoop?: (loop: LoopSummary) => void
+}) {
   const { data } = useSpecDocuments()
   const closeExploration = useCloseExploration()
   const propose = useProposeSpecDocument()
@@ -30,8 +41,10 @@ export function SpecPhaseBar({ path }: { path: string }) {
   const [rigorRefusal, setRigorRefusal] = useState<string[]>([])
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
+  const [startingFlow, setStartingFlow] = useState(false)
 
   const document = data?.documents.find((entry) => entry.path === path)
+  const flow = useDocumentFlow(document?.id)
   if (!document) return null
 
   const busy = closeExploration.isPending || propose.isPending || setPhase.isPending
@@ -170,6 +183,36 @@ export function SpecPhaseBar({ path }: { path: string }) {
           </button>
         )}
 
+        {/* A flow is offered on an approved change-spec only: earlier there are no tasks to work,
+            other kinds are not decomposed into flows, and an archived document is finished. */}
+        {document.kind === 'change-spec' && document.phase === 'approved' && (
+          flow ? (
+            onOpenLoop && flow.agent ? (
+              <button
+                type="button"
+                onClick={() => onOpenLoop(flow)}
+                data-testid="spec-flow-link"
+                className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
+              >
+                Flow: {flow.label}
+              </button>
+            ) : (
+              <span data-testid="spec-flow-link" style={{ color: 'var(--text-3)' }}>
+                Flow: {flow.label}
+              </span>
+            )
+          ) : (
+            <button
+              type="button"
+              onClick={() => setStartingFlow(true)}
+              data-testid="spec-start-flow"
+              className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
+            >
+              Start a flow…
+            </button>
+          )
+        )}
+
         <div className="flex-1" />
 
         {/* Rigor, beside the phase and visibly not the same control. They answer different
@@ -225,6 +268,13 @@ export function SpecPhaseBar({ path }: { path: string }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {startingFlow && (
+        <StartFlowDialog
+          document={{ id: document.id, title: document.title }}
+          onClose={() => setStartingFlow(false)}
+        />
       )}
 
       {confirmingArchive && (
