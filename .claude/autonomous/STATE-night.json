@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 1,
+    "iteration": 2,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "hub-tree-gate",
-    "next_action": "Do queue item 'hub-tree-gate': confirm the hub test suite result (see its detail), record the count in the log, then move to the next open queue item next firing.",
+    "current": "a-runner-choice-names-its-model-impl",
+    "next_action": "Do queue item 'a-runner-choice-names-its-model-impl': openspec-apply-change for a-runner-choice-names-its-model. Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files).",
     "queue": [
-        {
-            "id": "hub-tree-gate",
-            "status": "open",
-            "title": "Confirm hub/tests/ is green before building",
-            "detail": "CLI suite (tests/) confirmed green at compose: 553 passed, 3 skipped, 69s. hub/tests/ was started in background at compose (may not have finished/survived); rerun py -3.11 -m pytest hub/tests/ -q if no result on disk, record the count. If red and not caused by this window, that becomes the next queue item instead of the ORDER."
-        },
         {
             "id": "a-runner-choice-names-its-model-impl",
             "status": "open",
