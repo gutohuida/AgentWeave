@@ -33384,3 +33384,12 @@ Fresh Hub :8046 from `hub/` (profile drive0927b), Chromium on the served bundle,
 - **PASS** Chromium, Approve on a proposed document whose content was then emptied by a saved edit (the write is accepted, reporting the blocking finding): Approve shows the `requirements` finding, document stays proposed.
 - Harness note: my first sentence match for the Propose refusal looked for the word "complete" and reported BAD; the screenshot showed the refusal. Harness error, not product.
 - Teardown: Hub :8046 stopped; no jobs created.
+
+## b11 drive, 2026-09-27 (a-loop-that-is-gone-lets-go-of-its-document)
+
+Fresh Hub :8047 from `hub/` (profile drive0927d), project proj-523d0cf54f66, no agent turns. Harness `scripts/drive/d0927_b11_successor.py`.
+
+- **PASS** F53's three calls on an approved two-task document: flow one claims it (its queue lists both tasks); flow one archived; flow two created on the same document. `GET /tasks?loop_id=<flow two>` lists both tasks, each now stamped with flow two's loop id; flow one's queue is empty. Flow two carries a `loop_tasks_adopted` event.
+- **PASS** F157: a job naming `spec_document_id` with no purpose is 400 `spec_document_id describes a loop; give this job a purpose or a stop condition to make it one`.
+- Harness note: my first run passed the document's path rather than its id and bound nothing (queue empty); harness error, not product. Ids come from the approve response.
+- Teardown: both jobs archived, none enabled; Hub :8047 stopped. Not driven: UI in Chromium (no UI change in this change).

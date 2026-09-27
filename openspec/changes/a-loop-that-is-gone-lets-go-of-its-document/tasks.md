@@ -32,4 +32,4 @@ New `hub/tests/test_a_gone_loop_lets_go.py`.
 
 ## 3. Drive it
 
-- [ ] 3.1 On a trial Hub, reproduce F53's three calls (create a flow on an approved document, archive it before it fires, create a second flow on the same document), then list the second flow's queue: it holds the document's tasks. Disable every job before leaving
+- [x] 3.1 On a trial Hub, reproduce F53's three calls (create a flow on an approved document, archive it before it fires, create a second flow on the same document), then list the second flow's queue: it holds the document's tasks. Disable every job before leaving

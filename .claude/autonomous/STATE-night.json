@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 24,
+    "iteration": 25,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b11-drive",
-    "next_action": "Queue item b11-drive: drive a-loop-that-is-gone-lets-go-of-its-document live per tasks.md 3.1 (F53's three calls on a fresh trial Hub from source, then list the second flow's queue; also show F157's 400). Fresh port/profile per playbook .claude/loops/night-window.md; Haiku only; disable every job; record in scripts/drive/FINDINGS.md. Read CI verdict for the previous commit first. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "current": "b11-archive",
+    "next_action": "Queue item b11-archive: archive a-loop-that-is-gone-lets-go-of-its-document. Read CI verdict first. Set fixed <sha> (impl commit 8e9b05d) on F53 and F157 in scripts/drive/FINDINGS.md in the same commit; sync the change's spec deltas into openspec/specs by hand; tasks 0.1/0.2 rounds boxes unticked - note in the log. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",
@@ -59,9 +59,9 @@
         },
         {
             "id": "b11-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-loop-that-is-gone-lets-go-of-its-document live (UI in Chromium)",
-            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+            "detail": "Done iteration 25; FINDINGS.md \"b11 drive, 2026-09-27\"."
         },
         {
             "id": "b11-archive",
