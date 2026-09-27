@@ -25204,7 +25204,7 @@ Shutdown took 0.38 s. Covered by `hub/tests/test_a_cancelled_run_is_not_reported
 
 ## F299 (A) — a `claude` run whose harness has no MCP cannot write a file, and blames the operator's machine for it
 
-**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. **Corrected 2026-09-27 (`ghcp-d6-correct-f299`):** GHCP *can* take MCP (`--additional-mcp-config`, verified on 1.0.88); the real trigger is a run on a machine whose policy blocks MCP servers. It is answered for Copilot by slice 3, `a-run-reaches-the-hub-without-mcp`, of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. Original status follows.
 **Ready:** parked
 
 **Original status:** open. Driven 2026-09-09 by the night window, task §4.9 of
@@ -25433,7 +25433,7 @@ that gap.
 
 ## F301 (A) — on the `cli` access path a `claude` run has no tool that can make the request it is told to make
 
-**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. **Corrected 2026-09-27 (`ghcp-d6-correct-f299`):** GHCP *can* take MCP (`--additional-mcp-config`, verified on 1.0.88); the real trigger is a run on a machine whose policy blocks MCP servers. It is answered for Copilot by slice 3, `a-run-reaches-the-hub-without-mcp`, of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. Original status follows.
 **Ready:** parked
 
 **Original status:** open. Same session and fixture as F300; agent `httpagent`, `config.hub_client = "cli"`,
@@ -28317,7 +28317,7 @@ on the pre-follow-up code the error escapes `schedule_agent`.
 
 ## F339 (B) — `acceptEdits` is path-confined by Claude Code on a headless run, and four places in the repository, one of them a binding verdict's reason, say it checks nothing
 
-**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows. **2026-09-24 (B11):** stays parked for the approver-less question; its docs row is split out as a no-spec fix: reword `permission-postures.md:33` ("Not checked") to "checked by Claude Code, not by the Hub", with the version, after one Haiku re-measure with F339's script.
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. **Corrected 2026-09-27 (`ghcp-d6-correct-f299`):** GHCP *can* take MCP (`--additional-mcp-config`, verified on 1.0.88); the real trigger is a run on a machine whose policy blocks MCP servers. It is answered for Copilot by slice 3, `a-run-reaches-the-hub-without-mcp`, of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. Original status follows. **2026-09-24 (B11):** stays parked for the approver-less question; its docs row is split out as a no-spec fix: reword `permission-postures.md:33` ("Not checked") to "checked by Claude Code, not by the Hub", with the version, after one Haiku re-measure with F339's script.
 **Ready:** parked
 
 **Original status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13
@@ -28413,7 +28413,7 @@ turn and writes `%TEMP%\d7_0913_accept_edits\results.json` and `transcript.txt`.
 
 ## F340 (B) — the Hub's MCP grounds are positive-only and permanent, while the harness reports the server's state on every run and the Hub parses none of it
 
-**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. Original status follows.
+**Status:** open — **DEFERRED by the operator 2026-09-21: triaged, won't build now** (`spec-queue/DECISIONS.md`, `### 2026-09-21 evening`). Neither creatable runner reaches this path (`RUNNER_CLIS = ("claude", "codex")`, both MCP-injectable) and `hub_client` has no UI control; reopen when a runner that cannot take MCP (GHCP) is implemented. **Corrected 2026-09-27 (`ghcp-d6-correct-f299`):** GHCP *can* take MCP (`--additional-mcp-config`, verified on 1.0.88); the real trigger is a run on a machine whose policy blocks MCP servers. It is answered for Copilot by slice 3, `a-run-reaches-the-hub-without-mcp`, of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. Original status follows.
 **Ready:** parked
 
 **Original status:** open. Filed 2026-09-13 by the day window's `d7-ledger`, from research 2026-09-13

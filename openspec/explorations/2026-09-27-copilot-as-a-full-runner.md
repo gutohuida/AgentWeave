@@ -291,6 +291,14 @@ parity.
 - **D5: slice order.** Parity first (1→2→3), or the fire test first (1→3→2)?
 - **D6:** the 2026-09-21 decision on F299/F301/F339/F340 says *"reopen when a runner that cannot take MCP — GHCP — is implemented"*. Its premise is wrong: Copilot *can* take MCP. What reopens them is Copilot on a *policy-restricted* machine. Record the correction?
 
+**Answered by the operator, 2026-09-27** (`spec-queue/DECISIONS.md`, `ghcp-d1` to `ghcp-d6`):
+- **D1:** a custom agent file for the stable context; per-turn material stays in the prompt.
+- **D2:** Copilot-native files are written when a Copilot agent is created, into a Hub-owned `COPILOT_HOME`.
+- **D3:** credits are shown as information, and tokens stay the unit.
+- **D4:** Free plan for now. A Claude Max subscription cannot back Copilot's BYOK, which needs an API key.
+- **D5:** parity first (1 → 2 → 3 → 4 → 5).
+- **D6:** the 09-21 trigger is corrected.
+
 ## Probes to run on the work PC (before slice 3 is designed in detail)
 
 Only the operator can run these. Each is a slash command or a flag, with no model call unless noted.

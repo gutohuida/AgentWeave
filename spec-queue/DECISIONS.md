@@ -700,6 +700,41 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-27 — GitHub Copilot CLI as a full runner: six answers after the exploration
+
+**DECIDED by the operator in an interactive session, 2026-09-27**, answering D1–D6 of
+`openspec/explorations/2026-09-27-copilot-as-a-full-runner.md` (size L chosen: a runner seam first,
+then Copilot on it; MCP stays the primary channel, and a run must still reach the Hub when MCP is
+blocked by company policy).
+
+- DECIDED   ghcp-d1-instructions  **A Copilot custom agent file.** The agent's stable context
+  (profile, charter, tools, model, effort) is rendered as `<COPILOT_HOME>/agents/<agent>.agent.md`.
+  Per-turn material (turn notices, spec phase, team state) stays in the prompt, as for the other
+  runners. Selection over ACP (the `agent` config option) is code-read, not measured: the R1 of
+  slice 2 probes it, and falls back to an embedded resource on the prompt if it does not hold.
+- DECIDED   ghcp-d2-native-files  **Copilot-native files are created when a Copilot agent is
+  created.** The Hub writes that agent's Copilot files: custom agent, hooks, MCP config, and
+  instructions. It writes them into a Hub-owned `COPILOT_HOME`, not the repository. The repo's own
+  `CLAUDE.md`/`.claude/` still load (they cannot be switched off under ACP). The rendered context
+  says it takes precedence where they conflict.
+- DECIDED   ghcp-d3-credits  **Show credits as information.** Tokens stay the accounting unit.
+  AI credits (`nanoAiu`) and premium requests are recorded and shown beside them, and do not drive
+  the budget.
+- DECIDED   ghcp-d4-test-account  **Drive on the Copilot Free plan for now** (Auto model only, small
+  monthly allowance, 2 concurrent subagents). The "drive on Haiku" rule cannot be honoured on Free.
+  A Claude Max subscription cannot be used as Copilot's model provider: Copilot's BYOK takes an
+  Anthropic *API key*. The Max plan authenticates Claude Code and claude.ai by OAuth, and routing
+  it through another harness is not a supported use.
+- DECIDED   ghcp-d5-order  **Parity first:** slices 1 → 2 → 3 → 4 → 5 (seam; Copilot over ACP;
+  reaching the Hub without MCP; spend; native agents and hooks). All come after the 2026-09-27
+  night queue lands.
+- DECIDED   ghcp-d6-correct-f299  **The 2026-09-21 `f299-f301` row's reopen trigger is corrected.**
+  It read *"reopen when a runner that cannot take MCP — GHCP — is implemented"*. Copilot *can* take
+  MCP: `--additional-mcp-config` stdio was verified on 1.0.88. The real trigger is **a run on a
+  machine whose policy blocks MCP servers**. Copilot on the operator's work PC is the first such
+  deployment. Slice 3 (`a-run-reaches-the-hub-without-mcp`) is where F299, F301 and F340 are
+  answered for Copilot. The four findings' Status lines carry the correction.
+
 ### 2026-09-25 — request R1's two changes: four answers after R3
 
 **DECIDED by the operator in an interactive session, 2026-09-25**, after R1 (an interactive explore),
@@ -935,7 +970,7 @@ the drain rule stopped it doing the spec work.
   (the 2026-09-13 afternoon shapes (i)/(ii)/(iii) stay parked). Both creatable runners take MCP
   (`RUNNER_CLIS = ("claude", "codex")`, both in `MCP_INJECTABLE_RUNNERS`), `hub_client` has no UI
   control, and shape (ii) buys editing only. **Reopen when a runner that cannot take MCP — GHCP —
-  is implemented.** Each finding's Status line now carries this; they stay counted as open.
+  is implemented.** *(Corrected 2026-09-27, `ghcp-d6-correct-f299`: GHCP can take MCP; the trigger is a run on a machine whose policy blocks MCP servers.)* Each finding's Status line now carries this; they stay counted as open.
 - DECIDED   f325  **Keep open.** The operator declined to retire it, although Codex is cancelled as
   undrivable (2026-08-29). It remains an open severity A nobody can currently drive.
 - DECIDED   loop-staffs-s5  **Move §5 out of `a-loop-staffs-the-agent-it-names` as a finding (F400),
