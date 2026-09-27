@@ -8,24 +8,24 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 17,
+    "iteration": 18,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "r1a-impl",
-    "next_action": "Queue item r1a-impl close-out then r1a-drive. Read CI verdict for the iteration 17 commit (gh run list); if success, tick tasks.md 4.1 (full hub suite = CI, 4999+ passed) and mark r1a-impl done. Then r1a-drive (tasks.md 4.2): fresh throwaway Hub (new profile, free port, never 8000/8010), Chromium on the served bundle, Haiku only, start a flow from an approved document on the Spec destination, change the agent on the loop tab, record in FINDINGS.md. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "current": "r1a-archive",
+    "next_action": "Queue item r1a-archive (tasks.md 4.3): the :8000 skew note goes in the log/morning summary (design Risks: the committed bundle reaches the operator's live :8000 app on reload while :8000's Hub runs older code until restarted) - do NOT touch :8000. Sync the change's spec deltas into openspec/specs/ by hand, set the change's F377 fixed <sha> in scripts/drive/FINDINGS.md in the same commit, archive with the openspec-archive-change skill, commit, push. Read CI verdict for this iteration's commit first. Then b5-impl. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-flow-is-configured-from-its-own-tab: part 3 (UI, bundle, full suite)",
-            "detail": "openspec/changes/a-flow-is-configured-from-its-own-tab/tasks.md is the authority. F377; migration 0110 (tasks.md says 0108); UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+            "detail": "Done iterations 14-17; CI green on 1d827dd."
         },
         {
             "id": "r1a-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-flow-is-configured-from-its-own-tab live (UI in Chromium)",
-            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
+            "detail": "Done iteration 18; FINDINGS.md \"r1a drive, 2026-09-27\"."
         },
         {
             "id": "r1a-archive",

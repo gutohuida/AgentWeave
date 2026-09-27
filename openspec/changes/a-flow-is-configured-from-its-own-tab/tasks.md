@@ -48,6 +48,6 @@
 
 ## 4. Verify
 
-- [ ] 4.1 Full `hub/tests/` with `claude` stripped from PATH; the CLAUDE.md lint block
-- [ ] 4.2 Drive on a throwaway Hub (fresh profile, free port, never `:8000`/`:8010`, Haiku on any real turn, no job left enabled): start a flow from an approved document **on the Spec destination and from the conversation panel**, and see the document name the flow at once in both. Change its cadence and agent from the tab, see the agent pending, let one firing apply it, see it in force
+- [x] 4.1 Full `hub/tests/` with `claude` stripped from PATH; the CLAUDE.md lint block
+- [x] 4.2 Drive on a throwaway Hub (fresh profile, free port, never `:8000`/`:8010`, Haiku on any real turn, no job left enabled): start a flow from an approved document **on the Spec destination and from the conversation panel**, and see the document name the flow at once in both. Change its cadence and agent from the tab, see the agent pending, let one firing apply it, see it in force
 - [ ] 4.3 Tell the operator about the `:8000` skew (design, Risks) before the bundle commit; sync deltas and archive

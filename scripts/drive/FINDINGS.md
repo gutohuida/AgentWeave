@@ -33361,3 +33361,16 @@ Harnesses: `scripts/drive/d0927_loop_tab.py` (Chromium, two tabs, 19 checks) and
 - **6 PASS.** `POST /jobs/{id}/archive` on a running loop's job: 200; loop `stopped`, reason "archived with its job", `archived_at` set; `events` = `loop_archived`, `loop_stopped`.
 - **Observation, not a defect of this change.** Every UI update took 1.75-4.75 s after the action (the first run's fixed 1.5 s waits read the previous state; polling fixed the harness, not the product). Also `GET /jobs` showed the archived job b10-D still `enabled: true`; not checked against the pre-change code, so unverified as a regression.
 - Teardown: Hub :8043 stopped. Earlier partial runs of the harness left stopped-nowhere loops with enabled jobs in the throwaway profile `drive0927`; nothing can fire (Hub down), profile kept.
+
+## r1a drive, 2026-09-27 (live Hub :8044, profile drive0927c, Chromium on the served bundle, Haiku) -- a-flow-is-configured-from-its-own-tab
+
+Harness `scripts/drive/d0927_r1a_flow_tab.py` (documents seeded `approved` change-specs by `d0927_r1a_doc_seed.py`; the Hub's own propose/approve route needs a complete payload and is not what this change touches).
+
+- **PASS** Spec destination, approved change-spec: *Start a flow…* offered, dialog (agent, message, cron, stop-at) submitted, `Flow: r1a-spec` link on the phase bar 0.5-1.0 s later; Hub `GET /loops` has exactly one loop declaring the document.
+- **PASS** Conversation panel: same dialog from the panel's phase bar, flow link 3.5-7.75 s later. A conversation panel exists only once the agent has a conversation; a fresh `?agent=alpha&document=...` with none lands on "New conversation" and drops the document (not this change; noted).
+- **PASS** The flow link opens the loop tab in the conversation panel with `document=` absent from the URL.
+- **PASS** Agent changed from the tab's Settings: Hub `agent` stays `alpha`, `pending_edit.agent = beta`, a `loop_edit_staged` event; the tab's pending panel says "Edit staged - it applies at the next firing ... In force now: alpha / From the next firing: beta".
+- **PASS** Cadence changed from the tab (yearly to every minute); a firing applied the agent: `agent = beta`, `pending_edit` cleared, `loop_edit_applied` in `events`; the tab reads `Default agent: beta`, pending panel gone.
+- Harness checks marked BAD in the last run were mine: the Settings read view shows the in-force value by design (the staged value is in the pending panel), and the 5 s freshness bound was my own threshold.
+- **Observation, cause not isolated (unverified).** UI freshness after an action varied 0.3 s to 17.5 s: the first staged edit on a freshly opened tab took 6.65 s to show, the next two under 0.3 s (but those two matched text the panel already held, so unreliable); the tab showed the applied agent 17.5 s after the firing. `useSSE` has no debounce; the Hub broadcasts `loop_edit_staged`/`loop_edit_applied`. Not filed as a defect.
+- Teardown: Hub :8044 stopped; every job in the profile disabled.
