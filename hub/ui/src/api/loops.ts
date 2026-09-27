@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
-import type { LoopSummary } from './jobs'
+import type { Job, JobCreate, JobUpdate, LoopSummary } from './jobs'
 
 export type { LoopSummary }
 
@@ -89,4 +89,30 @@ export function useSetLoopControl() {
     (projectId, { loopId, control }) =>
       postJson(`/api/v1/projects/${projectId}/loops/${loopId}/control`, { control }),
   )
+}
+
+/** The operator's settings edit — `PATCH /jobs/{id}`, sending only the fields that changed. On a
+ *  loop the Hub stages the loop's fields and the agent for the next firing and applies name,
+ *  message and cadence at once, so both the loops and the jobs are re-read on settle. */
+export function useUpdateLoopSettings(jobId: string | null) {
+  return useLoopMutation<JobUpdate>((projectId, updates) =>
+    patchJson<Job>(`/api/v1/projects/${projectId}/jobs/${jobId}`, updates),
+  )
+}
+
+/** Starts a flow: `POST /jobs` with a `spec_document_id`. Invalidates the loops as well as the
+ *  jobs (`useCreateJob` does only the jobs), or the document page would keep offering to start a
+ *  flow that now exists and a second press would answer 409. */
+export function useCreateFlow() {
+  return useLoopMutation<JobCreate>((projectId, job) =>
+    postJson<Job>(`/api/v1/projects/${projectId}/jobs`, job),
+  )
+}
+
+/** The unarchived loop that declares this document, if any. The route orders by creation and the
+ *  partial unique index allows at most one unarchived loop per document, so order does not matter. */
+export function useDocumentFlow(documentId: string | null | undefined): LoopSummary | undefined {
+  const { data } = useLoops()
+  if (!documentId) return undefined
+  return data?.find((loop) => loop.spec_document_id === documentId)
 }

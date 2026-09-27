@@ -17,7 +17,9 @@ vi.mock('@/api/loops', () => ({
   useStopLoop: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useArchiveLoop: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
   useSetLoopControl: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useUpdateLoopSettings: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, reset: vi.fn() }),
 }))
+vi.mock('@/api/jobs', () => ({ useJob: () => ({ data: undefined }) }))
 vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: [] }) }))
 
 const mockedUseLoop = vi.mocked(useLoop)

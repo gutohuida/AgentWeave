@@ -541,6 +541,10 @@ export function useSSE(onEvent?: SSEListener) {
           if (d?.id) {
             queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs', d.id] })
           }
+          if (event.type !== 'job_fired') {
+            // An edit or a new flow from another window: the loops carry the job's settings.
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops'] })
+          }
           if (event.type === 'job_fired') {
             // A firing becoming "in_progress" (design D13, task A4.3) is committed before this
             // broadcasts (`scheduler.py`), so the loops list/detail's `firing_active` is already
@@ -566,6 +570,11 @@ export function useSSE(onEvent?: SSEListener) {
           const loopId = d?.loop_id ?? d?.id
           if (loopId) {
             queryClient.invalidateQueries({ queryKey: ['project', pid, 'loops', loopId] })
+          }
+          if (event.type === 'loop_edit_applied') {
+            // Applying a staged agent writes `job.agent`; a busy-refused or skipped tick
+            // broadcasts no `job_fired`, so nothing else would refresh the jobs.
+            queryClient.invalidateQueries({ queryKey: ['project', pid, 'jobs'] })
           }
           break
         }

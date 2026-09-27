@@ -32,6 +32,8 @@ export interface LoopPendingEdit {
   purpose?: string
   stop_at?: string
   stop_when_queue_empties?: boolean
+  /** The default agent staged for the next firing (`a-flow-is-configured-from-its-own-tab` D2). */
+  agent?: string
 }
 
 /** A job's loop state, present only when the job opted into being a loop (design D6). */
@@ -39,6 +41,8 @@ export interface LoopSummary {
   /** The `Loop` row's own id — what `GET /tasks?loop_id=` actually scopes by, distinct from the
    *  job's id. */
   id: string
+  /** The specification document this loop declares (a flow), or null for a plain loop. */
+  spec_document_id?: string | null
   /** The loop's job's name (design D20/B4.2) — what a picker shows; `LoopSummary` carried no name
    *  of its own before B4. */
   label: string
@@ -141,6 +145,9 @@ export interface JobCreate {
    *  default" — it does **not** opt a job into being a loop, and the Hub refuses it on a job that
    *  is not becoming one. */
   work_needs_evidence?: boolean
+  /** The specification document this loop declares (a flow); the Hub refuses a second unarchived
+   *  loop for the same document with 409. */
+  spec_document_id?: string
 }
 
 export interface JobUpdate {

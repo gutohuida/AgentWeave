@@ -8,6 +8,7 @@ import { useAgents } from '@/api/agents'
 import { readableApiError } from '@/api/client'
 import { hubDate } from '@/lib/hubTime'
 import { endingBucket } from './loopCounts'
+import { LoopSettings } from './LoopSettings'
 
 interface LoopTabProps {
   loopId: string
@@ -31,6 +32,14 @@ function stagedFields(loop: LoopSummary): Array<{ key: string; label: string; no
   const pending = loop.pending_edit
   if (!pending) return []
   const rows: Array<{ key: string; label: string; now: string; next: string }> = []
+  if (pending.agent !== undefined) {
+    rows.push({
+      key: 'agent',
+      label: 'Default agent',
+      now: loop.agent || 'none',
+      next: pending.agent || 'none',
+    })
+  }
   if (pending.purpose !== undefined) {
     rows.push({
       key: 'purpose',
@@ -360,6 +369,8 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
           </span>
         )}
       </div>
+
+      <LoopSettings loop={loop} />
 
       <PendingEdit loop={loop} />
 
