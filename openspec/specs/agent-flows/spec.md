@@ -797,8 +797,11 @@ Where text the firing did not compose is delivered after the briefing in the sam
 briefing SHALL identify it as the loop's standing message, delivered on every firing and not written
 for this turn in particular. It SHALL NOT instruct the agent to disregard that text: a loop's message
 may itself be written to address a review, and a briefing that told the agent to ignore it would be
-wrong in exactly the cases where its author had thought hardest. The message SHALL NOT be rewritten
-either, because it is the durable record of what its author said.
+wrong in exactly the cases where its author had thought hardest. The message's words SHALL NOT be
+rewritten either, because it is the durable record of what its author said. The one change its
+delivery makes is the one `agent-run-sandboxing` requires of every firing's text (*Text the operator
+did not write reaches a run without a file mention its harness would expand*): each at-sign in it is
+neutralised so that it attaches no file. The stored message keeps the text as its author wrote it.
 
 #### Scenario: A reviewer is not told to build what it is reviewing
 
@@ -825,13 +828,20 @@ either, because it is the durable record of what its author said.
 - **WHEN** an agent is briefed for a review turn and the loop's own message follows the briefing
 - **THEN** the briefing identifies the text following it as the loop's standing message
 - **AND** does not instruct the agent to disregard it
-- **AND** the loop's message itself is delivered unchanged
+- **AND** the loop's message itself is delivered with its words unchanged, its at-signs neutralised as
+  every firing's text is
 
 #### Scenario: An implementation firing is unaffected
 
 - **WHEN** a firing is not staffed as a review
 - **THEN** the briefing instructs the agent to do the task's work
 - **AND** names the transition that finishes it
+
+#### Scenario: A loop's message that mentions a file is delivered without attaching it
+
+- **WHEN** a review firing delivers a loop message that mentions a file in the harness's mention syntax
+- **THEN** the message reaches the run with that mention neutralised and no file is attached for it
+- **AND** the stored message keeps the mention as its author wrote it
 
 ### Requirement: A review nobody is doing is named, whatever its history
 

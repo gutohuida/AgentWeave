@@ -32572,7 +32572,7 @@ mostly re-spend real agent-turn cost to re-confirm what already matches. Instead
 
 ## F409 (A) -- another agent's text can make a Claude turn read any file, before any tool call, past every posture
 
-**Status:** open (proposed: `openspec/changes/an-at-mention-an-agent-wrote-reads-no-file`, R1, R2 and R3 2026-09-23)
+**Status:** fixed 945005d (archived as `openspec/changes/archive/2026-09-27-an-at-mention-an-agent-wrote-reads-no-file`; driven live 2026-09-27)
 **Source:** drive
 **Theme:** Workspace & permissions
 

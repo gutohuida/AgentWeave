@@ -78,5 +78,5 @@
 
 ## 5. Close
 
-- [ ] 5.1 Update F409's Status line to `fixed <sha>`, and regenerate the backlog with `py -3.11 scripts/backlog_page.py`
-- [ ] 5.2 `openspec validate an-at-mention-an-agent-wrote-reads-no-file --strict` passes. Archive with `openspec-archive-change`
+- [x] 5.1 Update F409's Status line to `fixed <sha>`, and regenerate the backlog with `py -3.11 scripts/backlog_page.py`
+- [x] 5.2 `openspec validate an-at-mention-an-agent-wrote-reads-no-file --strict` passes. Archive with `openspec-archive-change`

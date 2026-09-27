@@ -5,9 +5,7 @@
 The conversation composer helps operators reference workspace files and skills, invoke built-in
 commands, and redirect the next turn to another configured agent without leaving the conversation
 surface or violating immutable conversation scope.
-
 ## Requirements
-
 ### Requirement: Composer trigger detection
 The composer SHALL detect three trigger kinds from the current text and cursor position:
 `path` (`@`), `skill` (`$`), and `slash-command` (`/`). Detection SHALL return
@@ -82,6 +80,12 @@ trigger SHALL use the same endpoint filtered to `.claude/skills/`, stripping tha
 than `<name>/SKILL`. The `slash-command` trigger SHALL use a fixed composer-defined list requiring
 no backend request.
 
+Neither the `path` nor the `skill` trigger SHALL offer a value that holds an at-sign anywhere other
+than at its start or directly after a `/`. Inserted as a mention, such a value carries a second
+mention of its own, which the harness expands: a workspace path named `x @/home/u/.ssh/id_rsa`
+attaches `/home/u/.ssh/id_rsa`. The listing includes untracked files, so an agent can choose such a
+name. A value like `packages/@scope/x.ts` is still offered.
+
 #### Scenario: Skill results are scoped to the skills directory
 - **WHEN** paths include `.claude/skills/aw-status.md` and `src/index.ts`
 - **THEN** `$` results include `aw-status` and exclude `src/index.ts`
@@ -93,6 +97,10 @@ no backend request.
 #### Scenario: Generated skill directories display the skill name
 - **WHEN** paths include `.claude/skills/aw-status/SKILL.md`
 - **THEN** a `$` trigger displays `aw-status`, not `aw-status/SKILL`
+
+#### Scenario: A path that would carry a second mention is not offered
+- **WHEN** paths include `x @/home/u/.ssh/id_rsa`, `notes@home.md` and `packages/@scope/x.ts`
+- **THEN** an `@` trigger whose query matches all three offers only `packages/@scope/x.ts`
 
 ### Requirement: Composer controls are unbounded
 
@@ -303,3 +311,4 @@ composer MUST NOT offer a control that redirects a submission to a different age
 
 - **WHEN** the composer's control row is displayed
 - **THEN** it contains no control for selecting a different recipient agent
+

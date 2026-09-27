@@ -25,7 +25,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding="utf-8")
-from aw import api, task_rows  # noqa: E402
+from aw import api  # noqa: E402
 
 HUB = os.environ.get("AW_HUB", "")
 assert HUB and not HUB.endswith((":8000", ":8010"))

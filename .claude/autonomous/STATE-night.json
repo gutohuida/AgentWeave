@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "at-mention-archive",
-    "next_action": "Queue item at-mention-archive: archive openspec change an-at-mention-an-agent-wrote-reads-no-file (tasks.md group 5 is the authority; set fixed <sha> on F409 in scripts/drive/FINDINGS.md in the same commit; sync specs by hand if required). Drive is done (see log iteration 7; the Hub :8041 is stopped). First line of log: read CI verdict (gh run list). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
+    "current": "b10-impl",
+    "next_action": "Queue item b10-impl: implement a-loop-is-stopped-archived-and-delegated-from-its-own-tab (tests first, then fix); tasks.md in that change is the authority; read design.md round log first; F392 rules. First line of log: read CI verdict (gh run list). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
     "queue": [
-        {
-            "id": "at-mention-archive",
-            "status": "open",
-            "title": "Archive an-at-mention-an-agent-wrote-reads-no-file",
-            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
-        },
         {
             "id": "b10-impl",
             "status": "open",
