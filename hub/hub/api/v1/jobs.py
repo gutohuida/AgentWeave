@@ -317,6 +317,8 @@ async def _batch_loop_summaries(
     from ...scheduler import (
         CURRENT_ITEM_TASK_STATUSES,
         DECISION_STALLED,
+        _agent_for_next_firing,
+        _jobs_with_active_firing,
         _loop_flow_busy_reason,
         _loop_queue_order,
         decide_firing,
@@ -375,8 +377,17 @@ async def _batch_loop_summaries(
     #
     # One batched query for every loop in the batch, for design D7's reason.
     live = await task_attribution.live_runs(session, {loop.project_id for loop in loops})
+    # Task A4.4 (design D13): "is a firing active for this loop" -- the one shared query, now
+    # `scheduler._jobs_with_active_firing`, asked *before* the decide loop because the next
+    # firing's agent depends on it (`a-flow-is-configured-from-its-own-tab` D2a). `JobRun` has no
+    # FK to `Loop`, only `job_id`, so membership in the batch's own `job_ids` is the join.
+    firing_active_jobs = await _jobs_with_active_firing(session, job_ids)
     for job_id, loop in loop_by_job.items():
-        job_agent = job_agent_by_id.get(job_id, "")
+        # Who the *next* firing is for: the staged agent when no firing is active, because the
+        # tick applies it before it asks anything (D2a). `LoopSummary.agent` stays the live one.
+        job_agent = await _agent_for_next_firing(
+            session, loop, job_agent_by_id.get(job_id, ""), job_id in firing_active_jobs
+        )
         decision = await decide_firing(session, loop, default_agent=job_agent)
         stall_reason = decision.stall_reason
         if decision.kind == DECISION_STALLED:
@@ -446,23 +457,6 @@ async def _batch_loop_summaries(
     )
     for job_id, count in questions_result.all():
         open_questions_by_job[job_id] = count
-
-    # Task A4.4 (design D13): "is a firing active for this loop" — the ONE shared query every
-    # caller of this function gets for free. `JobRun` has no FK to `Loop`, only `job_id`
-    # (`Loop.job_id` is unique), so a plain membership check against the batch's own `job_ids`
-    # is the correct join, not a second per-loop query.
-    firing_active_jobs: set = set()
-    firing_result = await session.execute(
-        select(JobRun.job_id)
-        .join(
-            Run,
-            (Run.conversation_id == JobRun.conversation_id) & (Run.status == "running"),
-        )
-        .where(JobRun.job_id.in_(job_ids), JobRun.status == "in_progress")
-        .distinct()
-    )
-    for (job_id,) in firing_result.all():
-        firing_active_jobs.add(job_id)
 
     summaries: Dict[str, LoopSummary] = {}
     for job_id, loop in loop_by_job.items():

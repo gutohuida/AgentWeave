@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Mapping, NamedTuple, Optional, Sequence, Set
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Mapping, NamedTuple, Optional, Sequence, Set
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -2553,6 +2553,59 @@ async def _agent_archived(session: AsyncSession, project_id: str, name: str) -> 
     return lifecycle == "archived"
 
 
+async def _jobs_with_active_firing(session: AsyncSession, job_ids: "Iterable[str]") -> "set[str]":
+    """The subset of *job_ids* with a firing under way: a `JobRun` `in_progress` whose conversation
+    has a `Run` `running`. One statement for the panel's "Running now" (`_batch_loop_summaries`)
+    and the tick's decision to apply a staged edit early, so the two cannot disagree. It lives here
+    because `api/v1/jobs.py` imports this module at module level.
+    """
+    ids = list(job_ids)
+    if not ids:
+        return set()
+    result = await session.execute(
+        select(JobRun.job_id)
+        .join(
+            Run,
+            (Run.conversation_id == JobRun.conversation_id) & (Run.status == "running"),
+        )
+        .where(JobRun.job_id.in_(ids), JobRun.status == "in_progress")
+        .distinct()
+    )
+    return {job_id for (job_id,) in result.all()}
+
+
+async def _agent_for_next_firing(
+    session: AsyncSession, loop: Loop, job_agent: str, firing_active: bool
+) -> str:
+    """Who the next firing is for: the staged agent when a staged edit will be applied before the
+    tick asks anything (no firing active, and the agent not archived meanwhile), else *job_agent*.
+    The summary and `_do_fire_job` decide on these same terms."""
+    if (
+        loop.pending_edit_at is not None
+        and loop.pending_agent
+        and not firing_active
+        and not await _agent_archived(session, loop.project_id, loop.pending_agent)
+    ):
+        return loop.pending_agent
+    return job_agent
+
+
+async def _apply_staged_edit_if_idle(
+    session: AsyncSession, loop: Loop, job: AIJob
+) -> Optional[dict]:
+    """Apply a staged edit in memory, only when no firing of *job* is active (D2a)."""
+    if loop.pending_edit_at is None:
+        return None
+    if job.id in await _jobs_with_active_firing(session, [job.id]):
+        return None
+    return _stage_pending_loop_edit(
+        loop,
+        job,
+        agent_archived=bool(loop.pending_agent)
+        and await _agent_archived(session, job.project_id, loop.pending_agent),
+    )
+
+
 async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
     """Persist and broadcast the audit event (task A2.5) for a pending edit
     `_stage_pending_loop_edit` already applied in memory. Called only after the caller's own
@@ -3182,6 +3235,10 @@ class JobScheduler:
         from .inbound_queue import new_entry
         from .turn_scheduler import schedule_agent
 
+        # Bound before anything that can raise: the handler below reads both, and an exception
+        # ahead of their old binding points raised `UnboundLocalError` out of it (D2a).
+        pending_edit_payload: Optional[dict] = None
+        acting_agent = job.agent
         try:
             fired_at = datetime.now(timezone.utc)
 
@@ -3203,6 +3260,19 @@ class JobScheduler:
             except Exception:
                 job.next_run = None
 
+            # Loaded before the resume lookup and before the `JobRun` exists, because the busy guard
+            # below must be able to return without writing one at all (design D4, task 1.4) and it
+            # only applies to loops.
+            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
+            loop = loop_result.scalars().first()
+            if loop is not None:
+                # D2a: a staged edit is applied *before* the guard when no firing of this job is
+                # active, so the guard, the skip check and `decide_firing` all ask about the agent
+                # that will run. An operator who switches away from a held agent would otherwise
+                # be refused on that agent's hold every tick. Its emit follows each return below.
+                pending_edit_payload = await _apply_staged_edit_if_idle(session, loop, job)
+                acting_agent = job.agent
+
             resume_session_id = job.last_session_id if job.session_mode == "resume" else None
             conversation = None
             if resume_session_id:
@@ -3212,11 +3282,6 @@ class JobScheduler:
                     agent=job.agent,
                     provider_session_id=resume_session_id,
                 )
-            # Loaded before the `JobRun` exists, because the busy guard below must be able to
-            # return without writing one at all (design D4, task 1.4) and it only applies to loops.
-            loop_result = await session.execute(select(Loop).where(Loop.job_id == job.id))
-            loop = loop_result.scalars().first()
-
             if loop is not None:
                 # `_loop_flow_busy_reason`, not `_loop_agent_busy_reason`: refusing the whole
                 # firing because *the job's* agent is mid-turn is right for a loop and wrong for a
@@ -3237,6 +3302,9 @@ class JobScheduler:
                     # firing that left it in the past would be its own lie. Nothing else is dirty
                     # at this point, so this persists the schedule and no more.
                     await session.commit()
+                    if pending_edit_payload is not None:
+                        await _emit_loop_edit_applied(session, pending_edit_payload)
+                        pending_edit_payload = None
                     logger.debug(f"Job {job.id} fire refused: {busy_reason}")
                     return False
 
@@ -3262,6 +3330,9 @@ class JobScheduler:
                 run.status = "skipped"
                 run.error_summary = skip_reason
                 await session.commit()
+                if pending_edit_payload is not None:
+                    await _emit_loop_edit_applied(session, pending_edit_payload)
+                    pending_edit_payload = None
                 await persist_event(
                     session,
                     job.project_id,
@@ -3326,8 +3397,7 @@ class JobScheduler:
             # current definition, not one still waiting on the firing after next. The audit event
             # is emitted only after this branch's own commit lands `run`'s final status (below),
             # not here — see `_stage_pending_loop_edit`'s own comment for why.
-            pending_edit_payload = None
-            if loop is not None:
+            if loop is not None and pending_edit_payload is None:
                 pending_edit_payload = _stage_pending_loop_edit(
                     loop,
                     job,
@@ -3352,6 +3422,7 @@ class JobScheduler:
                 await session.commit()
                 if pending_edit_payload is not None:
                     await _emit_loop_edit_applied(session, pending_edit_payload)
+                    pending_edit_payload = None
                 await persist_event(
                     session,
                     job.project_id,
@@ -3457,6 +3528,7 @@ class JobScheduler:
                     await session.commit()
                     if pending_edit_payload is not None:
                         await _emit_loop_edit_applied(session, pending_edit_payload)
+                        pending_edit_payload = None
                     logger.debug(
                         f"Job {job.id} firing skipped: "
                         f"{len(decision._cannot_staff)} task(s) already in flight"
@@ -3491,6 +3563,7 @@ class JobScheduler:
                             await session.commit()
                             if pending_edit_payload is not None:
                                 await _emit_loop_edit_applied(session, pending_edit_payload)
+                                pending_edit_payload = None
                             logger.debug(
                                 f"Job {job.id} stall continues "
                                 f"({counted.tick_count}): {stall_reason}"
@@ -3501,6 +3574,7 @@ class JobScheduler:
                         await session.commit()
                         if pending_edit_payload is not None:
                             await _emit_loop_edit_applied(session, pending_edit_payload)
+                            pending_edit_payload = None
                         await persist_event(
                             session,
                             job.project_id,
@@ -3653,6 +3727,7 @@ class JobScheduler:
 
             if pending_edit_payload is not None:
                 await _emit_loop_edit_applied(session, pending_edit_payload)
+                pending_edit_payload = None
 
             queue_payload = {
                 "entry_id": entry.id,
@@ -3732,6 +3807,11 @@ class JobScheduler:
                     severity="error",
                 )
                 await session.commit()
+                if pending_edit_payload is not None:
+                    # This commit included the edit, so announce it; a raise before any `JobRun`
+                    # commits nothing and the edit simply stays staged.
+                    await _emit_loop_edit_applied(session, pending_edit_payload)
+                    pending_edit_payload = None
             return False
 
     async def _stage_additional_selections(
