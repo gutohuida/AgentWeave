@@ -1,104 +1,40 @@
 {
-  "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-  "playbook": ".claude/loops/night-window.md",
-  "runner": "claude",
-  "model": "opus",
-  "permission_mode": "unattended-full-access",
-  "branch": "autonomous/2026-09-26-daily",
-  "parent_branch": "master",
-  "parent_sha": "926eeeb",
-  "stop_at": "2026-09-27T07:00:00+01:00",
-  "iteration": 28,
-  "log_file": ".claude/autonomous/2026-09-26-night-log.md",
-  "findings_file": "scripts/drive/FINDINGS.md",
-  "approvals_file": "spec-queue/APPROVALS.md",
-  "current": null,
-  "next_action": null,
-  "queue": [
-    {
-      "id": "r1a-impl",
-      "status": "done",
-      "title": "Implement a-flow-is-configured-from-its-own-tab: part 3 (UI, bundle, full suite)",
-      "detail": "Done iterations 14-17; CI green on 1d827dd."
-    },
-    {
-      "id": "r1a-drive",
-      "status": "done",
-      "title": "Drive a-flow-is-configured-from-its-own-tab live (UI in Chromium)",
-      "detail": "Done iteration 18; FINDINGS.md \"r1a drive, 2026-09-27\"."
-    },
-    {
-      "id": "r1a-archive",
-      "status": "done",
-      "title": "Archive a-flow-is-configured-from-its-own-tab",
-      "detail": "Done iteration 19; F377 partly fixed, remainder with r1b."
-    },
-    {
-      "id": "b5-impl",
-      "status": "done",
-      "title": "Implement a-document-moves-forward-only-through-its-checks (tests first, then fix)",
-      "detail": "Done iteration 20; full hub suite 5016 passed."
-    },
-    {
-      "id": "b5-drive",
-      "status": "done",
-      "title": "Drive a-document-moves-forward-only-through-its-checks live (UI in Chromium)",
-      "detail": "Done iteration 21; FINDINGS.md \"b5 drive, 2026-09-27\"."
-    },
-    {
-      "id": "b5-archive",
-      "status": "done",
-      "title": "Archive a-document-moves-forward-only-through-its-checks",
-      "detail": "Done iteration 22; F207 and F113 fixed 263198d; spec-document-authority synced."
-    },
-    {
-      "id": "b11-impl",
-      "status": "done",
-      "title": "Implement a-loop-that-is-gone-lets-go-of-its-document (tests first, then fix)",
-      "detail": "Done iteration 23; full hub suite 5029 passed."
-    },
-    {
-      "id": "b11-drive",
-      "status": "done",
-      "title": "Drive a-loop-that-is-gone-lets-go-of-its-document live (UI in Chromium)",
-      "detail": "Done iteration 25; FINDINGS.md \"b11 drive, 2026-09-27\"."
-    },
-    {
-      "id": "b11-archive",
-      "status": "done",
-      "title": "Archive a-loop-that-is-gone-lets-go-of-its-document",
-      "detail": "Done iteration 26; F53 and F157 fixed 8e9b05d; agent-loops synced."
-    },
-    {
-      "id": "r1b-impl",
-      "status": "done",
-      "title": "Implement a-document-says-how-it-will-be-built-and-approval-starts-it (tests first, then fix)",
-      "detail": "Finished interactively 2026-09-27: impl 72d2e8b, drive, archived."
-    },
-    {
-      "id": "r1b-drive",
-      "status": "done",
-      "title": "Drive a-document-says-how-it-will-be-built-and-approval-starts-it live (UI in Chromium)",
-      "detail": "Finished interactively 2026-09-27: impl 72d2e8b, drive, archived."
-    },
-    {
-      "id": "r1b-archive",
-      "status": "done",
-      "title": "Archive a-document-says-how-it-will-be-built-and-approval-starts-it",
-      "detail": "Finished interactively 2026-09-27: impl 72d2e8b, drive, archived."
-    }
-  ],
-  "decisions_for_user": [],
-  "limits": [
-    "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-    "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-    "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-    "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-    "Every claim is measured or labelled unverified.",
-    "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-    "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-    "Tests under py -3.11, never bare python. black needs --target-version py311.",
-    "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-    "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-  ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-27-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "0c5f58e",
+    "stop_at":  "2026-09-28T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-27-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
