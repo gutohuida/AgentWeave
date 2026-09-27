@@ -2,7 +2,6 @@ import os, sys
 sys.path.insert(0, "scripts/drive"); sys.stdout.reconfigure(encoding="utf-8")
 from aw import api
 from playwright.sync_api import sync_playwright
-import json
 PID = sys.argv[1]; S = "/projects/%s/project" % PID; HUB = os.environ["AW_HUB"]; KEY = os.environ["AW_KEY"]
 c, doc = api("POST", S + "/documents", {"title": "b5 approve"}); path = doc["path"]
 pl = {"schema_version": 1, "kind": doc["kind"], "title": "b5 approve", "summary": "One.", "problem": "Drive.",
