@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 18,
+    "iteration": 19,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "r1a-archive",
-    "next_action": "Queue item r1a-archive (tasks.md 4.3): the :8000 skew note goes in the log/morning summary (design Risks: the committed bundle reaches the operator's live :8000 app on reload while :8000's Hub runs older code until restarted) - do NOT touch :8000. Sync the change's spec deltas into openspec/specs/ by hand, set the change's F377 fixed <sha> in scripts/drive/FINDINGS.md in the same commit, archive with the openspec-archive-change skill, commit, push. Read CI verdict for this iteration's commit first. Then b5-impl. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "current": "b5-impl",
+    "next_action": "Queue item b5-impl: implement a-document-moves-forward-only-through-its-checks per its tasks.md (tests first, then fix). Read design.md round log first; apply F392 rules. Read CI verdict for the previous commit first. Size to one firing; split in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",
@@ -29,9 +29,9 @@
         },
         {
             "id": "r1a-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-flow-is-configured-from-its-own-tab",
-            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+            "detail": "Done iteration 19; F377 partly fixed, remainder with r1b."
         },
         {
             "id": "b5-impl",
