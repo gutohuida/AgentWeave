@@ -599,11 +599,9 @@ async def test_a_loop_records_the_declaration_it_was_created_with(app, auth_head
 async def test_the_declaration_is_refused_on_a_job_that_is_not_a_loop(app, auth_headers):
     """Design D4: refused, not dropped.
 
-    `spec_document_id` on the same route is still dropped silently, deliberately left alone (F157):
-    a dropped document costs a loop its queue source, visible at once in a loop that never fills.
-    A dropped declaration is invisible until an approval writes — or does not write — to the
-    operator's main branch. The refusal names what to supply instead, so it is a step rather than a
-    wall.
+    `spec_document_id` on the same route is refused the same way (F157, pinned in
+    `test_a_gone_loop_lets_go.py`). The refusal names what to supply instead, so it is a step
+    rather than a wall.
     """
     refused = await app.post(
         JOBS,

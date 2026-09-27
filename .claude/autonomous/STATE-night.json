@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 22,
+    "iteration": 23,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b11-impl",
-    "next_action": "Queue item b11-impl: implement a-loop-that-is-gone-lets-go-of-its-document (tests first, then fix). Read CI verdict for the previous commit first. tasks.md and design.md round log are the authority; apply F392 rules. Size to one firing; split in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "current": "b11-drive",
+    "next_action": "Queue item b11-drive: drive a-loop-that-is-gone-lets-go-of-its-document live per tasks.md 3.1 (F53's three calls on a fresh trial Hub from source, then list the second flow's queue; also show F157's 400). Fresh port/profile per playbook .claude/loops/night-window.md; Haiku only; disable every job; record in scripts/drive/FINDINGS.md. Read CI verdict for the previous commit first. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",
@@ -53,9 +53,9 @@
         },
         {
             "id": "b11-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-loop-that-is-gone-lets-go-of-its-document (tests first, then fix)",
-            "detail": "openspec/changes/a-loop-that-is-gone-lets-go-of-its-document/tasks.md is the authority. F53,F157. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+            "detail": "Done iteration 23; full hub suite 5029 passed."
         },
         {
             "id": "b11-drive",

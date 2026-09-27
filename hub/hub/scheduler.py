@@ -1738,6 +1738,17 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
     # run, so the running arm's agent-level exception (a run carrying no `task_id`) does not reach
     # it, and its assigned task is in flight only where input naming it is queued for it.
     held_agents = await agents_held(session, loop.project_id)
+    # Design D7: the complement of the roster filter, which drops archived agents and so cannot
+    # say which of a task's holders are among them.
+    archived_agents = set(
+        (
+            await session.execute(
+                select(Agent.name).where(
+                    Agent.project_id == loop.project_id, Agent.lifecycle == "archived"
+                )
+            )
+        ).scalars()
+    )
     default_taken = False
 
     for task in await _loop_candidates(session, loop):
@@ -1901,6 +1912,19 @@ async def decide_firing(session: AsyncSession, loop: Loop, *, default_agent: str
                 # assignee with the job's default here is the defect group 5's spec review found:
                 # under width it hands one agent's running task to another and briefs them for it.
                 agent = task.assignee
+                # An archived assignee cannot be triggered (`agent_trigger` refuses the turn), so
+                # selecting the task for them only produces a refused turn and a loop that says
+                # nothing (design D7). Adoption keeps the assignee, so this is reachable. Neither
+                # the task nor the agent is changed: resetting either is a transition nobody made.
+                if agent in archived_agents:
+                    unstaffed.append(
+                        (
+                            task.id,
+                            f"{task.id} is held by {agent}, who is archived; unarchive {agent} "
+                            f"or reassign the task",
+                        )
+                    )
+                    continue
                 # An assignee with its briefing already queued for it, whatever holds that turn
                 # (a hold, a spent budget, an unavailable conversation), is attended: another
                 # briefing would be one more copy (F370, F368). One with nothing queued for this

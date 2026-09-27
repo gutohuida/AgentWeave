@@ -169,12 +169,22 @@ async def materialise(
     if not isinstance(declared, list) or not declared:
         return []
 
-    # A loop that declared this document as its source (design D1, `Loop.spec_document_id`) owns
-    # every task this call creates from it. `materialise()` already runs with the document in
+    # The live loop that declared this document as its source (design D1, `Loop.spec_document_id`)
+    # owns every task this call creates from it. `materialise()` already runs with the document in
     # scope, so this needs no new parameter — the binding was fixed at loop-creation time, not
-    # threaded through the approval call that reaches here.
+    # threaded through the approval call that reaches here. An archived loop is never stamped (F53):
+    # at most one live loop can name a document (`ux_loops_spec_document_live`), and with none the
+    # tasks are unowned until the next loop to claim the document adopts them.
     owning_loop = (
-        (await session.execute(select(Loop).where(Loop.spec_document_id == document.id)))
+        (
+            await session.execute(
+                select(Loop).where(
+                    Loop.project_id == document.project_id,
+                    Loop.spec_document_id == document.id,
+                    Loop.archived_at.is_(None),
+                )
+            )
+        )
         .scalars()
         .first()
     )

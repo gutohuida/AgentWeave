@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from pydantic import ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,7 @@ from ...scheduler import FiringDecision, cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
 from ...sse import defer_broadcast, sse_manager
-from ...task_transitions import operator, run_actor
+from ...task_transitions import TERMINAL_STATUSES, operator, run_actor
 from ...utils import persist_event, short_id
 from .tasks import check_task_create, create_task_for_actor
 
@@ -156,11 +156,11 @@ async def _check_spec_document_conflict(
     turn — created with the wrong agent, archived, replaced — permanently and irrevocably kept the
     document: no second loop could ever be created against it again, a real consequence reproduced
     live from three ordinary API calls, not a hypothetical. Excluding archived loops here does not
-    by itself rescue the tasks the dead loop already adopted (`_adopt_document_tasks`'s
-    `loop_id IS NULL` guard still leaves them stamped with the dead loop's id, since nothing here
-    clears it) — deciding whether already-started work should keep or lose that `loop_id` is a
-    real judgement call, left for the operator, not guessed at here. This only stops the document
-    itself from being permanently unusable.
+    by itself move the tasks the dead loop adopted: `_adopt_document_tasks` does that, at the
+    successor's claim, for every task the dead loop had not finished.
+
+    A loop that has *ended* but is not archived still holds its document, here and in the partial
+    unique index: archiving is the operator's statement that the loop is finished with it.
     """
     if spec_document_id is None:
         return
@@ -249,24 +249,52 @@ async def _adopt_document_tasks(session: AsyncSession, project_id: str, loop: Lo
     claim succeeded, and its queue was empty permanently, with no error and no stall reason.
 
     Adopting here makes the build order stop mattering, which is better than documenting a trap.
-    Restricted to `loop_id IS NULL` so a task another loop already owns is never taken; the caller
-    has just passed `_check_spec_document_conflict`, so no second loop can hold this document
-    anyway, and this is the belt to that braces.
+    Takes tasks nobody owns, and the **unfinished** tasks of an *archived* loop (F53): a replacement
+    loop must see the work its predecessor left, and an `approved` or `rejected` task stays with the
+    loop that ran it. A live loop's tasks are never taken; the caller has just passed
+    `_check_spec_document_conflict`, so no live loop holds this document anyway. An adopted task
+    keeps its assignee.
+
+    A move out of an archived loop is recorded as a `loop_tasks_adopted` event against both loops
+    (design D6), inside the caller's transaction, so a claim that rolls back leaves neither the
+    move nor the event. Tasks nobody owned move without one: no loop's history lost anything.
 
     Returns how many tasks were adopted, which is `0` in the ordinary create-then-approve order
     because there is nothing to adopt yet.
     """
     if loop.spec_document_id is None:
         return 0
-    result = await session.execute(
-        update(Task)
-        .where(
-            Task.project_id == project_id,
-            Task.spec_document_id == loop.spec_document_id,
+    gone = select(Loop.id).where(Loop.project_id == project_id, Loop.archived_at.is_not(None))
+    of_the_document = (
+        Task.project_id == project_id,
+        Task.spec_document_id == loop.spec_document_id,
+        or_(
             Task.loop_id.is_(None),
-        )
-        .values(loop_id=loop.id)
+            and_(Task.loop_id.in_(gone), Task.status.not_in(TERMINAL_STATUSES)),
+        ),
     )
+    left_behind = (
+        await session.execute(
+            select(Task.loop_id, Task.id)
+            .where(*of_the_document, Task.loop_id.is_not(None))
+            .order_by(Task.id)
+        )
+    ).all()
+    result = await session.execute(update(Task).where(*of_the_document).values(loop_id=loop.id))
+    moved: Dict[str, List[str]] = {}
+    for from_loop, task_id in left_behind:
+        moved.setdefault(from_loop, []).append(task_id)
+    for from_loop, task_ids in moved.items():
+        data = {"from_loop": from_loop, "to_loop": loop.id, "task_ids": task_ids}
+        for owner in (from_loop, loop.id):
+            await persist_event(
+                session,
+                project_id,
+                "loop_tasks_adopted",
+                data,
+                loop_id=owner,
+                commit=False,
+            )
     return result.rowcount or 0
 
 
@@ -608,14 +636,21 @@ async def create_job(
             detail="this job is a loop; continuity is by checkpoint, not by resumed session",
         )
 
-    # Design D4: `work_needs_evidence` is a loop field that does not opt a job in, and a loop field
-    # on a job that is not becoming a loop is refused rather than dropped. Deliberately unlike
-    # `spec_document_id`, which this route still drops silently a few lines further down: a dropped
-    # document costs a loop its queue source, which the operator sees immediately in a loop that
-    # never fills, while a dropped declaration is invisible until an approval writes — or fails to
-    # write — to their main branch. That asymmetry is filed as F157 and is not fixed here.
+    # Design D4: `work_needs_evidence` and `spec_document_id` are loop fields that do not opt a job
+    # in, and a loop field on a job that is not becoming a loop is refused rather than dropped
+    # (F157: PATCH already refused the document; a create used to answer 201 and forget it).
     #
     # Before the job row, like every other check in this block, so a 400 leaves nothing behind.
+    if body.spec_document_id is not None and not _loop_opts_in(
+        body.purpose, body.stop_at, body.stop_when_queue_empties
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "spec_document_id describes a loop; give this job a purpose or a stop "
+                "condition to make it one"
+            ),
+        )
     if body.work_needs_evidence is not None and not _loop_opts_in(
         body.purpose, body.stop_at, body.stop_when_queue_empties
     ):
@@ -756,8 +791,10 @@ async def create_job(
         session.add(loop)
         # Before the commit, so a flow and the queue it just adopted land together — a loop that
         # exists while its tasks still read `loop_id = NULL` is the F28 state itself.
-        await _adopt_document_tasks(session, project_id, loop)
+        # Inside the `try`: the adoption's first statement flushes the new loop, which is where
+        # the partial unique index answers a concurrent live claim.
         try:
+            await _adopt_document_tasks(session, project_id, loop)
             await session.commit()
         except IntegrityError as e:
             await session.rollback()
