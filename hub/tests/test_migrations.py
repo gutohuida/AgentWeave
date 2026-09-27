@@ -37,7 +37,7 @@ ALEMBIC_INI = Path(__file__).parent.parent / "hub" / "alembic.ini"
 # The revision `alembic upgrade head` must land on. Named once so the assertion and its failure
 # message cannot disagree — they did, for two head bumps, telling anyone debugging a failure to go
 # read the wrong migration.
-HEAD_REVISION = "0109"
+HEAD_REVISION = "0110"
 
 
 # ---------------------------------------------------------------------------
@@ -3922,3 +3922,51 @@ def test_a_read_only_command_leaves_an_empty_database_empty(tmp_path) -> None:
         assert (
             conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").fetchone()[0] == 0
         )
+
+
+# ---------------------------------------------------------------------------
+# 0110 -- a loop's default agent is a staged edit like the rest of its definition
+# ---------------------------------------------------------------------------
+
+
+def test_migration_0110_adds_pending_agent_and_round_trips(tmp_path) -> None:
+    """`a-flow-is-configured-from-its-own-tab` D7: one nullable column, rows survive both ways."""
+    from alembic import command
+    from alembic.config import Config
+
+    db_file = tmp_path / "loop_pending_agent.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    _run(_create_all_at(db_url))
+    _run_alembic_with(db_url)
+
+    stamp = "2026-01-01T00:00:00Z"
+    with sqlite3.connect(db_file) as conn:
+        column = {row[1]: row for row in conn.execute("PRAGMA table_info(loops)")}["pending_agent"]
+        assert column[3] == 0 and column[4] is None  # nullable, no backfill guess
+        conn.execute(
+            "INSERT INTO projects (id, name, created_at) VALUES ('proj-1', 'p', ?)", (stamp,)
+        )
+        conn.execute(
+            "INSERT INTO ai_jobs (id, project_id, name, agent, message, cron, created_at, "
+            "session_mode, enabled, source) "
+            f"VALUES ('job-1', 'proj-1', 'n', 'claude', 'go', '0 9 * * *', '{stamp}', 'new', 1, "
+            "'hub')"
+        )
+        conn.execute(
+            "INSERT INTO loops (id, project_id, job_id, purpose, stop_when_queue_empties, "
+            "created_at, pending_agent) VALUES ('loop-1', 'proj-1', 'job-1', 'p', 0, "
+            f"'{stamp}', 'other')"
+        )
+        conn.commit()
+
+    cfg = Config(str(ALEMBIC_INI))
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    with patch.object(settings, "database_url", db_url):
+        command.downgrade(cfg, "0109")
+        with sqlite3.connect(db_file) as conn:
+            assert "pending_agent" not in {r[1] for r in conn.execute("PRAGMA table_info(loops)")}
+            assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 1
+        command.upgrade(cfg, "head")
+        with sqlite3.connect(db_file) as conn:
+            assert "pending_agent" in {r[1] for r in conn.execute("PRAGMA table_info(loops)")}
+            assert conn.execute("SELECT COUNT(*) FROM loops").fetchone()[0] == 1

@@ -2465,7 +2465,9 @@ async def finalize_job_run_for_conversation(
 _LOOP_BRIEFING_CHECKPOINT_CHARS = 4_000
 
 
-def _stage_pending_loop_edit(loop: Loop) -> Optional[dict]:
+def _stage_pending_loop_edit(
+    loop: Loop, job: AIJob, *, agent_archived: bool = False
+) -> Optional[dict]:
     """Move a staged edit (design D11, task A2.2) from `loop`'s pending_* columns onto its live
     fields, in memory only — no commit, no event. Returns the audit payload for
     `_emit_loop_edit_applied` below, or `None` if nothing was staged.
@@ -2505,9 +2507,25 @@ def _stage_pending_loop_edit(loop: Loop) -> Optional[dict]:
         }
         loop.stop_when_queue_empties = loop.pending_stop_when_queue_empties
 
+    if loop.pending_agent is not None:
+        if agent_archived:
+            # Archived while it waited: the rest of the edit applies, and the drop is recorded.
+            changes["agent_dropped"] = {"name": loop.pending_agent, "reason": "archived"}
+        elif loop.pending_agent != job.agent:
+            changes["agent"] = {"from": job.agent, "to": loop.pending_agent}
+            job.agent = loop.pending_agent
+            # A session of the old agent must not follow the job to the new one (nothing in the Hub
+            # writes this column today, so this keeps it honest rather than fixing a live hazard).
+            job.last_session_id = None
+            if loop.control == "creator":
+                # A delegation to A is not a delegation to B: control returns to the operator.
+                loop.control = None
+                changes["control"] = {"from": "creator", "to": "operator"}
+
     actor = loop.pending_edit_actor
     staged_at = loop.pending_edit_at
 
+    loop.pending_agent = None
     loop.pending_purpose = None
     loop.pending_stop_at = None
     loop.pending_stop_when_queue_empties = None
@@ -2521,6 +2539,18 @@ def _stage_pending_loop_edit(loop: Loop) -> Optional[dict]:
         "staged_at": staged_at.isoformat() if staged_at else None,
         "changes": changes,
     }
+
+
+async def _agent_archived(session: AsyncSession, project_id: str, name: str) -> bool:
+    """Whether an `Agent` row with this name reads archived: the one state the PATCH check refuses
+    positively, and so the one a staged agent is dropped for at application. A name with no row is
+    applied, on the same lenient terms as that check."""
+    lifecycle = (
+        await session.execute(
+            select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == name)
+        )
+    ).scalar_one_or_none()
+    return lifecycle == "archived"
 
 
 async def _emit_loop_edit_applied(session: AsyncSession, payload: dict) -> None:
@@ -3296,7 +3326,14 @@ class JobScheduler:
             # current definition, not one still waiting on the firing after next. The audit event
             # is emitted only after this branch's own commit lands `run`'s final status (below),
             # not here — see `_stage_pending_loop_edit`'s own comment for why.
-            pending_edit_payload = _stage_pending_loop_edit(loop) if loop is not None else None
+            pending_edit_payload = None
+            if loop is not None:
+                pending_edit_payload = _stage_pending_loop_edit(
+                    loop,
+                    job,
+                    agent_archived=bool(loop.pending_agent)
+                    and await _agent_archived(session, job.project_id, loop.pending_agent),
+                )
 
             loop_stop_reason = await _loop_stop_reason(session, job)
             if loop_stop_reason:

@@ -66,6 +66,9 @@ class JobUpdate(RequestModel):
     stop_when_queue_empties: Optional[bool] = None
     stop_reason: Optional[str] = Field(default=None, max_length=4000)
     spec_document_id: Optional[str] = Field(default=None, max_length=64)
+    # The job's default agent. Operator-only (403 from an agent's run); staged on a loop, applied at
+    # once on a plain job (`a-flow-is-configured-from-its-own-tab` D2).
+    agent: Optional[str] = Field(default=None, max_length=64)
     # Accepted by the schema only so the route can **refuse** it with a sentence saying what to do
     # instead (design D3). Declaring it here rather than letting the request 422 on an unexpected
     # field is deliberate: a 422 says the field is unknown, which is false and offers no remedy.
@@ -109,6 +112,8 @@ class LoopSummary(BaseModel):
     # agent (operator, 2026-08-19). Sourced from the job in the same query as `label`, not a second
     # fetch. Distinct from `control`, which says who may EXTEND the queue, not who works it.
     agent: str = ""
+    # The specification document this loop declares (a flow), or None for a plain loop.
+    spec_document_id: Optional[str] = None
     purpose: str
     stop_at: Optional[datetime] = None
     stop_when_queue_empties: bool

@@ -470,6 +470,7 @@ async def _batch_loop_summaries(
             id=loop.id,
             label=job_name_by_id.get(job_id, ""),
             agent=job_agent_by_id.get(job_id, ""),
+            spec_document_id=loop.spec_document_id,
             purpose=loop.purpose,
             stop_at=loop.stop_at,
             stop_when_queue_empties=loop.stop_when_queue_empties,
@@ -542,6 +543,8 @@ def _pending_loop_edit(loop: Loop) -> Optional[Dict[str, Any]]:
         pending["stop_at"] = loop.pending_stop_at
     if loop.pending_stop_when_queue_empties is not None:
         pending["stop_when_queue_empties"] = loop.pending_stop_when_queue_empties
+    if loop.pending_agent is not None:
+        pending["agent"] = loop.pending_agent
     return pending
 
 
@@ -986,6 +989,24 @@ async def update_job(
             ),
         )
 
+    # `a-flow-is-configured-from-its-own-tab` D2. The default agent is operator-only: this body is
+    # also the agent plane's `PATCH /agent-actions/jobs/{id}`, and a run that could re-point a loop
+    # at itself would, under `control="creator"`, decide what enters its queue. Checked before
+    # anything is mutated, so a refusal leaves nothing half-applied. `agent` is not a loop field and
+    # never opts a plain job into being one, so the loop is looked up for it on its own, before the
+    # loop-fields branch below can create one.
+    agent_loop: Optional[Loop] = None
+    if body.agent is not None:
+        if agent_identity or run_identity:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="only the operator can change which agent a job names",
+            )
+        await _check_agent_exists(session, project_id, body.agent)
+        agent_loop = (
+            await session.execute(select(Loop).where(Loop.job_id == job_id))
+        ).scalar_one_or_none()
+
     loop_fields_supplied = (
         body.purpose is not None
         or body.stop_at is not None
@@ -1116,6 +1137,25 @@ async def update_job(
                 commit=False,
             )
         loop.updated_by_run_id = run_identity
+
+    if body.agent is not None:
+        if agent_loop is not None:
+            # A loop that already existed: the agent joins the staged definition, applied at the
+            # next firing (D2). One PATCH makes one `loop_edit_staged`, carrying every field.
+            agent_loop.pending_agent = body.agent
+            if staged_edit_event is None:
+                agent_loop.pending_edit_actor = "operator"
+                agent_loop.pending_edit_at = datetime.now(timezone.utc)
+                agent_loop.updated_by_run_id = run_identity
+                staged_edit_event = {"id": agent_loop.id, "actor": "operator", "changes": {}}
+            staged_edit_event["changes"]["agent"] = body.agent
+        else:
+            # A plain job, or a loop this same call just created: nothing to protect, so it is
+            # applied on the spot. A resume-mode job must not hand the old agent's provider session
+            # to the new one.
+            if job.agent != body.agent:
+                job.last_session_id = None
+            job.agent = body.agent
 
     # Design D4: a loop's continuity is by checkpoint, not by resumed session. Checked before
     # job.session_mode is mutated below, against the job's loop status AFTER this request is

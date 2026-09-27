@@ -1560,11 +1560,14 @@ class Loop(Base):
     pending_purpose: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     pending_stop_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
     pending_stop_when_queue_empties: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    # `a-flow-is-configured-from-its-own-tab` D2: the default agent the loop's job will name from
+    # the next firing (migration 0110). Applied by `scheduler._stage_pending_loop_edit`.
+    pending_agent: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Task A2.5: who staged the pending edit and when — the agent name, or the literal string
     # "operator" (never NULL for an operator edit; NULL here means "no pending edit", the same
     # role `pending_edit_at` plays below, so "operator" cannot collapse into "unset").
     pending_edit_actor: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    # The sentinel for "is there a pending edit at all" — non-NULL iff at least one of the three
+    # The sentinel for "is there a pending edit at all" — non-NULL iff at least one of the four
     # pending_* fields above is set (an edit always touches at least one, mirroring
     # `_loop_opts_in`'s own "at least one field" rule for loop creation).
     pending_edit_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), nullable=True)
