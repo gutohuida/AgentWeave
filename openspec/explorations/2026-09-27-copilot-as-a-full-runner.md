@@ -27,6 +27,12 @@ Evidence appendices (in this directory):
 - **No company policy was exercised.** The MCP-policy behaviour below is DOCUMENTED plus code-read (appendix A §D), not measured.
 - Three probe prompts were run in total, each costing Free allowance. The rest used slash commands over ACP, which make no model call.
 
+**Corrections found by slice 2's R1 (`a-copilot-agent-runs-over-acp`, same evening, measured on 1.0.88):**
+- `--no-auto-update` runs 1.0.88 here, not 1.0.75.
+- `~/.agents/skills` *does* load under a custom `COPILOT_HOME`.
+- Copilot's MCP tool-call timeout defaults to **30 s**, which would cut every `ask_user` short. The Hub sets 660000 ms in the MCP config.
+- The D1 probe held: a file in `$COPILOT_HOME/agents` makes `session/new` offer an `agent` option, and `set_config_option` selects it.
+
 ## The 09-20 question, answered
 
 `2026-09-20-the-approval-transport-is-not-the-tool-surface.md` said the first design question for
