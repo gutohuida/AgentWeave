@@ -31,4 +31,4 @@ New file `hub/tests/test_a_document_moves_forward_only_through_its_checks.py`, r
 
 ## 3. Drive
 
-- [ ] 3.1 Trial Hub: F207's four calls from its entry, verbatim, and record each answer
+- [x] 3.1 Trial Hub: F207's four calls from its entry, verbatim, and record each answer

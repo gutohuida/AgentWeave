@@ -33374,3 +33374,13 @@ Harness `scripts/drive/d0927_r1a_flow_tab.py` (documents seeded `approved` chang
 - Harness checks marked BAD in the last run were mine: the Settings read view shows the in-force value by design (the staged value is in the pending panel), and the 5 s freshness bound was my own threshold.
 - **Observation, cause not isolated (unverified).** UI freshness after an action varied 0.3 s to 17.5 s: the first staged edit on a freshly opened tab took 6.65 s to show, the next two under 0.3 s (but those two matched text the panel already held, so unreliable); the tab showed the applied agent 17.5 s after the firing. `useSSE` has no debounce; the Hub broadcasts `loop_edit_staged`/`loop_edit_applied`. Not filed as a defect.
 - Teardown: Hub :8044 stopped; every job in the profile disabled.
+
+## b5 drive, 2026-09-27 (a-document-moves-forward-only-through-its-checks)
+
+Fresh Hub :8046 from `hub/` (profile drive0927b), Chromium on the served bundle, no agent turns. Harnesses `scripts/drive/d0927_b5_phase_checks.py`, `d0927_b5_approve_refusal.py`.
+
+- **PASS** F207's four calls verbatim: create 201; close-exploration 200; propose 200 with `blocking` (no_requirements, non_goals_empty), document still exploring; `phase?to=proposed` now **409** `document_incomplete` carrying the same two findings (was 200 and `proposed`); `to=approved` 409 `illegal_transition`.
+- **PASS** Chromium, Propose on an empty exploring document: the phase bar shows both findings in words, document stays exploring.
+- **PASS** Chromium, Approve on a proposed document whose content was then emptied by a saved edit (the write is accepted, reporting the blocking finding): Approve shows the `requirements` finding, document stays proposed.
+- Harness note: my first sentence match for the Propose refusal looked for the word "complete" and reported BAD; the screenshot showed the refusal. Harness error, not product.
+- Teardown: Hub :8046 stopped; no jobs created.
