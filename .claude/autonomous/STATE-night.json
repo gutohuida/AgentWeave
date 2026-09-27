@@ -8,18 +8,18 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 2,
+    "iteration": 3,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-runner-choice-names-its-model-impl",
-    "next_action": "Do queue item 'a-runner-choice-names-its-model-impl': openspec-apply-change for a-runner-choice-names-its-model. Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files).",
+    "current": "a-runner-choice-names-its-model-drive",
+    "next_action": "Do queue item 'a-runner-choice-names-its-model-drive': drive against a fresh drive Hub per night-window.md 'Driving' section (tasks.md 3.1: create two 'Twin' claude runners on two declared models on trial Hub :8010, read the runner select's options in an agent's Settings, then both runner selects in project settings; record option texts verbatim in scripts/drive/FINDINGS.md).",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-runner-choice-names-its-model",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
+            "detail": "Done commit 2b91c92: runnerOptionLabel helper + wired into RunnerPicker and both ProjectSettingsPanel selects. Tests (1.1/1.1b/1.2/1.3) written to fail first then pass; hub/ui lint clean; full vitest 168 files/1723 tests green; UI bundle rebuilt and committed with source."
         },
         {
             "id": "a-runner-choice-names-its-model-drive",
