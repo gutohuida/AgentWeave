@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-runner-choice-names-its-model-drive",
-    "next_action": "Do queue item 'a-runner-choice-names-its-model-drive': drive against a fresh drive Hub per night-window.md 'Driving' section (tasks.md 3.1: create two 'Twin' claude runners on two declared models on trial Hub :8010, read the runner select's options in an agent's Settings, then both runner selects in project settings; record option texts verbatim in scripts/drive/FINDINGS.md).",
+    "current": "a-runner-choice-names-its-model-archive",
+    "next_action": "Do queue item 'a-runner-choice-names-its-model-archive': openspec-archive-change for a-runner-choice-names-its-model. Set FINDINGS.md Status lines for the F<n> its proposal.md names to 'fixed <sha>' and correct the index's open severity-A list.",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -23,9 +23,9 @@
         },
         {
             "id": "a-runner-choice-names-its-model-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-runner-choice-names-its-model",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
+            "detail": "Done: trial Hub :8010 per tasks.md 3.1 (task names :8010 explicitly, not a fresh drive Hub). Two same-named Twin runners on two models render distinct D1-format labels in both Agent Settings and Project Settings; checkpoint-runner override collapses both to the override model as designed. No new finding -- FINDINGS.md 'a-runner-choice-names-its-model drive, 2026-09-27'."
         },
         {
             "id": "a-runner-choice-names-its-model-archive",

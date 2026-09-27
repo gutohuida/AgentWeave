@@ -18,4 +18,4 @@
 
 ## 3. Drive
 
-- [ ] 3.1 On the trial Hub `:8010`, create two `claude` runners named `Twin` on two declared models. Read the runner select's options in an agent's Settings, then both runner selects in project settings. Record the option texts verbatim
+- [x] 3.1 On the trial Hub `:8010`, create two `claude` runners named `Twin` on two declared models. Read the runner select's options in an agent's Settings, then both runner selects in project settings. Record the option texts verbatim
