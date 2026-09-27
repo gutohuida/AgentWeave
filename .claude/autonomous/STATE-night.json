@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 21,
+    "iteration": 22,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b5-archive",
-    "next_action": "Queue item b5-archive: archive a-document-moves-forward-only-through-its-checks. Read CI verdict for the previous commit first. Set F207 to fixed <sha> in FINDINGS.md in the same commit (the impl sha is 263198d); sync deltas into openspec/specs by hand or script as iteration 19 did; tick remaining tasks (3.2+ if any). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "current": "b11-impl",
+    "next_action": "Queue item b11-impl: implement a-loop-that-is-gone-lets-go-of-its-document (tests first, then fix). Read CI verdict for the previous commit first. tasks.md and design.md round log are the authority; apply F392 rules. Size to one firing; split in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",
@@ -47,9 +47,9 @@
         },
         {
             "id": "b5-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-document-moves-forward-only-through-its-checks",
-            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+            "detail": "Done iteration 22; F207 and F113 fixed 263198d; spec-document-authority synced."
         },
         {
             "id": "b11-impl",

@@ -8096,7 +8096,7 @@ the guard.
 
 ## F113 (B) — `propose` promises "every check that refuses it" and omits one of them
 
-**Status:** **open.** Found 2026-08-28 by the full-surface sweep. The fix changes a status code, so
+**Status:** fixed 263198d (b5: `propose` lists open exploration with every other blocker in its 200 `blocking`). Found 2026-08-28 by the full-surface sweep. The fix changes a status code, so
 it is a decision rather than a repair.
 
 `POST /project/documents/propose` has two blockers and reports them through two different channels:
@@ -16827,7 +16827,7 @@ not being written is silently inherited by every later corpus read.
 
 ## F207 (C) — two doors into `proposed`, and the second one skips the first one's checks
 
-**Status:** open. The second door into `proposed` still bypasses the completeness check
+**Status:** fixed 263198d (b5: phase checks run inside `transition()`; driven live 2026-09-27). Was: the second door into `proposed` bypassed the completeness check
 the first one runs, and it is the same door the sibling entry's dead edge depends on. Named in no
 change. [classified 2026-09-09, D-3]
 
