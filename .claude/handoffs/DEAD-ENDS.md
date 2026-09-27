@@ -1731,3 +1731,21 @@ disappears is indistinguishable from one that was forgotten.
   has written something. Rolling a savepoint back also expires every ORM object touched inside it
   (bulk `UPDATE`s included), and reading one afterwards raises `MissingGreenlet`. Carry plain values
   out of a savepoint, never rows. Measured by R2 of `a-document-says-how-it-will-be-built-and-approval-starts-it`.
+- **2026-09-27 — a scripted splice anchored on a comment can match the wrong function**: the
+  `# F204/F210: every field of the body is optional…` comment appears three times in
+  `hub/hub/api/v1/spec.py`; a replace from its first match to the next route deleted ~1,000 lines.
+  Anchor on the function's `async def name(` and search forward from there, then check
+  `git diff --stat` before going on. Recovery that worked: rebuild the file from `git show HEAD:<path>`
+  and re-apply the edits in one script.
+- **2026-09-27 — a long python heredoc through the Bash tool can fail to parse** ("unexpected EOF
+  while looking for matching `'`") when the script body holds mixed quotes. Write the script to a
+  scratchpad file with the Write tool and run `py -3.11 <file>`.
+- **2026-09-27 — patching `hub.db.models._now` does not freeze `created_at`**: a column's
+  `default=_now` captured the function when the model class was defined. To make a tie, write the
+  timestamps into the rows directly. And on an exact tie, SQLite's `ORDER BY created_at DESC`
+  happened to return the later-inserted row first, so a mutation dropping a `rowid` tie-break is
+  not catchable by a test.
+- **2026-09-27 — subagents sharing one working tree must not `git stash`**: two parallel agents
+  each ran `git stash` / `stash pop` for fail-before evidence while other agents' uncommitted edits
+  were in the tree (it came back intact, by luck). Tell parallel agents to mutate through a scratch
+  copy of the file, never stash or `git checkout --` in a shared tree.
