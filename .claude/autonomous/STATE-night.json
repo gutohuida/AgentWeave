@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "b10-drive",
-    "next_action": "Queue item b10-drive. First: read CI verdict (gh run list); then finish task 3.1 of the b10 change (full hub suite with claude off PATH and NO timeout, run in background writing to a file; the iteration-10 run reached 73% clean before an own timeout, /tmp/hubsuite.txt may hold a second run) and tick it. Then drive a-loop-is-stopped-archived-and-delegated-from-its-own-tab live per queue detail and test-guide.md Human-only (fresh port/profile, Chromium, Haiku only), record in FINDINGS.md. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
+    "next_action": "Queue item b10-drive. Task 3.1 is DONE (4984 passed, iteration 11). Read CI verdict (gh run list), then drive a-loop-is-stopped-archived-and-delegated-from-its-own-tab live per queue detail and test-guide.md Human-only (fresh port/profile, Chromium, Haiku only), record in FINDINGS.md. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
     "queue": [
         {
             "id": "b10-drive",

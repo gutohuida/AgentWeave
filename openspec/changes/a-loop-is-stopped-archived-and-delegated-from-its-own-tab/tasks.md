@@ -175,7 +175,7 @@
 
 ## 3. Verification
 
-- [ ] 3.1 `py -3.11 -m pytest hub/tests/test_loop_archival.py hub/tests/test_surface_ceilings.py
+- [x] 3.1 `py -3.11 -m pytest hub/tests/test_loop_archival.py hub/tests/test_surface_ceilings.py
   hub/tests/test_jobs_crud.py hub/tests/test_an_operator_stop_actually_stops.py -q` with `claude` stripped from PATH, then the full `hub/tests/`.
 - [x] 3.2 `cd hub/ui && npm run lint && npx vitest run`.
 - [ ] 3.3 The CLAUDE.md lint block.
