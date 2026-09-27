@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 25,
+    "iteration": 26,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b11-archive",
-    "next_action": "Queue item b11-archive: archive a-loop-that-is-gone-lets-go-of-its-document. Read CI verdict first. Set fixed <sha> (impl commit 8e9b05d) on F53 and F157 in scripts/drive/FINDINGS.md in the same commit; sync the change's spec deltas into openspec/specs by hand; tasks 0.1/0.2 rounds boxes unticked - note in the log. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "current": "r1b-impl",
+    "next_action": "Queue item r1b-impl: implement a-document-says-how-it-will-be-built-and-approval-starts-it, tests first. Read CI verdict first. tasks.md is the authority; read design.md round log; F377; edits mcp_server.py and UI bundle (read .claude/rules). Apply F392 rules. Size to one firing; split in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",
@@ -65,9 +65,9 @@
         },
         {
             "id": "b11-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-loop-that-is-gone-lets-go-of-its-document",
-            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
+            "detail": "Done iteration 26; F53 and F157 fixed 8e9b05d; agent-loops synced."
         },
         {
             "id": "r1b-impl",

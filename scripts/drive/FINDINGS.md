@@ -3196,7 +3196,7 @@ as a finding because it was not driven deliberately or reproduced.
 
 ## F53 (B) — archiving a loop that never fired still permanently, irrevocably claims its spec document; the tasks it "adopted" have no recovery path
 
-**Status:** open — partially fixed 2239f38 (option (a) only — an archived loop's document claim no longer blocks a new loop); the `_adopt_document_tasks` orphaning half is open and queued as Q4-SPEC [checked 2026-09-22, D-4: still a correct open row — `2239f38` is the claim-release half only; `_adopt_document_tasks` (`hub/hub/api/v1/jobs.py:205`) still adopts only `loop_id IS NULL` and nothing clears an archived loop's `loop_id`, so the orphaning half stands. No `Q4-SPEC` change exists under `openspec/changes/` today — that queue label is historical.]
+**Status:** fixed 8e9b05d (the successor loop adopts a gone loop's unfinished tasks; claim release earlier at 2239f38). Driven 2026-09-27, see "b11 drive". Was: open — partially fixed 2239f38 (option (a) only — an archived loop's document claim no longer blocks a new loop); the `_adopt_document_tasks` orphaning half is open and queued as Q4-SPEC [checked 2026-09-22, D-4: still a correct open row — `2239f38` is the claim-release half only; `_adopt_document_tasks` (`hub/hub/api/v1/jobs.py:205`) still adopts only `loop_id IS NULL` and nothing clears an archived loop's `loop_id`, so the orphaning half stands. No `Q4-SPEC` change exists under `openspec/changes/` today — that queue label is historical.]
 
 Found 2026-08-26 driving Q4, self-inflicted and then traced to the code rather than dismissed as
 operator error — the whole value of finding it is that a real operator could do the exact same
@@ -12897,7 +12897,7 @@ has the same wrong verb -- a UI-round item alongside retiring `will_merge`.
 
 ## F157 (C) — a loop field on `POST /jobs` is silently dropped; the same field on `PATCH` is refused
 
-**Status:** open, and the product's own code says so. Verified 2026-09-09:
+**Status:** fixed 8e9b05d (`POST /jobs` naming a document with no purpose or stop condition is 400). Driven 2026-09-27, see "b11 drive". Was: open, and the product's own code says so. Verified 2026-09-09:
 `hub/hub/api/v1/jobs.py:569` reads *"That asymmetry is filed ... and is not fixed here"*, `create_job`
 still reads `spec_document_id` only inside `_loop_opts_in` (`:671-680`), and
 `hub/tests/test_jobs_crud.py:537` pins the silent drop as deliberate. [classified 2026-09-09, D-3]
