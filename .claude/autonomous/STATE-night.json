@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b10-drive",
-    "next_action": "Queue item b10-drive. Task 3.1 is DONE (4984 passed, iteration 11). Read CI verdict (gh run list), then drive a-loop-is-stopped-archived-and-delegated-from-its-own-tab live per queue detail and test-guide.md Human-only (fresh port/profile, Chromium, Haiku only), record in FINDINGS.md. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
+    "current": "b10-archive",
+    "next_action": "Queue item b10-archive. b10-drive is DONE (19/19, FINDINGS.md, iteration 12). Read CI verdict (gh run list), then archive a-loop-is-stopped-archived-and-delegated-from-its-own-tab: tasks 4.1 (foot F225 in FINDINGS.md with fixed sha, same commit) and 4.2 (run the R-2 collision script, sync the agent-loops delta by hand, archive). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
     "queue": [
-        {
-            "id": "b10-drive",
-            "status": "open",
-            "title": "Drive a-loop-is-stopped-archived-and-delegated-from-its-own-tab live (UI in Chromium)",
-            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
-        },
         {
             "id": "b10-archive",
             "status": "open",

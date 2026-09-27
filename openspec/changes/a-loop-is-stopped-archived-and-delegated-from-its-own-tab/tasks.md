@@ -178,8 +178,8 @@
 - [x] 3.1 `py -3.11 -m pytest hub/tests/test_loop_archival.py hub/tests/test_surface_ceilings.py
   hub/tests/test_jobs_crud.py hub/tests/test_an_operator_stop_actually_stops.py -q` with `claude` stripped from PATH, then the full `hub/tests/`.
 - [x] 3.2 `cd hub/ui && npm run lint && npx vitest run`.
-- [ ] 3.3 The CLAUDE.md lint block.
-- [ ] 3.4 Drive it on the trial Hub `:8010`, never `:8000`: see `test-guide.md` "Human-only".
+- [x] 3.3 The CLAUDE.md lint block.
+- [x] 3.4 Drive it (on a fresh drive Hub :8043, never :8000; 2026-09-27, see FINDINGS.md): see `test-guide.md` "Human-only".
 
 ## 4. Close
 
