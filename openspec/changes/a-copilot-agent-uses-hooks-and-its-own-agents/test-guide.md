@@ -1,0 +1,65 @@
+# Test guide — a Copilot agent uses hooks and its own agents
+
+Each group can be cut. Skip the rows of any group the operator rejected.
+
+## Agent-verifiable
+
+### Group A: Copilot's lifecycle reaches the Hub
+
+1. Task 1.1 records whether each subscribed raw-event type was delivered, and which of
+   `session.error` and the `Error:` text chunk arrived first. The fixtures under
+   `hub/tests/fixtures/copilot/` are in that recorded order.
+2. Tests 1.2 to 1.6 fail before tasks 2.1 to 2.6 and pass after them. Test 1.3 passes with the
+   error fixture in both orders, and counts diagnostics rather than reading positions.
+3. `grep -rn "summaryContent" hub/hub` finds only the mapper line that drops it.
+4. Drive 7.1: the timeline shows a paired `subagent_started` / `subagent_completed`.
+5. Drive 7.2: the `compacted` status and the checkpoint-due banner both appear, and no checkpoint row
+   is created under `offered`. The Round log records whether this was driven through a real
+   `/compact` or by replaying the fixture.
+6. Drive 7.3: exactly one diagnostic, and no repeated `Error:` text.
+7. Drive 7.4: no deciding hook, and no `COPILOT_ALLOW_ALL`.
+
+### Group C: BYOK
+
+1. Tests 1.7 to 1.10 fail before tasks 3.1 to 3.3 and pass after them.
+2. Drive 7.5: the pasted-key refusal sentence is recorded verbatim, and a read-only grep of the
+   trial database finds no key value.
+3. The Runners page shows the API-key and Claude Max sentence (test 1.14).
+
+### Group B: review agents
+
+1. Tests 1.11 and 1.12 fail before tasks 4.1 and 4.2 and pass after them. The verdict line is
+   byte-identical with the setting on and off.
+2. Drive 7.7: the context bullet names `<base>..<commit>`, a `code-review` subagent ran, and the
+   verdict was recorded by `update_task`.
+
+### Group D: GitHub server toggle
+
+1. Test 1.13 fails before task 5.1 and passes after it.
+2. Drive 7.8: the argv carries the flag when the toggle is off, and a card appears for a GitHub-server
+   call when it is on.
+
+### All groups
+
+- `openspec validate a-copilot-agent-uses-hooks-and-its-own-agents --strict` passes.
+- The CI command set in task 6.1 is green.
+
+## Human-only
+
+1. **Hooks (D2).** Do you still want a Hub hook for anything, now that raw events carry compaction,
+   errors and subagents with more detail? If yes, name the event and what it should feed.
+2. **Compaction behaviour.** On a real Copilot conversation long enough to auto-compact (about 80%
+   full), under `automatic`, does the handover feel right mid-turn? Under `offered`, is "the runner
+   compacted this conversation" on the banner clear?
+3. **BYOK happy path.** Put an Anthropic API key in the trial Hub's environment, bind a Copilot
+   provider runner on Haiku, and run a turn (task 7.6). Does it complete? Is the spend shown in
+   tokens, with no misleading "0 credits"?
+4. **Runner page copy.** Read the provider section. Is it clear that a Claude Max subscription cannot
+   be used and that the key stays in the Hub's environment?
+5. **Review agents.** On a real review, does consulting `code-review` improve the verdict enough to
+   justify the extra model calls? Would you turn it on by default for Copilot reviewers?
+6. **GitHub server (work PC).** On the Business plan, enable the toggle for one agent. Do the cards
+   for GitHub calls read as "this acts as you on GitHub"? Does company policy allow the built-in
+   server at all?
+7. **Work PC, hooks policy.** Check whether `allowManagedHooksOnly` is set there (exploration probe
+   6). If it is, that confirms D1's reason to rely on raw events rather than hooks.
