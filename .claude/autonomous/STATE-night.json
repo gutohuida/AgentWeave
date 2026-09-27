@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b10-impl",
-    "next_action": "Queue item b10-impl part 2 (UI half; backend done in iteration 9): tasks 1.5-1.10a, 1.14 (vitest, tests first), then 2.3-2.7 (hooks in api/loops.ts, LoopTab actions, mocks in loopTab/loopPendingEdit tests, ceiling via n10, bundle refresh), 3.1-3.3 incl. full hub suite; then tick and log. design.md D4 is the UI authority. First line of log: read CI verdict (gh run list). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
+    "current": "b10-drive",
+    "next_action": "Queue item b10-drive. First: read CI verdict (gh run list); then finish task 3.1 of the b10 change (full hub suite with claude off PATH and NO timeout, run in background writing to a file; the iteration-10 run reached 73% clean before an own timeout, /tmp/hubsuite.txt may hold a second run) and tick it. Then drive a-loop-is-stopped-archived-and-delegated-from-its-own-tab live per queue detail and test-guide.md Human-only (fresh port/profile, Chromium, Haiku only), record in FINDINGS.md. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
     "queue": [
-        {
-            "id": "b10-impl",
-            "status": "open",
-            "title": "Implement a-loop-is-stopped-archived-and-delegated-from-its-own-tab, UI half (backend done 2026-09-27 iteration 9)",
-            "detail": "openspec/changes/a-loop-is-stopped-archived-and-delegated-from-its-own-tab/tasks.md is the authority. F225; UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
-        },
         {
             "id": "b10-drive",
             "status": "open",

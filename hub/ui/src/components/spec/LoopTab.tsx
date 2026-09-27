@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { Icon } from '@/components/common/Icon'
 import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/ui/button'
-import { useLoop, type LoopSummary } from '@/api/loops'
+import { useLoop, useStopLoop, useArchiveLoop, useSetLoopControl, type LoopSummary } from '@/api/loops'
+import { useAgents } from '@/api/agents'
+import { readableApiError } from '@/api/client'
 import { hubDate } from '@/lib/hubTime'
 import { endingBucket } from './loopCounts'
 
@@ -145,6 +148,140 @@ function EndingSummary({ loop }: { loop: LoopSummary }) {
   return <Badge variant="secondary">Idle</Badge>
 }
 
+const DEFAULT_STOP_REASON = 'Stopped by the operator'
+
+/**
+ * Stop, Archive and who decides the queue, from the loop's own tab
+ * (`a-loop-is-stopped-archived-and-delegated-from-its-own-tab`, design D4). Visibility comes from
+ * the same `endingBucket` as the badge, so the two cannot disagree: a running loop offers Stop and
+ * the controller toggle, an ended one offers Archive, an archived one nothing. Confirmation is
+ * inline and two-step, as `JobCard`'s Archive is.
+ */
+function LoopActions({ loop }: { loop: LoopSummary & { job_id: string } }) {
+  const stop = useStopLoop()
+  const archive = useArchiveLoop()
+  const setControl = useSetLoopControl()
+  const { data: archivedAgents, isError: archivedListFailed } = useAgents('archived')
+  const [confirming, setConfirming] = useState<'stop' | 'archive' | null>(null)
+  const [reason, setReason] = useState('')
+
+  if (loop.archived_at) return null
+  const bucket = endingBucket(loop)
+  const ended = bucket === 'completed' || bucket === 'stopped'
+  const delegated = loop.control === 'creator'
+  const agent = loop.agent ?? ''
+  const agentArchived = !!archivedAgents?.some((a) => a.name === agent)
+
+  const failure = stop.isError
+    ? readableApiError(stop.error, 'Could not stop this loop.')
+    : archive.isError
+      ? readableApiError(archive.error, 'Could not archive this loop.')
+      : setControl.isError
+        ? readableApiError(setControl.error, 'Could not change who decides this loop’s queue.')
+        : null
+  const pending = stop.isPending || archive.isPending || setControl.isPending
+
+  return (
+    <div className="mt-3 space-y-2" data-testid="loop-tab-actions">
+      {!ended && (
+        <p data-testid="loop-tab-controller" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          Additions to this queue are decided by {delegated ? agent || 'the loop’s agent' : 'you'}.
+          {agent && !agentArchived && (
+            <>
+              {' '}
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={pending}
+                onClick={() => setControl.mutate({ loopId: loop.id, control: delegated ? 'operator' : 'creator' })}
+              >
+                {delegated ? 'Decide them yourself' : `Let ${agent} decide`}
+              </Button>
+            </>
+          )}
+        </p>
+      )}
+
+      {!ended && confirming !== 'stop' && (
+        <Button variant="destructive" size="xs" disabled={pending} onClick={() => setConfirming('stop')}>
+          Stop
+        </Button>
+      )}
+      {!ended && confirming === 'stop' && (
+        <div data-testid="loop-tab-stop-confirm" className="space-y-1.5">
+          <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
+            {loop.firing_active
+              ? 'The firing running now finishes; no firing starts after it.'
+              : 'No firing starts after this.'}
+          </p>
+          <label className="block" style={{ fontSize: 11, color: 'var(--text-3)' }}>
+            Reason
+            <input
+              className="mt-0.5 block w-full rounded-[var(--radius-sm)] px-2 py-1"
+              style={{ fontSize: 11, background: 'var(--surface-2)', color: 'var(--text)', border: '1px solid var(--border)' }}
+              value={reason}
+              placeholder={DEFAULT_STOP_REASON}
+              onChange={(e) => setReason(e.target.value)}
+            />
+          </label>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="destructive"
+              size="xs"
+              disabled={pending}
+              onClick={() => {
+                stop.mutate({ jobId: loop.job_id, reason: reason.trim() || DEFAULT_STOP_REASON })
+                setConfirming(null)
+              }}
+            >
+              Stop loop
+            </Button>
+            <Button variant="outline" size="xs" onClick={() => setConfirming(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {ended && confirming !== 'archive' && (
+        <Button variant="outline" size="xs" disabled={pending} onClick={() => setConfirming('archive')}>
+          Archive
+        </Button>
+      )}
+      {ended && confirming === 'archive' && (
+        <div className="flex items-center gap-1" data-testid="loop-tab-archive-confirm">
+          <Button
+            variant="destructive"
+            size="xs"
+            disabled={pending}
+            onClick={() => {
+              archive.mutate({ loopId: loop.id })
+              setConfirming(null)
+            }}
+          >
+            Archive loop
+          </Button>
+          <Button variant="outline" size="xs" onClick={() => setConfirming(null)}>
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      {!ended && archivedListFailed && (
+        <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
+          Could not check whether {agent || 'the loop’s agent'} is archived; delegating to an archived agent has no effect.
+        </p>
+      )}
+
+      {failure && (
+        <p role="alert" style={{ fontSize: 11, color: 'var(--red)' }}>
+          {failure}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /**
  * The panel shell's `loop:<loop_id>` drill-down tab (`2026-08-18-a-loop-writes-its-own-queue`,
  * task B6.1) — purpose, stop condition, ending state and reason, queue counts by status, the
@@ -243,6 +380,8 @@ export function LoopTab({ loopId, onClose }: LoopTabProps) {
         </p>
         {loop.stopped_at && <p>Stopped {formatDistanceToNow(hubDate(loop.stopped_at), { addSuffix: true })}</p>}
       </div>
+
+      <LoopActions loop={loop} />
 
       <div className="mt-4">
         <p className="mb-1.5" style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-3)' }}>

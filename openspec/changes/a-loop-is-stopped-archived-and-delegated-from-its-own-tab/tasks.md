@@ -74,29 +74,29 @@
   `POST /loops/{id}/control {"control": "creator"}`. A fresh read shows `control is None`. **Fails
   today**: the control commits before the event write. Do the same for `/archive` on an ended loop:
   `archived_at` stays `None`.
-- [ ] 1.5 `hub/ui/src/__tests__/loopTabActions.test.tsx` (new). Mock `@/api/loops` with `useLoop`
+- [x] 1.5 `hub/ui/src/__tests__/loopTabActions.test.tsx` (new). Mock `@/api/loops` with `useLoop`
   and the three new hooks. For a loop with `ending_state: null`, `archived_at: null`,
   `control: null`, `agent: 'worker'`: *Stop* is present, *Archive* absent, the text says you decide,
   and *Let worker decide* calls the control mutation with `{loopId, control: 'creator'}`. **Fails
   today**: no controls.
-- [ ] 1.6 Same file: *Stop* → confirm → the stop mutation is called with `{jobId: 'job-1', reason:
+- [x] 1.6 Same file: *Stop* → confirm → the stop mutation is called with `{jobId: 'job-1', reason:
   'Stopped by the operator'}` by default, or with the typed reason. With `firing_active: true` the
   confirmation contains *"The firing running now finishes"*. If the operator clears the field, or
   types only spaces, and confirms, the mutation gets `reason: 'Stopped by the operator'`.
   `'  enough  '` sends `'enough'` (design D2, operator review).
-- [ ] 1.7 Same file: `ending_state: 'stopped'`, `archived_at: null` → *Archive* present, *Stop* and
+- [x] 1.7 Same file: `ending_state: 'stopped'`, `archived_at: null` → *Archive* present, *Stop* and
   the controller line absent. With `archived_at` set, neither is present.
-- [ ] 1.8 Same file: `control: 'creator'` → the text names `worker`, and *Decide them yourself*
+- [x] 1.8 Same file: `control: 'creator'` → the text names `worker`, and *Decide them yourself*
   calls the mutation with `control: 'operator'`.
-- [ ] 1.9 Same file: a mutation in the error state with `detail` → a `role="alert"` line carries
+- [x] 1.9 Same file: a mutation in the error state with `detail` → a `role="alert"` line carries
   that text. A second case uses D2a's 409 body, a structured `detail` with `message` and `code:
   'loop_already_ended'`. The alert carries the `message` sentence, not the fallback.
-- [ ] 1.10 Same file: `agent: ''` → the delegation button is absent.
-- [ ] 1.10a Same file: mock `@/api/agents` `useAgents` so that `useAgents('archived')` returns
+- [x] 1.10 Same file: `agent: ''` → the delegation button is absent.
+- [x] 1.10a Same file: mock `@/api/agents` `useAgents` so that `useAgents('archived')` returns
   `[{name: 'worker', lifecycle: 'archived'}]`. The delegation button is absent, and the controller
   line is still present. With an archived list that does not name `worker`, or one still loading,
   the button is present. **Fails today**: no controls (design D4).
-- [ ] 1.14 `hub/ui/src/__tests__/loopsApi.test.tsx` (new). Follow `tasksApi.test.tsx`: a real
+- [x] 1.14 `hub/ui/src/__tests__/loopsApi.test.tsx` (new). Follow `tasksApi.test.tsx`: a real
   `QueryClient`, `renderHook`, `globalThis.fetch` replaced with a recorder, and
   `useConfigStore.setState({selectedProjectId: 'proj-1', hubUrl: 'http://hub.test', …})`. Spy on
   `client.invalidateQueries`. For each hook, assert the recorded request:
@@ -156,28 +156,28 @@
   - **Not landed:** the frames are `await sse_manager.broadcast(...)` after each commit, in the
     same order. Record in the commit message that B9's task 2.4b now applies to these four
     functions.
-- [ ] 2.3 `hub/ui/src/api/loops.ts`: `useStopLoop` (`patchJson` `/jobs/${jobId}` `{stop_reason}`),
+- [x] 2.3 `hub/ui/src/api/loops.ts`: `useStopLoop` (`patchJson` `/jobs/${jobId}` `{stop_reason}`),
   `useArchiveLoop` (`postJson` `/loops/${loopId}/archive`), `useSetLoopControl` (`postJson`
   `/loops/${loopId}/control` `{control}`). Each `onSettled` invalidates
   `['project', pid, 'loops']` and `['project', pid, 'jobs']`.
-- [ ] 2.4 `hub/ui/src/components/spec/LoopTab.tsx`: an actions section per design D4. The stop
+- [x] 2.4 `hub/ui/src/components/spec/LoopTab.tsx`: an actions section per design D4. The stop
   sends `reason.trim() || 'Stopped by the operator'`.
-- [ ] 2.4a Same component: read `useAgents('archived')` and hide the delegation toggle when that
+- [x] 2.4a Same component: read `useAgents('archived')` and hide the delegation toggle when that
   list names `loop.agent` (design D4).
-- [ ] 2.5 Add the three hooks to the `vi.mock('@/api/loops', …)` factories in `loopTab.test.tsx`
+- [x] 2.5 Add the three hooks to the `vi.mock('@/api/loops', …)` factories in `loopTab.test.tsx`
   and `loopPendingEdit.test.tsx`. A factory without them makes `LoopTab` call `undefined`. Add
   `vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: [] }) }))` to both files as well
   (2.4a). Without it, `useAgents` needs a `QueryClientProvider`, which those tests do not render.
-- [ ] 2.6 `hub/tests/test_surface_ceilings.py`: `CLIENTLESS_ROUTE_CEILING` 35 → 33, after running
+- [x] 2.6 `hub/tests/test_surface_ceilings.py`: `CLIENTLESS_ROUTE_CEILING` → 31 (measured 2026-09-27: 33 before the hooks, 31 after), after running
   `py -3.11 scripts/drive/n10_route_reachability.py` and recording the new count.
-- [ ] 2.7 `make ui` (or `scripts/refresh_ui_bundle.py`). Commit `hub/ui/src` and
+- [x] 2.7 `make ui` (or `scripts/refresh_ui_bundle.py`). Commit `hub/ui/src` and
   `hub/hub/static/ui` together (`.claude/rules/hub-ui.md`).
 
 ## 3. Verification
 
 - [ ] 3.1 `py -3.11 -m pytest hub/tests/test_loop_archival.py hub/tests/test_surface_ceilings.py
   hub/tests/test_jobs_crud.py hub/tests/test_an_operator_stop_actually_stops.py -q` with `claude` stripped from PATH, then the full `hub/tests/`.
-- [ ] 3.2 `cd hub/ui && npm run lint && npx vitest run`.
+- [x] 3.2 `cd hub/ui && npm run lint && npx vitest run`.
 - [ ] 3.3 The CLAUDE.md lint block.
 - [ ] 3.4 Drive it on the trial Hub `:8010`, never `:8000`: see `test-guide.md` "Human-only".
 

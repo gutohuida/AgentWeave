@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
-import { getJson } from './client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { getJson, patchJson, postJson } from './client'
 import { useConfigStore } from '@/store/configStore'
 import type { LoopSummary } from './jobs'
 
@@ -53,4 +53,40 @@ export function useLoop(loopId: string | null) {
     queryFn: () => getJson<LoopDetail>(`/api/v1/projects/${projectId}/loops/${loopId}`),
     enabled: isConfigured && !!projectId && !!loopId,
   })
+}
+
+/** Every loop action re-reads the loops and the jobs on *settle*, not on success: a Stop that lost
+ *  a race with another tab or a firing is refused with 409, and the tab must then show what the
+ *  Hub recorded rather than keep offering a control that no longer applies. */
+function useLoopMutation<TVars>(mutationFn: (projectId: string | null, vars: TVars) => Promise<unknown>) {
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: (vars: TVars) => mutationFn(projectId, vars),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'loops'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] })
+    },
+  })
+}
+
+/** The operator stop — the existing `PATCH /jobs/{id}` with `stop_reason`, not a second route
+ *  (design D2). Sends `stop_reason` alone: no `enabled`, see the change's *Residuals*. */
+export function useStopLoop() {
+  return useLoopMutation<{ jobId: string; reason: string }>((projectId, { jobId, reason }) =>
+    patchJson(`/api/v1/projects/${projectId}/jobs/${jobId}`, { stop_reason: reason }),
+  )
+}
+
+export function useArchiveLoop() {
+  return useLoopMutation<{ loopId: string }>((projectId, { loopId }) =>
+    postJson(`/api/v1/projects/${projectId}/loops/${loopId}/archive`),
+  )
+}
+
+export function useSetLoopControl() {
+  return useLoopMutation<{ loopId: string; control: 'creator' | 'operator' }>(
+    (projectId, { loopId, control }) =>
+      postJson(`/api/v1/projects/${projectId}/loops/${loopId}/control`, { control }),
+  )
 }

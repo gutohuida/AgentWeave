@@ -12,7 +12,13 @@ import { LoopTab } from '@/components/spec/LoopTab'
 import { useLoop } from '@/api/loops'
 import type { LoopDetail } from '@/api/loops'
 
-vi.mock('@/api/loops', () => ({ useLoop: vi.fn() }))
+vi.mock('@/api/loops', () => ({
+  useLoop: vi.fn(),
+  useStopLoop: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useArchiveLoop: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+  useSetLoopControl: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null }),
+}))
+vi.mock('@/api/agents', () => ({ useAgents: () => ({ data: [] }) }))
 
 const mockedUseLoop = vi.mocked(useLoop)
 
