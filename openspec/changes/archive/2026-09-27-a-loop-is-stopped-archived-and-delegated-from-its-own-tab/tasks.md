@@ -183,6 +183,6 @@
 
 ## 4. Close
 
-- [ ] 4.1 Foot F225 in `scripts/drive/FINDINGS.md` with the commit.
-- [ ] 4.2 Sync the delta into `openspec/specs/agent-loops/spec.md` (run the R-2 collision script
+- [x] 4.1 Foot F225 in `scripts/drive/FINDINGS.md` with the commit.
+- [x] 4.2 Sync the delta into `openspec/specs/agent-loops/spec.md` (run the R-2 collision script
   first; other open changes also carry `agent-loops` deltas) and archive the change.

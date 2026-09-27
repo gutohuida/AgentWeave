@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b10-archive",
-    "next_action": "Queue item b10-archive. b10-drive is DONE (19/19, FINDINGS.md, iteration 12). Read CI verdict (gh run list), then archive a-loop-is-stopped-archived-and-delegated-from-its-own-tab: tasks 4.1 (foot F225 in FINDINGS.md with fixed sha, same commit) and 4.2 (run the R-2 collision script, sync the agent-loops delta by hand, archive). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
+    "current": "r1a-impl",
+    "next_action": "Queue item r1a-impl. b10 is archived (iteration 13). Read CI verdict (gh run list), then implement a-flow-is-configured-from-its-own-tab per its tasks.md and design.md round log; tests first. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
     "queue": [
-        {
-            "id": "b10-archive",
-            "status": "open",
-            "title": "Archive a-loop-is-stopped-archived-and-delegated-from-its-own-tab",
-            "detail": "Set fixed <sha> on the change's F<n> in FINDINGS.md in same commit; sync specs by hand if required."
-        },
         {
             "id": "r1a-impl",
             "status": "open",

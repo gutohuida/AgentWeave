@@ -17948,7 +17948,7 @@ archived.
 
 ## F225 (C) — a loop's two operator-only actions have no operator surface
 
-**Status:** open. Verified 2026-09-09: `hub/ui/src/api/loops.ts` still exports exactly
+**Status:** fixed 9519f14 (drive 19/19, 2026-09-27). Verified 2026-09-09: `hub/ui/src/api/loops.ts` still exports exactly
 `useLoops` and `useLoop`, both `useQuery`, so neither operator-only route has a call site while the
 index screen still offers a *Show archived* toggle for a state no screen can produce. [classified 2026-09-09, D-3]
 
