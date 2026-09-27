@@ -122,3 +122,83 @@ async def test_a_charterless_exploring_turn_gets_all_of_it(app, auth_headers, tm
     assert "Interview in your reply" in context
     assert "Sketch when it makes something easier to see" in context
     assert "only for a genuine fork" in context
+
+
+# ---------------------------------------------------------------------------
+# D2: the delivery question and the open-agents roster, change-spec only
+# (change `a-document-says-how-it-will-be-built-and-approval-starts-it`)
+# ---------------------------------------------------------------------------
+
+ROADMAP_PATH = "spec/changes/interview-roadmap/spec.html"
+
+
+async def _create_roadmap_document(app, auth_headers, path):
+    response = await app.post(
+        f"{BASE}/documents",
+        json={"path": path, "title": "Demo roadmap", "kind": "roadmap"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, response.text
+
+
+async def _render_at(agent_name, path):
+    async with async_session_factory() as db:
+        agent_row = (
+            (
+                await db.execute(
+                    select(Agent).where(Agent.project_id == "proj-test", Agent.name == agent_name)
+                )
+            )
+            .scalars()
+            .first()
+        )
+        rendered = await _render_hub_agent_context(
+            agent=agent_name,
+            project_id="proj-test",
+            db=db,
+            session_data=None,
+            agent_row=agent_row,
+            work_dir="/tmp/project",
+            spec_document=path,
+        )
+    return rendered["context"]
+
+
+@pytest.mark.asyncio
+async def test_change_spec_exploring_is_asked_how_it_will_be_built(app, auth_headers):
+    """D2, Opus notes 5 and 7: the interview line, and the two phrases the review added."""
+    await _register(app, auth_headers, "solo")
+    await _create_document(app, auth_headers)
+
+    context = await _render("solo")
+    block = context.split("### Open specification document", 1)[1]
+
+    assert "ask how it will be built" in block
+    assert "when there is another agent" in block
+    assert "every later submission" in block
+    assert "'No flow' is a valid answer" in block
+
+
+@pytest.mark.asyncio
+async def test_roadmap_exploring_is_not_asked_about_delivery(app, auth_headers):
+    """D4 requires `delivery` of change-spec documents only, so no other kind is asked."""
+    await _register(app, auth_headers, "roadmapper")
+    await _create_roadmap_document(app, auth_headers, ROADMAP_PATH)
+
+    context = await _render_at("roadmapper", ROADMAP_PATH)
+
+    assert "ask how it will be built" not in context
+    assert "Open agents on this project" not in context
+
+
+@pytest.mark.asyncio
+async def test_single_agent_project_lists_open_agents_with_no_team_heading(app, auth_headers):
+    """The roster line is built from `roster` regardless of team size, but `### Team` still
+    prints only when there are peers (`test_agents_self_registered.py:726`)."""
+    await _register(app, auth_headers, "solo")
+    await _create_document(app, auth_headers)
+
+    context = await _render("solo")
+
+    assert "Open agents on this project: solo." in context
+    assert "### Team" not in context

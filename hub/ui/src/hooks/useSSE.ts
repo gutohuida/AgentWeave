@@ -477,6 +477,14 @@ export function useSSE(onEvent?: SSEListener) {
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'status'] })
           break
         case 'agent_created':
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
+          queryClient.invalidateQueries({ queryKey: ['projects'] })
+          // A new agent can turn a stale delivery fresh (design D5,
+          // `a-document-says-how-it-will-be-built-and-approval-starts-it`): the strip is computed
+          // from the roster, not from the file, so `spec_updated` never fires for it.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'spec'] })
+          break
         case 'agent_heartbeat':
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'tasks'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
@@ -595,6 +603,10 @@ export function useSSE(onEvent?: SSEListener) {
           // are grouped and marked there), and the roster from the agents key.
           queryClient.invalidateQueries({ queryKey: ['projects'] })
           queryClient.invalidateQueries({ queryKey: ['project', pid, 'agents'] })
+          // The stale-delivery flag (design D5) follows the roster without a reload: archiving or
+          // unarchiving broadcasts this, not `spec_updated`, so the `spec/<path>` query would
+          // otherwise stay stale until something else invalidated it.
+          queryClient.invalidateQueries({ queryKey: ['project', pid, 'spec'] })
           break
         case 'project_settings_updated':
           // `PUT /settings` also writes `token_budget`, the field the accounting routes read, and

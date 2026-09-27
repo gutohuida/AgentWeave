@@ -614,6 +614,123 @@ async def _hand_job_to_scheduler(
         )
 
 
+async def build_flow_rows(
+    session: AsyncSession,
+    project_id: str,
+    body: JobCreate,
+    *,
+    created_by_run_id: Optional[str],
+) -> Tuple[AIJob, Optional[Loop]]:
+    """Add a job and, when the request opts in, its loop, and adopt the document's tasks.
+
+    The half of a create that does not depend on who is asking, shared by `POST /jobs` and by
+    approval (`spec.set_phase`, which creates a document's flow as the operator). Request-level
+    checks (the agent-job allowance, `initial_tasks`, F265) stay in the route.
+
+    Three rules, each measured (design D6, rounds 2 and 3):
+
+    - **Never commits.** The caller owns the transaction: the route commits once, and approval runs
+      this inside a SAVEPOINT that must be able to roll back alone.
+    - **Never calls `session.rollback()`.** Inside a SAVEPOINT that discards the whole outer
+      transaction, approval included. Raising is enough: the route's session is closed and rolled
+      back by `get_session`, and approval's `begin_nested()` rolls back to its savepoint.
+    - **The loop is flushed before adoption.** Adoption is an ORM `UPDATE`, which autoflushes the
+      pending loop, so an unflushed loop raises its claim `IntegrityError` out of the adoption,
+      past the handler that turns it into the 409.
+
+    Raises `HTTPException`, as the helpers it calls do.
+    """
+    # F54: every refusal is asked before any row is added, so a 4xx leaves nothing behind.
+    # Same moment as the cron check below, for the same reason: both are facts about this request
+    # that are knowable now, and a job that can only ever fail should not be scheduled (F33).
+    await _check_agent_exists(session, project_id, body.agent)
+
+    # Validate cron using croniter
+    try:
+        from croniter import croniter
+
+        croniter(body.cron)
+    except ImportError:
+        # croniter not installed - skip validation
+        pass
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid cron expression: {e}",
+        ) from e
+
+    # F1: valid to croniter is not the same as unambiguous here — see
+    # `scheduler.cron_day_ambiguity_reason` for why an expression restricting both day fields
+    # fires on a different date than the one this Hub stores and displays. Refused at both write
+    # sites so no such expression can reach the scheduler at all.
+    day_ambiguity = cron_day_ambiguity_reason(body.cron)
+    if day_ambiguity:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=day_ambiguity)
+
+    opts_in = _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties)
+    if opts_in:
+        await _check_spec_document_conflict(session, project_id, body.spec_document_id)
+
+    job_id = f"job-{short_id()}"
+    next_run = None
+    try:
+        from croniter import croniter
+
+        next_run = croniter(body.cron, datetime.now(timezone.utc)).get_next(datetime)
+    except Exception:
+        pass
+
+    job = AIJob(
+        id=job_id,
+        project_id=project_id,
+        name=body.name,
+        agent=body.agent,
+        message=body.message,
+        cron=body.cron,
+        session_mode=body.session_mode,
+        enabled=body.enabled,
+        next_run=next_run,
+        source=body.source if body.source in ("local", "hub") else "hub",
+        created_by_run_id=created_by_run_id,
+    )
+    session.add(job)
+    try:
+        await session.flush()
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Job with ID '{job_id}' already exists",
+        ) from e
+
+    if not opts_in:
+        return job, None
+
+    loop = Loop(
+        id=f"loop-{short_id()}",
+        project_id=project_id,
+        job_id=job.id,
+        purpose=body.purpose or "",
+        stop_at=body.stop_at,
+        stop_when_queue_empties=body.stop_when_queue_empties,
+        spec_document_id=body.spec_document_id,
+        work_needs_evidence=body.work_needs_evidence,
+        created_by_run_id=created_by_run_id,
+    )
+    session.add(loop)
+    try:
+        # The partial unique index answers a concurrent live claim here, at this flush.
+        await session.flush()
+    except IntegrityError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"document '{body.spec_document_id}' is already claimed by another loop",
+        ) from e
+    # A flow and the queue it just adopted land together — a loop that exists while its tasks
+    # still read `loop_id = NULL` is the F28 state itself.
+    await _adopt_document_tasks(session, project_id, loop)
+    return job, loop
+
+
 @router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
 async def create_job(
     body: JobCreate,
@@ -662,32 +779,6 @@ async def create_job(
             ),
         )
 
-    # Same moment as the cron check below, for the same reason: both are facts about this request
-    # that are knowable now, and a job that can only ever fail should not be scheduled (F33).
-    await _check_agent_exists(session, project_id, body.agent)
-
-    # Validate cron using croniter
-    try:
-        from croniter import croniter
-
-        croniter(body.cron)
-    except ImportError:
-        # croniter not installed - skip validation
-        pass
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid cron expression: {e}",
-        ) from e
-
-    # F1: valid to croniter is not the same as unambiguous here — see
-    # `scheduler.cron_day_ambiguity_reason` for why an expression restricting both day fields
-    # fires on a different date than the one this Hub stores and displays. Refused at both write
-    # sites so no such expression can reach the scheduler at all.
-    day_ambiguity = cron_day_ambiguity_reason(body.cron)
-    if day_ambiguity:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=day_ambiguity)
-
     # Design D2's "definition window": `initial_tasks` is validated up front, before any row is
     # created, so one malformed entry cannot leave a job (and its loop) half-created behind a 422.
     initial_task_bodies: List[TaskCreate] = []
@@ -721,87 +812,25 @@ async def create_job(
             ),
         )
 
-    # F54: checked here, before the job row is created, for the same reason `initial_tasks` and the
-    # `session_mode`/loop check above are — a `409` response must not leave a half-created job
-    # behind. This used to run after the job was already committed (right where the loop itself is
-    # built, below), so the request that told a caller "nothing happened" had already left an
-    # enabled, spawnable job row in the database with no loop and no document. Measured live: a
-    # `409` from this exact check left `job-08e0c3b0329c` sitting `enabled: 1` for several minutes
-    # before an unrelated job sweep caught it.
     if _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
-        await _check_spec_document_conflict(session, project_id, body.spec_document_id)
         # F414: the tasks are created one commit at a time after the job and loop, so a refusal of
         # the second (an unknown requirement, an id already taken) used to leave an enabled loop
         # holding the first. Every refusal a task create makes from its body is asked here instead.
         await _check_initial_tasks(session, project_id, initial_task_bodies)
 
-    job_id = f"job-{short_id()}"
-
-    # Compute next run
-    next_run = None
-    try:
-        from croniter import croniter
-
-        itr = croniter(body.cron, datetime.now(timezone.utc))
-        next_run = itr.get_next(datetime)
-    except Exception:
-        pass
-
-    job = AIJob(
-        id=job_id,
-        project_id=project_id,
-        name=body.name,
-        agent=body.agent,
-        message=body.message,
-        cron=body.cron,
-        session_mode=body.session_mode,
-        enabled=body.enabled,
-        next_run=next_run,
-        source=body.source if body.source in ("local", "hub") else "hub",
-        created_by_run_id=run_identity,
-    )
-
-    session.add(job)
-    try:
-        await session.commit()
-    except IntegrityError as e:
-        await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Job with ID '{job_id}' already exists",
-        ) from e
+    # The agent, the cron expression and the document claim are asked by `build_flow_rows`, which
+    # approval (`set_phase`) shares, so both doors refuse the same things with the same answers.
+    job, loop = await build_flow_rows(session, project_id, body, created_by_run_id=run_identity)
+    # One commit for the job, its loop and the tasks the loop adopted. The job used to be committed
+    # first, so a loop insert refused afterwards left an enabled job with no loop (F54's shape).
+    await session.commit()
     await session.refresh(job)
+    job_id = job.id
 
     # Loop opt-in (design D6): a `Loop` row is created iff at least one of the three fields was
     # supplied non-default.
     loop_summary: Optional[LoopSummary] = None
-    if _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
-        await _check_spec_document_conflict(session, project_id, body.spec_document_id)
-        loop = Loop(
-            id=f"loop-{short_id()}",
-            project_id=project_id,
-            job_id=job.id,
-            purpose=body.purpose or "",
-            stop_at=body.stop_at,
-            stop_when_queue_empties=body.stop_when_queue_empties,
-            spec_document_id=body.spec_document_id,
-            work_needs_evidence=body.work_needs_evidence,
-            created_by_run_id=run_identity,
-        )
-        session.add(loop)
-        # Before the commit, so a flow and the queue it just adopted land together — a loop that
-        # exists while its tasks still read `loop_id = NULL` is the F28 state itself.
-        # Inside the `try`: the adoption's first statement flushes the new loop, which is where
-        # the partial unique index answers a concurrent live claim.
-        try:
-            await _adopt_document_tasks(session, project_id, loop)
-            await session.commit()
-        except IntegrityError as e:
-            await session.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(f"document '{body.spec_document_id}' is already claimed by another loop"),
-            ) from e
+    if loop is not None:
         # Seeds the new loop's queue in the same call that creates it (design D2's "definition
         # window"). `create_task_for_actor` is the single `Task(` construction site — reused here
         # rather than duplicated. Its refusals are asked before the first commit wherever they can

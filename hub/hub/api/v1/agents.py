@@ -1195,7 +1195,7 @@ def _operations() -> List[_Operation]:
             tool="submit_spec_document",
             args=(
                 "path, title, kind, summary, problem, design, lifecycle, scope, requirements, "
-                "acceptance_criteria, tasks, algorithms, evidence, open_questions"
+                "acceptance_criteria, tasks, algorithms, evidence, open_questions, delivery"
             ),
             method="POST",
             path="/spec/documents",
@@ -1210,14 +1210,18 @@ def _operations() -> List[_Operation]:
                 "file, so never write specification HTML yourself. Submitting an incomplete "
                 "document is expected while exploring: what is missing comes back to you as "
                 "`blocking`, and is a list of what to ask about next rather than an error. There "
-                "is no argument that sets a phase or approves — those are the operator's."
+                "is no argument that sets a phase or approves — those are the operator's. "
+                '`delivery` is how a change-spec document will be built: `{"mode": "flow", '
+                '"agent": ..., "stop_when_queue_empties": ..., "stop_at": ..., "cron": '
+                '...}` or `{"mode": "none"}`. Include it in every later submission — a '
+                "submission replaces the whole document, so one without it drops the answer."
             ),
             http_note=(
                 "This is the one operation whose request is not flat: everything after `path` — "
                 "`title`, `kind`, `summary`, `problem`, `design`, `lifecycle`, `scope`, "
                 "`requirements`, `acceptance_criteria`, `tasks`, `algorithms`, `evidence`, "
-                "`open_questions` — goes inside the `document` object, and a key you have nothing "
-                "for is left out rather than sent as null."
+                "`open_questions`, `delivery` — goes inside the `document` object, and a key you "
+                "have nothing for is left out rather than sent as null."
             ),
         ),
         _Operation(
@@ -1873,6 +1877,7 @@ async def _render_hub_agent_context(
         if open_spec_path is not None:
             phase = None
             is_unwritten = False
+            row = None
             with contextlib.suppress(Exception):
                 row = await spec_lifecycle.get_document(db, project_id, open_spec_path)
                 phase = row.phase if row is not None else None
@@ -1912,6 +1917,24 @@ async def _render_hub_agent_context(
             if phase:
                 lines.append(f"- Phase: **{phase}**.")
                 lines.append(SPEC_PHASE_DUTIES.get(phase, ""))
+                is_change_spec = row is not None and row.kind == "change-spec"
+                if is_change_spec and phase in ("exploring", "proposed"):
+                    open_names = ", ".join(peer.name for peer in roster)
+                    lines.append(f"- Open agents on this project: {open_names}.")
+                if is_change_spec and phase == "exploring":
+                    lines.append(
+                        "- Before the document is ready to propose, ask how it will be built. "
+                        "Recommend a flow when the work splits into tasks: a flow starts every "
+                        "task whose prerequisites are met, has finished work reviewed by another "
+                        "agent when there is another agent, and can stop when its queue empties. "
+                        "If the operator wants a flow, ask which agent works it by default (from "
+                        "the open agents listed here), when it stops, and how often it fires "
+                        "(every 5 minutes unless they say otherwise). Record the answer as "
+                        "`delivery`, and include `delivery` in every later submission of this "
+                        "document: a submission replaces the whole document, so one without it "
+                        "drops the answer. 'No flow' is a valid answer: the tasks still go on the "
+                        "board."
+                    )
                 lines.append(
                     "- Write the document with `submit_spec_document`. Never write specification "
                     "HTML yourself; the Hub renders it and assigns requirement identifiers."

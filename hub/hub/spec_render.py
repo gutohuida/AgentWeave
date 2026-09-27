@@ -19,6 +19,7 @@ owns. The renderer's job stops at semantic structure with stable ids.
 from __future__ import annotations
 
 import posixpath
+import re
 from dataclasses import dataclass
 from html import escape
 from typing import Any, Dict, List, Optional, Tuple
@@ -389,6 +390,33 @@ def _algorithms(payload: SpecPayload) -> str:
     return "".join(parts)
 
 
+def _delivery(payload: SpecPayload) -> str:
+    """How the document's tasks get worked once approved. Empty when the payload does not say, so a
+    document written without `delivery` renders byte-identically (design D5)."""
+    delivery = payload.delivery
+    if delivery is None:
+        return ""
+    if delivery.mode != "flow":
+        return _paragraphs("No flow. The tasks go on the board and are started by hand.")
+    sentences = ["Built by a flow."]
+    sentences.append(
+        f"Default agent: {delivery.agent}." if delivery.agent else "No default agent is named."
+    )
+    stops = []
+    if delivery.stop_when_queue_empties:
+        stops.append("when the queue empties")
+    if delivery.stop_at:
+        stops.append(f"at {delivery.stop_at}")
+    sentences.append(f"Stops {' or '.join(stops)}." if stops else "No stop condition is set.")
+    every = re.fullmatch(r"\*/(\d+) \* \* \* \*", delivery.cron.strip())
+    if every:
+        minutes = int(every.group(1))
+        sentences.append(f"Fires every {minutes} minute{'s' if minutes != 1 else ''}.")
+    else:
+        sentences.append(f"Fires on the schedule {delivery.cron}.")
+    return _paragraphs(" ".join(sentences))
+
+
 def _open_questions(payload: SpecPayload) -> str:
     # An absent section left a reader unable to tell a document whose questions
     # were asked and answered from one where none were ever asked — which is the
@@ -582,6 +610,7 @@ def render_document(
             _section("Evidence and coverage limits", "evidence", _evidence(payload)),
             _section("Lifecycle", "lifecycle", _paragraphs(payload.lifecycle)),
             _section("Tasks", "tasks", _tasks(payload, identifiers)),
+            _section("Delivery", "delivery", _delivery(payload)),
             _section("Open questions", "open-questions", _open_questions(payload)),
         ]
     )

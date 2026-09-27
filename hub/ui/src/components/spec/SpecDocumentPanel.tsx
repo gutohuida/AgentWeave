@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/common/Icon'
 import { SpecPhaseBar } from './SpecPhaseBar'
+import { SpecApprovalReport } from './SpecApprovalReport'
 import { SpecCoverageBar } from './SpecCoverageBar'
 import { SpecProposalsPanel } from './SpecProposalsPanel'
 import { SpecDocumentTasksLink } from './SpecDocumentTasksLink'
@@ -237,6 +238,10 @@ export function SpecDocumentPanel({
           do next is part of reading it — and because none of these controls exists on the
           agent's side, which is what makes the approval gate real. */}
       <SpecPhaseBar path={path} onOpenLoop={onOpenLoop} />
+
+      {/* What approving this document did (design D7, `…-approval-starts-it`). Under the phase
+          bar, beside its own Start a flow…/Flow control — never a second one. */}
+      <SpecApprovalReport path={path} />
 
       {/* Which requirements this document has work for, and which of that work is actually in the
           product. Under the phase bar because it is about what the document *says*, not about

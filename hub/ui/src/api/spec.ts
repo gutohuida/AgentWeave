@@ -27,10 +27,73 @@ export interface SpecEntry {
   document_id?: string | null
 }
 
+/** Whether the delivery a change-spec document declares can actually be honoured, computed fresh
+ *  on every `GET /spec` read rather than stored in the file (design D5,
+ *  `a-document-says-how-it-will-be-built-and-approval-starts-it`). Present only for a change-spec
+ *  document at `exploring` or `proposed`; absent for every other document, kind or phase, and
+ *  absent entirely from a Hub that predates this change (the `:8000` skew). */
+export interface SpecDeliveryStatus {
+  state: 'ok' | 'stale' | 'none' | 'absent'
+  agent?: string
+  reason?: 'archived' | 'unknown'
+}
+
+/** One task the board created for this approval. */
+export interface ApprovalCreatedTask {
+  id: string
+  key: string
+  title: string
+}
+
+/** A declared entry the board skipped because a hand-made task already served every requirement
+ *  it named. */
+export interface ApprovalServedEntry {
+  key: string
+  requirements: string[]
+}
+
+/** A dependency this approval's tasks could not honour. */
+export interface ApprovalDependencyProblem {
+  task_id: string
+  task_key: string
+  reference: string
+  reason: string
+}
+
+/** What approval did about the document's delivery (design D6/D7). `state` is `not_applicable`
+ *  for a document that is not a change-spec (only a change declares a delivery), `none` when the
+ *  document declared no flow, `not_created` when a flow was declared but could not be made,
+ *  `existing` when an unarchived flow already declared the document, and `created` for a new one.
+ *  `messages` carries the Hub's own sentences, in the order it returns them. */
+export interface ApprovalFlowOutcome {
+  state: 'created' | 'existing' | 'not_created' | 'none' | 'not_applicable'
+  job_id?: string
+  name?: string
+  agent?: string
+  flow_state?: 'running' | 'disabled' | 'ended'
+  messages: string[]
+}
+
+/** The newest approval's report (design D7) — present on `GET /spec` only for an approved
+ *  document that has one. Every field is read as possibly absent: an older Hub returns neither
+ *  this nor `delivery_status` at all (the `:8000` skew). Problems are rendered in the order the
+ *  Hub returns them: created, then already_served, then failed, then dependencies_not_honoured,
+ *  then the flow's own messages. */
+export interface SpecApprovalOutcome {
+  created: ApprovalCreatedTask[]
+  already_served: ApprovalServedEntry[]
+  failed: string | null
+  dependencies_not_honoured: ApprovalDependencyProblem[]
+  flow: ApprovalFlowOutcome
+  delivery_agent?: string | null
+}
+
 export interface SpecDocument {
   path: string
   content: string
   updated_at?: string
+  delivery_status?: SpecDeliveryStatus
+  approval_outcome?: SpecApprovalOutcome
 }
 
 // `source_id` and `updated_at` are gone with the push model: a source was a
@@ -381,14 +444,44 @@ export function useSetSpecRigor() {
   )
 }
 
+/** Approving (or reopening). Approving a change-spec document with a flow delivery may create the
+ *  flow (design D6, `a-document-says-how-it-will-be-built-and-approval-starts-it`), so this
+ *  invalidates the loops and jobs keys on success too — not just `useSpecMutation`'s
+ *  `specDocuments`/`specs` — or the phase bar would keep offering "Start a flow…" beside the flow
+ *  approval just made. */
 export function useSetSpecPhase() {
-  return useSpecMutation<{ path: string; to: string; reason?: string }, SpecDocumentRecord>(
-    (projectId, { path, to, reason }) =>
-      postJson(
+  const queryClient = useQueryClient()
+  const { selectedProjectId: projectId } = useConfigStore()
+  return useMutation({
+    mutationFn: ({
+      path,
+      to,
+      reason,
+      delivery_agent,
+    }: {
+      path: string
+      to: string
+      reason?: string
+      /** Sent only when the operator chose one from the stale-delivery strip (design D5b): an
+       *  agent name, or `''` for "No flow". Omitted otherwise — a bundle with no `delivery_status`
+       *  (the strip never appears without it) must never send this to a Hub that predates it,
+       *  which would 422 an unknown field. */
+      delivery_agent?: string
+    }) =>
+      postJson<SpecDocumentRecord & { approval_outcome?: SpecApprovalOutcome }>(
         `/api/v1/projects/${projectId}/project/documents/phase?path=${encodeURIComponent(path)}&to=${encodeURIComponent(to)}`,
-        { reason: reason ?? '' },
+        {
+          reason: reason ?? '',
+          ...(delivery_agent !== undefined ? { delivery_agent } : {}),
+        },
       ),
-  )
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specDocuments'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'specs'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'loops'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId, 'jobs'] })
+    },
+  })
 }
 
 // ---------------------------------------------------------------------------

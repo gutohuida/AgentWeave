@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import Field
-from sqlalchemy import select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ... import (
@@ -48,16 +50,22 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import (
     EVIDENCE_RETENTION_POLICIES,
+    Agent,
+    AIJob,
     EvidenceFootprint,
     EvidenceReview,
+    Loop,
     Project,
     RequirementDrift,
     RequirementEvidence,
     SpecDocument,
+    SpecDocumentEvent,
     SpecEditProposal,
     SpecRequirement,
+    Task,
 )
 from ...schemas.common import RequestModel
+from ...schemas.jobs import JobCreate
 from ...spec_manifest import (
     Manifest,
     SpecPathError,
@@ -66,9 +74,14 @@ from ...spec_manifest import (
     validate_spec_path,
 )
 from ...spec_payload import SCHEMA_VERSION
-from ...sse import sse_manager
+from ...sse import defer_broadcast, sse_manager
+from ...task_transitions import TERMINAL_STATUSES
+from ...utils import persist_event
+from .jobs import _hand_job_to_scheduler, build_flow_rows
 
 router = APIRouter(prefix="/project", tags=["spec"])
+
+logger = logging.getLogger(__name__)
 
 #: What a document is called before it has been written into. Not the path, and
 #: not the placeholder — a reader looking at the title is looking for the
@@ -185,6 +198,89 @@ async def _divergence_fields(
     }
 
 
+#: `SpecDocumentEvent.kind` of the record approval leaves (design D7). Named for storage only: the
+#: API field is `approval_outcome`, because tasks already answer an unrelated `approval_report`.
+APPROVAL_REPORT = "approval_report"
+
+#: Where a document is read for its delivery's agent: while it is being written and decided.
+_DELIVERY_PHASES = ("exploring", "proposed")
+
+
+async def delivery_agent_state(session: AsyncSession, project_id: str, name: str) -> str:
+    """`ok`, `archived` or `unknown`: the one definition of a usable delivery agent (design D5).
+
+    Not `_check_agent_exists`, which accepts any name on an empty roster and any name legacy
+    session data knows, so a delivery the page calls stale could still become a flow that fails
+    every five minutes (F33). Only an open `Agent` row is usable.
+    """
+    lifecycle = (
+        await session.execute(
+            select(Agent.lifecycle).where(Agent.project_id == project_id, Agent.name == name)
+        )
+    ).scalar_one_or_none()
+    if lifecycle is None:
+        return "unknown"
+    return "ok" if lifecycle == "open" else "archived"
+
+
+def _delivery_of(payload: Optional[Dict[str, Any]]) -> Optional[spec_payload_module.Delivery]:
+    """The payload's delivery, or None when it has none or it does not validate."""
+    raw = (payload or {}).get("delivery")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return spec_payload_module.Delivery.model_validate(raw)
+    except Exception:  # noqa: BLE001 - an unreadable delivery is reported as absent, never a 500
+        return None
+
+
+def _read_payload(workspace, path: str) -> Optional[Dict[str, Any]]:
+    content = spec_documents.read_document(workspace, path)
+    return spec_payload_module.extract_payload(content) if content else None
+
+
+async def _delivery_status(
+    session: AsyncSession, project_id: str, document, payload: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """Computed on every read, never written into the file (design D5): agent state changes
+    independently of the document, and a rewrite off a transition registers as divergence."""
+    if document.kind != "change-spec" or document.phase not in _DELIVERY_PHASES:
+        return None
+    delivery = _delivery_of(payload)
+    if delivery is None:
+        return {"state": "absent"}
+    if delivery.mode != "flow":
+        return {"state": "none"}
+    if not delivery.agent:
+        return {"state": "stale", "agent": "", "reason": "unknown"}
+    state = await delivery_agent_state(session, project_id, delivery.agent)
+    if state == "ok":
+        return {"state": "ok", "agent": delivery.agent}
+    return {"state": "stale", "agent": delivery.agent, "reason": state}
+
+
+async def _approval_outcome(session: AsyncSession, document) -> Optional[Dict[str, Any]]:
+    """The newest approval report, chosen by the Hub so the UI never picks (design D7).
+
+    `created_at` alone ties on this machine (a 15.625 ms wall clock), so insertion order breaks
+    the tie: `spec_document_events` has a `String` primary key, so it is a rowid table.
+    """
+    return (
+        await session.execute(
+            select(SpecDocumentEvent.detail)
+            .where(
+                SpecDocumentEvent.document_id == document.id,
+                SpecDocumentEvent.kind == APPROVAL_REPORT,
+            )
+            .order_by(
+                SpecDocumentEvent.created_at.desc(),
+                literal_column("spec_document_events.rowid").desc(),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
 @router.get("/spec")
 async def get_spec(
     path: str = Query(...),
@@ -215,6 +311,17 @@ async def get_spec(
         "updated_at": spec_documents.document_updated_at(workspace, path),
     }
     payload.update(await _divergence_fields(session, project_id, path, content))
+    document = await spec_lifecycle.get_document(session, project_id, path)
+    if document is not None:
+        status_now = await _delivery_status(
+            session, project_id, document, spec_payload_module.extract_payload(content)
+        )
+        if status_now is not None:
+            payload["delivery_status"] = status_now
+        if document.phase == "approved":
+            outcome = await _approval_outcome(session, document)
+            if outcome is not None:
+                payload["approval_outcome"] = outcome
     return payload
 
 
@@ -239,6 +346,9 @@ class DocumentCreate(RequestModel):
 
 class PhaseRequest(RequestModel):
     reason: str = Field(default="", max_length=2000)
+    # At approval, the operator's choice of agent for a flow delivery whose agent is stale (design
+    # D5b): a name, or "" for no flow. Used for this flow only; the document is never edited.
+    delivery_agent: Optional[str] = Field(default=None, max_length=32)
 
 
 class MergeRequest(RequestModel):
@@ -1628,6 +1738,27 @@ async def set_phase(
     workspace = await _workspace(session, project_id)
     document = await _require_document(session, project_id, path)
 
+    # D5b: `delivery_agent` is honoured only where it can be, and refused before anything moves
+    # rather than ignored (`RequestModel`'s rule: honour a field or name it).
+    if body.delivery_agent is not None:
+        if to != "approved":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "delivery_agent chooses the agent of an approval's flow; send it only with "
+                    "to=approved"
+                ),
+            )
+        chosen_for = _delivery_of(_read_payload(workspace, document.path))
+        if chosen_for is None or chosen_for.mode != "flow":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "delivery_agent replaces a flow delivery's agent, and this document declares "
+                    "no flow"
+                ),
+            )
+
     try:
         await spec_lifecycle.transition(
             session,
@@ -1648,26 +1779,266 @@ async def set_phase(
             detail["blocking"] = exc.blocking
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
 
-    # Approval is what turns a decomposition from a description into work. The payload has always
-    # carried `tasks`, validated on save and read by the completeness check; until now nothing
-    # materialised them, so an operator approving a document got an empty board and re-described
-    # the decomposition by hand.
-    created = []
+    # Approval is what turns a decomposition from a description into work: the board is
+    # materialised, the delivery's flow is created, and what both did is recorded. Neither can undo
+    # the approval: each runs in its own savepoint and reports a failure instead of raising.
+    report: Optional[Dict[str, Any]] = None
+    created_job: Optional[AIJob] = None
+    created_count = 0
     if document.phase == "approved":
-        content = spec_documents.read_document(workspace, document.path)
-        payload = spec_payload_module.extract_payload(content) if content else None
-        created = await spec_tasks.materialise_quietly(
+        payload = _read_payload(workspace, document.path)
+        outcome = await spec_tasks.materialise_quietly(
             session, document, payload, actor=_operator()
+        )
+        created_count = len(outcome.created)
+        flow, created_job = await _approval_flow(
+            session, project_id, document, payload, body.delivery_agent
+        )
+        report = {
+            "created": [dataclasses.asdict(task) for task in outcome.created],
+            "already_served": [
+                {"key": entry.key, "requirements": list(entry.requirements)}
+                for entry in outcome.already_served
+            ],
+            "failed": outcome.failed,
+            # When the board failed, `_materialise_edges` did not run, and the rows there are the
+            # previous approval's (design D7, R3).
+            "dependencies_not_honoured": (
+                []
+                if outcome.failed
+                else await spec_tasks.dependencies_not_honoured(session, document, payload)
+            ),
+            "flow": flow,
+            "delivery_agent": body.delivery_agent,
+        }
+        await spec_lifecycle.record_event(
+            session, document, kind=APPROVAL_REPORT, actor=_operator(), detail=report
         )
 
     await spec_service.rerender_phase(session, workspace, document)
-    await session.commit()
-    await sse_manager.broadcast(
-        project_id, "spec_updated", {"path": document.path, "phase": document.phase}
+    # Staged, not sent (design D6 step 5): `job_created` is persisted uncommitted inside the flow's
+    # savepoint, so every frame here waits for the one commit below, in today's order.
+    defer_broadcast(
+        session, project_id, "spec_updated", {"path": document.path, "phase": document.phase}
     )
-    if created:
-        await sse_manager.broadcast(project_id, "task_updated", {"created": len(created)})
-    return {**_document_view(document), "tasks_created": [task.id for task in created]}
+    if created_count:
+        defer_broadcast(session, project_id, "task_updated", {"created": created_count})
+    if created_job is not None:
+        defer_broadcast(
+            session, project_id, "job_created", {"id": created_job.id, "name": created_job.name}
+        )
+    await session.commit()
+    if created_job is not None:
+        # First firing at the next cron tick; nothing fires now (operator). A registration failure
+        # is logged, and the committed flow fires from the next restart.
+        await _hand_job_to_scheduler(session, created_job.id, created_job)
+
+    response = {
+        **_document_view(document),
+        "tasks_created": [task["id"] for task in (report or {}).get("created", [])],
+    }
+    if report is not None:
+        response["approval_outcome"] = report
+    return response
+
+
+class _FlowWouldBeEmptyError(Exception):
+    """A flow approval would create owning no open task: an outcome, not a fault (design D6 3a)."""
+
+
+_NO_TASKS = "No flow was started: the approval gave it no tasks. Start a flow… once there is work."
+
+
+def _not_created(message: str, agent: Optional[str] = None) -> Dict[str, Any]:
+    entry: Dict[str, Any] = {"state": "not_created", "messages": [message]}
+    if agent:
+        entry["agent"] = agent
+    return entry
+
+
+async def _existing_flow_entry(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    delivery: Optional[spec_payload_module.Delivery],
+    delivery_agent: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """The report entry for a flow already declaring the document, or None when there is none.
+
+    Looked up whatever the delivery says (R3): a re-approval after a reopen, or a `mode: none`
+    document given a flow by Start a flow… since. Its state is named, because an ended flow does
+    not build anything, whatever it still claims.
+    """
+    existing = (
+        await session.execute(
+            select(Loop, AIJob)
+            .join(AIJob, AIJob.id == Loop.job_id)
+            .where(
+                Loop.project_id == project_id,
+                Loop.spec_document_id == document.id,
+                Loop.archived_at.is_(None),
+            )
+        )
+    ).first()
+    if existing is None:
+        return None
+    loop, job = existing
+    if loop.ending_state:
+        flow_state = "ended"
+        said = (
+            f"The flow {job.name} declares this document but has ended; the new tasks wait for "
+            "it. Archive it and start a flow."
+        )
+    elif not job.enabled:
+        flow_state = "disabled"
+        said = (
+            f"The flow {job.name} declares this document but is disabled; the new tasks wait "
+            "for it."
+        )
+    else:
+        flow_state = "running"
+        said = f"The flow {job.name} already builds this document."
+    messages = [said]
+    if delivery_agent is not None:
+        chosen = delivery_agent or "no flow"
+        messages.append(
+            f"The agent you chose, {chosen}, was not applied: the flow {job.name} already "
+            "declares this document."
+        )
+    if (
+        delivery is not None
+        and delivery.mode == "flow"
+        and delivery.agent
+        and job.agent != delivery.agent
+    ):
+        messages.append(f"The flow {job.name} runs as {job.agent}, not {delivery.agent}.")
+    return {
+        "state": "existing",
+        "job_id": job.id,
+        "name": job.name,
+        "agent": job.agent,
+        "flow_state": flow_state,
+        "messages": messages,
+    }
+
+
+async def _approval_flow(
+    session: AsyncSession,
+    project_id: str,
+    document,
+    payload: Optional[Dict[str, Any]],
+    delivery_agent: Optional[str],
+) -> Tuple[Dict[str, Any], Optional[AIJob]]:
+    """Create the flow a change document's delivery asks for, or say why none was (design D6).
+
+    Returns the report's `flow` entry and the job, when one was created. Everything read after a
+    savepoint rolled back is a plain value captured before it: rolling back expires what was
+    touched inside, and reading that raises `MissingGreenlet` (measured, R2).
+    """
+    if document.kind != "change-spec":
+        return {
+            "state": "not_applicable",
+            "messages": ["Only a change document declares a delivery, so no flow was started."],
+        }, None
+
+    delivery = _delivery_of(payload)
+    existing = await _existing_flow_entry(session, project_id, document, delivery, delivery_agent)
+    if existing is not None:
+        return existing, None
+
+    if delivery is None:
+        return {"state": "none", "messages": ["No delivery was declared."]}, None
+    if delivery.mode != "flow":
+        return {
+            "state": "none",
+            "messages": ["The delivery says no flow: the tasks are on the board, started by hand."],
+        }, None
+    if delivery_agent == "":
+        return _not_created("You chose no flow at approval."), None
+
+    agent = delivery_agent if delivery_agent is not None else delivery.agent
+    if not agent:
+        return _not_created("The delivery names no agent, so no flow was started."), None
+    agent_state = await delivery_agent_state(session, project_id, agent)
+    if agent_state == "archived":
+        return _not_created(f"{agent} is archived, so no flow was started.", agent), None
+    if agent_state == "unknown":
+        return (
+            _not_created(
+                f"{agent} is not an agent on this project, so no flow was started.", agent
+            ),
+            None,
+        )
+    if not delivery.stop_when_queue_empties and not delivery.stop_at:
+        return (
+            _not_created("The delivery sets no stop condition, so no flow was started.", agent),
+            None,
+        )
+    stop_at: Optional[datetime] = None
+    if delivery.stop_at:
+        stop_at = datetime.fromisoformat(delivery.stop_at)
+        if stop_at <= datetime.now(timezone.utc):
+            message = (
+                f"The delivery's stop time, {delivery.stop_at}, has passed, so no flow was started."
+            )
+            return _not_created(message, agent), None
+
+    title = document.title or document.path
+    try:
+        async with session.begin_nested():
+            # Built inside the guarded block (R3): a `ValidationError` outside it would be a 500
+            # after the transition.
+            request = JobCreate(
+                name=title[:256],
+                agent=agent,
+                message=f'Work the next task of "{title}".',
+                cron=delivery.cron,
+                purpose="",
+                stop_at=stop_at,
+                stop_when_queue_empties=delivery.stop_when_queue_empties,
+                spec_document_id=document.id,
+            )
+            job, loop = await build_flow_rows(session, project_id, request, created_by_run_id=None)
+            if loop is None:  # `purpose=""` opts in, so this cannot happen
+                raise RuntimeError("the flow's loop was not created")
+            # A loop whose queue was never filled fires a turn on every tick and never stops
+            # (`_loop_stall_reason`, `_loop_stop_reason`), so a flow with nothing to do is not made.
+            open_tasks = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(Task)
+                    .where(Task.loop_id == loop.id, Task.status.not_in(TERMINAL_STATUSES))
+                )
+            ).scalar_one()
+            if open_tasks == 0:
+                raise _FlowWouldBeEmptyError()
+            # Inside the savepoint, so the row commits with the flow or not at all (R3).
+            await persist_event(
+                session,
+                project_id,
+                "job_created",
+                {"id": job.id, "name": job.name, "agent": agent},
+                agent=agent,
+                commit=False,
+            )
+            job_id, job_name = job.id, job.name
+    except _FlowWouldBeEmptyError:
+        return _not_created(_NO_TASKS, agent), None
+    except HTTPException as exc:
+        reason = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+        return _not_created(f"No flow was started: {reason}", agent), None
+    except Exception:
+        logger.exception("could not create the flow for %s", document.path)
+        return _not_created("The flow could not be created.", agent), None
+
+    return {
+        "state": "created",
+        "job_id": job_id,
+        "name": job_name,
+        "agent": agent,
+        "flow_state": "running",
+        "messages": [f"The flow {job_name} was started as {agent}; it fires at its next tick."],
+    }, job
 
 
 @router.post("/documents/{path:path}/merge")

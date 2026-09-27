@@ -24,6 +24,7 @@ re-approving a document something an operator learns to fear.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import delete, select
@@ -59,6 +60,35 @@ MAX_TITLE = 80
 #: Marks a title as shortened. Only ever appended when something was actually dropped, so a
 #: description already short enough to be a name comes through byte-for-byte.
 ELLIPSIS = "…"
+
+
+@dataclass(frozen=True)
+class CreatedTask:
+    """A task approval created, as plain values: readable after any savepoint has rolled back."""
+
+    id: str
+    key: str
+    title: str
+
+
+@dataclass(frozen=True)
+class ServedEntry:
+    """A declared entry not created because hand-made tasks already serve every requirement it
+    names. It is the entry that is skipped, so it is named by its key."""
+
+    key: str
+    requirements: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MaterialiseOutcome:
+    """What approval's board did, in the payload's declaration order. Never ORM rows (design D7):
+    rolling a savepoint back expires what was touched inside it, and reading an expired row in this
+    async stack raises `MissingGreenlet`."""
+
+    created: List[CreatedTask]
+    already_served: List[ServedEntry]
+    failed: Optional[str]
 
 
 def _title_from(description: str) -> str:
@@ -158,8 +188,12 @@ async def materialise(
     payload: Optional[Dict[str, Any]],
     *,
     actor: Actor,
+    already_served: Optional[List[ServedEntry]] = None,
 ) -> List[Task]:
     """Create the tasks *document* declares that do not exist yet. Returns only what was created.
+
+    *already_served*, when given, collects each declared entry skipped because hand-made tasks
+    already serve every requirement it names, for approval's report.
 
     A document declaring nothing creates nothing, and that is not an error — it is a document whose
     decomposition has not been written, which is a normal state for one that was approved for its
@@ -235,7 +269,7 @@ async def materialise(
     # (those carry a key and are tracked by `existing_keys` instead), so a later entry in the
     # document's own decomposition naming a requirement an earlier declared task already serves is
     # still created — see `test_re_approving_creates_no_duplicates`.
-    already_served = await requirement_links.hand_made_requirement_ids(session, document.project_id)
+    served_by_hand = await requirement_links.hand_made_requirement_ids(session, document.project_id)
 
     # Built once, before the loop, through the same guarded helpers `criteria_by_requirement_key`
     # uses (design D6/D7): a payload this code cannot read must fail the same way for every entry,
@@ -273,9 +307,11 @@ async def materialise(
         if (
             requirements
             and not unresolved
-            and all(row.id in already_served for row in requirements)
+            and all(row.id in served_by_hand for row in requirements)
         ):
             existing_keys.add(key)
+            if already_served is not None:
+                already_served.append(ServedEntry(key=key, requirements=tuple(names)))
             continue
 
         description = entry.get("description") or ""
@@ -485,19 +521,76 @@ async def materialise_quietly(
     payload: Optional[Dict[str, Any]],
     *,
     actor: Actor,
-) -> List[Task]:
-    """`materialise`, but a failure is logged rather than raised.
+) -> MaterialiseOutcome:
+    """`materialise` inside a SAVEPOINT; a failure is reported rather than raised.
 
     Approval is the operator's decision about the specification. Failing that decision because the
     board could not be populated would make an unrelated problem look like a refusal to approve —
     and the document would stay unapproved, which is the one outcome nobody wanted.
+
+    The savepoint is what makes "the approval stands" true (design D7, measured): without it a
+    flush error mid-way left the session needing a rollback, so the approval's own commit raised
+    `PendingRollbackError`, and a non-database error after some `session.add` committed a partial
+    board. Now a failure rolls back exactly the board, and `failed` says why.
+
+    **Precondition:** the enclosing transaction has already written. Under pysqlite a SAVEPOINT
+    issued before any write becomes the outermost transaction, and its RELEASE commits. In
+    `set_phase` the transition's phase row and event are pending, and `begin_nested()` flushes
+    them first, which satisfies it.
     """
+    served: List[ServedEntry] = []
     try:
-        return await materialise(session, document, payload, actor=actor)
-    except Exception:  # noqa: BLE001 - see docstring: never fail an approval over this
+        async with session.begin_nested():
+            rows = await materialise(session, document, payload, actor=actor, already_served=served)
+            created = [
+                CreatedTask(id=row.id, key=row.spec_task_key or "", title=row.title) for row in rows
+            ]
+    except Exception as exc:  # noqa: BLE001 - see docstring: never fail an approval over this
         logger.warning(
             "Could not create the tasks %s declares; the approval stands.",
             document.path,
             exc_info=True,
         )
-        return []
+        return MaterialiseOutcome(
+            created=[], already_served=[], failed=f"{type(exc).__name__}: {exc}"
+        )
+    return MaterialiseOutcome(created=created, already_served=served, failed=None)
+
+
+async def dependencies_not_honoured(
+    session: AsyncSession, document: SpecDocument, payload: Optional[Dict[str, Any]]
+) -> List[Dict[str, str]]:
+    """The declared `depends_on` entries of *document*'s tasks that did not become edges.
+
+    Read from `TaskDependencyReference`, which `_materialise_edges` rewrites per task on every
+    approval, so the rows describe this approval. Ordered by the task's declaration position, then
+    by reference, so the report reads in the document's order rather than insertion order. Only
+    meaningful when the board did not fail: otherwise the rows are the previous approval's.
+    """
+    declared = (payload or {}).get("tasks")
+    order = {
+        entry.get("key"): index
+        for index, entry in enumerate(declared if isinstance(declared, list) else [])
+        if isinstance(entry, dict)
+    }
+    rows = (
+        await session.execute(
+            select(
+                Task.id,
+                Task.spec_task_key,
+                TaskDependencyReference.reference,
+                TaskDependencyReference.reason,
+            )
+            .join(Task, Task.id == TaskDependencyReference.task_id)
+            .where(
+                Task.project_id == document.project_id,
+                Task.spec_document_id == document.id,
+            )
+        )
+    ).all()
+    found = [
+        {"task_id": task_id, "task_key": key or "", "reference": reference, "reason": reason}
+        for task_id, key, reference, reason in rows
+    ]
+    found.sort(key=lambda item: (order.get(item["task_key"], len(order)), item["reference"]))
+    return found

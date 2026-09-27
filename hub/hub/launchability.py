@@ -320,6 +320,7 @@ def spec_turn_notice(
     *,
     path: Optional[str] = None,
     is_unwritten: bool = False,
+    kind: Optional[str] = None,
 ) -> Optional[str]:
     """One short block, carried in the **turn prompt**, for a turn with a document open.
 
@@ -341,6 +342,10 @@ def spec_turn_notice(
     `create_spec_document` and orphaning the operator's own document, live.
 
     `None` when no document is open, so an ordinary turn carries nothing.
+
+    `kind`, when `"change-spec"` and `phase == "exploring"`, adds one line asking how the work
+    will be built, before the unwritten-path line. `kind=None` adds nothing, keeping the output
+    byte-identical to before this parameter existed.
     """
     if not phase:
         return None
@@ -368,6 +373,12 @@ def spec_turn_notice(
             "`rename_spec_document(path, subject)` as soon as this reply establishes what the "
             "document is about, and use the path it returns from then on.",
         ]
+        if kind == "change-spec":
+            lines.append(
+                "Ask how it will be built (a flow, recommended, or no flow) before it is ready "
+                "to propose; record the answer as `delivery`, and include it in every later "
+                "submission."
+            )
         if path and is_unwritten:
             # F409 D9: the path is derived from the operator's document subject, and this notice
             # is composed into the turn prompt, so an at-sign in it would expand into a file

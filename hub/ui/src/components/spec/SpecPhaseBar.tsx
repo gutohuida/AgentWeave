@@ -4,14 +4,19 @@ import { ArchiveConfirmDialog } from '@/components/spec/ArchiveConfirmDialog'
 import { StartFlowDialog } from '@/components/spec/StartFlowDialog'
 import { useDocumentFlow, type LoopSummary } from '@/api/loops'
 import { readableApiError } from '@/api/client'
+import { useAgents } from '@/api/agents'
 import {
   useCloseExploration,
   useProposeSpecDocument,
   useSetSpecPhase,
   useSetSpecRigor,
+  useSpec,
   useSpecDocuments,
   type SpecBlockingFinding,
 } from '@/api/spec'
+
+/** No choice made yet — distinct from `''`, which is a real choice ("No flow", design D5b). */
+const NO_CHOICE = '__unset__'
 
 /**
  * What a refused phase move says, as findings. The Hub answers an incomplete document with
@@ -49,6 +54,10 @@ export function SpecPhaseBar({
   onOpenLoop?: (loop: LoopSummary) => void
 }) {
   const { data } = useSpecDocuments()
+  // `delivery_status` (design D5) rides the same `spec/<path>` query `SpecDocumentPanel` and
+  // `SpecApprovalReport` already hold — one cache entry, not a second fetch.
+  const { data: specDoc, isError: specDocError } = useSpec(path)
+  const { data: openAgentsData, isError: agentsError } = useAgents()
   const closeExploration = useCloseExploration()
   const propose = useProposeSpecDocument()
   const setPhase = useSetSpecPhase()
@@ -58,10 +67,17 @@ export function SpecPhaseBar({
   const [confirmingArchive, setConfirmingArchive] = useState(false)
   const [archiveRefusal, setArchiveRefusal] = useState<string | null>(null)
   const [startingFlow, setStartingFlow] = useState(false)
+  const [deliveryAgentChoice, setDeliveryAgentChoice] = useState(NO_CHOICE)
 
   const document = data?.documents.find((entry) => entry.path === path)
   const flow = useDocumentFlow(document?.id)
   if (!document) return null
+
+  // On a failed fetch there is nothing to flag as stale, and nothing to offer as a replacement —
+  // the strip simply does not appear, the same "say nothing false" rule the rest of the bar
+  // follows for a document the Hub does not track.
+  const deliveryStatus = specDocError ? undefined : specDoc?.delivery_status
+  const openAgents = agentsError ? [] : (openAgentsData ?? [])
 
   const busy = closeExploration.isPending || propose.isPending || setPhase.isPending
 
@@ -82,7 +98,14 @@ export function SpecPhaseBar({
   function onApprove() {
     setBlocking([])
     setPhase.mutate(
-      { path, to: 'approved' },
+      {
+        path,
+        to: 'approved',
+        // Sent only when the operator picked something in the stale-delivery strip (design D5b);
+        // otherwise omitted, so an un-restarted `:8000` (which has no `delivery_status` to show a
+        // strip from in the first place) never receives a field it would 422.
+        ...(deliveryAgentChoice !== NO_CHOICE ? { delivery_agent: deliveryAgentChoice } : {}),
+      },
       {
         // F207: approval runs the completeness checks again and answers 409 with the findings.
         onError: (error: unknown) =>
@@ -140,6 +163,48 @@ export function SpecPhaseBar({
 
   return (
     <div className="flex shrink-0 flex-col gap-1.5 px-3 py-2 text-xs">
+      {/* A stale delivery, above Approve (design D5/D5b): the declared agent is archived or
+          unknown, so approving as written would not start a flow. The choice made here — another
+          open agent, or "No flow" — travels with Approve; it is used for this flow only and never
+          rewrites the document. */}
+      {deliveryStatus?.state === 'stale' && (
+        <div
+          data-testid="delivery-stale-strip"
+          className="flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1.5"
+          style={{ background: 'color-mix(in srgb, var(--amber) 10%, transparent)', color: 'var(--text-2)' }}
+        >
+          <Icon name="warning" size={13} />
+          <span className="flex-1">
+            Delivery names {deliveryStatus.agent}, which is{' '}
+            {deliveryStatus.reason === 'archived' ? 'archived' : 'not an agent on this project'}.
+            {' '}Approving will not start a flow unless you choose another agent.
+          </span>
+          <select
+            data-testid="delivery-agent-choice"
+            value={deliveryAgentChoice}
+            onChange={(event) => setDeliveryAgentChoice(event.target.value)}
+            disabled={busy}
+            className="rounded-[var(--radius-sm)] px-1.5 py-0.5"
+            style={{
+              background: 'var(--surface-2)',
+              color: 'var(--text-2)',
+              border: '1px solid var(--border)',
+              fontSize: 11,
+            }}
+          >
+            <option value={NO_CHOICE} disabled>
+              Choose…
+            </option>
+            {openAgents.map((agent) => (
+              <option key={agent.name} value={agent.name}>
+                @{agent.name}
+              </option>
+            ))}
+            <option value="">No flow</option>
+          </select>
+        </div>
+      )}
+
       <div className="flex items-center gap-2">
         <span
           className="rounded-full px-2 py-0.5"

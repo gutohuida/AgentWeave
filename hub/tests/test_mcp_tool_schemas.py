@@ -282,7 +282,7 @@ def test_rename_spec_document_offers_no_lever_on_the_phase():
 
 
 def test_the_structured_fields_advertise_their_shape():
-    """The seven structured fields must say `object`/`array`, not nothing.
+    """The structured fields must say `object`/`array`, not nothing.
 
     They carried `Any` between `29ab883` and the reversal, which routed a wrong shape into
     `_check_submit_shapes` for a refusal naming the field — at the cost of these entries reading
@@ -299,6 +299,7 @@ def test_the_structured_fields_advertise_their_shape():
         "algorithms": "array",
         "evidence": "object",
         "open_questions": "array",
+        "delivery": "object",
     }
     for field, want in wanted.items():
         branches = schema["properties"][field]["anyOf"]

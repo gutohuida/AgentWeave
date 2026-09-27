@@ -1797,6 +1797,7 @@ def submit_spec_document(
     algorithms: Optional[List[Dict[str, Any]]] = None,
     evidence: Optional[Dict[str, Any]] = None,
     open_questions: Optional[List[Dict[str, Any]]] = None,
+    delivery: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Write a specification document. You supply structure; the Hub renders the document.
 
@@ -1855,6 +1856,15 @@ def submit_spec_document(
       document: a guess written in the voice of a requirement is built on as though it were a
       decision.
 
+    `delivery` — how the work gets built, for a change-spec document only. Either
+      `{"mode": "flow", "agent": "<name>", "stop_when_queue_empties": true, "stop_at": None,
+      "cron": "*/5 * * * *"}` (a flow: at least one of `stop_when_queue_empties`/`stop_at` must be
+      set, `agent` is the default agent's name from the open roster, and `stop_at` is an ISO-8601
+      timestamp carrying a timezone) or `{"mode": "none"}` (no flow: the tasks go on the board and
+      are started by hand). **Include `delivery` in every later submission of this document**, not
+      only the first one that answers it: a submission replaces the whole document, so one without
+      it drops the answer and proposing is refused again.
+
     Returns the path, the phase, the identifier assigned to each requirement key, and `blocking` —
     what would refuse a proposal right now.
     """
@@ -1877,6 +1887,7 @@ def submit_spec_document(
         "algorithms": algorithms,
         "evidence": evidence,
         "open_questions": open_questions,
+        "delivery": delivery,
     }
     # Before anything is sent. These are annotated `Any` so that a wrong shape reaches this check
     # rather than being refused by the framework's own validator, whose message was the finding

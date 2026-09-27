@@ -386,8 +386,8 @@ class TriggerAgentError(Exception):
 
 async def _spec_phase_for(
     session, project_id: str, spec_document: Optional[str]
-) -> Tuple[Optional[str], bool]:
-    """The open document's (phase, is_unwritten), or (None, False) when there is no row for it.
+) -> Tuple[Optional[str], bool, Optional[str]]:
+    """The open document's (phase, is_unwritten, kind), or (None, False, None) when there is no row.
 
     Failure is silent by design: a turn must not be refused because the phase could not be read.
     The canonical context carries the same statement, so losing the prompt notice degrades to the
@@ -399,18 +399,21 @@ async def _spec_phase_for(
     is `requirement_digests`, which is `{}` until a submission carries at least one requirement,
     exactly the state "start exploration" leaves its own document in, and exactly when the open
     document IS the write target rather than incidental context.
+
+    `kind` is the row's `kind` column, passed through to `spec_turn_notice` so only a change-spec
+    document is asked how it will be built (D2).
     """
     if not spec_document:
-        return None, False
+        return None, False, None
     try:
         from ... import spec_lifecycle
 
         row = await spec_lifecycle.get_document(session, project_id, spec_document)
         if row is None:
-            return None, False
-        return row.phase, not row.requirement_digests
+            return None, False, None
+        return row.phase, not row.requirement_digests, row.kind
     except Exception:  # noqa: BLE001 - a missing phase must never cost the turn
-        return None, False
+        return None, False, None
 
 
 async def _review_task_from_entries(
@@ -1180,8 +1183,12 @@ async def _trigger_agent_directly(
     # request is what arrives with the request. Prepended rather than merged into `message`, which
     # stays the durable record of what the operator actually said — the same division
     # `access_path_notice` has always used.
-    spec_phase, spec_is_unwritten = await _spec_phase_for(session, project_id, spec_document)
-    spec_notice = spec_turn_notice(spec_phase, path=spec_document, is_unwritten=spec_is_unwritten)
+    spec_phase, spec_is_unwritten, spec_kind = await _spec_phase_for(
+        session, project_id, spec_document
+    )
+    spec_notice = spec_turn_notice(
+        spec_phase, path=spec_document, is_unwritten=spec_is_unwritten, kind=spec_kind
+    )
     if spec_notice:
         notices.append(spec_notice)
     prompt = "\n\n".join([*notices, message])

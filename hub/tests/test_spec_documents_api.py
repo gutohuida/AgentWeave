@@ -568,8 +568,13 @@ async def test_document_events_are_append_only_with_no_route_to_change_or_delete
         )
         after = list(result.scalars().all())
 
-    assert len(after) == len(before) + 1, "approval adds one event and changes nothing else"
-    for event in after[: len(before)]:
+    # Two: the phase change, and the approval report of what approving did
+    # (`a-document-says-how-it-will-be-built-and-approval-starts-it`, D7).
+    added = sorted(event.kind for event in after if event.id not in snapshot)
+    assert added == ["approval_report", "phase"], "approval adds these events and changes nothing"
+    for event in after:
+        if event.id not in snapshot:
+            continue
         assert (event.kind, event.actor, event.origin, event.detail) == snapshot[
             event.id
         ], "an earlier event must not change when a later one is recorded"

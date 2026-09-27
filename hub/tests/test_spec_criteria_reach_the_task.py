@@ -123,8 +123,15 @@ async def _materialise(suffix, payload, *, keys=("alpha", "beta"), quietly=False
     """
     async with async_session_factory() as db:
         document = await _document(db, suffix, keys=keys)
-        create = spec_tasks.materialise_quietly if quietly else spec_tasks.materialise
-        created = await create(db, document, payload, actor=ACTOR)
+        if quietly:
+            # `materialise_quietly` answers with plain values (design D7), so the rows are read
+            # back by id; a failure it swallowed is asserted absent rather than read as no tasks.
+            outcome = await spec_tasks.materialise_quietly(db, document, payload, actor=ACTOR)
+            assert outcome.failed is None, outcome.failed
+            ids = [task.id for task in outcome.created]
+            created = (await db.execute(select(Task).where(Task.id.in_(ids)))).scalars().all()
+        else:
+            created = await spec_tasks.materialise(db, document, payload, actor=ACTOR)
         await db.commit()
     return {task.spec_task_key: task for task in created}
 

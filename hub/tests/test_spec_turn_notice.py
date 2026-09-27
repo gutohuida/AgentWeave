@@ -72,3 +72,39 @@ def test_a_later_phase_is_not_told_to_name_the_document():
     """A proposed or approved document has already been named."""
     for phase in ("proposed", "approved"):
         assert "rename_spec_document" not in spec_turn_notice(phase)
+
+
+def test_change_spec_exploring_asks_how_it_will_be_built():
+    """D2: the delivery question, in the turn-prompt copy, for a change-spec document only."""
+    notice = spec_turn_notice("exploring", kind="change-spec")
+    assert "how it will be built" in notice
+    assert "every later submission" in notice
+
+
+def test_roadmap_exploring_does_not_ask_about_delivery():
+    """D4 asks `delivery` of change-spec documents only, so no other kind is asked."""
+    notice = spec_turn_notice("exploring", kind="roadmap")
+    assert "how it will be built" not in notice
+
+
+def test_kind_none_is_byte_identical_to_today():
+    """`kind` defaults to `None`, and `None` must add nothing (R2 D2): the at-mention change's
+    byte-identical pin on this function must still hold."""
+    assert spec_turn_notice("exploring", kind=None) == spec_turn_notice("exploring")
+    assert "how it will be built" not in spec_turn_notice("exploring")
+
+
+def test_the_delivery_line_precedes_the_unwritten_path_line():
+    """R2 D2: the delivery line is appended before the unwritten-path line, not after."""
+    notice = spec_turn_notice(
+        "exploring", path="spec/changes/x/y.html", is_unwritten=True, kind="change-spec"
+    )
+    assert notice.index("how it will be built") < notice.index(
+        "is empty and is what you are interviewing for"
+    )
+
+
+def test_a_later_phase_does_not_ask_about_delivery():
+    """Delivery is an exploring-only question, like the interview itself."""
+    notice = spec_turn_notice("approved", kind="change-spec")
+    assert "how it will be built" not in notice
