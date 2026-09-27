@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentLaunchabilityResponse } from '@/api/agents'
 import { RunnerPicker } from '@/components/agents/AgentSettingsControls'
+import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
 
 // F179: an agent with no runner was shown "No runner" as though it were an ordinary choice, while
 // the Hub already had the sentence saying it cannot run. The sentence below is
@@ -10,6 +11,9 @@ const NO_RUNNER = 'No runner is bound to this agent. Bind one in the Hub UI befo
 
 let launchability: AgentLaunchabilityResponse | undefined
 let launchabilityError: unknown = null
+let runners: Array<{ id: string; name: string; cli: string; model?: string | null }> = [
+  { id: 'runner-default', name: 'Default Claude', cli: 'claude', model: null },
+]
 
 vi.mock('@/api/agents', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/agents')>()
@@ -17,17 +21,22 @@ vi.mock('@/api/agents', async (importOriginal) => {
 })
 
 vi.mock('@/api/runners', () => ({
-  useRunners: () => ({
-    data: [{ id: 'runner-default', name: 'Default Claude', cli: 'claude' }],
-    isLoading: false,
-  }),
+  useRunners: () => ({ data: runners, isLoading: false }),
   useBindAgentRunner: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+}))
+
+vi.mock('@/api/modelCatalog', () => ({
+  useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE }),
 }))
 
 const unbound = { name: 'q1', status: 'idle', message_count: 0, active_task_count: 0, runner_id: null }
 const bound = { ...unbound, runner_id: 'runner-default' }
 
 describe('the runner picker says when an agent cannot run (F179)', () => {
+  beforeEach(() => {
+    runners = [{ id: 'runner-default', name: 'Default Claude', cli: 'claude', model: null }]
+  })
+
   it("shows the Hub's reason for an agent with no runner", () => {
     launchability = {
       agents: { q1: { present: false, authorized: false, runnable: false, reason: NO_RUNNER } },
@@ -78,5 +87,23 @@ describe('the runner picker says when an agent cannot run (F179)', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Could not check whether this agent can run.')
     launchabilityError = null
+  })
+
+  it('names each same-named runner apart by its model (F268)', () => {
+    // Served in `created_at` order, the order `list_runners` returns (`runners.py:82`).
+    runners = [
+      { id: 'runner-opus', name: 'Twin', cli: 'claude', model: 'claude-opus-5' },
+      { id: 'runner-haiku', name: 'Twin', cli: 'claude', model: 'claude-haiku-4-5-20251001' },
+    ]
+    launchability = {
+      agents: { q1: { runner: 'claude', present: true, authorized: true, runnable: true, reason: null } },
+    }
+    render(<RunnerPicker agent={bound as never} />)
+
+    const opusOption = screen.getByRole('option', { name: 'Twin — Opus 5 (claude)' })
+    const haikuOption = screen.getByRole('option', { name: 'Twin — Haiku 4.5 (claude)' })
+    expect(opusOption).toBeInTheDocument()
+    expect(haikuOption).toBeInTheDocument()
+    expect(opusOption).not.toBe(haikuOption)
   })
 })

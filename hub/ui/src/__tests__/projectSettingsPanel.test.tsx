@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectSettingsPanel } from '@/components/environment/ProjectSettingsPanel'
 import { describeThreshold } from '@/components/environment/describeThreshold'
@@ -70,7 +70,7 @@ vi.mock('@/api/runners', () => ({
   useRunners: () => ({
     data: [
       { id: 'runner-haiku', name: 'Haiku 4.5', cli: 'claude', model: null },
-      { id: 'runner-titles', name: 'Titler', cli: 'claude', model: null },
+      { id: 'runner-titles', name: 'Titler', cli: 'claude', model: 'claude-opus-5' },
     ],
   }),
 }))
@@ -80,7 +80,10 @@ vi.mock('@/api/modelCatalog', () => ({
     data: {
       providers: [{
         provider: 'claude',
-        models: [{ id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', context_window: 200_000 }],
+        models: [
+          { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', context_window: 200_000 },
+          { id: 'claude-opus-5', label: 'Opus 5', context_window: 1_000_000 },
+        ],
       }],
     },
   }),
@@ -217,6 +220,28 @@ describe('phase 5 project settings and locate repair', () => {
     expect(update).toHaveBeenCalledWith(expect.objectContaining({
       conversation_title_mode: 'generate',
     }))
+  })
+
+  it('names each runner by its own model in the title-runner select (F268)', () => {
+    render(<ProjectSettingsPanel />)
+    const select = screen.getByLabelText('Conversation title runner')
+    expect(within(select).getByRole('option', { name: 'Haiku 4.5 — Provider default (claude)' })).toBeInTheDocument()
+    expect(within(select).getByRole('option', { name: 'Titler — Opus 5 (claude)' })).toBeInTheDocument()
+  })
+
+  it("names the project's checkpoint model in the checkpoint-runner select, whatever each runner records (F268)", () => {
+    render(<ProjectSettingsPanel />)
+    const select = screen.getByLabelText('Checkpoint runner')
+    expect(within(select).getByRole('option', { name: 'Haiku 4.5 — Haiku 4.5 (claude)' })).toBeInTheDocument()
+    expect(within(select).getByRole('option', { name: 'Titler — Haiku 4.5 (claude)' })).toBeInTheDocument()
+  })
+
+  it('names each runner by its own model in the checkpoint-runner select once checkpoint_model is cleared (F268)', () => {
+    settings.checkpoint_model = null
+    render(<ProjectSettingsPanel />)
+    const select = screen.getByLabelText('Checkpoint runner')
+    expect(within(select).getByRole('option', { name: 'Haiku 4.5 — Provider default (claude)' })).toBeInTheDocument()
+    expect(within(select).getByRole('option', { name: 'Titler — Opus 5 (claude)' })).toBeInTheDocument()
   })
 })
 

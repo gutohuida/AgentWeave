@@ -16,6 +16,7 @@ import { DeleteProjectDialog } from '@/components/environment/DeleteProjectDialo
 import { SettingsRow, SettingsSection } from '@/components/environment/SettingsSection'
 import { useConfigStore } from '@/store/configStore'
 import { describeThreshold } from '@/components/environment/describeThreshold'
+import { runnerOptionLabel } from '@/lib/runnerLabel'
 
 const inputClass = 'control-field block w-48 px-2 py-1.5 text-xs'
 
@@ -168,7 +169,7 @@ export function ProjectSettingsPanel() {
         >
           <option value="">None</option>
           {runners.map((runner) => (
-            <option key={runner.id} value={runner.id}>{runner.name}</option>
+            <option key={runner.id} value={runner.id}>{runnerOptionLabel(runner, catalog)}</option>
           ))}
         </Select>
       </SettingsRow>
@@ -276,7 +277,9 @@ export function ProjectSettingsPanel() {
         >
           <option value="">None — checkpointing stays off</option>
           {runners.map((runner) => (
-            <option key={runner.id} value={runner.id}>{runner.name}</option>
+            <option key={runner.id} value={runner.id}>
+              {runnerOptionLabel(runner, catalog, { model: form.checkpoint_model })}
+            </option>
           ))}
         </Select>
       </SettingsRow>

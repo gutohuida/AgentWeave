@@ -20,6 +20,7 @@ import {
 } from '@/api/runners'
 import { SettingsRow } from '@/components/environment/SettingsSection'
 import { Select, Textarea } from '@/components/ui/input'
+import { runnerOptionLabel } from '@/lib/runnerLabel'
 
 /**
  * The editable per-agent controls, shared by the settings page and — until it is retired — the
@@ -224,6 +225,7 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
  *  from `GET /agents/launchability`, so a missing CLI or credential reads here too. */
 export function RunnerPicker({ agent }: { agent: AgentSummary }) {
   const { data: runners = [], isLoading } = useRunners()
+  const { data: catalog } = useModelCatalog()
   const bindRunner = useBindAgentRunner()
   const { data: launchability, error: launchabilityError } = useAgentLaunchability()
   const verdict = launchability?.agents[agent.name]
@@ -250,7 +252,7 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
         <option value="">No runner (cannot run)</option>
         {runners.map((runner) => (
           <option key={runner.id} value={runner.id}>
-            {runner.name} ({runner.cli})
+            {runnerOptionLabel(runner, catalog)}
           </option>
         ))}
       </Select>
