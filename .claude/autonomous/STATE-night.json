@@ -8,19 +8,13 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 6,
+    "iteration": 7,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "at-mention-drive",
-    "next_action": "Continue queue item at-mention-drive, tasks 4.2a, 4.2b, 4.2c then 4.3 (record in FINDINGS.md, tear down). Drive Hub is ALREADY RUNNING on :8041 (PID 26020, profile drive0927, key in testbed/scratch/.drive0927key, project proj-3326ac7cbce3, agents agenta/agentb); state in testbed/scratch/d9_state.json; harness scripts/drive/d9_0927_at_mention_live.py has stages setup/41/42 done, add 42a-42c (UI legs in Chromium via playwright, see d1_aturn_browser.py). 4.1 and 4.2 already PASS (see log iteration 6). Verify the Hub still answers first. First line of log: read CI verdict (gh run list). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
+    "current": "at-mention-archive",
+    "next_action": "Queue item at-mention-archive: archive openspec change an-at-mention-an-agent-wrote-reads-no-file (tasks.md group 5 is the authority; set fixed <sha> on F409 in scripts/drive/FINDINGS.md in the same commit; sync specs by hand if required). Drive is done (see log iteration 7; the Hub :8041 is stopped). First line of log: read CI verdict (gh run list). Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep the file.",
     "queue": [
-        {
-            "id": "at-mention-drive",
-            "status": "open",
-            "title": "Drive an-at-mention-an-agent-wrote-reads-no-file live (UI in Chromium)",
-            "detail": "Fresh drive port/profile per playbook; AW_HUB/AW_KEY exported; Haiku only. Record in FINDINGS.md."
-        },
         {
             "id": "at-mention-archive",
             "status": "open",

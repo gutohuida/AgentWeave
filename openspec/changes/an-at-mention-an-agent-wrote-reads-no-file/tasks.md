@@ -64,17 +64,17 @@
 
 ## 4. Drive: the product, end to end (every real turn binds `claude-haiku-4-5`)
 
-- [ ] 4.1 Set up a scratch Hub (never `:8000`, never `:8010`'s real projects), with a fresh project in `testbed/scratch/` and two Claude agents, A and B, in the default "Workspace only" posture. Plant a random marker in a file outside B's workspace. Have the operator ask A to `send_message` B a text containing `@<that absolute path>`, and ask B to report any line starting with MARKER.
+- [x] 4.1 Set up a scratch Hub (never `:8000`, never `:8010`'s real projects), with a fresh project in `testbed/scratch/` and two Claude agents, A and B, in the default "Workspace only" posture. Plant a random marker in a file outside B's workspace. Have the operator ask A to `send_message` B a text containing `@<that absolute path>`, and ask B to report any line starting with MARKER.
   - **Before the fix** (or with task 2.2 reverted), record whether B's CLI session transcript has an `"attachment":{"type":"file"` for the marker file.
   - **After the fix**, confirm it has none and that the marker appears nowhere in B's run output
-- [ ] 4.2 Positive control on the same Hub: the operator sends B `@<a file inside B's workspace>` from the composer. Confirm the attachment is still made (the picker's contract survives)
-- [ ] 4.2a (D7) On the same Hub, have B write an `@<outside path>` into its reply in a conversation, then create a checkpoint for that conversation. Confirm:
+- [x] 4.2 Positive control on the same Hub: the operator sends B `@<a file inside B's workspace>` from the composer. Confirm the attachment is still made (the picker's contract survives)
+- [x] 4.2a (D7) On the same Hub, have B write an `@<outside path>` into its reply in a conversation, then create a checkpoint for that conversation. Confirm:
   - the checkpoint worker's CLI transcript has no `"attachment":{"type":"file"`;
   - the stored checkpoint body does not contain the marker;
   - the probe status is not `failed` for a reason naming that path
-- [ ] 4.2b (D8) On the same Hub, have A `create_task` with a title containing `@<outside path>`, then press Start work on that card from the served bundle in a browser, assigning B. Confirm that B's CLI transcript has no `"attachment":{"type":"file"` for the marker file, and that the chat shows the title with `\@`
-- [ ] 4.2c (D4, R4) On the same Hub, have B call `ask_user` with `blocking=false` and an option labelled `Use @<outside path>`. Click that option in the conversation. Confirm that B's next turn's CLI transcript has no `"attachment":{"type":"file"` for the marker file, that the chat's echo shows the answer with `\@`, and that the Questions destination shows the option as it was offered
-- [ ] 4.3 Record all five in `scripts/drive/FINDINGS.md` under the drive's dated section. Tear down the scratch Hub by exact PID and remove the scratch project
+- [x] 4.2b (D8) On the same Hub, have A `create_task` with a title containing `@<outside path>`, then press Start work on that card from the served bundle in a browser, assigning B. Confirm that B's CLI transcript has no `"attachment":{"type":"file"` for the marker file, and that the chat shows the title with `\@`
+- [x] 4.2c (D4, R4) On the same Hub, have B call `ask_user` with `blocking=false` and an option labelled `Use @<outside path>`. Click that option in the conversation. Confirm that B's next turn's CLI transcript has no `"attachment":{"type":"file"` for the marker file, that the chat's echo shows the answer with `\@`, and that the Questions destination shows the option as it was offered
+- [x] 4.3 Record all five in `scripts/drive/FINDINGS.md` under the drive's dated section. Tear down the scratch Hub by exact PID and remove the scratch project
 
 ## 5. Close
 
