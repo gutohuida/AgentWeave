@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 26,
+    "iteration": 27,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "r1b-impl",
-    "next_action": "Queue item r1b-impl: implement a-document-says-how-it-will-be-built-and-approval-starts-it, tests first. Read CI verdict first. tasks.md is the authority; read design.md round log; F377; edits mcp_server.py and UI bundle (read .claude/rules). Apply F392 rules. Size to one firing; split in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "next_action": "Queue item r1b-impl part 2: implement task 2.2 (completeness codes delivery_unanswered/delivery_flow_incomplete, gated on payload.kind == 'change-spec'; add both to B5's phase_blockers exclusion at APPROVED, in spec_completeness.py/spec_lifecycle.py) and the propose-refusal half of test 1.2 in hub/tests/test_a_document_says_how_it_will_be_built.py. D1 (Delivery model, shape validation, payload_to_dict) already landed iteration 27 -- do not redo. Read design.md D4 first. Read CI verdict first. tasks.md is the authority. Apply F392 rules (full-suite tick only at 4.1, with its count inline). Size to one firing; split further in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep. If mutating code to check a test, copy the file or git stash first -- do NOT `git checkout --` a file with uncommitted work still wanted (iteration 27 nearly lost D1 this way).",
     "queue": [
         {
             "id": "r1a-impl",
@@ -71,9 +71,9 @@
         },
         {
             "id": "r1b-impl",
-            "status": "open",
+            "status": "in_progress",
             "title": "Implement a-document-says-how-it-will-be-built-and-approval-starts-it (tests first, then fix)",
-            "detail": "openspec/changes/a-document-says-how-it-will-be-built-and-approval-starts-it/tasks.md is the authority. F377; edits mcp_server.py; UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+            "detail": "openspec/changes/a-document-says-how-it-will-be-built-and-approval-starts-it/tasks.md is the authority. F377; edits mcp_server.py; UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Part 1 (D1: Delivery model, shape validation in validate_payload, payload_to_dict drop-null; tasks 1.1, 2.1) done iteration 27. Remaining: 2.2-2.7 backend, 3.x UI + bundle, 1.2-1.12 tests, 4.x verify/drive/archive as separate queue items below."
         },
         {
             "id": "r1b-drive",

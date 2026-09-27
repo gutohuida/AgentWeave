@@ -27,7 +27,8 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -165,6 +166,38 @@ class Evidence(_Part):
     )
 
 
+class Delivery(_Part):
+    """How a change-spec document's tasks get worked, once approved.
+
+    Optional, and deliberately not required by this schema (D1): a required field would make
+    every document stored before this change, and every read of one, fail validation. Whether a
+    document *must* answer this before it can be proposed is a completeness question, checked at
+    the transition instead (`spec_completeness.py`).
+    """
+
+    mode: Literal["flow", "none"] = Field(
+        description="'flow' to have the Hub keep working this document's tasks after approval, one at a time as their prerequisites clear; 'none' to leave them on the board only."
+    )
+    agent: Optional[str] = Field(
+        default=None,
+        max_length=32,
+        description="Default agent for the flow, by name. The operator can also choose one at approval, or replace a stale name.",
+    )
+    stop_when_queue_empties: bool = Field(
+        default=False,
+        description="Stop the flow once its queue has nothing left to work.",
+    )
+    stop_at: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 timestamp, carrying a timezone, after which the flow stops. A flow needs at least one stop condition.",
+    )
+    cron: str = Field(
+        default="*/5 * * * *",
+        max_length=128,
+        description="How often the flow checks its queue for work, as a five-field cron expression.",
+    )
+
+
 class OpenQuestion(_Part):
     question: str = Field(description="Something genuinely undecided.")
     resolved: bool = Field(
@@ -198,6 +231,10 @@ class SpecPayload(_Part):
         description="Whether this updates a living document, records a one-off change, or needs a stated reconciliation after implementation.",
     )
     open_questions: List[OpenQuestion] = Field(default_factory=list)
+    delivery: Optional[Delivery] = Field(
+        default=None,
+        description="How this document's tasks get worked once approved. Only meaningful on a change-spec document; asked for in the interview, not required by this schema.",
+    )
 
 
 def _field_path(location: tuple) -> str:
@@ -295,6 +332,32 @@ def validate_payload(raw: Any) -> SpecPayload:
         if duplicate is not None:
             raise PayloadError(f"duplicate key {duplicate!r}", field=label)
 
+    # Shape only, per D1: whether a flow can actually be created from these values (an agent
+    # that exists, a cron the scheduler can act on unambiguously) is `set_phase`'s question. Here
+    # we only refuse what makes the value impossible to interpret at all.
+    if payload.delivery is not None and payload.delivery.mode == "flow":
+        try:
+            from croniter import croniter
+
+            croniter(payload.delivery.cron)
+        except ImportError:
+            pass
+        except Exception as exc:
+            raise PayloadError(f"cron does not parse: {exc}", field="delivery.cron") from exc
+
+    if payload.delivery is not None and payload.delivery.stop_at is not None:
+        try:
+            parsed_stop_at = datetime.fromisoformat(payload.delivery.stop_at)
+        except ValueError as exc:
+            raise PayloadError(
+                "stop_at must be an ISO-8601 timestamp", field="delivery.stop_at"
+            ) from exc
+        if parsed_stop_at.tzinfo is None:
+            raise PayloadError(
+                "stop_at must carry a timezone — a naive time leaves it to the Hub to guess which clock is meant",
+                field="delivery.stop_at",
+            )
+
     return payload
 
 
@@ -304,8 +367,19 @@ def payload_to_dict(payload: SpecPayload) -> Dict[str, Any]:
     `by_alias=True` so `Task.from_` (the reserved word `from` cannot be a Python
     field name) round-trips under the key the payload actually uses, not the
     Python attribute name.
+
+    `delivery` is dropped when `None` (D1, measured): `model_dump` without
+    `exclude_none` would otherwise write `"delivery": null` into every payload
+    saved from now on, which changes every new save's bytes and turns an
+    unchanged `contract`/`gate` resubmission into a spurious metadata proposal
+    (`_metadata_bundle`, `spec_service.py`). `exclude_none` globally would also
+    drop every stored `reviewer: null` and `from: null`, which are meaningful
+    absences elsewhere — only this one key gets the treatment.
     """
-    return payload.model_dump(mode="json", by_alias=True)
+    data = payload.model_dump(mode="json", by_alias=True)
+    if data.get("delivery") is None:
+        data.pop("delivery", None)
+    return data
 
 
 # ---------------------------------------------------------------------------
