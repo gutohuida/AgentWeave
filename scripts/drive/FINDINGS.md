@@ -20184,8 +20184,11 @@ line of that has moved. Both halves of the drift stay open — see F174's 2026-0
 
 ## F268 (B) — the runner-binding select renders `name (cli)`, so the spec's own "second runner with a different model" is unpickable
 
-**Status:** open. Filed alongside F267 by the 2026-09-02 catalog drive (`7b7720d`), never
-fixed and never specced. [classified 2026-09-09, D-2]
+**Status:** fixed `2b91c92` (2026-09-27) — `a-runner-choice-names-its-model` gave every
+runner-choosing select a `runnerOptionLabel` helper naming the runner's model (catalog label,
+provider default, or unrecognised id) alongside its name and provider; driven on the trial Hub
+`:8010` the same night, two same-named `Twin` runners on different models render distinct labels.
+Filed alongside F267 by the 2026-09-02 catalog drive (`7b7720d`). [classified 2026-09-09, D-2]
 
 Fell out of F267's drive rather than being looked for. `RunnerCreate` puts no uniqueness on `name`
 and `runners.__table_args__` carries `Index("ix_runners_project_name", ...)` — a plain index, not a
