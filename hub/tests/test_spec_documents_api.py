@@ -331,8 +331,12 @@ async def test_a_document_cannot_be_proposed_before_exploration_is_closed(
         f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "explore_not_closed"
+    # F113: "not yet" arrives in one shape. The open exploration is the first entry of the 200
+    # `blocking` list (`a-document-moves-forward-only-through-its-checks`), not a 409.
+    assert response.status_code == 200
+    body = response.json()
+    assert body["phase"] == "exploring"
+    assert body["blocking"][0]["code"] == "explore_not_closed"
 
 
 @pytest.mark.asyncio
@@ -417,7 +421,9 @@ async def test_reopening_an_approved_document_requires_closing_exploration_again
     blocked = await app.post(
         f"{BASE}/documents/propose", params={"path": PATH}, headers=auth_headers
     )
-    assert blocked.status_code == 409
+    assert blocked.status_code == 200
+    assert blocked.json()["blocking"][0]["code"] == "explore_not_closed"
+    assert blocked.json()["phase"] == "exploring"
 
 
 @pytest.mark.asyncio

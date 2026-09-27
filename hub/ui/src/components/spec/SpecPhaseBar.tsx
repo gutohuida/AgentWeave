@@ -14,6 +14,22 @@ import {
 } from '@/api/spec'
 
 /**
+ * What a refused phase move says, as findings. The Hub answers an incomplete document with
+ * `detail.blocking` (the same list `propose` returns with a 200); any other refusal is one message.
+ * `ApiError.message` is the response body verbatim, so the detail is parsed back out of it.
+ */
+function findingsFromRefusal(error: unknown, fallback: string): SpecBlockingFinding[] {
+  try {
+    const raw = error instanceof Error ? error.message : String(error)
+    const detail = (JSON.parse(raw) as { detail?: { blocking?: SpecBlockingFinding[] } }).detail
+    if (detail?.blocking?.length) return detail.blocking
+  } catch {
+    // not JSON: fall through to the readable message
+  }
+  return [{ code: 'refused', where: '', message: readableApiError(error, fallback) }]
+}
+
+/**
  * The phase of the open document, and the decisions only the operator can take.
  *
  * Every control here is deliberately absent from the agent's tool surface. An
@@ -50,11 +66,29 @@ export function SpecPhaseBar({
   const busy = closeExploration.isPending || propose.isPending || setPhase.isPending
 
   async function onPropose() {
-    const result = await propose.mutateAsync({ path })
-    // A blocked proposal is the normal case while a document is being written,
-    // so it reports rather than throws. Showing every finding at once matters:
-    // one per attempt turns five problems into five round trips.
-    setBlocking(result.blocking ?? [])
+    setBlocking([])
+    try {
+      const result = await propose.mutateAsync({ path })
+      // A blocked proposal is the normal case while a document is being written,
+      // so it reports rather than throws. Showing every finding at once matters:
+      // one per attempt turns five problems into five round trips.
+      setBlocking(result.blocking ?? [])
+    } catch (error) {
+      // 422 (no payload / payload invalid) used to reject unhandled and show nothing.
+      setBlocking(findingsFromRefusal(error, 'The Hub refused to propose this document.'))
+    }
+  }
+
+  function onApprove() {
+    setBlocking([])
+    setPhase.mutate(
+      { path, to: 'approved' },
+      {
+        // F207: approval runs the completeness checks again and answers 409 with the findings.
+        onError: (error: unknown) =>
+          setBlocking(findingsFromRefusal(error, 'The Hub refused to approve this document.')),
+      },
+    )
   }
 
   function onConfirmArchive() {
@@ -149,7 +183,7 @@ export function SpecPhaseBar({
           <button
             type="button"
             disabled={busy}
-            onClick={() => setPhase.mutate({ path, to: 'approved' })}
+            onClick={onApprove}
             className="rounded-[var(--radius-sm)] px-2 py-1 hover:bg-[var(--row-hover)]"
           >
             Approve
@@ -263,7 +297,9 @@ export function SpecPhaseBar({
             <li key={`${finding.code}:${finding.where}`} className="flex items-start gap-1.5">
               <Icon name="warning" size={13} />
               <span>
-                <code>{finding.where}</code> — {finding.message}
+                {finding.where && <code>{finding.where}</code>}
+                {finding.where ? ' — ' : ''}
+                {finding.message}
               </span>
             </li>
           ))}

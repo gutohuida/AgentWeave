@@ -52,6 +52,7 @@ function doc(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  setPhase.mockReset()
   documents = [doc()]
   propose.mockResolvedValue({ ...doc(), blocking: [] })
 })
@@ -123,10 +124,52 @@ describe('SpecPhaseBar', () => {
 
     await userEvent.click(screen.getByText('Approve'))
 
-    expect(setPhase).toHaveBeenCalledWith({
-      path: 'spec/changes/demo/spec.html',
-      to: 'approved',
+    expect(setPhase).toHaveBeenCalledWith(
+      { path: 'spec/changes/demo/spec.html', to: 'approved' },
+      expect.anything(),
+    )
+  })
+
+  // F207: approval re-runs the completeness checks and answers 409 with every finding.
+  it('shows each finding when approval is refused as incomplete', async () => {
+    const refusal = new ApiError(
+      409,
+      JSON.stringify({
+        detail: {
+          code: 'document_incomplete',
+          message: 'this document cannot move to approved yet: requirement_without_task',
+          blocking: [
+            { code: 'requirement_without_task', where: 'requirements[0]', message: "'alpha' has no task" },
+            { code: 'non_goals_empty', where: 'scope.non_goals', message: 'state what is out of scope' },
+          ],
+        },
+      }),
+    )
+    setPhase.mockImplementation((_vars: unknown, options: { onError: (e: unknown) => void }) => {
+      options.onError(refusal)
     })
+    documents = [doc({ phase: 'proposed' })]
+    renderBar()
+
+    await userEvent.click(screen.getByText('Approve'))
+
+    expect(screen.getByText('requirements[0]')).toBeInTheDocument()
+    expect(screen.getByText(/'alpha' has no task/)).toBeInTheDocument()
+    expect(screen.getByText('scope.non_goals')).toBeInTheDocument()
+  })
+
+  it('renders a bare refusal message when approval fails without findings', async () => {
+    setPhase.mockImplementation((_vars: unknown, options: { onError: (e: unknown) => void }) => {
+      options.onError(
+        new ApiError(422, JSON.stringify({ detail: { code: 'payload_invalid', message: 'the payload is broken' } })),
+      )
+    })
+    documents = [doc({ phase: 'proposed' })]
+    renderBar()
+
+    await userEvent.click(screen.getByText('Approve'))
+
+    expect(screen.getByText(/the payload is broken/)).toBeInTheDocument()
   })
 
   it('can reopen an approved document', async () => {

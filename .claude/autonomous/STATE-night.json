@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 19,
+    "iteration": 20,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "b5-impl",
-    "next_action": "Queue item b5-impl: implement a-document-moves-forward-only-through-its-checks per its tasks.md (tests first, then fix). Read design.md round log first; apply F392 rules. Read CI verdict for the previous commit first. Size to one firing; split in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
+    "current": "b5-drive",
+    "next_action": "Queue item b5-drive: drive a-document-moves-forward-only-through-its-checks live per tasks.md section 3 (F207's four calls verbatim, plus the Approve refusal in Chromium). Fresh drive port/profile per playbook (.claude/loops/night-window.md); AW_HUB/AW_KEY exported; Haiku only; record in scripts/drive/FINDINGS.md. Read CI verdict for the previous commit first. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep.",
     "queue": [
         {
             "id": "r1a-impl",
@@ -35,9 +35,9 @@
         },
         {
             "id": "b5-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-document-moves-forward-only-through-its-checks (tests first, then fix)",
-            "detail": "openspec/changes/a-document-moves-forward-only-through-its-checks/tasks.md is the authority. F207,F113. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Size to one firing; split in the log if not."
+            "detail": "Done iteration 20; full hub suite 5016 passed."
         },
         {
             "id": "b5-drive",

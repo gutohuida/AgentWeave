@@ -17,13 +17,16 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.models import SPEC_KINDS, SpecDocument, SpecDocumentEvent
 from .utils import short_id
+
+if TYPE_CHECKING:
+    from .project_workspace import ProjectWorkspace
 
 EXPLORING = "exploring"
 PROPOSED = "proposed"
@@ -69,8 +72,16 @@ TRANSITIONS = {
 class PhaseError(RuntimeError):
     """A transition that may not happen, with the reason stated."""
 
-    def __init__(self, message: str, *, code: str = "phase_refused") -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "phase_refused",
+        blocking: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
         self.code = code
+        # Set only for `document_incomplete`: every reason the move is not yet possible.
+        self.blocking: List[Dict[str, Any]] = list(blocking or [])
         super().__init__(message)
 
 
@@ -273,6 +284,7 @@ async def transition(
     *,
     to_phase: str,
     actor: Actor,
+    workspace: ProjectWorkspace,
     reason: str = "",
 ) -> SpecDocumentEvent:
     """Move a document between phases, or refuse and say why.
@@ -329,11 +341,19 @@ async def transition(
                 code="archive_would_orphan_work",
             )
 
-    if to_phase == PROPOSED and document.explore_closed_at is None:
-        raise PhaseError(
-            "exploration has not been closed; the operator decides when it is complete",
-            code="explore_not_closed",
-        )
+    if to_phase in (PROPOSED, APPROVED):
+        # Required `workspace`: a caller with none cannot move a document at all, rather than
+        # moving it unchecked (F207). Imported here because `spec_service` imports this module.
+        from . import spec_service
+
+        blocking = await spec_service.phase_blockers(session, workspace, document, to_phase)
+        if blocking:
+            raise PhaseError(
+                f"this document cannot move to {to_phase} yet: "
+                + ", ".join(b["code"] for b in blocking),
+                code="document_incomplete",
+                blocking=blocking,
+            )
 
     previous = document.phase
     document.phase = to_phase

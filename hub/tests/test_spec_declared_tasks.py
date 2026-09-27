@@ -40,6 +40,20 @@ DECLARED = [
 ]
 
 
+def _criteria(requirements):
+    """One criterion per requirement, so the document passes the completeness check (F207)."""
+    return [
+        {
+            "key": f"c-{r['key']}",
+            "requirement": r["key"],
+            "given": "the document is approved",
+            "when": "the work is done",
+            "then": "the requirement is shown",
+        }
+        for r in requirements
+    ]
+
+
 @pytest.fixture
 async def author():
     async with async_session_factory() as session:
@@ -63,7 +77,9 @@ async def submit(app, run_headers, *, requirements=(ALPHA, BETA), tasks=DECLARED
         "schema_version": SCHEMA_VERSION,
         "kind": "change-spec",
         "title": "Declared demo",
+        "scope": {"in_scope": ["the demo"], "non_goals": ["everything else"]},
         "requirements": list(requirements),
+        "acceptance_criteria": _criteria(requirements),
     }
     if tasks is not None:
         document["tasks"] = list(tasks)
@@ -215,13 +231,20 @@ async def test_work_already_under_way_is_left_alone(app, auth_headers, author):
 
 
 @pytest.mark.asyncio
-async def test_a_document_declaring_no_tasks_creates_none(app, auth_headers, author):
-    """A document approved for its requirements alone is a normal thing, not an error."""
+async def test_a_document_that_declares_no_tasks_creates_none_and_is_not_proposed(
+    app, auth_headers, author
+):
+    """F207: requirements alone used to be enough to approve; a requirement nothing implements now
+    blocks the move to `proposed`, so no approval and no board rows follow."""
     await make_document(app, auth_headers, author, tasks=None)
-    response = await approve(app, auth_headers)
-
-    assert response.status_code == 200
-    assert response.json()["tasks_created"] == []
+    await app.post(
+        f"{BASE}/documents/close-exploration", params={"path": PATH}, headers=auth_headers
+    )
+    moved = await app.post(
+        f"{BASE}/documents/phase", params={"path": PATH, "to": "proposed"}, headers=auth_headers
+    )
+    assert moved.status_code == 409, moved.text
+    assert moved.json()["detail"]["code"] == "document_incomplete"
     assert await board(app, auth_headers) == []
 
 
@@ -505,7 +528,7 @@ async def test_a_declared_title_is_what_the_board_shows(app, auth_headers, autho
             "requirements": ["alpha"],
         },
     ]
-    await make_document(app, auth_headers, author, tasks=declared)
+    await make_document(app, auth_headers, author, tasks=declared, requirements=(ALPHA,))
     await approve(app, auth_headers)
 
     tasks = await board(app, auth_headers)
@@ -527,7 +550,7 @@ async def test_a_task_declaring_no_title_gets_a_readable_one(app, auth_headers, 
             "requirements": ["alpha"],
         },
     ]
-    await make_document(app, auth_headers, author, tasks=declared)
+    await make_document(app, auth_headers, author, tasks=declared, requirements=(ALPHA,))
     await approve(app, auth_headers)
 
     title = (await board(app, auth_headers))[0]["title"]

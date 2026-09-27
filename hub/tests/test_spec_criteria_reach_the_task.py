@@ -191,9 +191,15 @@ async def test_3_1_a_tasks_criteria_follow_its_requirements(app, auth_headers, a
                 "schema_version": SCHEMA_VERSION,
                 "kind": "change-spec",
                 "title": "Criteria demo",
+                "scope": {"in_scope": ["the demo"], "non_goals": ["everything else"]},
                 "requirements": [ALPHA, BETA],
                 "acceptance_criteria": [AC_ALPHA, AC_BETA],
-                "tasks": [_entry("build-listing", requirements=["alpha"])],
+                # Beta needs a task of its own for the document to pass the check (F207); the
+                # assertion below still pins that beta's criteria stay off the listing task.
+                "tasks": [
+                    _entry("build-listing", requirements=["alpha"]),
+                    _entry("build-recording", requirements=["beta"]),
+                ],
             },
         },
         headers=author,
@@ -216,8 +222,9 @@ async def test_3_1_a_tasks_criteria_follow_its_requirements(app, auth_headers, a
     listed = await app.get(TASKS, headers=auth_headers)
     assert listed.status_code == 200, listed.text
     board = listed.json()["tasks"]
-    assert len(board) == 1
-    assert board[0]["acceptance_criteria"] == [RENDERED_ALPHA]
+    assert len(board) == 2
+    listing = next(t for t in board if t["spec_task_key"] == "build-listing")
+    assert listing["acceptance_criteria"] == [RENDERED_ALPHA]
 
 
 @pytest.mark.asyncio

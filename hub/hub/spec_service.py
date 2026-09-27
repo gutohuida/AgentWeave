@@ -744,19 +744,28 @@ async def _repoint_pending_input(
     )
 
 
-async def propose(
+EXPLORE_NOT_CLOSED_MESSAGE = (
+    "exploration has not been closed; the operator decides when it is complete"
+)
+
+
+async def phase_blockers(
     session: AsyncSession,
     workspace: ProjectWorkspace,
     document: SpecDocument,
-    *,
-    actor: spec_lifecycle.Actor,
+    to_phase: str,
 ) -> List[Dict[str, Any]]:
-    """Move a document to `proposed`, or return what is blocking it.
+    """Every reason `to_phase` may not be reached yet, or [] (F207, F113).
 
-    The completeness checks run against the payload the document actually
-    carries, not against a claim about it. A document whose file no longer
-    parses cannot be proposed at all — there is nothing to check.
+    'Not yet' only: a move the phase map forbids, or an actor who may not make it, is not a
+    blocker — `transition()` refuses those first, as the authority it already is.
+
+    A document whose file carries no payload, or one that no longer validates, raises
+    `SaveRefusedError`: there is nothing to check.
     """
+    if to_phase not in (spec_lifecycle.PROPOSED, spec_lifecycle.APPROVED):
+        return []
+
     content = spec_documents.read_document(workspace, document.path)
     stored = extract_payload(content) if content else None
     if stored is None:
@@ -775,12 +784,49 @@ async def propose(
     findings = spec_completeness.check(
         payload, board_served=board_served, approved_document_paths=approved_paths
     )
-    if findings:
-        return [finding.to_dict() for finding in findings]
+    if to_phase == spec_lifecycle.APPROVED:
+        # A document whose import source was reopened after it was proposed is approved anyway and
+        # the reference recorded as `document_not_approved` (task-dependencies, settled).
+        findings = [f for f in findings if f.code != "import_not_approved"]
 
-    await spec_lifecycle.transition(
-        session, document, to_phase=spec_lifecycle.PROPOSED, actor=actor
-    )
+    blocking = [finding.to_dict() for finding in findings]
+    if to_phase == spec_lifecycle.PROPOSED and document.explore_closed_at is None:
+        blocking.insert(
+            0,
+            {
+                "code": "explore_not_closed",
+                "where": "exploration",
+                "message": EXPLORE_NOT_CLOSED_MESSAGE,
+            },
+        )
+    return blocking
+
+
+async def propose(
+    session: AsyncSession,
+    workspace: ProjectWorkspace,
+    document: SpecDocument,
+    *,
+    actor: spec_lifecycle.Actor,
+) -> List[Dict[str, Any]]:
+    """Move a document to `proposed`, or return what is blocking it.
+
+    The checks run inside `transition()` against the payload the document actually carries, so
+    this is the same answer whoever asks. A document whose file no longer parses cannot be
+    proposed at all — there is nothing to check.
+    """
+    try:
+        await spec_lifecycle.transition(
+            session,
+            document,
+            to_phase=spec_lifecycle.PROPOSED,
+            actor=actor,
+            workspace=workspace,
+        )
+    except spec_lifecycle.PhaseError as exc:
+        if exc.code == "document_incomplete":
+            return exc.blocking
+        raise
     await rerender_phase(session, workspace, document)
     return []
 

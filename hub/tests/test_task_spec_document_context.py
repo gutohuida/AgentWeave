@@ -61,7 +61,17 @@ async def _document(app, auth_headers, run_headers, tasks=None):
         "schema_version": SCHEMA_VERSION,
         "kind": "change-spec",
         "title": "Task context",
+        "scope": {"in_scope": ["the demo"], "non_goals": ["everything else"]},
         "requirements": [ALPHA],
+        "acceptance_criteria": [
+            {
+                "key": "c-alpha",
+                "requirement": "alpha",
+                "given": "the document is approved",
+                "when": "the work is done",
+                "then": "the requirement is shown",
+            }
+        ],
     }
     if tasks is not None:
         document["tasks"] = tasks

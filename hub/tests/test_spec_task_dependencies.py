@@ -21,6 +21,20 @@ SUBMIT = "/api/v1/agent-actions/spec/documents"
 ALPHA = {"key": "alpha", "statement": "It lists what is due today", "modal": "MUST"}
 
 
+def _criteria(requirements):
+    """One criterion per requirement, so the document passes the completeness check (F207)."""
+    return [
+        {
+            "key": f"c-{r['key']}",
+            "requirement": r["key"],
+            "given": "the document is approved",
+            "when": "the work is done",
+            "then": "the requirement is shown",
+        }
+        for r in requirements
+    ]
+
+
 @pytest.fixture
 async def author():
     async with async_session_factory() as session:
@@ -44,7 +58,9 @@ async def submit(app, run_headers, *, path, tasks, title="Dependency demo"):
         "schema_version": SCHEMA_VERSION,
         "kind": "change-spec",
         "title": title,
+        "scope": {"in_scope": ["the demo"], "non_goals": ["everything else"]},
         "requirements": [ALPHA],
+        "acceptance_criteria": _criteria([ALPHA]),
         "tasks": tasks,
     }
     saved = await app.post(SUBMIT, json={"path": path, "document": document}, headers=run_headers)
@@ -242,7 +258,12 @@ async def test_an_import_resolves_to_the_existing_task_without_creating_one(
     source_task_id = source_tasks["adopt-corpus"].id
 
     declared = [
-        {"key": "adopt-corpus", "from": {"document": PATH_IMPORT_SOURCE, "key": "adopt-corpus"}},
+        {
+            "key": "adopt-corpus",
+            "from": {"document": PATH_IMPORT_SOURCE, "key": "adopt-corpus"},
+            # An import entry traces to a requirement like any task (F207).
+            "requirements": ["alpha"],
+        },
         {
             "key": "render-map",
             "description": "Render the map.",
@@ -282,7 +303,12 @@ async def test_an_unresolvable_import_is_preserved_and_reported_not_raised(
     await approve(app, auth_headers, path=PATH_IMPORT_SOURCE)
 
     declared = [
-        {"key": "adopt-corpus", "from": {"document": PATH_IMPORT_SOURCE, "key": "adopt-corpus"}},
+        {
+            "key": "adopt-corpus",
+            "from": {"document": PATH_IMPORT_SOURCE, "key": "adopt-corpus"},
+            # An import entry traces to a requirement like any task (F207).
+            "requirements": ["alpha"],
+        },
         {
             "key": "render-map",
             "description": "Render the map.",

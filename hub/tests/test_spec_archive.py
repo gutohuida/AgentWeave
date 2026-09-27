@@ -8,11 +8,12 @@ directly here, the same way design D1 states the rule exists "here as well as at
 """
 
 import pytest
+from sqlalchemy import select
 
-from hub import spec_lifecycle
+from hub import project_workspace, spec_lifecycle
 from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
-from hub.db.models import Run
+from hub.db.models import Run, SpecDocument
 from hub.spec_payload import SCHEMA_VERSION
 
 BASE = "/api/v1/projects/proj-test/project"
@@ -272,40 +273,53 @@ async def test_transition_itself_refuses_an_agent_actor_archiving(app, auth_head
                 document,
                 to_phase=spec_lifecycle.ARCHIVED,
                 actor=spec_lifecycle.Actor(kind="agent", name="claude-1", run_id="run-x"),
+                workspace=await project_workspace.resolve_project_workspace(session, "proj-test"),
             )
         assert excinfo.value.code == "archive_is_the_operators"
         assert document.phase == spec_lifecycle.APPROVED, "a refused transition must not mutate"
 
 
 @pytest.mark.asyncio
-async def test_first_approved_at_is_set_once_and_survives_a_reopen(app, tmp_path):
+async def test_first_approved_at_is_set_once_and_survives_a_reopen(
+    app, auth_headers, run_headers, tmp_path
+):
     """`task-dependencies` design D6: unlike `explore_closed_at`, which resets to `None` on every
     reopen, `first_approved_at` is set the first time a document is approved and never touched
     again — not on reopening, and not on a second approval."""
     operator = spec_lifecycle.Actor(kind="operator", name="operator")
+    path = "spec/changes/first-approved-demo/spec.html"
+    # Created and written through the API so the file carries a complete payload: the move to
+    # `proposed` now runs the completeness checks (F207), and `create_document` alone does not.
+    await app.post(
+        f"{BASE}/documents",
+        json={"path": path, "title": "First approved demo"},
+        headers=auth_headers,
+    )
+    await app.post(AGENT, json={"path": path, "document": _document()}, headers=run_headers)
     async with async_session_factory() as session:
-        document = await spec_lifecycle.create_document(
-            session,
-            "proj-test",
-            "spec/changes/first-approved-demo/spec.html",
-            actor=operator,
-            title="First approved demo",
-        )
+        document = (
+            await session.execute(select(SpecDocument).where(SpecDocument.path == path))
+        ).scalar_one()
+        workspace = await project_workspace.resolve_project_workspace(session, "proj-test")
         assert document.first_approved_at is None
 
         await spec_lifecycle.close_exploration(session, document, actor=operator)
         await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator
+            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator, workspace=workspace
         )
         await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator
+            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator, workspace=workspace
         )
         first_stamp = document.first_approved_at
         assert first_stamp is not None
 
         # Reopen. `explore_closed_at` resets; `first_approved_at` must not.
         await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.EXPLORING, actor=operator
+            session,
+            document,
+            to_phase=spec_lifecycle.EXPLORING,
+            actor=operator,
+            workspace=workspace,
         )
         assert document.explore_closed_at is None
         assert document.first_approved_at == first_stamp
@@ -313,9 +327,9 @@ async def test_first_approved_at_is_set_once_and_survives_a_reopen(app, tmp_path
         # Approve a second time. Still the original timestamp, not a later one.
         await spec_lifecycle.close_exploration(session, document, actor=operator)
         await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator
+            session, document, to_phase=spec_lifecycle.PROPOSED, actor=operator, workspace=workspace
         )
         await spec_lifecycle.transition(
-            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator
+            session, document, to_phase=spec_lifecycle.APPROVED, actor=operator, workspace=workspace
         )
         assert document.first_approved_at == first_stamp

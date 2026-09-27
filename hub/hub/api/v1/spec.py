@@ -1630,13 +1630,23 @@ async def set_phase(
 
     try:
         await spec_lifecycle.transition(
-            session, document, to_phase=to, actor=_operator(), reason=body.reason
+            session,
+            document,
+            to_phase=to,
+            actor=_operator(),
+            workspace=workspace,
+            reason=body.reason,
         )
-    except spec_lifecycle.PhaseError as exc:
+    except spec_service.SaveRefusedError as exc:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": str(exc), "code": exc.code},
         ) from exc
+    except spec_lifecycle.PhaseError as exc:
+        detail: Dict[str, Any] = {"message": str(exc), "code": exc.code}
+        if exc.blocking:
+            detail["blocking"] = exc.blocking
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
 
     # Approval is what turns a decomposition from a description into work. The payload has always
     # carried `tasks`, validated on save and read by the completeness check; until now nothing
