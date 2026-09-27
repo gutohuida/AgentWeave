@@ -425,11 +425,10 @@ async def test_operator_supplied_stop_reason_records_a_stopped_ending(app, auth_
     assert patched.json()["loop"]["ending_state"] == "stopped"
     assert patched.json()["loop"]["stop_reason"] == "operator decided to stop it"
 
-    # A later edit to the prose must not overwrite the governance fact already recorded.
+    # A second stop is refused (design D2a): the ending already recorded is left as it was.
     edited = await app.patch(
         f"/api/v1/projects/proj-test/jobs/{job_id}",
         json={"stop_reason": "operator decided to stop it, revised"},
         headers=auth_headers,
     )
-    assert edited.status_code == 200
-    assert edited.json()["loop"]["ending_state"] == "stopped"
+    assert edited.status_code == 409

@@ -19,7 +19,7 @@ from ...operator_direction import require_operator_direction
 from ...scheduler import FiringDecision, cron_day_ambiguity_reason
 from ...schemas.jobs import JobCreate, JobResponse, JobRunResponse, JobUpdate, LoopSummary
 from ...schemas.tasks import TaskCreate
-from ...sse import sse_manager
+from ...sse import defer_broadcast, sse_manager
 from ...task_transitions import operator, run_actor
 from ...utils import persist_event, short_id
 from .tasks import check_task_create, create_task_for_actor
@@ -994,10 +994,29 @@ async def update_job(
         or body.spec_document_id is not None
     )
     staged_edit_event: Optional[Dict[str, Any]] = None
+    loop_stopped_event: Optional[Dict[str, Any]] = None
     if loop_fields_supplied:
         loop_result = await session.execute(select(Loop).where(Loop.job_id == job_id))
         loop = loop_result.scalar_one_or_none()
         loop_already_existed = loop is not None
+        if body.stop_reason is not None and loop is not None and loop.ending_state is not None:
+            # An ending is written once (design D2a): a second stop would only reword how, why or
+            # when this loop ended. Refused before anything is mutated, so nothing half-applies.
+            ended_when = loop.stopped_at.isoformat() if loop.stopped_at else "an unknown time"
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": (
+                        f"this loop already ended ({loop.stop_reason or loop.ending_state}) at "
+                        f"{ended_when}; its record is left as it was"
+                    ),
+                    "code": "loop_already_ended",
+                    "loop_id": loop.id,
+                    "ending_state": loop.ending_state,
+                    "stop_reason": loop.stop_reason,
+                    "stopped_at": loop.stopped_at.isoformat() if loop.stopped_at else None,
+                },
+            )
         if loop is None:
             if not _loop_opts_in(body.purpose, body.stop_at, body.stop_when_queue_empties):
                 raise HTTPException(
@@ -1072,8 +1091,30 @@ async def update_job(
             # the same function: this route used to write `stop_reason` and `ending_state` and
             # nothing else, leaving `stopped_at` NULL and the job *enabled*. A loop stopped by the
             # operator went on firing once a minute while every reader reported it stopped.
-            end_loop(job, loop, reason=body.stop_reason, when=datetime.now(timezone.utc))
+            end_loop(
+                job,
+                loop,
+                reason=body.stop_reason,
+                when=datetime.now(timezone.utc),
+                completed=False,
+            )
             loop_ended = True
+            # The refusal above guarantees this loop was running, so this call did end it. The
+            # row joins the transaction: if it cannot be written, the stop is not either.
+            loop_stopped_event = {
+                "job_id": job.id,
+                "loop_id": loop.id,
+                "reason": body.stop_reason,
+            }
+            await persist_event(
+                session,
+                project_id,
+                "loop_stopped",
+                loop_stopped_event,
+                agent=agent_identity,
+                loop_id=loop.id,
+                commit=False,
+            )
         loop.updated_by_run_id = run_identity
 
     # Design D4: a loop's continuity is by checkpoint, not by resumed session. Checked before
@@ -1142,13 +1183,10 @@ async def update_job(
 
     job.updated_by_run_id = run_identity
 
-    await session.commit()
-    await session.refresh(job)
-
+    # Every event row is staged here, above the commit, and each frame is deferred to it, in this
+    # order (design D3): a reader reacting to a frame can already see the row it reports.
     if staged_edit_event is not None:
-        # Task A2.5: recorded with actor and time — mirrors `loop_control_changed`'s own
-        # persist_event/broadcast pair (A1), fired after the commit above so a reader reacting to
-        # the event can already see the staged fields on the row.
+        # Task A2.5: recorded with actor and time — mirrors `loop_control_changed`'s own pair (A1).
         await persist_event(
             session,
             project_id,
@@ -1156,15 +1194,20 @@ async def update_job(
             staged_edit_event,
             agent=None if staged_edit_event["actor"] == "operator" else staged_edit_event["actor"],
             loop_id=staged_edit_event["id"],
+            commit=False,
         )
-        await sse_manager.broadcast(project_id, "loop_edit_staged", staged_edit_event)
+        defer_broadcast(session, project_id, "loop_edit_staged", staged_edit_event)
+    if loop_stopped_event is not None:
+        defer_broadcast(session, project_id, "loop_stopped", loop_stopped_event)
+    defer_broadcast(session, project_id, "job_updated", {"id": job_id, "enabled": job.enabled})
+
+    await session.commit()
+    await session.refresh(job)
 
     # Update scheduler. `update_job` is remove-then-add, so handing it the job it should now be
     # running under is the same statement as registering one for the first time.
     if update_scheduler:
         await _hand_job_to_scheduler(session, job_id, job if job.enabled else None)
-
-    await sse_manager.broadcast(project_id, "job_updated", {"id": job_id, "enabled": job.enabled})
 
     loop_summaries = await _batch_loop_summaries(session, [job_id])
     job.loop = loop_summaries.get(job_id)
@@ -1239,7 +1282,9 @@ async def archive_job(
     offered and declined, because the app has no control that stops a loop (F225, D6), so the
     refusal would strand the operator exactly as `agent-loops`' "Archiving a job retires its loop"
     scenario records happening on 2026-08-21. The job's archive ends the loop instead (F224, below).
-    Revisit only if a stop control ships.
+    Revisited when `LoopTab` gained Stop: it stays, because the archive already ends the loop and
+    disables the job in one transaction (nothing is left firing), and the main spec says the
+    operator need not stop it first.
     """
     project_id, _ = project
     await _require_agent_job_allowance(session, project_id, agent_identity, run_identity)
@@ -1276,19 +1321,52 @@ async def archive_job(
     job.archived_at = archived_at
     job.enabled = False
     job.updated_by_run_id = run_identity
+    ended_now = False
     if loop is not None:
-        if loop.ending_state is None:
-            # F224: an archived job cannot be switched back on (F222), so a loop archived with it
-            # has stopped for good — and must say so. Its record used to keep `ending_state` NULL,
-            # read as "still running" forever, with no route left that could give it an ending.
-            end_loop(job, loop, reason=ARCHIVED_WITH_JOB_REASON, when=archived_at)
+        # F224: an archived job cannot be switched back on (F222), so a loop archived with it
+        # has stopped for good — and must say so. Its record used to keep `ending_state` NULL,
+        # read as "still running" forever, with no route left that could give it an ending.
+        ended_now = end_loop(
+            job, loop, reason=ARCHIVED_WITH_JOB_REASON, when=archived_at, completed=False
+        )
         loop.archived_at = archived_at
+
+    # Rows and deferred frames above the one commit, in this order (design D3a): the loop's own
+    # history records the stop and the archival, and an open loop tab is told.
+    await persist_event(
+        session, project_id, "job_archived", {"id": job_id}, agent=agent_identity, commit=False
+    )
+    defer_broadcast(session, project_id, "job_archived", {"id": job_id})
+    if loop is not None:
+        if ended_now:
+            stopped_payload = {
+                "job_id": job_id,
+                "loop_id": loop.id,
+                "reason": ARCHIVED_WITH_JOB_REASON,
+            }
+            await persist_event(
+                session,
+                project_id,
+                "loop_stopped",
+                stopped_payload,
+                agent=agent_identity,
+                loop_id=loop.id,
+                commit=False,
+            )
+            defer_broadcast(session, project_id, "loop_stopped", stopped_payload)
+        await persist_event(
+            session,
+            project_id,
+            "loop_archived",
+            {"id": loop.id},
+            agent=agent_identity,
+            loop_id=loop.id,
+            commit=False,
+        )
+        defer_broadcast(session, project_id, "loop_archived", {"id": loop.id})
 
     await session.commit()
     await session.refresh(job)
-
-    await sse_manager.broadcast(project_id, "job_archived", {"id": job_id})
-    await persist_event(session, project_id, "job_archived", {"id": job_id}, agent=agent_identity)
 
     await _hand_job_to_scheduler(session, job_id)
 

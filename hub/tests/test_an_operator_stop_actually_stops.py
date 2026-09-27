@@ -120,8 +120,8 @@ async def test_editing_a_loop_without_stopping_it_leaves_it_running(app, auth_he
     assert loop.stopped_at is None
 
 
-async def test_a_second_stop_reason_does_not_overwrite_the_recorded_ending_state(app, auth_headers):
-    """Editing the prose afterwards is not a new governance fact."""
+async def test_a_second_stop_is_refused_and_the_recorded_ending_stands(app, auth_headers):
+    """An ending is written once (design D2a): a second stop is refused, not reworded."""
     job_id = await _loop_job(app, auth_headers)
     await app.patch(
         f"/api/v1/projects/proj-test/jobs/{job_id}",
@@ -133,14 +133,15 @@ async def test_a_second_stop_reason_does_not_overwrite_the_recorded_ending_state
         loop.ending_state = "completed"
         await session.commit()
 
-    await app.patch(
+    second = await app.patch(
         f"/api/v1/projects/proj-test/jobs/{job_id}",
         json={"stop_reason": "actually, it finished"},
         headers=auth_headers,
     )
+    assert second.status_code == 409, second.text
     _, loop = await _rows(job_id)
     assert loop.ending_state == "completed"
-    assert loop.stop_reason == "actually, it finished"
+    assert loop.stop_reason == "enough"
 
 
 async def test_a_bare_job_with_no_loop_is_untouched_by_the_ending_path(app, auth_headers):

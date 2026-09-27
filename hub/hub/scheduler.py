@@ -3305,7 +3305,13 @@ class JobScheduler:
                 # D17/B2.5. One statement of what ending means, shared with the operator's own
                 # stop in `api/v1/jobs.py` — which used to keep a partial copy of this and left
                 # out the two halves that matter most, `stopped_at` and disabling the job.
-                end_loop(job, loop, reason=loop_stop_reason, when=fired_at)
+                end_loop(
+                    job,
+                    loop,
+                    reason=loop_stop_reason,
+                    when=fired_at,
+                    completed=loop_stop_reason == QUEUE_DRAINED_REASON,
+                )
                 await session.commit()
                 if pending_edit_payload is not None:
                     await _emit_loop_edit_applied(session, pending_edit_payload)

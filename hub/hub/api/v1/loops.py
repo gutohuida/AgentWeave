@@ -34,7 +34,7 @@ from ...auth import get_project
 from ...db.engine import get_session
 from ...db.models import EventLog, JobRun, Loop
 from ...schemas.jobs import LoopControlUpdate, LoopDetail, LoopSummary
-from ...sse import sse_manager
+from ...sse import defer_broadcast
 from ...utils import persist_event
 from .jobs import _batch_loop_summaries
 
@@ -179,10 +179,11 @@ async def archive_loop(
         )
 
     loop.archived_at = datetime.now(timezone.utc)
+    await persist_event(
+        session, project_id, "loop_archived", {"id": loop_id}, loop_id=loop_id, commit=False
+    )
+    defer_broadcast(session, project_id, "loop_archived", {"id": loop_id})
     await session.commit()
-
-    await sse_manager.broadcast(project_id, "loop_archived", {"id": loop_id})
-    await persist_event(session, project_id, "loop_archived", {"id": loop_id}, loop_id=loop_id)
 
     return await _get_loop_detail(session, project_id, loop_id)
 
@@ -214,18 +215,12 @@ async def set_loop_control(
 
     previous = loop.control or "operator"
     loop.control = "creator" if body.control == "creator" else None
-    await session.commit()
-
     new_value = loop.control or "operator"
-    await sse_manager.broadcast(
-        project_id, "loop_control_changed", {"id": loop_id, "from": previous, "to": new_value}
-    )
+    changed = {"id": loop_id, "from": previous, "to": new_value}
     await persist_event(
-        session,
-        project_id,
-        "loop_control_changed",
-        {"id": loop_id, "from": previous, "to": new_value},
-        loop_id=loop_id,
+        session, project_id, "loop_control_changed", changed, loop_id=loop_id, commit=False
     )
+    defer_broadcast(session, project_id, "loop_control_changed", changed)
+    await session.commit()
 
     return await _get_loop_detail(session, project_id, loop_id)
