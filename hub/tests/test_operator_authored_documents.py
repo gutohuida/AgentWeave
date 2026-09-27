@@ -65,8 +65,11 @@ def _complete_payload(kind, **overrides):
     discussion is incomplete by definition. Proposing is what cares, and it wants three things:
     non-empty `non_goals`, an acceptance criterion covering every requirement, and a task covering
     every requirement ("a task tracing to nothing is work nobody asked for", and a requirement
-    tracing to no task is something nothing implements).
+    tracing to no task is something nothing implements). A change document must also say how it
+    will be built, so it answers "no flow".
     """
+    if kind == "change-spec":
+        overrides.setdefault("delivery", {"mode": "none"})
     return _payload(
         kind,
         acceptance_criteria=[
