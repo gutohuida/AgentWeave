@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "926eeeb",
     "stop_at": "2026-09-27T07:00:00+01:00",
-    "iteration": 27,
+    "iteration": 28,
     "log_file": ".claude/autonomous/2026-09-26-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
     "current": "r1b-impl",
-    "next_action": "Queue item r1b-impl part 2: implement task 2.2 (completeness codes delivery_unanswered/delivery_flow_incomplete, gated on payload.kind == 'change-spec'; add both to B5's phase_blockers exclusion at APPROVED, in spec_completeness.py/spec_lifecycle.py) and the propose-refusal half of test 1.2 in hub/tests/test_a_document_says_how_it_will_be_built.py. D1 (Delivery model, shape validation, payload_to_dict) already landed iteration 27 -- do not redo. Read design.md D4 first. Read CI verdict first. tasks.md is the authority. Apply F392 rules (full-suite tick only at 4.1, with its count inline). Size to one firing; split further in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep. If mutating code to check a test, copy the file or git stash first -- do NOT `git checkout --` a file with uncommitted work still wanted (iteration 27 nearly lost D1 this way).",
+    "next_action": "Queue item r1b-impl part 3: task 2.3 -- interview line and roster line in the open-document block (agents.py, change-spec only, exploring/proposed phases); spec_turn_notice(kind=None) in launchability.py and the one call site passing kind; agent_trigger._spec_phase_for returning kind (D2). Then D3: mcp_server.submit_spec_document gains delivery: Optional[Dict[str, Any]] plus docstring paragraph; agents.py HTTP prose for submit_spec_document names delivery; test_tool_surface_matches_server.py and test_mcp_tool_schemas.py's wanted map (delivery: object). Follow .claude/rules/mcp-server.md. Tasks 2.2 and the 1.2 refusal half landed iteration 28 -- do not redo; 1.2's remaining two cases ({mode: none} proposes cleanly; a roadmap payload with no delivery gets neither code) are still open, pick up in tests alongside 2.3/D2 if time allows, else a later firing. Read design.md D2 and D3 first. Read CI verdict first. tasks.md is the authority. Apply F392 rules (full-suite tick only at 4.1, with its count inline). Size to one firing; split further in the log if not. Do NOT write backslash text via bash/python heredocs: use Edit/Write, then grep. If mutating code to check a test, copy the file or git stash first -- do NOT `git checkout --` a file with uncommitted work still wanted (iteration 27 nearly lost D1 this way).",
     "queue": [
         {
             "id": "r1a-impl",
@@ -73,7 +73,7 @@
             "id": "r1b-impl",
             "status": "in_progress",
             "title": "Implement a-document-says-how-it-will-be-built-and-approval-starts-it (tests first, then fix)",
-            "detail": "openspec/changes/a-document-says-how-it-will-be-built-and-approval-starts-it/tasks.md is the authority. F377; edits mcp_server.py; UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Part 1 (D1: Delivery model, shape validation in validate_payload, payload_to_dict drop-null; tasks 1.1, 2.1) done iteration 27. Remaining: 2.2-2.7 backend, 3.x UI + bundle, 1.2-1.12 tests, 4.x verify/drive/archive as separate queue items below."
+            "detail": "openspec/changes/a-document-says-how-it-will-be-built-and-approval-starts-it/tasks.md is the authority. F377; edits mcp_server.py; UI bundle. Read design.md round log first. Apply F392 rules (union of open changes' guard files; counts inline). Part 1 (D1: Delivery model, shape validation in validate_payload, payload_to_dict drop-null; tasks 1.1, 2.1) done iteration 27. Part 2 (D4: completeness codes + phase_blockers exclusion, task 2.2; 1.2's propose-refusal half) done iteration 28. Remaining: 2.3-2.7 backend, 3.x UI + bundle, 1.2's other two cases plus 1.3-1.12 tests, 4.x verify/drive/archive as separate queue items below."
         },
         {
             "id": "r1b-drive",

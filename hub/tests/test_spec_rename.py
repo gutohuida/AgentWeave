@@ -57,6 +57,7 @@ def _document(**overrides):
             {"key": "c1", "requirement": "alpha", "given": "g", "when": "w", "then": "t"}
         ],
         "tasks": [{"key": "t1", "description": "Build it", "requirements": ["alpha"]}],
+        "delivery": {"mode": "none"},
     }
     payload.update(overrides)
     return payload

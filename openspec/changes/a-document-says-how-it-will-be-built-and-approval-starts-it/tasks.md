@@ -27,7 +27,7 @@
 ## 2. Backend
 
 - [x] 2.1 `Delivery` model and `SpecPayload.delivery` (D1)
-- [ ] 2.2 Completeness codes, gated on `payload.kind == "change-spec"` (D4); both codes added to B5's `phase_blockers` exclusion at `APPROVED`
+- [x] 2.2 Completeness codes, gated on `payload.kind == "change-spec"` (D4); both codes added to B5's `phase_blockers` exclusion at `APPROVED`
 - [ ] 2.3 Interview line and roster line in the open-document block, change-spec only; `spec_turn_notice(kind=None)`, and `_spec_phase_for` returning kind (D2). `mcp_server.submit_spec_document` + HTTP prose (D3), following `.claude/rules/mcp-server.md`
 - [ ] 2.4 `spec_render` Delivery section, only when present; `delivery_agent_state`; `GET /spec` `delivery_status` (D5)
 - [ ] 2.5 `build_flow_rows` in `api/v1/jobs.py` (flushes the job, then the loop **before** adoption; never commits; **never calls `session.rollback()`**; raises `HTTPException`), and the route rewired to commit once (D6)

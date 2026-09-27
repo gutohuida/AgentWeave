@@ -58,6 +58,7 @@ async def submit(app, run_headers, *, tasks=None):
         "requirements": [ALPHA],
         "acceptance_criteria": [CRITERION],
         "scope": SCOPE,
+        "delivery": {"mode": "none"},
     }
     if tasks is not None:
         document["tasks"] = tasks

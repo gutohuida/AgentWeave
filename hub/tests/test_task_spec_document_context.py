@@ -72,6 +72,7 @@ async def _document(app, auth_headers, run_headers, tasks=None):
                 "then": "the requirement is shown",
             }
         ],
+        "delivery": {"mode": "none"},
     }
     if tasks is not None:
         document["tasks"] = tasks

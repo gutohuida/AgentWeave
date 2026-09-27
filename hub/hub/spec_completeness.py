@@ -248,4 +248,28 @@ def check(
                 )
             )
 
+    # D4: only a change-spec document declares delivery — no other kind is asked.
+    if payload.kind == "change-spec":
+        if payload.delivery is None:
+            findings.append(
+                Finding(
+                    "delivery_unanswered",
+                    "delivery",
+                    "ask how this document's tasks will be worked once approved: a flow "
+                    "(with a default agent and a stop condition) or no flow at all",
+                )
+            )
+        elif payload.delivery.mode == "flow" and (
+            not payload.delivery.agent
+            or not (payload.delivery.stop_when_queue_empties or payload.delivery.stop_at)
+        ):
+            findings.append(
+                Finding(
+                    "delivery_flow_incomplete",
+                    "delivery",
+                    "a flow delivery needs a default agent and at least one stop condition "
+                    "(stop_when_queue_empties or stop_at)",
+                )
+            )
+
     return findings

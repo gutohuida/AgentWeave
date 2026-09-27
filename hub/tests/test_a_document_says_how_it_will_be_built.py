@@ -1,9 +1,11 @@
 """`a-document-says-how-it-will-be-built-and-approval-starts-it`.
 
 This file grows with the change (design.md's rounds; `openspec/changes/
-a-document-says-how-it-will-be-built-and-approval-starts-it/tasks.md`). This slice is task 1.1
-only: `delivery`'s shape at save time. Propose- and approve-time behaviour (1.2 onward) needs
-completeness and `set_phase` work this slice does not touch yet.
+a-document-says-how-it-will-be-built-and-approval-starts-it/tasks.md`). Task 1.1 is `delivery`'s
+shape at save time. Task 1.2's refusal half is here too: a change-spec cannot be proposed while
+`delivery` is unanswered or an incomplete flow (D4). The rest of 1.2 (a `none` delivery and a
+roadmap with no delivery both propose cleanly) and 1.3 onward (approval) need `phase_blockers`'s
+APPROVED-time exclusion exercised end to end and `set_phase` work this slice does not touch yet.
 """
 
 import pytest
@@ -12,6 +14,10 @@ from hub.agent_auth import hash_run_token
 from hub.db.engine import async_session_factory
 from hub.db.models import Run
 from hub.spec_payload import SCHEMA_VERSION, PayloadError, payload_to_dict, validate_payload
+
+from .test_spec_documents_api import PATH as DOC_PATH
+from .test_spec_documents_api import _create, _document
+from .test_spec_documents_api import _submit as _submit_document
 
 BASE = "/api/v1/projects/proj-test/project"
 AGENT = "/api/v1/agent-actions/spec/documents"
@@ -166,3 +172,72 @@ async def test_an_unchanged_resubmission_with_no_delivery_key_proposes_nothing(
     body = response.json()
     assert body["proposals"] == []
     assert "metadata" in body["unchanged"]
+
+
+# ---------------------------------------------------------------------------
+# 1.2 (refusal half) — proposing a change-spec is refused while `delivery` is
+# unanswered or an incomplete flow (D4). `_document()` (test_spec_documents_api) already
+# carries a requirement, a criterion and a task that satisfy every other completeness check,
+# so the only finding these fixtures can produce is the one under test.
+# ---------------------------------------------------------------------------
+
+
+async def _close_exploration(app, auth_headers, path=DOC_PATH):
+    closed = await app.post(
+        f"{BASE}/documents/close-exploration", params={"path": path}, headers=auth_headers
+    )
+    assert closed.status_code == 200, closed.text
+
+
+async def _propose(app, auth_headers, path=DOC_PATH):
+    return await app.post(f"{BASE}/documents/propose", params={"path": path}, headers=auth_headers)
+
+
+@pytest.mark.asyncio
+async def test_proposing_with_no_delivery_is_refused(app, auth_headers, run_headers):
+    await _create(app, auth_headers)
+    await _submit_document(app, run_headers, _document(delivery=None))
+    await _close_exploration(app, auth_headers)
+
+    response = await _propose(app, auth_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["phase"] == "exploring"
+    assert "delivery_unanswered" in {b["code"] for b in body["blocking"]}
+
+
+@pytest.mark.asyncio
+async def test_proposing_a_flow_with_no_agent_is_refused(app, auth_headers, run_headers):
+    await _create(app, auth_headers)
+    await _submit_document(
+        app,
+        run_headers,
+        _document(delivery={"mode": "flow", "stop_when_queue_empties": True}),
+    )
+    await _close_exploration(app, auth_headers)
+
+    response = await _propose(app, auth_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["phase"] == "exploring"
+    assert "delivery_flow_incomplete" in {b["code"] for b in body["blocking"]}
+
+
+@pytest.mark.asyncio
+async def test_proposing_a_flow_with_no_stop_condition_is_refused(app, auth_headers, run_headers):
+    await _create(app, auth_headers)
+    await _submit_document(
+        app,
+        run_headers,
+        _document(delivery={"mode": "flow", "agent": "dev"}),
+    )
+    await _close_exploration(app, auth_headers)
+
+    response = await _propose(app, auth_headers)
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["phase"] == "exploring"
+    assert "delivery_flow_incomplete" in {b["code"] for b in body["blocking"]}

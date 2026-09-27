@@ -787,7 +787,15 @@ async def phase_blockers(
     if to_phase == spec_lifecycle.APPROVED:
         # A document whose import source was reopened after it was proposed is approved anyway and
         # the reference recorded as `document_not_approved` (task-dependencies, settled).
-        findings = [f for f in findings if f.code != "import_not_approved"]
+        # A document proposed before this change (or one whose delivery answer is incomplete) is
+        # approved anyway: an absent or incomplete delivery just means no flow is created, and the
+        # approval report says so (D4) — it is not a reason to refuse approval.
+        excluded_at_approval = {
+            "import_not_approved",
+            "delivery_unanswered",
+            "delivery_flow_incomplete",
+        }
+        findings = [f for f in findings if f.code not in excluded_at_approval]
 
     blocking = [finding.to_dict() for finding in findings]
     if to_phase == spec_lifecycle.PROPOSED and document.explore_closed_at is None:

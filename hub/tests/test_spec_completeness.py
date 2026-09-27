@@ -18,6 +18,7 @@ def _complete(**overrides):
         ],
         "tasks": [{"key": "t1", "description": "Build it", "requirements": ["alpha"]}],
         "scope": {"in_scope": ["the thing"], "non_goals": ["the other thing"]},
+        "delivery": {"mode": "none"},
     }
     base.update(overrides)
     return _payload(**base)

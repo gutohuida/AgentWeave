@@ -200,6 +200,7 @@ async def test_3_1_a_tasks_criteria_follow_its_requirements(app, auth_headers, a
                     _entry("build-listing", requirements=["alpha"]),
                     _entry("build-recording", requirements=["beta"]),
                 ],
+                "delivery": {"mode": "none"},
             },
         },
         headers=author,

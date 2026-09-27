@@ -62,6 +62,7 @@ async def submit(app, run_headers, *, path, tasks, title="Dependency demo"):
         "requirements": [ALPHA],
         "acceptance_criteria": _criteria([ALPHA]),
         "tasks": tasks,
+        "delivery": {"mode": "none"},
     }
     saved = await app.post(SUBMIT, json={"path": path, "document": document}, headers=run_headers)
     assert saved.status_code == 200, saved.text
