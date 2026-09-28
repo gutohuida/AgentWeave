@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 10,
+    "iteration": 11,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-model-alias-is-a-model-choice-archive",
-    "next_action": "Do queue item 'a-model-alias-is-a-model-choice-archive': openspec-archive-change for a-model-alias-is-a-model-choice. Sync its MODIFIED/ADDED requirements into openspec/specs/. This change's proposal.md names the F<n> it closes -- read it, set that finding's Status line in scripts/drive/FINDINGS.md to 'fixed 63d9f34' and correct the index's open severity list if that F<n> is on it.",
+    "current": "the-codex-models-offered-are-the-ones-its-cli-lists-impl",
+    "next_action": "Do queue item 'the-codex-models-offered-are-the-ones-its-cli-lists-impl': openspec-apply-change for the-codex-models-offered-are-the-ones-its-cli-lists. Follow F392 rules 1-2 (inline full-suite counts in tasks.md; union of open changes' guard files naming hub/tests or tests test files that must not move).",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -65,9 +65,9 @@
         },
         {
             "id": "a-model-alias-is-a-model-choice-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-model-alias-is-a-model-choice",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "detail": "Done commit 8e75486: archived to openspec/changes/archive/2026-09-28-a-model-alias-is-a-model-choice, synced the ADDED model-catalog requirement (append) and the MODIFIED + ADDED runner-registry requirements (merge + append) into openspec/specs/ (43/43 specs strict, 45/45 changes strict), and marked F221 'fixed 63d9f34 (2026-09-27)' in FINDINGS.md. F221 is severity D, never on the open severity-A index, so no index correction was owed."
         },
         {
             "id": "the-codex-models-offered-are-the-ones-its-cli-lists-impl",
