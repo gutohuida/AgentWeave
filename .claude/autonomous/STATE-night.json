@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 11,
+    "iteration": 12,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "the-codex-models-offered-are-the-ones-its-cli-lists-impl",
-    "next_action": "Do queue item 'the-codex-models-offered-are-the-ones-its-cli-lists-impl': openspec-apply-change for the-codex-models-offered-are-the-ones-its-cli-lists. Follow F392 rules 1-2 (inline full-suite counts in tasks.md; union of open changes' guard files naming hub/tests or tests test files that must not move).",
+    "current": "the-codex-models-offered-are-the-ones-its-cli-lists-drive",
+    "next_action": "Do queue item 'the-codex-models-offered-are-the-ones-its-cli-lists-drive': drive against the trial Hub :8010 per tasks.md section 3 (3.1 GET /api/v1/model-catalog lists this machine's cached Codex models with source.kind == \"cli_cache\", recorded verbatim; 3.2 POST /runners with an unrecognised Codex model answers 400 and a seeded existing runner reads model_unrecognised: true; 3.3 New-runner form's Codex source line, recorded verbatim). Record result in scripts/drive/FINDINGS.md.",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -71,9 +71,9 @@
         },
         {
             "id": "the-codex-models-offered-are-the-ones-its-cli-lists-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement the-codex-models-offered-are-the-ones-its-cli-lists",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
+            "detail": "Done commit 3b3563a: verified an inherited uncommitted diff already covered tasks.md sections 0-2.4 (Codex models/default/source read from $CODEX_HOME/models_cache.json at runtime, literal CATALOG as fallback), completed task 2.5's full-suite gate. Caught and fixed a real, pre-existing CI regression unrelated to this change: F460 (B) -- two a-model-alias-is-a-model-choice tests never mocked hub.launchability.shutil.which, so they only passed with a real claude on PATH; CI had been red on them for 4 consecutive commits since 63d9f34. Fixed to match every sibling test. hub/tests/ (claude stripped from PATH) 5109 passed/86 skipped; tests/ 553 passed/3 skipped; ruff/black/mypy/eslint clean; UI bundle already matched source."
         },
         {
             "id": "the-codex-models-offered-are-the-ones-its-cli-lists-drive",
