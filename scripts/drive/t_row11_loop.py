@@ -227,9 +227,12 @@ def main():
                     (h.get("error_summary") or "")[:70],
                 )
             )
+        # A `JobRun` row is a dispatch, not a firing (design D1,
+        # `a-firing-is-counted-once-however-many-agents-it-starts`), so equality with the row
+        # count holds only for a one-agent loop; the general check is distinct `fired_at` values.
         verdict(
-            "run_count matches the number of history rows (F121's lens, on a loop)",
-            j.get("run_count") == len(hist),
+            "run_count matches the number of firings (distinct `fired_at`)",
+            j.get("run_count") == len({h.get("fired_at") for h in hist}),
             "run_count=%s history_rows=%s" % (j.get("run_count"), len(hist)),
         )
 
@@ -308,9 +311,10 @@ def main():
                 )
             )
         j = job_row(job_id)
+        # Same D1 caveat as above: matches firings (distinct `fired_at`), not history rows.
         verdict(
-            "run_count still matches the history rows after the ending",
-            j.get("run_count") == len(hist),
+            "run_count matches the number of firings (distinct `fired_at`) after the ending",
+            j.get("run_count") == len({h.get("fired_at") for h in hist}),
             "run_count=%s history_rows=%s" % (j.get("run_count"), len(hist)),
         )
 

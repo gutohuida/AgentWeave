@@ -4055,10 +4055,12 @@ class JobScheduler:
             task_id=task.id if not is_review else None,
         )
         session.add(entry)
-        # One per row, so `run_count` keeps counting `JobRun`s (finding F11 stamps the primary's at
-        # the same boundary). `job.last_run` is not touched: the firing has one time, already
-        # stamped, and moving it per selection would make it mean "the last agent started".
-        job.run_count += 1
+        # `run_count` is not touched here: it counts firings, not dispatches (design D1,
+        # `a-firing-is-counted-once-however-many-agents-it-starts`) — the primary path already
+        # stamped it once for this firing, and an additional selection is the same firing reaching
+        # a second agent, not a second firing. `job.last_run` is not touched either: the firing has
+        # one time, already stamped, and moving it per selection would make it mean "the last agent
+        # started".
         await session.commit()
 
         queue_payload = {

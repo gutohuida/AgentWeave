@@ -215,7 +215,10 @@ class JobResponse(BaseModel):
     created_at: datetime
     last_run: Optional[datetime] = None
     next_run: Optional[datetime] = None
-    run_count: int
+    run_count: int = Field(
+        description="Firings that queued work for at least one agent. A firing that queues work "
+        "for several agents counts once."
+    )
     last_session_id: Optional[str] = Field(default=None, max_length=128)
     source: str = Field(default="hub", max_length=64)  # "local" or "hub"
     # D16: NULL means live and listed by default; set only by `POST /jobs/{id}/archive`.

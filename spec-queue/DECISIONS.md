@@ -1464,6 +1464,14 @@ was.
   (`a-flows-own-moves-are-recorded-as-the-flows` D8): a manual Run press reads "Loop X moved"; a review
   staged late by a divergence restaff stays "You moved"; old rows are unchanged. Operator, 2026-09-24
   (`spec-queue/tracks/reviews/B3-2026-09-24.md`). Recorded 2026-09-25 at archive.
+- DECIDED   B2-D1a  **A `JobRun` row is a dispatch: one agent's share of one firing, not a firing
+  itself** (`a-firing-is-counted-once-however-many-agents-it-starts` D1, first half — the same D1
+  whose rename half was recorded above as `F149-D1b`). `run_count` counts firings that queued work
+  for at least one agent, once per firing regardless of how many agents it started; the per-agent
+  increment in `scheduler.py`'s `_stage_selection` is removed. The operator approved it 2026-09-24
+  (`APPROVALS.md`, B2: "the Opus review approved it as it stands"), the same approval `F149-D1b`
+  cites for the rename half of the identical D1. Recorded 2026-09-28 at this change's
+  implementation, closing task 0.3.
 
 ### F306 and F312, decided 2026-09-10 evening — and the scope verdict's mechanism, amended
 

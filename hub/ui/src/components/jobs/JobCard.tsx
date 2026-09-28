@@ -359,7 +359,7 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
   const { data: fetchedHistory, isLoading: historyLoading } = useJobHistory(job.id, expanded)
   const history = job.history ?? fetchedHistory
   // Firings the queue refused. `skipped` records exist and are listed, but never reach
-  // `run_count`, which is what made `0 runs` read as a contradiction of the list below it (F25).
+  // `run_count`, which is what made `0 fired` read as a contradiction of the list below it (F25).
   const refusedRecently = (history ?? []).filter((run) => run.status === 'skipped').length
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   // Null for any schedule that cannot be stated exactly — the line is then simply absent rather
@@ -432,13 +432,18 @@ export function JobCard({ job, onRun, onPause, onResume, onArchive, isPending, o
         <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
           <Badge variant={getStatusVariant(job.enabled)}>{getStatusLabel(job.enabled)}</Badge>
           <Badge variant="secondary">{job.session_mode}</Badge>
-          <Badge variant="default">{job.run_count} runs</Badge>
+          <Badge variant="default">{job.run_count} fired</Badge>
           {/* F25: `0 runs` sat on the same card as a Recent Runs list showing one entry, and the
               two disagreed on first read. Neither number was wrong — `run_count` counts firings
-              that actually ran, so a queue that has only ever refused is honestly zero — but a
+              that queued work, so a queue that has only ever refused is honestly zero — but a
               reader meets them as two counts of one word. Naming the refusals separately
-              reconciles them: "0 runs · 1 refused" adds up to the one row underneath, where
+              reconciles them: "0 fired · 1 refused" adds up to the one row underneath, where
               "0 runs" alone contradicted it.
+
+              `run_count` counts firings, not dispatches (design D1,
+              `a-firing-is-counted-once-however-many-agents-it-starts`): a firing that queues work
+              for several agents at once still counts once, so the label reads "fired" rather than
+              "runs" — a wide flow firing has more `JobRun` rows than firings.
 
               Drawn from the history the card already has rather than a new field: it is capped at
               five, so this says "of the recent history" and stops claiming more than it knows. */}

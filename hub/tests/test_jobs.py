@@ -421,6 +421,18 @@ async def test_job_history_tracks_runs(app, auth_headers):
     assert get_resp.json()["run_count"] == 1
     assert len(get_resp.json()["history"]) == 1
 
+    # Control (`a-firing-is-counted-once-however-many-agents-it-starts`, task 1.3): a plain job
+    # (one agent, no flow) fired twice by pressing Run counts two firings, unaffected by design
+    # D1 — D1 only changes how a single wide firing counts, not how repeated firings do.
+    second_run_resp = await app.post(
+        f"/api/v1/projects/proj-test/jobs/{job_id}/run", headers=auth_headers
+    )
+    assert second_run_resp.status_code == 200
+    assert second_run_resp.json()["success"] is True
+    get_resp = await app.get(f"/api/v1/projects/proj-test/jobs/{job_id}", headers=auth_headers)
+    assert get_resp.json()["run_count"] == 2
+    assert len(get_resp.json()["history"]) == 2
+
 
 @pytest.mark.asyncio
 async def test_update_job_not_found(app, auth_headers):

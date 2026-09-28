@@ -6,51 +6,60 @@
       before reading it. Record in `spec-queue/tracks/B2.md`
 - [x] 0.2 R3 (2026-09-24, recorded in `spec-queue/tracks/B2.md`): a second independent re-derivation. `openspec validate
       a-firing-is-counted-once-however-many-agents-it-starts --strict` passes. both increments (`scheduler.py:3443`, `:3756`) and the badge (`JobCard.tsx:435`) confirmed; no change
-- [ ] 0.3 The operator records D1 in `spec-queue/DECISIONS.md` (bundle B2). No task below starts
-      before it, and none starts if D1 is answered otherwise than *a row is a dispatch*
+- [x] 0.3 (2026-09-28) The operator records D1 in `spec-queue/DECISIONS.md` (bundle B2), as `B2-D1a`
+      — a row is a dispatch, citing the same B2 approval `F149-D1b` already used for D1's rename half
 
 ## 1. Tests first — each must fail on today's code unless marked as a control
 
-- [ ] 1.1 Edit `hub/tests/test_flow_width.py:423-424` (the `rows` case: one firing, two agents):
+- [x] 1.1 Edit `hub/tests/test_flow_width.py:423-424` (the `rows` case: one firing, two agents):
       assert `run_count == 1`, and replace the comment with one naming this change. Keep
-      `len(runs) == 2` and the two distinct conversations. Record that it FAILS today (2)
-- [ ] 1.2 Add to the same file: two firings of one flow, the first starting two agents and the
-      second one (complete the first firing's tasks between them, or stage a third task that becomes
-      startable). Assert three `JobRun` rows, two distinct `fired_at` values, and `run_count == 2`.
-      Record that it FAILS today (3)
-- [ ] 1.3 Control, PASSES today and must keep passing: a plain job fired twice by `POST
-      /jobs/{id}/run` reads `run_count == 2` (`test_jobs.py:419-421` covers one press; extend it or
-      add beside it)
-- [ ] 1.4 Control, PASSES today and must keep passing: `test_board_agent_role.py:346` (a declined
-      firing does not count) and `test_a_loop_staffs_the_agent_it_names.py:336`
-- [ ] 1.5 `hub/ui/src/__tests__/jobCard.test.tsx:391-412`: expect `'0 fired'` where it expects
-      `'0 runs'`, and add `expect(screen.queryByText(/\bruns\b/)).not.toBeInTheDocument()` against the
-      badge row. Update `:433-435` (`'1 runs'` → `'1 fired'`). Add a case `run_count: 3` renders
-      `'3 fired'`. Record that they FAIL today
+      `len(runs) == 2` and the two distinct conversations. FAILED before 2.1 (`1 == 2`), confirmed
+      before the fix was applied
+- [x] 1.2 Added `test_two_firings_of_one_flow_count_as_two_however_many_agents_each_started` to the
+      same file: two firings of one flow, the first starting two agents (then completed directly)
+      and the second one. Asserts `len(runs) == 3`, two distinct `fired_at` values, `run_count == 2`.
+      FAILED before 2.1 (`2 == 3`)
+- [x] 1.3 Control, extended `test_jobs.py`'s `test_job_history_tracks_runs`: a plain job fired
+      twice by `POST /jobs/{id}/run` reads `run_count == 2`, `history` length 2. PASSED before and
+      after (D1 does not change repeated-firing counting)
+- [x] 1.4 Control, confirmed still passing: `test_board_agent_role.py::test_no_job_run_row_is_written_for_a_declined_firing`
+      and `test_a_loop_staffs_the_agent_it_names.py` (`run_count == 0` after a declined firing)
+- [x] 1.5 `hub/ui/src/__tests__/jobCard.test.tsx`: `'0 fired'` where it expected `'0 runs'`, plus
+      `expect(screen.queryByText(/\bruns\b/)).not.toBeInTheDocument()`; `'1 runs'` → `'1 fired'`;
+      added a `run_count: 3` case asserting `'3 fired'`. FAILED before 2.3 (badge still read "runs")
 
 ## 2. The fix
 
-- [ ] 2.1 `hub/hub/scheduler.py` `_stage_selection`: delete `job.run_count += 1` (`:3756`) and
-      rewrite the comment at `:3753-3755` to say the counter counts firings (this change, D1) and
-      the row counts the dispatch
-- [ ] 2.2 `hub/hub/schemas/jobs.py:213`: `run_count: int = Field(description="Firings that queued
+- [x] 2.1 `hub/hub/scheduler.py` `_stage_selection`: deleted `job.run_count += 1` and rewrote the
+      comment to say `run_count` is not touched there — it counts firings (design D1), and the
+      primary path (`_do_fire_job`) already stamped it once for this firing
+- [x] 2.2 `hub/hub/schemas/jobs.py`: `run_count: int = Field(description="Firings that queued
       work for at least one agent. A firing that queues work for several agents counts once.")`
-- [ ] 2.3 `hub/ui/src/components/jobs/JobCard.tsx:435`: `{job.run_count} fired`. Rewrite the F25
-      comment (`:436-442`) and the one at `:362-363` to the firing wording
-- [ ] 2.4 `make ui` (or `scripts/refresh_ui_bundle.py`); commit `hub/ui/src` and
-      `hub/hub/static/ui` together
-- [ ] 2.5 Run group 1; every row passes. `py -3.11 -m pytest hub/tests/ -q` and `cd hub/ui && npm
-      test -- --run` with counts recorded inline. Any other moved assertion is named and explained
-- [ ] 2.6 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, `cd hub/ui
-      && npm run lint`, clean
-- [ ] 2.7 `scripts/drive/t_row11_loop.py:231` and `:312`: re-point both verdicts from
-      `run_count == len(hist)` to `run_count == len({h.get("fired_at") for h in hist})`, and reword
-      their labels to "run_count matches the number of firings (distinct `fired_at`)". A comment names
-      this change: a row is a dispatch, so equality with the row count holds only for a one-agent loop
-      (operator review 2026-09-24)
+- [x] 2.3 `hub/ui/src/components/jobs/JobCard.tsx`: `{job.run_count} fired`. Rewrote the F25
+      comment and the one above `RunHistory`'s "0 runs" empty-state usage line at `:362-363` (`0
+      fired`) to the firing wording
+- [x] 2.4 `make ui` — bundle rebuilt via `scripts/refresh_ui_bundle.py`, committed with
+      `hub/ui/src`
+- [x] 2.5 Group 1 run individually first (`hub/tests/test_flow_width.py` 27/27,
+      `hub/tests/test_jobs.py` + `test_board_agent_role.py` + `test_a_loop_staffs_the_agent_it_names.py`
+      78 passed/1 skipped, `jobCard.test.tsx` 19/19) — all passing. Then the full suites, on the
+      uncommitted tree over `c1d7486` (2026-09-28, interactive session): `py -3.11 -m pytest
+      hub/tests -n auto -q` with `claude` stripped from PATH — 5110 passed, 86 skipped, 0 failed;
+      `py -3.11 -m pytest tests/ -q` — 553 passed, 3 skipped; `npx vitest run` — 168 files, 1735
+      passed
+- [x] 2.6 `ruff check hub/`, `black --check --target-version py311 hub/hub/ hub/tests/`, `cd hub/ui
+      && npm run lint`, `npx tsc --noEmit`, `mypy src/` — clean (2026-09-28)
+- [x] 2.7 `scripts/drive/t_row11_loop.py`: both verdicts (`:230-234`ish, `:313-318`ish) re-pointed
+      from `run_count == len(hist)` to `run_count == len({h.get("fired_at") for h in hist})`, labels
+      reworded to "run_count matches the number of firings (distinct `fired_at`)", with a comment
+      naming this change and the one-agent-loop caveat
 
 ## 3. Drive it
 
-- [ ] 3.1 On a trial Hub from source (fresh port and profile; never `:8000`), a flow with two
+- [x] 3.1 On a trial Hub from source (fresh port and profile; never `:8000`), a flow with two
       startable tasks and two Haiku agents: press Run once. `GET /jobs/{id}` reads `run_count: 1`
-      and its history holds two rows sharing `fired_at`. Disable the job afterwards
+      and its history holds two rows sharing `fired_at`. Disable the job afterwards. Done
+      2026-09-28 on `:8051`, profile `drive0928firing`, `scripts/drive/d0928_firing_counted_once.py`:
+      an approved document seeded two pending tasks; one press started agents `one` and `two` (two
+      measured `claude-haiku-4-5-20251001` turns); `GET /jobs/{id}` read `run_count=1` with two
+      `completed` history rows both at `2026-09-28T08:05:44.101721Z`. Job disabled and archived

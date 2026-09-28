@@ -409,7 +409,8 @@ describe('JobCard: what the row and the chips actually claim', () => {
     }
     renderCard(baseJob({ run_count: 0 }))
 
-    expect(screen.getByText('0 runs')).toBeInTheDocument()
+    expect(screen.getByText('0 fired')).toBeInTheDocument()
+    expect(screen.queryByText(/\bruns\b/)).not.toBeInTheDocument()
     expect(screen.getByTestId('job-refused-job-1')).toHaveTextContent('1 refused')
 
     await user.click(screen.getByLabelText('Expand job details'))
@@ -432,8 +433,19 @@ describe('JobCard: what the row and the chips actually claim', () => {
     }
     renderCard(baseJob({ run_count: 1 }))
 
-    expect(screen.getByText('1 runs')).toBeInTheDocument()
+    expect(screen.getByText('1 fired')).toBeInTheDocument()
     expect(screen.queryByTestId('job-refused-job-1')).not.toBeInTheDocument()
+  })
+
+  it('names run_count as firings, not JobRun rows, in the badge (design D1)', async () => {
+    // `a-firing-is-counted-once-however-many-agents-it-starts`: a wide firing starts several
+    // agents but counts once, so the badge reads "fired" rather than "runs" — a count of
+    // dispatches (`JobRun` rows) would disagree with `run_count` for exactly that case.
+    loopTasks = []
+    jobHistory = { data: [], isLoading: false }
+    renderCard(baseJob({ run_count: 3 }))
+
+    expect(screen.getByText('3 fired')).toBeInTheDocument()
   })
 
   it('says a prospective reviewer is next, not that it is working the task (F26)', async () => {

@@ -420,7 +420,64 @@ async def test_a_wide_firing_records_one_job_run_per_selection(app, auth_headers
     assert len(runs) == 2
     assert len({r.conversation_id for r in runs}) == 2
     assert {e.agent for e in entries} == {OWNER, SECOND}
-    # `run_count` keeps counting `JobRun`s, so the two stay in step (finding F11).
+    # `run_count` counts firings, not `JobRun` rows (design D1,
+    # `a-firing-is-counted-once-however-many-agents-it-starts`): one firing that started two
+    # agents is one firing.
+    assert run_count == 1
+
+
+async def test_two_firings_of_one_flow_count_as_two_however_many_agents_each_started(
+    app, auth_headers, bind_runner
+):
+    """Design D1 (`a-firing-is-counted-once-however-many-agents-it-starts`): `run_count` counts
+    firings, and a firing that started two agents is still one firing. This is the two-firing
+    half of that guarantee — the single-firing half is
+    `test_a_wide_firing_records_one_job_run_per_selection` above.
+
+    The first firing's two tasks are completed directly (mirroring
+    `test_the_agent_arithmetic_for_a_review` above) rather than by letting a real turn run to
+    completion, so the second firing's availability depends only on task state, exactly as
+    `_agents_that_are_free` reads it.
+
+    `hub.launchability.shutil.which` is patched away for both firings so neither queued entry
+    ever spawns a real turn — this test is only about `run_count`, and a real (or real-looking)
+    spawn would leave the agent `running` past the firing, hiding it from the second firing's
+    `_agents_that_are_free` read for reasons this test does not care about."""
+    from unittest.mock import patch
+
+    await _roster(app, auth_headers, bind_runner, OWNER, SECOND)
+    async with async_session_factory() as db:
+        job, loop = await _flow(db, suffix="twice")
+        await _task(db, loop, "twice-a")
+        await _task(db, loop, "twice-b")
+
+    scheduler = JobScheduler()
+    with patch("hub.launchability.shutil.which", return_value=None):
+        async with async_session_factory() as db:
+            fresh_job = await db.get(AIJob, job.id)
+            await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+        async with async_session_factory() as db:
+            for key, agent in (("twice-a", OWNER), ("twice-b", SECOND)):
+                task = await db.get(Task, f"task-width-{key}")
+                actor = run_actor(run_id=f"run-{key}", agent=agent)
+                for status in ("assigned", "in_progress", "completed"):
+                    await apply_transition(db, task, status, actor)
+                task.assignee = None
+            await db.commit()
+            await _task(db, loop, "twice-c")
+
+        async with async_session_factory() as db:
+            fresh_job = await db.get(AIJob, job.id)
+            await scheduler._fire_job_internal(fresh_job, trigger="scheduled", session=db)
+
+    async with async_session_factory() as db:
+        runs = (await db.execute(select(JobRun).where(JobRun.job_id == job.id))).scalars().all()
+        fresh_job = await db.get(AIJob, job.id)
+        run_count = fresh_job.run_count
+
+    assert len(runs) == 3
+    assert len({r.fired_at for r in runs}) == 2
     assert run_count == 2
 
 
