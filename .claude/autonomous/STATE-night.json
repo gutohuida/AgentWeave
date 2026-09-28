@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 9,
+    "iteration": 10,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-model-alias-is-a-model-choice-drive",
-    "next_action": "Do queue item 'a-model-alias-is-a-model-choice-drive': drive against a fresh drive Hub per night-window.md 'Driving' section (tasks.md 3.1: trial Hub :8010, create a runner on haiku through the form, bind an agent, run one real turn on claude-haiku-4-5; record turn_usage.model vs runners.model). Record result in scripts/drive/FINDINGS.md.",
+    "current": "a-model-alias-is-a-model-choice-archive",
+    "next_action": "Do queue item 'a-model-alias-is-a-model-choice-archive': openspec-archive-change for a-model-alias-is-a-model-choice. Sync its MODIFIED/ADDED requirements into openspec/specs/. This change's proposal.md names the F<n> it closes -- read it, set that finding's Status line in scripts/drive/FINDINGS.md to 'fixed 63d9f34' and correct the index's open severity list if that F<n> is on it.",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -59,9 +59,9 @@
         },
         {
             "id": "a-model-alias-is-a-model-choice-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-model-alias-is-a-model-choice",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
+            "detail": "Done: trial Hub :8010 per tasks.md 3.1 (task names :8010 explicitly). Created a runner on the 'haiku' alias, bound an agent, ran one real claude-haiku-4-5 turn (scripts/drive/d0928_alias_turn_usage.py). Confirmed live: turn_usage.model == 'claude-haiku-4-5-20251001' (full resolved id) while runners.model stayed 'haiku' after the run -- D1 holds end to end. No new finding; FINDINGS.md 'a-model-alias-is-a-model-choice drive, 2026-09-28'."
         },
         {
             "id": "a-model-alias-is-a-model-choice-archive",

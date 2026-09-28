@@ -24,4 +24,4 @@
 
 ## 3. Drive
 
-- [ ] 3.1 On the trial Hub `:8010`: create a runner on `haiku` through the form, bind an agent to it, and run one real turn (Haiku, per the cheap-models rule). Record `turn_usage.model`, which should be the full id the CLI resolved, while `runners.model` still reads `haiku`
+- [x] 3.1 On the trial Hub `:8010`: created runner `alias-haiku-041659` on `haiku` (`POST /runners`, 201, `model_unrecognised: false`), bound agent `aliasdriver041659`, ran one real turn (`scripts/drive/d0928_alias_turn_usage.py`). Confirmed via `GET /accounting`'s `recent_turns`: `turn_usage.model` = `claude-haiku-4-5-20251001` (the full id the CLI resolved), while `GET /runners/{id}` still reads `runners.model` = `haiku` after the run — D1 holds end to end. Fixture project and its temp directory deleted afterward. (The script's own `turn_usage.runner` assertion was wrong, not the product: that column stores the CLI name, `"claude"`, not the runner's model — `hub/hub/db/models.py:1270`. Not a finding.)
