@@ -17742,10 +17742,17 @@ legacy runner cannot be saved.
 
 ## F221 (D) — the Hub refuses a model alias its own catalog declares
 
-**Status:** open, and deliberately so.
-`2026-09-02-runner-model-is-chosen-from-the-catalog` names the alias refusal out of scope in its
-design, and its `tasks.md:176` states in as many words that this entry stays open. The picker makes
-it unreachable from the screen; the API answer is still untrue. [classified 2026-09-09, D-3]
+**Status:** fixed 63d9f34 (2026-09-27). `a-model-alias-is-a-model-choice` (archived
+2026-09-28) reversed the out-of-scope call: every door that sets a model (`ProviderDescriptor.model`,
+runner create/edit, Add agent, per-run overrides, the worker gate) now accepts a declared alias and
+records it as written rather than the id it stands for; `undeclared_model_reason` lost its alias
+branch. Driven live (iteration 10, 2026-09-28): `POST /runners {"model": "haiku"}` was accepted and
+stored as `"haiku"`, a real turn resolved to `claude-haiku-4-5-20251001`, and the runner's stored
+model stayed `"haiku"` afterward.
+
+`2026-09-02-runner-model-is-chosen-from-the-catalog` had named the alias refusal out of scope in its
+design, and its `tasks.md:176` stated in as many words that this entry stayed open. The picker made
+it unreachable from the screen; the API answer was still untrue. [classified 2026-09-09, D-3]
 
 Found alongside F220. `ProviderDescriptor.model()` matches `m.id` only
 (`hub/hub/model_catalog.py:113-117`), and nothing outside the catalog module resolves aliases. But
