@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useCreateAgent } from '@/api/agents'
 import { useCharters } from '@/api/charters'
 import { useProviderLaunchability, type RunnerLaunchability } from '@/api/runners'
-import { useModelCatalog, type ProviderDescriptor } from '@/api/modelCatalog'
+import { useModelCatalog, catalogModelLabel, type ProviderDescriptor } from '@/api/modelCatalog'
 import { Button } from '@/components/ui/button'
 import { Icon, ProviderMark } from '@/components/common/Icon'
 import { useDialogFocus } from '@/hooks/useDialogFocus'
@@ -168,6 +168,7 @@ export function AgentCreateDialog({
   const providers = catalog?.providers ?? []
   const selectedProvider = providers.find((p) => p.provider === provider)
   const models = selectedProvider?.models ?? []
+  const aliasModels = models.flatMap((model) => model.aliases.map((alias) => ({ alias, model })))
   const selectedVerdict = launchability?.providers[provider]
   const canSubmit = /^[a-zA-Z0-9_-]{1,32}$/.test(name.trim())
     && !!provider
@@ -220,6 +221,13 @@ export function AgentCreateDialog({
             Model
             <select aria-label="Model" value={model} onChange={(event) => setModel(event.target.value)} className="mt-1 block w-full rounded-md px-3 py-2" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
               {models.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+              {aliasModels.length > 0 && (
+                <optgroup label="Latest">
+                  {aliasModels.map(({ alias, model: target }) => (
+                    <option key={alias} value={alias}>{catalogModelLabel(target, alias)}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
         )}

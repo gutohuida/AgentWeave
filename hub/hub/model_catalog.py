@@ -126,8 +126,10 @@ class ProviderDescriptor:
     controls: Tuple[ControlDescriptor, ...]
 
     def model(self, model_id: str) -> Optional[ModelDescriptor]:
+        """The descriptor whose `id` or `aliases` contain *model_id* (a declared alias is a model
+        choice, not a shorthand the Hub resolves away — see `a-model-alias-is-a-model-choice`)."""
         for m in self.models:
-            if m.id == model_id:
+            if m.id == model_id or model_id in m.aliases:
                 return m
         return None
 
@@ -287,20 +289,16 @@ def get_provider(provider: str) -> Optional[ProviderDescriptor]:
 def undeclared_model_reason(provider: str, model: str) -> str:
     """Why *model* is refused for *provider*, naming what would be accepted (F175, F182).
 
-    The one sentence for every site that refuses an undeclared model. An alias is published by
-    `GET /model-catalog` but not stored (a runner records the model id), so refusing one with "is
-    not a model it declares" was untrue; it names the id the alias stands for instead.
+    The one sentence for every site that refuses an undeclared model. A declared alias is itself
+    an accepted choice (`ProviderDescriptor.model` resolves it), so it is refused here only when
+    it is neither a declared id nor a declared alias, and is named among what would be accepted.
     """
     entry = get_provider(provider)
     if entry is None:
         return f"unknown provider {provider!r}; expected one of: {', '.join(sorted(CATALOG))}"
-    declared = ", ".join(m.id for m in entry.models)
-    for m in entry.models:
-        if model in m.aliases:
-            return (
-                f"{model!r} is the alias {provider!r} publishes for {m.id!r}; a runner stores the "
-                f"model id, so use {m.id!r}. {provider!r} declares: {declared}"
-            )
+    declared = ", ".join(
+        m.id if not m.aliases else f"{m.id} (or {', '.join(m.aliases)})" for m in entry.models
+    )
     return f"{model!r} is not a model {provider!r} declares; expected one of: {declared}"
 
 

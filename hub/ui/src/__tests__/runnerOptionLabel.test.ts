@@ -67,4 +67,16 @@ describe('runnerOptionLabel (F268)', () => {
     expect(runnerOptionLabel(runner({ model: 'claude-opus-5' }), MODEL_CATALOG_FIXTURE, { model: null }))
       .toBe('Claude Code — Opus 5 (claude)')
   })
+
+  it('names a declared alias as what the runner records, not its current target (a-model-alias-is-a-model-choice D2)', () => {
+    expect(runnerOptionLabel(runner({ model: 'opus' }), MODEL_CATALOG_FIXTURE))
+      .toBe('Claude Code — opus (latest) (claude)')
+  })
+
+  it('does not double an alias for a runner the Hub named for itself', () => {
+    const hubNamed = runner({ name: 'Claude Code — opus (latest)', model: 'opus' })
+    const label = runnerOptionLabel(hubNamed, MODEL_CATALOG_FIXTURE)
+    expect(label).toBe('Claude Code — opus (latest) (claude)')
+    expect(label.match(/opus/g)).toHaveLength(1)
+  })
 })

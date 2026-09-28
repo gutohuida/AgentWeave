@@ -75,14 +75,15 @@ vi.mock('@/api/runners', () => ({
   }),
 }))
 
-vi.mock('@/api/modelCatalog', () => ({
+vi.mock('@/api/modelCatalog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/modelCatalog')>()),
   useModelCatalog: () => ({
     data: {
       providers: [{
         provider: 'claude',
         models: [
-          { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', context_window: 200_000 },
-          { id: 'claude-opus-5', label: 'Opus 5', context_window: 1_000_000 },
+          { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', aliases: ['haiku'], context_window: 200_000 },
+          { id: 'claude-opus-5', label: 'Opus 5', aliases: ['opus'], context_window: 1_000_000 },
         ],
       }],
     },

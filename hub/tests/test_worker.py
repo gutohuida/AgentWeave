@@ -135,11 +135,9 @@ def test_a_model_is_checked_against_the_catalog_before_anything_is_spawned():
     assert model_is_declared("claude", None)  # the CLI's own default
     assert not model_is_declared("claude", "gpt-5.6-terra")  # a codex model on the claude CLI
     assert not model_is_declared("claude", "a-model-nobody-declares")
-    # Exact ids only, matching `runners._reject_undeclared_model`. The alias resolution
-    # `context_window_for_model` performs is for samples reporting whatever the provider called
-    # the model; this is a gate on an operator's choice, and the runner registry already refuses
-    # aliases at the point that choice is made.
-    assert not model_is_declared("claude", "haiku")
+    # A declared alias is itself an accepted choice (`a-model-alias-is-a-model-choice`), matching
+    # `runners._reject_undeclared_model` exactly — both gates go through `ProviderDescriptor.model`.
+    assert model_is_declared("claude", "haiku")
 
 
 # --------------------------------------------------------------------------- JSON extraction

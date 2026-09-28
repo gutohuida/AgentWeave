@@ -10,7 +10,7 @@ const PROVIDER: ProviderDescriptor = {
   label: 'Claude Code',
   models: [
     { id: 'claude-sonnet-5', label: 'Sonnet 5', aliases: [], context_window: 1_000_000, default: true },
-    { id: 'claude-opus-5', label: 'Opus 5', aliases: [], context_window: null, default: false },
+    { id: 'claude-opus-5', label: 'Opus 5', aliases: ['opus'], context_window: null, default: false },
     { id: 'claude-haiku-5', label: 'Haiku 5', aliases: [], context_window: 200_000, default: false },
   ],
   controls: [],
@@ -109,6 +109,17 @@ describe('ModelPicker — search, grouping, favourites (composer/chrome refineme
     expect(onChangeModel).not.toHaveBeenCalled()
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
     expect(screen.getByTitle(/^Model:/)).toHaveTextContent('Sonnet 5')
+  })
+
+  it('resolves an alias-stored effectiveModel to its target — not the provider default (F268-adjacent, a-model-alias-is-a-model-choice)', () => {
+    render(<ModelPicker provider={PROVIDER} effectiveModel="opus" onChangeModel={vi.fn()} />)
+    expect(screen.getByTitle(/^Model:/)).toHaveTextContent('opus — latest (now Opus 5)')
+  })
+
+  it('marks the alias target row active, not no row', () => {
+    render(<ModelPicker provider={PROVIDER} effectiveModel="opus" onChangeModel={vi.fn()} />)
+    open()
+    expect(screen.getByRole('option', { name: 'Opus 5' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('declares no fixed width on the picker (content-derived per §2, task 4b.10)', () => {

@@ -161,10 +161,10 @@ def model_is_declared(cli: str, model: Optional[str]) -> bool:
     Checked before spawning because a mistyped model is a slow, billable failure otherwise: the
     CLI starts, contacts the provider, and fails somewhere the operator cannot see.
 
-    Exact ids only, matching `runners._reject_undeclared_model` — deliberately *not* the alias
-    resolution `context_window_for_model` does. A worker's model comes from a runner record that
-    was validated by that rule at creation, and a worker that accepted models the runner registry
-    refuses would be the laxer of two gates on the same value.
+    A declared id or a declared alias, matching `runners._reject_undeclared_model` exactly (both
+    go through `ProviderDescriptor.model`). A worker's model comes from a runner record that was
+    validated by that same rule at creation, and a worker that accepted a value the runner
+    registry refuses — or refused one it accepts — would be two gates disagreeing on one value.
     """
     if model is None:
         return True

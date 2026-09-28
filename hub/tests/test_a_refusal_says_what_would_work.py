@@ -18,7 +18,6 @@ from hub.model_catalog import get_provider, validate_overrides
 
 P = "/api/v1/projects/proj-test"
 CLAUDE_MODELS = [m.id for m in get_provider("claude").models]
-OPUS = next(m.id for m in get_provider("claude").models if "opus" in m.aliases)
 
 pytestmark = pytest.mark.asyncio
 
@@ -46,33 +45,10 @@ async def test_an_undeclared_model_is_refused_with_the_declared_ones(
     assert all(model_id in detail for model_id in CLAUDE_MODELS)
 
 
-@pytest.mark.parametrize(
-    ("route", "body"),
-    [
-        ("/runners", {"name": "r", "cli": "claude"}),
-        ("/agents", {"name": "a-4b", "provider": "claude"}),
-    ],
-)
-async def test_a_published_alias_is_refused_naming_the_id_it_stands_for(
-    app, auth_headers, route, body
-):
-    """`GET /model-catalog` publishes `opus` as an alias; calling it undeclared was untrue."""
-    catalog = await app.get("/api/v1/model-catalog", headers=auth_headers)
-    published = {
-        alias: model["id"]
-        for provider in catalog.json()["providers"]
-        if provider["provider"] == "claude"
-        for model in provider["models"]
-        for alias in model["aliases"]
-    }
-    assert published["opus"] == OPUS
-
-    refused = await app.post(P + route, json={**body, "model": "opus"}, headers=auth_headers)
-
-    assert refused.status_code == 400, refused.text
-    detail = refused.json()["detail"]
-    assert "is not a model" not in detail
-    assert f"use '{OPUS}'" in detail
+"""`test_a_published_alias_is_refused_naming_the_id_it_stands_for` was deleted here
+(`a-model-alias-is-a-model-choice`): an alias is now accepted outright, not refused with a
+sentence naming the id it stands for. Its intent moves to
+`test_a_model_alias_is_a_model_choice.py`, test 1."""
 
 
 async def test_the_override_refusal_uses_the_same_sentence():

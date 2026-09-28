@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Icon, ProviderMark } from '@/components/common/Icon'
 import { composerControlClassName } from './ComposerModelControls'
-import type { ProviderDescriptor } from '@/api/modelCatalog'
+import { catalogModelLabel, resolveCatalogModel, type ProviderDescriptor } from '@/api/modelCatalog'
 
 const FAVOURITES_STORAGE_KEY = 'aw.composer.favouriteModels'
 
@@ -52,7 +52,10 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
   const rootRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
-  const current = provider.models.find((m) => m.id === effectiveModel) ?? provider.models.find((m) => m.default)
+  const current =
+    resolveCatalogModel(provider, effectiveModel) ?? provider.models.find((m) => m.default)
+  const currentLabel =
+    current && effectiveModel ? catalogModelLabel(current, effectiveModel) : current?.label
 
   useEffect(() => {
     if (!open) return
@@ -141,11 +144,11 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
         aria-expanded={open}
         className={`${composerControlClassName} min-w-0 max-w-full`}
         // Same rule as `ControlPill`: the model's name is what truncates, never the word "Model".
-        title={`Model: ${current?.label ?? effectiveModel ?? '—'}`}
+        title={`Model: ${currentLabel ?? effectiveModel ?? '—'}`}
       >
         <span className="shrink-0" style={{ color: 'var(--text-3)' }}>Model: </span>
         {mark}
-        <span className="min-w-0 truncate">{current?.label ?? effectiveModel ?? '—'}</span>
+        <span className="min-w-0 truncate">{currentLabel ?? effectiveModel ?? '—'}</span>
         <span className="shrink-0">▾</span>
       </Button>
       {open && (
@@ -194,7 +197,7 @@ export function ModelPicker({ provider, effectiveModel, onChangeModel }: ModelPi
                 </div>
                 {filtered.map((model, index) => {
                   const isFavourite = favourites.has(favouriteKey(provider.provider, model.id))
-                  const active = model.id === (effectiveModel ?? current?.id)
+                  const active = model.id === current?.id
                   return (
                     <div
                       key={model.id}

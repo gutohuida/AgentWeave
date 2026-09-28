@@ -8,8 +8,14 @@ function modelPartFor(
 ): string {
   if (!modelId) return 'Provider default'
   if (!catalog) return modelId
-  const model = catalog.providers.find((provider) => provider.provider === cli)?.models.find((m) => m.id === modelId)
-  return model ? model.label : `${modelId} (unrecognised)`
+  const provider = catalog.providers.find((p) => p.provider === cli)
+  const model = provider?.models.find((m) => m.id === modelId)
+  if (model) return model.label
+  // A declared alias names what the runner records, not what it currently resolves to — the
+  // model pickers are where "now Opus 5.5" is shown (design.md D2).
+  const aliasTarget = provider?.models.find((m) => m.aliases.includes(modelId))
+  if (aliasTarget) return `${modelId} (latest)`
+  return `${modelId} (unrecognised)`
 }
 
 /** Renders a runner as one choice among many — the format every select that offers a runner

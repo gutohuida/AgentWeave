@@ -707,10 +707,14 @@ async def create_operator_agent(
         )
         runner = existing_runner.scalars().first()
         if runner is None:
+            # An alias is named by what was chosen, not by its current target (design.md D1): a
+            # runner named for today's target would be a new F268 once the alias moves on.
+            is_alias = model_entry.id != body.model
+            name_suffix = f"{body.model} (latest)" if is_alias else model_entry.label
             runner = Runner(
                 id=f"runner-{short_id()}",
                 project_id=project_id,
-                name=f"{provider_entry.label} — {model_entry.label}",
+                name=f"{provider_entry.label} — {name_suffix}",
                 cli=body.provider,
                 model=body.model,
             )

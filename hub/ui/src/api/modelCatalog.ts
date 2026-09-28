@@ -78,3 +78,25 @@ export function providerForRunner(runner: string | undefined | null): string | n
   if (runner === 'codex') return 'codex'
   return null
 }
+
+/** The descriptor *value* names, whether it is a declared id or one of a model's declared
+ * aliases — the one resolution rule every UI reader of a stored model shares
+ * (`a-model-alias-is-a-model-choice` D1/D2; mirrors `ProviderDescriptor.model` in
+ * `hub/hub/model_catalog.py`, which every backend door already goes through). */
+export function resolveCatalogModel(
+  provider: ProviderDescriptor | null | undefined,
+  value: string | null | undefined,
+): ModelDescriptor | null {
+  if (!provider || !value) return null
+  return provider.models.find((m) => m.id === value || m.aliases.includes(value)) ?? null
+}
+
+/** The label for a stored value that resolved to *model*: the model's own label for a declared
+ * id, or "{alias} — latest (now {model's current label})" for a declared alias — stated as the
+ * catalog's present reading, not a promise (design.md D2). Used by the pickers that offer a
+ * model choice (`RunnerForm`, `AgentCreateDialog`, the checkpoint-model select, `ModelPicker`) —
+ * not by `runnerOptionLabel`, which names what a runner *records*, not what it currently
+ * resolves to. */
+export function catalogModelLabel(model: ModelDescriptor, value: string): string {
+  return model.id === value ? model.label : `${value} — latest (now ${model.label})`
+}

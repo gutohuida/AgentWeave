@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
@@ -54,6 +54,19 @@ vi.mock('@/api/runners', () => ({
         created_at: '2026-08-03T00:00:00Z',
         updated_at: '2026-08-03T00:00:00Z',
         model_unrecognised: true,
+      },
+      {
+        // A declared alias, stored as written (a-model-alias-is-a-model-choice). The API already
+        // reads this as recognised (`ProviderDescriptor.model` resolves aliases).
+        id: 'runner-alias',
+        project_id: 'proj-test',
+        name: 'Claude Code — opus (latest)',
+        cli: 'claude',
+        model: 'opus',
+        flags: null,
+        created_at: '2026-08-03T00:00:00Z',
+        updated_at: '2026-08-03T00:00:00Z',
+        model_unrecognised: false,
       },
     ],
     isLoading: false,
@@ -141,7 +154,15 @@ describe('runner management UI', () => {
     // The model is chosen from the catalog — the unset choice plus exactly what claude declares,
     // and no free-typed model field anywhere on screen.
     const modelSelect = screen.getByLabelText('Model')
-    expect(optionsOf(modelSelect)).toEqual(['Provider default', 'Opus 5', 'Sonnet 5', 'Haiku 4.5'])
+    expect(optionsOf(modelSelect)).toEqual([
+      'Provider default',
+      'Opus 5',
+      'Sonnet 5',
+      'Haiku 4.5',
+      'opus — latest (now Opus 5)',
+      'sonnet — latest (now Sonnet 5)',
+      'haiku — latest (now Haiku 4.5)',
+    ])
     expect(screen.queryByPlaceholderText('e.g. claude-sonnet-5')).not.toBeInTheDocument()
 
     await user.selectOptions(modelSelect, 'claude-sonnet-5')
@@ -201,6 +222,9 @@ describe('runner management UI', () => {
       'Opus 5',
       'Sonnet 5',
       'Haiku 4.5',
+      'opus — latest (now Opus 5)',
+      'sonnet — latest (now Sonnet 5)',
+      'haiku — latest (now Haiku 4.5)',
     ])
 
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -277,6 +301,19 @@ describe('runner management UI', () => {
     // The mutation outlives the dialog, so without a reset the refusal is on screen before
     // anything has been submitted.
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('opens a runner stored as a declared alias with the alias option selected and no unrecognised marker (design test 6)', async () => {
+    const user = userEvent.setup()
+    render(<RunnersPage />)
+
+    const row = screen.getByText('Claude Code — opus (latest)').closest('.row-group') as HTMLElement
+    expect(within(row).queryByText('Unrecognised')).not.toBeInTheDocument()
+
+    await user.click(within(row).getByRole('button', { name: 'Edit Claude Code — opus (latest)' }))
+    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
+    expect(modelSelect.value).toBe('opus')
+    expect(optionsOf(modelSelect)).not.toContain('opus — unrecognised')
   })
 
   it('rebinds an agent to a different runner', async () => {

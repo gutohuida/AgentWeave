@@ -13,7 +13,7 @@ import {
   Runner,
   RunnerCli,
 } from '@/api/runners'
-import { useModelCatalog } from '@/api/modelCatalog'
+import { useModelCatalog, catalogModelLabel, resolveCatalogModel } from '@/api/modelCatalog'
 import { readableApiError } from '@/api/client'
 
 const CLI_OPTIONS: RunnerCli[] = ['claude', 'codex']
@@ -200,13 +200,19 @@ function RunnerForm({
   // Loading and failed both land here. An empty select would read as "this provider declares no
   // models" rather than "we do not know yet", so the control is disabled and says which it is.
   const catalogAvailable = !!catalog
-  const declaredModels = catalog?.providers.find((p) => p.provider === cli)?.models ?? []
+  const providerEntry = catalog?.providers.find((p) => p.provider === cli)
+  const declaredModels = providerEntry?.models ?? []
+  const aliasModels = declaredModels.flatMap((model) =>
+    model.aliases.map((alias) => ({ alias, model })),
+  )
 
   // The runner's own stored model, kept as an offered and selected option when the catalog does not
   // list it — without it, opening a legacy runner would silently re-point it at whatever option came
-  // first, and Save would destroy a working configuration.
+  // first, and Save would destroy a working configuration. A declared alias counts as declared too
+  // (`resolveCatalogModel` — a-model-alias-is-a-model-choice): a runner stored as `opus` must not
+  // show as unrecognised.
   const storedModel = initial?.model ?? null
-  const storedIsDeclared = declaredModels.some((m) => m.id === storedModel)
+  const storedIsDeclared = !!resolveCatalogModel(providerEntry, storedModel)
   const storedOption = storedModel && !storedIsDeclared ? storedModel : null
 
   return (
@@ -286,6 +292,15 @@ function RunnerForm({
                   {option.label}
                 </option>
               ))}
+              {aliasModels.length > 0 && (
+                <optgroup label="Latest">
+                  {aliasModels.map(({ alias, model: target }) => (
+                    <option key={alias} value={alias}>
+                      {catalogModelLabel(target, alias)}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </Select>
             {!catalogAvailable && (
               <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>

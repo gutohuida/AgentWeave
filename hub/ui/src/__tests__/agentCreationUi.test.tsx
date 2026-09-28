@@ -16,7 +16,8 @@ vi.mock('@/api/runners', () => ({
     'future-cli': { runnable: true, present: true, authorized: true },
   } } }),
 }))
-vi.mock('@/api/modelCatalog', () => ({
+vi.mock('@/api/modelCatalog', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/modelCatalog')>()),
   useModelCatalog: () => ({ data: { providers: [
     {
       provider: 'claude',
@@ -35,7 +36,7 @@ vi.mock('@/api/modelCatalog', () => ({
     {
       provider: 'future-cli',
       label: 'Future CLI',
-      models: [{ id: 'future-1', label: 'Future One', aliases: [], context_window: null, default: true }],
+      models: [{ id: 'future-1', label: 'Future One', aliases: ['future-latest'], context_window: null, default: true }],
       controls: [],
     },
   ] } }),
@@ -132,6 +133,19 @@ describe('operator agent creation dialog', () => {
     fireEvent.click(option)
     expect(screen.getByRole('button', { name: 'Provider' })).toHaveTextContent('Future CLI')
     expect(screen.getByLabelText('Model')).toHaveValue('future-1')
+  })
+
+  it('offers a declared alias as its own "Latest" choice, labelled with its current target (a-model-alias-is-a-model-choice)', () => {
+    render(<AgentCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Provider' }))
+    fireEvent.click(screen.getByRole('option', { name: /Future CLI/ }))
+
+    const modelSelect = screen.getByLabelText('Model') as HTMLSelectElement
+    const optionTexts = [...modelSelect.querySelectorAll('option')].map((o) => o.textContent)
+    expect(optionTexts).toEqual(['Future One', 'future-latest — latest (now Future One)'])
+
+    fireEvent.change(modelSelect, { target: { value: 'future-latest' } })
+    expect(modelSelect.value).toBe('future-latest')
   })
 
   it('does not offer a model select before a provider is chosen', () => {

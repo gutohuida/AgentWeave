@@ -8,7 +8,7 @@ import {
   useUpdateProjectSettings,
   type ProjectSettings,
 } from '@/api/projects'
-import { useModelCatalog } from '@/api/modelCatalog'
+import { useModelCatalog, catalogModelLabel, resolveCatalogModel } from '@/api/modelCatalog'
 import { useRunners } from '@/api/runners'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/input'
@@ -88,10 +88,14 @@ export function ProjectSettingsPanel() {
     setForm((current) => (current ? { ...current, [key]: value } : current))
 
   const checkpointRunner = runners.find((runner) => runner.id === form.checkpoint_runner_id)
+  const checkpointProviderEntry = catalog?.providers.find(
+    (provider) => provider.provider === checkpointRunner?.cli,
+  )
   const contextWindow =
-    catalog?.providers
-      .find((provider) => provider.provider === checkpointRunner?.cli)
-      ?.models.find((model) => model.id === form.checkpoint_model)?.context_window ?? null
+    resolveCatalogModel(checkpointProviderEntry, form.checkpoint_model)?.context_window ?? null
+  const checkpointAliasModels = (checkpointProviderEntry?.models ?? []).flatMap((model) =>
+    model.aliases.map((alias) => ({ alias, model })),
+  )
 
   const thresholdMode = form.checkpoint_threshold_mode ?? 'percent'
   const previewValue = toCanonical(thresholdMode, thresholdEntry)
@@ -292,11 +296,16 @@ export function ProjectSettingsPanel() {
           className="px-2 py-1.5 text-xs"
         >
           <option value="">Use the runner's model</option>
-          {catalog?.providers
-            .find((provider) => provider.provider === checkpointRunner?.cli)
-            ?.models.map((model) => (
-              <option key={model.id} value={model.id}>{model.label}</option>
-            ))}
+          {checkpointProviderEntry?.models.map((model) => (
+            <option key={model.id} value={model.id}>{model.label}</option>
+          ))}
+          {checkpointAliasModels.length > 0 && (
+            <optgroup label="Latest">
+              {checkpointAliasModels.map(({ alias, model: target }) => (
+                <option key={alias} value={alias}>{catalogModelLabel(target, alias)}</option>
+              ))}
+            </optgroup>
+          )}
         </Select>
       </SettingsRow>
 
