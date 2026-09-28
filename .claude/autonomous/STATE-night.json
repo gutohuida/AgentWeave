@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 5,
+    "iteration": 6,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "an-estimate-that-misses-turns-says-so-impl",
-    "next_action": "Do queue item 'an-estimate-that-misses-turns-says-so-impl': openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files).",
+    "current": "an-estimate-that-misses-turns-says-so-drive",
+    "next_action": "Do queue item 'an-estimate-that-misses-turns-says-so-drive': drive against the trial Hub :8010 per tasks.md 3.1 -- GET /accounting for a project with at least one unavailable turn, record unpriced_turns and the rendered label on the Budgets settings section, per night-window.md 'Driving' section. Record result in scripts/drive/FINDINGS.md.",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -35,9 +35,9 @@
         },
         {
             "id": "an-estimate-that-misses-turns-says-so-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement an-estimate-that-misses-turns-says-so",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
+            "detail": "Done commit 45e01b2. Also fixed F459: hub/tests full run caught a-runner-choice-names-its-model's unhandled second useModelCatalog() call site (CI red for 3 shas), bound its error in RunnerPicker. hub/tests 5086 passed/86 skipped; tests/ 553 passed/3 skipped; vitest 168 files/1725 tests; lint clean; bundle refreshed."
         },
         {
             "id": "an-estimate-that-misses-turns-says-so-drive",
