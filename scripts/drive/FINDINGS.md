@@ -14447,9 +14447,14 @@ rebuilds once, in its section 5. Retirement waits on that drive.
 
 ## F174 (B) — the Codex catalog has drifted from the file it says it is copied from, and the drift includes the default
 
-**Status:** open. Filed by the row-2 sweep (`6908cfd`). The catalog drift is unrepaired; the
-adjacent effort control was re-checked and holds, which is a vindication inside this entry rather
-than a resolution of it. Reappears in the 2026-09-03 and 2026-09-04 research pages, still open. [classified 2026-09-09, D-2]
+**Status:** fixed `3b3563a` (2026-09-27). Filed by the row-2 sweep (`6908cfd`); reappeared in the
+2026-09-03/2026-09-04 research pages and was reclassified with the new shape it took by
+`the-codex-models-offered-are-the-ones-its-cli-lists`'s proposal (`gpt-6-luna`/`gpt-6-sol` declared
+from a changelog, not the cache). `model_catalog.py` now reads `$CODEX_HOME/models_cache.json` at
+runtime instead of the literal, so no hand-authored list can drift from the cache again; the literal
+survives only as the fallback for when the cache is absent. Confirmed live in the 2026-09-28 drive
+(`e94a4a3`): `GET /model-catalog` served exactly the cache's three `visibility: list` models,
+verbatim, with `source.kind: cli_cache`. [classified 2026-09-09, D-2]
 
 `model_catalog.py`'s docstring states its own source of truth:
 
@@ -20091,7 +20096,14 @@ run failure) and this window does not write proposals.
 **Consequences.** Severity drops **B → C** — it costs suite time and credibility, not operator behaviour. The "Not proposed / needs the day window / the fix is a design question" note is superseded: the design question is a *harness* question (how to give the Hub suite per-session connections without weakening `assert_engine_is_disposable`), and the candidates measured so far are under F272. The one piece of genuinely product-side content that survives from either entry is filed as **F273**.
 
 ## F267 (B) — the model catalog is a compile-time literal behind a closed door, and it is already 28 days stale
-**Status:** open (note: `scripts/check_model_catalog.py`/tests added 2026-09-10, bb08dc4, as a staleness detector only -- the finding's own text confirms the underlying literal-catalog defect is unfixed)
+**Status:** fixed `3b3563a` (2026-09-27). `scripts/check_model_catalog.py`/tests (2026-09-10, `bb08dc4`)
+made the staleness visible only; `the-codex-models-offered-are-the-ones-its-cli-lists` closes the
+underlying defect by having `model_catalog.py` read the installed CLI's own cache
+(`$CODEX_HOME/models_cache.json`) at runtime rather than a literal behind a release, with the literal
+kept only as a fallback. Confirmed live in the 2026-09-28 drive (`e94a4a3`): all four doors this
+finding measured (`POST/PATCH runners`, `POST agents`, `POST agent/trigger`) now accept a Codex model
+because it is offered from the cache, and a model the cache does not list is still refused, per
+`GET /model-catalog`'s `source.kind: cli_cache`.
 
 Found by the 2026-09-02 day window's D-1 drive
 (`scripts/drive/t_d1_catalog_is_the_only_door.py`, **33 passed / 3 failed**), driving the served

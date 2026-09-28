@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 13,
+    "iteration": 14,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "the-codex-models-offered-are-the-ones-its-cli-lists-archive",
-    "next_action": "Do queue item 'the-codex-models-offered-are-the-ones-its-cli-lists-archive': openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list.",
+    "current": "a-firing-is-counted-once-however-many-agents-it-starts-impl",
+    "next_action": "Do queue item 'a-firing-is-counted-once-however-many-agents-it-starts-impl': openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files).",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -83,9 +83,9 @@
         },
         {
             "id": "the-codex-models-offered-are-the-ones-its-cli-lists-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive the-codex-models-offered-are-the-ones-its-cli-lists",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "detail": "Done commit (this iteration): archived to openspec/changes/archive/2026-09-28-the-codex-models-offered-are-the-ones-its-cli-lists, synced its ADDED model-catalog requirement (append) into openspec/specs/model-catalog/spec.md (43/43 specs strict, 43/43 changes strict), and marked F267 and F174 'fixed 3b3563a' in FINDINGS.md (both severity B, never on the open severity-A index -- F299/F301/F325/F332/F352 -- so no index correction was owed)."
         },
         {
             "id": "a-firing-is-counted-once-however-many-agents-it-starts-impl",
