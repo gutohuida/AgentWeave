@@ -63,6 +63,11 @@
    agent. If the organisation disables Copilot's allow-all mode, the run should say so and keep
    working inside its workspace, quoting the reason Copilot gave. Does that sentence tell you what
    happened?
+
+   A specification turn under Full access (open a spec document with the same agent) always
+   behaves as Workspace only, on any machine, policy or not (operator decision 2026-09-28): a
+   command writing outside the workspace is refused there although a build turn would run it. Is
+   that difference visible enough in the timeline?
 7. **What Workspace only does not see** (review 2026-09-28). Copilot runs commands it considers
    read-only (listing a folder, reading a file) without asking anyone, so the Hub never judges
    them. Under Workspace only, ask a Copilot agent to list its folder and then to write a file with a

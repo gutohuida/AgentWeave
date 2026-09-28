@@ -124,7 +124,9 @@ the first runner whose approval axis is independent of its tool surface.
     `copilot` is `workspace` to match (Copilot has no sandbox of its own to fall back on).
   - A specification turn gets `--excluded-tools` over Copilot's write tools except `create`, and
     the Hub refuses every file change it asks for in every posture (slice 3 later allows its args
-    file), with allow-all never set on (consistency pass 2026-09-28). Plan mode (the
+    file), with allow-all never set on (consistency pass 2026-09-28). Under Full access its other
+    requests are judged as `workspace`, never allowed on Full access's account (operator decision
+    2026-09-28, design open question 13). Plan mode (the
     full-URI `session/set_mode`) ships **off** until a drive shows it cannot hang on
     `exit_plan_mode` (review 2026-09-28).
   - The Hub's own `agentweave` tools are always allowed, when Copilot reports them from the Hub's

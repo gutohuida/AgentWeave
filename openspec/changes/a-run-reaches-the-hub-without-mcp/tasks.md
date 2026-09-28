@@ -37,6 +37,10 @@
     findings; both contract conflicts resolved too). Mapping in `design.md`'s Round log, *Review fixes,
     2026-09-28*. Open question 7 now carries four options for the operator (design, *Opus review … on open
     question 7*); it is the operator's decision before any APPROVED row.
+  - **Operator decisions, 2026-09-28.** Open question 7: (a) now, (c) detect-and-degrade as a follow-up change,
+    raised only if the work-PC drive (task 10.1, test guide human-only step 8) records persistent shell sessions in
+    use; (b) and (d) rejected. Open question 11: (c), a full-access spec turn's non-`edit` requests judged as
+    `workspace`.
 
 ## 1. Tests first — each fails on today's code
 
@@ -226,7 +230,9 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - Copilot (slice 2's fake ACP agent): a spec turn's argv excludes `apply_patch,edit,str_replace,str_replace_editor`
     and not `create`; an `edit` request for `.agentweave/calls/1.json` is allowed by standing and one for `src/x.py`
     is `reject_once`, under `workspace`, under `manual` (no card asked) and under full access (where `allow_all` is
-    not set on for the spec turn); `session/set_mode` plan is sent after the wait and only for a run told `mcp`.
+    not set on for the spec turn); under full access a spec turn's non-`edit` request, a PowerShell command writing
+    outside the workspace, is refused as under `workspace`, never ALLOWed on full access's account (design open
+    question 11, DECIDED (c) 2026-09-28); `session/set_mode` plan is sent after the wait and only for a run told `mcp`.
 
 ## 2. The per-run record (design D1)
 
@@ -357,7 +363,8 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     rule in every posture; no `allow_all` on a spec turn; Plan mode after the wait, for `mcp` only (consistency pass
     2026-09-28: slice 2's D9 item 1a now ships the first three with every spec-turn `edit` refused, so here only the
     step-3 args-file allow and the plan-mode move remain, unless slice 2 landed without them; the full-access non-`edit`
-    answer waits on design open question 11);
+    answer is judged as `workspace`, design open question 11 DECIDED (c) 2026-09-28, which slice 2 ships too; add it
+    here only if slice 2 landed without it);
   - (review fix 7) a run's own wait timeout gives `shim` even under `hub_client: "mcp"` (design D1).
   Tests 1.14 and 1.15 (Copilot half) pass.
 - [ ] 5.6 (review finding 4, design D16; slice 1's builder) `restrict_spec_writes` with the described surface: the
@@ -474,6 +481,9 @@ SQLite reads of the trial profile's database.
 ## 10. Archive
 
 - [ ] 10.1 The human-only checks in `test-guide.md` are done by the operator on the work PC, or explicitly waived by
-  them.
+  them. Step 8's answer (whether Copilot's shell sessions persist between a run's commands there, and whether any
+  run activated a venv, imported a module or set `ComSpec` before an `aw-tool` call) is recorded in the Round log:
+  it is the trigger for the detect-and-degrade follow-up change (design open question 7, DECIDED (a) now, (c) as a
+  follow-up, 2026-09-28). If it shows persistent sessions in use, raise that change; it is not built here.
 - [ ] 10.2 `openspec validate a-run-reaches-the-hub-without-mcp --strict`, then the `openspec-archive-change` skill.
   Sync the four deltas. Commit and push per CLAUDE.md, staging paths explicitly.

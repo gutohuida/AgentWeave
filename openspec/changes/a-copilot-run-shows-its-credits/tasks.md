@@ -135,13 +135,18 @@ root.
   `compaction_percent=95` give threshold 80, notes 70, final 92 (pins Claude). `compaction_percent=80`
   gives 65 / 55 / 77. A project percent threshold 80 with `compaction_percent=80` gives 77 and
   `threshold_source == "runner_ceiling"`, and a notes value of 78 becomes 67. A Claude percent
-  threshold 95 with `compaction_percent=95` gives 92 (`runner_ceiling`; Q7). Token mode:
-  `should_checkpoint` with tokens below the threshold is True at percent 92 under C=95 and False at
-  percent 91. `crosses` itself is unchanged, since its signature has no policy.
+  threshold 95 with `compaction_percent=95` gives 92 (`runner_ceiling`; Q7 decided (b): the percent
+  ceiling applies to Claude too), and a Claude notes value of 94 with it becomes 82. Token mode
+  (Q7 decided (b), 2026-09-28: the token ceilings apply only below C=95): `should_checkpoint` with
+  tokens below the threshold is True at percent 77 under C=80 and False at percent 76. Under C=95 it
+  is False at percent 92 and at percent 99 (a Claude token threshold above 92% of the window is
+  **not** fired early; this assert fails if the ceiling is applied uniformly). `crosses` itself is
+  unchanged, since its signature has no policy.
   `needs_final_warning` at 77 is True under C=80 and False under C=95. Token-mode notes (R3): with
   C=80, a token threshold of 150000 and notes 140000, `should_request_notes` at 30000 tokens is False
   at percent 66 and True at percent 67, and False at percent 77 (the threshold ceiling). With no
-  notes value it is False at 67. Fails today
+  notes value it is False at 67. The same threshold and notes under C=95 give False at percent 82 and
+  at 91 (no Claude token-notes ceiling). Fails today
 - [ ] 1.13 Extend `hub/tests/test_checkpoint_cutover.py` (beside the offered-mode tests): an `offered`
   project, a `copilot` runner bound to agent `cop` and a `claude` runner bound to agent `cla`, both
   with no threshold of their own. A reading of 66% for `cop`'s conversation sets
@@ -185,7 +190,21 @@ root.
   `checkpoint_compaction_percent: 95` and a percent override of 96 shows "lowered to 92%", and one
   with 92 does not. Extend `projectSettingsPanel.test.tsx`: a project threshold of 80 with an agent
   at `checkpoint_compaction_percent: 80` shows the "Lowered to 77%" line naming that agent; with
-  only agents at 95 it shows nothing
+  only agents at 95 it shows nothing. **Q7 decided (b), 2026-09-28:** an agent with
+  `checkpoint_compaction_percent: 95` and a percent override of 95 shows "lowered to 92%"; an agent
+  with a token override of 150000 shows the "fires at 150000 tokens or at 77% of its window" line
+  at `checkpoint_compaction_percent: 80` and **no** token line at 95 (Claude's token threshold is
+  not lowered)
+- [ ] 1.19 Extend `hub/tests/test_provider_allowance.py` (Q6 decided 2026-09-28, design D8): a
+  reading `{"status": "rejected", "resetsAt": 1790812800, "rateLimitType": "monthly", "provider":
+  "copilot"}` gives `hold_for_reading(...).provider == "copilot"`, and `hold_sentence("cop", hold)`
+  contains `"2026-10-01"`, `"00:00 UTC"`, `"another runner"`, `"then send it a message"` and
+  `"rebinding alone does not end the hold"`, and names loops and jobs. `hold_busy_reason` and
+  `hold_coalesce_reason` for it contain `"2026-10-01"`, and the coalesce form is at most 500
+  characters at a 32-character agent name. The existing Claude reading (no `provider` key) gives
+  `provider is None`, and the three existing length asserts (285, 86, 161) are unchanged, so no
+  Claude sentence moves. Extend `test_a_refused_turn_holds_the_queue.py`'s RPC case (1.15(b)): the
+  held Copilot agent's `waiting_reason` from `schedule_agent` is that Copilot sentence. Fails today
 
 ## 2. Schema and sample
 
@@ -207,9 +226,10 @@ root.
   declares it. `grep -rn "compaction_percent" hub/hub/runner_adapters` shows all three. (Rebase at
   IMPL: `each-runner-cli-is-one-adapter` unbuilt at R2)
 - [ ] 3.2 `checkpoint_policy.py`: D10's formulas, the two new `CheckpointPolicy` fields, the percent
-  clamp, the notes clamp, the token-mode ceiling in `should_checkpoint` and in the threshold half of
-  `should_request_notes` (not in `crosses`), and `needs_final_warning` reading the
-  policy. Keep the three module constants at their C=95 values. Task 1.12 passes
+  clamp (every runner), the notes clamp, the token-mode ceiling in `should_checkpoint` and in the
+  threshold half of `should_request_notes` (not in `crosses`) and the token-mode notes ceiling, both
+  guarded by `policy.compaction_percent < 95` (Q7 decided (b), 2026-09-28), and `needs_final_warning`
+  reading the policy. Keep the three module constants at their C=95 values. Task 1.12 passes
 - [ ] 3.3 `checkpoint_trigger.consider`: resolve the agent's runner (`Agent.runner_id` → `Runner` →
   adapter) and pass `compaction_percent`; the decline message names `policy.final_warning_percent`;
   both `checkpoint_due` payloads carry `threshold_source`. Task 1.13 passes.
@@ -281,6 +301,13 @@ root.
   of the `-p --output-format json` stream contains that event. The parser test uses that capture, not
   a hand-written line. If the capture has no `session.shutdown`, record that here and leave the
   columns NULL. (Rebase at IMPL: slices 1 and 2 unbuilt at R2)
+- [ ] 5.5 `provider_allowance.py` (Q6 decided 2026-09-28, design D8): `AllowanceRefusal` and
+  `ProviderHold` gain `provider: Optional[str] = None`, read from the reading's `provider` key and
+  carried by `hold_for_reading`. For `provider == "copilot"`, `hold_sentence` names the reset date and
+  the way out (bind the agent to another runner, then message it; rebinding alone does not end the
+  hold; its loops and jobs stay blocked until then), and `hold_busy_reason` and
+  `hold_coalesce_reason` add the date. A hold with no provider renders exactly as today. Task 1.19
+  passes. `py -3.11 -m pytest hub/tests/test_provider_allowance.py hub/tests/test_a_refused_turn_holds_the_queue.py hub/tests/test_inbound_queue.py -q`
 
 ## 6. API and UI
 
@@ -359,4 +386,6 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
   change, and record slice 4 as done in the exploration's slice list
 - [ ] 8.2 File a finding (or append to an open one) asking for the first real Copilot quota refusal's
   `session.error` payload, captured by task 5.2's log, so that D8's recognition is confirmed or
-  corrected. Copy any answer to Q6 (month-long hold) into DECISIONS
+  corrected. Copy the Q6 decision (2026-09-28: keep the month-long hold; its notice states the reset
+  date and the rebind-then-message way out) and the Q7 decision (2026-09-28: option (b)) into
+  DECISIONS

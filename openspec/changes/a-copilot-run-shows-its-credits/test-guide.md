@@ -2,8 +2,8 @@
 
 ## Agent-verifiable
 
-1. Tasks 1.1–1.18 fail before their implementation tasks and pass after them. Record the failing
-   run's output for at least 1.1, 1.10, 1.12, 1.13 and 1.15.
+1. Tasks 1.1–1.19 fail before their implementation tasks and pass after them. Record the failing
+   run's output for at least 1.1, 1.10, 1.12, 1.13, 1.15 and 1.19.
 2. `grep -rn "ai_nano_aiu" hub/hub/usage_accounting.py` shows it in the aggregates and the recent
    turns, and `grep -n "ai_nano_aiu\|nano" hub/hub/usage_accounting.py` shows it in **no** expression
    that computes `used_tokens`, `total_tokens` or `budget_state`. Credits never reach the budget.
@@ -16,13 +16,22 @@
    bodies. The four extended exact asserts of task 6.1 (`test_accounting_api.py:89`, `:98`, `:136`,
    `:368`) pin it.
 4. `resolve_policy` with no runner, or with a Claude or Codex runner, gives 80 / 70 / 92 (task 1.12).
+   Q7 as decided (option (b), 2026-09-28), all in task 1.12: a Claude percent threshold of 95 gives
+   92 (`runner_ceiling`); a Claude token threshold not yet reached is **not** crossed at percent 92
+   or 99; a Copilot token threshold is crossed at 77 and not at 76; Copilot token notes are reached
+   at 67 and not at 66.
 5. Drive tasks 7.1–7.4 and 7.6 record their figures in design.md's round log: tokens equal the
    per-call sum; the second turn's credits equal the difference of the two session totals if the
    checkpoint continued after the load. If it restarted, D4 is revised before archive (task 7.3:
    `max(K', P)` on a loaded session, premium from its own checkpoint) and the credits equal the
    turn's own checkpoint; record which (design D4); the
    synthetic 66% reading raised a banner for the Copilot agent only.
-6. `openspec validate a-copilot-run-shows-its-credits --strict` passes.
+6. Q6 as decided (keep the hold, 2026-09-28), task 1.19: a Copilot hold's `waiting_reason` names
+   the reset date (`2026-10-01`, `00:00 UTC`) and says to bind the agent to another runner and then
+   message it, that rebinding alone does not end the hold, and that its loops and jobs stay blocked;
+   the loop and job notices name the date; every Claude hold sentence is unchanged (the length
+   asserts 285 / 86 / 161 still pass).
+7. `openspec validate a-copilot-run-shows-its-credits --strict` passes.
 
 ## Human-only
 
@@ -37,19 +46,21 @@
    imprecise for them (design D12; the string is kept because every Claude/Codex project shows it).
    Say whether it should read "no reported API-equivalent cost".
 3. **The first real quota refusal (work PC, or when this account's allowance runs out).** Does the
-   agent's queue show "held until …" with the reset date, and does sending the agent a message try one
-   turn? Paste the `session.error` payload from the Hub log into FINDINGS (task 8.2): it is the first
+   agent's queue show "held until …" with the reset **date**, and does the notice say to rebind the
+   agent to another runner and then message it? Does sending the agent a message try one turn? Does
+   rebinding to a Claude runner and then messaging it end the hold? Paste the `session.error` payload from the Hub log into FINDINGS (task 8.2): it is the first
    observation of the refusal's real shape.
 4. **The work PC's plan (Business).** Which `quotaSnapshots` key appears in a Copilot run's
    `assistant.usage`, and does a Business refusal carry a `resetDate`? (Design Q4. Without a reset
    date the Hub shows the exhaustion and does not hold, by design.)
 5. **Compaction.** In a long Copilot conversation with checkpointing `offered`, does the checkpoint
    warning appear before Copilot compacts (Copilot starts at about 80%, the Hub now warns at 65%)?
-6. **Decide Q6.** Is holding a Copilot agent's queue until the 1st of next month what you want after a
-   quota refusal on an individual plan, or should it only be shown? Rebinding the agent does not end
-   the hold by itself: rebind, then message it.
-7. **Decide Q7.** A configured Claude threshold of 93–99% is lowered to 92%, and a token threshold
-   (and token notes) now also fires at 92% (82%) of the window, which in `automatic` mode bills a
-   checkpoint earlier. Nobody on this machine configures one, but PyPI users may. Keep it uniform,
-   restrict the token ceilings to runners that compact below 95, or restrict all three (design Q7)?
-   Check that an agent's and the project's checkpoint settings say when a threshold is lowered.
+6. **Q6, decided 2026-09-28: keep the hold.** A quota refusal on an individual plan holds the
+   Copilot agent's queue until the 1st of next month. When you meet one (item 3), read the notice:
+   is the date clear, and is "rebind to another runner, then message it" clear enough to act on?
+7. **Q7, decided 2026-09-28: option (b).** A configured Claude percent threshold of 93–99% is
+   lowered to 92%, stated on screen; token-mode ceilings apply only to Copilot (a runner that
+   compacts below 95), so a Claude token threshold behaves as before. Check that an agent's and the
+   project's checkpoint settings say when a threshold is lowered: set a Claude agent's override to
+   96% and read "lowered to 92%"; set a Claude agent's override in tokens and see no lowering line;
+   set a Copilot agent's override in tokens and see "fires at <N> tokens or at 77% of its window".

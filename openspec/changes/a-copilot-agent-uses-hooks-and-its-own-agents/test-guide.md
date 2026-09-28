@@ -22,7 +22,8 @@ Each group can be cut. Skip the rows of any group the operator rejected.
    banner both appear, and no checkpoint row is created under `offered`.
 6. Drive 7.3: exactly one error event, still shown with diagnostics hidden, and no repeated `Error:`
    text.
-7. Drive 7.4: no deciding hook and no trusted folder in the agent's Copilot home.
+7. Drive 7.4: no deciding hook and no trusted folder in the agent's Copilot home (the change installs
+   no hook at all, DECIDED 2026-09-28; this checks that nothing else did).
 
 ### Group C: BYOK
 
@@ -63,27 +64,32 @@ Each group can be cut. Skip the rows of any group the operator rejected.
 
 ## Human-only
 
-1. **Hooks (D2).** Do you still want a Hub hook for anything, now that raw events carry compaction,
-   errors and subagents with more detail? If yes, name the event and what it should feed.
+1. **Hooks (D2). DECIDED 2026-09-28: none.** Nothing to test: the change installs no hook. Only if
+   task 1.1 shows the raw event types are not emitted over ACP is the question reopened, and then
+   by bringing the finding to you, not by building a hook.
 2. **Compaction behaviour.** On a real Copilot conversation long enough to auto-compact (about 80%
    full), under `automatic`, does the handover feel right mid-turn? Under `offered`, the banner
-   keeps its threshold sentence and the timeline shows a "Copilot compacted this conversation" card
-   (R2: nothing can show a banner variant without a persisted fact). Is that enough, or do you want
-   the banner itself to say the runner compacted?
-3. **BYOK happy path.** Put an Anthropic API key in the trial Hub's environment, bind a Copilot
-   provider runner on Haiku, and run a turn (task 7.6). Does it complete? Is the spend shown in
-   tokens, with no misleading "0 credits"? Know that the key is in the run's own environment, so
-   the agent's shell commands and the Hub's tool server can read it, as with a proxy runner today;
-   what they print back is redacted by its exact value. Is that acceptable? OpenAI BYOK is deferred
-   (R2). Recommended by the 2026-09-28 review (your call): only after the scrub, the prefix strip and
-   the URL check are built, with a dedicated Anthropic workspace key with a hard monthly spend limit
-   of a few dollars, set only in the trial Hub's launch environment, and revoked afterwards.
+   keeps its threshold sentence and the timeline shows a "Copilot compacted this conversation" card.
+   (DECIDED 2026-09-28: no runner-compacted banner now; the card is the signal, and a banner is a
+   possible follow-up.) Check that the card is noticeable enough next to the unchanged banner.
+3. **BYOK happy path (task 7.6).** Preconditions (DECIDED 2026-09-28), all before the key is set:
+   the exact-value scrub, the whole-prefix strip and the URL check / `KeyError`-free key read (review
+   findings 2, 3 and 10) are built and green; the key is a dedicated Anthropic workspace key with a
+   hard monthly spend limit of a few dollars; it is set only in the trial Hub's launch environment
+   (not user-wide, so the `:8000` Hub cannot see it); and you revoke it afterwards. Then bind a
+   Copilot provider runner on Haiku and run a turn. Does it complete? Is the spend shown in tokens,
+   with no misleading "0 credits"? What the agent can see: the key is in the run's own environment,
+   so the agent's shell commands and the Hub's tool server can read it, as with a proxy runner
+   today; what they print back is redacted by its exact value. You accepted that on 2026-09-28,
+   given a throwaway key. OpenAI and Azure BYOK are deferred (DECIDED 2026-09-28).
 4. **Runner page copy.** Read the provider section. Is it clear that a Claude Max subscription cannot
    be used and that the key stays in the Hub's environment?
 5. **Review agents.** On a real review, does consulting `code-review` improve the verdict enough to
    justify the extra model calls? Would you turn it on by default for Copilot reviewers?
 6. **GitHub server (work PC).** On the Business plan, enable the toggle for one agent. Do the cards
    for GitHub calls read as "this acts as you on GitHub"? Does company policy allow the built-in
-   server at all?
+   server at all? If task 1.1 found no status event within a turn, a server that fails to start
+   shows only as GitHub tool calls that never happen (DECIDED 2026-09-28: accepted, no other
+   signal).
 7. **Work PC, hooks policy.** Check whether `allowManagedHooksOnly` is set there (exploration probe
    6). If it is, that confirms D1's reason to rely on raw events rather than hooks.

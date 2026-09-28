@@ -87,7 +87,10 @@ would lose their context without the Hub acting first.
   The reset instant comes from the run's newest `quotaSnapshots` reading (`resetDate`), or else from
   the project's newest Copilot reading whose reset is ahead (the quota is per account). Only the
   reset is borrowed, and only for a refused run. The ledger writes
-  the same allowance reading shape the hold already reads, so `provider_allowance.py` is unchanged.
+  the same allowance reading shape the hold already reads, so the refusal rule in
+  `provider_allowance.py` is unchanged. The hold is kept for a month on an individual plan (Q6,
+  decided 2026-09-28), and its notice gains the reset date and the way out: rebind the agent to
+  another runner, then message it (design D8).
   A refused turn ends `failed` whatever Copilot's stop reason. When the prompt is answered by an
   error response, which slice 2's client would raise, it returns instead. When a reset is known its
   input goes back to the queue uncounted; with none, nothing holds and the input is counted like any
@@ -96,9 +99,11 @@ would lose their context without the Hub acting first.
 - **Checkpoint thresholds follow the runner's compaction point.** The adapter declares
   `compaction_percent` (Claude 95, Codex 95, Copilot 80). The built-in threshold, notes point and
   final warning are derived from it: Claude keeps 80/70/92 exactly; Copilot gets 65/55/77. A
-  configured threshold past the runner's final-warning point is lowered to it (for Claude a configured
-  93–99% becomes 92%, open question Q7 for the operator), and the agent's and the project's checkpoint
-  settings say so (design D9, D10).
+  configured percent threshold past the runner's final-warning point is lowered to it, for every
+  runner (for Claude a configured 93–99% becomes 92%), and the agent's and the project's checkpoint
+  settings say so. A token threshold is also treated as crossed at the final-warning point only on a
+  runner that compacts below 95, so Claude's token-mode behaviour is unchanged (Q7, decided (b),
+  2026-09-28; design D9, D10).
 - **API responses of a Claude- or Codex-only project gain empty credit fields** (`ai_nano_aiu`,
   `premium_requests`), the allowance display's `runner`, the agent summary's
   `checkpoint_compaction_percent` and the `checkpoint_due` broadcast's `threshold_source`. Its

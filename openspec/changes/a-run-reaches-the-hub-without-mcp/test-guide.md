@@ -53,6 +53,16 @@ Before starting, update the Hub there to a build carrying slices 1–3.
    needs the credential typed anywhere?
 6. **A specification turn** (design D16). Open a specification document with the Copilot agent and ask it, in one
    tiny turn, to submit the document unchanged. It should write its arguments file and submit with no card, and
-   write nothing else.
+   write nothing else. Under Full access the same turn behaves as Workspace only (design D16, open question 11):
+   a command writing outside the workspace is refused there.
 7. **On this machine, optional.** If you want to see the Claude side, give a Claude agent `hub_client: cli` and ask
    it to create a task. It should use `aw-tool` and succeed (group 7).
+8. **What "Ask me" does not cover, and whether it matters here** (design D8's *Decided* paragraph, open question 7).
+   Under "Ask me", every request is carded except the Hub's own call command and its args-file write. An `aw-tool`
+   call is never carded, so once you approve a command that changes what `aw-tool` resolves to in Copilot's
+   persistent shell session (activating a venv, `Import-Module` of a module exporting `aw-tool`, a function or alias
+   named `aw-tool`, setting `ComSpec`), later `aw-tool` calls in that session run the changed program without a
+   card; the machine's cmd `AutoRun` also runs before every call. This is accepted, stated. On the work PC, record:
+   do Copilot's shell sessions persist between a run's commands (does a `$env:X='1'` set in one command show in the
+   next)? Did any run activate a venv, import a module or set `ComSpec` before an `aw-tool` call? If sessions
+   persist and such commands occur, that is the trigger for the detect-and-degrade follow-up change (task 10.1).

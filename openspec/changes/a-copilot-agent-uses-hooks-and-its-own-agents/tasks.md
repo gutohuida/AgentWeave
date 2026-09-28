@@ -82,6 +82,12 @@ scratch copy (DEAD-ENDS 2026-09-27).
   the reviewer's recommended answers in design Open question 8 and remain the operator's. See
   design's Round log, *Review fixes, 2026-09-28*.
 
+  **Operator decisions, 2026-09-28:** every item of design Open question 8 DECIDED ("yes" to all
+  recommendations): no hooks (D2); Azure and OpenAI BYOK deferred (D7); a key for drive 7.6 only on
+  task 7.6's conditions below; the key in the run's shell and tool server accepted (D7); no
+  runner-compacted banner now (D4, possible follow-up); the GitHub-unavailable diagnostic's removal
+  path accepted (D9). See design's Round log, *Operator decisions, 2026-09-28*.
+
 ## 1. Tests first — each fails on today's code
 
 - [ ] 1.1 (A, C) **Capture real Copilot events before writing fixtures**, so that every
@@ -104,7 +110,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
     the scratch home, so the GitHub server should fail; record whether and when a
     `session.mcp_servers_loaded` / `session.mcp_server_status_changed` names `github-mcp-server`,
     and with which status (design D9: if none arrives within the turn, the unavailable-server
-    diagnostic is removed). (Review 2026-09-28, finding 4) Also record the `mcpServerName` that
+    diagnostic is removed; operator-accepted 2026-09-28, with no replacement signal). (Review 2026-09-28, finding 4) Also record the `mcpServerName` that
     `tool.execution_start` reports for each built-in server's tool, if any tool call reaches one.
   - **Save** each transcript's `github.com/copilot/sessionEvent` notifications and `session/update`
     notifications, **in arrival order**, as `hub/tests/fixtures/copilot/{compaction,subagent,error}.jsonl`.
@@ -119,8 +125,9 @@ scratch copy (DEAD-ENDS 2026-09-27).
       oversized case is tested synthetically in 1.2);
     - whether `subagent.started` arrived before the `tool_call` update of its `task` call.
 
-  If a type is **not** delivered, stop group A. Tell the operator that D1's source does not hold and
-  that D2's hook transport is the fallback.
+  If a type is **not** delivered, stop group A. Tell the operator that D1's source does not hold.
+  Do **not** build D2's hook transport (operator decision 2026-09-28: no hooks; the fallback is not
+  pre-built, and any revisit is the operator's call).
 - [ ] 1.2 (A) `hub/tests/test_copilot_lifecycle_events.py`: feed each fixture from 1.1 through the
   Copilot adapter's `map_events` in its recorded order.
   - `compaction.jsonl` gives exactly one `status` event with `phase == "compacted"`, carrying
@@ -219,7 +226,8 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - `api_key_var: "sk-ant-api03-xyz"` is refused with **400** and the sentence in design D7 as a
     string `detail`, and the table is unchanged. Count the rows before and after;
   - a `claude` runner with `provider_config` is refused;
-  - `type:"azure"` and `type:"openai"` are refused (design D7: both deferred);
+  - `type:"azure"` and `type:"openai"` are refused (design D7: both deferred, operator decision
+    2026-09-28);
   - a model the `claude` catalog does not declare is refused;
   - no model is refused, on create, and a `PATCH` setting `model: null` on a provider runner is
     refused;
@@ -370,7 +378,8 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - a raw `session.mcp_servers_loaded` naming `github-mcp-server` as `failed` gives one
     `diagnostic` (`copilot.github_mcp_unavailable`) per turn with the toggle on, and none with it
     off; (R3) `pending` gives none. Use the status event and order task 1.1 run (c) captured; if it
-    captured none, this case and the mapping are removed (design D9);
+    captured none, this case and the mapping are removed (design D9; operator-accepted
+    2026-09-28), with the two spec scenarios on reporting a failed or starting server;
   - `GET /agents` returns `copilot_github_mcp` in the agent's `config`.
 - [ ] 1.14 (C, B, D) UI tests.
   - `hub/ui/src/__tests__/runnerProviderConfig.test.tsx`: the Runners page shows provider fields only
@@ -534,7 +543,9 @@ scratch copy (DEAD-ENDS 2026-09-27).
   (finding 14). The Copilot `permission_card_label` gives D9's label, built from the reported
   server name, and the Copilot `workspace_verdict` returns `None` for such a request (R3).
   `CopilotEventMapper`: the unavailable-server diagnostic for `failed`, `needs-auth`, `disabled`,
-  `stopped`, `not_configured` only, if task 1.1 showed the event arrives. Add `copilot_github_mcp`
+  `stopped`, `not_configured` only, if task 1.1 showed the event arrives (if not, delete it from
+  `specs/agent-configuration/spec.md` too: the requirement's paragraph on an unavailable server and
+  its two scenarios; operator-accepted 2026-09-28). Add `copilot_github_mcp`
   to `ROSTER_CONFIG_KEYS`. `mcp_server.py` is not touched. Pass test 1.13.
 - [ ] 5.2 Agent Settings UI: add a GitHub-server toggle shown only for `copilot` agents; its help
   text says that while it is on every non-Hub MCP call under Workspace only is asked, and that a
@@ -594,14 +605,23 @@ every run id, and paste each surface's text verbatim into the Round log.
 
   Then grep the trial database file (read-only, `mode=ro`) for `sk-ant-not-a-name`. There must be no
   match.
-- [ ] 7.6 (C, **operator key only**) If the operator has put a real Anthropic API key in the trial
-  Hub's environment (design open question 8), run one turn on `claude-haiku-4-5-20251001` through
-  the provider runner: `Reply with the single word ok.` It completes, and its usage is in tokens.
-  Otherwise record "not driven: no key", and leave this task unchecked for the operator.
-  (Review 2026-09-28, recommended answer, still the operator's: only after tasks 3.3 and 3.5 are
-  built and green, with a dedicated, spend-capped Anthropic workspace key set only in the trial
-  Hub's launch environment, revoked after this task.) Then grep the trial database (`mode=ro`) for
-  the key's value: no match. If group B is kept, add one turn asking `cp5` to use the `explore`
+- [ ] 7.6 (C, **operator key only**) **Preconditions (operator decision 2026-09-28, design D7 and
+  Open question 8), all required before the key is set:**
+  - the fixes for review findings 2 (the exact-value scrub, task 3.5), 3 (the whole-prefix strip,
+    task 3.3) and 10 (the `urlsplit` address check, task 3.2, and the `os.environ.get` key read,
+    task 3.3) are built, and tests 1.7, 1.8 and 1.9 are green;
+  - the key is a **dedicated Anthropic workspace key** with a **hard monthly spend limit of a few
+    dollars**;
+  - it is set **only in the trial Hub's launch environment** (the shell that starts `:8010`), not in
+    the user-wide environment, so the `:8000` Hub cannot see it;
+  - it is **revoked after this task**; record that it was.
+
+  The key is readable by the agent's shell commands and the Hub's tool server (accepted by the
+  operator, design D7). With the preconditions met and the operator's key in place, run one turn on
+  `claude-haiku-4-5-20251001` through the provider runner: `Reply with the single word ok.` It
+  completes, and its usage is in tokens. Otherwise record "not driven: no key" (or which
+  precondition is unmet), and leave this task unchecked for the operator. Then grep the trial
+  database (`mode=ro`) for the key's value: no match. If group B is kept, add one turn asking `cp5` to use the `explore`
   agent and record the `model` its `subagent_completed`/`subagent_failed` reports (finding 13).
 - [ ] 7.7 (B) Give a task completed by another agent evidence at a real commit. Set
   `cp5.copilot_review_agents = ["code-review"]` and fire a review turn at `cp5` through a flow.

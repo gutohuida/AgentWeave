@@ -509,7 +509,39 @@ messaging it**. Rebinding alone writes no `turn_usage` row, so the hold, keyed o
 (`provider_allowance.py:122-143`), stays, and loops and jobs stay blocked (`scheduler.py:1182`,
 `:1740`); only operator input served by the new runner ends it, as the main spec already says
 (`agent-conversation-workspace/spec.md:2489-2492`; review 2026-09-28, finding 8). This matches the
-Claude weekly hold. It is flagged as an operator decision (Q6) because a month is long.
+Claude weekly hold. It was flagged as an operator decision (Q6) because a month is long.
+
+**Decided 2026-09-28 (Q6, the operator: "yes" to keeping the hold).** The hold stays. Because a
+month is long, the operator must be told when it ends and how to get out of it, in the notice the
+hold already produces. That notice is `hold_sentence(agent, hold)` (`provider_allowance.py:208-217`),
+derived, never stored, and read by the queue status route (`inbound_queue.py:195-199`) and by the
+scheduler's `waiting_reason` (`turn_scheduler.py:361`), which the conversation shows as *"Not started
+— <reason>"* (`AgentOutputPanel.tsx:821`, `:891-895`). Today it names the reset only as a clock time
+plus an ISO instant, and its only way out is *"A new message from the operator is tried once
+sooner"*, which for a Copilot plan refused again means nothing without the rebind. So:
+
+- **`ProviderHold` and `AllowanceRefusal` gain `provider: Optional[str] = None`**, read by
+  `allowance_refusal` from the reading's `provider` key when it is a non-empty string, and carried
+  by `hold_for_reading` (`provider_allowance.py:60-105`). D7's Copilot reading carries
+  `"provider": "copilot"`. A Claude reading (`rate_limit_info`, `runner_parsing.py:365-368`) has no
+  such key, so a Claude hold has `provider is None` and every Claude sentence is byte-identical
+  (`test_provider_allowance.py:276` keeps its length 285). This supersedes proposal's earlier
+  *"`provider_allowance.py` is unchanged"*: the refusal rule itself (`:68-75`) is still unchanged.
+- **`hold_sentence` for a Copilot hold** names the reset **date** and the way out. The wording:
+  *"<agent>'s Copilot plan quota is spent until 00:00 UTC on 2026-10-01 (2026-10-01T00:00:00+00:00).
+  The Hub holds its queue, its loops and its jobs until then, and does not count the refusal against
+  any input. To continue sooner, bind the agent to another runner and then send it a message:
+  rebinding alone does not end the hold. A new message from the operator is also tried once on
+  Copilot, which helps only after buying more credits."* The date is `until.strftime("%Y-%m-%d")`
+  beside `_clock(until)` (`:204-205`), so it is read off the hold, never hard-coded.
+- **`hold_busy_reason` and `hold_coalesce_reason`** (`:220-230`) name only a clock time, which for a
+  month-long hold does not say which day. For a Copilot hold both add the date
+  (*"held until 00:00 UTC on 2026-10-01"*). The coalesce form must still fit `JobRun.error_summary`'s
+  500 characters at a 32-character agent name.
+- The `queue_agent_held` event (`agent_trigger.py:2731-2742`) already carries `hold_until` and
+  `resets_at`, and task 5.3 copies it unchanged; it gains nothing.
+
+Task 1.19 pins the Copilot sentences and the unchanged Claude ones.
 
 ## D9 — The runner's compaction point is an adapter member
 
@@ -554,8 +586,10 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
   `CheckpointPolicy(...)` directly with the six existing fields.
 - **A configured threshold past the final-warning point is lowered to it.**
   - In percent mode, when the value is above `final_warning_percent`, it becomes `final_warning_percent`,
-    and `threshold_source` becomes `"runner_ceiling"`. **For Claude this also lowers a configured
-    93–99% to 92%.** `threshold_error` accepts up to 99 (`checkpoint_policy.py:125-129`). R1 stated
+    and `threshold_source` becomes `"runner_ceiling"`. **This percent ceiling applies to every
+    runner, Claude included (Q7, decided (b), 2026-09-28): a Claude configured 93–99% becomes 92%,
+    stated on screen.** A Claude percent threshold above 95 can never fire before Claude compacts, and
+    this rescues it. `threshold_error` accepts up to 99 (`checkpoint_policy.py:125-129`). R1 stated
     only the token-mode change, and this is a second Claude behaviour change (Q7). **R3 measured
     its reach:** a `mode=ro` read of the operator's `:8000` database and of the trial database found
     no project and no agent with a configured threshold (every `checkpoint_threshold_mode` is NULL).
@@ -568,11 +602,17 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
     (`:156-172`) takes no policy and is also used for the notes point. The ceiling goes in
     `should_checkpoint` (`:175-192`) and in the threshold half of `should_request_notes`
     (`:214-219`, so that notes stop being asked once the ceiling is reached). In both, a token
-    threshold counts as crossed when `crosses(...)` is True **or** `percent >= final_warning_percent`.
-    For Claude that fires a token threshold set above 92% of a known window at 92%. Today such a
-    threshold is reached only after Claude has compacted at 95%, so it can never fire in time. That
-    is the same defect this change fixes for Copilot. It is a behaviour change for Claude token-mode
-    thresholds only in that band, stated here and pinned by a test (open question Q7).
+    threshold counts as crossed when `crosses(...)` is True **or**, **only when
+    `policy.compaction_percent < 95`**, `percent >= final_warning_percent`.
+    **Decided (Q7, option (b), 2026-09-28): the token-mode ceilings apply only to runners that compact
+    below 95, today Copilot.** Token mode exists for windows the Hub cannot trust
+    (`checkpoint_policy.py:8-11`, `:163-168`), and this ceiling trusts the reading's `percent`. With a
+    wrong denominator (a catalog 200k on a 1M session) it would fire a Claude 600k threshold at about
+    184k, and in `automatic` mode an early firing bills a checkpoint generation. So Claude's (and
+    Codex's) token-mode behaviour is unchanged by this slice: a Claude token threshold set above 92%
+    of the window is **not** fired early. It stays reachable only after Claude compacts, as today;
+    the percent ceiling above is the rescue for Claude. The condition reads the policy's own
+    `compaction_percent` field (C=95 when there is no runner), so no caller changes.
   - A notes value that is not below the lowered threshold is lowered to `threshold − 10`, or it
     would be silently ignored (`should_request_notes`, `:205-208`).
   - **Token-mode notes (R3, added).** R2 put the ceiling into the threshold half of
@@ -580,11 +620,12 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
     never start. Example: a project token threshold of 150000 with notes at 140000, and a Copilot
     agent whose window is 128000 (acp4's `maxPromptTokens`). The checkpoint now fires at 77%, about
     98600 tokens, but 140000 is never reached, so no notes are ever asked for and the checkpoint is
-    generated from none. So, in token mode and only when a notes value is set, the notes half also
-    counts as reached at `percent >= final_warning_percent − 10`. That is the percent-mode result
-    for a notes value past the ceiling (the lowered threshold minus 10): 67 for Copilot and 82 for
-    Claude. It is one line in `should_request_notes`, and like the threshold ceiling it needs a
-    reading that carries `percent`. No notes value, no notes, as today.
+    generated from none. So, in token mode, only when a notes value is set and only when
+    `policy.compaction_percent < 95` (Q7 (b), as above), the notes half also counts as reached at
+    `percent >= final_warning_percent − 10`. That is the percent-mode result for a notes value past
+    the ceiling (the lowered threshold minus 10): 67 for Copilot. Claude's token-mode notes are
+    unchanged (no 82% ceiling). It is one line in `should_request_notes`, and like the threshold
+    ceiling it needs a reading that carries `percent`. No notes value, no notes, as today.
   - **A threshold at the ceiling leaves no room for a dismissal.** With the threshold equal to the
     final warning, a conversation dismissed at the ceiling gets its final warning on the next
     reading. That is what a configured 92% does for Claude today, and it is the design's intent:
@@ -618,8 +659,9 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
     mode and above `checkpoint_compaction_percent − 3`. For Claude: *"This agent's threshold of 96%
     is lowered to 92%: Claude compacts at about 95% of its window."* A token threshold cannot be
     compared with a percent in the UI, so for one the line reads *"This agent's checkpoint fires at
-    <N> tokens or at <C − 3>% of its window, whichever comes first"*, shown whenever the token-mode
-    ceiling applies to the runner (every runner under Q7's current answer). The comparison is one
+    <N> tokens or at <C − 3>% of its window, whichever comes first"*, shown only where the token-mode
+    ceiling applies: `checkpoint_compaction_percent < 95` (Q7 decided (b): not for a Claude or Codex
+    agent, whose token threshold is not lowered and so gets no line). The comparison is one
     helper, `runnerCeilingNote(compactionPercent, mode, value)`, beside
     `describeThreshold` (`components/environment/describeThreshold.ts`), used by both surfaces.
     `AgentSettingsControls` already has the agent's override; the project threshold comes from
@@ -630,7 +672,8 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
     point: *"Lowered to 77% for agents on a runner that compacts at about 80% (cop)."*
   - A Claude or Codex project with no configured threshold shows neither line (80 < 92), so its
     screens stay identical. Test 1.18 covers the Claude 96 → 92 line, the Copilot line, the project
-    panel line, and the no-line default.
+    panel line, the no-line default, and the token line (shown for a Copilot agent with a token
+    threshold, not for a Claude one).
 - **Where the percent comes from.** A live Copilot reading derives `percent` in
   `ContextUsageSample.__post_init__` (`runner_events.py:260-268`) from slice 2's `usage_update
   {used, size}`. D10 assumes Copilot's "about 80%" is a fraction of that same `size` (INFERRED). The
@@ -1070,6 +1113,42 @@ order fails it. API tests assert by position in the order the route returns (`ag
   `spend_from`/`quota_hold_from`" sentence (design, *Where the ledger lives*; proposal header) now says slice 1's R2
   reserved them and its R3 dropped them. Nothing else changed.
 
+- **Operator decisions, 2026-09-28.** In an interactive session the operator said "yes" to every
+  recommendation. Two open questions of this change were decided:
+  - **Q7 (D10's ceiling): option (b).** The percent ceiling applies to every runner, Claude included
+    (a configured 93–99% becomes 92, stated on screen). The two token-mode ceilings (the threshold at
+    `percent >= final_warning_percent` in `should_checkpoint` and the threshold half of
+    `should_request_notes`; the token notes at `percent >= final_warning_percent − 10`) apply only
+    when `compaction_percent < 95`, today Copilot. Reason: token mode exists for windows the Hub
+    cannot trust (`checkpoint_policy.py:8-11`, `:163-168`), a wrong denominator would fire a Claude
+    600k threshold at about 184k, and in `automatic` mode that bills a checkpoint generation. Claude's
+    token-mode behaviour is unchanged by this slice. (a) and (c) rejected.
+  - **Q6 (the Copilot quota hold): keep the hold.** A Copilot quota refusal on an individual plan
+    still holds the queue until the 1st of next month. In addition the hold's notice states the reset
+    date and the way out: rebind to another runner, then message the agent (rebinding alone does not
+    end the hold; until then its loops and jobs stay blocked). Re-read for this:
+    `provider_allowance.py:52-105`, `:204-230`; `inbound_queue.py:195-199`; `turn_scheduler.py:361`;
+    `AgentOutputPanel.tsx:821`, `:891-895`; `agent_trigger.py:2731-2742`; `runner_parsing.py:365-368`
+    (a Claude reading carries no `provider` key, so Claude's sentences stay byte-identical);
+    `test_provider_allowance.py:273-295` (the length asserts 285 / 86 / 161).
+  - **Sections changed.** design.md: D8 (a new *Decided 2026-09-28* block: `ProviderHold.provider`,
+    the Copilot `hold_sentence` wording with date and remedy, the dated busy and coalesce forms); D10
+    percent-mode bullet (the ceiling for every runner), token-mode bullet (the `compaction_percent <
+    95` guard and its reason), token-mode notes bullet (Copilot 67 only, no Claude 82), *Where the
+    lowering is stated* (the token line only below 95; test 1.18's coverage); Q6 and Q7 marked
+    DECIDED; this entry. tasks.md: 1.12 (Claude percent 95 → 92, Claude notes 94 → 82, Claude token
+    threshold False at 92 and 99, Copilot token threshold True at 77 and False at 76, Claude token
+    notes False at 82 and 91), 1.18 (Claude 95 → "lowered to 92%", the token line at 80 and not at
+    95), new 1.19 (the Copilot hold's notice), 3.2 (the guard), new 5.5 (`provider_allowance.py`),
+    8.2 (copy both decisions into DECISIONS). specs/conversation-checkpoint: the token-mode sentences
+    now apply only to a runner that compacts earlier than about 95% and state the Claude exception;
+    the token scenario names an 80% runner at 77%; two scenarios added (a Claude token threshold not
+    fired early; a Claude 95% lowered to 92%). specs/agent-conversation-workspace: a paragraph
+    requiring the Copilot hold notice to state the end date and the rebind-then-message remedy, and
+    the loop and job notices to state the date; three scenarios added. test-guide.md:
+    Agent-verifiable items 1, 4 and a new 6 (validate is now 7); Human-only items 3, 6 and 7 turned
+    from decisions into checks. proposal.md: the Copilot hold bullet and the thresholds bullet.
+
 ## Open questions for R2/R3
 
 - **Q1 (slice 1). Answered in R2, from slice 1's design (unbuilt).** No. `usage_from` is a
@@ -1096,6 +1175,10 @@ order fails it. API tests assert by position in the order the route returns (`ag
   holding? D1–D6 do not answer this. For the answer (review 2026-09-28, finding 8): rebinding the
   agent to another runner does **not** end the hold by itself; the operator must rebind and then
   message the agent, and until then its loops and jobs stay blocked too.
+  **DECIDED 2026-09-28: keep the hold** (the operator, in an interactive session: "yes" to the
+  recommendation). In addition, the hold's notice states the reset date and the way out (rebind the
+  agent to another runner, then message it; rebinding alone does not end the hold, and until then
+  its loops and jobs stay blocked). D8, *Decided 2026-09-28*, says where; task 1.19 pins it.
 - **Q7.** D10's ceiling changes Claude's behaviour in two bands. First, token thresholds that fall
   between 92% and 100% of a known window. Second (found in R2), configured **percent** thresholds of
   93–99, which are lowered to 92. Keep it uniform (R1's choice: a threshold above 92 leaves at most
@@ -1120,6 +1203,16 @@ order fails it. API tests assert by position in the order the route returns (`ag
   percent ceiling for every runner, the token ceilings only for runners that compact below 95, which
   removes the denominator risk for Claude and keeps Copilot's fix; (c) all three ceilings only below
   95. Each is one condition. The lowering is stated on screen under any answer (D10, finding 5).
+  **DECIDED 2026-09-28: option (b)** (the operator, in an interactive session: "yes" to the
+  recommendation). The percent ceiling applies to every runner, Claude included: a Claude configured
+  percent threshold of 93–99 becomes 92, and a notes value past it becomes 82, stated on screen. The
+  two token-mode ceilings (the threshold counted as crossed at `percent >= final_warning_percent`
+  in `should_checkpoint` and in the threshold half of `should_request_notes`, and the token notes
+  counted as reached at `percent >= final_warning_percent − 10`) apply only when
+  `compaction_percent < 95`, today Copilot. Reason: the token ceilings trust the reading's percent,
+  whose denominator token mode exists to distrust, and in `automatic` mode an early firing bills a
+  checkpoint generation. Claude's token-mode behaviour is unchanged by this slice. Options (a) and
+  (c) are rejected. Pinned by tasks 1.12 and 1.18.
 - **Q8. Answered in R2.** No UI literal assumes 80/92/95. A grep of `components/checkpoints`,
   `AgentSettingsControls.tsx`, `BannerStack.tsx`, `ProjectSettingsPanel.tsx` and
   `components/context` found none. Only `CONTEXT_WARNING_PERCENT = 70`

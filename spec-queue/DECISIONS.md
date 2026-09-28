@@ -700,6 +700,38 @@ serving four-day-old code.
 
 ## Decided
 
+### 2026-09-28 — ghcp slices 2–5: five answers after the Opus review
+
+**DECIDED by the operator in an interactive session, 2026-09-28**, answering *"yes"* to every
+recommendation put to them after the slices' R2, R3 and Opus adversarial review
+(`spec-queue/tracks/reviews/ghcp-s2..s5-2026-09-28.md`). Each option was explained with its
+background and cost before the answer. Applied to the designs the same evening.
+
+- DECIDED   ghcp-a-spec-turn-full-access  **(c): a spec turn is judged as Workspace, even under Full
+  access.** Its non-`edit` requests are judged by the `workspace` posture; the Hub never answers
+  them ALLOW on its own authority. A spec turn never asks Copilot for allow-all, so it cannot learn
+  whether managed policy withheld it, and ALLOW would grant through the Hub what the organisation
+  withheld. Rejected: (a) ALLOW every non-edit; (b) probe allow-all, read it back, then decide.
+  Slice 2 Q13, slice 3 Q11.
+- DECIDED   ghcp-b-ceiling  **(b): the percent ceiling for every runner, the token ceilings only
+  below 95.** A configured percent threshold past the final-warning point is lowered for every
+  runner (a Claude 93–99 becomes 92, said on screen). The token-mode threshold and notes ceilings
+  apply only when the runner compacts below 95%, because token mode exists for windows the Hub
+  cannot trust and an early firing bills a checkpoint in automatic mode. Claude token mode is
+  unchanged. Rejected: (a) uniform; (c) nothing for Claude. Slice 4 Q7.
+- DECIDED   ghcp-c-quota-hold  **Keep the month-long hold**, and the notice states the reset date
+  and the way out (rebind the agent to another runner, then message it). Slice 4 Q6.
+- DECIDED   ghcp-d-slice5  **Slice 5's seven items, all as recommended:** no Copilot hooks; Azure
+  and OpenAI BYOK deferred; the BYOK drive uses a dedicated, spend-capped Anthropic key set only in
+  the trial Hub's launch environment, revoked afterwards, and only after review findings 2, 3 and
+  10 are built; the key in the run's shell environment is accepted; no "compacted" banner for now;
+  the GitHub-unavailable diagnostic may be removed if task 1.1 shows no MCP status event. Slice 5
+  open question 8.
+- DECIDED   ghcp-e-aw-tool-shell  **(a) now, (c) as a follow-up.** `aw-tool`'s standing approval
+  under "Ask me" ships with the persistent-shell residual stated. Detect-and-degrade becomes a
+  follow-up change if the work-PC drive shows persistent sessions in use. Rejected: (b) the `.exe`
+  launcher; (d) a card per call. Slice 3 Q7.
+
 ### 2026-09-27 — GitHub Copilot CLI as a full runner: six answers after the exploration
 
 **DECIDED by the operator in an interactive session, 2026-09-27**, answering D1–D6 of

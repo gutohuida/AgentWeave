@@ -113,7 +113,7 @@ did not compact the conversation, so an event with `agentId` never maps to `comp
 mapper therefore needs the whole `sessionEvent` params (`agentId`, `dataOmitted`), not only
 `{type, data}` (*Required of slices 1–4*).
 
-## D2 — The Hub installs no hook; the transport question if the operator overrules
+## D2 — The Hub installs no hook (DECIDED 2026-09-28: none)
 
 **Decision.** This change writes **no** hook file into the agent's `COPILOT_HOME/hooks/`. D1 leaves
 no fact that a hook carries better. Of the hook capabilities that raw events lack, R1 found only
@@ -128,11 +128,17 @@ these, and each is excluded:
   commit range, but the hook file is static and the range is per turn. The review context (D8)
   already hands the range to the main agent, which writes the subagent's prompt.
 
-**Operator question (not answered by D1–D6).** `ghcp-d2-native-files` lists hooks among the Copilot
-files the Hub writes. R1 recommends writing none, for the reasons above. The operator confirms, or
-names the hook and what it is for.
+**Operator decision, 2026-09-28: no hooks ("yes" to the review's recommended answer, Open
+question 8).** `ghcp-d2-native-files` listed hooks among the Copilot files the Hub writes; the
+operator decided none are wanted. Every fact a hook carries arrives richer in a raw event (D1);
+every deciding hook is barred by D3; `additionalContext` would open a second input channel beside
+the inbound queue. Revisit only if task 1.1 shows the raw event types are not emitted over ACP, and
+even then **do not pre-build the fallback**: stop group A and bring the finding to the operator.
+Nothing in this change's tasks, specs or test guide builds, installs or renders a hook.
 
-**If the operator overrules:** use a `type:"command"` hook with `exec` = the Python the Hub runs
+**Not built — the overrule path, kept only as a record of what a revisit would cost.** R1–R3 wrote
+it for the case the operator overruled; the operator did not, so none of it is implemented, and no
+task builds it. It was: use a `type:"command"` hook with `exec` = the Python the Hub runs
 under, and `args` = [the pinned `mcp_server.py` copy that `tool_server.py` maintains, `--call`, a
 tool that receives the hook's payload]. That is the shim call mode of
 `a-run-reaches-the-hub-without-mcp` (its D4: `mcp_server.py --call <tool>`, fastmcp not imported).
@@ -202,7 +208,8 @@ item is a trap a later change could walk into.
     `config.json` (its § *Provided* item 20). **This change writes nothing into the home** (D2: no
     hook; D8: the review agents are Copilot's built-ins; D9: the GitHub server is a spawn flag; D7:
     BYOK is environment only), so nothing of this change's is swept. Any later write there,
-    including D2's overrule path, goes through that recorder.
+    including D2's overrule path if it were ever built (it is not; operator decision 2026-09-28),
+    goes through that recorder.
   - **Review fixes, 2026-09-28 (finding 6): "the Hub must not set" is not enough.** Nothing strips a
     `COPILOT_ALLOW_ALL` the Hub did not set. `resolve_agent_env` copies `os.environ` and merges the
     agent's `env_vars` (`launchability.py:157-179`), so an operator's shell or an agent's `env_vars`
@@ -346,9 +353,11 @@ runner compacted it". Nothing could show it:
 
 A test asserting the flag would pass while no operator ever saw it. So the flag is dropped. What
 the operator sees is the `compacted` card in the run's timeline (above), next to the unchanged due
-banner. Whether a banner variant is wanted is an operator question (Open question 8): it needs a
-persisted fact (a column, or reading the conversation's `compacted` rows) and a UI change, which is
-why R2 did not add it silently.
+banner. A banner variant would need a persisted fact (a column, or reading the conversation's
+`compacted` rows) and a UI change, which is why R2 did not add it silently. **Operator decision,
+2026-09-28: not now** (Open question 8). The due banner keeps its threshold sentence, and the
+timeline's `compacted` card is the signal. A banner that says the runner compacted is recorded as a
+possible follow-up change, not built here.
 
 **Why `context_pressure` and not a new trigger value.** `CHECKPOINT_TRIGGERS` is guarded by a check
 constraint from migration `0044` (`db/models.py:1646-1653`). The UI offers a ready checkpoint only
@@ -540,7 +549,8 @@ would accept ids nobody verified for the API, and a runner valid on one machine 
 the next. The `claude` catalog's ids are the ones Claude Code passes to the Anthropic API, and the
 drive's model (`claude-haiku-4-5-20251001`) is a dated API id (the other entries are **INFERRED**
 to be API ids too; only Haiku is driven). `type` stays a field, so a later change can add a
-provider with a catalog of its own. Operator question 8 now carries both deferrals.
+provider with a catalog of its own. **Operator decision, 2026-09-28: both deferred** (OpenAI and
+Azure; Open question 8).
 
 **Validation.** R2: returned as **400 with a string `detail`** from `api/v1/runners.py`, like
 `_reject_undeclared_model` (`:24-44`), not as a Pydantic `ValueError` (which would be a 422 whose
@@ -660,12 +670,12 @@ have to dig out). The schema types the fields; the route decides.
   **(rebase at IMPL: `each-runner-cli-is-one-adapter` unbuilt at R2; if `catalog_provider` becomes
   per-runner there, these sites collapse onto it.)**
 
-**Azure is deferred.** An Azure model is a deployment name the catalog cannot declare
-(`COPILOT_PROVIDER_WIRE_MODEL`), which conflicts with the catalog rule. This is an operator question.
-Review 2026-09-28 adds: Azure also needs `COPILOT_PROVIDER_AZURE_API_VERSION` and possibly
+**Azure is deferred (DECIDED 2026-09-28, together with OpenAI).** An Azure model is a deployment
+name the catalog cannot declare (`COPILOT_PROVIDER_WIRE_MODEL`), which conflicts with the catalog
+rule. Review 2026-09-28 adds: Azure also needs `COPILOT_PROVIDER_AZURE_API_VERSION` and possibly
 `API_KEY_COMMAND`, the very variables the spawn now strips, so supporting it means a per-runner
-"declared deployment + base model id" concept, not a catalog entry (recommended answer in Open
-question 8).
+"declared deployment + base model id" concept, not a catalog entry. The operator accepted the
+deferral (Open question 8); `type` stays a field so a later change can add it.
 
 **Spawn (rewritten, review fixes 2026-09-28, findings 3 and 10).** One function,
 `copilot_provider_env(env, provider_config) -> env`, used by the Copilot `guard_env` (runs) and the
@@ -737,7 +747,9 @@ environment. Whether Copilot's stdio `env` field *replaces* or *merges* with the
 environment is not known, so the Hub cannot scrub it there either. The requirement therefore no
 longer claims the key stays out of the tool server. It claims what holds: the key is stored nowhere,
 returned nowhere, and redacted from everything recorded. The shell exposure is stated to the
-operator (test guide, human-only 3).
+operator (test guide, human-only 3). **Operator decision, 2026-09-28: accepted** (Open question 8),
+as a proxy runner's key is today; the throwaway, spend-capped key drive 7.6 uses makes it
+acceptable there.
 
 **R3: this change declines slice 2's hand-off of an MCP `env` filter, with reasons.** Slice 2's R2
 D3 now says *"Whichever lands the BYOK variables adds that filter (an `env` map that blanks them)"*.
@@ -826,7 +838,8 @@ both. **(rebase at IMPL: slice 1 D14 moves `probe_agent` onto the adapter; the c
   `a-file-path-is-not-redacted-as-a-credential` does not change. D5 adds the value rule to
   `error_event`'s message, which today is not redacted.
 - Stderr summaries are "secret-safe" per `runtime-diagnostics`, and pass the scrub when recorded.
-- It **is** in the environment of the run's tool server and shell commands (above).
+- It **is** in the environment of the run's tool server and shell commands (above). Accepted by
+  the operator, 2026-09-28.
 - `RpcTurnRequest.env` holds it in memory for the run. A dataclass `repr` in any log line would
   print it, so slice 1's `env` field is `repr=False` (*Required of slices 1–4*, 1.8), and the trigger
   fills `RpcTurnRequest.agent_config` with only the keys the run needs (`copilot_github_mcp`), never
@@ -836,6 +849,14 @@ Test 1.9 asserts the key value appears in none of the runner response, the agent
 recorded run event, a permission card, or an error or diagnostic payload, feeding it through a
 **text** event, a **thinking** event and a permission subject (a tool result alone would pass on
 today's code: the F190 pattern).
+
+**The happy-path drive's key (DECIDED 2026-09-28, Open question 8).** The operator will supply a
+real key for drive 7.6, and only on these conditions: the fixes for review findings 2 (the
+exact-value scrub, task 3.5), 3 (the whole-prefix strip, task 3.3) and 10 (the `urlsplit` address
+check and the `KeyError`-free key read, tasks 3.2 and 3.3) are built and their tests green; the key
+is a dedicated Anthropic workspace key with a hard monthly spend limit of a few dollars; it is set
+only in the trial Hub's launch environment (not user-wide, so not visible to the `:8000` Hub); and
+it is revoked after 7.6.
 
 **Plainly: a Claude Max subscription cannot back this.** Copilot's BYOK takes an API key. A Max plan
 authenticates Claude Code and claude.ai by OAuth, and routing it through another harness is not a
@@ -1074,7 +1095,8 @@ not guarantee a stored value is well-formed. So:
     `--disable-builtin-mcps` under a home with no GitHub sign-in, so the GitHub server should fail,
     and records whether and when a status event names it. If none arrives within a turn, this
     diagnostic cannot fire: it is removed from the change and the spec, and the operator is told
-    that a failed GitHub server shows only as tool calls that never happen.
+    that a failed GitHub server shows only as tool calls that never happen. **Operator decision,
+    2026-09-28: accepted** (Open question 8). No other signal is built in its place.
 
 ## D10 — Independence of the groups
 
@@ -1147,7 +1169,7 @@ has not), **correction** (sibling text that is wrong about this change), or **no
 
 | # | Item | Kind |
 |---|---|---|
-| 3.1 | No "hook call mode" is needed. D2 installs no hook. Its overrule path would need its own stdin mode and tool, which slice 3's closed, stdin-refusing call mode rightly does not offer. | nothing required |
+| 3.1 | No "hook call mode" is needed. D2 installs no hook (DECIDED 2026-09-28: none). Its overrule path, not built, would need its own stdin mode and tool, which slice 3's closed, stdin-refusing call mode rightly does not offer. | nothing required |
 | 3.2 | A failed **GitHub** server is reported by this change's mapper (D9), not by slice 3's `agentweave`-only status handling. | owned here |
 | 3.3 | Open question 10 (does a stdio `env` block replace or merge the inherited environment) decides what reaches the tool server, which is slice 3's subject. If slice 3 settles it, D7's declined filter can be revisited. | nothing required |
 
@@ -1490,13 +1512,52 @@ has not), **correction** (sibling text that is wrong about this change), or **no
     `session.error`). D7's `guard_env(proc_env, env_vars)` corrected to `guard_env(proc_env, config)`.
   - *Required of slices 1–4*: 1.7, 1.8, 2.10 marked provided; 2.12 done; 2.13 already closed.
 
+- **Operator decisions, 2026-09-28** (interactive session; the operator said "yes" to every
+  recommendation; no design round, no code read). Open question 8 is DECIDED item by item:
+  1. D2, hooks: **none**. Revisit only if task 1.1 shows the raw types are not emitted over ACP, and
+     even then do not pre-build the fallback.
+  2. D7, Azure BYOK: **deferred**, with OpenAI; `type` stays a field.
+  3. D7, OpenAI BYOK: **deferred** with Azure.
+  4. D7 / task 7.6, a key for the happy-path drive: **yes, only after findings 2, 3 and 10 are
+     built**, with a dedicated Anthropic workspace key, hard monthly spend limit of a few dollars,
+     set only in the trial Hub's launch environment, revoked after 7.6.
+  5. D7, the key in the run's shell and tool server: **accepted**, as for a proxy runner today.
+  6. D4, a runner-compacted banner: **not now**; the `compacted` card is the signal; possible
+     follow-up.
+  7. D9, removing the GitHub-unavailable diagnostic if 1.1 finds no status event within a turn:
+     **accepted**, no other signal.
+
+  Sections changed:
+  - design: D2 heading and body (decision stated; the overrule path marked **not built**, kept as a
+    record); D4 (the banner paragraph: decided, follow-up); D7 (R2 `openai` paragraph, Azure
+    paragraph, the shell-exposure paragraph, the "where the key could leak" bullet, a new paragraph
+    on the 7.6 key's conditions); D9 (the delivery bullet: removal accepted); *Required* 3.1 (overrule
+    path not built); Open question 2 (no hook fallback pre-built); Open question 8 (each item marked
+    DECIDED with the operator's word; the review's heading no longer says "not decided").
+  - tasks: 0.3 (decisions note), 1.1 (run (c) removal path accepted; the not-delivered branch no
+    longer names a hook fallback), 1.7 (the `azure`/`openai` refusal cites the decision), 1.13 and
+    5.1 (removal path accepted, and the spec text that goes with it), 7.6 (the preconditions as a
+    list; the key's visibility accepted).
+  - proposal: the dependency on slice 3's shim (none now); *What R1 found* (hooks decided: none;
+    the name note); group C (deferrals decided; the key's visibility accepted); group D (the
+    unavailable-server report is conditional on 1.1).
+  - test-guide: agent-verifiable A.7; human-only 1 (hooks decided), 2 (banner decided), 3 (the 7.6
+    preconditions and what the agent can see), 6 (the removal path).
+  - specs: none needed. No spec builds or renders a hook (`agent-run-sandboxing` is the prohibition,
+    `agent-stream-events` already says the facts do not depend on a hook process);
+    `runner-registry` already offers `anthropic` only and already states that the key is visible to
+    what the CLI starts; `agent-configuration`'s unavailable-server paragraph stays until task 1.1
+    decides it (tasks 1.13, 5.1 say what to delete if it is removed).
+  - The change's name still says "hooks" although it installs none; not renamed (proposal note).
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its
    mapper classify `Error:` chunks? Where does Copilot's `request_permission` meet `_decide`
    (D5, D9)?
 2. **Delivery.** Are the six types actually delivered over ACP (**INFERRED**)? Task 1.1 settles it.
-   If not, group A's source falls back to D2's hook transport, and the operator is told. **R3,
+   If not, group A stops and the operator is told; D2's hook transport is **not** pre-built
+   (operator decision 2026-09-28, Open question 8). **R3,
    narrowed:** the passthrough forwards any subscribed type the session emits (VERIFIED-CODE, D1
    table), so what is open is whether an ACP session emits them, not whether they are relayed.
    Still carried to task 1.1.
@@ -1514,24 +1575,41 @@ has not), **correction** (sibling text that is wrong about this change), or **no
 7. **Built-ins on a detached HEAD.** Does `code-review` accept an explicit `<base>..<commit>` range
    when HEAD is detached with a clean tree? This is documented as "branch diffs", so it is
    **INFERRED**. Drive task 7.7 checks it (R2: R1 said 7.2). **R3: carried.**
-8. **Operator questions:**
-   - D2: are any hooks still wanted?
-   - D7: is Azure BYOK deferred?
+8. **Operator questions — DECIDED 2026-09-28**, item by item, in an interactive session: the
+   operator said **"yes"** to every recommendation (the review's recommended answers below, and the
+   design's own for the items that had no separate recommendation).
+   - D2: are any hooks still wanted? **DECIDED: none.** Every fact a hook carries arrives richer in a
+     raw event; every deciding hook is barred by D3; `additionalContext` would open a second input
+     channel. Revisit only if task 1.1 shows the raw event types are not emitted over ACP, and even
+     then do not pre-build the fallback (D2).
+   - D7: is Azure BYOK deferred? **DECIDED: deferred**, together with OpenAI. `type` stays a field so
+     it can be added later (D7).
    - D7: will the operator put an API key in the trial Hub's environment for the BYOK happy-path
-     drive? It spends real money, a few cents on Haiku.
+     drive? It spends real money, a few cents on Haiku. **DECIDED: yes, only after the fixes for
+     review findings 2 (exact-value scrub), 3 (whole-prefix strip) and 10 (URL parse, no
+     `KeyError`) are built**, with a dedicated Anthropic workspace key with a hard monthly spend
+     limit of a few dollars, set only in the trial Hub's launch environment (not user-wide, not
+     visible to the `:8000` Hub), and revoked after 7.6 (D7; task 7.6; test guide, human-only 3).
    - D4 (R2): after a compaction, the due banner keeps its threshold sentence and the timeline shows
      a `compacted` card. Is a banner that says the runner compacted wanted? It needs a persisted
-     fact and a UI change.
+     fact and a UI change. **DECIDED: not now.** The due banner keeps its threshold sentence and the
+     `compacted` card is the signal; a runner-compacted banner is a possible follow-up (D4).
    - D7 (R2): OpenAI BYOK is deferred with Azure, because no catalog here declares OpenAI API ids.
+     **DECIDED: deferred** with Azure (D7).
    - D7 (R2): the key is in the environment of the run's shell commands and tool server, as a proxy
      runner's key is today. Acceptable? (R3: slice 2 now asks the BYOK change to filter the tool
      server's copy; D7 declines, because the shell keeps it and a filter can break the server.)
+     **DECIDED: accepted**, as a proxy runner's key is today; a throwaway key makes it acceptable
+     (D7; test guide, human-only 3).
    - D9 (R3): if task 1.1 shows no MCP status event within a turn, the GitHub-unavailable diagnostic
-     is removed. Acceptable, or is a failed GitHub server worth a different signal?
+     is removed. Acceptable, or is a failed GitHub server worth a different signal? **DECIDED:
+     accepted**; no other signal (D9; tasks 1.13, 5.1).
 
-   **R3: all carried to the operator** (task 0.3's review); none is answerable from code.
+   **R3: all carried to the operator** (task 0.3's review); none is answerable from code. (All
+   decided 2026-09-28, above.)
 
-   **Review 2026-09-28 (task 0.3): recommended answers, still OPERATOR questions, not decided.**
+   **Review 2026-09-28 (task 0.3): recommended answers** (at the time still operator questions;
+   all adopted by the operator on 2026-09-28, above).
    - *Hooks wanted (D2)?* **Recommended: none.** Every fact a hook carries arrives richer in a raw
      event; every deciding hook is barred by D3 (it pre-empts the approval channel, fails open, or is
      a backstop); the only non-deciding extra (`additionalContext`) would open a second input

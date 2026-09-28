@@ -16,9 +16,14 @@ settings whenever the agent's effective threshold is below its configured one, a
 checkpoint settings whenever the project's threshold is lowered for any of its agents. It SHALL
 NOT be refused, because a project's threshold is shared by agents on runners that compact at
 different points. A notes point that is not below the lowered threshold SHALL be lowered with it.
-A threshold expressed in tokens SHALL also be treated as crossed once the reading's proportion
-reaches the runner's final-warning point. A notes point expressed in tokens SHALL likewise be treated
-as reached once the reading's proportion is ten points below that final-warning point.
+For a runner that compacts earlier than at about 95% of its window, a threshold expressed in
+tokens SHALL also be treated as crossed once the reading's proportion reaches the runner's
+final-warning point, and a notes point expressed in tokens SHALL likewise be treated as reached once
+the reading's proportion is ten points below that final-warning point. For a runner that compacts
+at about 95%, a threshold or notes point expressed in tokens SHALL NOT be treated as crossed or
+reached on the reading's proportion, because a threshold set in tokens is chosen for a window the
+system cannot trust, and firing it early would also generate, and bill, a checkpoint the operator
+did not configure.
 
 #### Scenario: A Copilot agent is warned before Copilot compacts
 
@@ -64,6 +69,21 @@ as reached once the reading's proportion is ten points below that final-warning 
 
 #### Scenario: A token threshold beyond the final-warning point still fires in time
 
-- **WHEN** an agent's threshold is expressed in tokens and its reading has not reached it
-- **AND** the reading's proportion reaches its runner's final-warning point
+- **WHEN** an agent bound to a runner that compacts at about 80% has a threshold expressed in tokens
+  and its reading has not reached it
+- **AND** the reading's proportion reaches 77%
 - **THEN** the threshold is treated as crossed
+
+#### Scenario: A Claude token threshold is not fired early
+
+- **WHEN** an agent bound to a runner that compacts at about 95% has a threshold expressed in tokens
+  and its reading has not reached it
+- **AND** the reading's proportion is 92% or more
+- **THEN** the threshold is not treated as crossed
+- **AND** its checkpoint settings do not say that its threshold is lowered
+
+#### Scenario: A Claude percent threshold of 95% is lowered to 92%
+
+- **WHEN** an agent bound to a runner that compacts at about 95% has a configured threshold of 95%
+- **THEN** its effective threshold is 92%
+- **AND** its checkpoint settings say that its threshold is lowered to 92%

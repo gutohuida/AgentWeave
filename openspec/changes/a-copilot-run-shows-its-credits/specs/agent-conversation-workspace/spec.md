@@ -28,6 +28,13 @@ Every Copilot run that reports its plan quota SHALL record that reading, so that
 can find the reset date it needs, and so that a served turn ends a hold. Rebinding a held agent to
 another runner SHALL NOT by itself end the hold; a turn served after the rebinding does.
 
+While a Copilot refusal holds an agent's queue, the notice the operator is shown for the hold SHALL
+state the date and time the hold ends and the way out of it: bind the agent to another runner and
+then send it a message, because rebinding alone does not end the hold, and until then the agent's
+loops and jobs stay blocked too. The shorter notices given to a loop or a job that such a hold blocks
+SHALL state the date the hold ends, not only its time of day. A hold from any other provider SHALL
+be described as before.
+
 #### Scenario: A quota refusal holds the queue until the quota resets
 
 - **WHEN** a Copilot turn fails with a quota error whose code says the quota is exceeded
@@ -77,6 +84,25 @@ another runner SHALL NOT by itself end the hold; a turn served after the rebindi
 
 - **WHEN** a Copilot turn fails because its session's own credit cap was reached
 - **THEN** the queue is not held
+
+#### Scenario: A Copilot hold names its end and the way out
+
+- **WHEN** an agent's queue is held by a Copilot refusal whose reset is 00:00 UTC on 2026-10-01
+- **THEN** the reason the agent is not running names 2026-10-01 and 00:00 UTC
+- **AND** it says to bind the agent to another runner and then send it a message
+- **AND** it says that rebinding alone does not end the hold, and that its loops and jobs stay
+  blocked until then
+
+#### Scenario: Rebinding without a message leaves the hold
+
+- **WHEN** an agent's queue is held by a Copilot refusal
+- **AND** the agent is bound to another runner and no message is sent to it
+- **THEN** the queue is still held and its loops and jobs stay blocked
+
+#### Scenario: A Claude hold is described as before
+
+- **WHEN** an agent's queue is held by a refusal from a provider other than Copilot
+- **THEN** the reason the agent is not running reads exactly as it did before this change
 
 #### Scenario: A served Copilot turn ends the hold
 

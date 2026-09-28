@@ -257,7 +257,8 @@ aw-tool --help
   `/d`, so a machine whose `HKCU`/`HKLM` `Software\Microsoft\Command Processor\AutoRun` prints anything (`chcp 65001`
   prints `Active code page: 65001`) puts that text ahead of the envelope on every call. Corporate images set
   `AutoRun`, and the work PC is one. The envelope is still the last line, and the notice says so. Human-only step 3
-  lists it as a likely cause. The `.exe` launcher (open question 7) would remove it.
+  lists it as a likely cause. The `.exe` launcher would remove it, and the operator rejected it on 2026-09-28 (open
+  question 7, DECIDED (a)): the envelope-is-the-last-line rule is the answer.
   R3: the output keeps `json.dumps`'s default `ensure_ascii=True`. PowerShell 5.1 decodes a native command's stdout
   with the console code page, so non-ASCII text in a task title would otherwise arrive mangled. Escaped output is
   pure ASCII, so it is identical in every shell.
@@ -561,6 +562,16 @@ operator with open question 7 rather than assumed:
   the judge or cards. The shim would mark its requests (a header), and `--list`/`--help`/usage failures, which make
   no request, would degrade too, in the safe direction. This is the only measure that closes the venv and module
   triggers.
+
+**Decided (operator, 2026-09-28, open question 7): option (a) now, (c) as a follow-up.** Case 2 and case 3 ship as
+designed, with this residual stated rather than closed: `ComSpec`, cmd `AutoRun`, `Import-Module`, a venv's `PATH`
+prepend, and PowerShell functions and aliases. What "Ask me" covers is therefore: every request except the Hub's own
+call command and args-file write is carded; an `aw-tool` call is never carded, so after the operator approves a
+command that redefines what `aw-tool` resolves to in a persistent Copilot shell session, later `aw-tool` calls in that
+session run the redefined program without a card. Detect-and-degrade (the second measure above) is **not built in this
+change**; it is a follow-up change, raised if the work-PC drive shows persistent shell sessions in use (test guide,
+human-only step 8; task 10.1). The `.exe` launcher and withholding case 2's standing under "Ask me" (one card per
+call) are rejected.
 
 **R3's attack on the allow-list (task 0.2).** Each attempt below was run against `_lex`/`_words` as they are
 (`mcp_server.py:1403-1505`) and against case 2 as now written. The PowerShell rows marked "measured" were run on
@@ -1013,9 +1024,12 @@ trap. R1–R3 never mentioned spec turns. The spec flow would be unusable exactl
   - on a spec turn the ACP handler answers **every `edit`-kind request** itself: allowed by standing when it names at
     least one path and every path passes D8 case 3, and `reject_once` otherwise, **in every posture**. That is
     stronger than today's nudge, because it is the Hub's own answer, not a tool list;
-  - so that such requests reach the handler at all, a spec turn does not set `allow_all` on under full access; the
-    handler answers every non-`edit` request ALLOW itself, which is what full access means for them (contract
-    conflict with slice 2's D8 fallback rule, open question 11; consistency pass, 2026-09-28);
+  - so that such requests reach the handler at all, a spec turn does not set `allow_all` on under full access. Its
+    non-`edit` requests are then judged as `workspace`, always: the handler never answers them ALLOW on full
+    access's account (operator decision, 2026-09-28, open question 11, option (c)). A turn that never asks Copilot
+    for allow-all cannot learn whether managed `permissions.disableBypassPermissionsMode` withheld it, and an ALLOW
+    would grant through the Hub what slice 2's D8 refuses to grant. Under Full access a Copilot spec turn therefore
+    behaves as Workspace only; that cost is accepted;
   - **Plan mode** (`session/set_mode`) is sent **after** the wait, and only when the run is told `mcp`. Whether Plan
     mode blocks the args-file write is unmeasured, and for a `shim` spec turn the handler's rule above replaces it.
     Slice 2's `SPEC_TURN_USES_PLAN_MODE` switch stays for the `mcp` case.
@@ -1288,6 +1302,25 @@ Copilot spec turn told `shim` submit a document. Test 1.15 covers both runners' 
   its D9 item 1a). D16's full-access non-`edit` ALLOW annotated; new open question 11 records it as a **contract
   conflict** with slice 2's D8 (also slice 2's open question 13). Task 5.4 notes what slice 2 now ships.
 
+- **Operator decisions, 2026-09-28** (interactive session; the operator said "yes" to every recommendation).
+  - **Decision A, open question 11 (a specification turn under Full access): option (c).** A full-access spec turn's
+    non-`edit` requests are always judged as `workspace`; it never relies on allow-all and the ACP handler never
+    answers them ALLOW on its own authority, because a turn that never asks for allow-all cannot learn whether managed
+    `permissions.disableBypassPermissionsMode` withheld it. Cost accepted: under Full access a spec turn behaves as
+    Workspace only. (a) ALLOW-all-non-`edit` and (b) probe-then-read-back rejected.
+  - **Decision E, open question 7 (the `aw-tool` persistent-shell residual): option (a) now, (c) as a follow-up.**
+    D8 case 2 and case 3 accepted as designed, residual stated (`ComSpec`, `AutoRun`, `Import-Module`, venv `PATH`
+    prepend, functions, aliases). Detect-and-degrade is a follow-up change, raised if the work-PC drive shows
+    persistent shell sessions in use; not built here. (b) the `.exe` launcher and (d) a card per call rejected.
+  - **Changed:** D3 (the `AutoRun` caveat's `.exe` launcher sentence); D8 (new *Decided* paragraph after the residual,
+    stating what "Ask me" covers); D16 (the full-access bullet, rewritten to (c)); *Required of slice 2* item 8 (its
+    preamble and the full-access bullet); open question 7 (DECIDED) and R3's carried note on 7; open question 11
+    (CLOSED); *Opus review … on open question 7* (the operator's decision appended); `specs/agent-run-sandboxing/
+    spec.md` (the residual paragraph: `AutoRun`, and what it means under "Ask me"); `tasks.md` 0.3 (decisions
+    note), 1.15 (a full-access non-`edit` case), 5.4 (the full-access answer no longer waits), 10.1 (record step 8
+    as the follow-up's trigger); `proposal.md` (the launcher bullet); `test-guide.md` human-only 6 (Full access) and
+    new 8 (what "Ask me" does not cover; record whether persistent sessions are in use).
+
 ## Required of slices 1, 2; not provided to 5 (R3)
 
 Each slice owns its own file. This section states, in the owning slice's names, what this change needs from each, and
@@ -1358,14 +1391,16 @@ them:
    count how often a genuine `powershell` request arrives with no known name; if that is common, the fix is in its
    `calls` map.
 8. **Spec turns (review finding 4, 2026-09-28; D16).** (Consistency pass, 2026-09-28: now in slice 2's text, its D9
-   items 1–2 and 1a, D8 posture step 2, § *Provided* item 22, except the non-`edit` answer under full access, which is
-   open question 11 here and 13 there, a contract conflict.) Slice 2's D9 changes:
+   items 1–2 and 1a, D8 posture step 2, § *Provided* item 22. The non-`edit` answer under full access, open question
+   11 here and 13 there, was DECIDED (c) by the operator on 2026-09-28 and applied in both designs.) Slice 2's D9
+   changes:
    - `--excluded-tools` on a spec turn drops `create`: `apply_patch,edit,str_replace,str_replace_editor`;
    - on a spec turn, `decide_permission` answers every `edit`-kind request itself, in every posture: allowed by
      standing when it names at least one path and `_hub_own_call("Write", {"path": p}, workspace=…)` holds for every
      path, `reject_once` otherwise (recorded through `_on_refusal` like any Hub refusal);
    - on a spec turn under full access, `allow_all` is **not** set on, so `edit` requests still reach the handler; the
-     handler answers every non-`edit` request ALLOW;
+     handler judges every non-`edit` request as `workspace`, never ALLOW on full access's account (open question 11,
+     DECIDED (c) 2026-09-28);
    - Plan mode's `session/set_mode` is sent after the D9 wait, and only for a run told `mcp`;
    - slice 2's drive task 11.3 (one spec turn) is unchanged for `mcp`; this change's drive 9.10 covers `shim`.
 
@@ -1424,6 +1459,8 @@ Still open:
 7. Is the auto-approved args-file write (D8 case 3) acceptable under "Ask me"? This goes to the Opus review (0.3),
    together with D8's persistent-session residual: a function, alias or `PATH` change approved once can change
    what a later, unasked `aw-tool` runs.
+   **DECIDED 2026-09-28 (the operator, interactive session: "yes" to the recommendation): (a) now, (c) as a
+   follow-up.** See *Opus review … on open question 7* below and D8's *Decided* paragraph.
 8. (R2, new) If group 6 is cut, `specs/agent-run-sandboxing/spec.md`'s *"Wherever the Hub answers a run's
    permission request"* over-claims for Codex. Task 6.3 carries the narrowed first line to use.
    **R3: answered.** Group 6 is cut, and the first line now reads *"Wherever the Hub answers a Claude or Copilot run's
@@ -1435,7 +1472,8 @@ R3 on the carried ones:
 - **5** stays open for drive 9.4 or the work PC. R3 found nothing newer than R2's `app.js` reading.
 - **7** stays for the Opus review (0.3). R3 narrowed the residual: interpreter variables are closed by `-I`.
   Aliases, functions, profiles and `PATH` are not. Also put to the reviewer: case 2 now refuses any tool outside
-  `Bash`/`PowerShell`, which R3 found to be a widening in R1/R2's wording.
+  `Bash`/`PowerShell`, which R3 found to be a widening in R1/R2's wording. (DECIDED 2026-09-28 by the operator: (a)
+  now, (c) as a follow-up.)
 9. (R3, new) Does `codex exec --json` report MCP server startup at all? `parse_codex_line` reads no MCP startup
    event (`runner_parsing.py:424-520`). Without one, F340 stays open for `exec` (D1). Undrivable here. Carry it until
    Codex can be driven.
@@ -1459,11 +1497,18 @@ R3 on the carried ones:
    non-`edit` request ALLOW itself. Slice 2's D8 refuses exactly that shape elsewhere: when Copilot will not grant
    allow-all (managed `permissions.disableBypassPermissionsMode`) the run "does not answer every request with ALLOW.
    That would grant through the Hub what the organisation withheld", and falls back to `workspace`. A spec turn that
-   never asks for allow-all cannot learn whether it was withheld. Not resolved here. Options: (a) this change's rule as
+   never asks for allow-all cannot learn whether it was withheld. Options: (a) this change's rule as
    written; (b) set `allow_all` on, read back the grant, set it off, and answer non-`edit` ALLOW only if it was
    granted, else judge as `workspace`; (c) always judge a full-access spec turn's non-`edit` requests as
    `workspace`. Every other part of item 8 is adopted in slice 2's text (its D9 item 1a, D8 posture step 2, § *Provided*
    item 22). Also carried in slice 2's open questions (its 13).
+   **CLOSED 2026-09-28: DECIDED (c)** (the operator, interactive session: "yes" to the recommendation). A full-access
+   spec turn's non-`edit` requests are always judged as `workspace`; the turn never relies on allow-all, and the ACP
+   handler never answers them ALLOW on its own authority. Reason: such a turn cannot learn whether managed policy
+   withheld allow-all, so an ALLOW would grant through the Hub what the organisation withheld, which slice 2's D8
+   refuses. Cost accepted: under Full access a spec turn behaves as Workspace only (some requests a build turn would
+   run are refused). (a) and (b) rejected. Applied in D16, *Required of slice 2* item 8 and
+   task 1.15/5.4; slice 2 applies it in its D8, D9 item 1a, § *Provided* item 22 and its open question 13.
 
 **Opus review, 2026-09-28, on open question 7 (the review's answer; the operator decides).** Case 3 under "Ask me" is
 acceptable **once the calls-root rule holds** (review fix 1, applied): the file is then inert data in a Hub-owned,
@@ -1478,6 +1523,11 @@ adopted (costless). **For the operator, with Q7:**
 
 This change's recommendation: **(a) now, (c) as a follow-up change** if the work-PC drive shows persistent sessions
 in use. (b) adds a binary dependency on pip's private vendored launcher for the smaller half of the residual.
+
+**Operator's decision, 2026-09-28 ("yes" to the recommendation): (a) now, (c) as a follow-up.** Case 2 and case 3
+ship as designed with the residual stated (D8's *Decided* paragraph, the sandboxing spec's residual paragraph, the
+test guide). (c) is a separate follow-up change, raised only if the work-PC drive records persistent shell sessions in
+use (test guide human-only step 8, task 10.1); it is not built here. (b) and (d) are rejected.
 
 ## Open questions as R1 posed them (answered or carried in the section above)
 

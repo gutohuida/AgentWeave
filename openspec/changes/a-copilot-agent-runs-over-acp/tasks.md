@@ -56,6 +56,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   Patch `shutil.which` and the platform. The test fails today because the module does not exist
 - [ ] 1.6 `hub/tests/test_copilot_acp_decide.py` (new): `decide_permission` over every row of design D8's table, for all four postures. Use the `request_permission` params captured in 1.1 for edit, execute and mcp, and CODE-shaped params for read, fetch, memory and an unknown kind. It must include:
   - (consistency pass 2026-09-28, design D9 item 1a) with `spec_turn=True`, an `edit` inside the workspace → REJECT under `workspace`, `acceptEdits`, `manual` and full access (no card under `manual`); with `spec_turn=False` the same request keeps its posture's answer;
+  - (operator decision 2026-09-28, design open question 13, option (c)) with `spec_turn=True` under full access, every **non-`edit`** row is answered as the `workspace` column answers it, never ALLOW on full access's account: a PowerShell command writing `..\..\x` → REJECT, one writing `.\x` → ALLOW, a foreign MCP server judged as under `workspace`, an MCP request whose server is not identified → REJECT, `memory` → REJECT; the same requests with `spec_turn=False` under full access → ALLOW;
   - a PowerShell command writing `..\..\x` refused under `workspace`;
   - `agentweave` MCP allowed under `manual`;
   - a foreign MCP server judged;
@@ -103,7 +104,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - (g) stop: `session/cancel` is sent, and `stopReason: cancelled` → `interrupted`;
   - (h) every `session/request_permission` is answered exactly once;
   - (i) `usage_update` → `on_usage` with a measured sample and the resolved model;
-  - (j) a spec turn (consistency pass 2026-09-28, slice 3's D16): the spawn argv holds `--excluded-tools=apply_patch,edit,str_replace,str_replace_editor` (no `create`); under full access `allow_all` is **not** set on (read back `off`); a `create` `edit` request for `x.py` is REJECTed and recorded through `_on_refusal`; with the switch patched on, `set_mode` carries the full plan URI before the prompt;
+  - (j) a spec turn (consistency pass 2026-09-28, slice 3's D16): the spawn argv holds `--excluded-tools=apply_patch,edit,str_replace,str_replace_editor` (no `create`); under full access `allow_all` is **not** set on (read back `off`), and an `execute` request for a PowerShell command writing outside the workspace is REJECTed (judged as `workspace`; operator decision 2026-09-28, design open question 13); a `create` `edit` request for `x.py` is REJECTed and recorded through `_on_refusal`; with the switch patched on, `set_mode` carries the full plan URI before the prompt;
   - (k) (R2, narrowed in R3) a JSON-RPC `error` response to a request **before** the prompt (e.g. `session/new`) raises `CopilotACPError` carrying `.code` and `.data`, and it is an `AppServerError`;
   - (l) (R2, amended in R3) `initialize` sends `clientCapabilities._meta["github.com/copilot"].events` equal to `COPILOT_RAW_EVENTS`, de-duplicated, including `tool.execution_start`. There is no `on_raw_event` callback and no `prompt_usage`/`session_was_new` field (removed, design D10);
   - (m) (R2) the process tree is terminated on a failed turn too, not only on a stop;

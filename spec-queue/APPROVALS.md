@@ -40,6 +40,28 @@ ORDER: an-undelivered-message-says-how-its-last-attempt-ended, the-checkpoint-gr
   design, and the verifier's two notes on task 1.4 (seed Run/Conversation rows for the executor
   test; vary `AW_DECISION_TIMEOUT` as an input, not by mutating `env`).
 
+Slices 2–5 below were approved once the operator answered their questions (*"yes"* to every
+recommendation, DECISIONS `### 2026-09-28 — ghcp slices 2–5`). Each design's Round log carries an
+"Operator decisions, 2026-09-28" entry, and all five slices pass `openspec validate --strict`.
+**Every row is gated like slice 1's, and also on the slice before it (`ghcp-d5-order`, 1→2→3→4→5):
+a night that finds the gate unmet skips the row.** None is in tonight's `ORDER:`.
+
+- APPROVED  a-copilot-agent-runs-over-acp   ghcp slice 2. Opus review REVISE, fixes applied 09-28;
+  Q13 decided (c): a spec turn under Full access is judged as Workspace. **Not before
+  `each-runner-cli-is-one-adapter` is archived.**
+- APPROVED  a-run-reaches-the-hub-without-mcp   ghcp slice 3. Opus review APPROVE WITH FIXES,
+  applied; Q11 decided (c), Q7 decided (a) with detect-and-degrade as a follow-up change triggered
+  by the work-PC drive (its test-guide human-only 8). **Not before `a-copilot-agent-runs-over-acp`
+  is archived.**
+- APPROVED  a-copilot-run-shows-its-credits   ghcp slice 4. Opus review APPROVE WITH FIXES,
+  applied; Q7 decided (b), Q6 decided (keep the hold; the notice names the reset date and the
+  remedy, new tasks 1.19 and 5.5). **Not before `a-run-reaches-the-hub-without-mcp` is archived.**
+- APPROVED  a-copilot-agent-uses-hooks-and-its-own-agents   ghcp slice 5. Opus review APPROVE WITH
+  FIXES (group C REVISE), applied; open question 8 decided item by item (no hooks; Azure/OpenAI
+  deferred). Task 7.6 spends real money and is **not unattended work**: it needs the operator's
+  dedicated capped key and runs only after findings 2, 3 and 10 are built. **Not before
+  `a-copilot-run-shows-its-credits` is archived.**
+
 ## 2026-09-27
 
 No review page today. **Written in an interactive session with the operator present** (DECIDE).

@@ -43,8 +43,12 @@ change what the allowed invocation runs. That is all it isolates. The shell that
 command's name is not isolated: in a shell session that persists between a run's commands, an earlier
 command can define a function or alias of the same name, import a module that does, put another
 directory ahead on the search path (as activating a virtual environment does), or change the program
-Windows uses to run command scripts, and the same text then runs something else. This rule cannot see
-that, and it does not claim to; the earlier command was itself decided under the run's posture.
+Windows uses to run command scripts, and the same text then runs something else. A machine's
+command-processor start-up setting also runs before every call. This rule cannot see that, and it
+does not claim to; the earlier command was itself decided under the run's posture. Under the posture
+that asks the operator, this means the operator's approval of one such earlier command also decides
+what later calls in that session run without asking. That residual is accepted and stated, not
+closed.
 Deciding this rule never fails: a request it cannot judge is one it does not match.
 
 A Codex run's command approvals are not read this way. Codex hands the Hub the command as its

@@ -81,7 +81,8 @@ harness reports the server's state on every run and the Hub parses none of it (`
      first on each run's `PATH`. Both run Python with `-I -S` (R3; `-S` from the Opus review), so an interpreter
      variable or a site-packages `.pth` file cannot change what the auto-approved program runs. The shell that
      resolves the name is not isolated: a function, module, `PATH` change or `ComSpec` set earlier in a persistent
-     Copilot session can (design D8's residual, open question 7).
+     Copilot session can (design D8's residual, open question 7). The operator accepted that residual, stated, on
+     2026-09-28; detect-and-degrade is a follow-up change if the work-PC drive shows persistent sessions in use.
    - The shim reads its args file only from inside `<workspace>/.agentweave/calls/`, by the same rule as the
      approver (review fix 8).
    - It is called `aw-tool`, not `aw`, because **`aw` is already the `agentweave` console script**

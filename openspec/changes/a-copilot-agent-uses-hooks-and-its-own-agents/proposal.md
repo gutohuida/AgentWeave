@@ -7,9 +7,9 @@ stream-transport members and `catalog_provider` is one value per adapter, so thi
 in slice 2's `copilot_acp` module and in `resolve_agent_env`/`guard_env` instead. See design,
 *Required of slices 1–4*, rewritten in R3.) It also depends on `a-copilot-agent-runs-over-acp` (slice 2): its ACP client and
 raw-event subscription, the Hub-owned `COPILOT_HOME` per agent written at agent creation, the
-`--disable-builtin-mcps` spawn flag, and its `copilot` runner literal and migration. It uses the
-shim of `a-run-reaches-the-hub-without-mcp` (slice 3) only in a design alternative the operator can
-choose. It lands after the 2026-09-27 night queue (DECISIONS `ghcp-d5-order`).
+`--disable-builtin-mcps` spawn flag, and its `copilot` runner literal and migration. It does not
+use the shim of `a-run-reaches-the-hub-without-mcp` (slice 3): the only design alternative that
+would have, a Hub hook, was declined by the operator on 2026-09-28 (design D2). It lands after the 2026-09-27 night queue (DECISIONS `ghcp-d5-order`).
 
 R1, 2026-09-27. Slice 5 of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. This is
 the "take full advantage of Copilot" slice. Parity with Claude and Codex is slices 1 to 4. Everything
@@ -54,8 +54,9 @@ The raw events also have three other advantages over hooks:
 
 So this change feeds those facts from the raw events. **It installs no Hub hook.** It also records,
 as a requirement, which hooks the Hub must never install. The operator's decision D2 lists "hooks"
-among the Copilot files the Hub writes. Whether any hook is still wanted is put back to the operator
-(design D2).
+among the Copilot files the Hub writes. Whether any hook is still wanted was put back to the
+operator, who decided on 2026-09-28: **none** (design D2). The change's name keeps the word
+"hooks" from the exploration; what it builds about hooks is the prohibition above.
 
 ## What changes: four task groups, each separately cuttable
 
@@ -94,7 +95,8 @@ its own tests and its own drive, and no group depends on another.
 ### Group C: BYOK, a Copilot runner on the operator's own API key
 
 - A `copilot` runner can name a provider, `anthropic` (R2: `openai` deferred with Azure, because
-  the Codex catalog is now a per-machine CLI cache, not a list of API ids), plus the **name** of a
+  the Codex catalog is now a per-machine CLI cache, not a list of API ids; both deferrals decided
+  by the operator 2026-09-28, with `type` kept as a field), plus the **name** of a
   Hub environment variable that holds the API key. That is the same indirection `ANTHROPIC_API_KEY_VAR`
   already uses (`hub/hub/launchability.py:101-114,162-169`). The key is never stored.
 - The runner's model is checked against that provider's catalog **ids** (an alias such as `haiku`
@@ -111,6 +113,9 @@ its own tests and its own drive, and no group depends on another.
   no-provider strip (and `COPILOT_ALLOW_ALL`'s) is asked of slice 2 and is not cut with C.
 - **API keys only. A Claude Max subscription cannot back this** (DECISIONS `ghcp-d4`): Copilot's BYOK
   takes an API key, and a Max plan signs in by OAuth. Runner management says so.
+- The key is in the run's own environment, so the agent's shell commands and the Hub's tool server
+  can read it, as a proxy runner's key can today. The operator accepted this on 2026-09-28; the
+  happy-path drive uses a dedicated, spend-capped key revoked afterwards (design D7, task 7.6).
 - One nullable column on `runners` needs a migration.
 
 ### Group B: Copilot's review agents help a Copilot reviewer
@@ -133,7 +138,8 @@ its own tests and its own drive, and no group depends on another.
 - Because that server acts on GitHub **as the operator**, a call to it under the `workspace` posture
   goes to the operator as an ask-me card. R2: `_decide` *would* auto-approve it (a GitHub call names
   no path and no command), so the rule is decided before `_decide` is consulted. A server that
-  fails to start while enabled is reported in the run's stream. (Review fixes, 2026-09-28: while the
+  fails to start while enabled is reported in the run's stream, if Copilot emits its status within
+  a turn; if task 1.1 shows it does not, that report is removed (operator-accepted 2026-09-28). (Review fixes, 2026-09-28: while the
   toggle is on, a call to **any** reported server other than `agentweave` asks, under its own name;
   a call whose server Copilot did not report is refused by slice 2, DECIDED.)
 - Group D is optional: it is the group the operator should cut first if something must go.

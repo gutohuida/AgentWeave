@@ -663,6 +663,11 @@ That is also what "Copilot's posture at rest is `workspace`" in § Sites touched
 Permissions control therefore declares `default=WORKSPACE_PERMISSION_MODE` rather than copying
 Codex's `acceptEdits` default (`model_catalog.py:294`), so the pill and the run agree.
 
+One exception to the last row (operator decision, 2026-09-28, open question 13, option (c)): a
+**specification turn** under `bypassPermissions` or `yolo` is judged as `workspace` for every
+non-`edit` request, and its `edit` requests are answered by D9 item 1a. It never sets `allow_all`
+on (D8 posture step 2), and the handler never answers ALLOW on full access's account for it.
+
 **Identifying the MCP server (corrected in R2, and again in R3).** The `toolCall` carries no server
 name, and its `title` is `toolTitle` when the tool has one, else `server/tool` (CODE). `acp4…log:25`
 shows a Hub-style tool *has* a `toolTitle` (`"ping"`), so R1's fallback, "`title` split on `/` when
@@ -698,7 +703,8 @@ The client decides the server from Copilot's own report of the call, in order:
    whatever the order; task 1.1 records the order);
 3. otherwise **no server is known**, and the request is answered at step 1: REJECTed, with the
    reason *"Copilot did not report which server this tool belongs to"*, under every posture but
-   `manual` and full access. It is never treated as the Hub's own, and never judged as a foreign
+   `manual` and full access (a full-access specification turn is judged as `workspace`, so it is
+   REJECTed there too; operator decision, 2026-09-28). It is never treated as the Hub's own, and never judged as a foreign
    server of unknown name. R2 judged it foreign, which under `workspace` means `_decide` and so an
    allow.
 
@@ -799,8 +805,12 @@ both.
   asserting policy: *"Copilot did not grant Full access (<Copilot's error message, or "no allow-all
   option was offered">); this run is deciding each action against its workspace instead."*
 - Any request that still reaches the client under full access is answered ALLOW (defensive, as
-  `decide_approval` does at `codex_appserver.py:289-290`), except an `edit` on a specification
-  turn, which D9 item 1a answers (consistency pass, 2026-09-28).
+  `decide_approval` does at `codex_appserver.py:289-290`), except on a specification turn
+  (consistency pass, 2026-09-28; operator decision, 2026-09-28, open question 13, option (c)):
+  there an `edit` is answered by D9 item 1a and every other request is judged as `workspace`. A
+  spec turn never asks Copilot for allow-all, so it cannot learn whether managed policy withheld
+  it, and an ALLOW on its own authority would grant through the Hub what the organisation may have
+  withheld, the thing the bullet above refuses.
 
 **The posture step, every turn (review 2026-09-28, finding 4).** R3 set plan mode on a
 specification turn and never set it back, and set `allow_all` only to turn it on. But Copilot
@@ -819,7 +829,10 @@ agent selection (D6), the step is total:
    diagnostic.
 2. Under full access: `allow_all` → `on`, as above, **except on a specification turn** (D9;
    consistency pass, 2026-09-28, slice 3's D16), where step 3 applies so that every `edit` request
-   reaches the handler. What such a turn answers its non-`edit` requests is open question 13.
+   reaches the handler. Such a turn judges its non-`edit` requests as `workspace` (operator
+   decision, 2026-09-28, open question 13, option (c)): under Full access a spec turn behaves as
+   Workspace only, and some requests are refused that a build turn would allow. That cost is
+   accepted.
 3. Under every other posture: read `allow_all.currentValue` from the returned `configOptions`; if it
    is `"on"`, set it `"off"` and read it back. If it is still `"on"`, `run_turn` **raises before the
    prompt** (a failed start, D12): *"Copilot kept allow-all on for this session; AgentWeave did not
@@ -888,6 +901,11 @@ An unanswered request would hang the turn (`codex_appserver.py:255-258`).
      allow, so every `edit` on a spec turn is refused: with `create` offered but refused, a spec
      turn writes no file, as before. A spec turn never sets `allow_all` on, even under full access
      (D8 posture step 2), because a request answered by allow-all never reaches the handler.
+     (Operator decision, 2026-09-28, open question 13, option (c).) Under full access a spec
+     turn's **non-`edit`** requests are judged as `workspace`: `decide_permission` is called with
+     `posture="workspace"` for them when `spec_turn=True`, and never answers ALLOW on full
+     access's account. Under every other posture a spec turn's non-`edit` requests are judged by
+     that posture, as on any turn.
   2. **Plan mode, only while `SPEC_TURN_USES_PLAN_MODE` is on (off by default; see below)**,
      through `session/set_mode` with the full URI
      `https://agentclientprotocol.com/protocol/session-modes#plan` (VERIFIED accepted). Plan mode
@@ -1826,8 +1844,8 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     handler, told `spec_turn=True`, REJECTs every `edit` step 3 did not allow, in every posture;
     no spec turn sets `allow_all` on; plan mode (still behind `SPEC_TURN_USES_PLAN_MODE`, which
     ships off) is set after slice 3's wait and only for a run told `mcp` (D8 posture step, D9).
-    What a full-access spec turn answers non-`edit` requests is open question 13 (contract
-    conflict).
+    A full-access spec turn judges its non-`edit` requests as `workspace` (open question 13,
+    decided 2026-09-28, option (c)).
 
 ## Risks / Trade-offs
 
@@ -1986,13 +2004,18 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     `permissions.disableBypassPermissionsMode`), the run "does not answer every request with ALLOW.
     That would grant through the Hub what the organisation withheld", and falls back to
     `workspace`. A spec turn that never asks for allow-all cannot learn whether the organisation
-    withheld it, so slice 3's ALLOW would grant exactly what D8 forbids on a managed machine. Not
-    resolved here. Options: (a) slice 3's rule as written, accepting the difference on managed
+    withheld it, so slice 3's ALLOW would grant exactly what D8 forbids on a managed machine.
+    Options: (a) slice 3's rule as written, accepting the difference on managed
     machines; (b) set `allow_all` on, read back whether Copilot granted it, set it off again, and
     answer non-`edit` requests ALLOW only if it was granted, else judge them as `workspace`;
-    (c) judge a full-access spec turn's non-`edit` requests as `workspace` always. Until decided,
-    task 1.6 carries no case for a full-access spec turn's non-`edit` answer. Also carried in slice
-    3's open questions.
+    (c) judge a full-access spec turn's non-`edit` requests as `workspace` always.
+    **CLOSED 2026-09-28: DECIDED (c)** (the operator, interactive session: "yes" to the
+    recommendation). A full-access spec turn never relies on allow-all and the handler never
+    answers its non-`edit` requests ALLOW on its own authority; they are judged as `workspace`.
+    Cost accepted: under Full access a spec turn behaves as Workspace only (some requests refused).
+    (a) and (b) rejected. Applied in D8 (posture table note, full-access bullet, posture step 2),
+    D9 item 1a, § *Provided* item 22, the sandboxing spec, task 1.6 and the test guide. Slice 3's
+    open question 11 is closed the same way.
 
 ## Round log
 
@@ -2415,6 +2438,21 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     requirement paragraph and scenario *"A specification turn has no write tools"*; tasks 1.6, 1.9(j), 11.3; proposal.
   - **Contract conflict left open:** open question 13, the non-`edit` answer of a full-access spec turn (slice 3:
     ALLOW; D8: never grant through the Hub what Copilot may have withheld). Also slice 3's open question 11.
+
+- **Operator decisions, 2026-09-28** (interactive session; the operator said "yes" to every recommendation).
+  - **Decided:** open question 13, a specification turn under Full access: **option (c)**. Its non-`edit` requests
+    are always judged as `workspace`; it never relies on allow-all and the handler never answers ALLOW on full
+    access's account for it. Reason: a spec turn that never asks for allow-all cannot learn whether managed
+    `permissions.disableBypassPermissionsMode` withheld it, so an ALLOW would grant through the Hub what D8 refuses
+    to grant. Cost accepted: under Full access a spec turn behaves as Workspace only. (a) and (b) rejected.
+  - **Changed:** D8 posture table (new note on the full-access row); D8 identifying-the-server list, point 3 (a
+    full-access spec turn is REJECTed there too); D8 full-access bullet "Any request that still reaches the client";
+    D8 posture step 2; D9 item 1a (new closing paragraph); § *Provided to slices 3–5* item 22; open question 13
+    (CLOSED); `specs/agent-run-sandboxing/spec.md` (Full access bullet, the allow-all-off paragraph, the
+    specification-turn paragraph, new scenario *"A specification turn under Full access is decided as Workspace
+    only"*); `tasks.md` 1.6 (new case) and 1.9(j) (an `execute` refused); `proposal.md` specification-turn bullet;
+    `test-guide.md` human-only 6.
+  - Slice 3's decision E (the `aw-tool` persistent-shell residual) touches nothing in this slice.
 
 ## Cross-slice consistency (orchestrator, 2026-09-27, after all five R1s; reconciled in R2)
 

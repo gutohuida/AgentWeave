@@ -30,15 +30,16 @@ The Hub SHALL answer as follows:
   the request is held open. A card for a tool call whose server Copilot did not report SHALL say so,
   and SHALL NOT name the server from text the model wrote. It SHALL be refused when the operator's
   wait runs out.
-- **Full access.** The run SHALL be put into Copilot's allow-all mode. When Copilot refuses that
+- **Full access.** The run SHALL be put into Copilot's allow-all mode, except on a specification
+  turn, which is decided as described below. When Copilot refuses that
   mode, the run SHALL fall back to deciding against its workspace, and SHALL say so in its timeline,
   quoting the reason Copilot gave. It SHALL NOT approve through the Hub what Copilot withheld.
 - **Edit files.** A file change inside the workspace SHALL be allowed. Any other request except the
   Hub's own tools SHALL be refused.
 
-Under every posture except Full access, the Hub SHALL set Copilot's session mode on every turn,
-including a resumed one, and SHALL confirm before sending the prompt that Copilot's allow-all mode is
-off. A turn whose allow-all mode cannot be turned off SHALL NOT be prompted, and SHALL fail with the
+Under every posture except Full access, and on a specification turn under every posture, the Hub
+SHALL set Copilot's session mode on every turn, including a resumed one, and SHALL confirm before
+sending the prompt that Copilot's allow-all mode is off. A turn whose allow-all mode cannot be turned off SHALL NOT be prompted, and SHALL fail with the
 reason. A runner option that widens what Copilot approves by itself SHALL NOT reach a run under any
 posture except Full access.
 
@@ -51,7 +52,11 @@ A turn triggered with a specification document open SHALL have Copilot's file-ed
 removed, except its file-creation tool, whatever the posture. The Hub SHALL refuse every file
 change such a turn asks for, in every posture, except a write the Hub itself recognises as the
 run's own call to the Hub, and SHALL NOT put such a turn into Copilot's allow-all mode, so that
-every file change reaches the Hub. It SHALL NOT run in Copilot's plan mode until a drive has shown
+every file change reaches the Hub. Under Full access, every other request such a turn raises SHALL
+be decided as under Workspace only, and the Hub SHALL NOT allow it on Full access's account: a turn
+that never asks Copilot for allow-all cannot learn whether Copilot, or an organisation's policy,
+would have withheld it. Under Full access a specification turn therefore behaves as Workspace only.
+It SHALL NOT run in Copilot's plan mode until a drive has shown
 that plan mode leaves the turn's specification duties intact and cannot leave the turn waiting on
 a request nobody can answer.
 
@@ -174,6 +179,13 @@ a request nobody can answer.
 - **AND** the session's allow-all mode is off before the prompt is sent
 - **AND** a request to create a file in the workspace is refused and recorded as a runtime refusal
 - **AND** the session is not put into plan mode while no drive has shown plan mode to be safe for specification turns
+
+#### Scenario: A specification turn under Full access is decided as Workspace only
+
+- **WHEN** a Copilot turn is triggered with a specification document open under Full access
+- **AND** it asks to run a PowerShell command that writes to a path outside its workspace
+- **THEN** the Hub refuses the request, as it would under Workspace only, and records the refusal
+- **AND** a shell command that stays inside the workspace is allowed, as it would be under Workspace only
 
 #### Scenario: Approvals do not depend on MCP
 
