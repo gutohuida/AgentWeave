@@ -12,13 +12,17 @@ the Hub already reads, and SHALL NOT depend on a hook process.
 An error Copilot reports SHALL be recorded as an error event, not as a diagnostic, so that it stays
 visible when diagnostics are hidden.
 
-An error SHALL be recorded as one fact. Where Copilot reports an error both as a structured event and
-as message text, the stream SHALL hold one error event for it and SHALL NOT also hold the message
-text, whichever of the two arrives first. Where the structured event does not arrive, the message
-text SHALL be recorded as it is without this change.
+An error SHALL be recorded as one fact. Copilot reports an error as a structured event and then as
+message text derived from it. The stream SHALL hold one error event for it and SHALL NOT also hold
+that message text, and any other text around it SHALL be recorded as it would be without the error.
+Where the structured event does not arrive, the message text SHALL be recorded as it is without
+this change.
 
 A compaction that Copilot reports as failed SHALL be recorded as a diagnostic, not as a compaction,
-because the context was not replaced.
+because the context was not replaced. A compaction Copilot reports for one of its subagents SHALL NOT
+be recorded as a compaction of the run's conversation, because that conversation's context was not
+replaced. A compaction whose report was too large for Copilot to relay SHALL still be recorded as a
+compaction, with whatever counts Copilot reported when it began.
 
 The counts Copilot reports (tokens before and after, the window, a subagent's tokens) SHALL be
 stored as the numbers reported. Redaction SHALL apply to the text an event carries, and SHALL NOT
@@ -30,8 +34,19 @@ Recording an error SHALL NOT itself place or lift a hold on the agent's queue.
 
 - **WHEN** Copilot reports a successful compaction of a run's conversation
 - **THEN** the run's stream holds a status event naming the compaction
-- **AND** it carries the context tokens before and after, the window it targeted, and whether it was
-  automatic or requested, as numbers
+- **AND** it carries the context tokens before and after and the window it targeted, as numbers,
+  and what triggered it, as Copilot reported it
+
+#### Scenario: A compaction too large to relay still counts
+
+- **WHEN** Copilot reports a compaction whose report was too large to relay in full
+- **THEN** the run's stream holds a status event naming the compaction
+- **AND** it carries the counts Copilot reported when the compaction began, where it reported them
+
+#### Scenario: A subagent's compaction is not the conversation's
+
+- **WHEN** Copilot reports that one of its subagents compacted its own context
+- **THEN** no compaction status event is recorded for the run's conversation
 
 #### Scenario: A failed compaction is not a compaction
 
@@ -39,13 +54,18 @@ Recording an error SHALL NOT itself place or lift a hold on the agent's queue.
 - **THEN** the stream holds a diagnostic naming the failed compaction
 - **AND** no compaction status event is recorded
 
-#### Scenario: An error is recorded once, in either order
+#### Scenario: An error is recorded once
 
-- **WHEN** Copilot reports an error as a structured event and as message text in the same turn
+- **WHEN** Copilot reports an error as a structured event and then as message text in the same turn
 - **THEN** the stream holds exactly one error event for it, carrying its category, status code and
   remediation where reported
 - **AND** the stream holds no text event repeating it
-- **AND** this holds whether the structured event or the message text arrives first
+
+#### Scenario: Text around an error is kept
+
+- **WHEN** the agent had written message text in the same message before Copilot reported an error
+- **THEN** the stream holds that text as text
+- **AND** holds the error once, as an error event
 
 #### Scenario: An error stays visible when diagnostics are hidden
 

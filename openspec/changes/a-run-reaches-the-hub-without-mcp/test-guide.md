@@ -15,8 +15,9 @@
    - the same agent with `--disable-mcp-server agentweave` records `absent`/`shim`, creates its task through
      `aw-tool` with no operator card, and has **zero** `aw_run_` occurrences in its stored events;
    - removing the flag returns it to `connected`/`mcp` on the next turn;
-   - a Claude run under a `deniedMcpServers` `--settings` records `absent`, and its next turn's stored prompt holds
-     the `aw-tool` notice.
+   - a Claude run under a `deniedMcpServers` `--settings` records `absent`. Its next turn records
+     `plane_surface = shim`, and its `.agentweave/context/<agent>.md` holds the `aw-tool` tool section. The Hub
+     stores no composed prompt, so that file and the run's facts are what can be read (R3).
 6. The full Hub and CLI suites are green, and the lint and format gates pass (group 8).
 
 ## Human-only
@@ -41,8 +42,9 @@ Before starting, update the Hub there to a build carrying slices 1–3.
 4. **One question to you through the command.** *"Ask me, with ask_user, whether to proceed; then stop."* Answer it
    in the app within the wait. The agent should receive your answer. Say whether the agent's shell cut the command
    off before you answered (design D7).
-5. **Reading the notice.** Open the run's prompt as the Hub stored it, and read the "Tool access" and "Your tools"
-   sections. Would a colleague understand from them alone how the agent reaches the Hub, and that nothing about it
+5. **Reading the notice.** Open the agent's `.agentweave/context/<agent>.md` in its workspace after the turn, and
+   read the "Your tools" section. The Hub stores no composed prompt. For the "Tool access" notice, ask the agent in a
+   second tiny turn to quote the "Tool access" section it received. Would a colleague understand from them alone how the agent reaches the Hub, and that nothing about it
    needs the credential typed anywhere?
 6. **On this machine, optional.** If you want to see the Claude side, give a Claude agent `hub_client: cli` and ask
    it to create a task. It should use `aw-tool` and succeed (group 7).

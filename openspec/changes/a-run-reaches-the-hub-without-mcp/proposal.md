@@ -13,7 +13,7 @@ of `access_path_notice`), `an-ask-me-card-says-what-workspace-only-would-decide`
 `a-runner-that-cannot-collaborate-says-so-where-it-is-bound`.
 
 Slice 3 of 5 of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. Its primary input is
-appendix C, `c-reaching-the-hub-without-mcp.md`. **R1, 2026-09-27; R2, 2026-09-28. Nothing here is implemented.**
+appendix C, `c-reaching-the-hub-without-mcp.md`. **R1, 2026-09-27; R2 and R3, 2026-09-28. Nothing here is implemented.**
 R2 ran against master `ef55e6f`, where none of the five changes above and neither slice had landed. So every site
 they move carries "rebase at IMPL" in `design.md`.
 
@@ -54,6 +54,9 @@ harness reports the server's state on every run and the Hub parses none of it (`
      line (newly parsed), Copilot's announce timeout, and Codex app-server's own
      `mcpServer/startupStatus/updated` (already read for its `failed` case). A call through the call command is
      never a positive report.
+   - R3: the harness's own report outranks the announce. The announce proves only that the process started (it
+     is posted before the server answers `initialize`), so a harness that started the server and then failed it
+     is recorded `failed`, whatever order the two arrive in.
    - What a run is told about the plane is decided from **the latest tested run** of the agent, not "any run
      ever". A status the Hub does not recognise counts as no grounds.
    - **A runner whose first prompt the Hub sends after the harness has started its MCP servers tests the
@@ -75,7 +78,8 @@ harness reports the server's state on every run and the Hub parses none of it (`
    - In call mode the script does not import fastmcp. It uses a stdlib stand-in for the decorator: measured
      1.4 s per call with fastmcp and 0.1 s without.
    - A launcher pair, `aw-tool` (POSIX sh) and `aw-tool.cmd` (Windows), is written beside the pin and put
-     first on each run's `PATH`.
+     first on each run's `PATH`. Both run Python with `-I` (R3), so an interpreter variable set earlier in a
+     persistent shell cannot change what the auto-approved program runs.
    - It is called `aw-tool`, not `aw`, because **`aw` is already the `agentweave` console script**
      (`pyproject.toml:82`; measured today, `Get-Command aw` resolves to `Python311\Scripts\aw.exe`). Arguments
      are passed as a file under `.agentweave/calls/`, never inline, because of the PowerShell facts above.
@@ -85,9 +89,10 @@ harness reports the server's state on every run and the Hub parses none of it (`
      holds for a file write of a `.json` file inside that directory. That is the same standing the
      `mcp__agentweave__*` tools already have.
    - It is one predicate in `mcp_server.py`, used by `_decide`, by `approve_tool_call`'s operator branch and by
-     slice 2's ACP permission handler. Codex's `decide_approval` is severable, and R2 recommends cutting it. Codex
-     sends the command wrapped (`powershell -Command "…"`), and its shell probably has neither the token nor the
-     network (design D8, open question 4).
+     slice 2's ACP permission handler. It applies only to the `Bash`/`PowerShell` shell tools and to Claude's
+     write tools. **Codex's `decide_approval` is not a caller (group 6 cut by R3).** Codex sends the command wrapped
+     (`powershell -Command "…"`), matching it would need a second quoting layer, and Codex cannot be driven here
+     (design D8, open question 4). Under "Workspace only", Codex already accepts such a command by its `cwd`.
    - "Exactly" is a character allow-list, not a list of refused syntax. R2 found a parenthesised path that the list
      approach let through.
    - A near miss (an operator, a redirection, a variable, a grouping, a second command, a path elsewhere) is not
@@ -114,7 +119,9 @@ The shim is Hub-owned run tooling, like the MCP server (design D2).
 
 ## Findings
 
-- **F340: closed for every runner** by (1).
+- **F340: closed for Claude, Copilot and Codex app-server runs that report their servers** by (1). It stays open for
+  Codex `exec` and for a Codex app-server run that reports nothing. Neither has a negative source, so the last
+  verdict stands (design D1, open question 9).
 - **F301: closed for Copilot** by (2) + (3). For Claude it closes by group 7 if its drive confirms.
 - **F299: closed for Copilot by construction**: the ACP approver is not an MCP tool (slice 2). This slice
   gives it a plane. It stays open for Claude.
@@ -157,7 +164,7 @@ The shim is Hub-owned run tooling, like the MCP server (design D2).
   - `hub/hub/api/v1/agent_actions.py`: the announce notifies waiters.
   - `hub/hub/runner_parsing.py`: Claude `system/init`.
   - `hub/hub/repo_hygiene.py`: `.agentweave/calls/` excluded.
-  - `hub/hub/codex_appserver.py`: `startupStatus` recording (and the predicate, only if group 6 is kept).
+  - `hub/hub/codex_appserver.py`: `startupStatus` recording only (group 6 cut).
   - Slice 2's Copilot adapter and ACP transport: wait, compose late, the `/mcp list` diagnostic, raw-event
     corroboration.
   - A new `hub/hub/mcp_announce.py`: in-process waiters.

@@ -72,7 +72,9 @@ would lose their context without the Hub acting first.
   larger of the two lower bounds wins (design D3). Nothing is added twice.
 - **Credits and premium requests are recorded per run.** Four nullable columns on `turn_usage`:
   this run's `ai_nano_aiu` and `premium_requests`, and the session totals the run ended at, which are
-  the next run's baseline (design D4, D5). Two on `worker_invocations` for Copilot one-shot calls.
+  the next run's baseline. A run's credits are the larger of its session-total difference and its
+  own per-call credit sum, so a counter that restarts or resets never under- or double-charges
+  (design D4, D5). Two on `worker_invocations` for Copilot one-shot calls.
   One migration.
 - **They are shown, never budgeted, never converted to money** (D3 of the operator; design D6). The
   Budgets section, the Overview, a conversation's header and each turn's "Worked for" line show
@@ -82,8 +84,9 @@ would lose their context without the Hub acting first.
   `session.error` `errorType: "quota"` with `errorCode: "quota_exceeded"`, never from message text.
   The reset instant comes from the newest `quotaSnapshots` reading (`resetDate`). The ledger writes
   the same allowance reading shape the hold already reads, so `provider_allowance.py` is unchanged.
-  A refused turn ends `failed` whatever Copilot's stop reason, so its input goes back to the queue
-  uncounted, and the RPC executor gains the refusal branch that only the stream executor has today
+  A refused turn ends `failed` whatever Copilot's stop reason. When the prompt is answered by an
+  error response, which slice 2's client would raise, it returns instead. Either way its input goes
+  back to the queue uncounted, and the RPC executor gains the refusal branch that only the stream executor has today
   (design D7, D8).
 - **Checkpoint thresholds follow the runner's compaction point.** The adapter declares
   `compaction_percent` (Claude 95, Codex 95, Copilot 80). The built-in threshold, notes point and

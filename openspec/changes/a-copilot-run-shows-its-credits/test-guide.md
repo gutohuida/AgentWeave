@@ -12,7 +12,8 @@
    Diff the two JSON bodies.
 4. `resolve_policy` with no runner, or with a Claude or Codex runner, gives 80 / 70 / 92 (task 1.12).
 5. Drive tasks 7.1–7.4 and 7.6 record their figures in design.md's round log: tokens equal the
-   per-call sum; the second turn's credits equal the difference of the two session totals; the
+   per-call sum; the second turn's credits equal the difference of the two session totals, or its
+   own per-call sum if the checkpoint restarted after the load (record which, design D4); the
    synthetic 66% reading raised a banner for the Copilot agent only.
 6. `openspec validate a-copilot-run-shows-its-credits --strict` passes.
 

@@ -15,12 +15,17 @@ not an identifier the provider accepts, and SHALL be refused for such a runner.
 
 Everywhere the Hub asks which models a runner may use, it SHALL answer with the provider's for a
 runner that names one: when the runner is created or edited, when the runner is reported, and when a
-single run asks for a different model. A single run of such a runner SHALL NOT change its model.
+single run asks for a different model. A single run of such a runner SHALL NOT change its model, and
+a model a conversation recorded for its runs before its runner named a provider SHALL NOT be used
+for such a runner's runs.
 
-A `copilot` runner that names no provider SHALL NOT inherit a provider from the Hub's own
-environment. A provider setting present in the environment the Hub was started from SHALL be removed
-from such a run's environment, so that an operator's shell cannot silently move a runner onto
-another provider.
+Adding a provider to a runner, or removing it, SHALL be refused when the model the runner would then
+hold is not one the resulting catalog declares, even if the model itself is not being changed.
+
+A `copilot` runner that names no provider SHALL NOT take a provider from anywhere else. A provider
+setting present in the environment the Hub was started from, or in the agent's own environment
+settings, SHALL be removed from such a run's environment, so that neither an operator's shell nor
+an agent's configuration can silently move a runner onto another provider.
 
 A runner that names a provider SHALL be reported launchable only when its key variable is set in the
 Hub's environment. When it is not, the report SHALL name the variable and SHALL NOT require a GitHub
@@ -74,9 +79,23 @@ what the CLI starts; what those report back is redacted like any other recorded 
 - **WHEN** a run of an agent bound to a provider runner asks for a different model
 - **THEN** the request is refused with a stated reason
 
+#### Scenario: A model recorded earlier does not reach a provider runner's run
+
+- **WHEN** a conversation recorded a model for its runs while its agent's runner named no provider
+- **AND** the runner is then given a provider and a run starts in that conversation
+- **THEN** the run uses the runner's model
+
+#### Scenario: Adding a provider re-checks the stored model
+
+- **WHEN** an operator adds a provider to a `copilot` runner whose stored model the provider's
+  catalog does not declare, without changing the model
+- **THEN** the request is refused with a stated reason
+- **AND** the runner is unchanged
+
 #### Scenario: An ambient provider does not leak into a subscription runner
 
-- **WHEN** the Hub's environment carries Copilot provider settings
+- **WHEN** the Hub's environment, or the agent's own environment settings, carry Copilot provider
+  settings
 - **AND** a run starts for a `copilot` runner that names no provider
 - **THEN** the run's environment carries none of them
 
@@ -85,6 +104,12 @@ what the CLI starts; what those report back is redacted like any other recorded 
 - **WHEN** a provider runner's key variable is not set in the Hub's environment
 - **THEN** the runner, and every agent bound to it, is reported not launchable, naming the variable
 - **AND** the report does not ask for a GitHub sign-in
+
+#### Scenario: An agent can be created on a provider runner without a GitHub sign-in
+
+- **WHEN** a provider runner's key variable is set and Copilot is not signed in to GitHub
+- **AND** the operator creates an agent bound to that runner
+- **THEN** the agent is created
 
 #### Scenario: The key is not repeated anywhere
 

@@ -3,8 +3,9 @@
 Build only after slices 1–4 (`each-runner-cli-is-one-adapter`, `a-copilot-agent-runs-over-acp`,
 `a-run-reaches-the-hub-without-mcp`, `a-copilot-run-shows-its-credits`) and the 2026-09-27 night
 queue have landed. **At R2 (2026-09-28, master `ef55e6f`) none of slices 1–4 and only 5 of the
-night's 28 changes had landed.** Before starting, re-read design.md's *Dependencies on slices 1–4,
-as written at R2* against the slices as built, and fix every "(rebase at IMPL)" site first. "Fails on today's code" below means **it fails on master after those land and
+night's 28 changes had landed; R3 (master `fc33ff9`) found the same.** Before starting, re-read
+design.md's *Required of slices 1–4* against the slices as built, and fix every "(rebase at IMPL)"
+site first. "Fails on today's code" below means **it fails on master after those land and
 before this change**.
 
 The four groups are A, C, B and D, in order of value. Each one can be cut. If the operator REJECTED
@@ -49,7 +50,7 @@ scratch copy (DEAD-ENDS 2026-09-27).
   a false MCP-env allow-list, BYOK launchability unreachable on every surface, `_decide` allowing
   GitHub calls; questions 1, 3, 4 answered, 2/5/6/7 carried, 9 and 10 added; 16 slice mismatches
   tabulated. See the Round log.
-- [ ] 0.2 R3: a second independent re-derivation, not a re-read of R2. Re-derive D1 by re-reading
+- [x] 0.2 R3: a second independent re-derivation, not a re-read of R2. Re-derive D1 by re-reading
   `schemas/session-events.schema.json` in the installed Copilot package: does the raw event still
   supersede the hook for each fact? Re-derive D4's table row by row against `checkpoint_trigger.py`
   as it then stands. Ask what each changed route *returns* when the function it calls raises. The
@@ -58,6 +59,13 @@ scratch copy (DEAD-ENDS 2026-09-27).
   conversation (R2's answers are in the Round log; re-derive them, do not re-read them). Also
   `POST /agent/trigger` with a `model` override on a provider runner, and `prepare_review_turn` when
   the merge base cannot be computed. `openspec validate a-copilot-agent-uses-hooks-and-its-own-agents --strict` passes.
+
+  **Done 2026-09-28** (at `fc33ff9`; slices 1–4 still unbuilt): D1 held and D4's rows held (one
+  added); 15 corrections, chiefly R2's `Error:` hold replaced by a chunk match on the code-verified
+  raw-first order, whole-`data` omission and subagent `agentId` on compactions, a `payload: null`
+  500, 3 of 6 wrong probe sites, stored model overrides and runner PATCH bypassing the BYOK model
+  rule, a leaking review checkout on a merge-base timeout; Q9 answered; R2's table rewritten as
+  *Required of slices 1–4*. See the Round log.
 - [ ] 0.3 Opus adversarial review of the change and of the three operator questions in design "Open
   questions" 8: hooks wanted (D2), Azure deferred (D7), an API key for the BYOK drive (D7). Record
   it in `spec-queue/tracks/reviews/`. Apply the fixes before any APPROVED row.
@@ -79,14 +87,24 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `COPILOT_PROVIDER_BASE_URL=https://api.anthropic.com`, `COPILOT_PROVIDER_API_KEY=invalid`,
     `COPILOT_MODEL=claude-haiku-4-5-20251001`, then prompt `ok`. This spends no Copilot allowance,
     and Anthropic answers 401. Record whether the scratch `COPILOT_HOME` was signed in to GitHub
-    and what `session/new` returned (design open question 9).
+    and what `session/new` returned (design open question 9; R3 predicts no `authRequired` from the
+    code). **R3: spawn this run without `--disable-builtin-mcps`** and with no GitHub sign-in in
+    the scratch home, so the GitHub server should fail; record whether and when a
+    `session.mcp_servers_loaded` / `session.mcp_server_status_changed` names `github-mcp-server`,
+    and with which status (design D9: if none arrives within the turn, the unavailable-server
+    diagnostic is removed).
   - **Save** each transcript's `github.com/copilot/sessionEvent` notifications and `session/update`
     notifications, **in arrival order**, as `hub/tests/fixtures/copilot/{compaction,subagent,error}.jsonl`.
     Redact `sessionId`, the cwd and any token.
   - **Write down** in `design.md`'s Round log:
     - whether each type was delivered at all (open question 2);
-    - which arrived first, `session.error` or the `Error:` text chunk, and whether any other
-      update arrived between them (slice 2 flushes a text block on one; design D5).
+    - which arrived first, `session.error` or the `Error:` text chunk (R3 predicts the raw event,
+      from `setupEventForwarding`; design D5), and whether the chunk's text is exactly
+      `"Error: " + message`;
+    - the byte size of the captured `session.compaction_complete` and whether it carried
+      `dataOmitted` (design D4, *Omitted data*; a tiny conversation will not reach 32 KB, so the
+      oversized case is tested synthetically in 1.2);
+    - whether `subagent.started` arrived before the `tool_call` update of its `task` call.
 
   If a type is **not** delivered, stop group A. Tell the operator that D1's source does not hold and
   that D2's hook transport is the fallback.
@@ -95,26 +113,39 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - `compaction.jsonl` gives exactly one `status` event with `phase == "compacted"`, carrying
     `pre_tokens`, `post_tokens`, `token_limit`, `trigger`, and `percent` computed as design D4 says.
     The three token counts are **integers**, not `"<redacted>"` (design D4: `_SECRET_FIELD_RE`
-    matches `token`). `summaryContent` appears nowhere in the payload.
+    matches `token`). `summaryContent` appears nowhere in the payload. `trigger` is the captured
+    value, one of the schema's `CompactionTrigger` values (R3: not `auto`).
   - A synthetic copy with `success: false` gives a `diagnostic` with code `copilot.compaction_failed`,
     `stream == "copilot"` and `severity == "warning"`, and no `compacted` status.
+  - (R3) A synthetic `session.compaction_complete` envelope with `dataOmitted: "too-large"` and
+    `data: {omitted, bytes, limit}`, preceded by a root `session.compaction_start {currentTokens,
+    tokenLimit}`, gives one `compacted` status with `pre_tokens`/`token_limit` from the start event
+    and no `post_tokens`. This fails on a mapper that requires `data.success`.
+  - (R3) The captured compaction with an `agentId` added to its envelope gives **no** `compacted`
+    status.
   - `subagent.jsonl` gives a `subagent_started` and a `subagent_completed` status sharing the
-    `call_id` of the parent `task` tool call's `tool_use` event; `total_tokens` is an integer.
+    `call_id` of the parent `task` tool call's `tool_use` event; `total_tokens` is an integer. The
+    pairing assertion is by `call_id`, not position (R3: the raw event can precede the `tool_use`).
 
   The mapper is slice 2's `copilot_acp.CopilotEventMapper` (slice 1's `map_events` is a
-  stream-transport member; design, dependency table).
+  stream-transport member; design, *Required of slices 1–4*).
 
   Run `py -3.11 -m pytest hub/tests/test_copilot_lifecycle_events.py -v`.
 - [ ] 1.3 (A) Same file, errors.
-  - `error.jsonl` in its **recorded** order gives exactly one `error` event (code
-    `copilot.<errorType>`, with `status_code` and `remediation` in its facts), no `diagnostic` for
-    it, and no `text` event repeating the message (design D5: `session.error` is an error, not a
-    diagnostic, because diagnostics are hideable).
-  - The **reversed** order also gives exactly one. Reversing the fixture must not make the test pass
-    by accident: assert on the count, not on the position. Include a non-message update between
-    the two, so a mapper that flushes the `Error:` block mid-turn fails.
-  - With the raw `session.error` removed, the `Error:` text block is emitted exactly as slice 2
-    emits it (as written at R2: a `text` event).
+  - `error.jsonl` in its **recorded** order (R3 predicts raw event first) gives exactly one `error`
+    event (code `copilot.<errorType>`, with `status_code` and `remediation` in its facts), no
+    `diagnostic` for it, and no `text` event containing `Error: <message>` (design D5:
+    `session.error` is an error, not a diagnostic, because diagnostics are hideable).
+  - (R3) The same fixture with a model `agent_message_chunk` ("Let me run the tests.") inserted
+    just before the `Error:` chunk, with no non-message update between them, gives that prose as
+    one `text` event without the `Error:` suffix, and still exactly one `error` event. This fails
+    on R2's block-level hold and on slice 2's block classifier.
+  - (R3) The **reversed** fixture (chunk before raw event) gives the error event **and** the
+    `Error:` text: the test documents that the order matters, and the first case fails if the
+    fixture's order is reversed (CLAUDE.md: the ordering the source actually emits). If task 1.1
+    recorded the chunk first, stop and revisit design D5 before writing the mapper.
+  - With the raw `session.error` removed, the `Error:` text is emitted exactly as slice 2 emits it
+    (a `text` event).
   - An `errorType` outside `^[a-z_]{1,32}$` gives code `copilot.unknown`.
   - An error message containing `sk-ant-test-value` is stored redacted.
   - Recording a `quota` error event through `record_agent_output` leaves the agent's allowance hold
@@ -141,8 +172,12 @@ scratch copy (DEAD-ENDS 2026-09-27).
 - [ ] 1.5 (A) Same file: `record_agent_output(kind="status", payload={"phase": "compacted", …},
   run_id=…)` dispatches `consider_from_compaction` with the conversation resolved from the run.
   Assert it through a patched `consider`. A `status` with any other phase does not dispatch. With
-  `consider` patched to raise, and with no running loop, `POST /agents/{name}/output` still answers
-  201 and stores exactly one row.
+  `consider` patched to raise, `POST /agents/{name}/output` still answers 201 and stores exactly
+  one row. (R3) `POST /agents/{name}/output` with `kind: "status"` and `payload: null` answers 201
+  and stores one row; this fails on a bare `payload.get(...)`. (R3) "No running loop" cannot be
+  reached through a route (an ASGI app always runs in one), so it is a direct synchronous call of
+  `consider_from_compaction`, which returns `None` and leaves `_in_flight` and
+  `_compaction_pending` without that conversation.
 - [ ] 1.6 (A) `hub/tests/test_copilot_home_has_no_deciding_hook.py`: create a Copilot agent through
   `POST /agents` (slice 2 writes its `COPILOT_HOME`), then:
   - every `*.json` under `<COPILOT_HOME>/hooks/` and the `hooks` key of `<COPILOT_HOME>/settings.json`
@@ -169,7 +204,14 @@ scratch copy (DEAD-ENDS 2026-09-27).
     refused;
   - an alias (`haiku`) is refused, and the sentence does **not** offer `haiku` (the shared
     `undeclared_model_reason` does since `63d9f34`). This fails if the provider check reuses
-    `ProviderDescriptor.model()`.
+    `ProviderDescriptor.model()`;
+  - (R3) `PATCH` adding `provider_config` to a `copilot` runner whose stored model is `auto`,
+    without sending `model`, is refused with 400 and the row is unchanged; the same `PATCH` also
+    setting `model: "claude-haiku-4-5-20251001"` succeeds. `PATCH` with `provider_config: null` on
+    a provider runner on `claude-haiku-4-5-20251001` is refused unless it also sets a `copilot`
+    model or `null`. These fail on today's `model == current` exemption (`runners.py:37`);
+  - (R3) `api_key_var` of 300 characters starting `sk-ant-` gets the 400 sentence, not a 422, and
+    the response body does not contain the submitted value.
 
   Run `py -3.11 -m pytest hub/tests/test_runner_provider_config.py -v`.
 - [ ] 1.8 (C) `hub/tests/test_copilot_byok_env.py`: with `monkeypatch.setenv("MY_ANTHROPIC_KEY",
@@ -182,18 +224,23 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
   With `COPILOT_PROVIDER_BASE_URL`, `COPILOT_PROVIDER_TYPE`, `COPILOT_MODEL` and `COPILOT_OFFLINE`
   set in the Hub's own environment, a `copilot` runner **without** `provider_config` gets none of
-  them.
+  them. (R3) The same holds when they are set in the agent's `config.env_vars` instead; this fails
+  on a copy of the Claude guard's `env_vars` exemption (`launchability.py:190`).
 
-  Launchability, **through the routes**, not only the adapter (design D7: six call sites build the
-  probe config by hand):
-  - with the variable unset, `GET /runners/launchability` for the runner, and `GET /agents` for an
-    agent bound to it, report not authorized, with a reason naming `MY_ANTHROPIC_KEY` and not
-    mentioning GitHub;
+  Launchability, **through the routes**, not only the adapter (design D7, R3 table of sites):
+  - with the variable unset, `GET /runners/launchability` for the runner, and
+    `GET /agents/launchability` for an agent bound to it, report not authorized, with a reason
+    naming `MY_ANTHROPIC_KEY` and not mentioning GitHub;
   - with the variable set, both report authorized with no GitHub token in the environment and a
-    `CopilotProbe` verdict of "not signed in" patched in.
+    `CopilotProbe` verdict of "not signed in" patched in, and (R3) `POST /agents` binding a new
+    agent to the runner answers 201, not the create-time 409 (`agents.py:728-733`).
 
   Per-run model: `POST /agent/trigger` for an agent bound to the provider runner with
-  `overrides: {"model": "auto"}` answers 400 with a stated reason, and no run is created.
+  `overrides: {"model": "auto"}` answers 400 with a stated reason, and no run is created and the
+  conversation's `runtime_overrides` is unchanged. (R3) With `runtime_overrides = {"model":
+  "auto"}` written directly on the agent's conversation (as one stored before the runner gained a
+  provider would be), a triggered run's request carries `model == "claude-haiku-4-5-20251001"`.
+  This fails on today's `agent_trigger.py:802`.
 - [ ] 1.9 (C) Same file: after one fake run records an event whose text contains the key value, the
   key value (`sk-ant-test-value`) is absent from:
   - the `GET /runners` response;
@@ -217,13 +264,18 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `prepare_review_turn` does not refuse the turn. Cover: the project has no `main_branch`; it
     names a branch that does not exist; the commit is already on `main_branch` (merge base equals
     the commit). `<base>` is `git merge-base <commit> <Project.main_branch>` (design D8).
+  - (R3) with the merge-base `_git` call patched to raise `subprocess.TimeoutExpired`,
+    `prepare_review_turn` returns a context with `base_sha is None`, and the patched call happened
+    **before** `worktrees.ensure_review_checkout` (assert call order), so a raise there could not
+    leave a provisioned checkout unclaimed.
 - [ ] 1.12 (B) Same file: `PATCH /agents/{name}` with `config.copilot_review_agents == ["research"]`
   or `["x"]` is refused with a 400 sentence, and the stored config is unchanged.
   `["code-review", "security-review"]` is accepted, and `GET /agents` returns it in the agent's
   `config` (it is in `ROSTER_CONFIG_KEYS`; design D8).
 - [ ] 1.13 (D) `hub/tests/test_copilot_github_mcp_toggle.py`:
   - slice 2's `copilot_acp.build_acp_argv` contains `--disable-builtin-mcps` when
-    `config.copilot_github_mcp` is absent or false, and omits it when true;
+    `RpcTurnRequest.github_mcp` is false, and omits it when true; and (R3) the trigger sets that
+    field from `config.copilot_github_mcp` (absent → false);
   - slice 2's `copilot_acp.decide_permission` answers an MCP permission request naming server
     `github-mcp-server` (a `create_issue` with `owner`/`repo`/`title`) with `ASK_OPERATOR` under
     `workspace`, `REJECT` under `acceptEdits`, `ALLOW` under full access, and the operator under
@@ -231,11 +283,14 @@ scratch copy (DEAD-ENDS 2026-09-27).
     {...})` returns `allow` ("inside your workspace"); record that in the test's docstring;
   - with the toggle on, a request whose MCP server cannot be identified is also `ASK_OPERATOR` under
     `workspace`;
-  - the card opened for it carries the D9 sentence and no Workspace-only "allow" verdict;
+  - the card opened for it has `tool_name` `github-mcp-server/create_issue — acts on GitHub as
+    you`, and the Copilot `workspace_verdict` for it is `None`, under `workspace` and `manual`
+    (R3: the card has no other place for the sentence; a two-valued verdict would say "allow");
   - a request for server `agentweave` under `workspace` is decided exactly as before;
-  - a raw `session.mcp_servers_loaded` naming `github-mcp-server` as not connected gives one
+  - a raw `session.mcp_servers_loaded` naming `github-mcp-server` as `failed` gives one
     `diagnostic` (`copilot.github_mcp_unavailable`) per turn with the toggle on, and none with it
-    off;
+    off; (R3) `pending` gives none. Use the status event and order task 1.1 run (c) captured; if it
+    captured none, this case and the mapping are removed (design D9);
   - `GET /agents` returns `copilot_github_mcp` in the agent's `config`.
 - [ ] 1.14 (C, B, D) UI tests.
   - `hub/ui/src/__tests__/runnerProviderConfig.test.tsx`: the Runners page shows provider fields only
@@ -253,32 +308,41 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 - [ ] 2.1 `hub/hub/runner_events.py` (design D4, D5):
   - `status_event` gains `facts`; `error_event` gains `facts` and redacts its `message` by value;
-  - `diagnostic_event(*, stream, severity, summary, code=None, facts=None)`, the CLI's shape. If
-    slice 2's narrower `diagnostic_event(code, message)` exists, widen it with keyword defaults;
+  - `diagnostic_event`: use slice 2's `diagnostic_event(*, code, message, severity, facts)` (R3). If
+    it has no `stream` keyword, add one with a default and write it into the payload (design D5;
+    *Required of slices 1–4*, 2.1);
   - facts: string values through the value rule only, numbers kept. Never `redact_secrets(facts)`
     whole.
 - [ ] 2.2 Ensure the six types are in slice 2's raw-event subscription constant, as a set union
   (design D1: `session.error` is slice 2's and `session.compaction_complete` slice 4's already).
 - [ ] 2.3 In slice 2's `copilot_acp.CopilotEventMapper`:
-  - `session.compaction_complete` becomes `compacted` or a diagnostic (D4);
-  - `session.error` becomes an error event, replacing slice 2's `copilot_session_error` for the
-    matched case (D5);
+  - a root `session.compaction_complete` becomes `compacted` or a diagnostic; one with `agentId`
+    becomes nothing; one with `dataOmitted: "too-large"` becomes `compacted` with counts from the
+    turn's last root `session.compaction_start` (D4);
+  - `session.error` becomes an error event (D5);
   - `subagent.*` become statuses (D6);
-  - a text block beginning `Error:` is held until prompt completion, then dropped if a raw
-    `session.error` of the turn matches it, else emitted as before (D5).
+  - an `agent_message_chunk` whose text equals `"Error: " + message` of an unmatched root
+    `session.error` already received this turn is dropped on arrival, before accumulation; nothing
+    is held; slice 2's `Error:` → `copilot_session_error` branch is deleted (D5, R3).
+
+  The mapper needs the whole `sessionEvent` params, `agentId` and `dataOmitted` included
+  (*Required of slices 1–4*, 2.3).
 
   Pass tests 1.2 and 1.3.
 - [ ] 2.4 `hub/hub/checkpoint_trigger.py`:
   - add `compacted: bool = False` to `consider`, with the branches of design D4's table;
   - add `consider_from_compaction(project_id, agent, conversation_id, payload)` with the
     `_in_flight` / `_dispatched` discipline, plus `_compaction_pending`: a compaction arriving
-    while the conversation is in flight is re-dispatched from the running task's `finally` (D4);
+    while the conversation is in flight is re-dispatched from the running task's `finally` (D4),
+    **including `consider_from_reading`'s `finally`** (R3: the in-flight task is usually a
+    reading's);
   - it never raises into its caller.
 
   Pass test 1.4.
 - [ ] 2.5 `hub/hub/output_recording.py::record_agent_output`: after persisting, dispatch
-  `consider_from_compaction` for `kind == "status"` with `payload.phase == "compacted"` (local import,
-  as at `:233`). Pass test 1.5.
+  `consider_from_compaction` for `kind == "status"` with `isinstance(payload, dict) and
+  payload.get("phase") == "compacted"` (R3: `payload` may be `None`; local import, as at `:233`).
+  Pass test 1.5.
 - [ ] 2.6 Confirm slice 2's `COPILOT_HOME` writer and run environment
   (`resolve_agent_env`/`guard_env`) meet design D3. Change them only
   if test 1.6 fails. Pass test 1.6.
@@ -295,16 +359,22 @@ scratch copy (DEAD-ENDS 2026-09-27).
   checks as 400s with a string `detail` (CLI is `copilot`; `type` is `anthropic`; `api_key_var` is a
   name; model set; model a declared **id** of the literal `CATALOG["claude"]`, with its own
   sentence). `RunnerResponse._flag_unrecognised_model` uses the same provider rule for a provider
-  runner. `agent_trigger.py:1618`: a `model` override on a provider runner is refused. Pass test
-  1.7 and the per-run half of 1.8.
+  runner. `agent_trigger.py:1618`: a `model` override on a provider runner is refused. (R3) The
+  runner `PATCH` validates the resulting `(provider_config, model)` pair whenever
+  `provider_config` is sent; `ProviderConfig`'s fields carry no Pydantic constraint.
+  (R3) `agent_trigger.py:802`: a provider runner's model is `runner_row.model` whatever
+  `conversation.runtime_overrides` holds. Pass test 1.7 and the per-run half of 1.8.
 - [ ] 3.3 Environment and launchability (design D7):
-  - `resolve_agent_env` takes the runner's `provider_config` from the trigger, and the Copilot
-    `guard_env` sets the provider environment or strips ambient provider variables;
+  - `provider_config` reaches `resolve_agent_env` through `config` (R3: no new parameter), and the
+    Copilot `guard_env` (given `config`; *Required of slices 1–4*, 1.3) sets the provider
+    environment from it, or strips the provider variables from both the ambient environment and
+    the agent's `env_vars`;
   - the adapter's `launchability` authorizes on the key variable, taking only `present` and the
     version from slice 2's `CopilotProbe`;
-  - one helper, `runner_probe_config(runner_row)`, builds `{runner, model, provider_config}` at every
-    probe site (`agents.py:552`, `:728`, `:2004`; `agent_trigger.py:764`; `runners.py:98`;
-    `launchability.py:524`).
+  - one helper, `runner_probe_config(runner_row)`, builds `{runner, model, provider_config}`, used
+    in `launchability.get_agent_config` (beside `:524-526`; serves `agents.py:234`,
+    `inbound_queue.py:223` and the trigger), `agent_trigger.py:764-765`, `agents.py:728` and
+    `runners.py:96-99` (R3: R2's `agents.py:552`/`:2004` are display code, not probes).
 
   Pass tests 1.8 and 1.9.
 - [ ] 3.4 The Runners page (`hub/ui/src/components/runners/RunnersPage.tsx`):
@@ -323,7 +393,8 @@ scratch copy (DEAD-ENDS 2026-09-27).
 - [ ] 4.1 `hub/hub/review_turn.py::prepare_review_turn`: read `Project.main_branch`, compute
   `git merge-base <commit> <main_branch>` (no helper exists; follow `task_integration._git`), and
   carry it as `ReviewContext.base_sha`, `None` on any failure or when it equals the commit. Never
-  raise for it (design D8).
+  raise for it: catch `(subprocess.SubprocessError, OSError)`, and compute it **before**
+  `ensure_review_checkout` (R3, design D8).
 - [ ] 4.2 `hub/hub/api/v1/agents.py`, the review section of `_render_hub_agent_context`: add the D8
   bullet after the verdict line, under the D8 conditions. Validate `copilot_review_agents` in the
   agent PATCH route before the merge. Add it to `ROSTER_CONFIG_KEYS` (`agents.py:651`) and update
@@ -333,12 +404,15 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 ## 5. Group D — the GitHub MCP server toggle
 
-- [ ] 5.1 Slice 2's `copilot_acp.build_acp_argv`: omit `--disable-builtin-mcps` when
-  `config.copilot_github_mcp` is true. Slice 2's `copilot_acp.decide_permission`:
-  `github-mcp-server` (and, with the toggle on, unidentified) requests are decided as design D9
-  says, before `_decide`, with D9's card sentence. `CopilotEventMapper`: the unavailable-server
-  diagnostic. Add `copilot_github_mcp` to `ROSTER_CONFIG_KEYS`. `mcp_server.py` is not touched.
-  Pass test 1.13.
+- [ ] 5.1 `RpcTurnRequest.github_mcp: bool = False` (if slice 1 has not added it), set by the
+  trigger from `config.copilot_github_mcp`. Slice 2's `copilot_acp.build_acp_argv`: omit
+  `--disable-builtin-mcps` when it is true. Slice 2's `copilot_acp.decide_permission` gains
+  `github_mcp: bool = False`: `github-mcp-server` (and, with the toggle on, unidentified) requests
+  are decided as design D9 says, before `_decide`. The Copilot `permission_card_label` gives D9's
+  label, and the Copilot `workspace_verdict` returns `None` for such a request (R3).
+  `CopilotEventMapper`: the unavailable-server diagnostic for `failed`, `needs-auth`, `disabled`,
+  `stopped`, `not_configured` only, if task 1.1 showed the event arrives. Add `copilot_github_mcp`
+  to `ROSTER_CONFIG_KEYS`. `mcp_server.py` is not touched. Pass test 1.13.
 - [ ] 5.2 Agent Settings UI: add a GitHub-server toggle shown only for `copilot` agents. Pass its
   part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
 
@@ -405,8 +479,9 @@ every run id, and paste each surface's text verbatim into the Round log.
 - [ ] 7.8 (D) With `copilot_github_mcp` false, the live `copilot.exe`'s command line contains
   `--disable-builtin-mcps` (R2: `Run` records no argv; read it while the run is live with
   `Get-CimInstance Win32_Process -Filter "ProcessId=<Run.pid>"`, or its child's). With it true, run one turn: `List one open issue in this repository
-  using the GitHub tools.` An ask-me card appears for the `github-mcp-server` call. Deny it and
-  record the card text.
+  using the GitHub tools.` An ask-me card appears for the `github-mcp-server` call, labelled
+  `… — acts on GitHub as you`, with no "Workspace only would …" line (R3). Deny it and record the
+  card text.
 
 ## 8. Archive
 

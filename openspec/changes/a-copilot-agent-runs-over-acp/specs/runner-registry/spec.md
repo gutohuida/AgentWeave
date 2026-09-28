@@ -94,6 +94,35 @@ updates disabled, so a cached newer package cannot run in place of the version i
 - **WHEN** the CLI's handshake reports no version
 - **THEN** the run fails as for a version below the minimum
 
+### Requirement: A Copilot turn that fails after its prompt ends as a failed turn, not a failed start
+
+Once a Copilot turn's prompt has been sent, the Hub SHALL record any failure of that turn as the run's failed outcome, keeping what the turn wrote, and SHALL NOT treat it as a turn that never started.
+
+A failure after the prompt includes an error answer to the prompt, the Copilot process ending, the
+turn timing out, and an error Copilot reports for the session during the turn. Copilot can report
+such an error and still say the turn ended normally. The Hub SHALL then record the turn as failed
+with Copilot's message, unless the turn was stopped. A failure before the prompt SHALL still be
+recorded as a failure to start. When that failure is Copilot reporting that it is not signed in
+or is too old, the Hub SHALL record that verdict for the runner before the input is retried. The
+retry is then held instead of failing the same way again.
+
+#### Scenario: The prompt is answered with an error after the agent worked
+
+- **WHEN** a Copilot turn has written a file in its worktree and its prompt is then answered with an error
+- **THEN** the run ends failed with that error
+- **AND** the worktree is snapshotted as for any finished turn
+
+#### Scenario: A session error with a normal ending
+
+- **WHEN** Copilot reports a session error during a turn and then ends the turn normally
+- **THEN** the run ends failed with the session error's message
+
+#### Scenario: A sign-in failure holds the input
+
+- **WHEN** a Copilot turn fails because Copilot is not signed in
+- **THEN** the runner is reported not authorized with the `copilot login` sentence
+- **AND** the operator's input stays queued without a delivery attempt being counted against it
+
 ### Requirement: Copilot launchability is read from Copilot itself
 
 The Hub SHALL decide whether a Copilot runner is authorized by asking the Copilot CLI, and SHALL NOT decide it from GitHub token variables in the Hub's own environment.

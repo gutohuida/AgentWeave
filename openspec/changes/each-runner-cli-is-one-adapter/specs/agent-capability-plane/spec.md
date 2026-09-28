@@ -2,7 +2,7 @@
 
 ### Requirement: A run's tool surface, approval channel and plane access are decided separately
 
-For every run, the Hub SHALL resolve three separate values, and SHALL NOT derive one from another except where the runner's own approval channel requires it. The three values are: whether the Hub's tool server is provided to the run (its tool surface), which channel, if any, lets the Hub answer the run's tool calls (its approval channel), and how the run is given access to the capability plane (its plane access).
+For every run, the Hub SHALL resolve three separate values, and SHALL take the run's approval channel from the transport the run uses rather than from whether the Hub's tool server is provided, except where that channel is carried by the tool server. The three values are: whether the Hub's tool server is provided to the run (its tool surface), which channel, if any, lets the Hub answer the run's tool calls (its approval channel), and how the run is given access to the capability plane (its plane access). The plane access is over the tool protocol exactly when the tool server is provided.
 
 A single value used to answer all three. For some runners the three move together. For others they do not:
 - A peer that asks the Hub over its own protocol can have its calls approved whether or not the Hub's tool server

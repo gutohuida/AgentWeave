@@ -22,9 +22,15 @@ root.
     a credit double count (D4), a refused turn whose input would not have been returned (D8), the
     ledger's home (D2), where the token ceiling goes (D10), and a drive step that could not raise its
     banner (7.6). Q1, Q2 and Q8 are answered, and gaps G1–G6 are in the round log
-- [ ] 0.2 R3: a second, fresh re-derivation of D3 (the lower-bound argument), D4 (the baseline
+- [x] 0.2 R3: a second, fresh re-derivation of D3 (the lower-bound argument), D4 (the baseline
   lookup) and D10 (the formulas and the token-mode ceiling), from the code and the acp4 numbers, not
   from R2's notes. `openspec validate a-copilot-run-shows-its-credits --strict` passes
+  - **Done 2026-09-28** against master `fc33ff9`. The acp4 sums were recomputed and hold (33108 / 64 /
+    21888 / 33172, and 275856000 nano-AIU from each call's `tokenDetails`). The corrections: D4 is
+    now the larger of two lower bounds, correct whether the checkpoint continues after a load or not.
+    D2's settle was keyed on a checkpoint total, which starved the fallback and the D8 reset fill. The
+    D8 JSON-RPC-error route could not fire, because slice 2 raises. The token-mode notes point was
+    missing. Plus a "Required of slices 1 and 2" section; details in the round log
 - [ ] 0.3 Opus adversarial review of the change and its decisions (the operator's standing step
   before an APPROVED row). It re-derives in particular: whether any path adds a Copilot credit to a
   token total or to the budget; whether a Claude or Codex project's API responses and screens are
@@ -38,12 +44,15 @@ root.
   then the prompt result `{inputTokens 33108, outputTokens 64, totalTokens 33172, thoughtTokens 0,
   cachedReadTokens 21888, cachedWriteTokens 0}`). With `session_was_new=True`, `finish()` gives input
   33108, output 64, total 33172, cache_read 21888, reasoning 0, model `mai-code-1.1-flash`,
-  `ai_nano_aiu` 275856000, `premium_requests` 1.0, both session totals equal to those. Fails today
+  `ai_nano_aiu` 275856000, `premium_requests` 1.0, both session totals equal to those, and
+  `source == "copilot_calls"` (the calls and the result tie at 33172; a tie goes to the calls, D3).
+  Fails today
   (no module). `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
 - [ ] 1.2 Same file: the sum is not doubled. Total is 33172, not 66344, whichever of the calls or
   the prompt result the ledger saw first
-- [ ] 1.3 Same file: dropped events (`session_was_new=True`). Only calls 1 and 3 observed, plus the
-  full prompt result, gives total 33172 and `source == "copilot_prompt_result"`. All three calls and
+- [ ] 1.3 Same file: dropped events (`session_was_new=True`). Only calls 1 and 3 observed (their sum
+  is 22080 + 26 = 22106), plus the full prompt result, gives total 33172 and
+  `source == "copilot_prompt_result"`, and logs one warning naming both figures. All three calls and
   no prompt result gives 33172 and `source == "copilot_calls"`
 - [ ] 1.4 Same file: one ledger (one process) that observes two prompt results, 33172 and then a
   cumulative 40000, uses 40000, not their sum 73172 (design D3: the process-cumulative figure is the
@@ -55,15 +64,26 @@ root.
   nano-AIU when no call has `providerCallId == requestId`, and adds nothing when one does
 - [ ] 1.7 Same file: two `session.usage_checkpoint` events (first 100000000/0, later 275856000/1) in
   emitted order: the later wins. Reversing their order fails this test
-- [ ] 1.8 Same file, credits baseline (D4): loaded session with baseline 275856000/1 and a
-  checkpoint of 400000000/2 gives 124144000 / 1.0; loaded with no baseline gives the per-call
-  `copilotUsage.totalNanoAiu` sum and `premium_requests is None`; checkpoint below baseline gives
-  `ai_nano_aiu is None` and stores the new total; no events at all gives `total_tokens is None`.
-  These cases run through `settle_copilot_credits` with a seeded `turn_usage`/`runs` baseline.
-  **The fallback stores what it charged (R2):** a new-session run with calls but no checkpoint records
-  the per-call sum 275856000 and `session_nano_aiu_total == 275856000`. A following loaded run whose
-  checkpoint is 400000000 is then charged 124144000, not 400000000 minus an older baseline. This
-  fails if the fallback stores nothing
+- [ ] 1.8 Same file, credits (D4, R3's larger-of rule). Each case runs through
+  `settle_copilot_credits` with a seeded `turn_usage`/`runs` baseline. "One call of N" means one
+  `assistant.usage` whose `copilotUsage.totalNanoAiu` is N. Each case's per-call sum is chosen so that
+  a rule taking only the difference, or only the calls, fails it:
+  - (a) loaded, baseline 275856000/1, checkpoint 400000000/2, one call of 124144000 gives 124144000
+    and premium 1.0, and stores 400000000/2;
+  - (b) loaded with no baseline, the acp4 calls (275856000), checkpoint 400000000/2 gives 275856000
+    and `premium_requests is None`, and stores 400000000/2;
+  - (c) counter reset: baseline 275856000/1, checkpoint 124144000/1, one call of 124144000 gives
+    124144000 (not None, R2's rule), `premium_requests is None`, and stores 124144000/1;
+  - (d) counter restarted per process: baseline 100000000/1, checkpoint 124144000/1, one call of
+    124144000 gives 124144000, not the difference 24144000, and `premium_requests is None`;
+  - (e) the fallback stores what it charged: a new-session run with the acp4 calls and no
+    checkpoint records 275856000 and `session_nano_aiu_total == 275856000`,
+    `session_premium_requests_total is None`. The following loaded run, checkpoint 400000000/2 and
+    one call of 124144000, is charged 124144000 with `premium_requests is None`. This fails if the
+    fallback stores nothing;
+  - (f) a run whose sample has `credit_session_new` set but no checkpoint and no calls is settled
+    (a no-op on credits) rather than skipped. A sample without `credit_session_new` is returned
+    unchanged. No events at all gives `total_tokens is None`
 - [ ] 1.9 Same file, quota (D7, D8): acp4's snapshots give reading `{"status": "allowed", "quota":
   "chat", "rateLimitType": "monthly", "resetsAt": 1790812800, "remainingPercentage": 96.5,
   "provider": "copilot"}`. (1790812800 is 2026-10-01T00:00:00Z; assert it with
@@ -93,7 +113,10 @@ root.
   threshold 95 with `compaction_percent=95` gives 92 (`runner_ceiling`; Q7). Token mode:
   `should_checkpoint` with tokens below the threshold is True at percent 92 under C=95 and False at
   percent 91. `crosses` itself is unchanged, since its signature has no policy.
-  `needs_final_warning` at 77 is True under C=80 and False under C=95. Fails today
+  `needs_final_warning` at 77 is True under C=80 and False under C=95. Token-mode notes (R3): with
+  C=80, a token threshold of 150000 and notes 140000, `should_request_notes` at 30000 tokens is False
+  at percent 66 and True at percent 67, and False at percent 77 (the threshold ceiling). With no
+  notes value it is False at 67. Fails today
 - [ ] 1.13 Extend `hub/tests/test_checkpoint_cutover.py` (beside the offered-mode tests): an `offered`
   project, a `copilot` runner bound to agent `cop` and a `claude` runner bound to agent `cla`, both
   with no threshold of their own. A reading of 66% for `cop`'s conversation sets
@@ -107,7 +130,12 @@ root.
   - (a) `hub/tests/test_copilot_acp_run_turn.py` (slice 2's scripted fake session): a session whose raw
     events include the quota refusal and whose `session/prompt` returns `stopReason: "end_turn"` yields
     `TurnOutcome.status == "failed"` and one `on_accounting` call carrying the rejected reading. This
-    is design D8's case. A fixture that ends `failed` by construction could not catch it.
+    is design D8's case. A fixture that ends `failed` by construction could not catch it. R3 adds
+    two more. First, a session whose `session/prompt` answers with a JSON-RPC error whose `data`
+    carries `errorType "quota"` and `errorCode "quota_exceeded"`. Second, one whose process exits
+    after the quota `session.error` and before the prompt returns. In both, `run_turn` **returns**
+    the failed outcome and calls `on_accounting` once, where slice 2's client would raise. The same
+    JSON-RPC error with `errorType "rate_limit"` still raises `CopilotACPError`.
   - (b) `hub/tests/test_a_refused_turn_holds_the_queue.py` gains an RPC case. It patches the Copilot
     transport's module-level `run_turn` (slice 1 D9's seam) to deliver that sample and a failed
     outcome. The run persists one `queue_agent_held` event. Its entries are returned, and the refusal
@@ -137,8 +165,9 @@ root.
   `batch_alter_table`, no backfill. Bump `HEAD_REVISION` (`hub/tests/test_migrations.py`) and the head
   assertion in `hub/tests/test_project_persistence.py`. `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`
 - [ ] 2.3 `runner_events.AccountingSample`: add `ai_nano_aiu`, `premium_requests`,
-  `session_nano_aiu_total`, `session_premium_requests_total` (Optional, default None) and carry them in
-  `merged`. `usage_accounting.record_turn_usage` writes them whether or not the sample is measured
+  `session_nano_aiu_total`, `session_premium_requests_total` (Optional, default None) and the
+  unpersisted `credit_session_new: Optional[bool]`, and carry all five in `merged` (R3: a merge that
+  dropped the flag would turn the settle into a no-op). `usage_accounting.record_turn_usage` writes them whether or not the sample is measured
 
 ## 3. The compaction point and the thresholds
 
@@ -167,15 +196,17 @@ root.
   this slice, and includes none of the three. A test asserts that the `initialize` request carries all
   four. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
 - [ ] 4.2 `hub/hub/copilot_usage.py`: `CopilotUsageLedger` (`observe_event`, `observe_prompt_result`,
-  `finish`) per design D2–D4, and `quota_reading(snapshots, *, refused, prior_reading)` per D7–D8.
+  `observe_prompt_error`, `finish`) per design D2–D4, and `quota_reading(snapshots, *, refused, prior_reading)` per D7–D8.
   `finish(*, session_was_new)` is pure and never raises (D11). Tasks 1.1–1.7 and the ledger half of
   1.9 pass. `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
 - [ ] 4.3 `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the newest
   `turn_usage` row joined to `runs` on `Run.session_id == session_id`, for that project and agent, with
   `session_nano_aiu_total` not null. It returns None on any exception, logged. Also
   `usage_accounting.settle_copilot_credits(db, sample, *, project_id, agent, session_id)` (design D2,
-  D4, D8): the baseline difference, the fallback's stored total, the negative case, and the prior
-  reading's `resetsAt`. It is a no-op for a sample without `credit_session_new`, and it never raises.
+  D4, D8): the larger of the baseline difference and the per-call sum, premium requests only when the
+  difference was used, the fallback's stored total, and the prior reading's `resetsAt`. It acts on
+  every sample whose `credit_session_new` is not None, checkpoint or not, returns any other sample
+  unchanged, and never raises.
   Tasks 1.8 and the settle half of 1.9 pass
 - [ ] 4.4 `copilot_acp.run_turn` (design D2; R2's answer to Q1 is that there is no adapter
   `usage_from`):
@@ -183,7 +214,11 @@ root.
   - every subscribed raw event and the prompt result go to the ledger;
   - `cb.on_accounting(ledger.finish(session_was_new=…))` is called exactly once on every return path
     after a session exists;
-  - it returns `TurnOutcome(status="failed", …)` when the ledger recorded the quota refusal (D8).
+  - it returns `TurnOutcome(status="failed", …)` when the ledger recorded the quota refusal (D8);
+  - once the prompt is written, an exception while waiting for it (a JSON-RPC error, whose `data`
+    goes to `observe_prompt_error`, or the process ending) is turned into that failed outcome when
+    the ledger has recognised the refusal, and is re-raised unchanged otherwise. This needs slice 2's
+    `CopilotACPError` to carry `.data` (design, *Required of slices 1 and 2*, item 9).
 
   Task 1.15(a) passes. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
 
@@ -191,7 +226,7 @@ root.
 
 - [ ] 5.1 `_execute_rpc_run` (slice 1's generic RPC executor): at run end, in the finalising session
   and before `record_turn_usage`, pass the merged sample through `settle_copilot_credits`, which acts
-  only on a sample with a session credit total. Then record it with `runner=adapter.name`. The
+  on any sample whose `credit_session_new` is set (R3: not only one with a session credit total). Then record it with `runner=adapter.name`. The
   executor has no `"copilot"` literal. (Rebase at IMPL: slice 1 unbuilt at R2)
 - [ ] 5.2 Log every `session.error` payload at warning level with its `errorType`, `errorCode` and
   `statusCode` (design D8, capture)
@@ -248,8 +283,9 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
   line shows the credits. A Claude agent's turn in the same project shows no credits
 - [ ] 7.3 A second turn in the **same conversation** (a resumed session): its `ai_nano_aiu` equals its
   `session_nano_aiu_total` minus 7.1's. That answers whether the checkpoint total continues across
-  `session/load` (design table, INFERRED until now). If it restarted from zero instead, D4's baseline
-  rule gives a negative or wrong delta: stop, record it, and revise D4. Also record this resumed
+  `session/load` (design table, INFERRED until now). If it restarted from zero instead, D4's
+  larger-of rule charges the per-call sum (R3). Record which it was and check that `ai_nano_aiu`
+  equals the run's per-call sum. D4 needs no revision either way. Also record this resumed
   turn's prompt-result `usage` beside its per-call sum (Q10). If the result includes 7.1's tokens,
   stop and make the per-call sum authoritative on a loaded session (design D3)
 - [ ] 7.4 Record the run's `quotaSnapshots` keys and which one's `usedRequests` rose. Record whether

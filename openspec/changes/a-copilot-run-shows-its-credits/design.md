@@ -68,6 +68,8 @@ creates one per call and feeds it:
   replays a durable `session.usage_checkpoint` is unknown. Unarmed, a replayed one would become the
   "last" checkpoint of a run that failed before its own.
 - `observe_prompt_result(usage)`: the `usage` of the `session/prompt` result, if any;
+- `observe_prompt_error(data)` (R3): the `data` of a JSON-RPC error answering `session/prompt`. It
+  is read only for D8's structured quota fields;
 - `finish(*, session_was_new) -> AccountingSample`: called once, on every return path of `run_turn`
   that produced a session, and passed to `cb.on_accounting`. `session_was_new` is True when
   `run_turn` called `session/new`, including slice 2's `-32002` fallback (its D7). The transport
@@ -78,15 +80,39 @@ checkpoint's session totals, the per-call nano-AIU sum, `session_was_new`, and t
 (D7, D8), possibly without `resetsAt`. The executor settles the credits at run end, in the
 finalising session and before `record_turn_usage`, with
 `usage_accounting.settle_copilot_credits(db, sample, *, project_id, agent, session_id)` (D4, D8).
-It acts on any sample that carries a session credit total, and only Copilot's do. So the generic RPC
-executor needs no runner literal. A run where `run_turn` raised before `finish` records no sample,
-which gives an `unavailable` row, as today.
+It acts on any sample whose `credit_session_new` is not None, and only the ledger sets it. So the
+generic RPC executor needs no runner literal. **(R3 correction.)** R2's text keyed the settle on "a
+sample that carries a session credit total". The runs that most need settling carry none: the
+per-call fallback (D4), whose stored total the settle writes, and a quota refusal on the run's first
+call (D8), whose `resetsAt` the settle fills from the prior reading. Keyed on a checkpoint total,
+neither branch could fire, while every test seeded with a checkpoint passed. `finish` sets
+`credit_session_new` on every sample it returns, checkpoint or not.
+
+A run where `run_turn` raised records no sample, which gives an `unavailable` row, as today: the
+executor's pre-spawn `except` records `sample=None` whatever `on_accounting` delivered
+(`agent_trigger.py:3256-3263`). Its spend stays in the session's checkpoint, so the next run's
+difference (D4) carries it. So `run_turn` must not raise once the ledger has recognised a quota
+refusal (D8).
+
+`AccountingSample.merged` carries all five new fields, `credit_session_new` included (R3: R2 listed
+only the four persisted ones). Under slice 1's contract (its D3, *run_turn's accounting contract*)
+the ledger's sample is the only `on_accounting` call a Copilot run makes. But a merge that dropped
+the flag would silently turn the settle into a no-op if anything else ever called it.
 
 **Raw-event subscription is slice 2's list.** Slice 2's design subscribes `session.error` but not
-`assistant.usage`, `session.usage_checkpoint` or `session.compaction_complete`. It says *"Slice 4
-adds its own (`assistant.usage`, `session.usage_checkpoint`)"* and keeps the list as a module
-constant. Task 4.1 adds all three. Slice 5 subscribes `session.compaction_complete` for its own
-trigger, and a set union makes that harmless.
+`assistant.usage`, `session.usage_checkpoint` or `session.compaction_complete`. It names the list
+`copilot_acp.COPILOT_RAW_EVENTS` and sends it de-duplicated in first-seen order (its D10). Task 4.1
+appends all three. Slice 5 subscribes `session.compaction_complete` for its own trigger, and the
+de-duplication makes that harmless.
+
+**Why not slice 2's `on_raw_event` (R3).** Slice 2's R2 offers the executor an `on_raw_event(type,
+data)` callback and two `TurnOutcome` fields, `prompt_usage` and `session_was_new`, *"so slice 4
+extends the executor instead of re-opening the transport"* (its D10). This change does not use
+them. To consume them, the generic `_execute_rpc_run` would have to build a Copilot ledger, which is
+a runner branch or a new adapter member. Slice 1's D3 rules out both: *"A transport whose usage must
+be summed or differenced keeps its own per-run ledger inside `run_turn` and calls `on_accounting`
+once."* The ledger reads the same armed dispatch that feeds slice 2's mapper, inside `run_turn`.
+See *Required of slices 1 and 2*.
 
 ## D3 — Tokens: per-call sum, cross-checked by the differenced prompt result
 
@@ -114,10 +140,20 @@ trigger, and a set union makes that harmless.
   the whole session's history as this run's cost.
 - **Which wins.** Each is a lower bound: the per-call sum can lose events (at most 256 raw events in
   flight, excess dropped, appendix A §A), and the cumulative may or may not include subagent calls
-  (unknown). The recorded totals are those of the source with the larger `total_tokens`. Its name
-  goes in `AccountingSample.source` (`copilot_calls` or `copilot_prompt_result`). A disagreement
-  of more than 1% is logged at warning level with both figures, because it is evidence about which
-  lower bound is short. Neither is added to the other.
+  (unknown). The recorded totals are those of the source with the larger `total_tokens`, and a tie
+  goes to `copilot_calls` (R3: R2 named no tie rule, and acp4 **is** a tie). Its name goes in
+  `AccountingSample.source` (`copilot_calls` or `copilot_prompt_result`). A disagreement of more
+  than 1% is logged at warning level with both figures, because it is evidence about which lower
+  bound is short. Neither is added to the other.
+- **The acp4 numbers, recomputed in R3** (log lines 19, 33, 46 for the calls, 52 the checkpoint, 54
+  the result; R2's 18/32/45/51/53 are one line early). Input 10988 + 11028 + 11092 = 33108, output
+  21 + 38 + 5 = 64, cache read 0 + 10880 + 11008 = 21888, total 33172. The result reads 33108 / 64 /
+  33172 / 21888, a tie, so `source == "copilot_calls"`. With call 2 dropped (task 1.3), the calls
+  give 22080 + 26 = 22106, and the result's 33172 wins with a 33.4% disagreement logged.
+  `copilotUsage.tokenDetails` reproduces each call's nano-AIU exactly: 10988 × 20000 + 21 × 120000 =
+  222280000, 148 × 20000 + 10880 × 2000 + 38 × 120000 = 29280000, and 84 × 20000 + 11008 × 2000 +
+  5 × 120000 = 24296000. The three sum to 275856000, the checkpoint's total, which displays as `0.28
+  AI credits`.
 - **Model:** the model with the largest per-call total (as `_claude_model_accounting` does,
   `runner_parsing.py:128-162`). With no per-call events, the model is unknown (`None`).
 - **No telemetry at all** (no events, no result usage): `total_tokens` stays None, so
@@ -129,37 +165,58 @@ The credit ledger that survives resume is `session.usage_checkpoint` (session-cu
 
 - `session_total` = the **last** checkpoint this run received (later replaces earlier). The ledger
   (D2) supplies it.
+- `per_call` = the sum of this run's `copilotUsage.totalNanoAiu` (plus compaction's, deduped as in
+  D3). It is None when no call reported one.
 - `baseline` = 0 if the session was created in this run (`session_was_new`, from the transport,
   D2). Otherwise the `session_nano_aiu_total` / `session_premium_requests_total` of the newest earlier
-  `turn_usage` row for the same project, agent and provider session that has one.
+  `turn_usage` row (by `observed_at`, then `id`) for the same project, agent and provider session
+  that has a non-null `session_nano_aiu_total`.
   `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)` reads it by joining
   `turn_usage.run_id` to `runs.id` on `Run.session_id == session_id`. `Run.session_id` is set at
-  creation from the resume id (`api/v1/agent_trigger.py:1310`) and rebound by `_bind_session_id`
+  creation from the resume id (`api/v1/agent_trigger.py:1309`) and rebound by `_bind_session_id`
   (`:3102-3125`). The current run's own row is not written yet, so it is never its own baseline.
-- `ai_nano_aiu = session_total - baseline`, and likewise for premium requests.
-- **No checkpoint this run** (for example a run that failed on its first call, or was stopped):
-  fall back to the per-call sum of `copilotUsage.totalNanoAiu` (plus compaction's, deduped as in D3).
-  Premium requests have no per-call equivalent (`cost` is a multiplier, and acp4 charged one premium
-  request for three calls), so they stay None.
-- **No baseline for a loaded session** (its earlier runs predate this change, or their rows were
-  lost): fall back to the per-call sum for credits. Store the checkpoint as the new baseline anyway.
-- **A negative difference** (the session's counter was reset, e.g. `/clear`; `help limits` says
-  *"/clear and /new reset used AI credits"*): credits None for this run. The stored checkpoint
-  becomes the new baseline. A reset is never reported as negative spend.
-- The run always stores the checkpoint it ended at, when it saw one, so the next run can difference.
-- **A fallback run stores the total it reached (R2 correction).** Without this, a run with no
-  checkpoint was charged its per-call sum, and the next run's difference against the older baseline
-  charged the same credits again. R1's text said the spend "moves one run later". That holds only for
-  a run that recorded nothing, not for one that recorded the fallback. So when a run takes the
-  per-call fallback **and** its baseline is known (0 for a new session, or a stored total), it stores
-  `session_nano_aiu_total = baseline + per_call_sum` and `session_premium_requests_total = None`. The
-  next run then differences against what was already charged. Its premium requests come out None,
-  because their baseline is unknown, rather than doubled. With no known baseline it stores nothing.
-  acp4 showed the per-call sum equal to the checkpoint exactly, so the synthetic total is the real
-  one whenever no call event was dropped.
+  Rows written by crash reconciliation or by the executor's pre-spawn `except` carry no total, so
+  they are skipped.
+- **Credits are the larger of two lower bounds (R3), as tokens are in D3.** Let `diff =
+  session_total - baseline`, defined only when both are known.
+  - `diff` defined and `diff >= (per_call or 0)`: `ai_nano_aiu = diff`, and `premium_requests =`
+    the premium total minus its baseline when both are known and the result is not negative, else
+    None.
+  - Otherwise: `ai_nano_aiu = per_call` (None when there is none), and `premium_requests = None`.
+    That covers no checkpoint, no baseline, a negative `diff`, and a `diff` smaller than the run's
+    own calls.
+  - The run stores `session_total` (and its premium total) whenever it saw a checkpoint, whichever
+    figure it was charged. Premium requests have no per-call equivalent (`cost` is a multiplier, and
+    acp4 charged one premium request for three calls).
+- **Why the larger, and not R2's "difference first, per-call only as a fallback".** Take any
+  difference that is smaller than the run's own calls: the counter can only have been reset. Its
+  causes are `/clear` or `/new` (`help limits`: *"/clear and /new reset used AI credits"*), or a
+  checkpoint that restarts per process after `session/load`. The second is the INFERRED row of the
+  table, measured only by task 7.3. Under R2's rule a restarted counter gave garbage. `A` ends at
+  275856000. A loaded run `B` that really spent 300000000 checkpoints 300000000 in its own process
+  and was charged 24144000. One that spent 124144000 was charged nothing (a negative difference gave
+  None). Under the larger-of rule both are charged their own calls, 300000000 and 124144000. When
+  the counter does continue (the schema's *"for reconstructing aggregate accounting on resume"*),
+  `diff >= per_call` always holds (proof below), so the rule is exactly R2's. D4 is therefore right
+  under either answer to 7.3. That task still measures it, but no longer gates the design.
+- **Never twice, never negative (R3 proof, continuing counter).** Invariant: after each run the
+  stored total `S` is at most the real counter `K`, and every credit charged so far is at most `S`
+  (equal when no call event was lost). A run with a checkpoint is charged `max(K' − S, P)`, where
+  `P <= K' − K <= K' − S`, so the charge is `K' − S` and it stores `K'`: the running charge equals
+  `K'`. A run without one is charged `P` and stores `S + P <= K'`. Neither step charges past the
+  counter, and every charge is at least 0.
+- **A fallback run stores the total it reached (R2, kept).** When a run is charged `per_call` with no
+  checkpoint and a known baseline (0 for a new session, or a stored total), it stores
+  `session_nano_aiu_total = baseline + per_call` and `session_premium_requests_total = None`. Without
+  this, the next run's difference against the older baseline would charge the same credits again.
+  The next run's premium requests then come out None, because their baseline is unknown, rather
+  than doubled. With no known baseline, or no `per_call`, it stores nothing.
 
-A run that crashed without recording anything leaves its spend in the next run's difference. The
-total stays right, and the attribution moves one run later. That is accepted and stated, not hidden.
+A run that recorded nothing leaves its spend in the next run's difference. That covers a crash, a
+Hub restart mid-run, and a `run_turn` that raised. The total stays right, and the attribution moves
+one run later. That is accepted and stated, not hidden. Spend that never reached the durable
+checkpoint (a process killed before its turn-end checkpoint) is not charged at all. It is lost, and
+never counted twice.
 
 `settle_copilot_credits` never raises. A failed baseline read is "no baseline". Any other exception
 is logged, and the sample is returned with the ledger's provisional per-call credits (D11).
@@ -319,6 +376,20 @@ JSON-RPC error's `data` count too (INFERRED that they may arrive there; nothing 
   returns `TurnOutcome(status="failed", error=<the session.error message>)` whenever its ledger
   recorded the D8 refusal, whatever the stop reason. Task 1.15 covers it with a scripted session whose
   prompt returns `end_turn`. A fixture that ends `failed` by construction could not fail on this.
+- **A refused turn must not raise either (R3 correction).** D8 counts the quota fields on a
+  `session/prompt` JSON-RPC error's `data`. As slice 2 designs its client, that error is raised:
+  `ACPProcess.request` raises `CopilotACPError(code=…)` for any error response, and `CopilotACPError`
+  subclasses `AppServerError` (its D12). A raise lands in the executor's pre-spawn `except`
+  (`agent_trigger.py:3244`), which records `sample=None` and calls `return_run_entries(db, run_id)`
+  with no refusal (`:3256-3266`). No reading is recorded, nothing holds, and the input is counted,
+  so that clause could never fire. The same happens if the process exits after a quota
+  `session.error` but before the prompt returns. So once the prompt has been written, `run_turn`
+  handles any exception from the prompt's wait in one step. It passes the error's `data` to
+  `observe_prompt_error`, when there is one. If the ledger has then recognised the refusal, it calls
+  `cb.on_accounting(ledger.finish(…))` and **returns** the failed outcome instead of raising. Any
+  other error is re-raised unchanged, which is slice 2's contract. A stop still wins: an
+  `interrupted` outcome stays `stopped` and keeps its input. This needs `CopilotACPError` to carry
+  the error's `data` as well as its `code` (*Required of slices 1 and 2*).
 - **The first real refusal is captured verbatim.** Until one is observed, the Copilot executor logs
   every `session.error` payload at warning level, and task 8.2 asks the operator to paste the first
   quota one into FINDINGS. That is how D8's recognition is confirmed or corrected.
@@ -371,7 +442,11 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
   - In percent mode, when the value is above `final_warning_percent`, it becomes `final_warning_percent`,
     and `threshold_source` becomes `"runner_ceiling"`. **For Claude this also lowers a configured
     93–99% to 92%.** `threshold_error` accepts up to 99 (`checkpoint_policy.py:125-129`). R1 stated
-    only the token-mode change, and this is a second Claude behaviour change (Q7).
+    only the token-mode change, and this is a second Claude behaviour change (Q7). **R3 measured
+    its reach:** a `mode=ro` read of the operator's `:8000` database and of the trial database found
+    no project and no agent with a configured threshold (every `checkpoint_threshold_mode` is NULL).
+    All seven projects use the built-in 80/70/92, so none of the three Claude bands changes anything
+    configured on this machine today.
   - In token mode the window is not known to the policy, so the ceiling is applied to the reading's
     percent. **Not in `crosses`** (R2 correction): `crosses(mode, value, *, context_tokens, percent)`
     (`:156-172`) takes no policy and is also used for the notes point. The ceiling goes in
@@ -384,6 +459,20 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
     thresholds only in that band, stated here and pinned by a test (open question Q7).
   - A notes value that is not below the lowered threshold is lowered to `threshold − 10`, or it
     would be silently ignored (`should_request_notes`, `:205-208`).
+  - **Token-mode notes (R3, added).** R2 put the ceiling into the threshold half of
+    `should_request_notes`, which stops the notes requests. It left the notes half alone, so they
+    never start. Example: a project token threshold of 150000 with notes at 140000, and a Copilot
+    agent whose window is 128000 (acp4's `maxPromptTokens`). The checkpoint now fires at 77%, about
+    98600 tokens, but 140000 is never reached, so no notes are ever asked for and the checkpoint is
+    generated from none. So, in token mode and only when a notes value is set, the notes half also
+    counts as reached at `percent >= final_warning_percent − 10`. That is the percent-mode result
+    for a notes value past the ceiling (the lowered threshold minus 10): 67 for Copilot and 82 for
+    Claude. It is one line in `should_request_notes`, and like the threshold ceiling it needs a
+    reading that carries `percent`. No notes value, no notes, as today.
+  - **A threshold at the ceiling leaves no room for a dismissal.** With the threshold equal to the
+    final warning, a conversation dismissed at the ceiling gets its final warning on the next
+    reading. That is what a configured 92% does for Claude today, and it is the design's intent:
+    past the final-warning point a dismissal is not respected.
   - Configuration is **accepted, not refused**. The project's threshold is shared by agents on
     different runners, so refusing 80% because one agent is on Copilot would refuse a threshold that
     is right for the others. The lowering is per agent, at evaluation time, and is said on screen.
@@ -471,6 +560,59 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
   change edits.
 - **Slice 5** reads the same `session.error` events for stream diagnostics and says *"Recording one
   does not move any quota hold: holds are slice 4's"*. The two consumers are independent.
+
+## Required of slices 1 and 2 (R3, the cross-slice contract)
+
+Slice 1 (`each-runner-cli-is-one-adapter`) is the authority on adapter and transport member names,
+and slice 2 (`a-copilot-agent-runs-over-acp`) on what the ACP client and executor provide. This
+change uses their names, as their designs stood on 2026-09-28, still unbuilt. Each item below is
+**needed**, **already provided**, **owned here**, or **not needed**.
+
+**Slice 1**
+
+1. *Already provided.* `RpcTransport.run_turn(req: RpcTurnRequest, cb: RpcCallbacks) -> TurnOutcome`,
+   with the accounting contract *"keeps its own per-run ledger inside `run_turn` and calls
+   `on_accounting` once"* (its D3). The executor's `_on_accounting` merges with
+   `AccountingSample.merged` (Codex today: `agent_trigger.py:3173-3177`).
+2. *Already provided.* `spend_from` and `quota_hold_from` are struck from its D16 table as superseded
+   by this change's ledger. Nothing further is needed (R2's gap G1 is closed).
+3. *Owned here.* `RunnerAdapter.compaction_percent: ClassVar[Optional[int]]`. Slice 1 keeps it
+   deferred to this slice (its D16 row, R2), so task 3.1 adds it **unconditionally**, with Claude 95,
+   Codex 95 and Copilot 80, and extends slice 1's conformance test (its task 1.5) to require it on
+   every `ADAPTERS` entry.
+4. *Owned here.* The run-end refusal branch in `_execute_rpc_run`. Slice 1 states it does not add it
+   (its D16 row). This is task 5.3. Also task 5.1: `settle_copilot_credits` before `record_turn_usage`
+   in the finalising session, and `runner=adapter.name`.
+5. *Needed.* `_execute_rpc_run` keeps the pre-spawn `except` tuple `(FileNotFoundError,
+   AppServerError, asyncio.TimeoutError, OSError)` and its `sample=None` recording (its D15). D2 and
+   D8 rely on a raise recording nothing, which is today's behaviour.
+
+**Slice 2**
+
+6. *Needed, and provided by its D10.* `copilot_acp.COPILOT_RAW_EVENTS` is extendable and is sent
+   de-duplicated. Task 4.1 appends `assistant.usage`, `session.usage_checkpoint` and
+   `session.compaction_complete`.
+7. *Needed.* Inside `copilot_acp.run_turn`, one armed dispatch point for raw events: the one that
+   feeds the mapper after the `session/prompt` request is written (its D7 arming). Task 4.4 calls
+   `ledger.observe_event(type, data)` there, and `ledger.observe_prompt_result(result.get("usage"))`
+   where the prompt result is read.
+8. *Needed, and provided by its D7.* `run_turn` knows whether it called `session/new`, including
+   the `-32002` fallback, and passes it to `ledger.finish(session_was_new=…)`.
+9. *Needed; slice 2 must add it.* `CopilotACPError` carries the JSON-RPC error's `data` (as
+   `.data`) beside `.code`, so that D8 can read the structured quota fields of a `session/prompt`
+   error. Its D12 names only `code`.
+10. *Owned here.* Slice 2 says `on_accounting` is *"never called"* and records `sample=None` (its
+    D11, D18). Task 4.4 replaces that: one `cb.on_accounting(ledger.finish(…))` on every return path
+    once a session exists. So is the D8 rule that a recognised quota refusal returns
+    `TurnOutcome(status="failed")` whatever the stop reason, and **instead of raising** on a prompt
+    error or a process exit. Slice 2's G4 gap is closed here, not there.
+11. *Not needed.* The `on_raw_event` callback and the `TurnOutcome.prompt_usage` /
+    `TurnOutcome.session_was_new` fields slice 2's R2 added for this slice (its D10, D18). Using them
+    would put a Copilot ledger in the generic executor (D2). Slice 2 may drop them. If it keeps them,
+    this change does not read them.
+12. *Needed, and provided by its task 1.2.* The captured `-p --output-format json` stream that
+    `parse_copilot_envelope` is tested against. Task 5.4 reads `session.shutdown` from it only if the
+    capture contains it. The parser keeps returning `WorkerUsage()` until then, as slice 2 says.
 
 ## Tests that can fail (summary; tasks.md group 1 is the list)
 
@@ -598,6 +740,115 @@ order fails it. API tests assert by position in the order the route returns (`ag
     G6, slice 2 D11 records `sample=None`, which this change replaces.
   - **Rebase at IMPL:** tasks 3.1, 4.1, 4.4, 5.1, 5.3, 5.4 and 1.15 name slice 1 and slice 2
     members that exist only in their designs.
+- **R3 (2026-09-28).** Task 0.2: a second re-derivation of D3, D4 and D10 (and of R2's D8
+  correction), from the code at master `fc33ff9` and the acp4 transcript. R2's entry was read only
+  after the derivation, to compare against it. Slices 1–3 are still unbuilt, so every "(rebase at
+  IMPL: …)" mark stays; each was re-checked against the sibling designs as they stood that day.
+  - **Read (code):** `usage_accounting.py` (whole, 224 lines, with `unpriced_turns`);
+    `runner_events.py:225-318`; `checkpoint_policy.py` (whole); `checkpoint_trigger.py:1-60`,
+    `:100-320`; `provider_allowance.py:40-210`; `api/v1/agent_trigger.py:1305-1314`,
+    `:2640-2760`, `:3095-3130`, `:3225-3380`; `runner_parsing.py` (the function map);
+    `db/models.py` (`observed_at` defaults, `Agent.runner_id`); `api/v1/agents.py:400-412`,
+    `:544-552`; the `resolve_policy`/constant callers (grep); the UI's readers of `threshold_value`
+    (grep: none reads the `checkpoint_due` payload's value). **Designs:** slice 1 `design.md` D3
+    (`:125-176`) and D16 (`:420-435`); slice 2 `design.md` D3, D7 (`:400-425`), D10 (`:660-712`),
+    D11, D12 (`:720-742`), D17-D18 (`:940-1000`), its route table and cross-slice notes. **Data:**
+    `mode=ro` reads of `~/.agentweave/hub/data/agentweave.db` (`:8000`) and the trial database for
+    configured checkpoint thresholds and runner CLIs.
+  - **Computed (acp4, log lines 19/33/46 calls, 52 checkpoint, 54 result):** tokens 33108 / 64 /
+    21888 / 33172 both ways (a tie). nano-AIU per call from `tokenDetails` × `costPerBatch/batchSize`:
+    222280000, 29280000 and 24296000, which sum to 275856000 = the checkpoint = `0.28 AI credits`.
+    Calls 1 + 3 alone give 22106 tokens, 33.4% short of the result. Newest `chat` snapshot 96.5,
+    reset 2026-10-01T00:00Z = 1790812800. D10: C=95 gives 80/70/92, C=80 gives 65/55/77, and the
+    notes ceiling (final − 10) is 82/67. Task 1.13's readings: 66 ≥ 65 is due for `cop`; 66 is
+    below both 70 and 80 for `cla`; a dismissed 78 ≥ 77 gets the final warning.
+  - **Attack sequences on D4, under a checkpoint that continues after a load (K = the real
+    counter):**
+    - S1: new A (checkpoint 275856000/1), then loaded B (checkpoint 400000000/2, calls
+      124144000). A is charged 275856000/1.0 and B 124144000/1.0. The charges sum to 400000000,
+      equal to K. Correct under R2 and R3.
+    - S2: new A is stopped with no checkpoint (calls 275856000), then B as in S1. A is charged
+      275856000 and stores 275856000/None, and B is charged 124144000 with premium None. The
+      credits are exact. One premium request is unattributed, and none is doubled.
+    - S3, a Hub restart mid-run: A as in S1. B is reconciled with no totals, and its spend reached
+      the checkpoint. C is loaded with checkpoint 450000000/3 and calls 124144000. C is charged
+      174144000/2.0, so B's spend moves to C and is counted once. If B died before its turn-end
+      checkpoint, its spend is never counted, and still never twice.
+    - S4: B's `run_turn` raises after the prompt, so the pre-spawn `except` records `sample=None`.
+      Same outcome as S3.
+    - S5: B fails without a quota refusal, returns a failed outcome with its checkpoint, and is
+      charged normally. Its requeued input's run uses B's total as its baseline, with no double
+      count.
+    - S6: the `-32002` fallback gives `session_was_new=True` and baseline 0, correct whatever the
+      old id's rows say.
+    - The invariant proof is in D4.
+  - **Attack sequences on D4, under a checkpoint that restarts per process (the INFERRED row):**
+    - S7: A = 275856000. Loaded B really spends 124144000, so its checkpoint reads 124144000. Under
+      R2 the difference is negative, so B is charged **None** and 124144000 is lost. Under R3 B is
+      charged 124144000.
+    - S8: loaded B really spends 300000000. Under R2 B is charged **24144000**, 275856000 too little.
+      Under R3 it is charged 300000000.
+    - In S7 and S8 R2 was never negative and never double, but wrong, and 7.3 was its only guard.
+    - S9: `/clear` resets the counter mid-session. It behaves like S7.
+  - **Attack sequences on D2/D8:**
+    - S10: a quota refusal on the run's first call. There is no checkpoint and no call, so the sample
+      carries no session total. Under R2's D2 text the settle skipped it, so its `resetsAt` was
+      never filled from the prior reading: no hold ever, while 1.9's seeded test (checkpoint
+      present) passed. Fixed by keying the settle on `credit_session_new`.
+    - S11: a quota refusal arriving as a `session/prompt` JSON-RPC error. Slice 2 raises
+      `CopilotACPError`, and the pre-spawn `except` records `sample=None` and counts the input.
+      D8's clause could never fire. Fixed in `run_turn` (D8, task 4.4, test 1.15(a)).
+    - S12: a quota `session.error`, then the process exits. The same path as S11, with the same fix.
+  - **Agreed with R2, re-derived independently:**
+    - D3's lower-bound argument. Both figures are this run's, and the larger is the better bound.
+      Only the tie rule was missing.
+    - The ceiling cannot live in `crosses`: it takes no policy and serves the notes point too
+      (`checkpoint_policy.py:156-172`, `:209-219`).
+    - The percent clamp lowers a Claude 93–99 to 92.
+    - The fallback-store correction to D4.
+    - The requirement that a refused turn end `failed` (`agent_trigger.py:2684-2689`, `:2719-2723`).
+    - The baseline join on `Run.session_id`, rebound by `_bind_session_id` (`:3102-3125`).
+  - **Disagreed with R2, and changed:**
+    1. D4: "difference first; a negative difference is None" becomes the larger of the difference
+       and the per-call sum, with premium requests only from the difference. The rule is now correct
+       whichever way 7.3 answers, and 7.3 no longer gates D4. Tests 1.8(a)–(f) are rewritten with
+       fixtures chosen so that either single-source rule fails.
+    2. D2 and tasks 4.3/5.1: the settle is keyed on `credit_session_new`, not on a session total
+       (S10). `merged` carries the flag.
+    3. D8: the JSON-RPC-error route (S11, S12). `observe_prompt_error` is added. Slice 2's
+       `CopilotACPError` must carry `.data`.
+    4. D10: the token-mode notes point gets the `final − 10` ceiling. R2 stopped notes at the
+       ceiling but never started them.
+    5. D3: the tie goes to `copilot_calls`, and test 1.1 asserts it.
+    6. References: the acp4 line numbers are 19/33/46/52/54, not R2's 18/32/45/51/53. `Run(…,
+       session_id=…)` is at `agent_trigger.py:1309`, not `:1310`.
+    7. Spec deltas: `usage-accounting`'s MODIFIED text still said the prompt result is "used only
+       as the difference from the previous prompt result in that process", with a scenario charging
+       a *second run* in the same process. That contradicts D3 since R2 (one process per turn; test
+       1.4 keeps the later result). It is rewritten, and the credits rule and its scenarios now
+       state the larger-of rule. `agent-conversation-workspace` covers the error-response refusal,
+       and `conversation-checkpoint` the token notes point.
+  - **Contract resolutions** (the new *Required of slices 1 and 2* section):
+    - G1 is closed: slice 1 struck `spend_from`/`quota_hold_from`.
+    - G2 is closed: slice 1's D3 now states the transport-ledger accounting contract.
+    - G3 is answered: `COPILOT_RAW_EVENTS` is named and de-duplicated, and task 4.1 appends three.
+    - G4 and G6 are owned here (task 4.4).
+    - G5 is unchanged.
+    - New: slice 2's `on_raw_event` and `TurnOutcome.prompt_usage`/`session_was_new` are not
+      needed, and using them would put a runner branch in the generic executor. `CopilotACPError.data`
+      is needed.
+    - `compaction_percent` stays this change's (task 3.1), as slice 1's D16 row now says.
+  - **Open questions:**
+    - Q7 is answered on evidence: no configured threshold exists on either database, and the
+      uniform rule is kept.
+    - Q9 is carried to the operator: it is a product choice, reachable only with Codex and Copilot
+      in one project.
+    - Q10 is carried and narrowed to tokens, because credits no longer depend on it.
+  - **Route-raises, re-asked:**
+    - Only S11 was a route whose raise silently cancelled a promised behaviour. It is fixed.
+    - `settle_copilot_credits` and `finish` never raise (D11).
+    - `consider` resolving the runner adds one `db.get`, and `consider_from_reading` already
+      swallows.
 
 ## Open questions for R2/R3
 
@@ -627,7 +878,14 @@ order fails it. API tests assert by position in the order the route returns (`ag
   between 92% and 100% of a known window. Second (found in R2), configured **percent** thresholds of
   93–99, which are lowered to 92. Keep it uniform (R1's choice: a threshold above 92 leaves at most
   3 points before Claude compacts, and one above 95 can never fire in time), or restrict the ceiling
-  to runners whose compaction point is below 95?
+  to runners whose compaction point is below 95? **R3: answered on evidence, with the uniform rule
+  kept.** R3 added a third band: token-mode notes values past 82% of a known window (D10). No project
+  or agent on `:8000` or on the trial Hub configures a threshold (D10, `mode=ro` read, 2026-09-28), so
+  none of the three bands changes anything configured today. For a Claude threshold above 95 the
+  uniform rule is the only one that fires before the loss. Restricting it would keep an
+  unreachable threshold unreachable for Claude alone. The operator can still overrule this at the
+  0.3 review or in APPROVALS. If they do, the change is one condition,
+  `compaction_percent < 95`, in front of the three ceilings.
 - **Q8. Answered in R2.** No UI literal assumes 80/92/95. A grep of `components/checkpoints`,
   `AgentSettingsControls.tsx`, `BannerStack.tsx`, `ProjectSettingsPanel.tsx` and
   `components/context` found none. Only `CONTEXT_WARNING_PERCENT = 70`
@@ -638,10 +896,22 @@ order fails it. API tests assert by position in the order the route returns (`ag
   adds the runner name. R2 found the sharper consequence: in a Codex + Copilot project the Copilot
   reading replaces the Codex API-equivalent headline outright (D6). Is a per-runner display (one line
   per provider) the better fix? R1 kept the smaller one, and R2 leaves the decision to R3 or the
-  operator.
+  operator. **R3: carried to the operator, with a reason.** It is a choice about what the Budgets
+  headline is for, not a fact the code can settle. Both answers are consistent with `usage-accounting`,
+  and the smaller one is not wrong, only lossy. It is reachable only in a project that runs both
+  Codex and Copilot, and Codex is undrivable on this machine since 2026-08-29. So it can wait for
+  the 0.3 review without blocking IMPL. The per-runner display would be additive (a list beside
+  `preferred_display`), so choosing it later rewrites no data.
 - **Q10 (R2).** After a process restart and `session/load`, does the first **model** prompt's
   `usage` start from zero? D3's "larger wins" is sound only if it does. R1's evidence is a `/usage`
   slash prompt after load that returned no `usage`, while in the original process slash prompts
   returned the cumulative totals. That is strong evidence, but not a model call. Task 7.3 records the
   prompt result and the per-call sum of the resumed turn. If the result includes the earlier turn,
-  D3 must make the per-call sum authoritative on a loaded session.
+  D3 must make the per-call sum authoritative on a loaded session. **R3: carried, and narrowed to
+  tokens.** Credits no longer depend on it: D4's larger-of rule is correct whether the session
+  checkpoint continues after a load or restarts. Tokens still do, because no stored token baseline
+  exists to difference against. R3 found no way to tell "the result includes history" from "call
+  events were dropped" inside `finish`, where there is no database. The evidence stays as R2 stated
+  it: after a load, the slash prompt that had returned the cumulative totals in the original process
+  returned no `usage` at all. That points to a per-process counter that starts empty. Task 7.3
+  remains the gate for D3.

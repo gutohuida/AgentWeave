@@ -19,7 +19,11 @@ A conversation whose warning the operator dismissed SHALL NOT be warned again in
 compaction. The final warning exists to precede the loss, and after it the stream's record of the
 compaction is the notice.
 
-A compaction the runner reports as failed SHALL NOT count.
+A compaction the runner reports as failed SHALL NOT count, and neither SHALL a compaction of one of
+the runner's subagents, whose context is not the conversation's.
+
+Acting on a compaction SHALL NOT change what recording the runner's output answers: an output that
+was stored is reported as stored, whatever becomes of the consideration it prompts.
 
 A checkpoint produced this way SHALL be recorded as produced by context pressure, so that every
 surface that offers a threshold checkpoint offers it too.
@@ -63,6 +67,17 @@ same time as it.
 
 - **WHEN** a runner reports a compaction that did not succeed
 - **THEN** the conversation is treated as though no compaction happened
+
+#### Scenario: A subagent's compaction does not count
+
+- **WHEN** a runner reports that one of its subagents compacted its own context
+- **THEN** the conversation is treated as though no compaction happened
+
+#### Scenario: Recording output is unaffected by the consideration
+
+- **WHEN** a runner's output is recorded, whether or not it reports a compaction, and whether or not
+  the consideration it prompts fails
+- **THEN** the output is stored once and reported as stored
 
 #### Scenario: The checkpoint is offered where threshold checkpoints are
 

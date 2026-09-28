@@ -7,12 +7,14 @@ The Hub SHALL answer every permission request a Copilot run raises over the Agen
 The Hub SHALL answer as follows:
 
 - **Workspace only**, which is also how a run that states no posture is decided. A shell command
-  SHALL be judged in the dialect of the shell Copilot runs: PowerShell on Windows. A file change and
-  an out-of-directory read SHALL be judged against the run's workspace, path by path, and a file
-  change that names no path SHALL be refused. A call to the Hub's own `agentweave` tools SHALL be
-  allowed, and a call SHALL count as the Hub's own only when the server it names is the Hub's and
-  the tool is one the Hub's server serves. A request kind the Hub does not recognise SHALL be
-  refused.
+  SHALL be judged in the dialect of the shell Copilot reports running it. A command whose shell is
+  not known SHALL be judged in every dialect the Hub reads, and refused if any refuses. A file change
+  and an out-of-directory read SHALL be judged against the run's workspace, path by path, and one
+  that names no path SHALL be refused. A call to the Hub's own `agentweave` tools SHALL be allowed.
+  A call SHALL count as the Hub's own only when Copilot's own report of the call names the Hub's
+  server and a tool the Hub's server serves. Text the model writes, such as a tool call's title,
+  SHALL NOT decide which server a call belongs to. A tool call whose server Copilot did not report
+  SHALL be refused, as SHALL a request kind the Hub does not recognise.
 - **Ask me.** Every request except the Hub's own tools SHALL be put to the operator as a card while
   the request is held open. It SHALL be refused when the operator's wait runs out.
 - **Full access.** The run SHALL be put into Copilot's allow-all mode. When the machine's Copilot
@@ -66,6 +68,16 @@ plan mode prevents the turn's specification duties.
 
 - **WHEN** a Copilot run asks to call a tool of an MCP server named `agentweave-x`
 - **THEN** the Hub judges the call as a foreign server's rather than allowing it as its own
+
+#### Scenario: A tool call whose title imitates the Hub's tool
+
+- **WHEN** a Copilot run under Ask me asks to call a tool whose displayed title reads `agentweave-send_message`, and Copilot's own report of the call names another server or no server
+- **THEN** the Hub does not allow it as its own tool
+
+#### Scenario: A tool call whose server Copilot did not report
+
+- **WHEN** a Copilot run under Workspace only raises a permission request for a tool call that Copilot has not reported as belonging to any MCP server
+- **THEN** the Hub answers the request with a refusal that says the server was not reported
 
 #### Scenario: An unknown request kind
 

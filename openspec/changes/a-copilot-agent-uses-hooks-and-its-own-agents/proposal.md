@@ -5,7 +5,7 @@ change needs are `map_events`, `build_launch`, `decide_posture`, `launchability`
 `catalog_provider`. (R2: as slice 1 is written, `map_events` and `build_launch` are
 stream-transport members and `catalog_provider` is one value per adapter, so this Copilot work lands
 in slice 2's `copilot_acp` module and in `resolve_agent_env`/`guard_env` instead. See design,
-*Dependencies on slices 1–4, as written at R2*.) It also depends on `a-copilot-agent-runs-over-acp` (slice 2): its ACP client and
+*Required of slices 1–4*, rewritten in R3.) It also depends on `a-copilot-agent-runs-over-acp` (slice 2): its ACP client and
 raw-event subscription, the Hub-owned `COPILOT_HOME` per agent written at agent creation, the
 `--disable-builtin-mcps` spawn flag, and its `copilot` runner literal and migration. It uses the
 shim of `a-run-reaches-the-hub-without-mcp` (slice 3) only in a design alternative the operator can
@@ -76,8 +76,10 @@ its own tests and its own drive, and no group depends on another.
   while a reading is being considered is considered afterwards, not dropped (R2).
 - **Errors become error events** in the run's stream, keeping their category, status code and
   remediation, and recorded once even though Copilot also echoes them as text. (R2: an error, not a
-  diagnostic, because diagnostics can be hidden and errors must stay visible.) A failed compaction
-  is a diagnostic. Recording one does not move any quota hold: holds are slice 4's.
+  diagnostic, because diagnostics can be hidden and errors must stay visible. R3: Copilot sends the
+  structured event before its echo, so the echo chunk is dropped on arrival and nothing is held.)
+  A failed compaction is a diagnostic; a subagent's compaction is not the conversation's (R3).
+  Recording one does not move any quota hold: holds are slice 4's.
 - **Subagents appear in the run's timeline**: start, end and failure, paired by the parent's tool
   call.
 - **No hook decides anything.** The Hub never installs `permissionRequest`, `preToolUse`, or a
@@ -140,9 +142,10 @@ its own tests and its own drive, and no group depends on another.
 ## Impact
 
 - **Group A:**
-  - Hub backend only. `status_event` and `error_event` gain facts, and `diagnostic_event` takes the
-    CLI's `{stream, severity, summary}` shape, in `hub/hub/runner_events.py`.
-  - Copilot event mapping in the adapter's `map_events` (slice 2's module).
+  - Hub backend only. `status_event` and `error_event` gain facts in `hub/hub/runner_events.py`, and
+    slice 2's `diagnostic_event` is used with a `stream` (R3: slice 2's parameter names).
+  - Copilot event mapping in slice 2's `copilot_acp.CopilotEventMapper` (R3: not an adapter
+    `map_events`, which is a stream-transport member).
   - A new `consider_from_compaction` in `hub/hub/checkpoint_trigger.py`, reusing `consider`.
   - The checkpoint trigger stays `context_pressure`. `CHECKPOINT_TRIGGERS` is guarded by migration
     `0044` (`db/models.py:1646-1653`), and the UI's offer reads that value
@@ -161,5 +164,6 @@ its own tests and its own drive, and no group depends on another.
   `request_permission` onto `_decide` from `copilot_acp.decide_permission`, in the Hub process
   (design D9).
 - **R2, 2026-09-28:** slices 1–4 are unbuilt at master `ef55e6f`, and only 5 of the night's 28
-  changes have landed. Design's *Dependencies on slices 1–4, as written at R2* lists 16 mismatches
-  to rebase at IMPL.
+  changes have landed.
+- **R3, 2026-09-28:** the same at `fc33ff9`. Design's *Required of slices 1–4* replaces R2's table:
+  what this change needs from each slice, in that slice's names.

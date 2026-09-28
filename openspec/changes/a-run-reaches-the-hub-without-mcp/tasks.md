@@ -17,11 +17,19 @@
       retargeted onto slice 2's `per_turn`;
     - OQ 1/3/4/6 answered, 2/5/7 carried;
     - 7 cross-slice gaps listed.
-- [ ] 0.2 R3: a second independent re-derivation.
+- [x] 0.2 R3: a second independent re-derivation.
   - Re-read D8's predicate against `_lex`/`_words` as they are, and try to construct a command that the predicate
     allows and that does more than one plane call. Record the attempt.
   - Re-check D1's "`connected` is final" and "untested" rows against how each runner can actually end.
   - `openspec validate a-run-reaches-the-hub-without-mcp --strict` passes.
+  - **Done 2026-09-28** on master `fc33ff9`. Result:
+    - 20 attacks, none giving more than one plane call. Three holes around the allow-list were closed: case 2 for
+      non-shell tools, the path-less edit, and `PYTHON*` poisoning (now `-I`). The PowerShell `-x.y` split was also
+      closed;
+    - "`connected` is final" was replaced by a source precedence (the announce precedes `mcp.run`);
+    - F340 is not closed for Codex `exec`;
+    - D12's wording was false for runs told `mcp`;
+    - group 6 cut; R2's Codex `*TOKEN*` premise was refuted.
 - [ ] 0.3 Opus adversarial review of the change and of D2 (not a CLI subcommand), D8 (the args-file write under
   "Ask me", open question 7) and D11 (runs no longer told HTTP). Record it in
   `spec-queue/tracks/reviews/`, and apply or answer each finding before any APPROVED row.
@@ -42,7 +50,7 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   "mcp_servers":[...]}` line sets `ParsedLine.harness_mcp_status`:
   - `connected` / `failed` for those statuses;
   - `absent` when there is no `agentweave` entry;
-  - `failed` for an unknown status string;
+  - `None` for an unknown status string such as `pending` (R3: not a report; design D1);
   - `None` for a non-init line.
   Fixture shapes come from F340's table and from the raw PTY capture in
   `openspec/changes/archive/2026-09-13-an-absent-approver-is-not-named/evidence/a-hub-plain-raw-pty.txt`.
@@ -51,7 +59,10 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - The listed names equal the tools `test_mcp_server_stdio_surface.py` reads over stdio, minus
     `approve_tool_call`.
   - A second run, with `PYTHONPATH` pointing at a `tmp_path` directory whose `fastmcp/__init__.py` raises
-    `ImportError`, still exits 0 (call mode does not import fastmcp; design D4).
+    `ImportError`, still exits 0 (call mode does not import fastmcp; design D4). Spawn this one **without** `-I`:
+    isolated mode ignores `PYTHONPATH`, so it would pass whether or not call mode imports fastmcp (R3).
+  - A third run through the launcher (`-I`) with `PYTHONPATH` naming a directory whose `json.py` raises still
+    exits 0 (design D5, R3).
 - [ ] 1.4 Same file: call mode against a stdlib `http.server` stub Hub bound to `127.0.0.1:0` in a thread, with
   `HUB_URL` and `AW_RUN_TOKEN` in the child's env.
   - `create_task` with an args file → the stub saw `POST /api/v1/agent-actions/tasks`, `Authorization: Bearer
@@ -100,10 +111,21 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     - `Aw-tool …` in Bash;
     - a `Write` of `.agentweave/calls/x.py`;
     - a `Write` whose path is a symlink under `calls/` pointing out (skip on Windows without symlink privilege).
+  - R3 rows, all **fall through**:
+    - `mcp__other__run` with `{"command": "aw-tool list_tasks"}`, and a tool named `Shell` with the same input
+      (case 2 is `Bash`/`PowerShell` only);
+    - `aw-tool –list` (U+2013) and `aw-tool list_tasks .agentweave/calls/ａ.json` (fullwidth `ａ`)
+      (ASCII set);
+    - `aw-tool create_task -x.agentweave/calls/1.json` in PowerShell, with `-x.agentweave` a junction/symlink to
+      `.agentweave` where the platform allows (leading `-`);
+    - a `Write` with no path key, and `("Write", {"path": ""})`;
+    - `os.path.realpath` patched to raise `OSError` → `None`, and neither `_decide` nor `approve_tool_call` raises.
+  - R3 row, **allowed**: `aw-tool create_task .AgentWeave/Calls/1.json` on Windows (case-insensitive paths,
+    compared with `normcase`).
   - Fails today: every "allowed" row under `operator` calls `_ask_operator`.
 - [ ] 1.7 `hub/tests/test_tool_server_pin.py`: `PIN.launcher_dir()` (design D5):
-  - it holds `aw-tool.cmd` (CRLF, naming `sys.executable` and the pinned path, `--call %*`) and `aw-tool` (sh,
-    `exec … --call "$@"`);
+  - it holds `aw-tool.cmd` (CRLF, naming `sys.executable`, `-I` and the pinned path, `--call %*`) and `aw-tool`
+    (sh, `exec … -I … --call "$@"`);
   - both are rewritten when altered or deleted;
   - it sits under `<digest>/bin/<sha256(sys.executable)[:8]>`;
   - `prune_stale` removes it with its digest directory.
@@ -131,18 +153,15 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - `wait(run_id, 1.0)` returns True at once when `mcp_adapter_online_at` is already set;
   - it returns True within ~0.1 s when the announce route is called during the wait;
   - it returns False after the timeout otherwise;
-  - the announce route sets `harness_mcp_status = connected` and never downgrades it.
+  - the announce route sets `harness_mcp_status = connected` over NULL and `absent`, and never over `failed`;
+  - (R3, design D1 precedence) `record_harness_mcp_status(..., "failed")` after an announce leaves `failed`. An
+    announce after a harness `failed` leaves `failed`. An announce after a wait's `absent` gives `connected`. A
+    harness `connected` after a harness `failed` gives `connected`.
 - [ ] 1.11 `RunFacts` carries `plane_surface` and `harness_mcp_status` from the row. Extend the test that asserts
   `outside_workspace_writes` on the agent timeline / chat run facts (`grep -rn outside_workspace_writes
   hub/tests`), using the ordering the route returns.
-- [ ] 1.12 (group 6; **R2 recommends cutting group 6**, design D8 and open question 4)
-  `hub/tests/test_codex_appserver*.py`: `decide_approval` on a command approval whose command has the **captured
-  wrapped shape** (`test_codex_appserver.py:73`, `:141`), for example
-  `powershell -Command "aw-tool create_task .agentweave/calls/1.json"`. A bare `aw-tool …` fixture is a shape
-  Codex never sends, so it is not evidence (F190).
-  - under `posture=OPERATOR_POSTURE` → accept, not `ASK_OPERATOR`;
-  - a near miss → `ASK_OPERATOR` as today.
-  R2 read it: `params["command"]` is one string (`approval_subject`, `codex_appserver.py:145-151`).
+- ~~1.12~~ **Cut by R3 with group 6** (design D8, open question 4). Codex's `decide_approval` is not a caller of the
+  predicate. No Codex approval test is added.
 - [ ] 1.13 (group 7) `hub/tests/test_agent_default_permission_mode.py` (there is no `test_runner_commands*.py`): a non-yolo Claude
   command, with and without `mcp_command`, carries `Bash(aw-tool:*)` and `PowerShell(aw-tool:*)` in
   `--allowedTools`. A yolo command carries neither.
@@ -155,7 +174,14 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - in both cases, the prompt holds exactly one tool section, the one for the decided surface, and
     `.agentweave/context/<agent>.md` after the run holds that same section (design D9);
   - a raw `session.mcp_servers_loaded` with `agentweave` not connected, on a run told `shim`, emits **no**
-    `copilot_mcp_server_failed` error event (design D9, superseding slice 2's D10).
+    `copilot_mcp_server_failed` error event (design D9, R3's narrowing of slice 2's D10);
+  - (R3) the announce arrives, the run is told `mcp`, then a raw `failed` for `agentweave` arrives. The run is
+    recorded `failed`, slice 2's `copilot_mcp_server_failed` **is** emitted once, and no `plane_surface` status event
+    is stored;
+  - (R3) the `/mcp list` prompt's content is exactly one text block, `/mcp list`, and the model prompt holds exactly
+    one access-path notice (none came from the pre-spawn `notices`);
+  - (R3) a Copilot agent with `hub_client: "cli"` does not wait: no `/mcp list`, `shim`, status NULL;
+  - (R3) an interrupt during the wait ends the run within one poll interval, with status NULL.
 
 ## 2. The per-run record (design D1)
 
@@ -166,8 +192,10 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - bump the head assertions in `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`;
   - add the fields to `db/models.py` `Run` with a comment in the house style.
   - Verify: `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`.
-- [ ] 2.2 `record_harness_mcp_status(session, run_id, status)` in `launchability.py` (or a new small module). It
-  enforces "`connected` is final" and the unknown→`failed` mapping. The announce route (`agent_actions.py:459-483`)
+- [ ] 2.2 `record_harness_mcp_status(session, run_id, status, *, source)` in `launchability.py` (or a new small
+  module), with `source` one of `harness` / `announce` / `wait`. It enforces design D1's precedence (R3, replacing
+  "`connected` is final" and unknown→`failed`). Callers outside the announce route call it inside a `try` that logs,
+  because a failing record must never fail a run. The announce route (`agent_actions.py:459-483`)
   writes the stamp and the status in one commit, then calls `mcp_announce.notify(run_id)`. If either raises, the
   route returns 500 and writes nothing (design D1).
 - [ ] 2.3 `hub/hub/mcp_announce.py`: the per-run event registry and `wait(run_id, timeout)`, which checks the row
@@ -176,10 +204,11 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   `latest` and to return `mcp` | `shim`. Update the call at `agent_trigger.py:1107-1112`. Tests 1.1 and 1.9 pass.
 - [ ] 2.5 Claude: `ParsedLine.harness_mcp_status` and the `system`/`init` branch in `parse_claude_line`. The claude
   run loop (`agent_trigger.py` ~`:2451-2560`, `parse_line` consumer) records it through 2.2 when the run was given
-  MCP. Test 1.2 passes.
+  MCP, inside a `try` (design D1, R3). Test 1.2 passes.
 - [ ] 2.6 Codex app-server (R2 settled open question 3):
   - in `run_turn`'s `mcpServer/startupStatus/updated` branch (`codex_appserver.py:1162-1183`), when
-    `name == own_server_name`, map `ready` → `connected` and `failed` → `failed`, through a new callback into 2.2;
+    `name == own_server_name`, map `ready` → `connected` and `failed` → `failed`, through a new callback into 2.2.
+    The callback never raises out of `run_turn` (design D1, R3);
   - the existing `failed` error event is unchanged;
   - no status leaves the run untested;
   - test: extend `TestRunTurnMcpStartupFailure` (`test_codex_appserver_run_turn.py:555`) with a `ready` case.
@@ -247,21 +276,27 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     constructor (`agent_trigger.py:1306`), which comes after the prompt.
 - [ ] 5.4 Copilot, in slice 2's adapter and transport:
   - `tests_mcp_before_first_prompt = True`;
-  - the transport waits with `mcp_announce.wait` after `session/new` / `session/load`, sends `/mcp list` on
-    timeout, then calls `render_surface(surface)` and sends `session/prompt`;
+  - the transport waits with `mcp_announce.wait` after `session/new` / `session/load`, **only when the run was
+    given the server**, honouring `should_interrupt`. On timeout it sends `/mcp list` as a bare single text block,
+    then calls `cb.render_surface(surface)` (an `RpcCallbacks` field, total) and sends `session/prompt`;
+  - the pre-spawn `notices` omit `access_path_notice` for such a runner (`agent_trigger.py:1173`), because
+    `render_surface` supplies it (design D9, R3);
   - the pre-spawn `per_turn` block is rendered with `include_tool_surface=False` (slice 2's agent file never
     carried the section);
   - `render_surface` returns the notice and the section, and rewrites `.agentweave/context/<agent>.md` with the
     section for the decided surface (design D9);
   - `mcp_announce.wait` is total: a failing row check counts as "not yet";
-  - slice 2's `copilot_mcp_server_failed` error event is not emitted. The non-connected status becomes 5.5's
-    event instead;
-  - `map_events` passes `session.mcp_servers_loaded` / `mcp_server_status_changed` entries for `agentweave` to 2.2
-    (`connected` only upgrades) and stores any other status as a diagnostic;
+  - slice 2's `copilot_mcp_server_failed` error event is suppressed for a run told `shim` and kept for a run told
+    `mcp` (design D9, R3);
+  - `map_events` passes `session.mcp_servers_loaded` / `mcp_server_status_changed` entries for `agentweave` with
+    status `connected` or `failed` to 2.2 as `source="harness"`, and stores any other status as a diagnostic;
   - `copilot.exe`'s env per 5.1.
   Test 1.14 passes.
 - [ ] 5.5 The `plane_surface` status event, once per run, when a run given MCP is recorded `absent` or `failed`
-  (quoting the `/mcp list` line on Copilot, bounded by `_truncate_utf8`). Test 1.14 (event half) passes.
+  (quoting the `/mcp list` line on Copilot, bounded by `_truncate_utf8`). Its wording follows the run's
+  `plane_surface` (design D12, R3). It is not emitted where the runner's own failure event states it: Codex
+  `failed`, and Copilot told `mcp`. Test 1.14 (event half) passes. Add a Claude case beside 1.2's consumer test: a
+  run told `mcp` whose `init` omits the server gets the "although the run was told to use it" wording.
 
 ## 6. The approver recognises the call command (design D8)
 
@@ -276,7 +311,9 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 - [ ] 6.2 Slice 2's ACP permission handler calls `_hub_own_call(..., workspace=<run work dir>)` before `_decide` or
   the card, in every posture, on its normalised `(tool_name, tool_input)`. It reports the allow like any other
   decision (`on_decision`, if `a-run-records-that-its-calls-were-allowed` has landed).
-- [ ] 6.3 (severable) Codex's `decide_approval`: the command-approval branch accepts on `_hub_own_call` before the
+- ~~6.3~~ **Cut by R3** (design D8, open question 4). The original text is kept below for the record. The cut's
+  consequences are already applied: 1.12 dropped, D8's Codex caller struck, the sandboxing requirement narrowed.
+  Codex's `decide_approval`: the command-approval branch accepts on `_hub_own_call` before the
   posture branches (imported from `hub.mcp_server`; the Hub side may import it, as `agents.py:1016` already does).
   Test 1.12 passes.
   - **R2 recommends cutting** (design D8, open question 4). The approval's command is wrapped, and the Codex shell
@@ -342,7 +379,10 @@ SQLite reads of the trial profile's database.
 - [ ] 9.7 **Claude, F340** (Haiku, 2 turns). A Claude agent whose runner flags carry `--settings
   '{"deniedMcpServers":[{"serverName":"agentweave"}]}'`. F340 measured its `init` omitting the server; F299 says
   the run then dies at its first approval-needing call, so the prompt needs none: *"Reply with the word ok."*
-  Expect `absent`. The second turn, *"Reply ok."*, reads the shim notice in its prompt (read the stored prompt).
+  Expect `absent`, and one `plane_surface` status event with the wording for the surface the first turn was told.
+  The second turn, *"Reply ok."*, is recorded `plane_surface = shim`, and its `.agentweave/context/<agent>.md`
+  holds the `aw-tool` tool section. R3: the Hub stores no composed prompt (`agent_trigger.py:1194` builds it,
+  `:1217`/`:1403` pass it, and `Run` has no prompt column), so "read the stored prompt" could not be done.
 - [ ] 9.8 **Claude, F301** (group 7; Haiku, 1 turn). A Claude agent with `config.hub_client = "cli"`: *"Create an
   AgentWeave task titled S3-F301, then stop."* Expect the task created through `aw-tool` with no denial.
   - If it holds, F301 is closed for Claude.

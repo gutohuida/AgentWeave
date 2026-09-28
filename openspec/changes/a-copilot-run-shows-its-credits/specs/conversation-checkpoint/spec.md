@@ -14,7 +14,8 @@ point for that agent, and the lowering SHALL be stated wherever the threshold is
 NOT be refused, because a project's threshold is shared by agents on runners that compact at
 different points. A notes point that is not below the lowered threshold SHALL be lowered with it.
 A threshold expressed in tokens SHALL also be treated as crossed once the reading's proportion
-reaches the runner's final-warning point.
+reaches the runner's final-warning point. A notes point expressed in tokens SHALL likewise be treated
+as reached once the reading's proportion is ten points below that final-warning point.
 
 #### Scenario: A Copilot agent is warned before Copilot compacts
 
@@ -43,6 +44,13 @@ reaches the runner's final-warning point.
   involve the operator, had its warning dismissed
 - **AND** its context reaches 77%
 - **THEN** it is warned again, and that warning cannot be dismissed
+
+#### Scenario: A token notes point beyond the window is still reached
+
+- **WHEN** an agent bound to a runner that compacts at about 80% has a token threshold and a token
+  notes point that its reading has not reached
+- **AND** the reading's proportion reaches 67%
+- **THEN** the agent is asked for its notes before the checkpoint
 
 #### Scenario: A token threshold beyond the final-warning point still fires in time
 

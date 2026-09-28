@@ -17,7 +17,9 @@ would allow it.
 Under Edit files such a call is refused, as a call to any server other than the Hub's own is. Under
 full access it is allowed, as every call is. Under Ask me it goes to the operator, as every call does.
 
-Where the server is enabled and fails to start, the run SHALL record that it is unavailable.
+Where the server is enabled and Copilot reports it failed, needs sign-in, or was disabled, stopped
+or not configured, the run SHALL record that it is unavailable. A server Copilot reports as still
+starting SHALL NOT be reported as unavailable.
 
 The setting SHALL be presented only for an agent bound to a `copilot` runner, and SHALL show the
 value stored for that agent.
@@ -40,8 +42,13 @@ value stored for that agent.
 
 #### Scenario: A failed server is reported
 
-- **WHEN** the GitHub server is enabled for a Copilot agent and does not start
+- **WHEN** the GitHub server is enabled for a Copilot agent and Copilot reports that it failed
 - **THEN** the run's stream records that it is unavailable
+
+#### Scenario: A server still starting is not reported
+
+- **WHEN** the GitHub server is enabled and Copilot reports it as still starting
+- **THEN** nothing is recorded about it being unavailable
 
 #### Scenario: The setting appears only for Copilot agents
 

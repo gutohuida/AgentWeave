@@ -12,6 +12,11 @@ at every cited line (a 4-line docstring swap in `worker.py:164-167` shifts nothi
 below hold on `ef55e6f` unless marked. A site that an unbuilt ORDER change will edit is marked
 **(rebase at IMPL: `<change>` unbuilt at R2)**, with what that change's design says it will leave.
 
+**R3 (2026-09-28) re-derived on master `fc33ff9`.** `git diff --stat ef55e6f fc33ff9 -- hub/` is empty, so every
+`ef55e6f` citation holds. The six unbuilt dependencies are still unbuilt; R3 checked that each one's tasks really
+edit the site R2 marked (they do; round log). The contract the later slices build on is the table
+**"Contract for slices 2–5"** at the end of D16. Where an R2 statement below conflicts with that table, the table wins.
+
 ## What is verified, and about what
 
 This change touches no Copilot code, and its proof is about Claude and Codex only.
@@ -65,6 +70,17 @@ the *dispatch*, not the code it dispatches to.
 `launchability`, `worker`, `conversation_titles`, `api/v1/agent_trigger`, `api/v1/agents` and `api/v1/runners` import
 `runner_adapters`. Nothing `runner_adapters` imports may import it back. Task 2.1 adds a test for that.
 
+**R3, the graph as it stands (read, then run).** The module-level internal imports are:
+`runner_commands → model_catalog`; `runner_parsing → model_catalog, runner_events`; `runner_events → workspace_writes`;
+`codex_appserver → model_catalog, pty_runner, runner_commands, runner_events, subprocess_windows` (`codex_appserver.py:39-53`);
+`pty_runner → subprocess_windows`. `model_catalog`, `workspace_writes`, `file_mentions` and `subprocess_windows` import
+no `hub` module. `hub/__init__.py` imports only `importlib.metadata`. Importing all seven named modules in a fresh
+`py -3.11` loads exactly nine `hub.*` modules, and none of `hub.db`, `hub.api`, `hub.worker`, `hub.launchability`,
+`sqlalchemy` or `fastapi`. So there is no cycle today, and `runner_adapters` on top of them adds none.
+**One edge already exists that constrains this change:** `codex_appserver → runner_commands` (`:41`, for
+`OPERATOR_POSTURE`). So `runner_commands` must never import `codex_appserver`. R2's D12 had it do exactly that; it is
+corrected there.
+
 ## D2 — The table is `ADAPTERS`; `RUNNER_CLIS` and the database constraint stay, bound to it by a test
 
 `RUNNER_CLIS = ("claude", "codex")` (`db/models.py:311`) stays where it is. The runners table carries
@@ -108,15 +124,15 @@ docstring states its contract.
 | **`catalog_provider`** | `ClassVar[str]` | The `CATALOG` key whose models and controls this runner renders. It replaces `catalog_provider_for_runner`. | `"claude"` | `"codex"` |
 | **`launchability`** | `(agent: str, config: Mapping) -> LaunchVerdict` | Is the binary present, and is the harness authorised? Same keys as `probe_agent` returns today (`launchability.py:135-142`). It must not raise. | `probe_binary` only (today's non-proxy path, `:91-99`) | same |
 | `collaboration` | `(flags: Sequence[str], *, yolo: bool) -> tuple[bool, Optional[str]]` | Can a triggered run collaborate? It is called only for a bound, runnable agent whose Hub address is known (`agents.py:239-265`). **R2:** `a-runner-that-cannot-collaborate-says-so-where-it-is-bound` (unbuilt at R2) moves only the *display* (UI `RunnerPicker`, `AgentCard` deleted) and edits `get_agents_launchability`'s docstring (its task 2.3); the Hub-side verdict stays in this block, so only a docstring-sized line shift is expected **(rebase at IMPL: that change unbuilt at R2)**. `flags` are the runner's **raw** flags, sentinels included. | `(True, None)` | today's `agents.py:249-261` branch, text unchanged |
-| `guard_env` | `(proc_env: Optional[dict], env_vars: Mapping) -> Optional[dict]` | Strips ambient variables that would silently redirect this harness's auth or endpoint. It runs last in `resolve_agent_env`. | today's `ANTHROPIC_BASE_URL` guard (`launchability.py:190-194`) | identity |
+| `guard_env` | `(proc_env: Optional[dict], config: Mapping) -> Optional[dict]` | Strips ambient variables that would silently redirect this harness's auth or endpoint. It runs last in `resolve_agent_env`, and receives the same `config` that function did. It must not raise (D15). **R3:** R2 passed `env_vars`. Slice 5 needs the runner's `provider_config` there (its D7: set `COPILOT_PROVIDER_*` or strip them), which it adds to that `config`, so the member takes the whole mapping. Claude's guard reads `config.get("env_vars") or {}` itself, exactly as `launchability.py:157` does. | today's `ANTHROPIC_BASE_URL` guard (`launchability.py:190-194`) | identity |
 | `transport_sentinels` | `ClassVar[tuple[str, ...]]` | Flags that select this runner's transport. The trigger strips the **union over every adapter** from argv, whichever runner is spawned. Today the Codex sentinels are stripped from every runner's flags, a Claude runner's included (`agent_trigger.py:1209-1211`), and a per-adapter strip would stop doing that for Claude. | `()` | `TRANSPORT_SENTINELS` (`codex_appserver.py:76`) |
 | `transport` | `(flags: Sequence[str]) -> StreamTransport \| RpcTransport` | The transport a run with these **raw** flags uses (before the sentinel strip: a stripped list would send every `--no-app-server` runner to app-server; `test_agent_trigger.py:2491`, `test_codex_exec_argv_never_carries_a_transport_sentinel`, fails if the trigger passes stripped flags, because `PipeSession.spawn` is then never called). | `ClaudeStreamTransport` | `CodexAppServerTransport` unless `APP_SERVER_OPT_OUT_FLAG in flags`. **R2:** this is `codex_appserver.uses_app_server`'s body (`:79-89`) minus its `runner_cli != "codex"` guard (`:85`), which the adapter lookup replaces. `uses_app_server` is **deleted**: its two callers (`agent_trigger.py:1210`, `agents.py:253`) read `adapter.transport(flags).kind` / `adapter.collaboration`, no test imports it, and its `!= "codex"` would fail task 4.4 |
-| **`decide_posture`** (at rest) | `posture_at_rest(axes: AccessAxes, *, yolo: bool) -> str` | The posture a run gets when no override states one. It reads `axes.approvals`, not the tool surface (D4). **R2:** `the-permissions-pill-shows-the-posture-the-run-gets` (unbuilt at R2) adds `runner_commands.posture_at_rest(provider: str, access_path: str, yolo: bool) -> str` (its D1), read by `build_command` at `:238-242` and by a new agents-list serializer field pair `permission_mode_at_rest` / `permission_mode_built_in` (its D2/D3, `agents.py:595-615`, via a new `launchability.agent_config(session_data, agent_name, agent_config)` merge helper). This member replaces that function; the list route then computes `get_adapter(bound_runner.cli).posture_at_rest(resolve_access_axes(adapter, hub_client=…, flags=bound_runner.flags), yolo=…)`, and `None` for no adapter where that change says `null` for an unknown cli **(rebase at IMPL: the-permissions-pill-shows-the-posture-the-run-gets unbuilt at R2)**. | `workspace` if `approvals != "none"`, else `acceptEdits`; `bypassPermissions` if `yolo` | `acceptEdits` (that change's D4(c) and task 1.3: *"a Codex-bound one reads `acceptEdits`"*; `_codex_posture(None)` is the default pair, `agent_trigger.py:2926-2952`); `bypassPermissions` if `yolo`, which that change's `yolo` column states for Claude only — R3 confirms the Codex yolo value against its built function |
+| **`decide_posture`** (at rest) | `posture_at_rest(axes: AccessAxes, *, yolo: bool) -> str` | The posture a run gets when no override states one. It reads `axes.approvals`, not the tool surface (D4). **R2:** `the-permissions-pill-shows-the-posture-the-run-gets` (unbuilt at R2) adds `runner_commands.posture_at_rest(provider: str, access_path: str, yolo: bool) -> str` (its D1), read by `build_command` at `:238-242` and by a new agents-list serializer field pair `permission_mode_at_rest` / `permission_mode_built_in` (its D2/D3, `agents.py:595-615`, via a new `launchability.agent_config(session_data, agent_name, agent_config)` merge helper). This member replaces that function; the list route then computes `get_adapter(bound_runner.cli).posture_at_rest(resolve_access_axes(adapter, hub_client=…, flags=bound_runner.flags), yolo=…)`, and `None` for no adapter where that change says `null` for an unknown cli **(rebase at IMPL: the-permissions-pill-shows-the-posture-the-run-gets unbuilt at R2)**. | `workspace` if `approvals != "none"`, else `acceptEdits`; `bypassPermissions` if `yolo` | `acceptEdits` (that change's D4(c) and task 1.3: *"a Codex-bound one reads `acceptEdits`"*; `_codex_posture(None)` is the default pair, `agent_trigger.py:2926-2952`); `bypassPermissions` if `yolo`. **R3, from code:** that is what a yolo Codex run gets on both transports: app-server starts `danger-full-access`/`never` for `yolo` with no posture (`codex_appserver.py:235-236`), `exec` gets `--dangerously-bypass-approvals-and-sandbox` (`runner_commands.py:343-344`), and `FULL_ACCESS_PERMISSION_MODE` is `"bypassPermissions"` (`model_catalog.py:184`). The permissions-pill change is still unbuilt at R3 and its design states `yolo` for Claude only; at IMPL the adapter reproduces the landed function's Codex value byte for byte, and if that value is not `bypassPermissions` the difference is filed as a finding, not changed here |
 | `mcp_tool_prefix` | `ClassVar[Optional[str]]` | How this harness addresses the Hub's MCP tools, when known. **R2:** `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` (unbuilt at R2) adds `CLAUDE_FAMILY_RUNNERS` in `runner_commands.py` (read by `build_command` at `:179`, its task 2.1), a `runner` parameter on `_render_hub_agent_context` (task 2.3), `tool_prefix` on `_tool_surface_lines`/`_mcp_lines` (task 2.2) and on `access_path_notice(access_path, tool_prefix="")` (task 2.4; on `ef55e6f` the renderer call is `agent_trigger.py:1123`, the notice `:1173`, `_render_hub_agent_context` `agents.py:1609`, `_tool_surface_lines` `:1508`, `_mcp_lines` `:1476`, `access_path_notice` `launchability.py:402`). After this change the trigger passes `tool_prefix = adapter.mcp_tool_prefix or ""` where that change tests `runner in CLAUDE_FAMILY_RUNNERS` and the described path is `"mcp"`. Equivalent, because the trigger's `runner` is `Runner.cli` (`:764`), so the set's `claude_proxy`/`native` members never occur **(rebase at IMPL: a-claude-run-is-told-its-agentweave-tools-by-their-full-names unbuilt at R2)**. | `"mcp__agentweave__"` | `None` |
 | `host_tool_note` | `ClassVar[Optional[str]]` | The sentence about the host's own similar-named tool. **R2:** that change renders it from a `host_tools_note: bool` argument set from `runner in CLAUDE_FAMILY_RUNNERS` (its task 2.2), with the text in `agents.py`. Here the text moves onto the adapter and the renderer takes `Optional[str]`, because slice 2 needs a different sentence for Copilot (its D16: *"Copilot has its own tools with similar purposes (such as its task tool)…"*); a bool cannot carry it **(rebase at IMPL: same change)**. | its `SendMessage` sentence | `None` |
-| `mcp_env_names` | `ClassVar[Optional[tuple[str, ...]]]` | Which run variables reach the MCP child. `None` means the child inherits the whole run environment. | `None` (`runner_commands.py:250-262` sets no `env`) | the five names at `runner_commands.py:322-328` and `codex_appserver.py:969-980`, declared once (D12) |
+| `mcp_env_names` | `ClassVar[Optional[tuple[str, ...]]]` | Which run variables reach the MCP child. `None` means the child inherits the whole run environment. | `None` (`runner_commands.py:250-262` sets no `env`) | the five names at `runner_commands.py:322-328` and `codex_appserver.py:969-980`, declared once as `runner_commands.CODEX_MCP_ENV_NAMES` (D12, R3) |
 | **`write_tool_kinds`** | `ClassVar[Mapping[str, str]]` | Tool name → the input key naming the file it writes, or `"changes[].path"`. It must be a subset of `workspace_writes.WRITE_TOOLS`, and disjoint from every other adapter's keys (D7). | `CLAUDE_WRITE_TOOLS` (`workspace_writes.py:39-44`) | `{CODEX_WRITE_TOOL: "changes[].path"}` (`:49`) |
-| **`one_shot`** | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]` | A no-tools, one-prompt invocation. The prompt is already neutralised for `@`. | today's `worker.py:142-146`, `conversation_titles.py:86-90` | `worker.py:147-153`, `conversation_titles.py:91-95` |
+| **`one_shot`** | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]` | A no-tools, one-prompt invocation. **R3:** it receives the prompt **raw** and neutralises it itself with `file_mentions.neutralise_file_mentions`, as both builders do today (`worker.py:146`, `:154`; `conversation_titles.py:90`, `:95`). R2's "the prompt is already neutralised" was wrong: no caller neutralises (`worker.py:454-459`, `conversation_titles.py:268-270`), so an adapter written to that contract would hand an agent-written `@path` to the CLI. `test_worker_at_mention.py` would catch it for the worker; task 1.3's golden now carries an `@` so both purposes are pinned. | today's `worker.py:142-146`, `conversation_titles.py:86-90` | `worker.py:147-153`, `conversation_titles.py:91-95` |
 | `one_shot_takes_schema` | `ClassVar[bool]` | The worker must write an output-schema file first (`worker.py:450-453`). | `False` | `True` |
 | `parse_one_shot` | `(stdout: str) -> tuple[Optional[str], WorkerUsage, Optional[str]]` | The worker envelope. | `parse_claude_envelope` (`worker.py:238`) | `parse_codex_envelope` (`:271`) |
 
@@ -213,6 +229,26 @@ The fourth row is the one fact this makes visible: **for Codex app-server, axis 
 Copilot over ACP has the same shape (exploration, "The 09-20 question, answered"). So splitting the axes adds no new
 behaviour. It names a distinction that already exists.
 
+**R3, each row traced through the trigger (task 0.2).** The path on `fc33ff9`: `hub_client = config.get("hub_client")`
+→ `resolve_access_path` (`agent_trigger.py:1105-1106`; it returns `"cli"` only for `override == "cli"`, because both
+`RUNNER_CLIS` values are in `MCP_INJECTABLE_RUNNERS`, `launchability.py:230-249`) → `mcp_command` iff `"mcp"`
+(`:1195-1203`) → `uses_app_server(runner, raw flags)`, then the sentinel strip (`:1209-1211`) → `build_command`
+(`:1213-1229`) → the executor chosen by `use_codex_app_server` (`:1401`, `:2321`). "Default posture" is the posture
+with no `permission_mode` control and no agent `default_permission_mode` (which `:808-809` would put in the control).
+
+| Row | Server given | Approver | Default posture as given | Matches D4 |
+|---|---|---|---|---|
+| claude, unset/`mcp` | `--mcp-config` (`runner_commands.py:250-260`) | `--permission-prompt-tool mcp__agentweave__approve_tool_call` when defaulted (`:243-247`, `:269-273`); not under `yolo` | `workspace`, spelled `--permission-mode manual` (`:238-242`, `:277-282`); `yolo` → `--dangerously-skip-permissions` (`:275-276`) | yes |
+| claude, `cli` | none (`mcp_command` is `None`) | none: the flag sits inside `if mcp_command` (`:250`), so an operator-chosen `workspace`/`manual` cannot bring it back | `acceptEdits` (`:238-242`) | yes |
+| codex app-server, unset/`mcp` | `config["mcp_servers"]` on `thread/start` (`codex_appserver.py:969-983`) | RPC: every server request goes to `decide_approval` (`:1061`), and the operator is asked through `request_approval` under `OPERATOR_POSTURE` (`:1081`) | `_codex_posture(None)` is `None` → `workspace-write`/`on-request` (`:241`); an escalation is declined unless `yolo` (`:291`); own-server elicitations accepted (`:269`) | yes |
+| codex app-server, `cli` | none (`if mcp_command`, `:969`) | RPC, unchanged: `posture` and `request_approval` are passed whatever `mcp_command` is (`agent_trigger.py:3217-3243`) | as the row above, with no elicitation to answer | yes |
+| codex exec (`--no-app-server`) | the three `-c mcp_servers.agentweave.*` iff `mcp_command` (`runner_commands.py:317-329`) | none: `exec` has no approval flag (`:14-17`); Codex's posture control renders nothing to argv | `--sandbox workspace-write` (`:346`); `yolo` or Full access → `--dangerously-bypass-approvals-and-sandbox` | yes |
+
+Two things the trace adds. First, on the Claude rows "approvals" means the channel **exists**, not that it is used: a
+`yolo` run keeps `mcp_permission_tool` on axis 2 and emits no approver flag, because `defaults_to_approver` requires
+`not yolo` (`runner_commands.py:243-247`). `posture_at_rest` then reads `yolo` first. Second, `hub_client: "auto"` counts as unset: only
+`"cli"` moves axis 1 (`test_launchability.py:543`), and task 1.6 carries that row.
+
 **Consumers after the change:**
 - `mcp_command` is materialised iff `axes.tool_surface == "mcp"`. Today that is `access_path == "mcp"`
   (`agent_trigger.py:1195-1203`).
@@ -227,9 +263,13 @@ behaviour. It names a distinction that already exists.
 `resolve_access_path` and `MCP_INJECTABLE_RUNNERS` are deleted (D5). `harness_has_honoured_mcp` is unchanged. Its
 permanent latch is F340, which belongs to slice 3.
 
-**Why `tool_surface` is not an adapter member in this slice.** Every adapter injects today, and slice 3 turns axis 1
-into a per-run detection (F340). An adapter-level `mcp_injectable` would be a boolean that is `True` everywhere now
-and wrong in shape later. Slice 3 owns axis 1's resolution. This slice only gives it a name and a place.
+**Why `tool_surface` is not an adapter member in this slice.** Every adapter injects today. An adapter-level
+`mcp_injectable` would be a boolean that is `True` everywhere. **R3 correction:** R1 and R2 said slice 3 turns axis 1
+into a per-run detection (F340). It does not. Slice 3 records per-run evidence (`harness_mcp_status`) and uses it only
+for what a run is **told** (`described_access_path`, which it widens to `"mcp"`/`"shim"`); axis 1 stays decided by
+`hub_client` alone, and nothing that decides containment reads the evidence (slice 3 design, *"What the run is given
+does not move"*, `:68-73`). So `resolve_access_axes` as written is the final rule for slices 1–5, and `AccessAxes.plane`
+keeps exactly `"mcp"`/`"cli"`: `"shim"` is a value of the *described* path, not of this axis.
 
 ## D5 — Which registries are deleted, and which are kept
 
@@ -313,7 +353,10 @@ and `_int_or_none` move to `runner_adapters/one_shot.py`. `worker.py` re-exports
 adapters must not (D1).
 
 The argv stays byte-identical: `worker` spells `"claude"`/`"codex"` literally (`:142`, `:147`) and the titler uses
-`cli` (`conversation_titles.py:87`, `:92`). Both are `adapter.binary`.
+`cli` (`conversation_titles.py:87`, `:92`). Both are `adapter.binary`. **R3:** the titler's `cli` is `runner.cli`
+(`conversation_titles.py:268-270`), never a resolved path, so `adapter.binary` is the same string. The wrappers pass
+the prompt **raw** and `one_shot` neutralises it, as the builders do today (D3). Slice 2's one-shot environment and
+title-text step are `one_shot_env` and `title_text` (D16), so neither spawn helper grows a runner branch.
 
 ## D9 — The two executors become runner-generic
 
@@ -338,8 +381,9 @@ The argv stays byte-identical: `worker` spells `"claude"`/`"codex"` literally (`
 ## D10 — Environment
 
 `resolve_agent_env(runner, config)` (`launchability.py:145-196`) keeps its `env_vars` resolution, which is generic,
-and ends with `adapter.guard_env(proc_env, env_vars)` when there is an adapter. The Claude guard is today's `:190-194`
-moved unchanged. Codex's guard is the identity. The per-run keys (`AW_*`, `HUB_URL`) and the strip list
+and ends with `adapter.guard_env(proc_env, config)` when there is an adapter (R3: `config`, not `env_vars`; D3). The
+Claude guard is today's `:190-194` moved unchanged, reading `env_vars` from `config` as `:157` does. `resolve_agent_env`
+has one caller, the trigger at `agent_trigger.py:849`, outside any `try`, so `guard_env` must not raise (D15). Codex's guard is the identity. The per-run keys (`AW_*`, `HUB_URL`) and the strip list
 (`agent_trigger.py:1243-1304`) stay generic.
 
 ## D11 — F325 becomes a declared value
@@ -361,12 +405,19 @@ F277). Task 6.2 files it.
 ## D12 — The Codex MCP env allow-list is declared once
 
 Today it is two literals with identical contents (`runner_commands.py:322-328`, `codex_appserver.py:973-979`). After
-this change it is one constant, `CODEX_MCP_ENV_NAMES`, in `codex_appserver.py`. `_build_codex_command` and `run_turn`
-both read it, and `CodexAdapter.mcp_env_names` points at it. The constant sits there rather than on the adapter
-because `runner_adapters` imports `codex_appserver`, and the reverse import would be a cycle (D1). It is the same list,
-so nothing changes. The omission of
+this change it is one constant, `CODEX_MCP_ENV_NAMES`, in **`runner_commands.py`** (R3). `_build_codex_command` reads
+it in place, `codex_appserver.run_turn` imports it on the line that already imports `OPERATOR_POSTURE` from there
+(`codex_appserver.py:41`), and `CodexAdapter.mcp_env_names` points at it.
+
+**R3 correction.** R2 put the constant in `codex_appserver.py`. Then `runner_commands` would import `codex_appserver`,
+which already imports `runner_commands` at module level (`:41`): a cycle. Run on a scratch copy of the nine modules
+with exactly that one import added, `import hub.runner_commands` fails with *"cannot import name 'OPERATOR_POSTURE' from
+partially initialized module 'hub.runner_commands'"*, and `import hub.codex_appserver` with the mirror message. The
+only acyclic home that both builders can read is `runner_commands`. It cannot sit on the adapter either, for R2's
+reason (`runner_adapters` imports both). It is the same list, so nothing changes. The omission of
 `AW_QUESTION_TIMEOUT`, `AW_DECISION_TIMEOUT`, `AW_WORKSPACE_DIR` and `AW_PERMISSION_POSTURE` (appendix B §12) is not
-fixed. It is listed in the open questions, because a declared list makes the gap visible in one line.
+fixed. It is listed in the open questions, because a declared list makes the gap visible in one line. **R3:** of the
+four, only `AW_QUESTION_TIMEOUT` changes what a Codex run does, and task 6.2 files it (open question 4).
 
 ## D13 — Context window: declared, and pinned to the parsers
 
@@ -405,6 +456,13 @@ becomes `base.probe_binary(binary, cli_override, name)`, and both paths call it,
   must not raise, a contract member that the conformance test exercises with a missing binary and with a pinned
   non-file override. An adapter that raised would make these routes answer 500 where today they answer a verdict.
   That is why "must not raise" is part of the contract.
+- (R3) `POST /agent/trigger` also calls `resolve_agent_env` (`agent_trigger.py:849`), outside a `try`. An adapter
+  `guard_env` that raised would be a 500 for every trigger of that runner, where today it cannot raise (dict
+  operations only, `launchability.py:157-196`). So `guard_env` must not raise; the conformance test calls it with an
+  empty config, with `env_vars` set, and with an ambient `ANTHROPIC_BASE_URL`.
+- (R3) `GET /agents/launchability` calls the collaboration verdict per agent in a loop (`agents.py:241-265`), with no
+  `try`. An adapter `collaboration` that raised would make the whole route a 500 instead of one agent's verdict, so it
+  must not raise either; `transport(flags)` and `resolve_access_axes` are pure over strings and lists.
 - The worker and the titler: `one_shot` returns argv and cannot raise on well-typed input. The worker's `OUTCOMES`
   (`worker.py:76-85`) are unchanged: no adapter is `unsupported_cli`.
 - `GET /model-catalog` (R2): `catalog_source` cannot raise (D2).
@@ -413,24 +471,123 @@ becomes `base.probe_binary(binary, cli_override, name)`, and both paths call it,
 - The RPC executor: `run_turn`'s allowed exceptions are exactly the tuple `agent_trigger.py:3244` catches. Anything
   else escapes, as it does today.
 
-## D16 — Members reserved for later slices (contract only, not added here)
+## D16 — Members reserved for later slices, and the contract slices 2–5 build on
 
-These are added by the slice that first reads them, so that no member exists without a caller:
+A member is added by the slice that first reads it, so that no member exists without a caller. **This design fixes its
+name and shape now**, and a consuming slice adopts them (R3, the ownership rule for the five concurrent rounds). R3
+re-read slices 2–5 as they stand at `fc33ff9` rather than trusting R2's gap list. Several of R2's gaps were already
+reconciled on the sibling side (slice 2's § *Slice 1 member names* uses `resume_session_id`, `mcp_tool_prefix` and
+`on_session`), and several of R2's reservations did not match what the sibling actually does.
 
-| Member | Slice | Contract |
+**Resolutions (R3):**
+
+- **Dropped, no slice reads them:** `hooks` (slice 5 D2 writes no hook file, and its table asks for this row to go);
+  `version_gate` (private to slice 2's ACP client and cached probe, its D12/D15); `models(live)` (slice 2 D13 declares
+  Copilot's models as a static `CATALOG` tuple, with no live source); `spend_from` and `quota_hold_from` (R2; slice 4's
+  ledger lives in `run_turn`); `shim_allowed` (R2; slice 3's predicate is in `mcp_server.py`); **per-run `tool_surface`
+  detection** (R3: slice 3 changes what a run is told, never axis 1; D4); **`RpcTurnRequest.provider_config`** (R3:
+  R2 reserved it for slice 5, but slice 5's own R2 routes the BYOK environment through `resolve_agent_env` →
+  `guard_env` and the model through `RpcTurnRequest.model`, its D7; so `guard_env` takes `config` instead, D3).
+- **Not a new `AccessAxes` value:** `"shim"` (R3). Slice 3 widens the *described* path (`described_access_path`,
+  `access_path_notice`, `_tool_surface_lines`) to `"mcp"`/`"shim"`/`"http"`; `AccessAxes.plane` stays `"mcp"`/`"cli"`
+  and slice 3 reads it as the given path (its D1: *"slice 1's `plane == "cli"`"*).
+- **Moved to the transport:** `tests_mcp_before_first_prompt`. Slice 3 wrote it on `RunnerAdapter`. It is a property
+  of how a turn is started (only an RPC transport can defer its prompt until an MCP status arrives), and D1's rule is
+  that what differs by transport sits on the transport. The trigger already holds `transport` where slice 3 reads it
+  (the context render, D4). A `ClassVar[bool]` on both transport ABCs, `False` by default; slice 3 sets it on the ACP
+  transport.
+- **Kept deferred, shape fixed:** `compaction_percent` (slice 4 D9 adds it unconditionally, with no base default,
+  in its task 3.1; nothing reads it before then); `write_native_files`, `agent_home`, `one_shot_env`, `title_text`,
+  `LaunchVerdict.verdict_pending` (slice 2); `render_surface` (slice 3); `agent_config` (slice 5).
+- **`catalog_provider` stays a `ClassVar[str]`.** Slice 5 notes it cannot vary per runner. It does not need to: the
+  controls a BYOK Copilot runner renders are Copilot's either way, and only the *model* differs. Slice 5's per-runner
+  model rule (its D7, four sites) is its own decision about models, not a catalog-provider lookup.
+- **`LEGACY_RUNNER_CLI["copilot"]` is deleted by slice 2** (D5). Slice 2 D15 keeps it "for the name". Once a
+  `CopilotAdapter` exists, `probe_agent` asks the adapter first for the string `copilot`, so the row is never read
+  again; the adapter's `binary` is the name. Slice 2 deletes the row with its env-token branch.
+- **Registries slice 2 extends** (`SUPPORTED_CLIS`, `_SUPPORTED_CLIS`, `_CATALOG_PROVIDER_BY_RUNNER`,
+  `SUPPORTED_RUNNERS`): slice 1 lands first and deletes them, so slice 2's "whichever exists at IMPL" resolves to the
+  adapter members. Its D14 `copilot` branches in the one-shot builders become `CopilotAdapter.one_shot`.
+
+### Contract for slices 2–5
+
+*Built* = slice 1 adds it with its Claude and Codex values. *Slice N adds* = the name and shape are fixed here, the
+member is added by that slice with the default stated, and slice 1's conformance test (task 1.5(g)) then covers it.
+
+**`RunnerAdapter`** (one per runner CLI; `abc.ABC`)
+
+| Member | Signature | Status | Used by |
+|---|---|---|---|
+| `name` | `ClassVar[str]` | built | 1, 2 |
+| `binary` | `ClassVar[str]` | built | 1, 2 |
+| `display_name` | `ClassVar[str]` | built | 1, 2 |
+| `catalog_provider` | `ClassVar[str]` | built | 1, 2, 5 (read only; see above) |
+| `launchability` | `(agent: str, config: Mapping) -> LaunchVerdict`; must not raise | built | 1, 2 (cached `CopilotProbe`), 5 (`config["provider_config"]`, from slice 5's `runner_probe_config`) |
+| `collaboration` | `(flags: Sequence[str], *, yolo: bool) -> tuple[bool, Optional[str]]`; must not raise | built | 1, 2 (`(True, None)`) |
+| `guard_env` | `(proc_env: Optional[dict], config: Mapping) -> Optional[dict]`; must not raise | built | 1, 2 (GitHub-token strip), 5 (`COPILOT_PROVIDER_*` set or strip) |
+| `transport_sentinels` | `ClassVar[tuple[str, ...]]` | built | 1, 2 (`()`) |
+| `transport` | `(flags: Sequence[str]) -> StreamTransport \| RpcTransport`, raw flags | built | 1, 2, 3 |
+| `posture_at_rest` | `(axes: AccessAxes, *, yolo: bool) -> str` | built (rebase at IMPL: the permissions-pill change) | 1, 2 |
+| `mcp_tool_prefix` | `ClassVar[Optional[str]]` | built (rebase at IMPL: the full-names change) | 1, 2 (`"agentweave-"`), 3 |
+| `host_tool_note` | `ClassVar[Optional[str]]` | built (rebase at IMPL: same) | 1, 2, 3 (also in the shim form) |
+| `mcp_env_names` | `ClassVar[Optional[tuple[str, ...]]]` | built | 1, 2 (`None`) |
+| `write_tool_kinds` | `ClassVar[Mapping[str, str]]` | built | 1, 2, 3 (restated in `mcp_server.py`, which cannot import adapters) |
+| `one_shot` | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]`; neutralises `prompt` itself | built | 1, 2 |
+| `one_shot_takes_schema` | `ClassVar[bool]` | built | 1, 2 |
+| `parse_one_shot` | `(stdout: str) -> tuple[Optional[str], WorkerUsage, Optional[str]]` | built | 1, 2, 4 (fills `WorkerUsage` from the capture) |
+| `one_shot_env` | `(purpose: Literal["worker", "title"]) -> Optional[dict]`; `None` = inherit the Hub's environment | slice 2 adds; base default returns `None` | 2 (its D14: `COPILOT_HOME=<worker home>`, token variables stripped; the new `env` parameter of `_run_worker_process` and `_run_titler`) |
+| `title_text` | `(stdout: str) -> str`, the text `title_from_output` reads | slice 2 adds; base default is the identity | 2 (its D14 R2: the title comes from the envelope's answer, not its last JSON line) |
+| `write_native_files` | `(project_id: str, agent: str, *, stable_context: Optional[str], model: Optional[str], effort: Optional[str], mcp_command: Optional[list[str]]) -> Optional[Path]`; raises only `OSError` | slice 2 adds; base default returns `None` and writes nothing | 2 (its D4 `ensure_copilot_home`, at agent create, PATCH, `POST /agents/request`, and before every spawn: `OSError` is logged at the first three and a 409 at the spawn) |
+| `agent_home` | `(project_id: str, agent: str) -> Optional[Path]` | slice 2 adds **only if** runner-agnostic code needs the path; otherwise it stays `copilot_home_path`, private | 2 |
+| `compaction_percent` | `ClassVar[Optional[int]]`, no base default | slice 4 adds (its task 3.1): Claude 95, Codex 95, Copilot 80 | 4 (`checkpoint_policy`, `AgentSummary.checkpoint_compaction_percent`) |
+
+**`StreamTransport`** (Claude; Codex `exec`). Built; no later slice adds one.
+
+| Member | Signature | Used by |
 |---|---|---|
-| `write_native_files(...)` | 2 (`ghcp-d2-native-files`) | Write the runner's own files into a Hub-owned home. **R2:** slice 2 designs this as `copilot_home.ensure_copilot_home(project_id, agent, *, stable_context, model, effort, mcp_command) -> Path` (its D4), called at agent create (`agents.py:731-733`), on a binding/charter/model PATCH, and **before every spawn** (a 409 on `OSError`). Those three call sites are runner-agnostic code, so under this change's requirement they reach it through an adapter member (a no-op for Claude and Codex), not a `cli == "copilot"` branch. |
-| `agent_home(agent) -> Optional[Path]` plus the env it sets (`COPILOT_HOME`) | 2 | A per-agent, Hub-owned configuration root. `None` for Claude and Codex. **R2:** slice 2 also needs it for **one-shot** calls (its D14: `COPILOT_HOME=<_worker home>`, token variables stripped), but `one_shot` returns argv only and `worker.py:349` spawns with the Hub's environment. Slice 2 adds the one-shot env to the contract. |
-| `version_gate(initialize_result) -> Optional[str]` | 2 | A refusal reason when the harness is older than the supported minimum. **R2:** slice 2 keeps it private to its ACP client (`COPILOT_MIN_VERSION`, its D12) and to its cached probe (D15); it need not be an adapter member. |
-| `models(live: Optional[Mapping]) -> Sequence[ModelDescriptor]` | 2 | Catalog models discovered at run time (Copilot's `availableModels`, Auto). |
-| `LaunchVerdict.verdict_pending` (optional key) | 2 | **R2, added.** Slice 2's cached, asynchronously refreshed probe returns `verdict_pending: True` before its first refresh (its D15). `LaunchVerdict` is `total=False`-compatible for it; `launchability` still must not raise or block. |
-| `RpcCallbacks.on_session_missing` | 2 | **R2, added.** Slice 2 D18 passes it for its D7 rebinding (`session/load` `-32002`). |
-| per-run `tool_surface` detection | 3 | Axis 1 resolved from evidence of *this* run (F340). It replaces D4's `hub_client`-only rule. **R2:** slice 3 widens `AccessAxes.plane` with a third value, `"shim"` (its `access_path_notice("shim")`, `_tool_surface_lines(access_path="shim")`), and hands the RPC transport a `render_surface(surface) -> list[str]` callable so the notice is rendered after the MCP announce (its D9). Both are additions to D4's types. |
-| `tests_mcp_before_first_prompt: ClassVar[bool]` | 3 | **R2, added** (slice 3 D9). `False` on Claude and Codex. |
-| ~~`shim_allowed(command) -> bool`~~ | 3 | **R2, removed.** Slice 3 puts the call-command predicate in `mcp_server.py`, runner-independent, called by `_decide`, `approve_tool_call`, slice 2's ACP handler and Codex's `decide_approval` (its D8, *Callers*). It is not an adapter member. |
-| ~~`spend_from`~~, ~~`quota_hold_from`~~ | 4 | **R2, removed.** Slice 4 keeps credits, premium requests and the quota reading inside a per-run `CopilotUsageLedger` that the Copilot transport's `run_turn` owns (its D2, D7-D8), delivered through `on_accounting` (D3, *run_turn's accounting contract*) and `TurnUsage.allowance`. What it needs from the executor is the run-end refusal branch `_execute_run` applies (`agent_trigger.py:2679-2745`); this change does **not** add it to `_execute_rpc_run` (it cannot fire for Codex, and this change is no-behaviour-change), so slice 4's task 5.3 does. |
-| `compaction_percent: ClassVar[Optional[int]]` | 4 | The point where the harness compacts by itself. Slice 4 D9's table: Claude 95 (`checkpoint_policy.py:24-28`), Codex 95 (INFERRED; keeps today's behaviour), Copilot 80 (DOCUMENTED). **R2:** kept deferred. Slice 4 argues slice 1 should add it because `checkpoint_policy` reads it for every runner, but on `ef55e6f` nothing reads it (the thresholds are constants), so by this table's rule slice 4 adds it, which slice 4's own fallback (its task 3.1) already provides for. |
-| `hooks` | 5 | Hub-owned hook definitions written by `write_native_files`. **R2:** slice 5 also reads a runner-level `provider_config` (BYOK) in Copilot's spawn argv and in `launchability` (its design `:286`, `:302`); that is a `RpcTurnRequest` field slice 5 adds. |
+| `kind` | `Literal["stream"]` | 1 |
+| `spawn_kind` | `ClassVar[Literal["pty", "pipe"]]` | 1 |
+| `build_launch` | `(req: LaunchRequest) -> list[str]`; raises only `UnsupportedRunnerError` | 1 |
+| `inject_mcp` | `(mcp_command: list[str], *, yolo: bool) -> list[str]` | 1 |
+| `instruction_channel` | `ClassVar[Optional[str]]` | 1 |
+| `approval_channel` | `(tool_surface: str) -> Literal["mcp_permission_tool", "none"]` | 1 |
+| `map_events` | `(line: str, *, model: Optional[str]) -> ParsedLine`; must not raise | 1 |
+| `usage_from` | `(*, session_id: str, env: Optional[dict], model: Optional[str]) -> Optional[AccountingSample]` | 1 |
+| `context_window_source` | `ClassVar[Literal["reported", "catalog"]]` | 1 |
+| `tests_mcp_before_first_prompt` | `ClassVar[bool] = False` | 3 (reads it; always `False` here) |
+
+**`RpcTransport`** (Codex `app-server`; slice 2's ACP)
+
+| Member | Signature | Status | Used by |
+|---|---|---|---|
+| `kind` | `Literal["rpc"]` | built | 1, 2 |
+| `approval_channel` | `(tool_surface: str) -> Literal["rpc"]` | built | 1, 2 |
+| `instruction_channel` | `ClassVar[Optional[str]]` | built (`None` on Codex, F325) | 1, 2 (the agent file) |
+| `posture_for` | `(permission_mode: Optional[str]) -> Optional[str]` | built | 1, 2 (its D8 table) |
+| `permission_card_label` | `(method: str, subject: Mapping) -> str` | built | 1, 2 (**adopt `subject`**: slice 2 D8 still writes `(method)` and keys its table by `copilot:<kind>`; the kind is in the subject) |
+| `refusal_label` | `(method: str, subject: Mapping) -> str` | built | 1, 2 (same) |
+| `workspace_verdict` | `(method: str, subject: Mapping, workspace: Optional[str]) -> Optional[dict]`; must not raise | built if the ask-me-card change has landed, else that change adds it | 1, 2 |
+| `context_window_source` | `ClassVar[Literal["reported", "catalog"]]` | built | 1, 2 (`"reported"`) |
+| `inject_mcp` | `(mcp_command: list[str]) -> dict` | built | 1, 2 (`agentweave-mcp.json`'s content) |
+| `run_turn` | `async (req: RpcTurnRequest, cb: RpcCallbacks) -> TurnOutcome`; raises only the tuple `agent_trigger.py:3244` catches; honours `cb.should_interrupt()` and leaves no process behind | built | 1, 2, 3 (defers the prompt, calls `cb.render_surface`), 4 (owns the ledger, one whole-turn `on_accounting`) |
+| `tests_mcp_before_first_prompt` | `ClassVar[bool] = False` | slice 3 adds (moved here from `RunnerAdapter`, above) | 3 (`True` on the ACP transport) |
+
+**Value types**
+
+| Type | Fields | Status | Used by |
+|---|---|---|---|
+| `AccessAxes` | `tool_surface: "mcp"\|"none"`, `approvals: "mcp_permission_tool"\|"rpc"\|"none"`, `plane: "mcp"\|"cli"` | built, final | 1, 2, 3 |
+| `resolve_access_axes` | `(adapter, *, hub_client: Optional[str], flags: Sequence[str]) -> AccessAxes` | built, final (axis 1 is `hub_client`-only through slice 5) | 1, 3 |
+| `LaunchVerdict` | today's `probe_agent` keys; `verdict_pending: bool` optional (`total=False`) | key added by slice 2 | 1, 2 |
+| `LaunchRequest` | `build_command`'s parameters plus `axes` | built | 1 |
+| `RpcTurnRequest` | `cli, cwd, env, prompt, model, resume_session_id, yolo, mcp_command, config_overrides, permission_mode, workspace, extra_flags, restrict_spec_writes` | built | 1, 2 |
+| ″ | `per_turn_context: Optional[str] = None`, `stable_context: Optional[str] = None` | slice 2 adds (its D18); Codex ignores both | 2, 3 |
+| ″ | `agent_config: Mapping = {}` (as `field(default_factory=dict)`) | slice 5 adds; Codex ignores it | 5 (its D9: `copilot_github_mcp` reaches `build_acp_argv`) |
+| `RpcCallbacks` | `on_event, on_usage, on_accounting, on_session, should_interrupt, request_approval, on_refusal` | built | 1, 2, 4 |
+| ″ | `on_decision(method, subject, allowed)`, awaited after the response is sent | built if `a-run-records-that-its-calls-were-allowed` has landed, else that change adds it | 1, 2 |
+| ″ | `on_session_missing(old_id: str)` | slice 2 adds (its D7 rebinding) | 2 |
+| ″ | `on_raw_event(type: str, data: Mapping)` | slice 2 adds **only if** an executor-side reader exists at its IMPL (its D10 names slice 4; slice 4's R2 moved its ledger inside `run_turn`, which needs no callback) | 2, 4 |
+| ″ | `render_surface(surface: str) -> list[str]`, `None` by default | slice 3 adds (its D9); read only when the transport's `tests_mcp_before_first_prompt` is `True` | 3 |
 
 ## Tests that can fail
 
@@ -554,6 +711,72 @@ These are added by the slice that first reads them, so that no member exists wit
       `RpcTurnRequest` field that slice 5 adds. The other members it names (`map_events`, `decide_posture`,
       `catalog_provider`) are defined here.
 
+- **R3 (2026-09-28):** a second independent re-derivation on master `fc33ff9` (no `hub/` change since `ef55e6f`),
+  started from the code and D1/D4's decisions; R2's entry was read only afterwards, to compare.
+  - **Read (code):** `agent_trigger.py:570-628`, `:722-812`, `:849`, `:1090-1262`, `:1385-1420`, `:2343-2350`,
+    `:2449-2472`, `:2572-2590`, `:2916-2980`, `:3000-3014`, `:3179-3262`; `runner_commands.py:1-360`;
+    `launchability.py:10-20`, `:143-249`; `codex_appserver.py:28-92`, `:186-300`, `:652-662`, `:904-1100` (grepped for
+    posture, approval and MCP sites); `agents.py:230-268`; `conversation_titles.py:60-130`, `:225-285`;
+    `worker.py:34-53`, `:123-155`, `:318-332`, `:440-460`; `runner_parsing.py:669-700`; `file_mentions.py`;
+    `mcp_server.py` (the four env readers); the import lines of every module in D1's list and of `hub/__init__.py`.
+    Tests: `test_launchability.py:505-560`, `test_agent_trigger.py:2908-2937`, and greps for every symbol this change
+    deletes or renames. UI: `api/runners.ts`, `AgentCreateDialog.tsx`, `agentCreationUi.test.tsx`.
+  - **Read (changes):** slices 2–5's designs and tasks at `fc33ff9` for every member they name; the tasks of the six
+    unbuilt dependencies for the sites R2 marked.
+  - **Re-derived, task 0.2:**
+    - D4's five rows, traced through the trigger for server, approver and default posture (D4, R3 table). All five
+      hold. Two refinements written into D4: on the Claude rows axis 2 names a channel that *exists* (a `yolo` run
+      has it and emits no approver flag); `hub_client: "auto"` is unset.
+    - D1's import graph: no cycle today, verified by reading every import and by importing the seven modules in a
+      fresh interpreter (nine `hub.*` modules load, none reaching the database or `api`).
+    - R2's *(rebase at IMPL)* markings: each named change's tasks do edit the marked site: the collaborate change's
+      task 2.3 (docstring only), the full-names change's 2.1/2.2 (`CLAUDE_FAMILY_RUNNERS` at `:179`,
+      `host_tools_note: bool`), the permissions-pill change's 2.1/2.3, the ask-me-card change's 2.4
+      (`codex_appserver.workspace_verdict`), the allow-recording change's 2.4 (`on_decision` after `session.respond`),
+      and request-agent's 2.2 (drops `principal`, `yolo`, `hub_client`). All six are unbuilt.
+    - R2's counts: 17 `codex_run_turn` patches (9/3/3/1/1), 5 `build_command` capture patches and 12 importing test
+      files, all exact.
+  - **Where R3 disagrees with R2, and changed:**
+    1. **D12 made a cycle** (the one decision in D1's graph that was wrong). R2's `CODEX_MCP_ENV_NAMES` in
+       `codex_appserver.py`, read by `_build_codex_command`, needs `runner_commands → codex_appserver`, and
+       `codex_appserver → runner_commands` already exists (`:41`). Shown on a scratch copy: both import orders raise
+       `ImportError` (partially initialized module). The constant now lives in `runner_commands.py`. Task 2.3 changed.
+    2. **`one_shot`'s contract said the prompt arrives neutralised.** No caller neutralises: both builders do it
+       (`worker.py:146`, `:154`; `conversation_titles.py:90`, `:95`). An adapter built to R2's contract would pass
+       `@path` through. `test_worker_at_mention.py` catches it for the worker only. The contract is corrected, and
+       task 1.3's golden prompt now carries an `@`.
+    3. **Task 3.2 would break a whole test module.** Deleting `resolve_access_path` removes a name
+       `test_launchability.py:14` imports, so every test in that file fails to collect, not only the `kimi` one R2
+       listed. Three more tests call it (`:523`, `:543`, `:555`). Task 3.2 now moves them onto `resolve_access_axes`.
+    4. **Slice 3 does not make axis 1 per-run, and `"shim"` is not a value of `AccessAxes.plane`.** R2's D16 row said
+       both. Slice 3's design says the opposite (*"What the run is given does not move"*): it widens the described
+       path. D4 and D16 corrected; `resolve_access_axes` is final through slice 5.
+    5. **`RpcTurnRequest.provider_config` (R2, for slice 5) is dropped.** Slice 5's own R2 routes BYOK through
+       `resolve_agent_env` → `guard_env`, which receives no runner row. So `guard_env` takes `config` (D3, D10), and
+       slice 5 reads `provider_config` from it. Slice 5 also needs the agent's config at the ACP argv builder
+       (`copilot_github_mcp`, its D9): `RpcTurnRequest.agent_config`, slice 5 adds.
+    6. **R2's slice-2 gap list was partly stale.** Slice 2 already uses `resume_session_id`, `mcp_tool_prefix` and
+       `on_session` (its § *Slice 1 member names*). What it still lacks from this contract: `(method, subject)` on the
+       two label members (its D8 writes `(method)`), and names for its one-shot environment and title-text step,
+       now `one_shot_env` and `title_text`. Its `RpcTurnRequest.per_turn_context`/`stable_context` and
+       `RpcCallbacks.on_raw_event` are adopted as reserved fields.
+    7. **The `agent-capability-plane` requirement contradicted D4.** Its first line said the Hub "SHALL NOT derive one
+       [value] from another except where the runner's own approval channel requires it", but D4 derives `plane` from
+       `tool_surface` on every run, and slice 3 keeps that. The line now states the rule D4 actually implements: the
+       approval channel comes from the transport, withdrawn with the tool surface only where the tool server carries
+       it; plane access follows the tool surface. The scenarios were already right and are unchanged.
+    8. **Minor:** golden argv must use a fake `mcp_command` (open question 6); D15 gains `guard_env` (the trigger's
+       `:849`) and `collaboration` (the agents-list loop), both must-not-raise; D3's Codex `posture_at_rest` under
+       `yolo` confirmed from `_thread_policy` and the exec builder.
+  - **Contract resolutions** (D16): dropped `hooks`, `version_gate`, `models(live)`, per-run axis-1 detection and
+    `RpcTurnRequest.provider_config`; moved `tests_mcp_before_first_prompt` from `RunnerAdapter` to the transports (a
+    per-transport fact, D1's rule); kept `compaction_percent` deferred to slice 4, shape fixed; kept `catalog_provider`
+    a `ClassVar`; confirmed slice 2 deletes `LEGACY_RUNNER_CLI["copilot"]`. The final table is D16's *Contract for
+    slices 2–5*.
+  - **Right as written:** D2, D5's inventory, D6's seams, D9, D11, D13, D14, and D4's equivalence argument
+    (`approvals != "none"` iff `mcp_command` on Claude).
+  - **Open questions 4–7 answered** (below). 4 becomes a finding for task 6.2.
+
 ## Open questions for R2/R3
 
 1. **Rebase onto the night.** Seven changes edit the sites here (proposal, "Depends on"). Re-derive every line marked
@@ -592,11 +815,42 @@ These are added by the slice that first reads them, so that no member exists wit
    and whose plane it cannot execute is not ready. Task 6.2 appends this to F301 instead of filing a duplicate.
 4. **The Codex MCP env allow-list gap** (D12): file it as a finding, or leave it with slice 3, which decides what
    reaches the tool server?
+   **R3: file it (task 6.2); it is not slice 3's.** Slice 3 says in terms that it keeps the allow-list as this change
+   leaves it (its D5, *Codex*). Of the four missing names, only one changes behaviour on Codex:
+   - `AW_QUESTION_TIMEOUT`: the trigger sets it from the agent's `question_timeout_seconds` (`agent_trigger.py:1261-1262`),
+     and the Hub records a question's deadline from the same setting (`:617-628`). The tool that waits,
+     `mcp_server.ask_user`, reads it in the MCP child (`mcp_server.py:1005`), which on Codex sees only the five
+     forwarded names (`runner_commands.py:320-328`, `codex_appserver.py:973-979`). So a Codex agent's configured
+     question wait never reaches the wait: it waits the default 240 s while the Hub's record says the configured
+     value. Derived from code, not driven (Codex is undrivable).
+   - `AW_DECISION_TIMEOUT` does not matter on Codex app-server: the Hub answers its approvals itself and reads the value
+     from the run env (`_codex_decision_timeout`, `agent_trigger.py:2955-2974`).
+   - `AW_WORKSPACE_DIR` and `AW_PERMISSION_POSTURE` are read only by `approve_tool_call`/`_decide`
+     (`mcp_server.py:1560`, `:1705`), Claude's approver, which a Codex run is never pointed at.
 5. **Is D6's move worth its churn?** About eleven test files change one import line. The alternative is keeping
    `runner_commands.build_command` with a function-local import of `runner_adapters`. The repo accepts that pattern
    (`agent_trigger.py:2962`), but it leaves the cycle in place. R1 chose the move.
+   **R3: keep the move.** The churn is 12 import lines (`grep -l build_command hub/tests/*.py | xargs grep -l
+   runner_commands`, re-counted) and nothing else in those files. The alternative leaves `runner_commands →
+   runner_adapters` at call time on top of `runner_adapters → runner_commands` at import time: a cycle that task 2.1's
+   `sys.modules` test cannot see (it never calls `build_command`), and one more module that knows adapter lookup. The
+   operator's standing preference is the cleaner design over the smaller diff. The one seam tests need,
+   `hub.api.v1.agent_trigger.build_command` (5 patches, all in `test_agent_trigger.py`), is kept by name (D6).
 6. **The golden fixture size.** About 100 argv cases of about 15 strings each is roughly 40 KB. Confirm it is small
    enough to commit, or cut the cross product.
+   **R3: commit it whole.** 80 cross-product cases plus about 20 one-axis variations. At about 15 short strings each,
+   with the prompt a fixed short string, it is well under 100 KB, and a cut would drop exactly the combinations
+   (posture × MCP × yolo × spec restriction) where the Claude builder's branches interact. One requirement R2 did not
+   state: the capture must use a **fixed, fake** `mcp_command` (for example `["<PY>", "<SERVER>"]`), never
+   `sys.executable` and `tool_server.pinned_server_path()`. The Claude argv embeds both in `--mcp-config`'s JSON
+   (`runner_commands.py:251-260`), so a golden captured with real paths would pass on the machine that wrote it and
+   fail on CI. Task 1.1 now says so.
 7. **Ordering rule.** `GET /runners/launchability-by-provider` returns a dict keyed in `ADAPTERS` order. Task 1.5
    asserts the order the route returns. Check no UI test fixes a different order
    (`hub/ui/src/__tests__/support/modelCatalogFixture.ts`).
+   **R3: no consumer depends on this order.** The only reader is `useProviderLaunchability` (`hub/ui/src/api/runners.ts:66-74`),
+   used by `AgentCreateDialog.tsx`, which looks verdicts up by key (`launchability?.providers[provider]`, `:172`;
+   `launchability?.[entry.provider]`, `:84`) while iterating the **model catalog's** provider list. Its test mock lists
+   `codex` first (`agentCreationUi.test.tsx:13-17`), which is harmless for a keyed read. `modelCatalogFixture.ts:27`
+   is `GET /model-catalog`'s shape, `['claude', 'codex']`, the order `CATALOG` iterates, which D2's test pins. So task
+   1.5(b) stays as a pin on the route, and no UI test changes.

@@ -10,7 +10,8 @@ scratchpad (`s3/run1.log`, `run2.log`, `run3.log`, `tsrv.py`).
 **Line numbers.** Rebased by R2 on 2026-09-28 against master `ef55e6f`. Only five of the 2026-09-27 night
 ORDER's changes had landed then, and none of the ones this change depends on. A site that an unbuilt change will
 move is marked **(rebase at IMPL: `<change>` unbuilt at R2)**. The expected post-landing shape is in the round
-log's R2 entry.
+log's R2 entry. R3 (2026-09-28, master `fc33ff9`, whose only change since `ef55e6f` is R2's documents)
+re-checked every site it relies on and found no drift.
 
 ## D1. Detection is per run, recorded, and the latest test decides (F340)
 
@@ -34,11 +35,19 @@ The sources, per runner (all feed one writer, `record_harness_mcp_status(session
 
 | runner | `connected` | a negative | "untested" |
 |---|---|---|---|
-| any | the adapter's announce (`POST /mcp-adapter-online`, `agent_actions.py:459-483`). It keeps stamping `mcp_adapter_online_at` as today, and now also sets `connected`. | — | — |
-| claude | `init.mcp_servers[agentweave].status == "connected"` | `"failed"` → `failed`; no `agentweave` entry → `absent` | no `init` line seen (spawn failure, killed before init) |
-| copilot | announce within the wait (D9) | wait timed out → `absent` | the run ended before `session/new` returned |
+| any | the adapter's announce (`POST /mcp-adapter-online`, `agent_actions.py:459-483`). It keeps stamping `mcp_adapter_online_at` as today, and now also sets `connected` (subject to the precedence below). | — | — |
+| claude | `init.mcp_servers[agentweave].status == "connected"` | `"failed"` → `failed`; no `agentweave` entry → `absent` | no `init` line seen (spawn failure, killed before init). R3: an `init` status other than `connected`/`failed` (for example `pending`) is **not a report**; the announce, if any, decides that run |
+| copilot | announce within the wait (D9); a raw `connected` for `agentweave` | wait timed out → `absent`; a raw `failed` for `agentweave` → `failed` (R3; `failed` is VERIFIED in appendix A §D, every other raw string stays a diagnostic) | the run ended, or was cancelled, before the wait finished (R3); the run was not given the server (no wait, D9) |
 | codex (app-server) | announce; or `mcpServer/startupStatus/updated` for `agentweave` with status `ready` | the same notification with status `failed` → `failed` | no status for `agentweave` by run end (R2: the "completed with no announce → `absent`" row is dropped, open question 3) |
 | codex (exec) | announce | — | every other end |
+
+**R3: F340 is not closed for Codex `exec`, nor for a Codex app-server run that reports no status.** The latest-test
+rule skips untested runs. A runner with no negative source therefore keeps its last verdict, and that may be an
+old `connected`. That is today's latch, narrowed to those runs. `exec` is a live transport
+(`codex_appserver.uses_app_server`, `agent_trigger.py:1210`, opted into by a runner flag). Recording "completed
+with no announce → `absent`" would close it by guessing, and for Codex the guess is not the safe direction: a Codex
+run told `shim` points at a command whose shell may have no network (open question 4). So the rule is not added.
+`proposal.md`'s F340 line says so.
 
 R2: the Codex app-server source already exists. `run_turn` reads `mcpServer/startupStatus/updated`
 (`codex_appserver.py:1162-1183`; `McpServerStartupState` is `starting | ready | failed | cancelled`), and today
@@ -47,13 +56,40 @@ and `failed` for the Hub's own server name to `record_harness_mcp_status`. Wheth
 server that a policy removed is not known, so a Codex run with no status stays untested rather than guessed
 `absent`.
 
-Two rules make the record monotone and safe:
-- **`connected` is final for a run.** The announce is direct evidence that the harness started the program. A
-  later `absent` or `failed` from a slower source does not overwrite it. An `absent` or `failed` may be upgraded
-  to `connected` (a late announce, or Copilot's raw `session.mcp_servers_loaded` saying `connected`).
-- **Unknown vendor strings are not grounds.** Any `init` status other than `connected`/`failed` is stored as
-  `failed`. A raw Copilot status other than `connected` is recorded only as a diagnostic (D12), never as
-  grounds (F340's own requirement: *"A status string the Hub does not recognise must count as 'no grounds'"*).
+**Precedence, not "`connected` is final" (R3).** R1 and R2 made `connected` final, on the grounds that the announce
+is direct evidence that the harness started the program. That is what it proves, and no more.
+`_announce_adapter_online` runs first in `main()` (`mcp_server.py:2091-2094`), after the module's imports and
+**before** `mcp.run` answers `initialize`. So a harness that started the server and then failed the connection has
+already produced the announce. Examples are a handshake timeout, or a crash inside `mcp.run`. Claude's
+`init` then says `failed`, Codex's `startupStatus` says `failed`, and Copilot's raw event says `failed`.
+
+Under "`connected` is final", each such run was recorded `connected`, and the next Claude/Codex run was told MCP. Its
+own announce would again be final, so the next run would be told MCP too. That is F340's positive-only latch, rebuilt
+one level down, for exactly the "started but not usable" case. The rule is therefore a precedence over sources. The
+result is the same whatever order the sources arrive in:
+1. **The harness's own recognised report decides.** That is Claude `init` `connected`/`failed`/absent entry, Codex
+   `ready`/`failed`, and Copilot raw `connected`/`failed`. A later recognised report from the harness replaces an
+   earlier one; Copilot's `mcp_server_status_changed` can move a server twice.
+2. **Otherwise the announce decides `connected`.** It writes over NULL and `absent`, never over `failed`.
+3. **Otherwise Copilot's wait decides `absent`.** It writes only over NULL.
+
+One column suffices. `failed` can only come from a harness report, and a harness `absent` (Claude omitted the server)
+is never legitimately followed by an announce, because the process was not started. The one sequence this gets wrong
+is a Claude `absent` followed by an announce that something other than the harness posted. Anything holding the run
+token can post one: the model with `curl`, or by running the pinned file without `--call`. That makes one run's
+record `connected`, and the next run's own test corrects it. This is recorded, not guarded.
+
+**Unknown vendor strings are not reports.** An `init` status other than `connected`/`failed` is ignored, not stored
+as `failed`. R2's "store as `failed`" would, under this precedence, outrank a real announce. If Claude ever reports
+`pending` at `init` for a slow server, every run would then be recorded `failed` and told `shim` for ever. A raw
+Copilot status other than `connected`/`failed` is only a diagnostic (D12). F340's own requirement says: *"A status
+string the Hub does not recognise must count as 'no grounds'"*. An ignored string gives no grounds.
+
+**Recording never fails a run (R3).** Every writer (the Claude read loop, the Codex `run_turn` callback, and
+Copilot's `map_events`) calls `record_harness_mcp_status` inside a `try` that logs and continues. These run inside
+the executors, and there an exception fails the run or the turn (Codex: `run_turn` raises only the tuple
+`agent_trigger.py:3244` catches). A write that fails leaves the run untested, which is the safe direction. The
+announce route is the one exception: it has its own transaction (below).
 
 **The grounds.** Called at `agent_trigger.py:1106-1112` **(rebase at IMPL: slice 1 `each-runner-cli-is-one-adapter`
 unbuilt at R2.** There, `resolve_access_path` is deleted and the call reads `described_access_path(axes.plane, …)`
@@ -73,7 +109,7 @@ reading the given path or `axes.approvals`. Nothing that decides containment rea
 slice does **not** do. That is a note for slice 1's owner (R2 cross-slice gap 1).
 
 **The announce route, when what it calls raises.** `report_mcp_adapter_online` (`agent_actions.py:459-483`) writes
-the stamp and `harness_mcp_status = connected` in **one** commit. It calls `mcp_announce.notify(run_id)` only after
+the stamp and, by the precedence above, `harness_mcp_status = connected` in **one** commit. It calls `mcp_announce.notify(run_id)` only after
 that commit. If `record_harness_mcp_status` or the commit raises, the route returns 500 and writes nothing. The
 adapter swallows the failure (`_announce_adapter_online`, `mcp_server.py:2073-2088`, `contextlib.suppress`), and a
 Copilot waiter times out. So the run is recorded `absent` and told `shim`. That is a false negative, but it is in the
@@ -157,6 +193,9 @@ aw-tool --help
     `get_task` as the way to check. It does not say "failed", because the Hub may have committed the write.
 
   Nothing else is ever printed to stdout, so a model can parse it. Exceptions are not leaked as tracebacks.
+  R3: the output keeps `json.dumps`'s default `ensure_ascii=True`. PowerShell 5.1 decodes a native command's stdout
+  with the console code page, so non-ASCII text in a task title would otherwise arrive mangled. Escaped output is
+  pure ASCII, so it is identical in every shell.
 
 ## D4. One file, fastmcp not imported in call mode
 
@@ -178,8 +217,8 @@ else:
 import is added.
 
 **Call mode never announces (R2).** `_announce_adapter_online` (`:2073-2088`) runs only from `main()` (`:2091-2094`).
-It must stay there and must never run in call mode. The announce is the one `connected` source, and `connected` is
-final (D1). If a shim call announced, a run whose harness refused the MCP server would record `connected` the first
+It must stay there and must never run in call mode. The announce is the `connected` source for runs that have no
+harness report, and it outranks a Copilot wait's `absent` (D1). If a shim call announced, a run whose harness refused the MCP server would record `connected` the first
 time it used `aw-tool`, and every later run of the agent would be told MCP. That is F340's latch again, rebuilt out of
 the fix. Test 1.4 asserts the stub Hub never sees `POST /mcp-adapter-online` from call mode.
 
@@ -202,10 +241,21 @@ directory that is not the package root. It asserts that the names equal the fast
 - **Location.** `~/.agentweave/hub/tool-server/<digest>/bin/<exe>/`, where `<digest>` is the pin's digest and
   `<exe>` is `sha256(sys.executable)[:8]`. The launcher embeds the interpreter path, and two Hubs with the same
   server bytes but different Pythons must not rewrite each other's launcher. Two files:
-  - `aw-tool.cmd`: `@"<sys.executable>" "<pinned mcp_server.py>" --call %*`, with CRLF line endings.
-  - `aw-tool`: `#!/bin/sh` + `exec "<python, forward slashes>" "<pinned path, forward slashes>" --call "$@"`,
+  - `aw-tool.cmd`: `@"<sys.executable>" -I "<pinned mcp_server.py>" --call %*`, with CRLF line endings.
+  - `aw-tool`: `#!/bin/sh` + `exec "<python, forward slashes>" -I "<pinned path, forward slashes>" --call "$@"`,
     mode 0700 on POSIX. Git Bash on Windows runs it (VERIFIED today with a stand-in: `command -v aw-tool` found
     it, and argv arrived intact).
+  - **`-I` (R3).** Isolated mode ignores every `PYTHON*` variable (`PYTHONPATH`, `PYTHONSTARTUP`, `PYTHONHOME`,
+    …) and the user site, and it leaves the script's directory off `sys.path`. Call mode imports only the stdlib, so
+    it loses nothing. `-I` does not touch `os.environ`, so `AW_RUN_TOKEN` and `HUB_URL` still reach the shim.
+    Without `-I`, an earlier command in a persistent shell could set `$env:PYTHONPATH='.'` next to a `json.py` in
+    the workspace, and every later auto-approved `aw-tool` would run that file. Under "Workspace only", `_decide`
+    allows both the assignment and the write, because both name only workspace words. The server mode that the
+    harness spawns is unchanged.
+  - **Resolution, VERIFIED by R3** on PowerShell 5.1.26100 with both files in one directory first on `PATH`.
+    `Get-Command aw-tool -All` lists `aw-tool.cmd` first and the extensionless `aw-tool` second, and a bare
+    `aw-tool …` runs the `.cmd`. The extensionless file would be tried only if the `.cmd` were missing, and then
+    through its file association. The compare-and-rewrite below restores a deleted `.cmd` on the next trigger.
 - **Verified like the server.** `ToolServerPin` gains `launcher_dir()`. It is written with the same
   compare-and-rewrite and atomic replace as `path()` (`tool_server.py:39-56`), inside the Hub user's own
   directory (the existing requirement's shared-directory clause applies unchanged), and pruned with the digest
@@ -270,19 +320,36 @@ directory that is not the package root. It asserts that the names equal the fast
 **One predicate in `mcp_server.py`**, `_hub_own_call(tool_name, tool_input, *, workspace=None) -> Optional[str]`. It
 returns a reason (`"the Hub's own tools"`, the wording `_decide` already uses at `:1558`) when the call is the Hub's
 own, and `None` otherwise. `workspace` defaults to `AW_WORKSPACE_DIR`. R2: the keyword is required because two of
-its callers run in the **Hub** process, whose environment is not the run's. Those are slice 2's ACP handler and
-Codex's `decide_approval`. Slice 2's D8 gives `_decide` the same keyword for the same reason. It is true in exactly
-three cases:
+its callers run in the **Hub** process, whose environment is not the run's. Since R3 cut group 6 that caller is slice
+2's ACP handler alone. Slice 2's D8 gives `_decide` the same keyword for the same reason.
+
+**Total (R3).** The predicate never raises. Every `os.path.realpath`/`commonpath` failure, and any other exception,
+means `None`, which falls through. The reason is what each caller does when it raises:
+- `approve_tool_call` is a FastMCP tool, so an exception becomes a tool error that the harness must interpret;
+- slice 2's `decide_permission` answers `reject_once` on any client error (its D8, *"Every request is answered"*).
+
+A raising predicate would therefore turn a request that should have fallen through into a refusal. That is the one
+thing the rule promises never to do. A test patches `os.path.realpath` to raise `OSError` and asserts `None`.
+
+It is true in exactly three cases:
 
 1. `tool_name` starts with `mcp__agentweave__`. This moves today's check (`:1557-1558`, and `:1709-1710` in
    `approve_tool_call`) into the predicate unchanged. Slice 2 recognises its Copilot MCP requests itself, by
    server name from the raw `permission.requested` event or a `title` of `agentweave/<tool>` (its D8). It does not
    pass them through here.
-2. **A shell command that is exactly one call-command invocation.** The command text is lexed with the existing
-   `_lex` in the tool's dialect (`_TOOL_DIALECTS`, `:1072`; a tool of unknown dialect must satisfy **both**
-   readings, as `_decide` already requires). It must satisfy **all** of:
+2. **A shell command that is exactly one call-command invocation.** **R3: only for a tool named in
+   `_TOOL_DIALECTS` (`Bash`, `PowerShell`, `:1072`).** R1 and R2 accepted a tool of unknown dialect read both ways, as
+   `_decide` does. For `_decide` that is a stricter reading of a command it would judge anyway. For this predicate it
+   is a widening. Under "Ask me", a foreign MCP tool such as `mcp__other__run` with input `{"command": "aw-tool
+   list_tasks", "target": "…"}` would be allowed without a card, because its `command` key reads as a plain call.
+   The predicate cannot know what a foreign tool does with its other keys. Slice 2 judges every Copilot shell
+   request as `PowerShell`/`Bash`, so no caller loses a real case. The command text is lexed with the existing `_lex`
+   in that tool's dialect. It must satisfy **all** of:
    - **every character of the raw text is in a fixed plain set** (R2): ASCII letters, digits, `.`, `_`, `-`, `/`,
-     the space, and `\` in the PowerShell reading only. Any other character makes the predicate `None`. R1 listed
+     the space, and `\` in the PowerShell reading only. Any other character makes the predicate `None`. R3: the set
+     is an explicit ASCII `frozenset`, not `str.isalnum`, `str.isspace` or regex `\w`/`\s`. Those accept non-ASCII
+     letters, digits and spaces, and `_lex` itself splits at `char.isspace()` (`:1476`), which includes U+00A0 and
+     U+2028. R1 listed
      the forbidden characters instead (`; | & < > \n \r ` $ % * ?`), and that list missed grouping.
      `_ARGUMENT_ENDS` (`:1061`) splits arguments at `(` and `)`, so in PowerShell
      `aw-tool list_tasks (.agentweave/calls/1.json)` lexes to exactly the three words the rule accepts. PowerShell
@@ -297,11 +364,16 @@ three cases:
    - word 1 is `--list`, `--help`, or a name in the callable set (D3). The set is computed in the same module, so
      it cannot drift;
    - there is at most one more word. It must be a plain relative path (no `..` component, no leading separator,
-     no drive, no `~`), end in `.json`, and resolve with `os.path.realpath` against `workspace` to a file
-     inside `<workspace>/.agentweave/calls/`;
+     no drive, no `~`, **R3: not beginning with `-`**), end in `.json`, and resolve with `os.path.realpath`
+     against `workspace` to a file inside `<workspace>/.agentweave/calls/`, compared with `os.path.normcase` as
+     `_where` does (`:1113-1133`). The leading `-` is excluded because R3 measured that PowerShell 5.1 splits a
+     native argument that begins with `-` and contains a `.`: `aw-tool create_task -x.agentweave/calls/1.json`
+     reaches the program as `['create_task', '-x', '.agentweave/calls/1.json']`. The word the predicate judged is
+     then not the argv the program gets. It cannot do more than a usage error, but "exactly" should mean exactly;
    - there are no further words.
-3. **A file write whose every declared path is a `.json` file inside `<workspace>/.agentweave/calls/`**, resolved
-   the same way. A symlink out resolves out and fails. **R2 correction:** R1 said "file write" means the tool
+3. **A file write whose declared paths are all `.json` files inside `<workspace>/.agentweave/calls/`, and that
+   declares at least one** (R3: "every declared path" is vacuously true of none). The paths are resolved the same
+   way. A symlink out resolves out and fails. A write tool whose input carries a `command` key is not this case. **R2 correction:** R1 said "file write" means the tool
    kinds that slice 1's `write_tool_kinds` names. `mcp_server.py` cannot read that, because it is spawned
    standalone and imports only stdlib and fastmcp (`.claude/rules/mcp-server.md`). So the predicate restates
    Claude's write tools as `_HUB_OWN_WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit":
@@ -315,8 +387,8 @@ logic runs unchanged: the `workspace` posture's word-by-word `_decide`, or the o
 can only turn an "ask" or an "allow by `_decide`" into an "allow by standing", never a refusal into an allow
 that `_decide` would refuse *for a reason other than asking*.
 
-Case 2 is strictly narrower than what `_decide` already allows under `workspace`, which permits any shell
-command whose words resolve inside the workspace. So under `workspace` the predicate changes only the recorded
+Case 2 (limited to `Bash`/`PowerShell` since R3) is strictly narrower than what `_decide` already allows under
+`workspace`, which permits any shell command whose words resolve inside the workspace. So under `workspace` the predicate changes only the recorded
 reason. It changes behaviour only where someone would have been **asked**: the operator posture (`manual`, "Ask
 me"), and Copilot/Codex requests routed to a card.
 
@@ -340,7 +412,39 @@ widening:
   command's words when that command ran.
 
 It does mean the operator's approval of one innocuous-looking command can change what later unasked calls do. Say so
-in the Opus review rather than claim the predicate alone bounds it.
+in the Opus review rather than claim the predicate alone bounds it. R3 narrowed the residual by one class: an
+interpreter variable (`PYTHONPATH`, `PYTHONSTARTUP`) set earlier no longer changes what the launcher runs, because
+the launcher passes `-I` (D5). Aliases, functions, a user profile loaded by the shell, and a directory put ahead on
+`PATH` remain.
+
+**R3's attack on the allow-list (task 0.2).** Each attempt below was run against `_lex`/`_words` as they are
+(`mcp_server.py:1403-1505`) and against case 2 as now written. The PowerShell rows marked "measured" were run on
+PowerShell 5.1.26100, with stand-in launchers that print their argv.
+
+| attempt | outcome |
+|---|---|
+| `…; rm x`, `… && x`, `… \| x`, `… > f`, `… 2>&1`, a newline, CR | `;`, `&`, `\|`, `>`, `<`, the newline and CR are outside the set, so the result is `None` |
+| `(…)`, `{…}`, `$(…)`, `@(…)`, a backtick, `$env:X`, `${X}`, `%X%`, `!X!` | `(`, `{`, `$`, `@`, the backtick, `%` and `!` are outside the set |
+| `'create_task'`, `"…"`, a quote in the middle of a word, the PowerShell `--%` stop-parsing token | quotes and `%` are outside the set |
+| `,` (array), `=` (assignment prefix `X=y aw-tool`), `#` (comment), `~`, `*`, `?`, `[` | outside the set |
+| a tab, U+00A0, U+2028 (split by `_lex`'s `isspace`) | outside the set, which holds only the ASCII space |
+| U+2013 en dash in `–list`; U+2018 and U+201C smart quotes, which PowerShell treats as quotes; fullwidth letters | outside an ASCII set. Measured: `–list` reaches argv unchanged. These are the rows an `isalnum`/`\w` implementation would get wrong, so test 1.6 carries two of them |
+| `.\aw-tool`, `C:\…\aw-tool.cmd`, `\\host\share\aw-tool.cmd` (UNC) | word 0 is not exactly the name, so `None` |
+| `. aw-tool …` (dot-source), `& aw-tool …` | word 0 is `.`, or `&` is outside the set |
+| `aw-tool.cmd` in bash, `Aw-tool` in bash | refused (bash names are exact) |
+| `AW-TOOL.CMD --list` in PowerShell | allowed. Measured: it runs the launcher |
+| path `\\host\share\x.json`, `C:x.json`, `.agentweave\calls\..\..\x.json`, `.agentweave/calls/1.json:ads`, `…/1.json.` | leading separator, drive, `..`, `:` and suffix rules all give `None` |
+| path `-x.agentweave/calls/1.json` behind a junction `-x.agentweave` → `.agentweave` | before R3 it resolved inside `calls/`, and was measured to reach argv as two arguments. It is now refused by the leading-`-` rule |
+| path `.agentweave/calls/CON.json`, `NUL.json`, `COM1.json` | measured on this Windows 11 build: `realpath` keeps them inside `calls/`, and `open` raises `FileNotFoundError`, so they are ordinary names, not devices. Allowed, and harmless |
+| numeric-looking words (`1kb`, `0x10`, `1e3`) | measured: passed to the native command unchanged. None is a tool name or a `calls/` path anyway |
+| a foreign tool, `mcp__x__y` with `{"command": "aw-tool list_tasks", …}` | **allowed before R3** (unknown dialect, read both ways). Now `None`, because case 2 is limited to `_TOOL_DIALECTS` |
+| a Copilot `edit` request that names no path (its `write_powershell` input to a running shell) | **allowed before R3** if a caller asked "every path passes" of an empty list. Now it needs at least one path, and slice 2 already rejects it (its D8) |
+| `aw-tool create_task .agentweave/calls/1.json` after an earlier `$env:PYTHONPATH='.'` and a workspace `json.py` | **ran agent code before R3**, under an auto-approved call. Closed by `-I` (D5) |
+| after an earlier `Set-Alias aw-tool x`, `function aw-tool {…}`, or a `PATH` prepend | the same text runs something else. **Not closable by the predicate**: this is the recorded residual above |
+
+No attempt produced more than one plane call from text the predicate allows. Three produced something other than
+"exactly one invocation of the Hub's launcher": the foreign tool, the empty edit and the interpreter-variable
+poisoning. Each is closed above. The fourth, alias/function/`PATH`, is the residual.
 
 **Callers.**
 - `_decide`: the predicate is first, replacing the `mcp__agentweave__` line (`:1557-1558`).
@@ -353,8 +457,27 @@ in the Opus review rather than claim the predicate alone bounds it.
   `workspace=<run's work dir>`. R2 checked slice 2's D8 as currently written: it judges `kind:"execute"` as
   `_decide("PowerShell" if Windows else "Bash", {"command": rawInput.command})` and each `kind:"edit"` path as
   `_decide("Write", {"path": p})`. Those are exactly the names cases 2 and 3 read. Open question 6 is answered.
-- Codex's `decide_approval` (`codex_appserver.py:244-300`): **R2 found that this caller, as R1 wrote it, cannot
-  fire on Windows.** Codex's command approval carries the command *as its harness wrapped it*. The live captures
+  R3: for an `edit` request the handler allows by standing only when the request names at least one path and
+  `_hub_own_call("Write", {"path": p}, workspace=…)` holds for **every** path. Otherwise the whole request goes to
+  its existing per-path judge. A standing allow for some paths and a judge for the rest would be two answers to one
+  request, and ACP takes one.
+- ~~Codex's `decide_approval`~~ **cut by R3 (group 6 removed).** R3 kept R2's recommendation, for reasons partly
+  different from R2's:
+  - The predicate cannot match what Codex sends without an unwrap. This is VERIFIED from the fixtures below.
+  - The unwrap is a second quoting layer, Windows argv plus PowerShell `-Command` re-parsing. That is the class of
+    reading R2's `()` finding came from.
+  - The only evidence available is fixtures, because Codex is undrivable here, and Codex is not the work PC's
+    runner.
+  - Cutting costs little. Under "Workspace only", `decide_approval` already accepts a command approval whose `cwd`
+    is inside the workspace (`codex_appserver.py:280-283`). Only "Ask me" puts a Codex shim call on a card, and that
+    card works.
+
+  **R2's second reason was wrong.** Codex's current configuration reference, read 2026-09-28
+  (`learn.chatgpt.com/docs/config-file/config-reference`), says `shell_environment_policy.ignore_default_excludes`
+  *"Keep variables containing KEY, SECRET, or TOKEN before other filters run (default: true)"*. So by default a Codex
+  shell **does** keep `AW_RUN_TOKEN`. The network default for `workspace-write` is not stated there, and it stays
+  unverified. R2's text, kept for the record: **R2 found that this caller, as R1 wrote it, cannot fire on
+  Windows.** Codex's command approval carries the command *as its harness wrapped it*. The live captures
   in `hub/tests/test_codex_appserver.py:73` (`powershell -Command "Set-Content …"`) and `:141`
   (`"C:\…\powershell.exe" -Command 'echo …'`) show that word 0 is `powershell`, never `aw-tool`. Case 2 would
   therefore never match, and test 1.12 as R1 wrote it (a bare `aw-tool …` command) would pass against a shape
@@ -419,9 +542,19 @@ knowing"*): **the first turn does not have to not-know.** The raw events are lat
    times, kept until drive 9.2 measures the real gap.
 3. `connected` → surface `mcp`. Timeout → `harness_mcp_status = absent`, surface `shim`, and then one prompt
    `/mcp list` (no model call). Its text is stored verbatim as a diagnostic (D12) and is not parsed for a
-   decision.
+   decision. **R3:** that prompt's content is exactly one text block, `/mcp list`, and nothing else. Slice 2's D5
+   puts the per-turn block ahead of every prompt, and a slash command that is not the prompt's first text is sent
+   to the model as ordinary text. Slice 2's R2 left this gap to slice 3 (its round log, `:1347`). The transport
+   therefore sends this one diagnostic prompt without the per-turn block, and every model prompt keeps it.
 4. The access-path notice and the tool section are rendered **now**, for the surface just decided, and
    `session/prompt` is sent.
+
+**R3: when there is no wait.** A Copilot run that was **not given** the server (slice 1's `tool_surface == "none"`,
+from `hub_client: "cli"`) skips steps 2–3. Its surface is `shim`, it sends no `/mcp list`, and its status stays NULL.
+Nothing was tested, and waiting 15 s for an announce that cannot come would only delay the turn. A run cancelled
+during the wait ends untested (NULL), not `absent`. `should_interrupt` is honoured within the wait's poll, as slice
+1's `run_turn` contract requires (*"within one poll interval"*), so `wait` takes the interrupt check, or polls in
+steps of at most that interval.
 
 Slice 2 composes the prompt in `trigger_agent_directly` before the transport starts, as the other runners do.
 This slice changes that for a runner whose adapter declares **`tests_mcp_before_first_prompt = True`**, a new
@@ -429,6 +562,18 @@ This slice changes that for a runner whose adapter declares **`tests_mcp_before_
 slice that first reads it):
 - such a runner is handed `render_surface(surface) -> list[str]`, which returns the notice and the tool section;
 - `plane_surface` is written when that callable is invoked.
+
+R3 pins the shape in slice 1's names. It is an `RpcCallbacks` field, `render_surface: Optional[Callable[[Literal["mcp",
+"shim"]], list[str]]]`, set by the executor only when `adapter.tests_mcp_before_first_prompt` is true. It is a
+callback, not an `RpcTurnRequest` field, because it writes: `plane_surface`, and the context file below. It is
+**total**. The rendering is pure. The two writes are best-effort: logged on failure, never raised. The prompt is what
+the run is told, and failing the run after spawn over a record would be worse than a stale record. The transport
+calls `mcp_announce.wait` itself. That module is a Hub-side import with no database session of the caller's.
+
+**R3: the access-path notice leaves the pre-spawn `notices` too.** `notices = [access_path_notice(described_path)]`
+(`agent_trigger.py:1173`) is joined into `prompt` at `:1194`. For such a runner, R2's design left that pre-spawn
+notice in place, so the run would have received two access notices, the pre-spawn one possibly for the other
+surface. The trigger omits it from `notices`, and `render_surface` supplies it. No other notice moves.
 
 **Where the tool section goes for such a runner (rewritten by R2 against slice 2's D5).** Slice 2 already keeps the
 tool section out of the custom-agent file. Its D5 splits `_render_hub_agent_context` into `stable` (to the agent
@@ -453,8 +598,10 @@ concurrently and may move `per_turn`'s composition.
 
 **Corroboration, after the fact.** Slice 2's `map_events` subscribes to `session.mcp_servers_loaded` and
 `session.mcp_server_status_changed` (appendix A §A). This slice consumes them:
-- the entry named `agentweave` with status `connected` upgrades the run's record (D1);
-- any other status is stored as a diagnostic only.
+- the entry named `agentweave` with status `connected` or `failed` is a harness report (D1's precedence). R3 added
+  `failed`: it is VERIFIED in appendix A §D, and it is how a run whose server started (so the announce came and it
+  was told `mcp`) and then failed is recorded at all;
+- any other status (`pending`, and whatever a policy block says) is stored as a diagnostic only.
 
 **R2: this supersedes one line of slice 2.** Slice 2's D10 (*"The Hub's own server failing"*) emits, once per turn,
 an `error` event `copilot_mcp_server_failed` carrying the text of Codex's `map_mcp_server_failure`
@@ -464,6 +611,18 @@ has every operation through `aw-tool`. Left in, a blocked run would show the ope
 cannot collaborate, beside D12's statement that it was told `aw-tool`. So for a Copilot run, the non-`connected`
 raw status becomes D12's diagnostic, and slice 2's error event is not emitted. Task 5.4 carries this. Codex's own
 event is left alone: whether a Codex shell can reach the Hub is open question 4.
+
+**R3: narrowed, to agree with slice 2 as it now stands.** Slice 2's R2 wrote the opposite rule. Its D10 says
+*"whichever lands second removes the duplicate, and this slice's once-per-turn error for the Hub's own server is the
+one to keep"*. Both halves are right for different runs:
+- **For a run told `mcp`** (the announce came, and the server then failed), slice 2's sentence is **true**. The
+  run has no AgentWeave tools it was told about. Slice 2's event is kept, and it is that run's only statement. D12
+  emits nothing more for it.
+- **For a run told `shim`**, the sentence is false. D12's status event has already been stored at the wait's
+  timeout, quoting `/mcp list`. Slice 2's event is suppressed.
+
+So slice 2's mapper needs the run's told surface. This slice lands second and sets it: `render_surface` records the
+surface, and the mapper reads it. Slice 2 keeps its code, its message and its once-per-turn rule.
 
 A `Warning:` message chunk naming the server (`MCP server "agentweave" was blocked by your enterprise …`,
 DOCUMENTED wording) is **not** parsed. It is already shown to the operator as text by slice 2's mapper, and the
@@ -533,10 +692,21 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
 - `RunFacts` (`hub/hub/schemas/agents.py:140-169`) gains `plane_surface` and `harness_mcp_status`, read from the
   row. `None` means untested or pre-change.
 - When a run given MCP is recorded `absent` or `failed`, **one** `status` event is appended to that run's stream
-  (existing kind, `runner_events.status_event`, `:221`). Its phase is `plane_surface` and its summary reads:
-  *"The AgentWeave MCP server did not start for this run (absent); the run was told to reach the Hub with
-  `aw-tool`."* On Copilot a second sentence quotes the `/mcp list` line for `agentweave` verbatim (vendor text,
-  bounded by `_truncate_utf8`).
+  (existing kind, `runner_events.status_event`, `:221`). Its phase is `plane_surface`. **R3: its summary depends on
+  what the run was told.** R2's single wording (*"… the run was told to reach the Hub with `aw-tool`"*) is false
+  for every Claude and Codex run told `mcp` from history whose own test then came back negative. Those runs are told
+  before spawn (D10), and the test is what a stale `connected` looks like when it fails:
+  - `plane_surface == "shim"`: *"The AgentWeave MCP server did not start for this run (absent); the run was told
+    to reach the Hub with `aw-tool`."*
+  - `plane_surface == "mcp"`: *"The AgentWeave MCP server did not start for this run (failed), although the run
+    was told to use it. Its next turn is told `aw-tool`."* ("next turn" is true for Claude, from the latest test.
+    For Copilot, which tests every turn, this wording is never used, because slice 2's event carries this case,
+    D9.)
+  - A runner that already reports the failure in its own words emits no second statement: Codex `failed`
+    (`map_mcp_server_failure`), and Copilot told `mcp` (slice 2's `copilot_mcp_server_failed`).
+
+  On Copilot the `shim` wording gains a second sentence quoting the `/mcp list` line for `agentweave` verbatim
+  (vendor text, bounded by `_truncate_utf8`).
 - The event is written **once per run**, not per status change. No new event kind and no UI change, so no bundle
   refresh.
 - `RunFacts` is built at `agents.py:898` and `agent_chat.py:341` (R2 rebase; R1 had `:904` and `:351`).
@@ -587,7 +757,12 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
 | Claude `init` omits a `deniedMcpServers`-blocked server | VERIFIED in F340 (`--settings`, 2.1.269) |
 | Codex app-server reports its MCP servers as `mcpServer/startupStatus/updated` `starting\|ready\|failed\|cancelled` | VERIFIED (live captures cited at `codex_appserver.py:655-657`, `:1167-1183`; `test_codex_appserver_run_turn.py:555-590`) |
 | A Codex command approval's `command` is the wrapped shell line (`powershell -Command "…"`), not the model's bare command | VERIFIED (captured fixtures, `test_codex_appserver.py:73`, `:141`) |
-| Codex's shell drops `*TOKEN*` variables by default, and its sandbox has network off | recalled vendor documentation, not re-read (R3 verifies); Codex undrivable here |
+| ~~Codex's shell drops `*TOKEN*` variables by default~~ **False (R3):** `ignore_default_excludes` defaults to `true`, so `*TOKEN*` variables are kept | DOCUMENTED (Codex configuration reference, read 2026-09-28) |
+| Codex's `workspace-write` sandbox has network off by default | not stated in the configuration reference; unverified; Codex undrivable here |
+| PowerShell 5.1 resolves a bare `aw-tool` to `aw-tool.cmd` over an extensionless `aw-tool` in the same directory | **VERIFIED** (R3, 5.1.26100, `Get-Command -All`) |
+| PowerShell 5.1 splits a native argument that begins with `-` and contains `.` (`-x.a/b` → `-x`, `.a/b`) | **VERIFIED** (R3) |
+| `CON.json`/`NUL.json`/`COM1.json` are ordinary file names on this Windows 11 build | **VERIFIED** (R3: `realpath` stays inside; `open` raises `FileNotFoundError`) |
+| An announce can precede a failed connection (`main()` announces before `mcp.run`) | CODE (`mcp_server.py:2091-2094`) |
 | Copilot's shell tool is a persistent session with `mode sync\|async` and `initial_wait` | CODE (`app.js` 1.0.88, tool help table) |
 
 ## Round log
@@ -732,6 +907,143 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
     6. Slice 5 (`:385`) says *"slice 3's MCP status handling surfaces"* a failed **GitHub** MCP server. This slice
        records and reports only `agentweave`, so slice 5 must surface other servers itself.
     7. Slice 4: no dependency found.
+- **R3, 2026-09-28** (task 0.2; a second independent re-derivation, on master `fc33ff9`).
+  - **Tree.** `ef55e6f..fc33ff9` is R2's documents only. The five night-ORDER changes and slices 1 and 2 are still
+    directories under `openspec/changes/`, so every "(rebase at IMPL: … unbuilt at R2)" marking still holds. R3 kept
+    them all and added none.
+  - **Read (code, first, before R2's entry):**
+    - `mcp_server.py:1000-1740` (`_lex`, `_words`, `_judge_word`, `_decide`, `_ask_operator`, `approve_tool_call`)
+      and `:2060-2107` (the announce and `main`);
+    - `agent_actions.py:455-490`;
+    - `agent_trigger.py:1100-1335` (the grounds call, notices, pin, env, the `Run(...)` row) plus greps for the
+      executors;
+    - `codex_appserver.py:244-300`;
+    - `runner_parsing.py:424-520`;
+    - `test_codex_appserver.py:68-78`, `:138-144`.
+  - **Read (designs):**
+    - this change whole;
+    - slice 1 D4 and D16 and its round-log requests (`:178-232`, `:420-431`, `:538-595`);
+    - slice 2 D5, D8, D10 and D18, and its R2 gap list (`:308-360`, `:420-460`, `:520-565`, `:640-660`,
+      `:985-1000`, `:1340-1352`);
+    - slice 5 D2 fallback, its GitHub-server paragraph and its contract table (`:105-135`, `:644-660`, `:688-694`,
+      `:850-858`);
+    - appendix A §D and appendix C's detection signals.
+  - **Probes (no model call):**
+    - PowerShell 5.1.26100 with stand-in launchers (`aw-tool.cmd` plus extensionless `aw-tool`, both printing
+      argv) first on `PATH`: resolution order, `\` paths, `AW-TOOL.CMD`, the `-x.y` split, numeric words, the en
+      dash;
+    - Python `realpath`/`open` on device-named `.json` files;
+    - Codex's configuration reference (WebFetch).
+  - **Attack on D8 (task 0.2): 20 attempts, recorded in D8's table.**
+    - No allowed text yields more than one plane call.
+    - Three holes in the rule *around* the allow-list were closed:
+      - case 2 accepted any tool with a `command` key, a foreign MCP tool included;
+      - case 3 was vacuously true for a path-less edit;
+      - `PYTHON*` variables could redirect the auto-approved program (now `-I`).
+    - One word-vs-argv mismatch was closed: the PowerShell `-x.y` split (the path may not begin with `-`).
+    - The ASCII set is now explicitly not `isalnum`/`\w`.
+    - The predicate is now total. The reason is what its two callers return when it raises: a FastMCP tool error, and
+      slice 2's `reject_once`.
+  - **D1 against how each runner ends.**
+    - **"`connected` is final" was wrong.** The announce precedes `mcp.run` (`mcp_server.py:2091-2094`). So
+      "started, then failed" recorded `connected` on every run: F340's latch one level down. It is replaced by a
+      source precedence (harness report > announce > wait).
+    - An unknown Claude `init` status is ignored rather than stored `failed`, which would now outrank a real
+      announce.
+    - Copilot raw `failed` is now a report.
+    - "Untested" gains: Copilot cancelled mid-wait, and a Copilot run not given the server, which now skips the wait.
+    - **F340 is not closed for Codex `exec`** (no negative source), and `proposal.md` said "every runner".
+    - Every recorder is best-effort inside the executors, so a failing write never fails a run.
+  - **Also wrong, and changed:**
+    - **D12:** the status event's single wording was false for a Claude/Codex run told `mcp` from history. The wording
+      now depends on the told surface, and a runner's own failure event is not doubled.
+    - **D9:** the pre-spawn `notices` kept an access notice for a runner that renders one late, which would have
+      sent two. The `/mcp list` prompt must be sent without slice 2's per-turn block (slice 2's gap to this slice).
+      `render_surface` is total and is an `RpcCallbacks` field.
+    - **Test 9.7 and the test guide** read "the stored prompt". The Hub persists no composed prompt: `prompt` is
+      built at `agent_trigger.py:1194` and passed at `:1217`/`:1403`, and `Run` has no prompt column. They now read
+      `plane_surface` and the canonical context file.
+    - **Test 1.3's second half** must spawn without `-I`, or `PYTHONPATH` is ignored and the fastmcp stub proves
+      nothing.
+  - **Disagreements with R2:**
+    1. R2's Codex `*TOKEN*` premise is contradicted by the current vendor reference. R3 still cuts group 6, on the
+       other reasons.
+    2. R2's "unknown `init` status → `failed`" and "`connected` is final" (inherited from R1) are replaced, as above.
+    3. R2's D9/D10 "slice 2's error is not emitted for Copilot" is narrowed to runs told `shim`. For a run told `mcp`
+       it is true, and it is kept (slice 2's R2 wants it kept).
+    4. R2 called the predicate "strictly narrower than what `_decide` allows under `workspace`". That is true of case
+       2 only once it is limited to shell tools. For an unknown tool it was not narrower under "Ask me".
+  - **Group 6: cut.** Tasks 1.12 and 6.3 are removed. D8's caller is struck. The sandboxing requirement's first line
+    is narrowed (open question 8). `proposal.md` is updated.
+  - **Contract resolutions:** the next section.
+
+## Required of slices 1, 2; not provided to 5 (R3)
+
+Each slice owns its own file. This section states, in the owning slice's names, what this change needs from each, and
+what it does not provide. Where a slice's current text says otherwise, the difference is named. Nothing here edits
+another change.
+
+**From slice 1 (`each-runner-cli-is-one-adapter`; it owns member and axis names).**
+- `RunnerAdapter.tests_mcp_before_first_prompt: ClassVar[bool]`, `False` on Claude and Codex, `True` on Copilot.
+  Slice 1's D16 (`:429`) has it. **Agreed.**
+- `RpcCallbacks.render_surface: Optional[Callable[[str], list[str]]]`, set by the executor only for such an adapter
+  (D9). Slice 1's D16 (`:428`) names "a `render_surface(surface) -> list[str]` callable" handed to the RPC transport,
+  without saying where. This change asks for it as an `RpcCallbacks` field.
+- **Not** a third `AccessAxes.plane` value. Slice 1's D16 (`:428`) says *"slice 3 widens `AccessAxes.plane` with a
+  third value, `"shim"`"*. It does not. `AccessAxes.plane` is what the run is **given** and stays `"mcp" | "cli"`.
+  What gains `"shim"` is the **described** value: `described_access_path(axes.plane, …)`'s return, which is `"mcp" |
+  "shim"` and never `"cli"`, and the `access_path` accepted by `access_path_notice`/`_tool_surface_lines`
+  (`"mcp" | "shim" | "http"`).
+- **Not** per-run axis 1. Slice 1's D4 (`:230-232`, *"slice 3 turns axis 1 into a per-run detection"*) and D16 (`:428`,
+  *"per-run `tool_surface` detection … replaces D4's `hub_client`-only rule"*) describe something this change does not
+  do. Axis 1 (`tool_surface`) stays decided by `hub_client` alone. The per-run record changes only what is *told*
+  (D1, *"What the run is given does not move"*). Slice 1's reason for not making `tool_surface` an adapter member
+  still holds, for a different reason: it is `hub_client`'s, not the adapter's.
+- `shim_allowed`: slice 1 has already struck it (`:430`). **Agreed.**
+- Slice 1's open question 4 (the Codex MCP env allow-list): not this change's. The shim runs in the harness's shell,
+  whose environment is the run's, not the MCP server's env block. This change changes neither.
+
+**From slice 2 (`a-copilot-agent-runs-over-acp`; it owns the ACP client, executor and permission handler).** This
+change lands after slice 2 and makes these edits itself at IMPL (task 5.4, 6.2). Slice 2 need only not contradict
+them:
+1. `decide_permission` calls `mcp_server._hub_own_call(tool, input, workspace=<run work dir>)` first, in every
+   posture, on its own normalised `("PowerShell"|"Bash", {"command": …})` / `("Write", {"path": p})`. For `edit`, it
+   allows by standing only with at least one path and every path passing (D8). The allow is recorded through the same
+   `on_decision` as any other answer. The predicate is total. If it raises regardless, the handler treats that as
+   `None` and falls through, not `reject_once`.
+2. D5: a runner that tests before its first prompt renders its per-turn block with `include_tool_surface=False`,
+   and the access-path notice is left out of the pre-spawn `notices`. `render_surface` supplies both after the wait,
+   and rewrites the canonical context file.
+3. The one `/mcp list` diagnostic prompt is sent as a bare single text block, without the per-turn block (slice 2's
+   gap list, `:1347`).
+4. D10: `copilot_mcp_server_failed` is **kept** for a run told `mcp` and **suppressed** for a run told `shim`. The
+   mapper learns the told surface from `render_surface`. Slice 2's message and once-per-turn rule are unchanged.
+5. `map_events` passes an `agentweave` raw status of `connected` or `failed` to `record_harness_mcp_status`, inside a
+   `try`. Any other status is a diagnostic.
+6. D3: `copilot.exe` receives the whole run env, including the prepended `PATH`, and `agentweave-mcp.json` has no
+   `env` block. This is slice 2's design today, and task 5.1 re-reads it at IMPL. This also answers slice 5's open
+   question 10 for this change: an `env` block would keep the token from the tool server, but not from the shell that
+   runs `aw-tool`. So it buys nothing here.
+
+**Not provided to slice 5 (`a-copilot-agent-uses-hooks-and-its-own-agents`). This change is the authority on the
+shim.** Slice 5's current text (`:118-123`, `:647-655`, `:692`) already matches all of the following. It is stated
+here so it stays matched.
+- **Slice 5 may assume:**
+  - `mcp_server.py --call <tool> [<args-file>]`, run from the pinned copy (`tool_server.PIN.path()`), or through
+    `aw-tool` in `PIN.launcher_dir()`;
+  - it calls exactly the registered `@mcp.tool()` functions except `approve_tool_call`;
+  - it reads `AW_RUN_TOKEN`/`HUB_URL` from its own environment;
+  - it prints one JSON envelope with D3's exit codes;
+  - it never imports fastmcp, and never announces.
+- **Slice 5 may not assume:**
+  - a hook mode, an event-name argument, or any tool that receives a hook payload;
+  - that call mode reads **stdin**. It refuses stdin (D3), and Copilot command hooks deliver their payload on stdin.
+    A hook receiver is a new mode and a new route, slice 5's to design and to add to the callable-set parity test;
+  - that `_hub_own_call` approves anything but `aw-tool` shell text and `calls/*.json` writes. A hook command is not
+    a permission request, and the predicate never sees it;
+  - that this change records or reports any MCP server but `agentweave`. `github-mcp-server` failures are slice 5's
+    own mapping, as its R2 already says;
+  - that `aw-tool` is on `PATH` outside a Hub-spawned run.
 
 ## Open questions for R3
 
@@ -751,6 +1063,10 @@ Answered by R2 (kept for the record):
    R2 recommends cutting group 6 (tasks 1.12 and 6.3, and D8's Codex caller). Say in the notice's Codex story that an
    untested Codex run points at a command that may not connect. That is no worse than today's HTTP form, which has
    the same network and variable problem.
+
+   **R3: re-answered.** The variable count is **wrong**. Codex keeps `*TOKEN*` variables by default (D15, DOCUMENTED
+   2026-09-28). The network count is unverified. The wrapped command stays VERIFIED. **Group 6 is cut** on D8's
+   reasons. Tasks 1.12 and 6.3 are removed, and the sandboxing requirement is narrowed to Claude and Copilot.
 6. **Slice 2 normalises to `PowerShell`/`Bash` + `command`, and to `Write` + `path` per edited path.** D8 matches.
 
 Still open:
@@ -765,6 +1081,19 @@ Still open:
    what a later, unasked `aw-tool` runs.
 8. (R2, new) If group 6 is cut, `specs/agent-run-sandboxing/spec.md`'s *"Wherever the Hub answers a run's
    permission request"* over-claims for Codex. Task 6.3 carries the narrowed first line to use.
+   **R3: answered.** Group 6 is cut, and the first line now reads *"Wherever the Hub answers a Claude or Copilot run's
+   permission request"*. The requirement body says that a Codex run's command approvals are decided as before.
+
+R3 on the carried ones:
+- **2** stays open for drive 9.2. R3 adds no measurement. The 15 s now also bounds a cancel, which the wait honours
+  (D9).
+- **5** stays open for drive 9.4 or the work PC. R3 found nothing newer than R2's `app.js` reading.
+- **7** stays for the Opus review (0.3). R3 narrowed the residual: interpreter variables are closed by `-I`.
+  Aliases, functions, profiles and `PATH` are not. Also put to the reviewer: case 2 now refuses any tool outside
+  `Bash`/`PowerShell`, which R3 found to be a widening in R1/R2's wording.
+9. (R3, new) Does `codex exec --json` report MCP server startup at all? `parse_codex_line` reads no MCP startup
+   event (`runner_parsing.py:424-520`). Without one, F340 stays open for `exec` (D1). Undrivable here. Carry it until
+   Codex can be driven.
 
 ## Open questions as R1 posed them (answered or carried in the section above)
 

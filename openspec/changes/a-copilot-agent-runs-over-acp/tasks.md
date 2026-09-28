@@ -10,7 +10,15 @@
 
   Re-derive D1–D19 from those files, not from this design. Re-check every row of design § "Sites touched by open changes" against what landed, including slice 1's adapter member names, and correct the design where they differ. Answer Open questions 2, 4 and 9 from `app.js` or the command reference. Record the round in `design.md`'s Round log. `openspec validate a-copilot-agent-runs-over-acp --strict` passes
   - **Done 2026-09-28** against master `ef55e6f` (3 of the queue's sites landed; the rest and slice 1 unbuilt, marked "rebase at IMPL"): 16 corrections, incl. three gates that would 501 or never inject MCP, an empty `--available-tools=` that grants every tool, and JSON-titled conversations; Open questions 2, 4, 9, 10 answered. See the Round log
-- [ ] 0.2 R3: a second independent re-derivation, not a re-read of R2. Ask of each route in design § "What each route returns when what it calls raises" what it actually returns when the Copilot function it calls raises, by reading the route. Re-derive the D8 table from `app.js`'s `XDo`/`nNo` and `mcp_server._decide`. Record the round in the Round log
+- [x] 0.2 R3: a second independent re-derivation, not a re-read of R2. Ask of each route in design § "What each route returns when what it calls raises" what it actually returns when the Copilot function it calls raises, by reading the route. Re-derive the D8 table from `app.js`'s `XDo`/`nNo` and `mcp_server._decide`. Record the round in the Round log
+  - **Done 2026-09-28** against master `fc33ff9` (code identical to `ef55e6f`). There are five changes:
+    - R2's MCP identification by `tool_call` title is replaced, because the title is the model-written `description` argument (`VDo`). The source is now `tool.execution_start`, and an unidentified call is refused;
+    - the trigger route answers 200 queued, not 409, so three refusals gain `agent_wide`;
+    - `run_turn` returns rather than raises after the prompt;
+    - MCP calls are labelled by server, not by `YDo`'s guessed kind;
+    - `diagnostic_event` gets the spec's `stream`/`severity`.
+
+    The contract with slices 3–5 is written down. Open questions 3, 6 and 7 are answered and 8 in part; 1 and 5 are carried. See the Round log
 - [ ] 0.3 Opus adversarial review of the change and of the decisions it assumes (the operator's standing step before APPROVED). It MUST address:
   - D5: the context split, and whether the tool surface belongs in `per_turn`;
   - D8: whether the `acceptEdits` emulation, fetch-allowed parity and the refusal to emulate full access under policy are right;
@@ -23,12 +31,14 @@
 
 Copilot Free plan: **two** model-calling prompts in this group, and no more. Every other probe is a slash command or a handshake. Run captures with `openspec/changes/a-copilot-agent-runs-over-acp/evidence/r1_probe.py` as the starting point. Always use a scratch `COPILOT_HOME` under `%TEMP%`, and point the MCP server's `HUB_URL` at a dead port, never `:8000`.
 
-- [ ] 1.1 **Capture 1 (1 prompt, ACP).** Set up a scratch workspace holding a custom agent file whose body carries the marker `AW-MARKER-5521`, and the Hub's real `mcp_server.py` from `--additional-mcp-config`. Subscribe to design D10's raw events plus `tool.execution_start`. Answer every `session/request_permission` with `allow_once`, **recording its params**. Send one prompt: *"Quote the marker in your agent instructions. Then create file probe.txt containing hi, then run the shell command `echo done`, then call agentweave-list_tasks."*
+- [ ] 1.1 **Capture 1 (1 prompt, ACP).** Set up a scratch workspace holding a custom agent file whose body carries the marker `AW-MARKER-5521`, and the Hub's real `mcp_server.py` from `--additional-mcp-config`. Subscribe to design D10's raw events (`COPILOT_RAW_EVENTS`, which since R3 includes `tool.execution_start`). Answer every `session/request_permission` with `allow_once`, **recording its params**. Send one prompt: *"Quote the marker in your agent instructions. Then create file probe.txt containing hi, then run the shell command `echo done`, then call agentweave-list_tasks."*
 
   Save the transcript, in wire order, to `hub/tests/fixtures/copilot_acp/turn_write_shell_mcp.jsonl`. Paths must be replaced by `<WS>`/`<HOME>`, and it must hold no token. Record in the Round log:
   - whether the marker came back (Open question 1);
   - the three `request_permission` shapes (edit, execute, mcp) against design D8;
-  - the `session.error|warning|info` field names, if any appeared (Open question 10).
+  - the `session.error|warning|info` field names, if any appeared (Open question 10);
+  - (R3) for each permission request, the order of its raw `tool.execution_start`, its raw `permission.requested` and the ACP `session/request_permission`. Also whether `tool.execution_start` carried `mcpServerName` for the `agentweave` call. Design D8 relies on it preceding the request (CODE, `setupEventForwarding`);
+  - (R3) the stop reason the prompt returned if a `session.error` appeared, and any second `session_info_update` title (Open question 8).
 - [ ] 1.2 **Capture 2 (1 prompt, `-p`).** Run `copilot.exe -p "Reply with the word ok" --output-format json --no-auto-update --disable-builtin-mcps --no-custom-instructions --no-ask-user --excluded-tools=builtin:*,mcp:*,custom:* --allow-all-tools` under a scratch home. **Never `--available-tools=`**: R2 read `app.js`'s `Y0`, and an empty value means *no filter* (design D14). Save stdout to `hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`. Record which event carries the answer and whether any tool was offered. If the source-qualified patterns did not remove every tool, record that; design D14's fallback (the explicit built-in list) applies. Also save `evidence/help-config.txt` (the output of `copilot help config`, no model call) for task 2.4
 - [ ] 1.3 `hub/tests/test_runners_api.py`: `POST /runners` with `cli: "copilot"` returns 201, and the row reads back. Today it fails with 422, the validator's refusal. Add a model-level test that inserts a `Runner(cli="copilot")` and commits; it fails today on `ck_runners_cli`
   - Verify: `py -3.11 -m pytest hub/tests/test_runners_api.py -q -k copilot`
@@ -48,7 +58,12 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - the answer never being `allow_always`;
   - (R2) an `edit` request with no `locations` and no `fileName` refused;
   - (R2) an unset `permission_mode` judged exactly as `workspace`;
-  - (R2) the Hub's own server identified from a preceding `tool_call` title `agentweave-send_message` when no raw `permission.requested` has been read, and a title `agentweave-x-send_message`, or a tool not in the Hub's tool set, judged as foreign
+  - (R3, replacing R2's title case) the server taken from a raw `tool.execution_start` (`mcpServerName: "agentweave"`, `mcpToolName: "send_message"`) read before the request → ALLOW under `manual`;
+  - (R3) the same request with **no** raw event read, but a preceding `tool_call` titled `agentweave-send_message` (a foreign tool's `description` argument) → REJECT under every posture but full access. Under R2's rule this is an allow; it must fail on R2's code;
+  - (R3) `mcpServerName: "agentweave-x"`, or `"agentweave"` with a tool the Hub does not serve → judged as foreign;
+  - (R3) a `read` request with no `rawInput.path` and no `locations` → REJECT;
+  - (R3) an `execute` request whose `tool.execution_start.toolName` is `local_shell`, carrying a command that only the Bash reading refuses → REJECT (both dialects);
+  - (R3) a foreign MCP call whose arguments name no path and no command → ALLOW under `workspace` (Claude parity, stated in the test's docstring)
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;
@@ -58,7 +73,10 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - a replayed `user_message_chunk` before arming emits nothing;
   - a synthetic message `"Warning: X"` with a matching raw `session.warning` becomes `diagnostic`, and without one stays `text`;
   - an `agentweave` server status `failed` emits one error;
-  - `session.model_change` to a different model emits one diagnostic.
+  - `session.model_change` to a different model emits one diagnostic;
+  - (R3) an MCP `tool_call` whose raw `tool.execution_start` names `mcpServerName: "agentweave"`, `mcpToolName: "create_task"` (so `YDo` gives it kind `edit`) emits `tool_use` with `tool == "agentweave-create_task"` and category `mcp`, never `edit`/`file_change`;
+  - (R3) every `diagnostic` payload carries `version`, `stream == "copilot"`, `severity` and `summary`;
+  - (R3) an `agentweave` server status `failed` on a run whose `told_access_path` is `cli` emits a `copilot.mcp_server_unavailable` diagnostic, not the error.
 
   Reversing the order of a `tool_call` and its `tool_call_update` must make the correlation assertion fail (the CLAUDE.md ordering rule)
 - [ ] 1.9 `hub/tests/test_copilot_acp_run_turn.py` (new): a scripted fake session in the style of `test_codex_appserver_run_turn.py`, whose `session/prompt` response is delivered **after** that turn's notifications, as Copilot does. Assert:
@@ -72,14 +90,18 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - (h) every `session/request_permission` is answered exactly once;
   - (i) `usage_update` → `on_usage` with a measured sample and the resolved model;
   - (j) a spec turn: `set_mode` with the full plan URI before the prompt, and the spawn argv holds `--excluded-tools=apply_patch,create,edit,str_replace,str_replace_editor`;
-  - (k) (R2) a JSON-RPC `error` response raises `CopilotACPError` carrying `.code`, and it is an `AppServerError`;
-  - (l) (R2) `initialize` sends `clientCapabilities._meta["github.com/copilot"].events` equal to `COPILOT_RAW_EVENTS`, de-duplicated; `on_raw_event` receives each armed raw event; `TurnOutcome.prompt_usage` holds the prompt result's `usage`;
-  - (m) (R2) the process tree is terminated on a failed turn too, not only on a stop
+  - (k) (R2, narrowed in R3) a JSON-RPC `error` response to a request **before** the prompt (e.g. `session/new`) raises `CopilotACPError` carrying `.code` and `.data`, and it is an `AppServerError`;
+  - (l) (R2, amended in R3) `initialize` sends `clientCapabilities._meta["github.com/copilot"].events` equal to `COPILOT_RAW_EVENTS`, de-duplicated, including `tool.execution_start`. There is no `on_raw_event` callback and no `prompt_usage`/`session_was_new` field (removed, design D10);
+  - (m) (R2) the process tree is terminated on a failed turn too, not only on a stop;
+  - (n) (R3) a `session/prompt` answered with a JSON-RPC error, and separately a process that exits after the prompt is written, each **return** `TurnOutcome(status="failed")` with the error and `stderr_tail`, and raise nothing;
+  - (o) (R3) an armed raw `session.error` followed by `stopReason: end_turn` returns `status == "failed"` with the event's `message`. With `stopReason: cancelled` it is `interrupted`;
+  - (p) (R3) `session/new` answered `-32000` raises, and `CopilotProbe`'s verdict reads not authorized before the raise propagates;
+  - (q) (R3) the prompt's first text block is `per_turn_context` then `tool_surface_context`, and `control_overrides {"effort": "high"}` puts `--reasoning-effort high` on the spawn argv
 - [ ] 1.10 `hub/tests/test_copilot_home.py` (new): `copilot_home_path` is `…/copilot-home/projects/<pid>/<agent>` and refuses a project id of `..`, `a/b`, `a\b` or one resolving outside the root (R2); the worker home is `…/copilot-home/worker`. `ensure_copilot_home` writes `agents/<agent>.agent.md` with frontmatter `name`, `description` (the marker), `tools`, `model` (omitted for `auto`) and `reasoningEffort`, and a body that opens with the precedence statement and holds the stable context. It also writes `agentweave-mcp.json` with no `env` and `timeout == (agents.MAX_WAITING_SECONDS + 60) * 1000`. A second call with the same content does not rewrite the file (mtime unchanged). No file contains an `aw_run_` string
 - [ ] 1.11 `hub/tests/test_copilot_context_split.py` (new):
-  - `_render_hub_agent_context`'s `stable` and `per_turn` together hold every `##`/`###` section of `context` exactly once;
+  - `_render_hub_agent_context`'s `stable`, `per_turn` and `tool_surface` (R3) together hold every `##`/`###` section of `context` exactly once;
   - the charter and project instructions are in `stable`;
-  - the tool surface and workspace are in `per_turn`;
+  - the workspace is in `per_turn`, and the tool surface only in `tool_surface`;
   - `context` for a Claude run equals a snapshot taken before the change (write the snapshot as the first step of this task, from today's code)
 - [ ] 1.12 `hub/tests/test_model_catalog.py`: `get_provider("copilot")` exists, its default model is `auto` labelled "Auto", every model's `context_window is None`, its Permissions values and labels equal Codex's with default `workspace` (R2), and `validate_overrides("copilot", {"model": "bogus-model"})` is refused
 - [ ] 1.13 `hub/tests/test_workspace_writes.py`: `written_paths("edit", {"locations": [{"path": "C:/elsewhere/x.py"}], …})` returns that path, and `delete`/`move` likewise. `"shell"` returns `()`. `OutsideWriteRecorder` records a Copilot edit outside the workspace
@@ -90,7 +112,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - `copilot` is in both supported sets;
   - (R2) neither argv contains `--available-tools`, and both contain `--excluded-tools=builtin:*,mcp:*,custom:*`;
   - (R2) a Copilot conversation titled from the 1.2 fixture gets the answer, not a JSON fragment (`generate_conversation_title` with `_run_titler` patched to return the fixture);
-  - (R2) with `resolve_copilot_executable` raising, `run_worker` returns `spawn_failed` naming the looked-for path and raises nothing, and titling returns `None`;
+  - (R2, mechanism fixed in R3) with `resolve_copilot_executable` raising `CopilotExecutableNotFound` (a `FileNotFoundError`), `run_worker` returns `spawn_failed` (not `unsupported_cli`) naming the looked-for path, raises nothing and removes its temporary directory, and titling returns `None`;
   - (R2) the spawn helpers pass the Copilot environment (`COPILOT_HOME` = the worker home, no `GH_TOKEN`) and still pass `env=None` for Claude and Codex
 - [ ] 1.15 `hub/tests/test_launchability.py`:
   - with `GH_TOKEN` unset and a cached probe verdict "signed in, 1.0.88", `probe_agent` for `copilot` is runnable (today it says "No GitHub auth token found");
@@ -123,14 +145,14 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
 - [ ] 3.1 `hub/hub/copilot_probe.py`: `resolve_copilot_executable` (design D2). Task 1.5 passes
 - [ ] 3.2 `CopilotProbe`: a cached, TTL'd, async refresh using `initialize` → `session/new` → `session/close` under the worker home, with no model call (design D15). R2: the refresh is scheduled by `CopilotProbe.verdict()` itself whenever the verdict is stale and a loop is running, so all six `probe_agent` callers keep it fresh; amend `get_agents_launchability`'s "never spawns anything" docstring. Test its refresh against a fake process
-- [ ] 3.3 `launchability.py`: delete the env-token branch (`:116-126`), make `probe_agent` read the Copilot verdict, add `copilot` to `MCP_INJECTABLE_RUNNERS` (`:230`; R2: without it no Copilot run is given the MCP server), and extend `resolve_agent_env` with the GitHub-token strip (design D3). Tasks 1.15 and 1.16 pass
+- [ ] 3.3 `launchability.py`: delete the env-token branch (`:116-126`) with its tests (`test_launchability.py:124-140`) and (R3, slice 1 D5) the `RUNNER_CLI["copilot"]` row, make `probe_agent` read the Copilot verdict (its `cli` the resolved path; an unclassified refresh failure leaves the verdict unchanged and adds `probe_error`, design D15), add `copilot` to `MCP_INJECTABLE_RUNNERS` (`:230`; R2: without it no Copilot run is given the MCP server), and extend `resolve_agent_env` with the GitHub-token strip (design D3). Tasks 1.15 and 1.16 pass
   - Verify: `py -3.11 -m pytest hub/tests/test_launchability.py hub/tests/test_runner_command_env.py hub/tests/test_copilot_probe.py -q`
 
 ## 4. The Hub-owned Copilot home and the context split
 
 - [ ] 4.1 `_render_hub_agent_context` returns `stable` and `per_turn` beside the unchanged `context` (design D5). Task 1.11 passes
 - [ ] 4.2 `hub/hub/copilot_home.py`: `copilot_home_path` and `ensure_copilot_home` (design D4). Task 1.10 passes
-- [ ] 4.3 Call `ensure_copilot_home` after `create_operator_agent` commits and after `PATCH /agents/{name}` commits, for a Copilot-bound agent; an `OSError` is logged and does not fail the route. Also after `POST /agents/request` if that path creates Copilot agents. Add a route test: creating a Copilot agent produces the agent file, and a failing write (patched) still returns 201
+- [ ] 4.3 Call `ensure_copilot_home` after `create_operator_agent` commits and after `PATCH /agents/{name}` commits, for a Copilot-bound agent: on create after the `agent_created` broadcast (`agents.py:758`), on PATCH before the `schedule_agent` re-drain (`:2720`). **Any** exception is logged and does not fail the route (R3: not only `OSError`). Not after `POST /agents/request`, design D4 (R3). Add route tests: creating a Copilot agent produces the agent file; a patched write raising `OSError`, and one raising `RuntimeError`, each still return 201 and broadcast `agent_created`
   - Verify: `py -3.11 -m pytest hub/tests/test_copilot_home.py hub/tests/test_copilot_context_split.py -q`
 
 ## 5. Approvals
@@ -141,7 +163,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
 ## 6. The ACP transport
 
-- [ ] 6.1 `runner_events.diagnostic_event(code, message)` in the closed set. `copilot_acp.CopilotEventMapper` (design D10). Task 1.8 passes
+- [ ] 6.1 `runner_events.diagnostic_event(*, stream, severity, summary, code=None, facts=None)` (R3: slice 5's shape, which `agent-stream-events` requires) in the closed set, with a test that its payload has `version`, `stream`, `severity` and `summary`. `copilot_acp.CopilotEventMapper` (design D10). Task 1.8 passes
 - [ ] 6.2 `copilot_acp.ACPProcess`: stdio JSON-RPC as `AppServerProcess`, UTF-8, stderr drained, and a pending-request map. It additionally supports a request whose response is awaited while notifications are drained, and handles agent→client requests. `close()` ends the process tree with `terminate_process_tree`. Test it against a stand-in script, as `test_codex_appserver_process.py` does
 - [ ] 6.3 `copilot_acp.build_acp_argv` and `run_turn` (design D3, D6, D7, D9, D11, D12, D17). Task 1.9 passes
   - Verify: `py -3.11 -m pytest hub/tests/test_copilot_acp_mapper.py hub/tests/test_copilot_acp_run_turn.py -q`
@@ -151,15 +173,15 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 - [ ] 7.1 If slice 1 did not already make `_execute_codex_appserver_run` a runner-parameterised RPC executor, do that first: replace the four `runner="codex"` literals (`agent_trigger.py:3089`, `:3261`, `:3350`, `:3445`) with the adapter's name, and `codex_run_turn` with the adapter's `run_turn`. Run the whole Codex app-server suite unchanged
   - Verify: `py -3.11 -m pytest hub/tests/test_codex_appserver_run_turn.py hub/tests/test_codex_appserver.py -q`
 - [ ] 7.2 In `trigger_agent_directly`, a `copilot` runner:
-  - resolves the executable (a `TriggerAgentError(409)` with the probe's sentence when absent);
-  - ensures its home with this turn's model and effort;
+  - resolves the executable (a `TriggerAgentError(409, agent_wide=True)` with the probe's sentence when absent);
+  - ensures its home with this turn's model and effort (`TriggerAgentError(409, agent_wide=True)` on failure; R3);
   - sets `COPILOT_HOME` in the environment;
   - sends the per-turn block and the prompt;
   - reaches the RPC executor with the Copilot adapter.
 
   `on_session_missing` rebinds under design D7's exception. Add `_bind_session_id(replace_missing=True)`. Add a trigger-level test with the adapter's `run_turn` patched, asserting `Run.session_id` and `Conversation.provider_session_id` after a rebind.
 
-  R2: first admit `copilot` past the three gates of design D1: `SUPPORTED_RUNNERS` (`agent_trigger.py:773`, 501 today), the `build_command` call (`:1214`, 501 at `:1230`; skipped for an RPC transport) and `MCP_INJECTABLE_RUNNERS` (task 3.3). The trigger-level test enters through `trigger_agent_directly`, not the executor, and asserts the patched `run_turn` received a non-`None` `mcp_command` and the per-turn block. It fails today with 501
+  R2: first admit `copilot` past the three gates of design D1: `SUPPORTED_RUNNERS` (`agent_trigger.py:773`, 501 today), the `build_command` call (`:1214`, 501 at `:1230`; skipped for an RPC transport) and `MCP_INJECTABLE_RUNNERS` (task 3.3). The trigger-level test enters through `trigger_agent_directly`, not the executor, and asserts the patched `run_turn` received a non-`None` `mcp_command` and the per-turn block. It fails today with 501. (R3) A route test through `POST /agent/trigger` with the home write patched to fail asserts **200** `status: "queued"` with the sentence in `waiting_reason`, and that the queue entry's delivery attempts are unchanged
 - [ ] 7.3 Route an operator card for `ASK_OPERATOR` through `_await_operator_permission` with Copilot's labels (and its `workspace` verdict once `an-ask-me-card-says-what-workspace-only-would-decide` lands). Route refusals through `_on_refusal`, and allows through the `on_decision` callback whose executor side is `permission_tally.note`/`write_counts` from `a-run-records-that-its-calls-were-allowed` (R2: unbuilt at R2; if still unbuilt at IMPL, record refusals only and say so)
   - Verify: `py -3.11 -m pytest hub/tests -q -k "copilot or appserver or trigger"`
 

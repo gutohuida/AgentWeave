@@ -2,7 +2,7 @@
 
 ### Requirement: The Hub's own call command is decided like the Hub's own tools
 
-Wherever the Hub answers a run's permission request, it SHALL allow, in every posture and without asking the operator, a shell command that is exactly one invocation of the call command and a file write of an arguments file inside the run's own calls directory, and SHALL decide every other request exactly as it would without this rule.
+Wherever the Hub answers a Claude or Copilot run's permission request, it SHALL allow, in every posture and without asking the operator, a request of the harness's shell tool whose command is exactly one invocation of the call command and a file write that names at least one path and only arguments files inside the run's own calls directory, and SHALL decide every other request exactly as it would without this rule.
 
 The plane's operations were never subject to the run's posture: the tool-protocol tools are allowed
 by standing, because asking a person to approve each message would make collaboration unusable and
@@ -13,13 +13,24 @@ must be written to a file first, and that write is part of the same call.
 "Exactly one invocation" is read from the command's text in the shell it will run in: the command
 name `aw-tool` by itself (not a path to it), then an operation the command can perform, then at most
 one arguments file given as a plain relative path to a `.json` file inside the run's calls directory
-within its workspace, and nothing else. The command's text may hold only the characters such an
-invocation needs: letters, digits, the dot, the underscore, the hyphen, the forward slash, the space,
-and in PowerShell the backslash. Any other character anywhere in the command means it is not one
+within its workspace, not beginning with a hyphen, and nothing else. The command's text may hold only
+the ASCII characters such an invocation needs: letters, digits, the dot, the underscore, the hyphen,
+the forward slash, the space, and in PowerShell the backslash. Any other character anywhere in the command means it is not one
 invocation, whatever that character would do. The rule does not list the shell syntax it refuses,
 because a list of refused syntax fails open at the first form it forgot, and one was found while this
 requirement was reviewed: a parenthesised path, which PowerShell runs as a command. The calls
 directory is the Hub's own, and the repository ignores it.
+
+Only the harness's own shell tools are read this way. A request of any other tool is not a shell
+command merely because its input has a field of that name: what a foreign tool does with its other
+fields cannot be seen, so sparing it the operator's question would widen what the run may do
+unasked. The call command itself runs its interpreter isolated from interpreter settings in the
+environment, so that a setting made earlier in the same shell cannot change what the allowed
+invocation runs. Deciding this rule never fails: a request it cannot judge is one it does not match.
+
+A Codex run's command approvals are not read this way. Codex hands the Hub the command as its
+harness wrapped it for the shell, not as the model wrote it, and they are decided as they were before
+this rule.
 
 A request that is almost an invocation is not refused by this rule. It is decided exactly as it would
 be without it, so this rule can only spare a request from being asked about, never refuse one or
@@ -54,6 +65,17 @@ allow one the workspace decision would refuse for any other reason.
 
 - **WHEN** the arguments file named is outside the run's calls directory, reaches it through `..`, is
   absolute, or is not a `.json` file
+- **THEN** the request is decided as it would be without this rule
+
+#### Scenario: Another tool's command field is not a shell command
+
+- **WHEN** a run under the posture that asks the operator requests a tool other than its shell tool
+  whose input holds a field named `command` with the text of a plain call
+- **THEN** the request is decided as it would be without this rule
+
+#### Scenario: A file write that names no path is not allowed by it
+
+- **WHEN** a write request names no path at all
 - **THEN** the request is decided as it would be without this rule
 
 #### Scenario: A path to the command is not the command

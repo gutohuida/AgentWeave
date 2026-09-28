@@ -28,6 +28,14 @@ the canonical event contract.
 - **WHEN** a Copilot turn requested a named model and Copilot reports that it is running another
 - **THEN** the adapter SHALL emit one `diagnostic` event naming both models and the models the plan allows
 
+#### Scenario: A Copilot diagnostic names its stream and severity
+- **WHEN** the adapter emits any `diagnostic` event for a Copilot run
+- **THEN** its payload SHALL carry `version` 1, the stream `copilot`, a severity and a summary
+
+#### Scenario: A call to the Hub's own tool is shown as a tool call
+- **WHEN** a Copilot run calls the Hub's `create_task` tool, which Copilot classifies as an edit because of its name
+- **THEN** the adapter SHALL emit a `tool_use` event naming `agentweave-create_task` as an MCP call, not as a file change
+
 ### Requirement: Stream contract conformance tests
 The repository SHALL include representative fixtures and tests for every supported runner adapter,
 event persistence and delivery, legacy compatibility, payload bounds and redaction, ordering, and

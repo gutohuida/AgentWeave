@@ -181,7 +181,9 @@ had ever reported online was grounds for every later run of that agent, for ever
 reports on every run whether it started the server. A policy that arrived after the first success was
 never noticed. Grounds are now the outcome of the most recent run of the agent that tested it:
 the adapter reporting online is a positive test, and a harness's own report that the server failed or
-was left out, or a wait for the adapter that ended without it, is a negative one. A report the system
+was left out, or a wait for the adapter that ended without it, is a negative one. The harness's own
+report outweighs the adapter's, because the adapter reports when its process starts, before the harness
+has finished connecting to it. A report the system
 does not recognise is not grounds. A run whose harness starts the server before the system sends the
 run its first prompt tests itself, and is described from its own result.
 
@@ -262,15 +264,24 @@ is told.
 
 ### Requirement: Whether a run's harness started the Hub's tool server is recorded per run
 
-For every run given the Hub's tool-protocol server, the system SHALL record whether that run's harness started it, as one of started, failed, or left out, from the first source that reports it, and SHALL record for every run which surface the run was told to reach the plane through.
+For every run given the Hub's tool-protocol server, the system SHALL record whether that run's harness started it, as one of started, failed, or left out, letting the harness's own recognised report decide over the adapter reporting online and the adapter reporting online decide over a wait that ended without it, in whatever order they arrive, and SHALL record for every run which surface the run was told to reach the plane through.
 
-A positive report is final for the run: the adapter reporting online is direct evidence that the
-harness started the program, and a slower source that later says otherwise does not overwrite it.
-Because it is final, only the harness starting the program may make it: the call command is the same
+The adapter reports online as soon as its process starts, before the harness has finished connecting
+to it. That proves the harness started the program, not that the harness offers its tools: a harness
+that started the server and then failed to connect to it has already produced that report. So the
+harness's own account of the server, where it gives one the system recognises, is what the run is
+recorded by, and the adapter's report decides only where the harness says nothing recognisable. A
+positive that could never be withdrawn by the harness's own later failure would be the permanent
+grounds this requirement exists to remove, rebuilt one level down.
+
+Only the harness starting the program may produce the adapter's report: the call command is the same
 program, started by the run rather than by its harness, and a call through it reports nothing about
-the server. A
-negative record may still become positive if the adapter reports online late. A run that ended before
-any source could report was not tested, and is recorded as untested rather than as a negative.
+the server. A run that ended before any source could report was not tested, and is recorded as
+untested rather than as a negative. Recording never fails the run it records.
+
+A runner that has no way to report a negative keeps its last recorded test, which may be an old
+positive. That is stated rather than guessed around: for such a runner a guessed negative would point
+the run at a path its own sandbox may not let it use.
 
 #### Scenario: The adapter reporting online records a positive test
 
@@ -281,6 +292,12 @@ any source could report was not tested, and is recorded as untested rather than 
 
 - **WHEN** a run's harness reports the servers it started and the Hub's server is not among them
 - **THEN** that run is recorded as having left the server out
+
+#### Scenario: The harness's own failure outweighs the adapter's report
+
+- **WHEN** a run's adapter reports online and that run's harness reports that the server failed, in
+  either order
+- **THEN** that run is recorded as failed
 
 #### Scenario: A run that never reached its harness's report is untested
 

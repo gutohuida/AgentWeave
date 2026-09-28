@@ -9,9 +9,11 @@ Each group can be cut. Skip the rows of any group the operator rejected.
 1. Task 1.1 records whether each subscribed raw-event type was delivered, and which of
    `session.error` and the `Error:` text chunk arrived first. The fixtures under
    `hub/tests/fixtures/copilot/` are in that recorded order.
-2. Tests 1.2 to 1.6 fail before tasks 2.1 to 2.6 and pass after them. Test 1.3 passes with the
-   error fixture in both orders, and counts error events rather than reading positions. Test 1.4's
-   in-flight case passes, and 1.2's token counts are integers.
+2. Tests 1.2 to 1.6 fail before tasks 2.1 to 2.6 and pass after them. Test 1.3 uses the order task
+   1.1 recorded (R3: the code sends the raw event first); its prose-before-error case keeps the
+   prose as text, and its reversed-order case shows the order matters. Test 1.4's in-flight case
+   passes, 1.2's token counts are integers, 1.2's oversized and subagent compactions behave as
+   design D4 says, and 1.5's `payload: null` post answers 201.
 3. `grep -rn "summaryContent" hub/hub` finds only the mapper line that drops it.
 4. Drive 7.1: the timeline shows a paired `subagent_started` / `subagent_completed`.
 5. Drive 7.2 (replaying the captured fixture; R2 found no bare `/compact` can reach Copilot): the
@@ -24,7 +26,9 @@ Each group can be cut. Skip the rows of any group the operator rejected.
 ### Group C: BYOK
 
 1. Tests 1.7 to 1.10 fail before tasks 3.1 to 3.3 and pass after them. Test 1.8's launchability
-   assertions go through `GET /runners/launchability` and `GET /agents`, not the adapter alone.
+   assertions go through `GET /runners/launchability`, `GET /agents/launchability` and
+   `POST /agents`, not the adapter alone; its stored-override case and 1.7's `PATCH` pair cases
+   pass (R3).
 2. Drive 7.5: the pasted-key refusal sentence is recorded verbatim, and a read-only grep of the
    trial database finds no key value.
 3. The Runners page shows the API-key and Claude Max sentence (test 1.14).
@@ -40,7 +44,8 @@ Each group can be cut. Skip the rows of any group the operator rejected.
 
 1. Test 1.13 fails before task 5.1 and passes after it.
 2. Drive 7.8: the live process's command line carries the flag when the toggle is off, and a card
-   saying the call acts on GitHub as the operator appears for a GitHub-server call when it is on.
+   saying the call acts on GitHub as the operator, with no "Workspace only would …" line, appears
+   for a GitHub-server call when it is on.
 
 ### All groups
 

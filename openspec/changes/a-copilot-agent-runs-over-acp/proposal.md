@@ -16,8 +16,20 @@ member names"):
 
 R1's `build_launch`, `map_events` and `usage_from` are stream-transport members and do not apply;
 `resume_id` is `RpcTurnRequest.resume_session_id`; `stop` is a clause of `run_turn`'s contract.
-This change adds `per_turn_context`, `stable_context` and `restrict_spec_writes` to
-`RpcTurnRequest`, and `on_session_missing` and `on_raw_event` to `RpcCallbacks`.
+This change adds `per_turn_context`, `tool_surface_context`, `stable_context`, `control_overrides`
+and `told_access_path` to `RpcTurnRequest` (`restrict_spec_writes` and `extra_flags` are slice 1's
+own), and `on_session_missing` to `RpcCallbacks` (R3: R2's `on_raw_event` is removed, since slice 4
+does not use it). What slices 3–5 get from this change is listed in `design.md` § "Provided to
+slices 3–5".
+
+**Round 3, 2026-09-28** changed four behaviours:
+
+- an MCP call's server is taken only from Copilot's own raw report of the call, never from a tool
+  call's title, which the model writes;
+- failures after the prompt are returned as a failed turn, not raised as a failure to start;
+- a Copilot session error fails the turn;
+- refusals about the agent's Copilot home or executable hold the input rather than count against
+  it.
 
 It also meets eight changes of the 2026-09-27 night queue and three parked ones. At R2 (master
 `ef55e6f`) three of those have landed and the rest are unbuilt; `design.md` § "Sites touched by open
@@ -114,8 +126,11 @@ the first runner whose approval axis is independent of its tool surface.
   - `tool_call`/`tool_call_update` carry locations and diffs;
   - `plan` becomes a plan status;
   - `Error:`/`Warning:`/`Info:` text that matches a raw `session.error|warning|info` event becomes
-    an error or diagnostic event;
-  - a failed `agentweave` MCP server is reported.
+    an error or diagnostic event, and a `session.error` fails the turn;
+  - an MCP call is labelled by the server Copilot reports for it, not by the kind Copilot guesses
+    from its name;
+  - a failed `agentweave` MCP server is reported, as an error for a run told the MCP form and as a
+    diagnostic otherwise.
 - **Context meter** from `usage_update {used, size}`. **Accounting** records the turn as unmeasured;
   per-call usage and credits are slice 4.
 - **One-shot calls** (`worker.py`, `conversation_titles.py`) use `copilot -p --output-format json`,
@@ -165,9 +180,10 @@ None. Every behaviour lands in an existing capability.
   - *Runners are project-scoped Hub records*: the supported set becomes `claude`, `codex`, `copilot`.
   - *Built-in runners are seeded on first use*: the seed includes `copilot`.
 
-  Three ADDED requirements:
+  Four ADDED requirements:
   - *A Copilot runner is spawned as its own executable*;
   - *A Copilot runner below the supported version is refused*;
+  - (R3) *A Copilot turn that fails after its prompt ends as a failed turn, not a failed start*;
   - *Copilot launchability is read from Copilot itself*.
 - `agent-run-sandboxing`: ADDED *A Copilot run's posture is decided by the Hub over ACP* and *A
   Copilot run receives no GitHub token it was not given*.

@@ -56,6 +56,13 @@ it is.
 - **THEN** the review turn takes place
 - **AND** its context names the commit alone
 
+#### Scenario: A divergence point that cannot be computed does not stop the review
+
+- **WHEN** determining the divergence point fails for any reason, including the version-control
+  command timing out
+- **THEN** the review turn takes place with its context naming the commit alone
+- **AND** nothing prepared for the review is left behind unreleased
+
 #### Scenario: The choice is shown as stored
 
 - **WHEN** the operator chooses code review for a Copilot agent and reopens its settings
