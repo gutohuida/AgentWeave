@@ -16,6 +16,25 @@ Newest day first. Days below the newest are history and are not read.
 
 ---
 
+## 2026-09-28
+
+No review page today. **Written in an interactive session with the operator present.** The
+operator asked to *"approve the ones we can"* after the Copilot (ghcp) slices had R2, R3 and the
+Opus adversarial review (`spec-queue/tracks/reviews/ghcp-s1..s5-2026-09-28.md`). Only slice 1 has
+no question left for the operator; slices 2–5 wait on the questions listed in their designs.
+
+**This section carries no `ORDER:` and adds nothing buildable tonight.** Slice 1's prerequisites
+are the 23 changes of the 2026-09-27 `ORDER:` that are still unbuilt (its proposal's *Depends on*),
+and DECISIONS `ghcp-d5-order` puts every ghcp slice after them.
+
+- APPROVED  each-runner-cli-is-one-adapter   ghcp slice 1. R1 09-27; R2, R3, Opus review (REVISE,
+  11 findings) and its fixes 09-28; an independent Opus verification of the fixes found it
+  approvable (finding 7's worker-spend note has since landed). **Not before every change still
+  open from the 2026-09-27 `ORDER:` is archived**: a night that finds any of them unarchived skips
+  this row. Carries F461 and F462 (its task 6.2). Before building: the rebase-at-IMPL lines in its
+  design, and the verifier's two notes on task 1.4 (seed Run/Conversation rows for the executor
+  test; vary `AW_DECISION_TIMEOUT` as an input, not by mutating `env`).
+
 ## 2026-09-27
 
 No review page today. **Written in an interactive session with the operator present** (DECIDE).
