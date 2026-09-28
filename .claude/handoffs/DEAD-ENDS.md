@@ -1749,3 +1749,13 @@ disappears is indistinguishable from one that was forgotten.
   each ran `git stash` / `stash pop` for fail-before evidence while other agents' uncommitted edits
   were in the tree (it came back intact, by luck). Tell parallel agents to mutate through a scratch
   copy of the file, never stash or `git checkout --` in a shared tree.
+- **2026-09-28 — `git mv <dir> <archive-dir>` then `git add <old-dir>` fails the whole `&&` chain**
+  with `fatal: pathspec '<old-dir>' did not match any files`: the move already staged the removal
+  (same family as the 2026-09-09 `git rm --cached` entry). After a `git mv`, stage only the new path
+  and the other edited files; the chain's later `commit` and `push` never ran, and only a `git log`
+  afterwards showed the archive commit was missing.
+- **2026-09-28 — the auto-mode classifier can return "no verdict (error)" for every Bash and
+  PowerShell call for several minutes**, a transient server-side failure, not a denial. Read, Glob
+  and Grep still work: git refs can be read straight from `.git/refs/heads/<branch>`,
+  `.git/refs/remotes/origin/<branch>` and `.git/packed-refs`. Retrying later worked; do not burn the
+  10-in-a-row budget retrying the same call back to back.
