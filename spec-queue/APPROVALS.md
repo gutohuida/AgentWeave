@@ -23,9 +23,14 @@ operator asked to *"approve the ones we can"* after the Copilot (ghcp) slices ha
 Opus adversarial review (`spec-queue/tracks/reviews/ghcp-s1..s5-2026-09-28.md`). Only slice 1 has
 no question left for the operator; slices 2–5 wait on the questions listed in their designs.
 
-**This section carries no `ORDER:` and adds nothing buildable tonight.** Slice 1's prerequisites
-are the 23 changes of the 2026-09-27 `ORDER:` that are still unbuilt (its proposal's *Depends on*),
-and DECISIONS `ghcp-d5-order` puts every ghcp slice after them.
+**Tonight continues the 2026-09-27 `ORDER:`.** Asked at 20:15 whether tonight should build the
+23 changes of that `ORDER:` still unbuilt, the operator answered *"yes"*. The line below is those
+23, in their 09-27 order (the first five were built and archived by the 09-27 night). Each carries
+its 09-27 approval (restated there from 2026-09-24); none has changed since. Slice 1's prerequisites
+are exactly these 23 (its proposal's *Depends on*), and DECISIONS `ghcp-d5-order` puts every ghcp
+slice after them, so **no ghcp slice is in tonight's `ORDER:`**, even if the 23 finish early.
+
+ORDER: an-undelivered-message-says-how-its-last-attempt-ended, the-checkpoint-grant-says-it-reaches-every-checkpoint, the-operator-can-rename-a-task, a-message-to-the-operator-is-told-where-the-operator-reads, an-agent-updates-a-task-with-what-its-tool-carries, a-claude-run-is-told-its-agentweave-tools-by-their-full-names, request-agent-models-the-new-agent-on-one-the-operator-made, a-runner-that-cannot-collaborate-says-so-where-it-is-bound, agents-no-longer-register-themselves, a-loops-outstanding-mail-is-mail-not-yet-delivered, the-permissions-pill-shows-the-posture-the-run-gets, an-ask-me-card-says-what-workspace-only-would-decide, the-approval-preview-asks-the-gates-merge-question, isolation-does-not-change-under-held-work, a-documents-rigor-history-and-retired-requirements-are-on-screen, a-pending-proposal-can-be-withdrawn, the-corpus-is-indexed-arranged-and-adopted-from-the-app, a-specification-is-read-in-results-that-fit, input-the-hub-accepted-is-answered-as-accepted, charters-are-named-once-and-an-empty-one-says-so, a-dialog-takes-the-keyboard-when-it-opens, the-app-window-keeps-the-operators-preferences, a-run-records-that-its-calls-were-allowed
 
 - APPROVED  each-runner-cli-is-one-adapter   ghcp slice 1. R1 09-27; R2, R3, Opus review (REVISE,
   11 findings) and its fixes 09-28; an independent Opus verification of the fixes found it
