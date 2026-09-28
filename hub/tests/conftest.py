@@ -1031,6 +1031,26 @@ def _default_project_workspace(monkeypatch, tmp_path):
     monkeypatch.setattr(project_workspace, "resolve_project_workspace", _fake_resolve)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_codex_model_cache(monkeypatch, tmp_path):
+    """`model_catalog.py` now reads `$CODEX_HOME/models_cache.json` at runtime and offers
+    exactly what it lists (`the-codex-models-offered-are-the-ones-its-cli-lists`, design D4).
+    Without this fixture, this suite would assert against *this machine's* real cache — a
+    0.146.0 install's three models, not the literal `CATALOG["codex"]` ten test files assert
+    on (`gpt-6-sol` and similar) — and pass here for a reason that fails everywhere else, the
+    same trap the `claude`-on-PATH memory records for a different tool.
+
+    Points `_codex_cache_path` at a file under this test's own disposable `tmp_path` that does
+    not exist, so every test sees the literal fallback unless it writes a cache of its own
+    (`hub/tests/test_codex_models_from_the_cli_cache.py` does, per test). Also clears the
+    module's success-only memo so an earlier test's cache reading cannot leak into this one.
+    """
+    import hub.model_catalog as model_catalog
+
+    monkeypatch.setattr(model_catalog, "_codex_cache_memo", None)
+    monkeypatch.setattr(model_catalog, "_codex_cache_path", lambda: tmp_path / "models_cache.json")
+
+
 @pytest.fixture
 def bind_project_workspace(monkeypatch):
     """Returns an async helper: `await bind_project_workspace(directory)`.

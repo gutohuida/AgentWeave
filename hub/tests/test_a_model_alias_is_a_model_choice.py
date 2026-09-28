@@ -2,6 +2,8 @@
 runner keeps it as written (D1/D2 of the change's design.md).
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from hub.model_catalog import get_provider, undeclared_model_reason, validate_overrides
@@ -29,11 +31,12 @@ async def test_post_runners_accepts_the_alias_and_stores_it_as_written(app, auth
 
 @pytest.mark.asyncio
 async def test_post_agents_accepts_the_alias_and_stores_it_as_written(app, auth_headers):
-    created = await app.post(
-        P + "/agents",
-        json={"name": "a-alias", "provider": "claude", "model": ALIAS},
-        headers=auth_headers,
-    )
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        created = await app.post(
+            P + "/agents",
+            json={"name": "a-alias", "provider": "claude", "model": ALIAS},
+            headers=auth_headers,
+        )
     assert created.status_code == 201, created.text
     runner_id = created.json()["runner_id"]
     runner = await app.get(f"{P}/runners/{runner_id}", headers=auth_headers)
@@ -119,11 +122,12 @@ async def test_an_unknown_model_is_still_refused(app, auth_headers):
 
 @pytest.mark.asyncio
 async def test_an_alias_created_runner_is_named_for_the_alias_not_its_target(app, auth_headers):
-    created = await app.post(
-        P + "/agents",
-        json={"name": "a-alias-name", "provider": "claude", "model": ALIAS},
-        headers=auth_headers,
-    )
+    with patch("hub.launchability.shutil.which", return_value="/usr/bin/claude"):
+        created = await app.post(
+            P + "/agents",
+            json={"name": "a-alias-name", "provider": "claude", "model": ALIAS},
+            headers=auth_headers,
+        )
     assert created.status_code == 201, created.text
     runner_id = created.json()["runner_id"]
     runner = await app.get(f"{P}/runners/{runner_id}", headers=auth_headers)

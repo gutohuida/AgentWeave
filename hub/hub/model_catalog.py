@@ -33,24 +33,23 @@ Model IDs and context windows below are live-verified, not authored from memory:
   in front of a real 1M Haiku. There is no 1M Haiku. A window-variant mechanism was built on that
   misreading and reverted; if the suffix tempts you again, check the model's published context
   window before declaring anything.
-- Codex: read directly from `~/.codex/models_cache.json`, the CLI's own server-synced catalog
-  (has a `fetched_at` timestamp and an `etag`) — not from the CLI's `--help` text, which lists no
-  models. Only entries with `"visibility": "list"` are included (`codex-auto-review`, visibility
-  `"hide"`, is an internal review model, not one an operator selects). Context windows are that
-  file's own `context_window` field per model.
+- Codex: read at runtime from `$CODEX_HOME/models_cache.json`, else `~/.codex/models_cache.json`
+  — the CLI's own server-synced catalog (has a `fetched_at` timestamp, an `etag` and a
+  `client_version`), the same resolution `read_codex_rollout_accounting` uses
+  (`runner_parsing.py:677`) — not from the CLI's `--help` text, which lists no models. Only
+  entries with `"visibility": "list"` are offered (`codex-auto-review`, visibility `"hide"`, is an
+  internal review model, not one an operator selects), in the cache's `priority` order, taking each
+  entry's own `display_name` and `context_window`. The first becomes the default: the Hub follows
+  whatever the CLI it will actually spawn was told, not a value chosen here. See
+  `the-codex-models-offered-are-the-ones-its-cli-lists` (F267, F174: two GPT-6 models were declared
+  here from a changelog alone, for a CLI version this machine never ran, and drifted from what the
+  installed CLI was actually offered).
 
-  **The catalog the server sends depends on the client's version.** Re-read 2026-09-23 with
-  `codex debug models`: CLI 0.146.0 is sent GPT-5.6-Terra, GPT-5.6-Luna and GPT-5.5 (GPT-5.6-Sol,
-  GPT-5.4 and GPT-5.4-Mini are gone, and were removed here); CLI 0.156.1 is additionally sent
-  GPT-6-Luna, first in its priority order. GPT-6-Luna is declared, but it is not the default:
-  the default stays on a model every current client is offered, so an agent created against an
-  older installed `codex` does not start on a model its CLI has never been told about.
-
-  **GPT-6-Sol** shipped the same release as GPT-6-Luna (Codex rust-v0.156.1, 2026-09-23T02:41Z,
-  changelog #47405: *"Choose GPT-6 Sol or GPT-6 Luna from the model picker"*). The installed CLI
-  here is still 0.146.0 (`models_cache.json`'s `client_version`), so — same as GPT-6-Luna above —
-  it could not be confirmed against a live 0.156.1 cache; declared from the changelog alone, same
-  context window as its sibling GPT-6 models, and also not the default for the reason given above.
+  **The list below is the fallback**, used when the cache is absent, unreadable, malformed, or
+  lists no model — a machine with no Codex CLI, CI, or a Docker Hub whose container has no Codex
+  home. `scripts/check_model_catalog.py` compares it against a real cache and reports when it has
+  drifted from what *some* installed CLI was offered; a report no longer means the Hub offers the
+  wrong list, only that the fallback would, on a machine with no cache to prefer instead.
 
   The effort control's values are the INTERSECTION of every listed model's
   `supported_reasoning_levels` (`low, medium, high, xhigh`) — not the union. The cache shows
@@ -64,8 +63,11 @@ Model IDs and context windows below are live-verified, not authored from memory:
 
 from __future__ import annotations
 
+import json
+import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,25 @@ class ModelDescriptor:
     aliases: Tuple[str, ...] = ()
     context_window: Optional[int] = None
     default: bool = False
+
+
+@dataclass(frozen=True)
+class CacheReading:
+    """A successful read of a provider CLI's own model cache (design D1)."""
+
+    models: Tuple[ModelDescriptor, ...]
+    fetched_at: Optional[str]
+    client_version: Optional[str]
+
+
+@dataclass(frozen=True)
+class CatalogSource:
+    """Where a provider's offered models came from (design D2)."""
+
+    kind: str  # "cli_cache" | "built_in"
+    fetched_at: Optional[str] = None
+    client_version: Optional[str] = None
+    reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -278,12 +299,134 @@ CATALOG: Dict[str, ProviderDescriptor] = {
 }
 
 
+#: The provider whose models are read from an installed CLI's own cache at runtime (design D1).
+_CACHE_BACKED_PROVIDER = "codex"
+
+#: `(str(path), st_mtime_ns, st_size) -> CacheReading`, for the last *successful* read only
+#: (design D1.2 / operator review). A failed reading is never stored here, so it is retried on
+#: the next call rather than sticking to the fallback until the file's mtime happens to move
+#: again — the trap a memo keyed on mtime alone would fall into (design test 5b).
+_codex_cache_memo: Optional[Tuple[Tuple[str, int, int], CacheReading]] = None
+
+
+def _codex_cache_path() -> Path:
+    """`$CODEX_HOME/models_cache.json`, else `~/.codex/models_cache.json` — the same resolution
+    `read_codex_rollout_accounting` uses (`runner_parsing.py:677`). A module-level function, not a
+    module-level constant, so tests can monkeypatch it (design D4) without touching `os.environ`.
+    """
+    return Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex"))) / "models_cache.json"
+
+
+def _codex_models_from_cache() -> Tuple[Optional[CacheReading], Optional[str]]:
+    """Read `_codex_cache_path()` and reduce it to a `CacheReading`, or `(None, reason)`.
+
+    Never raises (design D1.5): a missing file, an unreadable one, one that is not the shape a
+    Codex model cache has, or one that lists no `"visibility": "list"` model all fall back with a
+    reason string naming why, rather than crashing a route that only wanted a model list.
+    """
+    global _codex_cache_memo
+    path = _codex_cache_path()
+    try:
+        stat = path.stat()
+    except OSError:
+        return None, f"no Codex model cache at {path}"
+
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    if _codex_cache_memo is not None and _codex_cache_memo[0] == key:
+        return _codex_cache_memo[1], None
+
+    try:
+        # `json.loads` on `bytes` detects UTF-8/16/32 itself (RFC 8259) — a text-mode open with
+        # the platform's default codec does not, and fails on this machine's real cache (see
+        # design.md D1.3: `charmap` cannot decode a byte this cache actually contains).
+        data: Any = json.loads(path.read_bytes())
+    except Exception as exc:  # a half-written or corrupt cache is a fallback, not a crash
+        return None, f"Codex model cache unreadable: {type(exc).__name__}"
+
+    if not isinstance(data, dict) or not isinstance(data.get("models"), list):
+        return None, "Codex model cache lists no models"
+
+    listed = [
+        entry
+        for entry in data["models"]
+        if isinstance(entry, dict)
+        and entry.get("visibility") == "list"
+        and isinstance(entry.get("slug"), str)
+        and entry["slug"]
+    ]
+    if not listed:
+        return None, "Codex model cache lists no models"
+
+    # Sort by priority *after* the visibility filter — a hidden low-priority entry (this
+    # machine's real cache has one at priority 3) would otherwise become the default (R2).
+    # A missing priority sorts last; ties keep the file's own order (a stable sort).
+    listed.sort(
+        key=lambda entry: (
+            entry.get("priority")
+            if isinstance(entry.get("priority"), (int, float))
+            else float("inf")
+        )
+    )
+
+    def _window(entry: Dict[str, Any]) -> Optional[int]:
+        try:
+            return int(entry.get("context_window")) or None
+        except (TypeError, ValueError):
+            return None
+
+    models = tuple(
+        ModelDescriptor(
+            id=entry["slug"],
+            label=entry.get("display_name") or entry["slug"],
+            context_window=_window(entry),
+            default=(index == 0),
+        )
+        for index, entry in enumerate(listed)
+    )
+    reading = CacheReading(
+        models=models,
+        fetched_at=data.get("fetched_at"),
+        client_version=data.get("client_version"),
+    )
+    _codex_cache_memo = (key, reading)
+    return reading, None
+
+
+def _effective_catalog() -> Dict[str, ProviderDescriptor]:
+    """`CATALOG`, with `_CACHE_BACKED_PROVIDER`'s models replaced by a live cache reading when one
+    exists (design D1). Controls are never replaced — only the models a cache-backed provider
+    offers are per-machine; its controls stay the literal, declared values (proposal.md)."""
+    reading, _ = _codex_models_from_cache()
+    if reading is None:
+        return CATALOG
+    literal = CATALOG[_CACHE_BACKED_PROVIDER]
+    return {
+        **CATALOG,
+        _CACHE_BACKED_PROVIDER: ProviderDescriptor(
+            provider=literal.provider,
+            label=literal.label,
+            models=reading.models,
+            controls=literal.controls,
+        ),
+    }
+
+
+def codex_catalog_source() -> CatalogSource:
+    """Where the Codex provider's currently offered models came from (design D2)."""
+    reading, reason = _codex_models_from_cache()
+    if reading is None:
+        return CatalogSource(kind="built_in", reason=reason)
+    return CatalogSource(
+        kind="cli_cache", fetched_at=reading.fetched_at, client_version=reading.client_version
+    )
+
+
 def providers() -> List[ProviderDescriptor]:
-    return list(CATALOG.values())
+    return list(_effective_catalog().values())
 
 
 def get_provider(provider: str) -> Optional[ProviderDescriptor]:
-    return CATALOG.get(provider)
+    return _effective_catalog().get(provider)
 
 
 def undeclared_model_reason(provider: str, model: str) -> str:
@@ -303,12 +446,31 @@ def undeclared_model_reason(provider: str, model: str) -> str:
 
 
 def model_context_window(provider: str, model_id: str) -> Optional[int]:
-    """The catalog's declared context window for *model_id*, or None if unknown or undeclared."""
+    """The catalog's declared context window for *model_id*, or None if unknown or undeclared.
+
+    Consults the effective (cache-backed) catalog first and, on a miss, the literal `CATALOG`
+    (design D1, operator review) — a run on a model the cache no longer lists still keeps its
+    context window. Only this reading falls back; whether the model is *accepted* never does
+    (see `undeclared_model_reason`, `validate_overrides`).
+    """
     entry = get_provider(provider)
-    if entry is None:
-        return None
-    model = entry.model(model_id)
-    return model.context_window if model is not None else None
+    model = entry.model(model_id) if entry is not None else None
+    if model is not None:
+        return model.context_window
+    literal_entry = CATALOG.get(provider)
+    literal_model = literal_entry.model(model_id) if literal_entry is not None else None
+    return literal_model.context_window if literal_model is not None else None
+
+
+def _context_window_in(catalog: Dict[str, ProviderDescriptor], normalized: str) -> Optional[int]:
+    best: Optional[ModelDescriptor] = None
+    for entry in catalog.values():
+        for model in entry.models:
+            if model.id == normalized or normalized in model.aliases:
+                return model.context_window
+            if normalized.startswith(model.id) and (best is None or len(model.id) > len(best.id)):
+                best = model
+    return best.context_window if best is not None else None
 
 
 def context_window_for_model(model_id: str) -> Optional[int]:
@@ -320,18 +482,17 @@ def context_window_for_model(model_id: str) -> Optional[int]:
     report dated snapshots (`claude-haiku-4-5-20251001`) that the catalog may hold undated, and a
     window that is right for the family is a better answer than none. Returns None rather than
     guessing when nothing matches — an unknown window means no percentage, which is honest.
+
+    Consults the effective (cache-backed) catalog first and, on a miss, the literal `CATALOG`
+    (design D1, operator review), same fallback as `model_context_window`.
     """
     normalized = (model_id or "").strip()
     if not normalized:
         return None
-    best: Optional[ModelDescriptor] = None
-    for entry in CATALOG.values():
-        for model in entry.models:
-            if model.id == normalized or normalized in model.aliases:
-                return model.context_window
-            if normalized.startswith(model.id) and (best is None or len(model.id) > len(best.id)):
-                best = model
-    return best.context_window if best is not None else None
+    result = _context_window_in(_effective_catalog(), normalized)
+    if result is not None:
+        return result
+    return _context_window_in(CATALOG, normalized)
 
 
 PERMISSION_MODE_CONTROL = "permission_mode"
@@ -353,7 +514,7 @@ def permission_mode_values() -> List[ControlValue]:
     does not silently make it unofferable as a default.
     """
     seen: Dict[str, ControlValue] = {}
-    for entry in CATALOG.values():
+    for entry in _effective_catalog().values():
         control = entry.control(PERMISSION_MODE_CONTROL)
         if control is None:
             continue

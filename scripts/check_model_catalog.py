@@ -12,6 +12,15 @@ only skip there -- which is exactly where a green suite would most misleadingly 
 catalog. This is the shape that gets run when someone suspects the catalog is wrong. Do not
 promote it to a CI gate; on a machine with no Codex CLI it has nothing to compare and says so.
 
+**The literal this compares against is now the fallback, not the offered list**
+(`the-codex-models-offered-are-the-ones-its-cli-lists`). `hub/hub/model_catalog.py` reads a
+Codex model cache at runtime and offers exactly what it lists; the literal `CATALOG["codex"]`
+this script diffs is used only when a cache is absent, unreadable, malformed, or lists no model.
+So a drift this script reports no longer means the Hub is offering the wrong list -- on any
+machine with a readable cache, it already is not. It means the *fallback* has drifted from what
+some installed CLI was offered, which still matters for CI, a machine with no Codex CLI, and a
+Docker Hub whose container has no Codex home.
+
 **What it compares**, all of it derived from rules `model_catalog.py`'s own docstring states:
 
 | check | the rule it enforces |
@@ -304,7 +313,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument(
         "--catalog", type=Path, default=DEFAULT_CATALOG, help=f"default: {DEFAULT_CATALOG}"
     )
-    parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE, help=f"default: {DEFAULT_CACHE}")
+    parser.add_argument(
+        "--cache", type=Path, default=DEFAULT_CACHE, help=f"default: {DEFAULT_CACHE}"
+    )
     args = parser.parse_args(argv)
 
     cache_path: Path = args.cache

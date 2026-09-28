@@ -27,6 +27,10 @@ export const MODEL_CATALOG_FIXTURE: ModelCatalogResponse = {
   providers: ['claude', 'codex'].map((provider) => ({
     provider,
     label: provider,
+    // Both providers built-in by default (matches "no cache on this machine"); Codex's own
+    // cache-reading state is exercised by tests that override this field directly
+    // (`the-codex-models-offered-are-the-ones-its-cli-lists`, design test 9).
+    source: { kind: 'built_in' as const, fetched_at: null, client_version: null, reason: `no Codex model cache` },
     models: MODELS[provider],
     controls: [
       {

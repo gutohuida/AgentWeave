@@ -13,7 +13,12 @@ import {
   Runner,
   RunnerCli,
 } from '@/api/runners'
-import { useModelCatalog, catalogModelLabel, resolveCatalogModel } from '@/api/modelCatalog'
+import {
+  useModelCatalog,
+  catalogModelLabel,
+  catalogSourceLine,
+  resolveCatalogModel,
+} from '@/api/modelCatalog'
 import { readableApiError } from '@/api/client'
 
 const CLI_OPTIONS: RunnerCli[] = ['claude', 'codex']
@@ -215,6 +220,11 @@ function RunnerForm({
   const storedIsDeclared = !!resolveCatalogModel(providerEntry, storedModel)
   const storedOption = storedModel && !storedIsDeclared ? storedModel : null
 
+  // Only Codex publishes its own catalog today (design D2) — Claude's models are a literal with
+  // no cache to name, so this line is Codex-only rather than showing "Built-in list" for every
+  // provider and implying Claude might one day drift the same way.
+  const sourceLine = cli === 'codex' ? catalogSourceLine(providerEntry?.source) : null
+
   return (
     <div
       className="fixed inset-0 flex items-center justify-center z-50"
@@ -305,6 +315,11 @@ function RunnerForm({
             {!catalogAvailable && (
               <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
                 The model catalog is unavailable — this runner will use the provider's default.
+              </p>
+            )}
+            {catalogAvailable && sourceLine && (
+              <p className="text-xs mt-1" style={{ color: 'var(--text-3)' }}>
+                {sourceLine}
               </p>
             )}
           </div>

@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/api/client'
+import type { ModelCatalogResponse } from '@/api/modelCatalog'
 import { AgentSettingsPage } from '@/components/agents/AgentSettingsPage'
 import { RunnersPage } from '@/components/runners/RunnersPage'
 import { MODEL_CATALOG_FIXTURE } from './support/modelCatalogFixture'
@@ -16,6 +17,10 @@ const bindMutate = vi.fn()
 // has no `error` to render and no `reset()` to clear, which is the whole of section 3.
 let refuseCreate: unknown = null
 let refuseUpdate: unknown = null
+
+// Armed by a test to swap in a catalog with a different Codex `source`
+// (`the-codex-models-offered-are-the-ones-its-cli-lists`, design test 9).
+let catalogOverride: ModelCatalogResponse | null = null
 
 vi.mock('@/api/runners', () => ({
   useRunners: () => ({
@@ -125,7 +130,10 @@ vi.mock('@/api/agents', async (importOriginal) => {
 
 vi.mock('@/api/modelCatalog', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/api/modelCatalog')>()
-  return { ...actual, useModelCatalog: () => ({ data: MODEL_CATALOG_FIXTURE, isLoading: false }) }
+  return {
+    ...actual,
+    useModelCatalog: () => ({ data: catalogOverride ?? MODEL_CATALOG_FIXTURE, isLoading: false }),
+  }
 })
 
 function optionsOf(select: HTMLElement): (string | null)[] {
@@ -139,6 +147,53 @@ describe('runner management UI', () => {
     bindMutate.mockReset()
     refuseCreate = null
     refuseUpdate = null
+    catalogOverride = null
+  })
+
+  it('names the built-in fallback under the Codex model select when no cache was read (design test 9)', async () => {
+    const user = userEvent.setup()
+    render(<RunnersPage />)
+
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.selectOptions(screen.getByLabelText('CLI'), 'codex')
+
+    expect(screen.getByText('Built-in list: no Codex model cache')).toBeInTheDocument()
+  })
+
+  it('names the installed Codex CLI and fetch date under the model select when a cache was read (design test 9)', async () => {
+    const user = userEvent.setup()
+    catalogOverride = {
+      providers: MODEL_CATALOG_FIXTURE.providers.map((p) =>
+        p.provider === 'codex'
+          ? {
+              ...p,
+              source: {
+                kind: 'cli_cache' as const,
+                fetched_at: '2026-09-23T10:10:51Z',
+                client_version: '0.146.0',
+                reason: null,
+              },
+            }
+          : p,
+      ),
+    }
+    render(<RunnersPage />)
+
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    await user.selectOptions(screen.getByLabelText('CLI'), 'codex')
+
+    expect(
+      screen.getByText('As listed by your installed Codex CLI (0.146.0, fetched 23 Sep)'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows no Codex source line for the Claude CLI', async () => {
+    const user = userEvent.setup()
+    render(<RunnersPage />)
+
+    await user.click(screen.getByRole('button', { name: 'New Runner' }))
+    // Claude is the default CLI when the dialog opens.
+    expect(screen.queryByText(/Built-in list|As listed by your installed Codex CLI/)).not.toBeInTheDocument()
   })
 
   it('creates a custom runner variant without replacing the existing runner', async () => {

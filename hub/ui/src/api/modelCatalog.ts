@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { getJson } from './client'
 import { useConfigStore } from '@/store/configStore'
+import { hubDate } from '@/lib/hubTime'
 
 export interface ModelDescriptor {
   id: string
@@ -29,11 +30,22 @@ export interface ControlDescriptor {
   apply: ApplySpec
 }
 
+export interface CatalogSource {
+  kind: 'cli_cache' | 'built_in'
+  fetched_at: string | null
+  client_version: string | null
+  reason: string | null
+}
+
 export interface ProviderDescriptor {
   provider: string
   label: string
   models: ModelDescriptor[]
   controls: ControlDescriptor[]
+  // Optional so a test's hand-built catalog fixture (most predate this field) still type-checks;
+  // the Hub's real response always sends it (see `catalogSourceLine`, which treats a missing
+  // source the same as no line to show).
+  source?: CatalogSource
 }
 
 export interface ModelCatalogResponse {
@@ -99,4 +111,26 @@ export function resolveCatalogModel(
  * resolves to. */
 export function catalogModelLabel(model: ModelDescriptor, value: string): string {
   return model.id === value ? model.label : `${value} — latest (now ${model.label})`
+}
+
+/** One line naming where a provider's offered models came from
+ * (`the-codex-models-offered-are-the-ones-its-cli-lists` design D2). `cli_cache` names the
+ * installed CLI version and when its cache was fetched; `built_in` states the reason the cache
+ * was not used instead — the same reason string the Hub computed, not re-derived here. */
+export function catalogSourceLine(source: CatalogSource | null | undefined): string | null {
+  if (!source) return null
+  if (source.kind === 'cli_cache') {
+    const version = source.client_version ?? 'unknown version'
+    const fetched = source.fetched_at ? hubDate(source.fetched_at) : null
+    // Built by hand, not a single Intl.DateTimeFormat call: 'en-GB' abbreviates September as
+    // "Sept" (four letters) where 'en-US' gives "Sep" (three) — the month token is pinned to
+    // 'en-US' regardless of locale so the abbreviation stays fixed width, and "day month" order
+    // is applied afterward rather than trusted to a locale that might reorder it back.
+    const fetchedText =
+      fetched && !Number.isNaN(fetched.getTime())
+        ? `, fetched ${fetched.getUTCDate()} ${new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(fetched)}`
+        : ''
+    return `As listed by your installed Codex CLI (${version}${fetchedText})`
+  }
+  return `Built-in list: ${source.reason ?? 'no CLI cache to read'}`
 }

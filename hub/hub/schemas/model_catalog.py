@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
-from ..model_catalog import ProviderDescriptor
+from ..model_catalog import CatalogSource, ProviderDescriptor
 
 
 class ModelDescriptorResponse(BaseModel):
@@ -34,17 +34,47 @@ class ControlDescriptorResponse(BaseModel):
     apply: ApplySpecResponse
 
 
+class CatalogSourceResponse(BaseModel):
+    kind: str  # "cli_cache" | "built_in"
+    fetched_at: Optional[str] = None
+    client_version: Optional[str] = None
+    reason: Optional[str] = None
+
+    @classmethod
+    def from_source(cls, source: CatalogSource) -> "CatalogSourceResponse":
+        return cls(
+            kind=source.kind,
+            fetched_at=source.fetched_at,
+            client_version=source.client_version,
+            reason=source.reason,
+        )
+
+
+#: A provider whose models are declared literals, never a runtime cache — Claude, and any future
+#: provider that does not publish its own catalog (design D2: "Claude is always built_in with no
+#: reason").
+_BUILT_IN_SOURCE = CatalogSourceResponse(kind="built_in")
+
+
 class ProviderDescriptorResponse(BaseModel):
     provider: str
     label: str
     models: List[ModelDescriptorResponse]
     controls: List[ControlDescriptorResponse]
+    source: CatalogSourceResponse
 
     @classmethod
-    def from_descriptor(cls, descriptor: ProviderDescriptor) -> "ProviderDescriptorResponse":
+    def from_descriptor(
+        cls, descriptor: ProviderDescriptor, source: Optional[CatalogSource] = None
+    ) -> "ProviderDescriptorResponse":
         return cls(
             provider=descriptor.provider,
             label=descriptor.label,
+            source=(
+                CatalogSourceResponse.from_source(source)
+                if source is not None
+                else _BUILT_IN_SOURCE
+            ),
             models=[
                 ModelDescriptorResponse(
                     id=m.id,
