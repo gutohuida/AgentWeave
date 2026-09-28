@@ -17,4 +17,4 @@
 
 ## 3. Drive
 
-- [ ] 3.1 On the trial Hub `:8010`, read `GET /accounting` for a project with at least one `unavailable` turn, and record `unpriced_turns` and the rendered label on the Budgets settings section
+- [x] 3.1 On the trial Hub `:8010`, read `GET /accounting` for a project with at least one `unavailable` turn, and record `unpriced_turns` and the rendered label on the Budgets settings section. Driven: crashed a real run mid-flight (`taskkill` on the Hub PID) and restarted the Hub, so `run_reconciliation` produced a genuine `unavailable` `turn_usage` row (F92's mechanism). `GET /accounting` correctly reported `unpriced_turns: 1` at both project and per-agent level (D1). The Budgets tab's rendered label never showed "excludes N turns" because `preferred_display.kind` stayed `allowance` (a `claude` runner's turns always carry allowance data, which wins over `api_equivalent` per D2) — expected per design, recorded in `scripts/drive/FINDINGS.md` ("an-estimate-that-misses-turns-says-so drive, 2026-09-28") as a design consequence worth knowing, not a new finding.
