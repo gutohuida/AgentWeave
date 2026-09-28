@@ -20,6 +20,6 @@
 
 ## 3. Drive (no Codex spawn: Codex is undrivable, 2026-08-29)
 
-- [ ] 3.1 On the trial Hub `:8010`: `GET /api/v1/model-catalog` should list this machine's cached Codex models (`gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` at 0.146.0) with `source.kind == "cli_cache"`. Record it verbatim
-- [ ] 3.2 `POST /runners {"cli":"codex","model":"gpt-6-sol"}` answers 400 on this machine, and an existing runner on it (seed one through SQL on the trial database only) reads `model_unrecognised: true`
-- [ ] 3.3 Open New runner, choose Codex, and read the source line. Record it verbatim
+- [x] 3.1 On the trial Hub `:8010`: `GET /api/v1/model-catalog` listed `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` for `codex`, with `source: {"kind": "cli_cache", "fetched_at": "2026-09-23T10:10:51.560427200Z", "client_version": "0.146.0", "reason": null}` — recorded verbatim in `scripts/drive/FINDINGS.md`
+- [x] 3.2 `POST /runners {"cli":"codex","model":"gpt-6-sol"}` answered 400 (`'gpt-6-sol' is not a model 'codex' declares; expected one of: gpt-5.6-terra, gpt-5.6-luna, gpt-5.5`); a runner seeded through SQL on the trial database with that model read `model_unrecognised: true`
+- [x] 3.3 New Runner → CLI `codex`: the source line read, verbatim, "As listed by your installed Codex CLI (0.146.0, fetched 23 Sep)". No new finding; full account in `scripts/drive/FINDINGS.md`, "the-codex-models-offered-are-the-ones-its-cli-lists drive, 2026-09-28"
