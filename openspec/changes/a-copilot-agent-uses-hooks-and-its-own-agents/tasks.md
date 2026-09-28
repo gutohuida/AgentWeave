@@ -274,8 +274,9 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `config` (it is in `ROSTER_CONFIG_KEYS`; design D8).
 - [ ] 1.13 (D) `hub/tests/test_copilot_github_mcp_toggle.py`:
   - slice 2's `copilot_acp.build_acp_argv` contains `--disable-builtin-mcps` when
-    `RpcTurnRequest.github_mcp` is false, and omits it when true; and (R3) the trigger sets that
-    field from `config.copilot_github_mcp` (absent → false);
+    `RpcTurnRequest.agent_config["copilot_github_mcp"]` is false or absent, and omits it when true;
+    and (R3) the trigger fills `agent_config` from the agent's config (contract reconciliation,
+    2026-09-28: slice 1's field name, not `github_mcp`);
   - slice 2's `copilot_acp.decide_permission` answers an MCP permission request naming server
     `github-mcp-server` (a `create_issue` with `owner`/`repo`/`title`) with `ASK_OPERATOR` under
     `workspace`, `REJECT` under `acceptEdits`, `ALLOW` under full access, and the operator under
@@ -308,9 +309,9 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 - [ ] 2.1 `hub/hub/runner_events.py` (design D4, D5):
   - `status_event` gains `facts`; `error_event` gains `facts` and redacts its `message` by value;
-  - `diagnostic_event`: use slice 2's `diagnostic_event(*, code, message, severity, facts)` (R3). If
-    it has no `stream` keyword, add one with a default and write it into the payload (design D5;
-    *Required of slices 1–4*, 2.1);
+  - `diagnostic_event`: use slice 2's `diagnostic_event(*, stream, severity, summary, code=None,
+    facts=None)` (its R3; contract reconciliation, 2026-09-28), with `summary=` and
+    `stream="copilot"`. Nothing to add to it (design D5; *Required of slices 1–4*, 2.1);
   - facts: string values through the value rule only, numbers kept. Never `redact_secrets(facts)`
     whole.
 - [ ] 2.2 Ensure the six types are in slice 2's raw-event subscription constant, as a set union
@@ -404,9 +405,11 @@ scratch copy (DEAD-ENDS 2026-09-27).
 
 ## 5. Group D — the GitHub MCP server toggle
 
-- [ ] 5.1 `RpcTurnRequest.github_mcp: bool = False` (if slice 1 has not added it), set by the
-  trigger from `config.copilot_github_mcp`. Slice 2's `copilot_acp.build_acp_argv`: omit
-  `--disable-builtin-mcps` when it is true. Slice 2's `copilot_acp.decide_permission` gains
+- [ ] 5.1 `RpcTurnRequest.agent_config: Mapping = {}` (slice 1's D16 name; contract reconciliation,
+  2026-09-28), filled by the trigger from the agent's config. `copilot_acp.run_turn` passes
+  `agent_config.get("copilot_github_mcp", False)` as `github_mcp`. Slice 2's
+  `copilot_acp.build_acp_argv` gains `github_mcp: bool = False`: omit `--disable-builtin-mcps` when
+  it is true. Slice 2's `copilot_acp.decide_permission` gains
   `github_mcp: bool = False`: `github-mcp-server` (and, with the toggle on, unidentified) requests
   are decided as design D9 says, before `_decide`. The Copilot `permission_card_label` gives D9's
   label, and the Copilot `workspace_verdict` returns `None` for such a request (R3).

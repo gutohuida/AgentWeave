@@ -387,7 +387,8 @@ JSON-RPC error's `data` count too (INFERRED that they may arrive there; nothing 
   handles any exception from the prompt's wait in one step. It passes the error's `data` to
   `observe_prompt_error`, when there is one. If the ledger has then recognised the refusal, it calls
   `cb.on_accounting(ledger.finish(…))` and **returns** the failed outcome instead of raising. Any
-  other error is re-raised unchanged, which is slice 2's contract. A stop still wins: an
+  other error after the prompt is written also ends in slice 2's returned `failed` outcome, with no
+  refusal recorded: that is slice 2's contract since its D12 R3 (contract reconciliation, 2026-09-28; R3 here said it was re-raised). A stop still wins: an
   `interrupted` outcome stays `stopped` and keeps its input. This needs `CopilotACPError` to carry
   the error's `data` as well as its `code` (*Required of slices 1 and 2*).
 - **The first real refusal is captured verbatim.** Until one is observed, the Copilot executor logs
@@ -598,18 +599,21 @@ change uses their names, as their designs stood on 2026-09-28, still unbuilt. Ea
    where the prompt result is read.
 8. *Needed, and provided by its D7.* `run_turn` knows whether it called `session/new`, including
    the `-32002` fallback, and passes it to `ledger.finish(session_was_new=…)`.
-9. *Needed; slice 2 must add it.* `CopilotACPError` carries the JSON-RPC error's `data` (as
-   `.data`) beside `.code`, so that D8 can read the structured quota fields of a `session/prompt`
-   error. Its D12 names only `code`.
+9. *Needed, and provided by its D12 (R3).* `CopilotACPError` carries the JSON-RPC error's `data`
+   (as `.data`) beside `.code`, so that D8 can read the structured quota fields of a `session/prompt`
+   error. (contract reconciliation, 2026-09-28: R3 here said slice 2 names only `code`; slice 2's R3 added `.data`.)
 10. *Owned here.* Slice 2 says `on_accounting` is *"never called"* and records `sample=None` (its
     D11, D18). Task 4.4 replaces that: one `cb.on_accounting(ledger.finish(…))` on every return path
     once a session exists. So is the D8 rule that a recognised quota refusal returns
-    `TurnOutcome(status="failed")` whatever the stop reason, and **instead of raising** on a prompt
-    error or a process exit. Slice 2's G4 gap is closed here, not there.
+    `TurnOutcome(status="failed")` whatever the stop reason. (contract reconciliation, 2026-09-28: slice 2's D12 R3 now returns a
+    `failed` outcome, instead of raising, for **every** failure after the prompt is written, and fails
+    the turn on an armed `session.error` whatever the stop reason (its D10). So "instead of raising"
+    is slice 2's general rule, and this change adds only its ledger, `observe_prompt_error` and the
+    recognised-refusal hold on top.)
 11. *Not needed.* The `on_raw_event` callback and the `TurnOutcome.prompt_usage` /
     `TurnOutcome.session_was_new` fields slice 2's R2 added for this slice (its D10, D18). Using them
-    would put a Copilot ledger in the generic executor (D2). Slice 2 may drop them. If it keeps them,
-    this change does not read them.
+    would put a Copilot ledger in the generic executor (D2). Slice 2's R3 dropped all three, and
+    slice 1 does not add `on_raw_event` (contract reconciliation, 2026-09-28).
 12. *Needed, and provided by its task 1.2.* The captured `-p --output-format json` stream that
     `parse_copilot_envelope` is tested against. Task 5.4 reads `session.shutdown` from it only if the
     capture contains it. The parser keeps returning `WorkerUsage()` until then, as slice 2 says.
@@ -850,6 +854,15 @@ order fails it. API tests assert by position in the order the route returns (`ag
     - `consider` resolving the runner adds one `db.get`, and `consider_from_reading` already
       swallows.
 
+- **Contract reconciliation, 2026-09-28** (a textual pass over the five slices' contract sections after their
+  concurrent R2/R3 rounds; not a design round; no code read). Changed here:
+  - *Required of slices 1 and 2* item 9: `CopilotACPError.data` is provided by slice 2's D12 R3.
+  - Items 10 and 11: slice 2 now returns `failed` for every failure after the prompt; `on_raw_event`,
+    `prompt_usage` and `session_was_new` are dropped.
+  - D8 and tasks 1.15(a), 4.4: an unrecognised post-prompt error ends in slice 2's returned `failed` outcome
+    (no refusal), not a re-raise; the `rate_limit` case asserts a returned outcome with no hold.
+  - Q11: slice 5's BYOK-credits request (its 4.3) carried as an open question.
+
 ## Open questions for R2/R3
 
 - **Q1 (slice 1). Answered in R2, from slice 1's design (unbuilt).** No. `usage_from` is a
@@ -915,3 +928,8 @@ order fails it. API tests assert by position in the order the route returns (`ag
   it: after a load, the slash prompt that had returned the cumulative totals in the original process
   returned no `usage` at all. That points to a per-process counter that starts empty. Task 7.3
   remains the gate for D3.
+- **Q11 (contract reconciliation, 2026-09-28, carried from slice 5's *Required of slices 1–4* 4.3).** Under BYOK a Copilot
+  run's credits are probably 0 and the provider bills tokens (slice 5's open question 6). This design
+  does not mention BYOK, so a BYOK run would show 0 credits as if the turn were free. Not a member or
+  field of the contract, so not settled here: decide at the 0.3 review whether a provider runner
+  (`runners.provider_config` set) shows credits at all.

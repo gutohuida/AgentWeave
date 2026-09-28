@@ -268,27 +268,28 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - If `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` has landed, the shim form renders its
     host-`SendMessage` sentence too.
   Test 1.9 passes.
-- [ ] 5.3 `_render_hub_agent_context(include_tool_surface=True)`.
-  - `agents.py:2126` is the only `_tool_surface_lines` call. The flag is carried through slice 2's
-    `stable`/`per_turn` split.
+- [ ] 5.3 `_render_hub_agent_context`: no `include_tool_surface` flag (contract reconciliation, 2026-09-28). Slice 2's D5 returns the
+  tool section as its own key, carried as `RpcTurnRequest.tool_surface_context`.
+  - `agents.py:2126` is the only `_tool_surface_lines` call.
   - The claude/codex paths are unchanged.
   - Record `plane_surface` when the prompt is composed. On the Claude/Codex path that is the `Run(...)`
     constructor (`agent_trigger.py:1306`), which comes after the prompt.
 - [ ] 5.4 Copilot, in slice 2's adapter and transport:
-  - `tests_mcp_before_first_prompt = True`;
+  - `tests_mcp_before_first_prompt = True` on the ACP **transport** (slice 1 D16: a transport `ClassVar`);
   - the transport waits with `mcp_announce.wait` after `session/new` / `session/load`, **only when the run was
     given the server**, honouring `should_interrupt`. On timeout it sends `/mcp list` as a bare single text block,
     then calls `cb.render_surface(surface)` (an `RpcCallbacks` field, total) and sends `session/prompt`;
   - the pre-spawn `notices` omit `access_path_notice` for such a runner (`agent_trigger.py:1173`), because
     `render_surface` supplies it (design D9, R3);
-  - the pre-spawn `per_turn` block is rendered with `include_tool_surface=False` (slice 2's agent file never
+  - the pre-spawn `tool_surface_context` is not sent; `render_surface`'s output replaces it (slice 2's agent file never
     carried the section);
   - `render_surface` returns the notice and the section, and rewrites `.agentweave/context/<agent>.md` with the
     section for the decided surface (design D9);
   - `mcp_announce.wait` is total: a failing row check counts as "not yet";
   - slice 2's `copilot_mcp_server_failed` error event is suppressed for a run told `shim` and kept for a run told
-    `mcp` (design D9, R3);
-  - `map_events` passes `session.mcp_servers_loaded` / `mcp_server_status_changed` entries for `agentweave` with
+    `mcp` (design D9, R3); the mapper reads slice 2's `RpcTurnRequest.told_access_path`, which the transport
+    replaces with the surface it passed to `render_surface` (contract reconciliation, 2026-09-28);
+  - slice 2's `CopilotEventMapper` passes `session.mcp_servers_loaded` / `mcp_server_status_changed` entries for `agentweave` with
     status `connected` or `failed` to 2.2 as `source="harness"`, and stores any other status as a diagnostic;
   - `copilot.exe`'s env per 5.1.
   Test 1.14 passes.

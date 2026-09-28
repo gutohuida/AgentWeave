@@ -213,6 +213,10 @@ Two additions to that environment:
 this slice does not build. Whichever lands the BYOK variables adds that filter (an `env` map that
 blanks them, since `${VAR}` expansion and inheritance are both VERIFIED); a test that only inspects
 the config file's `env` cannot catch the leak, because inheritance does not appear in the file.
+(contract reconciliation, 2026-09-28: slice 5, which lands the BYOK variables and owns this, **declines** the filter in its D7:
+the key is in every shell command's environment anyway, and a blanking `env` map may replace
+rather than merge the inherited environment. That is slice 5's open question 10, not an obligation
+of either slice.)
 
 **The MCP `timeout`.** Copilot's MCP default is 30 s (DOCUMENTED). The Hub's `ask_user` blocks up to
 `AW_QUESTION_TIMEOUT` (default 240 s, configurable to `MAX_WAITING_SECONDS` = 600,
@@ -833,8 +837,10 @@ Copilot ledger in the generic executor. Slice 1's rule is that no member exists 
 all three are **removed**. What slice 4 needs instead lives inside `run_turn` and is listed under
 § "Provided to slices 3–5":
 
-- one armed dispatch function, `_on_armed_raw_event(type, data)`, through which every armed raw
-  event passes to the mapper, and to which slice 4 adds its ledger's `observe_event`;
+- one armed dispatch function, `_on_armed_raw_event(type, data, params)`, through which every armed
+  raw event passes to the mapper, and to which slice 4 adds its ledger's `observe_event(type, data)`.
+  `params` is the whole notification params, `agentId` and `dataOmitted` included (contract reconciliation, 2026-09-28, for
+  slice 5's D4);
 - the prompt result read in one place;
 - a local `session_was_new`.
 
@@ -1059,7 +1065,9 @@ the titler's stdout to `title_from_output` (`conversation_titles.py:277`), which
 non-empty line* (`:99-110`). With `--output-format json` that line is the envelope's final JSONL
 record, so every Copilot conversation would be titled with a fragment of JSON. The title path for
 `copilot` therefore passes stdout through `parse_copilot_envelope` first and titles from the answer
-it returns (an unparseable envelope titles nothing, the titler's existing "" floor). Task 1.14
+it returns (contract reconciliation, 2026-09-28: in slice 1's names this step is `CopilotAdapter.title_text(stdout)`, the one-shot
+environment is `one_shot_env(purpose)`, and the `copilot` builder branches are
+`CopilotAdapter.one_shot`, slice 1 D16) (an unparseable envelope titles nothing, the titler's existing "" floor). Task 1.14
 asserts it on the 1.2 fixture.
 
 **The envelope parser.** `parse_copilot_envelope(stdout)` reads the JSONL:
@@ -1486,9 +1494,20 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
       allowed. Slice 5's "unidentified is treated as `github-mcp-server`" therefore meets a refusal,
       which is the safer side it wanted.
 15. *The argv builder needs the agent's config: owned by slice 5.* `build_acp_argv` takes explicit
-    keywords. Slice 5 adds a `builtin_mcps: bool` (omitting `--disable-builtin-mcps`) and the
-    `RpcTurnRequest` field that carries it, as it does `provider_config`.
-16. *MCP `env` inheritance and BYOK: recorded in D3, owned by slice 5* (unchanged from R2).
+    keywords. Slice 5 adds a `github_mcp: bool = False` keyword (omitting `--disable-builtin-mcps`
+    when true), and the same keyword on `decide_permission`, both fed from slice 1's
+    `RpcTurnRequest.agent_config["copilot_github_mcp"]`. (contract reconciliation, 2026-09-28: R3 wrote `builtin_mcps` and "the
+    `RpcTurnRequest` field … as it does `provider_config`"; slice 1 dropped
+    `RpcTurnRequest.provider_config`, since BYOK reaches the run through `guard_env(proc_env,
+    config)`, and fixed the field as `agent_config`; slice 5 names the keyword `github_mcp`.)
+16. *MCP `env` inheritance and BYOK: recorded in D3, owned by slice 5.* (contract reconciliation, 2026-09-28: slice 5, its D7
+    and *Required of slices 1–4* 2.7, declines the `env` filter D3 handed it; D3 now records that.)
+17. *The mapper sees the whole raw-event params: provided* (contract reconciliation, 2026-09-28, requested by slice 5, its
+    *Required of slices 1–4* 2.3). Slice 5's D4 skips a subagent's compaction by the envelope's
+    `agentId` and handles an oversized report by `dataOmitted`, neither of which is in `data`. So
+    `_on_armed_raw_event(type, data, params)` also takes the whole `github.com/copilot/sessionEvent`
+    params and hands them to `CopilotEventMapper`. Slice 4's `observe_event(type, data)` is
+    unchanged.
 
 ## Risks / Trade-offs
 
@@ -1593,6 +1612,25 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
 10. ~~**The exact field names of `session.error|warning|info` raw event data**~~ **Answered in R2
     (CODE, SDK `session-events.d.ts`):** `message` on all three, beside `errorType`/`warningType`/
     `infoType`. Task 1.1 still records one captured event.
+11. **Contract conflict (contract reconciliation, 2026-09-28): the `"Shell"` key and slice 3's
+    predicate.** D8 (R3) normalises a shell request from `local_shell`, or with no tool name known,
+    to `("Shell", {"command": …})`, and § *Provided to slices 3–5* item 4 says slice 3 "already
+    requires [an unknown dialect] to satisfy both readings". Slice 3's R3 no longer does: its D8
+    case 2 is limited to `_TOOL_DIALECTS` (`Bash`, `PowerShell`), and its D8 caller text still says
+    this slice judges every shell request as `PowerShell`/`Bash`. So an `aw-tool` call arriving as
+    `"Shell"` gets no standing allow and goes to the judge (under "Ask me", a card). That is the safe
+    side, but the two designs disagree about whether a `"Shell"` request is recognised. Not resolved
+    here: either slice 3 admits `"Shell"` read both ways in case 2 (its R3 reason for the limit was
+    a foreign MCP tool's `command` key, which `"Shell"` is not), or this slice never emits
+    `"Shell"` to the predicate. Also carried in slice 3's open questions.
+12. **Contract conflict (contract reconciliation, 2026-09-28): an unidentified MCP server with slice 5's toggle on.** D8's
+    table REJECTs a `kind:"other"` request with no server reported, in every posture, and item 14 of
+    § *Provided to slices 3–5* says slice 5's "unidentified is treated as `github-mcp-server`" meets
+    that refusal. Slice 5's D9 and its task 1.13 instead require `ASK_OPERATOR` under `workspace` for
+    such a request while `copilot_github_mcp` is on, from its rule at step 3, which it places after the
+    `agentweave` row and before the foreign-MCP row. Both are the safe side, but a card and a refusal
+    are different answers. Not resolved here: whether slice 5's step 3 runs before the no-server row.
+    Also carried in slice 5's open questions (its 11).
 
 ## Round log
 
@@ -1893,6 +1931,19 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     - refusing an MCP call whose server Copilot did not report;
     - failing a turn on any armed `session.error`;
     - `agent_wide` on the home, executable and unsafe-id refusals.
+
+- **Contract reconciliation, 2026-09-28** (a textual pass over the five slices' contract sections after their
+  concurrent R2/R3 rounds; not a design round; no code read). Changed here:
+  - § *Provided to slices 3–5* item 15: `builtin_mcps` and "an `RpcTurnRequest` field … as it does
+    `provider_config`" replaced by slice 5's `github_mcp` keyword fed from slice 1's `RpcTurnRequest.agent_config`.
+  - Item 16 and D3's BYOK paragraph: record that slice 5 declines the MCP `env` filter.
+  - New item 17 and D10's dispatch bullet: `_on_armed_raw_event(type, data, params)` hands the whole
+    `sessionEvent` params (`agentId`, `dataOmitted`) to the mapper (requested by slice 5, its 2.3); slice 4's
+    `observe_event(type, data)` unchanged.
+  - D14: names slice 1's `title_text`, `one_shot_env` and `CopilotAdapter.one_shot` for the title step, the one-shot
+    environment and the builder branches.
+  - Open questions 11 and 12: two **contract conflicts** left open (the `"Shell"` key vs slice 3's predicate; an
+    unidentified MCP server with slice 5's toggle on).
 
 ## Cross-slice consistency (orchestrator, 2026-09-27, after all five R1s; reconciled in R2)
 

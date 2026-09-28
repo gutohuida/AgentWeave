@@ -86,7 +86,7 @@ Copilot status other than `connected`/`failed` is only a diagnostic (D12). F340'
 string the Hub does not recognise must count as 'no grounds'"*. An ignored string gives no grounds.
 
 **Recording never fails a run (R3).** Every writer (the Claude read loop, the Codex `run_turn` callback, and
-Copilot's `map_events`) calls `record_harness_mcp_status` inside a `try` that logs and continues. These run inside
+slice 2's Copilot `CopilotEventMapper`) calls `record_harness_mcp_status` inside a `try` that logs and continues. These run inside
 the executors, and there an exception fails the run or the turn (Codex: `run_turn` raises only the tuple
 `agent_trigger.py:3244` catches). A write that fails leaves the run untested, which is the safe direction. The
 announce route is the one exception: it has its own transaction (below).
@@ -335,8 +335,8 @@ It is true in exactly three cases:
 
 1. `tool_name` starts with `mcp__agentweave__`. This moves today's check (`:1557-1558`, and `:1709-1710` in
    `approve_tool_call`) into the predicate unchanged. Slice 2 recognises its Copilot MCP requests itself, by
-   server name from the raw `permission.requested` event or a `title` of `agentweave/<tool>` (its D8). It does not
-   pass them through here.
+   server name from its raw-event `calls` map (`tool.execution_start` / `permission.requested`), never from a
+   `title` (its D8 R3; contract reconciliation, 2026-09-28). It does not pass them through here.
 2. **A shell command that is exactly one call-command invocation.** **R3: only for a tool named in
    `_TOOL_DIALECTS` (`Bash`, `PowerShell`, `:1072`).** R1 and R2 accepted a tool of unknown dialect read both ways, as
    `_decide` does. For `_decide` that is a stricter reading of a command it would judge anyway. For this predicate it
@@ -557,14 +557,14 @@ during the wait ends untested (NULL), not `absent`. `should_interrupt` is honour
 steps of at most that interval.
 
 Slice 2 composes the prompt in `trigger_agent_directly` before the transport starts, as the other runners do.
-This slice changes that for a runner whose adapter declares **`tests_mcp_before_first_prompt = True`**, a new
-`RunnerAdapter` class attribute (`False` on Claude and Codex; slice 1's D16 says each member is added by the
-slice that first reads it):
+This slice changes that for a runner whose transport declares **`tests_mcp_before_first_prompt = True`**, a
+`ClassVar[bool]` on both of slice 1's transport ABCs, `False` by default and `True` on slice 2's ACP transport
+(slice 1's D16 places it on the transport, not on `RunnerAdapter`; contract reconciliation, 2026-09-28):
 - such a runner is handed `render_surface(surface) -> list[str]`, which returns the notice and the tool section;
 - `plane_surface` is written when that callable is invoked.
 
 R3 pins the shape in slice 1's names. It is an `RpcCallbacks` field, `render_surface: Optional[Callable[[Literal["mcp",
-"shim"]], list[str]]]`, set by the executor only when `adapter.tests_mcp_before_first_prompt` is true. It is a
+"shim"]], list[str]]]`, set by the executor only when `transport.tests_mcp_before_first_prompt` is true. It is a
 callback, not an `RpcTurnRequest` field, because it writes: `plane_surface`, and the context file below. It is
 **total**. The rendering is pure. The two writes are best-effort: logged on failure, never raised. The prompt is what
 the run is told, and failing the run after spawn over a record would be worse than a stale record. The transport
@@ -582,8 +582,10 @@ aimed `include_tool_surface=False` at the agent file, which is the wrong target.
 
 The real problem is timing. Slice 2 renders `per_turn` in `trigger_agent_directly`, before spawn, from the pre-spawn
 `described_path`. A runner that tests before its first prompt must not send that section. So:
-- for such a runner, the trigger renders the context with `include_tool_surface=False`. The only call site is
-  `agents.py:2126`, and slice 2's tagged-section split carries the flag through;
+- slice 2's D5 (R3) already renders the tool section as its own key and carries it as
+  `RpcTurnRequest.tool_surface_context`, apart from `per_turn_context`. For such a runner the transport does not
+  send the pre-spawn `tool_surface_context`; `render_surface`'s output replaces it. No `include_tool_surface` flag
+  is added (contract reconciliation, 2026-09-28: R3 wrote one; slice 2 provides the separate field instead);
 - `render_surface(surface)` returns the notice, then the tool section, and the transport puts both in the
   `session/prompt` content ahead of the operator's message;
 - **the canonical context file** `.agentweave/context/<agent>.md` is written pre-spawn with the full `context`
@@ -596,7 +598,7 @@ The real problem is timing. Slice 2 renders `per_turn` in `trigger_agent_directl
 **(rebase at IMPL: slice 2 `a-copilot-agent-runs-over-acp` unbuilt at R2.)** Slice 2's own R2 is running
 concurrently and may move `per_turn`'s composition.
 
-**Corroboration, after the fact.** Slice 2's `map_events` subscribes to `session.mcp_servers_loaded` and
+**Corroboration, after the fact.** Slice 2's `CopilotEventMapper` (via `COPILOT_RAW_EVENTS`) subscribes to `session.mcp_servers_loaded` and
 `session.mcp_server_status_changed` (appendix A §A). This slice consumes them:
 - the entry named `agentweave` with status `connected` or `failed` is a harness report (D1's precedence). R3 added
   `failed`: it is VERIFIED in appendix A §D, and it is how a run whose server started (so the announce came and it
@@ -621,8 +623,9 @@ one to keep"*. Both halves are right for different runs:
 - **For a run told `shim`**, the sentence is false. D12's status event has already been stored at the wait's
   timeout, quoting `/mcp list`. Slice 2's event is suppressed.
 
-So slice 2's mapper needs the run's told surface. This slice lands second and sets it: `render_surface` records the
-surface, and the mapper reads it. Slice 2 keeps its code, its message and its once-per-turn rule.
+So slice 2's mapper needs the run's told surface. Slice 2 carries it as `RpcTurnRequest.told_access_path` (its
+D18). This slice lands second: for such a runner the transport replaces that value with the surface it passes to
+`render_surface`, and the mapper reads it (contract reconciliation, 2026-09-28). Slice 2 keeps its code, its message and its once-per-turn rule.
 
 A `Warning:` message chunk naming the server (`MCP server "agentweave" was blocked by your enterprise …`,
 DOCUMENTED wording) is **not** parsed. It is already shown to the operator as text by slice 2's mapper, and the
@@ -977,6 +980,19 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
     is narrowed (open question 8). `proposal.md` is updated.
   - **Contract resolutions:** the next section.
 
+- **Contract reconciliation, 2026-09-28** (a textual pass over the five slices' contract sections after their
+  concurrent R2/R3 rounds; not a design round; no code read). Changed here:
+  - D9, *Required of slices 1, 2* and task 5.4: `tests_mcp_before_first_prompt` is a `ClassVar` on the
+    transports (slice 1 D16), not on `RunnerAdapter`.
+  - D9, *Required of slice 2* item 2, tasks 5.3/5.4: no `include_tool_surface` flag; slice 2's separate
+    `RpcTurnRequest.tool_surface_context` is withheld and replaced by `render_surface`'s output.
+  - D9, *Required of slice 2* item 4, task 5.4: the mapper's told surface is slice 2's `told_access_path`,
+    replaced by the transport with the surface it passes to `render_surface`.
+  - `map_events` for Copilot renamed to slice 2's `CopilotEventMapper` (D1, D9, item 5, task 5.4); D8 case 1's
+    `title` identification replaced by slice 2's `calls` map.
+  - *Required of slice 1*: `render_surface` type and the `AccessAxes`/axis-1 items marked agreed (slice 1 R3).
+  - Open question 10: **contract conflict** with slice 2's `"Shell"` key, left open.
+
 ## Required of slices 1, 2; not provided to 5 (R3)
 
 Each slice owns its own file. This section states, in the owning slice's names, what this change needs from each, and
@@ -984,19 +1000,20 @@ what it does not provide. Where a slice's current text says otherwise, the diffe
 another change.
 
 **From slice 1 (`each-runner-cli-is-one-adapter`; it owns member and axis names).**
-- `RunnerAdapter.tests_mcp_before_first_prompt: ClassVar[bool]`, `False` on Claude and Codex, `True` on Copilot.
-  Slice 1's D16 (`:429`) has it. **Agreed.**
-- `RpcCallbacks.render_surface: Optional[Callable[[str], list[str]]]`, set by the executor only for such an adapter
-  (D9). Slice 1's D16 (`:428`) names "a `render_surface(surface) -> list[str]` callable" handed to the RPC transport,
-  without saying where. This change asks for it as an `RpcCallbacks` field.
-- **Not** a third `AccessAxes.plane` value. Slice 1's D16 (`:428`) says *"slice 3 widens `AccessAxes.plane` with a
-  third value, `"shim"`"*. It does not. `AccessAxes.plane` is what the run is **given** and stays `"mcp" | "cli"`.
+- `tests_mcp_before_first_prompt: ClassVar[bool] = False` on **both transport ABCs** (`StreamTransport`,
+  `RpcTransport`), `True` on slice 2's ACP transport. Slice 1's D16 (R3) moved it off `RunnerAdapter`, because
+  only an RPC transport can defer its prompt. **Adopted** (contract reconciliation, 2026-09-28; R3 here still wrote `RunnerAdapter`).
+- `RpcCallbacks.render_surface: Optional[Callable[[Literal["mcp", "shim"]], list[str]]] = None`, set by the executor
+  only for such a transport (D9). Slice 1's D16 (R3) has it as an `RpcCallbacks` field. **Agreed** (contract reconciliation, 2026-09-28).
+- **Not** a third `AccessAxes.plane` value. Slice 1's R2 D16 said *"slice 3 widens `AccessAxes.plane` with a
+  third value, `"shim"`"*; slice 1's R3 corrected it (its D4, D16: *"Not a new `AccessAxes` value"*). **Agreed**
+  (contract reconciliation, 2026-09-28). It does not. `AccessAxes.plane` is what the run is **given** and stays `"mcp" | "cli"`.
   What gains `"shim"` is the **described** value: `described_access_path(axes.plane, …)`'s return, which is `"mcp" |
   "shim"` and never `"cli"`, and the `access_path` accepted by `access_path_notice`/`_tool_surface_lines`
   (`"mcp" | "shim" | "http"`).
-- **Not** per-run axis 1. Slice 1's D4 (`:230-232`, *"slice 3 turns axis 1 into a per-run detection"*) and D16 (`:428`,
-  *"per-run `tool_surface` detection … replaces D4's `hub_client`-only rule"*) describe something this change does not
-  do. Axis 1 (`tool_surface`) stays decided by `hub_client` alone. The per-run record changes only what is *told*
+- **Not** per-run axis 1. Slice 1's R2 D4 (*"slice 3 turns axis 1 into a per-run detection"*) and D16 (*"per-run
+  `tool_surface` detection … replaces D4's `hub_client`-only rule"*) described something this change does not
+  do; slice 1's R3 corrected both (`resolve_access_axes` is final through slice 5). **Agreed** (contract reconciliation, 2026-09-28). Axis 1 (`tool_surface`) stays decided by `hub_client` alone. The per-run record changes only what is *told*
   (D1, *"What the run is given does not move"*). Slice 1's reason for not making `tool_surface` an adapter member
   still holds, for a different reason: it is `hub_client`'s, not the adapter's.
 - `shim_allowed`: slice 1 has already struck it (`:430`). **Agreed.**
@@ -1011,14 +1028,16 @@ them:
    allows by standing only with at least one path and every path passing (D8). The allow is recorded through the same
    `on_decision` as any other answer. The predicate is total. If it raises regardless, the handler treats that as
    `None` and falls through, not `reject_once`.
-2. D5: a runner that tests before its first prompt renders its per-turn block with `include_tool_surface=False`,
-   and the access-path notice is left out of the pre-spawn `notices`. `render_surface` supplies both after the wait,
-   and rewrites the canonical context file.
+2. D5: for a runner that tests before its first prompt, the pre-spawn `RpcTurnRequest.tool_surface_context`
+   (slice 2's separate field, its D5/D18 R3) is not sent, and the access-path notice is left out of the pre-spawn
+   `notices`. `render_surface` supplies both after the wait, and rewrites the canonical context file. (contract reconciliation, 2026-09-28: R3
+   wrote an `include_tool_surface=False` flag, which slice 2's separate field makes unnecessary.)
 3. The one `/mcp list` diagnostic prompt is sent as a bare single text block, without the per-turn block (slice 2's
    gap list, `:1347`).
 4. D10: `copilot_mcp_server_failed` is **kept** for a run told `mcp` and **suppressed** for a run told `shim`. The
-   mapper learns the told surface from `render_surface`. Slice 2's message and once-per-turn rule are unchanged.
-5. `map_events` passes an `agentweave` raw status of `connected` or `failed` to `record_harness_mcp_status`, inside a
+   mapper reads the told surface from slice 2's `RpcTurnRequest.told_access_path`, which the transport replaces
+   with the surface it passes to `render_surface` (contract reconciliation, 2026-09-28). Slice 2's message and once-per-turn rule are unchanged.
+5. Slice 2's `CopilotEventMapper` passes an `agentweave` raw status of `connected` or `failed` to `record_harness_mcp_status`, inside a
    `try`. Any other status is a diagnostic.
 6. D3: `copilot.exe` receives the whole run env, including the prepended `PATH`, and `agentweave-mcp.json` has no
    `env` block. This is slice 2's design today, and task 5.1 re-reads it at IMPL. This also answers slice 5's open
@@ -1094,6 +1113,15 @@ R3 on the carried ones:
 9. (R3, new) Does `codex exec --json` report MCP server startup at all? `parse_codex_line` reads no MCP startup
    event (`runner_parsing.py:424-520`). Without one, F340 stays open for `exec` (D1). Undrivable here. Carry it until
    Codex can be driven.
+10. **Contract conflict (contract reconciliation, 2026-09-28): slice 2's `"Shell"` key.** Slice 2's D8 (R3)
+   normalises a shell request from `local_shell`, or with no tool name known, to `("Shell", {"command": …})`, a key
+   `_TOOL_DIALECTS` lacks, and its § *Provided to slices 3–5* item 4 says this change already accepts an unknown
+   dialect read both ways. This change's R3 limited D8 case 2 to `Bash`/`PowerShell`, and its D8 caller text still
+   says slice 2 judges every Copilot shell request as `PowerShell`/`Bash` (*"no caller loses a real case"*). So an
+   `aw-tool` call arriving as `"Shell"` gets no standing allow and goes to the judge (under "Ask me", a card): the
+   safe side, but the two designs disagree. Not resolved here: either case 2 admits `"Shell"` read both ways (R3's
+   reason for the limit was a foreign MCP tool's `command` key, which `"Shell"` is not), or slice 2 never hands the
+   predicate `"Shell"`. Also carried in slice 2's open questions (its 11).
 
 ## Open questions as R1 posed them (answered or carried in the section above)
 

@@ -372,10 +372,13 @@ compaction* (a degraded state, not a failure of the turn) is a `diagnostic`.
   `facts: Optional[Dict[str, Any]] = None`, merged into the payload. The `message` is bounded as
   today and, new, passed through the **value** rule of `redact_secrets`: today `error_event` does
   not redact its message at all, and an authentication error can quote the credential it refused.
-- `diagnostic_event`. **R3: this change adopts slice 2's builder and its names.** Slice 2's R2
-  (its D10) now ships `diagnostic_event(*, code, message, severity="info", facts=None)`, keyword-only,
-  and states that slice 5 extends rather than re-adds it. R2's own signature (`stream`, `summary`) is
-  therefore dropped here. One thing is still missing: `agent-stream-events` *Versioned kind-specific
+- `diagnostic_event`. **R3: this change adopts slice 2's builder and its names.** (contract reconciliation, 2026-09-28: slice 2's
+  R3 now ships `diagnostic_event(*, stream, severity, summary, code=None, facts=None)`, keyword-only,
+  payload `{version: 1, stream, severity, summary, code?, facts?}`, `stream="copilot"` on every
+  Copilot diagnostic. This change calls it with those names, `summary=` where R3 wrote `message=`,
+  and adds nothing to it. The rest of this bullet is R3's reasoning, now met by slice 2.) R3 read
+  slice 2's R2 signature, `diagnostic_event(*, code, message, severity="info", facts=None)`. One thing
+  was still missing: `agent-stream-events` *Versioned kind-specific
   payloads* says *"Diagnostic payloads SHALL identify stream and severity"*, and the CLI's payload
   carries `stream` (`src/agentweave/stream_events.py:556-573`). Slice 2's builder has no `stream`.
   That is a requirement of slice 2's own diagnostics (its `Warning:`/`Info:` and model-substitution
@@ -404,8 +407,8 @@ compaction* (a degraded state, not a failure of the turn) is a `diagnostic`.
   hold, so there is no second hold and no second hold path. It does not claim a quota error leaves
   the queue unheld.
 - `session.compaction_complete` (root, data present) with `success:false` →
-  `diagnostic_event(code="copilot.compaction_failed", message=<its error, else a fixed sentence>,
-  severity="warning", stream="copilot", facts={status_code})` (R3: slice 2's parameter names;
+  `diagnostic_event(code="copilot.compaction_failed", summary=<its error, else a fixed sentence>,
+  severity="warning", stream="copilot", facts={status_code})` (R3, reconciled 2026-09-28: slice 2's parameter names;
   `statusCode` is in the schema for a failed compaction).
 
 **The echo.** Copilot also turns `session.error` into an ACP `agent_message_chunk` whose text is
@@ -596,9 +599,9 @@ there. `guard_env` receives no runner row. **R3: no new parameter on `resolve_ag
 needed.** The trigger already builds `config` from `get_agent_config` and overwrites `runner`/`model`
 from `runner_row` (`agent_trigger.py:764-765`), then calls `resolve_agent_env(runner, config)`
 (`:849`). Putting `config["provider_config"] = runner_row.provider_config` in the same place (and
-in `get_agent_config`, below) delivers it. What is missing is the last hop: slice 1's
-`guard_env(proc_env, env_vars)` sees only `env_vars`, not `config`. That is listed under *Required
-of slices 1–4*. **(rebase at IMPL: `each-runner-cli-is-one-adapter`, `a-copilot-agent-runs-over-acp`
+in `get_agent_config`, below) delivers it. What was missing is the last hop: slice 1's
+`guard_env(proc_env, env_vars)` saw only `env_vars`, not `config`. That was listed under *Required
+of slices 1–4*, and slice 1's R3 provides it: `guard_env(proc_env, config)`, must not raise (contract reconciliation, 2026-09-28). **(rebase at IMPL: `each-runner-cli-is-one-adapter`, `a-copilot-agent-runs-over-acp`
 unbuilt at R3.)**
 
 **R2: the key reaches everything `copilot.exe` starts. R1's "explicit allow-list" was false.**
@@ -787,9 +790,12 @@ Auto. Each consult is at least one extra model call, so the setting is off by de
   transport's `run_turn`, which receives only slice 1's `RpcTurnRequest` (`cli, cwd, env, prompt,
   model, resume_session_id, yolo, mcp_command, config_overrides, permission_mode, workspace,
   extra_flags, restrict_spec_writes`). None of those carries an agent setting, so the toggle needs
-  one field, `github_mcp: bool = False`, set by the trigger from `config.copilot_github_mcp` and read
-  both by `build_acp_argv` and by `decide_permission` (below). A `False` default leaves slices 1–2
-  byte-identical. This change adds the field if slice 1 has not (*Required of slices 1–4*).
+  one field. Slice 1's D16 (R3) fixes it as `RpcTurnRequest.agent_config: Mapping = {}`, which this
+  change adds and the trigger fills from the agent's config; `copilot_acp.run_turn` reads
+  `agent_config.get("copilot_github_mcp", False)` and passes it as the keyword `github_mcp: bool` to
+  both `build_acp_argv` and `decide_permission` (below). An empty default leaves slices 1–2
+  byte-identical. (contract reconciliation, 2026-09-28: R3 here asked for a `github_mcp: bool` request field; slice 1 owns the
+  request's shape and had fixed `agent_config` for this need, so this change adopts it.)
 - **The decision.** A permission request for the `github-mcp-server` is an MCP-kind request.
   - **R2: `_decide` would allow it, which is why the rule is needed.** R1 wrote that `_decide` "has
     no ground to allow it". It has, by default: `_decide` (`mcp_server.py:1543-1592`) refuses only
@@ -808,16 +814,17 @@ Auto. Each consult is at least one extra model call, so the setting is off by de
   - Under full access (`allow_all`) it is allowed as everything else is.
   - Under `manual` it goes to the operator anyway.
   - **Where it lives (R2 answered):** slice 2's `copilot_acp.decide_permission(params, *, posture,
-    workspace, hub_url, mcp_server_names)`, a pure function in the Hub process that calls
+    workspace, hub_url, calls)` (contract reconciliation, 2026-09-28: R2 wrote `mcp_server_names`), a pure function in the Hub process that calls
     `_decide`. It is not in `mcp_server.py`, so `.claude/rules/mcp-server.md`'s import restriction
     does not apply, and `mcp_server.py` is unchanged. The server name comes from slice 2's per-turn
     `toolCallId → (serverName, toolName)` map, fed by the raw `permission.requested` event; a
     request whose server cannot be established is judged foreign by slice 2, which under
     `workspace` means `_decide` and therefore allow. So this rule also treats an **unidentified**
     MCP server as `github-mcp-server` while the toggle is on: asking is the safe side.
-  - R3: slice 2's signature (its D8) is `decide_permission(params, *, posture, workspace, hub_url,
-    mcp_server_names)`; nothing in it says whether the toggle is on. This change adds the keyword
-    `github_mcp: bool = False`, fed from `RpcTurnRequest.github_mcp`. The rule sits after the
+  - R3: slice 2's signature (its D8 R3) is `decide_permission(params, *, posture, workspace, hub_url,
+    calls)` (`calls` replaced `mcp_server_names`; contract reconciliation, 2026-09-28); nothing in it says whether the toggle is on.
+    This change adds the keyword `github_mcp: bool = False`, fed from
+    `RpcTurnRequest.agent_config["copilot_github_mcp"]`. The rule sits after the
     `agentweave` row and before the foreign-MCP row of slice 2's table, and nowhere else. With the
     toggle off the built-in server is disabled and no workspace servers load (untrusted folder,
     D3), so no foreign MCP request is expected at all, and slice 2's rows stand unchanged.
@@ -847,7 +854,7 @@ Auto. Each consult is at least one extra model call, so the setting is off by de
   operator would see nothing. So group D adds one mapping: a raw `session.mcp_servers_loaded` /
   `session.mcp_server_status_changed` naming `github-mcp-server` in a state other than connected,
   **while the toggle is on**, gives one `diagnostic_event(code="copilot.github_mcp_unavailable",
-  message=…, severity="warning", stream="copilot")` per turn. With the toggle off the server is
+  summary=…, severity="warning", stream="copilot")` per turn. With the toggle off the server is
   disabled on purpose and nothing is reported.
   - **R3: "other than connected" is too wide.** The schema's `McpServerStatus` includes `pending`,
     *"still being established"*, which a slow server reports before `connected`. Reporting it would
@@ -872,7 +879,7 @@ Auto. Each consult is at least one extra model call, so the setting is off by de
 - **B** touches the context renderer, `review_turn.py`, `ROSTER_CONFIG_KEYS`, and the agent
   Settings UI.
 - **D** touches slice 2's argv builder and `decide_permission`, slice 1's `RpcTurnRequest`
-  (`github_mcp`, R3) and its Copilot `permission_card_label` / `workspace_verdict`, the Copilot
+  (`agent_config`, reconciled 2026-09-28) and its Copilot `permission_card_label` / `workspace_verdict`, the Copilot
   mapper (one diagnostic), `ROSTER_CONFIG_KEYS`, and the agent Settings UI.
 
 B and D share one UI section and one tuple. Each adds its own control and its own key, so rejecting
@@ -894,10 +901,10 @@ has not), **correction** (sibling text that is wrong about this change), or **no
 
 | # | Item | Kind |
 |---|---|---|
-| 1.1 | **Drop the reserved `hooks` row of D16.** This change writes no hook file (D2), and D16's own rule is that no member exists without a caller. | correction |
-| 1.2 | **D16's `hooks` row also says slice 5 reads `provider_config` "in Copilot's spawn argv" through "a `RpcTurnRequest` field slice 5 adds".** It does not. `provider_config` reaches `launchability` through its existing `config: Mapping`, and reaches the environment through `resolve_agent_env(runner, config)` (D7). The argv's `--model` is `RpcTurnRequest.model`, which is already the runner's (D7, spawn). No `provider_config` field on `RpcTurnRequest`. | correction |
-| 1.3 | **`guard_env(proc_env, env_vars)` needs the runner's `config`** (keyword `config: Mapping`, or at least `provider_config`), because the Copilot guard sets or strips the provider variables from it (D7). Claude and Codex ignore it. If slice 1 lands without it, this change adds `provider_config: Optional[Mapping] = None` as a keyword with that default. | needed / owned here |
-| 1.4 | **`RpcTurnRequest.github_mcp: bool = False`**, set by the trigger from `config.copilot_github_mcp`, read by slice 2's `build_acp_argv` and `decide_permission` (D9). A `False` default keeps slices 1–2 unchanged. | needed / owned here |
+| 1.1 | **Drop the reserved `hooks` row of D16.** This change writes no hook file (D2), and D16's own rule is that no member exists without a caller. | correction; **done** in slice 1's R3 D16 (contract reconciliation, 2026-09-28) |
+| 1.2 | **D16's `hooks` row also says slice 5 reads `provider_config` "in Copilot's spawn argv" through "a `RpcTurnRequest` field slice 5 adds".** It does not. `provider_config` reaches `launchability` through its existing `config: Mapping`, and reaches the environment through `resolve_agent_env(runner, config)` (D7). The argv's `--model` is `RpcTurnRequest.model`, which is already the runner's (D7, spawn). No `provider_config` field on `RpcTurnRequest`. | correction; **done** in slice 1's R3 D16 (contract reconciliation, 2026-09-28) |
+| 1.3 | **`guard_env(proc_env, env_vars)` needs the runner's `config`** (keyword `config: Mapping`, or at least `provider_config`), because the Copilot guard sets or strips the provider variables from it (D7). Claude and Codex ignore it. If slice 1 lands without it, this change adds `provider_config: Optional[Mapping] = None` as a keyword with that default. | **provided** by slice 1's R3 as `guard_env(proc_env, config)` (contract reconciliation, 2026-09-28) |
+| 1.4 | ~~`RpcTurnRequest.github_mcp: bool = False`~~ → **slice 1's `RpcTurnRequest.agent_config: Mapping = {}`** (its D16 R3), filled by the trigger from the agent's config; `run_turn` passes `agent_config.get("copilot_github_mcp", False)` as the `github_mcp` keyword of slice 2's `build_acp_argv` and `decide_permission` (D9). An empty default keeps slices 1–2 unchanged. | owned here; name adopted from slice 1 (contract reconciliation, 2026-09-28) |
 | 1.5 | `catalog_provider` stays a `ClassVar`. This change does not ask for a per-runner provider: it checks a provider runner's model itself at the four sites in D7. If slice 1 ever makes it per-runner, those sites collapse onto it. | nothing required |
 | 1.6 | The Copilot `permission_card_label(method, subject)` returns `github-mcp-server/<tool> — acts on GitHub as you` for a request D9 routes to the operator, and `workspace_verdict(method, subject, workspace)` returns `None` for it. Both members are slice 1's; their Copilot bodies are slice 2's, with this change's case. | owned here |
 
@@ -905,13 +912,13 @@ has not), **correction** (sibling text that is wrong about this change), or **no
 
 | # | Item | Kind |
 |---|---|---|
-| 2.1 | **`diagnostic_event` lacks `stream`.** Slice 2 ships `diagnostic_event(*, code, message, severity="info", facts=None)` (its D10). `agent-stream-events` *Versioned kind-specific payloads* requires diagnostic payloads to *"identify stream and severity"*, and that applies to slice 2's own `Warning:`/`Info:`/model-substitution diagnostics. Add `stream` (keyword) and write it into the payload. This change adopts slice 2's parameter names and, if slice 2 lands without `stream`, adds it with a default (D5). | needed / owned here |
-| 2.2 | **D10's sentence about slice 5 is stale:** *"Slice 5 (its D5) later re-maps a raw `session.error` to a `diagnostic_event(severity="error")` and suppresses the echoed `Error:` block in either order."* Since R2, slice 5 records `session.error` as an **`error_event`** with facts, not a diagnostic. Since R3, it drops the echo at the **chunk**, not the block, relying on the raw-first order (VERIFIED-CODE), and deletes slice 2's `Error:` → `copilot_session_error` branch (D5). | correction |
-| 2.3 | **The mapper must see the whole `github.com/copilot/sessionEvent` params**, including `agentId` and `dataOmitted`, not only `{sessionId, type, timestamp, data}` as slice 2's VERIFIED row describes the envelope. D4 ignores a subagent's compaction by `agentId` and handles an oversized `session.compaction_complete` by `dataOmitted`. `on_raw_event(type, data)` loses both; this change does not use it. | needed |
+| 2.1 | **`diagnostic_event` lacks `stream`.** Slice 2 ships `diagnostic_event(*, code, message, severity="info", facts=None)` (its D10). `agent-stream-events` *Versioned kind-specific payloads* requires diagnostic payloads to *"identify stream and severity"*, and that applies to slice 2's own `Warning:`/`Info:`/model-substitution diagnostics. Add `stream` (keyword) and write it into the payload. This change adopts slice 2's parameter names and, if slice 2 lands without `stream`, adds it with a default (D5). | needed; **provided** by slice 2's R3 as `diagnostic_event(*, stream, severity, summary, code=None, facts=None)`; this change uses `summary=` (contract reconciliation, 2026-09-28) |
+| 2.2 | **D10's sentence about slice 5 is stale:** *"Slice 5 (its D5) later re-maps a raw `session.error` to a `diagnostic_event(severity="error")` and suppresses the echoed `Error:` block in either order."* Since R2, slice 5 records `session.error` as an **`error_event`** with facts, not a diagnostic. Since R3, it drops the echo at the **chunk**, not the block, relying on the raw-first order (VERIFIED-CODE), and deletes slice 2's `Error:` → `copilot_session_error` branch (D5). | correction; **done** in slice 2's R3 D10 (contract reconciliation, 2026-09-28) |
+| 2.3 | **The mapper must see the whole `github.com/copilot/sessionEvent` params**, including `agentId` and `dataOmitted`, not only `{sessionId, type, timestamp, data}` as slice 2's VERIFIED row describes the envelope. D4 ignores a subagent's compaction by `agentId` and handles an oversized `session.compaction_complete` by `dataOmitted`. `on_raw_event(type, data)` loses both; this change does not use it. | needed; **provided** at contract reconciliation, 2026-09-28: slice 2's `_on_armed_raw_event(type, data, params)` hands the whole params to `CopilotEventMapper` |
 | 2.4 | **`COPILOT_RAW_EVENTS`**: this change appends `subagent.started`, `subagent.completed`, `subagent.failed` and `session.compaction_start`, and ensures `session.compaction_complete` and `session.error`, relying on slice 2's de-duplication in first-seen order (D1). | nothing required |
 | 2.5 | **`decide_permission` gains a keyword `github_mcp: bool = False`** from this change (D9). This change's rule sits between the `agentweave` row and the foreign-MCP row of slice 2's D8 table. | owned here |
 | 2.6 | **The Copilot `workspace_verdict` is `None` when this change's rule routes the request**, under `workspace` and `manual` alike. Slice 2's D8 fills the verdict from its `workspace` column, which for a GitHub call is `_decide`'s allow. Unchanged, the ask-me card would read "Workspace only would allow this" on a card raised because Workspace only does not. | needed / owned here |
-| 2.7 | **D3's hand-off of an MCP `env` filter** ("whichever lands the BYOK variables adds that filter") is declined here, with reasons (D7): the key is in every shell command's environment anyway, and a blanking `env` map breaks the tool server if Copilot's `env` replaces rather than merges (Open question 10). Slice 2 should reword the sentence as an open question, not an obligation. | correction |
+| 2.7 | **D3's hand-off of an MCP `env` filter** ("whichever lands the BYOK variables adds that filter") is declined here, with reasons (D7): the key is in every shell command's environment anyway, and a blanking `env` map breaks the tool server if Copilot's `env` replaces rather than merges (Open question 10). Slice 2 should reword the sentence as an open question, not an obligation. | correction; **recorded** in slice 2's D3 and item 16 (contract reconciliation, 2026-09-28) |
 | 2.8 | Slice 2's non-`connected` `agentweave` status report has the same `pending` hazard D9 found (the schema's `McpServerStatus` has `pending`). Slice 3 now owns that report (its D9). | observation |
 
 ### Slice 3 — `a-run-reaches-the-hub-without-mcp`
@@ -1169,6 +1176,18 @@ has not), **correction** (sibling text that is wrong about this change), or **no
     params to the mapper, `None` verdict for a GitHub card, reword the `env` filter hand-off;
     nothing needed from slice 3; BYOK credits carried to slice 4.
 
+- **Contract reconciliation, 2026-09-28** (a textual pass over the five slices' contract sections after their
+  concurrent R2/R3 rounds; not a design round; no code read). Changed here:
+  - D5, D9, task 2.1: `diagnostic_event` calls use slice 2's R3 signature (`stream`, `severity`, `summary`,
+    `code`, `facts`): `summary=` where R3 wrote `message=`; nothing is added to the builder.
+  - D7: `guard_env(proc_env, config)` is provided by slice 1 R3.
+  - D9, D10, *Required* 1.4, tasks 1.13/5.1: `RpcTurnRequest.github_mcp` replaced by slice 1's
+    `RpcTurnRequest.agent_config["copilot_github_mcp"]`, passed as the `github_mcp` keyword; `decide_permission`'s
+    `mcp_server_names` corrected to `calls`.
+  - *Required* table: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 2.7 marked done/provided/recorded.
+  - Open question 6 points at slice 4's Q11; open question 11: **contract conflict** with slice 2 over an
+    unidentified MCP server with the toggle on, left open.
+
 ## Open questions for R2/R3
 
 1. **Slice 2 alignment.** *(Answered in R2; R3 moved the answers into *Required of slices 1–4*, D5 and D9.)* What does slice 2's raw-event subscription list contain? Where does its
@@ -1189,7 +1208,7 @@ has not), **correction** (sibling text that is wrong about this change), or **no
    the mapping.
 6. **BYOK credits.** Under BYOK, what does `session.usage_checkpoint.totalNanoAiu` read? This affects
    slice 4's display, not this change. **R3: carried to slice 4** (*Required of slices 1–4*, 4.3);
-   slice 4's design does not yet mention BYOK.
+   slice 4's design does not yet mention BYOK. (Contract reconciliation, 2026-09-28: now slice 4's Q11.)
 7. **Built-ins on a detached HEAD.** Does `code-review` accept an explicit `<base>..<commit>` range
    when HEAD is detached with a clean tree? This is documented as "branch diffs", so it is
    **INFERRED**. Drive task 7.7 checks it (R2: R1 said 7.2). **R3: carried.**
@@ -1222,3 +1241,14 @@ has not), **correction** (sibling text that is wrong about this change), or **no
     carried to slice 3, which decides what reaches the tool server. **R3: carried; not found in
     `app.js`** (MCP process start-up is behind the bundle's native runtime calls). It is also the
     reason D7 declines slice 2's filter hand-off.
+11. **Contract conflict (contract reconciliation, 2026-09-28): an unidentified MCP server with the toggle on.** D9 and task
+    1.13 say that, with `copilot_github_mcp` on, a request whose MCP server cannot be identified is
+    `ASK_OPERATOR` under `workspace` (this change's rule sits at slice 2's step 3, after the
+    `agentweave` row and before the foreign-MCP row). Slice 2's D8 R3 table has a separate row, `kind:"other"`
+    with **no** server reported → REJECT in every posture, and its § *Provided to slices 3–5* item 14
+    says slice 5's "unidentified is treated as `github-mcp-server`" therefore **meets a refusal**. Both
+    are the safe side, but the two designs give different answers (a card vs a refusal) for the same
+    request, and D9's R2 premise (unidentified → foreign → `_decide` → allow) is no longer slice 2's
+    behaviour. Not resolved here: decide whether step 3 runs before slice 2's no-server row (then
+    ASK) or after it (then REJECT, and task 1.13's unidentified case changes). Also carried in slice
+    2's open questions (its 12).

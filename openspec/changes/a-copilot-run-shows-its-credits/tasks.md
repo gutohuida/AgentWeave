@@ -134,8 +134,9 @@ root.
     two more. First, a session whose `session/prompt` answers with a JSON-RPC error whose `data`
     carries `errorType "quota"` and `errorCode "quota_exceeded"`. Second, one whose process exits
     after the quota `session.error` and before the prompt returns. In both, `run_turn` **returns**
-    the failed outcome and calls `on_accounting` once, where slice 2's client would raise. The same
-    JSON-RPC error with `errorType "rate_limit"` still raises `CopilotACPError`.
+    the failed outcome and calls `on_accounting` once, carrying the rejected reading. The same
+    JSON-RPC error with `errorType "rate_limit"` also returns slice 2's `failed` outcome (its D12 R3),
+    with no rejected reading, so no hold (contract reconciliation, 2026-09-28: R3 said it still raises).
   - (b) `hub/tests/test_a_refused_turn_holds_the_queue.py` gains an RPC case. It patches the Copilot
     transport's module-level `run_turn` (slice 1 D9's seam) to deliver that sample and a failed
     outcome. The run persists one `queue_agent_held` event. Its entries are returned, and the refusal
@@ -216,9 +217,10 @@ root.
     after a session exists;
   - it returns `TurnOutcome(status="failed", …)` when the ledger recorded the quota refusal (D8);
   - once the prompt is written, an exception while waiting for it (a JSON-RPC error, whose `data`
-    goes to `observe_prompt_error`, or the process ending) is turned into that failed outcome when
-    the ledger has recognised the refusal, and is re-raised unchanged otherwise. This needs slice 2's
-    `CopilotACPError` to carry `.data` (design, *Required of slices 1 and 2*, item 9).
+    goes to `observe_prompt_error`, or the process ending) ends in slice 2's returned `failed`
+    outcome (its D12 R3), carrying the refusal when the ledger has recognised it (contract reconciliation, 2026-09-28: R3 said
+    re-raised otherwise). This reads slice 2's `CopilotACPError.data` (design, *Required of slices 1
+    and 2*, item 9).
 
   Task 1.15(a) passes. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
 

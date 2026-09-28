@@ -463,7 +463,8 @@ becomes `base.probe_binary(binary, cli_override, name)`, and both paths call it,
 - (R3) `GET /agents/launchability` calls the collaboration verdict per agent in a loop (`agents.py:241-265`), with no
   `try`. An adapter `collaboration` that raised would make the whole route a 500 instead of one agent's verdict, so it
   must not raise either; `transport(flags)` and `resolve_access_axes` are pure over strings and lists.
-- The worker and the titler: `one_shot` returns argv and cannot raise on well-typed input. The worker's `OUTCOMES`
+- The worker and the titler: `one_shot` returns argv and cannot raise on well-typed input, except `FileNotFoundError` when
+  the executable cannot be resolved (slice 2 D14 R3), which `run_worker` and the titler catch without naming a runner. The worker's `OUTCOMES`
   (`worker.py:76-85`) are unchanged: no adapter is `unsupported_cli`.
 - `GET /model-catalog` (R2): `catalog_source` cannot raise (D2).
 - The agents list (after the permissions-pill change, R2): `posture_at_rest` and `resolve_access_axes` are pure; no
@@ -532,12 +533,12 @@ member is added by that slice with the default stated, and slice 1's conformance
 | `host_tool_note` | `ClassVar[Optional[str]]` | built (rebase at IMPL: same) | 1, 2, 3 (also in the shim form) |
 | `mcp_env_names` | `ClassVar[Optional[tuple[str, ...]]]` | built | 1, 2 (`None`) |
 | `write_tool_kinds` | `ClassVar[Mapping[str, str]]` | built | 1, 2, 3 (restated in `mcp_server.py`, which cannot import adapters) |
-| `one_shot` | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]`; neutralises `prompt` itself | built | 1, 2 |
+| `one_shot` | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]`; neutralises `prompt` itself; raises only `FileNotFoundError`, when the executable cannot be resolved (added at contract reconciliation, 2026-09-28, requested by slice 2: its D14 R3 `CopilotExecutableNotFound`) | built | 1, 2 |
 | `one_shot_takes_schema` | `ClassVar[bool]` | built | 1, 2 |
 | `parse_one_shot` | `(stdout: str) -> tuple[Optional[str], WorkerUsage, Optional[str]]` | built | 1, 2, 4 (fills `WorkerUsage` from the capture) |
 | `one_shot_env` | `(purpose: Literal["worker", "title"]) -> Optional[dict]`; `None` = inherit the Hub's environment | slice 2 adds; base default returns `None` | 2 (its D14: `COPILOT_HOME=<worker home>`, token variables stripped; the new `env` parameter of `_run_worker_process` and `_run_titler`) |
 | `title_text` | `(stdout: str) -> str`, the text `title_from_output` reads | slice 2 adds; base default is the identity | 2 (its D14 R2: the title comes from the envelope's answer, not its last JSON line) |
-| `write_native_files` | `(project_id: str, agent: str, *, stable_context: Optional[str], model: Optional[str], effort: Optional[str], mcp_command: Optional[list[str]]) -> Optional[Path]`; raises only `OSError` | slice 2 adds; base default returns `None` and writes nothing | 2 (its D4 `ensure_copilot_home`, at agent create, PATCH, `POST /agents/request`, and before every spawn: `OSError` is logged at the first three and a 409 at the spawn) |
+| `write_native_files` | `(project_id: str, agent: str, *, stable_context: Optional[str], model: Optional[str], effort: Optional[str], mcp_command: Optional[list[str]]) -> Optional[Path]`; raises only `OSError` or `ValueError` (an unsafe project id or agent name; added at contract reconciliation, 2026-09-28, requested by slice 2: its D4 R3) | slice 2 adds; base default returns `None` and writes nothing | 2 (its D4 `ensure_copilot_home`, at agent create, PATCH and before every spawn, **not** `POST /agents/request` (its D4 R3): any exception is logged at the first two, the post-commit step being wrapped in `except Exception`, and a 409 `agent_wide` at the spawn) |
 | `agent_home` | `(project_id: str, agent: str) -> Optional[Path]` | slice 2 adds **only if** runner-agnostic code needs the path; otherwise it stays `copilot_home_path`, private | 2 |
 | `compaction_percent` | `ClassVar[Optional[int]]`, no base default | slice 4 adds (its task 3.1): Claude 95, Codex 95, Copilot 80 | 4 (`checkpoint_policy`, `AgentSummary.checkpoint_compaction_percent`) |
 
@@ -564,7 +565,7 @@ member is added by that slice with the default stated, and slice 1's conformance
 | `approval_channel` | `(tool_surface: str) -> Literal["rpc"]` | built | 1, 2 |
 | `instruction_channel` | `ClassVar[Optional[str]]` | built (`None` on Codex, F325) | 1, 2 (the agent file) |
 | `posture_for` | `(permission_mode: Optional[str]) -> Optional[str]` | built | 1, 2 (its D8 table) |
-| `permission_card_label` | `(method: str, subject: Mapping) -> str` | built | 1, 2 (**adopt `subject`**: slice 2 D8 still writes `(method)` and keys its table by `copilot:<kind>`; the kind is in the subject) |
+| `permission_card_label` | `(method: str, subject: Mapping) -> str` | built | 1, 2 (`subject` adopted by slice 2's D8 R3: the kind is read from `subject`) |
 | `refusal_label` | `(method: str, subject: Mapping) -> str` | built | 1, 2 (same) |
 | `workspace_verdict` | `(method: str, subject: Mapping, workspace: Optional[str]) -> Optional[dict]`; must not raise | built if the ask-me-card change has landed, else that change adds it | 1, 2 |
 | `context_window_source` | `ClassVar[Literal["reported", "catalog"]]` | built | 1, 2 (`"reported"`) |
@@ -582,12 +583,13 @@ member is added by that slice with the default stated, and slice 1's conformance
 | `LaunchRequest` | `build_command`'s parameters plus `axes` | built | 1 |
 | `RpcTurnRequest` | `cli, cwd, env, prompt, model, resume_session_id, yolo, mcp_command, config_overrides, permission_mode, workspace, extra_flags, restrict_spec_writes` | built | 1, 2 |
 | ″ | `per_turn_context: Optional[str] = None`, `stable_context: Optional[str] = None` | slice 2 adds (its D18); Codex ignores both | 2, 3 |
-| ″ | `agent_config: Mapping = {}` (as `field(default_factory=dict)`) | slice 5 adds; Codex ignores it | 5 (its D9: `copilot_github_mcp` reaches `build_acp_argv`) |
+| ″ | `tool_surface_context: Optional[str] = None` (the tool section, kept apart from `per_turn_context`), `control_overrides: Mapping[str, str] = {}` (the raw catalog controls; Copilot's Effort is a flag control `render_control_config` skips), `told_access_path: Optional[str] = None` (the described path the run was told) | slice 2 adds (its D5, D10, D18 R3; added at contract reconciliation, 2026-09-28, requested by slice 2); Codex ignores all three | 2, 3 (`render_surface`'s output replaces `tool_surface_context`, and the surface it is called with replaces `told_access_path`) |
+| ″ | `agent_config: Mapping = {}` (as `field(default_factory=dict)`) | slice 5 adds; Codex ignores it | 5 (its D9: `agent_config["copilot_github_mcp"]` reaches `build_acp_argv` and `decide_permission` as their `github_mcp: bool` keyword; slice 5's R3 `RpcTurnRequest.github_mcp` is this field, reconciled 2026-09-28) |
 | `RpcCallbacks` | `on_event, on_usage, on_accounting, on_session, should_interrupt, request_approval, on_refusal` | built | 1, 2, 4 |
 | ″ | `on_decision(method, subject, allowed)`, awaited after the response is sent | built if `a-run-records-that-its-calls-were-allowed` has landed, else that change adds it | 1, 2 |
 | ″ | `on_session_missing(old_id: str)` | slice 2 adds (its D7 rebinding) | 2 |
-| ″ | `on_raw_event(type: str, data: Mapping)` | slice 2 adds **only if** an executor-side reader exists at its IMPL (its D10 names slice 4; slice 4's R2 moved its ledger inside `run_turn`, which needs no callback) | 2, 4 |
-| ″ | `render_surface(surface: str) -> list[str]`, `None` by default | slice 3 adds (its D9); read only when the transport's `tests_mcp_before_first_prompt` is `True` | 3 |
+| ″ | ~~`on_raw_event(type: str, data: Mapping)`~~ | **not added** (contract reconciliation, 2026-09-28): slice 2's D10 R3 removed it and slice 4 does not use it; raw events stay inside `run_turn` (slice 2's `_on_armed_raw_event`) | — |
+| ″ | `render_surface: Optional[Callable[[Literal["mcp", "shim"]], list[str]]] = None`, total (slice 3's D9 shape, confirmed at contract reconciliation, 2026-09-28) | slice 3 adds (its D9); read only when the transport's `tests_mcp_before_first_prompt` is `True` | 3 |
 
 ## Tests that can fail
 
@@ -776,6 +778,23 @@ member is added by that slice with the default stated, and slice 1's conformance
   - **Right as written:** D2, D5's inventory, D6's seams, D9, D11, D13, D14, and D4's equivalence argument
     (`approvals != "none"` iff `mcp_command` on Claude).
   - **Open questions 4–7 answered** (below). 4 becomes a finding for task 6.2.
+
+- **Contract reconciliation, 2026-09-28** (a textual pass over the five slices' contract sections after their
+  concurrent R2/R3 rounds; not a design round; no code read). Changed here:
+  - D16 `one_shot` row and D15: `one_shot` may raise `FileNotFoundError` when the executable cannot be resolved
+    (requested by slice 2, its D14 R3).
+  - D16 `write_native_files` row: raises `OSError` or `ValueError`; call sites are create, PATCH and spawn, not
+    `POST /agents/request`; any exception is logged at the first two (slice 2 D4 R3).
+  - D16 `permission_card_label` row: slice 2 has adopted `subject` (the stale "still writes `(method)`" note removed).
+  - D16 value types: added the `RpcTurnRequest` row `tool_surface_context`, `control_overrides`, `told_access_path`
+    (slice 2 adds; requested by slice 2, read by slice 3).
+  - D16 `agent_config` row: names its readers (`build_acp_argv`, `decide_permission` via slice 5's `github_mcp`
+    keyword); slice 5's `RpcTurnRequest.github_mcp` request is this field, and slice 5 adopted it.
+  - D16 `on_raw_event` row: struck, **not added** (slice 2 R3 removed it; slice 4 does not use it).
+  - D16 `render_surface` row: the exact type slice 3 uses, `Optional[Callable[[Literal["mcp","shim"]], list[str]]]`.
+  - Agreed without change: `hooks` and `provider_config` dropped, `guard_env(proc_env, config)`,
+    `tests_mcp_before_first_prompt` on the transports, `AccessAxes.plane` two-valued and axis 1 `hub_client`-only
+    (slice 3 agrees), `compaction_percent` (slice 4 agrees).
 
 ## Open questions for R2/R3
 
