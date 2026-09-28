@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 12,
+    "iteration": 13,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "the-codex-models-offered-are-the-ones-its-cli-lists-drive",
-    "next_action": "Do queue item 'the-codex-models-offered-are-the-ones-its-cli-lists-drive': drive against the trial Hub :8010 per tasks.md section 3 (3.1 GET /api/v1/model-catalog lists this machine's cached Codex models with source.kind == \"cli_cache\", recorded verbatim; 3.2 POST /runners with an unrecognised Codex model answers 400 and a seeded existing runner reads model_unrecognised: true; 3.3 New-runner form's Codex source line, recorded verbatim). Record result in scripts/drive/FINDINGS.md.",
+    "current": "the-codex-models-offered-are-the-ones-its-cli-lists-archive",
+    "next_action": "Do queue item 'the-codex-models-offered-are-the-ones-its-cli-lists-archive': openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list.",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -77,9 +77,9 @@
         },
         {
             "id": "the-codex-models-offered-are-the-ones-its-cli-lists-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive the-codex-models-offered-are-the-ones-its-cli-lists",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
+            "detail": "Done commit e94a4a3: trial Hub :8010 per tasks.md section 3 (task names :8010 explicitly). 3.1 GET /model-catalog listed gpt-5.6-terra/gpt-5.6-luna/gpt-5.5 with source.kind==cli_cache, client_version 0.146.0, verbatim. 3.2 POST /runners with an unrecognised Codex model answered 400; a SQL-seeded existing runner on that model read model_unrecognised: true. 3.3 New Runner's Codex source line read 'As listed by your installed Codex CLI (0.146.0, fetched 23 Sep)', verbatim. No new finding; new harness scripts/drive/d0928_codex_cache_source_line.py."
         },
         {
             "id": "the-codex-models-offered-are-the-ones-its-cli-lists-archive",
