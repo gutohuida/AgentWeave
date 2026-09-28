@@ -61,4 +61,10 @@
    expected?
 6. **Full access under a company policy** (work PC, optional). Choose Full access for a Copilot
    agent. If the organisation disables Copilot's allow-all mode, the run should say so and keep
-   working inside its workspace. Does that sentence tell you what happened?
+   working inside its workspace, quoting the reason Copilot gave. Does that sentence tell you what
+   happened?
+7. **What Workspace only does not see** (review 2026-09-28). Copilot runs commands it considers
+   read-only (listing a folder, reading a file) without asking anyone, so the Hub never judges
+   them. Under Workspace only, ask a Copilot agent to list its folder and then to write a file with a
+   shell command. Only the second should appear as a decided action. Is that difference acceptable
+   to you, given that a Claude agent's every command is judged?

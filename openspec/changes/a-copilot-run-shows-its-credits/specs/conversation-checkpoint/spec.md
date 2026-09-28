@@ -10,7 +10,10 @@ built-in threshold, notes point and final warning SHALL remain 80%, 70% and 92%.
 compacts at about 80%, they SHALL be 65%, 55% and 77%.
 
 A configured threshold that lies past the runner's final-warning point SHALL be lowered to that
-point for that agent, and the lowering SHALL be stated wherever the threshold is reported. It SHALL
+point for that agent, whichever runner it is, including a runner that compacts at about 95%, for
+which a configured 93% to 99% becomes 92%. The lowering SHALL be stated in the agent's checkpoint
+settings whenever the agent's effective threshold is below its configured one, and in the project's
+checkpoint settings whenever the project's threshold is lowered for any of its agents. It SHALL
 NOT be refused, because a project's threshold is shared by agents on runners that compact at
 different points. A notes point that is not below the lowered threshold SHALL be lowered with it.
 A threshold expressed in tokens SHALL also be treated as crossed once the reading's proportion
@@ -37,6 +40,13 @@ as reached once the reading's proportion is ten points below that final-warning 
 - **AND** one of its agents is bound to a runner that compacts at about 80%
 - **THEN** that agent's effective threshold is 77%, reported as lowered for its runner
 - **AND** the project's other agents keep 80%
+- **AND** the project's checkpoint settings say that the threshold is lowered for that agent
+
+#### Scenario: A configured threshold past Claude's final warning is lowered and says so
+
+- **WHEN** an agent bound to a runner that compacts at about 95% has a configured threshold of 96%
+- **THEN** its effective threshold is 92%
+- **AND** its checkpoint settings say that its threshold is lowered to 92%
 
 #### Scenario: A dismissed Copilot conversation gets its final warning before the compaction
 

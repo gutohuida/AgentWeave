@@ -99,9 +99,11 @@ updates disabled, so a cached newer package cannot run in place of the version i
 Once a Copilot turn's prompt has been sent, the Hub SHALL record any failure of that turn as the run's failed outcome, keeping what the turn wrote, and SHALL NOT treat it as a turn that never started.
 
 A failure after the prompt includes an error answer to the prompt, the Copilot process ending, the
-turn timing out, and an error Copilot reports for the session during the turn. Copilot can report
-such an error and still say the turn ended normally. The Hub SHALL then record the turn as failed
-with Copilot's message, unless the turn was stopped. A failure before the prompt SHALL still be
+turn timing out, and an error Copilot reports for the session's own agent during the turn. Copilot
+can report such an error and still say the turn ended normally. The Hub SHALL then record the turn
+as failed with Copilot's message, unless the turn was stopped. An error Copilot reports for a
+subagent the turn started SHALL be recorded in the run's timeline and SHALL NOT by itself fail the
+turn. A failure before the prompt SHALL still be
 recorded as a failure to start. When that failure is Copilot reporting that it is not signed in
 or is too old, the Hub SHALL record that verdict for the runner before the input is retried. The
 retry is then held instead of failing the same way again.
@@ -116,6 +118,12 @@ retry is then held instead of failing the same way again.
 
 - **WHEN** Copilot reports a session error during a turn and then ends the turn normally
 - **THEN** the run ends failed with the session error's message
+
+#### Scenario: A subagent's error with a normal ending
+
+- **WHEN** Copilot reports an error for a subagent the turn started, and then ends the turn normally with no error for the session's own agent
+- **THEN** the run does not end failed on that account
+- **AND** the subagent's error appears in the run's timeline
 
 #### Scenario: A sign-in failure holds the input
 
@@ -132,7 +140,8 @@ environment overrides that sign-in instead of proving it exists. The Hub SHALL r
 without a model call. It SHALL report a CLI that is not signed in, and a CLI below the supported
 version, as not authorized, each with a reason that says what to do. A verdict the Hub has not yet
 computed SHALL NOT make a Copilot agent uncreatable. In that case the run's own handshake is the
-binding check.
+binding check. A verdict that the CLI is not signed in or is too old SHALL be checked again on the
+next read of it, so that signing in or updating is seen without waiting for the verdict to age.
 
 #### Scenario: A signed-in Copilot with no token variables
 
@@ -144,6 +153,12 @@ binding check.
 - **WHEN** the Copilot CLI refuses to create a session because no sign-in exists
 - **THEN** a Copilot runner is reported not authorized
 - **AND** the reason says to run `copilot login`
+
+#### Scenario: Signing in is seen at once
+
+- **WHEN** the Hub holds a verdict that the Copilot CLI is not signed in, and the operator then runs `copilot login`
+- **THEN** the next read of the verdict starts a new check
+- **AND** a read after that check completes reports the runner launchable
 
 #### Scenario: The verdict is still being computed
 

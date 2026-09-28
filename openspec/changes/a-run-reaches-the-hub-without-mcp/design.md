@@ -85,6 +85,20 @@ as `failed`. R2's "store as `failed`" would, under this precedence, outrank a re
 Copilot status other than `connected`/`failed` is only a diagnostic (D12). F340's own requirement says: *"A status
 string the Hub does not recognise must count as 'no grounds'"*. An ignored string gives no grounds.
 
+**What ignoring them costs (review note 10, 2026-09-28).** An ignored string is not free. It is the gap through which
+a narrow latch returns:
+- **Claude `pending`.** If a Claude version reports `pending` at `init` for a slow fastmcp start, the announce decides
+  `connected`. If the server then fails, Claude emits no second `init`, and nothing later corrects the record: F340's
+  latch is back for that version, one run at a time. Drive 9.7 (and 9.8) records the literal `init` status string for
+  `agentweave`, so a `pending` shows up as a measurement, not a guess. If it does, the fix is a later Claude status
+  source, not storing `pending` as `failed`.
+- **Codex `cancelled`.** Likewise ignored; the announce, if any, decides. Codex is undrivable here, so this stays a
+  stated gap.
+- **Copilot, late announce.** An announce after the 15 s wait writes `connected` over the wait's `absent`, by the
+  precedence. D12's event has already said *"did not start"*, and the `/mcp list` quote may say `(connected)`. The
+  record is right and the event is stale. It is benign but self-contradictory, and D12 says so. A cold first start
+  under corporate antivirus is the likely cause.
+
 **Recording never fails a run (R3).** Every writer (the Claude read loop, the Codex `run_turn` callback, and
 slice 2's Copilot `CopilotEventMapper`) calls `record_harness_mcp_status` inside a `try` that logs and continues. These run inside
 the executors, and there an exception fails the run or the turn (Codex: `run_turn` raises only the tuple
@@ -100,6 +114,21 @@ is not NULL. `described_access_path(..., latest=...)` describes MCP iff the oper
 `plane == "cli"`, today `access_path == "cli"`) is described `shim`, never `cli`: today's
 `if access_path != "mcp": return access_path` (`launchability.py:311-312`) becomes `return "shim"`. Per agent, as
 today; the docstring's argument for that grain (`launchability.py:258-264`) still holds.
+
+**The operator's declaration against a run that tests itself (review fix 7, 2026-09-28).** `described_access_path`
+returns `"mcp"` on `override == "mcp"` (`launchability.py:313-314`), and the capability-plane spec keeps *"The
+operator's own statement is honoured"*. R1–R3 did not say which wins for a Copilot run whose own wait times out. The
+order is:
+1. **A run's own negative test before its first prompt decides that run** (`absent` from the wait, D9): it is told
+   `shim`, declaration or not. The declaration is a statement about what the agent should be *given* and how it is
+   usually reached. The run's own test is a measurement of what this harness did this turn, and telling a run tools
+   it measurably lacks is the defect the requirement exists to prevent. The declaration still decides what is
+   *given* (axis 1 stays `hub_client`-only), so the server is still injected and tested next turn.
+2. **Otherwise the declaration decides**, as today, for every run described before spawn (Claude, Codex).
+3. **Otherwise the latest test decides.**
+
+`hub_client: "mcp"` is rare: the review read 0 agents holding it in the backup and profile databases (`mode=ro`).
+D12's "next turn" wording depends on it (below).
 
 **What the run is *given* does not move.** The record changes only what a run is *told*. Slice 1's axis 1
 (`tool_surface`, whether the server is injected) stays decided by `hub_client` alone, and `posture_at_rest` keeps
@@ -164,11 +193,33 @@ aw-tool --help
 
   Stdin is left out because PowerShell 5.1 re-encodes piped strings through `$OutputEncoding` (ASCII by default)
   (DOCUMENTED PowerShell behaviour), and F301 measured Claude's analyser refusing heredoc brace forms.
-- **The file.** It is read as UTF-8, with or without a BOM, or as UTF-16 with a BOM, because
-  `Out-File`/`Set-Content` in 5.1 write those. It must hold a JSON object. The path resolves against the shim's
-  own cwd. The notice tells the agent to write it under `.agentweave/calls/` in its workspace (D14), and only that
-  location is auto-approved (D8). The shim itself reads any path its process can read, because the restriction
-  belongs to the approver, not the reader.
+- **The file's encoding (review fix 3, 2026-09-28).** R1–R3 said *"UTF-8 or UTF-16 with a BOM, because
+  `Out-File`/`Set-Content` in 5.1 write those"*. That is half wrong. `Out-File` in 5.1 writes UTF-16LE with a BOM, but
+  `Set-Content` writes the **ANSI code page with no BOM**. VERIFIED 2026-09-28 on 5.1.26100: an em dash written by a
+  bare `Set-Content` is the single byte `0x97`, and a strict UTF-8 decode raises `UnicodeDecodeError`. `Set-Content
+  -Encoding utf8` writes UTF-8 with a BOM. The decode order is therefore:
+  1. a UTF-8 BOM → UTF-8; a UTF-16 BOM → UTF-16;
+  2. otherwise strict UTF-8;
+  3. if that fails, **on Windows only**, the ANSI code page (`locale.getencoding()`, 3.11+), which is what a bare
+     `Set-Content` wrote;
+  4. if that fails too, or on POSIX, a `usage` error that says to write the file with the file tool, or with
+     `Set-Content -Encoding utf8`.
+
+  The notice gives the same advice: write the args file with the file tool, and from PowerShell only with
+  `-Encoding utf8`. It must hold a JSON object.
+- **Where the file may be (review fix 8, 2026-09-28).** R1–R3 let the shim read *"any path its process can read,
+  because the restriction belongs to the approver, not the reader"*. That is withdrawn. On Claude's `cli` path the
+  approver is group 7's prefix rule `Bash(aw-tool:*)`, which restricts no path. And the predicate resolves a relative
+  path against the workspace, while the shell resolves it against its current directory, which a persistent shell
+  (Copilot's) and Claude's Bash tool both keep across a `cd`. So the shim enforces D8's path rule itself:
+  - the path is resolved against the shim's own cwd, as the shell meant it;
+  - the root is `os.path.join(os.path.realpath(AW_WORKSPACE_DIR), ".agentweave", "calls")`, not resolved further;
+  - the file is read only when `normcase(realpath(root)) == normcase(root)` (no component of `.agentweave/calls` is
+    a link or junction, D8) and the file's realpath is inside `root` by `commonpath`, and it ends in `.json`;
+  - otherwise, and when `AW_WORKSPACE_DIR` is unset, it is a `usage` error naming the calls directory, and no
+    request is made.
+
+  Both approvers then mean the same thing, and a drifted working directory fails closed with a readable error.
 - **No file** means `{}`, for tools with no required arguments (`list_tasks`, `list_checkpoints`).
 - **Binding.** The keys are the tool function's parameter names, which are the MCP argument names, not the
   route's field names. They are bound with `inspect.signature(fn).bind(**args)`. An unknown or missing key is
@@ -178,6 +229,15 @@ aw-tool --help
   runtime endpoint (`UNDESCRIBED_TOOLS`, `agents.py:989-999`) and means nothing when called by an agent. R2 count:
   27 registered, so 26 callable. All 27 are plain `def`s, and none is `async`.
   `submit_checkpoint_notes` stays callable, because the checkpoint prompt names it.
+  **How the set is known in both modes (review note 12, 2026-09-28).** The predicate runs synchronously, and in the
+  Hub process (slice 2's handler) and in the server mode `approve_tool_call` runs in, fastmcp is loaded, and
+  enumerating its registered tools is async or private. So the module keeps one plain name set,
+  `_CALLABLE_TOOLS: Dict[str, Callable]`, filled by a thin module-level decorator, `_tool()`, that records the
+  function and then applies `mcp.tool()` (in server mode) or `_CallRegistry.tool()` (in call mode). Every
+  `@mcp.tool()` becomes `@_tool()`. `approve_tool_call` is recorded like the rest and left out of the callable set
+  by name, and it keeps its missing return annotation (`.claude/rules/mcp-server.md`). The predicate, `call_main` and
+  `--list` read only this set, and test 1.3 asserts it equals the fastmcp-registered set minus `approve_tool_call`.
+  That is what keeps *"cannot drift"* true.
 - **Output.** One JSON object on stdout.
   - Success: `{"ok": true, "result": <the tool's return>}`, exit **0**.
   - Refusal: `{"ok": false, "error": {"kind": "rejected", "status": <int>, "detail": <str>, "data": {...}}}`,
@@ -192,7 +252,12 @@ aw-tool --help
     raises `ValueError`. For a call that writes, the detail says the outcome is unknown and names `list_tasks` /
     `get_task` as the way to check. It does not say "failed", because the Hub may have committed the write.
 
-  Nothing else is ever printed to stdout, so a model can parse it. Exceptions are not leaked as tracebacks.
+  The shim prints nothing else to stdout, so a model can parse it. Exceptions are not leaked as tracebacks.
+  **One exception the shim cannot control (review note 9).** PowerShell runs a `.cmd` as `%ComSpec% /c "…"`, without
+  `/d`, so a machine whose `HKCU`/`HKLM` `Software\Microsoft\Command Processor\AutoRun` prints anything (`chcp 65001`
+  prints `Active code page: 65001`) puts that text ahead of the envelope on every call. Corporate images set
+  `AutoRun`, and the work PC is one. The envelope is still the last line, and the notice says so. Human-only step 3
+  lists it as a likely cause. The `.exe` launcher (open question 7) would remove it.
   R3: the output keeps `json.dumps`'s default `ensure_ascii=True`. PowerShell 5.1 decodes a native command's stdout
   with the console code page, so non-ASCII text in a task title would otherwise arrive mangled. Escaped output is
   pure ASCII, so it is identical in every shell.
@@ -241,13 +306,18 @@ directory that is not the package root. It asserts that the names equal the fast
 - **Location.** `~/.agentweave/hub/tool-server/<digest>/bin/<exe>/`, where `<digest>` is the pin's digest and
   `<exe>` is `sha256(sys.executable)[:8]`. The launcher embeds the interpreter path, and two Hubs with the same
   server bytes but different Pythons must not rewrite each other's launcher. Two files:
-  - `aw-tool.cmd`: `@"<sys.executable>" -I "<pinned mcp_server.py>" --call %*`, with CRLF line endings.
-  - `aw-tool`: `#!/bin/sh` + `exec "<python, forward slashes>" -I "<pinned path, forward slashes>" --call "$@"`,
+  - `aw-tool.cmd`: `@"<sys.executable>" -I -S "<pinned mcp_server.py>" --call %*`, with CRLF line endings.
+  - `aw-tool`: `#!/bin/sh` + `exec "<python, forward slashes>" -I -S "<pinned path, forward slashes>" --call "$@"`,
     mode 0700 on POSIX. Git Bash on Windows runs it (VERIFIED today with a stand-in: `command -v aw-tool` found
     it, and argv arrived intact).
   - **`-I` (R3).** Isolated mode ignores every `PYTHON*` variable (`PYTHONPATH`, `PYTHONSTARTUP`, `PYTHONHOME`,
     …) and the user site, and it leaves the script's directory off `sys.path`. Call mode imports only the stdlib, so
     it loses nothing. `-I` does not touch `os.environ`, so `AW_RUN_TOKEN` and `HUB_URL` still reach the shim.
+  - **`-S` (review fix 2, 2026-09-28).** `-I` still runs `site`, and `site` executes every `.pth` file in
+    site-packages. The review counted five on this machine, `pywin32.pth` and three `__editable__` finders among them.
+    `-S` skips `site` entirely. Call mode is stdlib-only, so it loses nothing, and the review measured it slightly
+    faster (85 ms against 92 ms). What `-I -S` does **not** isolate is listed in D8's residual: `ComSpec`, `AutoRun`,
+    `LD_PRELOAD`/`DYLD_*`, and PowerShell functions, aliases, modules and `PATH`.
     Without `-I`, an earlier command in a persistent shell could set `$env:PYTHONPATH='.'` next to a `json.py` in
     the workspace, and every later auto-approved `aw-tool` would run that file. Under "Workspace only", `_decide`
     allows both the assignment and the write, because both name only workspace words. The server mode that the
@@ -260,6 +330,13 @@ directory that is not the package root. It asserts that the names equal the fast
   compare-and-rewrite and atomic replace as `path()` (`tool_server.py:39-56`), inside the Hub user's own
   directory (the existing requirement's shared-directory clause applies unchanged), and pruned with the digest
   directory.
+- **The pin is now executed per call, not loaded once (review note 11, 2026-09-28).** Before this change the pinned
+  file was verified at trigger and loaded once per harness start. Now every `aw-tool` call re-reads
+  `~/.agentweave/hub/tool-server/<digest>/mcp_server.py`. The compare-and-rewrite runs at trigger, not per call. So a
+  change to that file in the middle of a run reaches that run's later, unasked calls, and those of every other
+  in-flight run of this Hub, not only the next spawn. Making that change needs a write outside every workspace, into
+  the Hub user's own directory, which the posture judges like any other outside write. The risk is low. It is stated,
+  not guarded.
 - **`PATH`.** In `trigger_agent_directly`, beside `AW_RUN_TOKEN` (`agent_trigger.py:1246`), the launcher
   directory is prepended to the run's `PATH`. On Windows the environment key may be spelled `Path`, so the
   existing key is found case-insensitively and reused. Every run gets it, whatever its surface: it is harmless
@@ -342,8 +419,17 @@ It is true in exactly three cases:
    `_decide` does. For `_decide` that is a stricter reading of a command it would judge anyway. For this predicate it
    is a widening. Under "Ask me", a foreign MCP tool such as `mcp__other__run` with input `{"command": "aw-tool
    list_tasks", "target": "…"}` would be allowed without a card, because its `command` key reads as a plain call.
-   The predicate cannot know what a foreign tool does with its other keys. Slice 2 judges every Copilot shell
-   request as `PowerShell`/`Bash`, so no caller loses a real case. The command text is lexed with the existing `_lex`
+   The predicate cannot know what a foreign tool does with its other keys. **Slice 2's `"Shell"` key never gets
+   standing (conflict 1, DECIDED 2026-09-28).** Slice 2 normalises a shell request from `local_shell`, or one whose
+   tool name it does not know, to `("Shell", {"command": …})`. Case 2 stays limited to `Bash`/`PowerShell`, so such a
+   request goes to the judge, and under "Ask me" to a card. That is a real case lost, deliberately: an unnamed shell is
+   exactly the one whose name lookup nobody knows, and `cmd` looks in the current directory first (the review measured
+   `cmd /d /c "aw-tool list_tasks …"` running a workspace `aw-tool.bat` ahead of the launcher first on `PATH`, once
+   `NoDefaultCurrentDirectoryInExePath` was unset; Claude Code sets it in its own shells, runs do not). Reading the
+   text both ways checks characters, not resolution. Copilot's `write_powershell` is `execute`-kind, but its input is
+   `{shellId, input, delay}`, text for a running process, not a command; it never reaches case 2 either. If slice 2's
+   task 1.1 capture finds genuine `powershell` requests commonly arriving with no known name, the fix is in slice 2's
+   `calls` map, not here. The command text is lexed with the existing `_lex`
    in that tool's dialect. It must satisfy **all** of:
    - **every character of the raw text is in a fixed plain set** (R2): ASCII letters, digits, `.`, `_`, `-`, `/`,
      the space, and `\` in the PowerShell reading only. Any other character makes the predicate `None`. R3: the set
@@ -365,15 +451,14 @@ It is true in exactly three cases:
      it cannot drift;
    - there is at most one more word. It must be a plain relative path (no `..` component, no leading separator,
      no drive, no `~`, **R3: not beginning with `-`**), end in `.json`, and resolve with `os.path.realpath`
-     against `workspace` to a file inside `<workspace>/.agentweave/calls/`, compared with `os.path.normcase` as
-     `_where` does (`:1113-1133`). The leading `-` is excluded because R3 measured that PowerShell 5.1 splits a
+     against `workspace` to a file inside the **calls root**, by the *calls-root rule* below. The leading `-` is excluded because R3 measured that PowerShell 5.1 splits a
      native argument that begins with `-` and contains a `.`: `aw-tool create_task -x.agentweave/calls/1.json`
      reaches the program as `['create_task', '-x', '.agentweave/calls/1.json']`. The word the predicate judged is
      then not the argv the program gets. It cannot do more than a usage error, but "exactly" should mean exactly;
    - there are no further words.
 3. **A file write whose declared paths are all `.json` files inside `<workspace>/.agentweave/calls/`, and that
    declares at least one** (R3: "every declared path" is vacuously true of none). The paths are resolved the same
-   way. A symlink out resolves out and fails. A write tool whose input carries a `command` key is not this case. **R2 correction:** R1 said "file write" means the tool
+   way, by the calls-root rule. A symlink out resolves out and fails. A write tool whose input carries a `command` key is not this case. **R2 correction:** R1 said "file write" means the tool
    kinds that slice 1's `write_tool_kinds` names. `mcp_server.py` cannot read that, because it is spawned
    standalone and imports only stdlib and fastmcp (`.claude/rules/mcp-server.md`). So the predicate restates
    Claude's write tools as `_HUB_OWN_WRITE_TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit":
@@ -381,6 +466,32 @@ It is true in exactly three cases:
    (`workspace_writes.py:38-43`), the house pattern for a restated constant. Slice 2 judges a Copilot edit as
    `_decide("Write", {"path": p})` per path (its D8), so the predicate also reads the `path` key for `Write`. In
    other words, it reads every `_PATH_KEYS` entry (`:1009`) present on a tool in that set.
+
+**The calls-root rule (review fix 1, BLOCKING, 2026-09-28).** R1–R3 said each path is *"resolved with `realpath`
+and compared with `normcase` as `_where` does"*. `_where` compares against a **realpath'd** root (`_decide`: `root =
+os.path.realpath(workspace)`, `mcp_server.py:1567`). The natural implementation, `_where(p,
+os.path.realpath(<ws>/.agentweave/calls))`, therefore accepts everything under wherever `calls` points. VERIFIED
+2026-09-28 (5.1.26100, Python 3.11): after `New-Item -ItemType Junction -Path ws\.agentweave\calls -Target ws\.claude`,
+then `New-Item -Force` of the directory as a per-turn `mkdir` would do (it leaves the junction in place),
+`realpath(<calls>/settings.json)` is `…\ws\.claude\settings.json` and `realpath(<calls>)` is `…\ws\.claude`. Under
+"Workspace only", `_decide` allows the junction's creation, because every word names the workspace (the review
+measured `{'allow': True, 'reason': 'inside your workspace'}`). The junction
+then persists across postures, runs, agents and runners. Later, under "Ask me", a write of
+`.agentweave/calls/settings.json` would be allowed by standing and land in `.claude/settings.json`, whose hooks run
+code at the next Claude start. A junction to the workspace root reaches `.mcp.json` and `package.json`, and one to
+`.vscode` reaches `tasks.json`. So the rule, used by cases 2 and 3 and by the shim itself (D3):
+- **The calls root** is `os.path.join(os.path.realpath(workspace), ".agentweave", "calls")`, **not resolved further**.
+- **The root must be itself.** The predicate is `None` unless `normcase(realpath(root)) == normcase(root)`. So neither
+  `.agentweave` nor `calls` may be a symlink or a junction. The workspace itself may be one, because its realpath is
+  what the root is built on. The check is this comparison, not `os.path.islink`: VERIFIED, `islink` is `False` for a
+  directory junction on 3.11, and `os.path.isjunction` does not exist before 3.12.
+- **The file must be inside it.** `commonpath([root, realpath(file)])` equals `root` under `normcase`. A file-level
+  link out, `..`, and a different drive all fail this.
+- Any exception is `None` (the predicate is total).
+
+A junction swapped in between the decision and the write (a background shell job, say) is not caught. Starting that
+job needed its own decision, so this is the same class as the persistent-session residual below. D14 says how the Hub
+makes and checks the directory.
 
 **Near misses fall through; they are never denied by this rule.** When the predicate returns `None`, today's
 logic runs unchanged: the `workspace` posture's word-by-word `_decide`, or the operator card. So the predicate
@@ -400,7 +511,14 @@ operations under exactly that credential, and nothing else:
 - it runs a fixed program with no shell of its own;
 - the file it reads is data;
 - the auto-approved write can only create `.json` data inside a Hub-owned, git-excluded directory, which nothing
-  executes (D14).
+  executes (D14), and only once the calls-root rule holds.
+
+  **One residue (review note 13).** Nothing *automatically* executes the file, and nobody sees its content: Python
+  runs any file as a script, whatever its extension, so a later card for `py .agentweave/calls/x.json` asks the
+  operator to approve code they never saw. That command is a card under "Ask me" and a judged command under
+  "Workspace only", as any other. Flagging a card whose command names a file under `.agentweave/calls/` belongs to
+  the card's own change (`an-ask-me-card-says-what-workspace-only-would-decide`), and is not a reason to refuse case 3.
+  It is recorded, not built here.
 
 **A residual, for R3 and the Opus review (R2).** "A fixed program" assumes that the bare name `aw-tool` resolves to
 the Hub's launcher. Copilot's shell is a *persistent* session (CODE, `app.js` help table). An earlier command in
@@ -414,8 +532,35 @@ widening:
 It does mean the operator's approval of one innocuous-looking command can change what later unasked calls do. Say so
 in the Opus review rather than claim the predicate alone bounds it. R3 narrowed the residual by one class: an
 interpreter variable (`PYTHONPATH`, `PYTHONSTARTUP`) set earlier no longer changes what the launcher runs, because
-the launcher passes `-I` (D5). Aliases, functions, a user profile loaded by the shell, and a directory put ahead on
-`PATH` remain.
+the launcher passes `-I` (D5).
+
+**The residual is wider than R3 stated (review fix 2, 2026-09-28).** What remains, after `-I -S`:
+- **`ComSpec`.** PowerShell runs a `.cmd` as `%ComSpec% /c ""<path>\aw-tool.cmd" <args>"`. VERIFIED 2026-09-28 on
+  5.1.26100: with `$env:ComSpec` set to a copy of `python.exe`, a bare `aw-tool list_tasks …` ran that program with
+  `/c` as its first argument. The review measured the same with a workspace `argv.exe`, and `_decide` allows the
+  assignment under "Workspace only". A relative `ComSpec` is not honoured.
+- **cmd `AutoRun`.** The same command line has no `/d`, so `Command Processor\AutoRun` runs before every call (and
+  may print, D3).
+- **Site `.pth` files.** Closed by `-S` (D5).
+- **POSIX loader variables.** `LD_PRELOAD`, `LD_LIBRARY_PATH` and `DYLD_*` are untouched by `-I`.
+- **PowerShell command precedence.** An alias or function beats an application. The realistic triggers are ordinary
+  commands, not odd ones: `Import-Module .\helpers.psm1` exporting an `aw-tool` function, and a virtualenv's
+  `Activate.ps1`, which prepends `.venv\Scripts` to `PATH`, where an `aw-tool.cmd` then wins (both measured by the
+  review). Under "Ask me" the operator approves "activate the venv" or "import the helper module" once, and every
+  later `aw-tool` call in that persistent Copilot session runs workspace code with no card.
+- **A user profile** loaded by the shell.
+
+It is **Copilot-specific** in practice: Claude's Bash tool does not persist aliases, functions or environment
+variables between calls. The predicate cannot close any of it. Two further measures would, and they are put to the
+operator with open question 7 rather than assumed:
+- **an `.exe` launcher** in place of `aw-tool.cmd`, which takes `cmd.exe` out of the chain, and with it `ComSpec`,
+  `AutoRun` and `%*` re-parsing. pip's own console-script launcher (`pip/_vendor/distlib/t64.exe`, how `aw.exe`
+  exists) is one ready-made form. It does **not** close functions, aliases, modules or `PATH`;
+- **detect and degrade**: an auto-approved shell call after which no call-mode request reaches the Hub under that
+  run's token before the tool call completes withdraws case 2's standing for the rest of that run, returning it to
+  the judge or cards. The shim would mark its requests (a header), and `--list`/`--help`/usage failures, which make
+  no request, would degrade too, in the safe direction. This is the only measure that closes the venv and module
+  triggers.
 
 **R3's attack on the allow-list (task 0.2).** Each attempt below was run against `_lex`/`_words` as they are
 (`mcp_server.py:1403-1505`) and against case 2 as now written. The PowerShell rows marked "measured" were run on
@@ -441,6 +586,8 @@ PowerShell 5.1.26100, with stand-in launchers that print their argv.
 | a Copilot `edit` request that names no path (its `write_powershell` input to a running shell) | **allowed before R3** if a caller asked "every path passes" of an empty list. Now it needs at least one path, and slice 2 already rejects it (its D8) |
 | `aw-tool create_task .agentweave/calls/1.json` after an earlier `$env:PYTHONPATH='.'` and a workspace `json.py` | **ran agent code before R3**, under an auto-approved call. Closed by `-I` (D5) |
 | after an earlier `Set-Alias aw-tool x`, `function aw-tool {…}`, or a `PATH` prepend | the same text runs something else. **Not closable by the predicate**: this is the recorded residual above |
+| (review) `.agentweave/calls` itself a junction to `.claude`, then a write of `.agentweave/calls/settings.json` | **allowed by R3's wording**, which compared against the resolved calls directory. Now `None` by the calls-root rule (review fix 1) |
+| (review) after an earlier `$env:ComSpec = "<ws>\x.exe"`, `Import-Module .\m.psm1`, or `.venv\Scripts\Activate.ps1` | the same text runs something else. Residual, widened above (review fix 2) |
 
 No attempt produced more than one plane call from text the predicate allows. Three produced something other than
 "exactly one invocation of the Hub's launcher": the foreign tool, the empty edit and the interpreter-variable
@@ -530,8 +677,14 @@ knowing"*): **the first turn does not have to not-know.** The raw events are lat
    3 s on 1.0.88. `mcp_announce` is a new, tiny module:
    - a per-run `asyncio.Event` registry;
    - the announce route sets the event after its commit;
-   - `wait` first checks `Run.mcp_adapter_online_at` in a fresh session, because the announce can precede the
-     wait;
+   - **`wait` registers its Event first, and only then checks `Run.mcp_adapter_online_at`** in a fresh session,
+     because the announce can precede the wait. R1–R3 checked first and registered second (review fix 5,
+     2026-09-28). An announce that committed between the two notified no one, and the run was recorded `absent` and
+     told `shim` while it held MCP. By this section's own timings the announce is expected about +2–2.5 s after
+     `session/new` is sent, and `session/new` returns at +1.85 s, so that window was the expected arrival time.
+     Register-then-check closes it: an announce committed before the check is seen by the check, and one after it
+     finds the Event registered. The wait also **re-checks the stamp at every poll step** (it already polls for
+     `should_interrupt`), so a lost notification costs at most one poll interval;
    - `wait` is total. A database error in that check is logged and treated as "not yet", and the wait goes on to
      its timeout. So a failing check ends as `absent` + `shim`, the safe direction. It never fails the run (R2:
      the transport runs inside the trigger's executor, and an exception there fails the run).
@@ -612,7 +765,9 @@ task updates or questions"*. Once this slice lands, that sentence is **false** f
 has every operation through `aw-tool`. Left in, a blocked run would show the operator an error saying the agent
 cannot collaborate, beside D12's statement that it was told `aw-tool`. So for a Copilot run, the non-`connected`
 raw status becomes D12's diagnostic, and slice 2's error event is not emitted. Task 5.4 carries this. Codex's own
-event is left alone: whether a Codex shell can reach the Hub is open question 4.
+event is left alone: whether a Codex shell can reach the Hub is open question 4. **Review fix 6 corrects that last
+sentence:** after D10, every Codex run with no grounds is told `shim`, so Codex's own message is reworded for a run
+told `shim` (D12), not left alone.
 
 **R3: narrowed, to agree with slice 2 as it now stands.** Slice 2's R2 wrote the opposite rule. Its D10 says
 *"whichever lands second removes the duplicate, and this slice's once-per-turn error for the Hub's own server is the
@@ -646,6 +801,15 @@ So for both, the notice and the tool section are decided before spawn from `late
 one change is that **no grounds → `shim`**, where today it is HTTP. The requirement *"A run holding the tools is
 not told it is empty"* still holds: the shim text asserts nothing about MCP (D11). F302's measurement (3 of 3
 fresh first turns reached for MCP anyway) is why no conditional wording is added.
+
+**The Codex caveat (review fix 6, 2026-09-28; R2's open question 4 sentence, which reached no task).** Every first
+Codex run is now told `shim`, where before it was told the HTTP form, and whether a Codex shell under
+`workspace-write` can reach `127.0.0.1` is unverified (D15). So the shim notice, rendered for a Codex run, carries one
+more sentence: *"Your shell's sandbox may not allow network access to the Hub. If `aw-tool` reports `unreachable`,
+say so in your reply rather than retrying."* It is keyed on the runner (slice 1's adapter), like the host-tool
+sentence (D11). It is no worse than today's HTTP form, which has the same network question, and it stops the notice
+asserting reachability as a fact for a runner where it is not known. The capability-plane scenario is scoped to
+match (*"A run whose shell may not reach the Hub is told so"*). Task 5.2 carries it.
 
 ## D11. Runs are no longer told the raw HTTP form
 
@@ -702,11 +866,28 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
   - `plane_surface == "shim"`: *"The AgentWeave MCP server did not start for this run (absent); the run was told
     to reach the Hub with `aw-tool`."*
   - `plane_surface == "mcp"`: *"The AgentWeave MCP server did not start for this run (failed), although the run
-    was told to use it. Its next turn is told `aw-tool`."* ("next turn" is true for Claude, from the latest test.
-    For Copilot, which tests every turn, this wording is never used, because slice 2's event carries this case,
-    D9.)
+    was told to use it."*, followed by **one of two** second sentences (review fix 7, 2026-09-28):
+    - no `hub_client` declaration: *"Its next turn is told `aw-tool`."* That is true for Claude, from the latest test;
+    - `hub_client: "mcp"` declared: *"This agent is declared to use MCP (`hub_client: "mcp"`), so its next turn is
+      told the same; change the declaration to stop that."* R1–R3's unconditional "next turn is told `aw-tool`" was
+      false under a declaration, because a run described before spawn follows the declaration (D1, *The operator's
+      declaration*).
+
+    For Copilot, which tests every turn, this wording is never used, because slice 2's event carries this case (D9).
   - A runner that already reports the failure in its own words emits no second statement: Codex `failed`
     (`map_mcp_server_failure`), and Copilot told `mcp` (slice 2's `copilot_mcp_server_failed`).
+  - **Codex told `shim` (review fix 6, 2026-09-28).** `map_mcp_server_failure`'s own-server text (*"… so this turn had
+    no AgentWeave tools -- no messages, evidence, task updates or questions"*, `codex_appserver.py:557-561`) is false
+    for a run told `aw-tool`, the same defect D9 fixed for Copilot, and it would break `runtime-diagnostics`'
+    *"naming the surface the run was actually told to use"*. After D10 every Codex run with no grounds is told `shim`,
+    so this is the common case. `map_mcp_server_failure` gains a keyword `told_access_path`, passed through
+    `run_turn` from the request. For `"shim"` the own-server message reads *"The AgentWeave MCP server ({name})
+    failed to start; this run was told to reach the Hub with `aw-tool`: {detail}"*. The code
+    (`codex_mcp_server_failed`) and the once-per-turn emission are unchanged, and it stays the one statement: D12
+    emits nothing more for Codex. For `"mcp"` the text is today's, which is then true. Task 2.6 carries it.
+  - **A late Copilot announce (review note 10).** An announce after the wait makes the record `connected`, while
+    the event already stored says the server did not start. The event is not withdrawn. It was true when written:
+    the run was told `aw-tool` because nothing arrived in time. The run's facts show the final record.
 
   On Copilot the `shim` wording gains a second sentence quoting the `/mcp list` line for `agentweave` verbatim
   (vendor text, bounded by `_truncate_utf8`).
@@ -729,6 +910,10 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
   - F301 closes for Claude: the plane is reachable on the `cli` path.
   - Under F299 condition A the plane is reachable, but file writes still die. **F299 stays open for Claude**, and
     the containment choice stays the operator's (`DECISIONS.md` 2026-09-13 1b; F339).
+- **The rule restricts no path, so the shim does (review fix 8, 2026-09-28).** `Bash(aw-tool:*)` matches `aw-tool
+  <tool> <any path>`, so on the `cli` path it is wider than D8's case 2. The shim's own calls-root check (D3, *Where
+  the file may be*) makes the two approvers mean the same thing: `aw-tool create_task C:\elsewhere\x.json` runs,
+  but reads nothing and exits `usage`.
 - **If group 7 is cut,** delete the ADDED requirement *"A Claude run pre-allows the Hub's call command"* from
   `specs/agent-run-sandboxing/spec.md`, and F301 stays open for Claude.
 
@@ -736,6 +921,24 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
 
 - The Hub creates `<effective_work_dir>/.agentweave/calls/` beside `.agentweave/context/`
   (`agent_trigger.py:1160-1169`) on every turn.
+- **How it is made and checked (review fix 1, 2026-09-28).** A plain `mkdir(exist_ok=True)` leaves an existing
+  junction or symlink in place (VERIFIED: `New-Item -Force` of the directory over a junction succeeds and the junction
+  stays). So the per-turn step is:
+  1. If `.agentweave/calls` exists and `normcase(realpath(p)) != normcase(p)` for its unresolved path `p` (built on
+     `realpath(work_dir)`), or it is not a directory, the Hub **removes the link itself, never its target's
+     contents** (`os.rmdir` for a directory junction or directory symlink on Windows, `os.unlink` for a POSIX
+     symlink or a file), then creates a real directory. VERIFIED 2026-09-28: `os.rmdir` on the junction removed it
+     and left the target's files in place. `calls` is the Hub's own; nothing else belongs there.
+  2. If `.agentweave` itself is a link, the Hub does **not** replace it: it may hold the project binding
+     (`.agentweave/project.json`). It creates nothing through it, logs a warning, and the turn proceeds. The
+     calls-root rule then never matches for that workspace, so every `aw-tool` call and args-file write is decided
+     as it would be without this change (the judge, or a card). The shim refuses to read, with a readable `usage`
+     error. The safe direction, and visible.
+  3. A removal or creation that raises `OSError` refuses the turn with the context write's existing refusal, as
+     today's context write does.
+
+  This is belt and braces. The predicate and the shim check the root at every decision and every read, whatever the
+  Hub made at turn start, because the run can make a junction mid-turn.
 - `repo_hygiene.EXCLUDE_PATTERNS` (`repo_hygiene.py:59-85`) gains `.agentweave/calls/`, so `snapshot_worktree`'s
   `git add -A` never commits call arguments.
 - The files are not deleted by the shim, because the agent may reuse them. They are the agent's scratch, inside
@@ -767,6 +970,58 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
 | `CON.json`/`NUL.json`/`COM1.json` are ordinary file names on this Windows 11 build | **VERIFIED** (R3: `realpath` stays inside; `open` raises `FileNotFoundError`) |
 | An announce can precede a failed connection (`main()` announces before `mcp.run`) | CODE (`mcp_server.py:2091-2094`) |
 | Copilot's shell tool is a persistent session with `mode sync\|async` and `initial_wait` | CODE (`app.js` 1.0.88, tool help table) |
+| A directory junction on `.agentweave/calls` makes `realpath(calls)` its target; a per-turn `New-Item -Force` leaves it; `os.path.islink` is `False` for it on 3.11 | **VERIFIED** (review fix 1, 2026-09-28) |
+| `os.rmdir` on a directory junction removes the junction and keeps the target's files | **VERIFIED** (2026-09-28) |
+| PowerShell 5.1 bare `Set-Content` writes the ANSI code page (em dash → `0x97`); `-Encoding utf8` writes UTF-8 with a BOM | **VERIFIED** (review fix 3, 2026-09-28) |
+| PowerShell 5.1 runs a `.cmd` through `%ComSpec% /c`, and an absolute `ComSpec` set earlier in the session replaces `cmd.exe` | **VERIFIED** (review fix 2, 2026-09-28) |
+| `Import-Module` of a workspace module, or a venv `PATH` prepend, makes a bare `aw-tool` run workspace code | measured by the review (2026-09-28), not re-run here |
+| Plan mode blocks a Copilot `create` of `.agentweave/calls/*.json` | unmeasured; D16 avoids depending on it |
+
+## D16. A specification turn told `shim` keeps the one write it needs (review finding 4, 2026-09-28)
+
+**The gap.** A specification turn removes every file-write tool, as a declared nudge:
+- Claude: `--disallowedTools Edit,MultiEdit,Write,NotebookEdit` (`runner_commands.py:229`, slice 1's
+  `restrict_spec_writes`);
+- Copilot: `--excluded-tools=apply_patch,create,edit,str_replace,str_replace_editor` plus Plan mode (slice 2 D9).
+
+A spec turn told `shim` (every Copilot spec turn on the work PC) must write `.agentweave/calls/*.json` to call
+`submit_spec_document`. Without a file tool it must write it from the shell. That write is neither case 2 nor case 3,
+is denied on Claude's `cli` path (no approver), may be blocked by Plan mode (unmeasured), and meets fix 3's encoding
+trap. R1–R3 never mentioned spec turns. The spec flow would be unusable exactly where this change is for.
+
+**Options weighed.**
+- *Tell a spec turn MCP.* Not an option where it matters: a run told `shim` is one whose MCP is absent or untested.
+- *One card per args file on spec turns.* Needs a file tool to be asked about, which the turn does not have, and
+  Claude's `cli` path has no one to ask.
+- *The spec flow is MCP-only on locked-down machines.* Gives up the fire test's spec half.
+- **The args-file write is the one write a spec turn keeps. Chosen.** It is the cleanest: the restriction's purpose
+  is "do not implement", and a `.json` data file in the Hub's own git-excluded directory implements nothing.
+
+**What it means per runner.**
+- **Claude** (stream transport; the surface is decided before spawn, D10). When `restrict_spec_writes` is set **and**
+  the run is described `shim`, `--disallowedTools` is `Edit,MultiEdit,NotebookEdit`: `Write` stays. Claude's permission
+  rules have no negation, so `Write` cannot be confined to the calls directory by the harness. On a run described
+  `shim` there is usually no Hub approver either (the approver is the same MCP server). So for that turn the nudge
+  against `Write` is weaker: `Edit`/`MultiEdit`/`NotebookEdit` are still removed, and `Write` is decided by the posture
+  (the workspace judge, a card, or `acceptEdits` on the `cli` path). This is stated, not hidden: the restriction was
+  already *"a nudge, not a sandbox: `Bash` is not named either"* (`runner_commands.py:224-229`). A run described `mcp`
+  keeps today's four-tool list.
+- **Copilot** (RPC transport; the surface is decided *after* spawn, D9, but the argv is built at spawn). So the
+  exclusion cannot depend on the surface:
+  - on **every** Copilot spec turn, `create` leaves the `--excluded-tools` list (`apply_patch,edit,str_replace,
+    str_replace_editor` stay excluded);
+  - on a spec turn the ACP handler answers **every `edit`-kind request** itself: allowed by standing when it names at
+    least one path and every path passes D8 case 3, and `reject_once` otherwise, **in every posture**. That is
+    stronger than today's nudge, because it is the Hub's own answer, not a tool list;
+  - so that such requests reach the handler at all, a spec turn does not set `allow_all` on under full access; the
+    handler answers every non-`edit` request ALLOW itself, which is what full access means for them;
+  - **Plan mode** (`session/set_mode`) is sent **after** the wait, and only when the run is told `mcp`. Whether Plan
+    mode blocks the args-file write is unmeasured, and for a `shim` spec turn the handler's rule above replaces it.
+    Slice 2's `SPEC_TURN_USES_PLAN_MODE` switch stays for the `mcp` case.
+- **Codex.** Unchanged: `restrict_spec_writes` does not reach Codex app-server today (slice 1 D3/D11, a declared gap).
+
+**The notice** for a spec turn told `shim` names the file tool for the args file (UTF-8, fix 3). Drive 9.10 makes one
+Copilot spec turn told `shim` submit a document. Test 1.15 covers both runners' launch and the handler's spec-turn rule.
 
 ## Round log
 
@@ -993,6 +1248,40 @@ checkpoint prompt, spec notices and the 35+ other mentions (R2 count in tonight'
   - *Required of slice 1*: `render_surface` type and the `AccessAxes`/axis-1 items marked agreed (slice 1 R3).
   - Open question 10: **contract conflict** with slice 2's `"Shell"` key, left open.
 
+- **Review fixes, 2026-09-28** (task 0.3: applying `spec-queue/tracks/reviews/ghcp-s3-2026-09-28.md`, Opus, APPROVE
+  WITH FIXES, on master `450de52`). Each blocking and should-fix finding was re-verified before it was applied.
+  Probes ran only under `%TEMP%\claude\s3fix\` (PowerShell 5.1.26100, Python 3.11); no copilot, claude or codex
+  process was spawned. Code re-read: `mcp_server.py:1105-1135`, `:1555-1575`; `launchability.py:295-316`;
+  `runner_commands.py:222-232`; `codex_appserver.py:545-565`; slice 1 D3/D6 and slice 2 D8/D9 on `restrict_spec_writes`.
+
+  | # | finding | verified | done |
+  |---|---|---|---|
+  | 1 | BLOCKING: a junction on `.agentweave/calls` turns case 3 into "write any `.json`" | **yes**: junction → `.claude`, `realpath(calls)` is `.claude`, `New-Item -Force` leaves it; also `os.path.islink` is `False` for a junction on 3.11 | D8 *calls-root rule* (unresolved root, root must equal its realpath, file inside by `commonpath`), used by cases 2 and 3 and the shim; D14 per-turn replacement of a `calls` link (`os.rmdir` VERIFIED to keep the target's files), `.agentweave` link left with a warning; sandboxing requirement body + scenario *"A calls directory that is itself a link…"*; tasks 1.4, 1.6, 1.8, 4.2 |
+  | 2 | residual wider than stated; the `-I` spec sentence false | **yes** for `ComSpec` (a python.exe copy as `ComSpec` ran in place of `cmd`); the module/venv/`.pth` rows taken from the review | D8 residual rewritten (ComSpec, AutoRun, `.pth`, loader variables, functions/modules/venv `PATH`, profile; Copilot-specific); `-S` **adopted** (D5, proposal, tasks 1.3, 1.7, 4.1); spec sentence now claims only interpreter variables and states the shell residual; `.exe` launcher and detect-and-degrade put to the operator with open question 7 (options a–d, recommendation a now, c later) |
+  | 3 | `Set-Content` writes ANSI, not UTF-8 | **yes**: em dash → `0x97`, strict UTF-8 raises; `-Encoding utf8` writes a BOM | D3 decode order (BOM, strict UTF-8, Windows ANSI, else `usage` naming `-Encoding utf8`); notice advice; task 1.4 cp1252 row, 3.2, 5.2 |
+  | 4 | spec turns remove the write tools the args file needs (cross-slice item a) | **yes**: `runner_commands.py:229`; slice 2 D9 | new **D16**: the args-file write is the one write a spec turn keeps. Claude: `Write` kept only for a spec turn described `shim` (stated weakening; no negation in Claude rules, no Hub approver on such runs). Copilot: `create` never excluded on spec turns, the handler allows only case-3 `edit`s and rejects every other in every posture, no `allow_all` on a spec turn, Plan mode after the wait for `mcp` only. New `spec-document-authority` MODIFIED delta. *Required of slice 1* (`restrict_spec_writes` + `described_access_path`) and *of slice 2* item 8; tasks 1.15, 5.2, 5.4, 5.6, drive 9.10, human step 6 |
+  | 5 | `mcp_announce.wait` check-then-register race | yes, by reading D9 against the announce route's notify-after-commit | D9: register first, then check; re-check the stamp every poll step; task 1.10 race row that fails on R3's order |
+  | 6 | Codex's failure text false for runs told `shim`; R2's Codex caveat dropped | **yes**: `codex_appserver.py:557-561` says "no AgentWeave tools" | D12: `map_mcp_server_failure(…, told_access_path)` rewords for `shim` and stays the one statement; D9's "left alone" sentence corrected; D10 Codex sandbox-network sentence in the shim notice; capability-plane scenario *"A run whose shell may not reach the Hub is told so"*; runtime-diagnostics scenario; tasks 2.6, 5.2 |
+  | 7 | declared `hub_client: "mcp"` against a run's own test; D12's "next turn" | **yes**: `launchability.py:313-314` | D1 *The operator's declaration*: a run's own negative test decides that run; declaration next; then latest test. D12's second sentence conditional on the declaration. Capability-plane body + scenarios; tasks 1.14, 5.4, 5.5 |
+  | 8 | group 7's rule restricts no path; cwd drift | yes, by reading D3/D13 | the shim enforces the calls-root rule itself (D3 *Where the file may be*; D13); R1–R3's "reads any path" withdrawn; sandboxing requirement body; task 1.4 rows (outside, unset workspace, drifted cwd, junction) |
+  | 9 | NOTE: `AutoRun` output precedes the envelope | accepted | D3 caveat; notice says the envelope is the last line; human-only step 3 |
+  | 10 | NOTE: Claude `pending`, Codex `cancelled`, late Copilot announce | accepted | D1 *What ignoring them costs*; D12 late-announce bullet; drives 9.2 and 9.7 record the literal status strings |
+  | 11 | NOTE: the pin is re-executed per call | accepted | D5 bullet |
+  | 12 | NOTE: the callable set in the Hub process | accepted | D3: `_CALLABLE_TOOLS` + `_tool()` decorator in both modes; tasks 1.3, 3.1; slice 5 bullet |
+  | 13 | NOTE: the args file's content is never shown | **answered, not built** | D8 residue paragraph: flagging such a card belongs to the card's own change; not a reason to refuse case 3 |
+  | conflict 1 | slice 2's `"Shell"` key (cross-slice item b) | **DECIDED**: case 2 stays `Bash`/`PowerShell`-only | D8 caller text rewritten (`write_powershell` never case 2 either); open question 10 closed; *Required of slice 2* item 7; sandboxing scenario *"A shell request from an unnamed shell tool…"* |
+  | conflict 2 | other dependencies | consistent except finding 4 | covered by D16 |
+  - **Disagreements with the review:** none on substance. Two differences of detail: (i) on finding 3 the ANSI fallback
+    is **Windows-only**; on POSIX a non-UTF-8 file is a `usage` error, because there is no `Set-Content` to have
+    written it; (ii) on finding 1, a `.agentweave` that is itself a link is **not** replaced (it may hold the project
+    binding); the rule refuses standing there instead of the Hub deleting anything. On finding 4 the review listed
+    three options; D16 takes a fourth, closest to the caller's "the one permitted write", and states Claude's
+    weakening rather than hiding it. The operator may prefer "Claude spec turns told `shim` cannot submit" instead;
+    it is one line in *Required of slice 1*.
+  - **Answers to 0.3's three questions** (the review's, adopted): D2 sound; D8 case 3 acceptable once fix 1 holds,
+    residual to the operator with open question 7; D11 sound, with finding 6's Codex correction.
+  - `openspec validate a-run-reaches-the-hub-without-mcp --strict` re-run after these edits.
+
 ## Required of slices 1, 2; not provided to 5 (R3)
 
 Each slice owns its own file. This section states, in the owning slice's names, what this change needs from each, and
@@ -1019,6 +1308,17 @@ another change.
 - `shim_allowed`: slice 1 has already struck it (`:430`). **Agreed.**
 - Slice 1's open question 4 (the Codex MCP env allow-list): not this change's. The shim runs in the harness's shell,
   whose environment is the run's, not the MCP server's env block. This change changes neither.
+- **`restrict_spec_writes` (review finding 4, 2026-09-28; D16). NEW, not yet in slice 1's text.** Precisely:
+  1. The builder needs the **described** surface. `build_command`/`StreamTransport.build_launch` gain a keyword,
+     `described_access_path: Literal["mcp", "shim"]` (slice 1 names it; default `"mcp"`, which reproduces today's
+     argv), passed from the trigger's `described_access_path(axes.plane, …)` result (D1).
+  2. Claude: `restrict_spec_writes and described_access_path == "shim"` → `--disallowedTools
+     Edit,MultiEdit,NotebookEdit` (no `Write`). Every other combination → today's `Edit,MultiEdit,Write,NotebookEdit`.
+     Still unconditional on yolo, as today.
+  3. `RpcTurnRequest.restrict_spec_writes` keeps its meaning as a bool. An RPC transport cannot know the surface at
+     spawn, so the Copilot half of D16 is slice 2's (below), not a builder input.
+  4. Slice 1's golden-argv matrix (its task 1.x, `yolo × restrict_spec_writes`) gains the `described_access_path`
+     axis for Claude.
 
 **From slice 2 (`a-copilot-agent-runs-over-acp`; it owns the ACP client, executor and permission handler).** This
 change lands after slice 2 and makes these edits itself at IMPL (task 5.4, 6.2). Slice 2 need only not contradict
@@ -1043,6 +1343,21 @@ them:
    `env` block. This is slice 2's design today, and task 5.1 re-reads it at IMPL. This also answers slice 5's open
    question 10 for this change: an `env` block would keep the token from the tool server, but not from the shell that
    runs `aw-tool`. So it buys nothing here.
+7. **The `"Shell"` key gets no standing (conflict 1, DECIDED 2026-09-28).** Slice 2's § *Provided to slices 3–5*
+   item 4 (*"which slice 3 already requires to satisfy both readings"*) is wrong and should say that a request
+   normalised to `"Shell"` gets no standing from `_hub_own_call` (the judge, and under "Ask me" a card), and that
+   `write_powershell` (input `{shellId, input, delay}`) never reaches case 2. Slice 2's task 1.1 capture should
+   count how often a genuine `powershell` request arrives with no known name; if that is common, the fix is in its
+   `calls` map.
+8. **Spec turns (review finding 4, 2026-09-28; D16). NEW, not yet in slice 2's text.** Slice 2's D9 changes:
+   - `--excluded-tools` on a spec turn drops `create`: `apply_patch,edit,str_replace,str_replace_editor`;
+   - on a spec turn, `decide_permission` answers every `edit`-kind request itself, in every posture: allowed by
+     standing when it names at least one path and `_hub_own_call("Write", {"path": p}, workspace=…)` holds for every
+     path, `reject_once` otherwise (recorded through `_on_refusal` like any Hub refusal);
+   - on a spec turn under full access, `allow_all` is **not** set on, so `edit` requests still reach the handler; the
+     handler answers every non-`edit` request ALLOW;
+   - Plan mode's `session/set_mode` is sent after the D9 wait, and only for a run told `mcp`;
+   - slice 2's drive task 11.3 (one spec turn) is unchanged for `mcp`; this change's drive 9.10 covers `shim`.
 
 **Not provided to slice 5 (`a-copilot-agent-uses-hooks-and-its-own-agents`). This change is the authority on the
 shim.** Slice 5's current text (`:118-123`, `:647-655`, `:692`) already matches all of the following. It is stated
@@ -1050,7 +1365,8 @@ here so it stays matched.
 - **Slice 5 may assume:**
   - `mcp_server.py --call <tool> [<args-file>]`, run from the pinned copy (`tool_server.PIN.path()`), or through
     `aw-tool` in `PIN.launcher_dir()`;
-  - it calls exactly the registered `@mcp.tool()` functions except `approve_tool_call`;
+  - it calls exactly the functions registered through the module's `_tool()` decorator except `approve_tool_call`
+    (review note 12: every `@mcp.tool()` becomes `@_tool()`, so a tool slice 5 adds uses `_tool()` too);
   - it reads `AW_RUN_TOKEN`/`HUB_URL` from its own environment;
   - it prints one JSON envelope with D3's exit codes;
   - it never imports fastmcp, and never announces.
@@ -1122,6 +1438,26 @@ R3 on the carried ones:
    safe side, but the two designs disagree. Not resolved here: either case 2 admits `"Shell"` read both ways (R3's
    reason for the limit was a foreign MCP tool's `command` key, which `"Shell"` is not), or slice 2 never hands the
    predicate `"Shell"`. Also carried in slice 2's open questions (its 11).
+   **CLOSED 2026-09-28: DECIDED, as conveyed with the task that applied the Opus review (its contract conflict 1).** Case 2
+   stays `Bash`/`PowerShell`-only. The `"Shell"` key never auto-approves: such a request goes to the judge, and under
+   "Ask me" to a card. The review's reason, which is not R3's: an unnamed shell is exactly the one whose name lookup
+   nobody knows, and `cmd` searches the current directory before `PATH`, so a bare `aw-tool` there can run an
+   agent-written `aw-tool.bat`. D8's caller text and *Required of slice 2* item 7 say so. Slice 2 fixes its § *Provided
+   to slices 3–5* item 4.
+
+**Opus review, 2026-09-28, on open question 7 (the review's answer; the operator decides).** Case 3 under "Ask me" is
+acceptable **once the calls-root rule holds** (review fix 1, applied): the file is then inert data in a Hub-owned,
+git-excluded directory, the same standing `mcp__agentweave__*` already has, and note 13 (content never shown) is the
+only residue. The persistent-session residual is **not** closable by the predicate, and it is wider and easier to
+trigger than R3 stated (D8, review fix 2): `ComSpec`, `AutoRun`, `Import-Module`, a venv's `PATH` prepend. `-S` is
+adopted (costless). **For the operator, with Q7:**
+- (a) accept case 2 and case 3 as designed, residual stated;
+- (b) also build the `.exe` launcher (closes `ComSpec`/`AutoRun`/`%*` re-parsing, not functions, modules or `PATH`);
+- (c) also build detect-and-degrade (closes the venv and module triggers after their first use in a run);
+- (d) withhold case 2's standing under "Ask me" (one card per call), keeping case 3.
+
+This change's recommendation: **(a) now, (c) as a follow-up change** if the work-PC drive shows persistent sessions
+in use. (b) adds a binary dependency on pip's private vendored launcher for the smaller half of the residual.
 
 ## Open questions as R1 posed them (answered or carried in the section above)
 

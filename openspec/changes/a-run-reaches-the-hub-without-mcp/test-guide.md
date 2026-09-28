@@ -2,7 +2,7 @@
 
 ## Agent-verifiable
 
-1. Tasks 1.1–1.14 fail on the tree before their implementation task, and pass after it. Record the fail-before
+1. Tasks 1.1–1.15 fail on the tree before their implementation task, and pass after it. Record the fail-before
    evidence through a scratch copy of the file, never `git stash` (DEAD-ENDS 2026-09-27).
 2. `aw-tool --list`, run from the pinned copy in a directory that is not the package root, lists exactly the served
    tools minus `approve_tool_call` (task 1.3). With fastmcp made unimportable, it still works.
@@ -38,7 +38,12 @@ Before starting, update the Hub there to a build carrying slices 1–3.
    which only this machine can show, are:
    - the company blocks running a `.cmd` from the user profile (AppLocker/WDAC);
    - PowerShell's policy refuses the command;
-   - Copilot asks about the command in a way the Hub did not recognise.
+   - Copilot asks about the command in a way the Hub did not recognise;
+   - the machine's `cmd` `AutoRun` (`reg query "HKCU\Software\Microsoft\Command Processor" /v AutoRun`, and the
+     same under `HKLM`) prints something, such as `Active code page: 65001`, ahead of the command's JSON output on
+     every call. Note the value if one is set (design D3);
+   - the args file was written by a bare `Set-Content` and holds non-ASCII text (the command then says to use
+     `-Encoding utf8`).
 4. **One question to you through the command.** *"Ask me, with ask_user, whether to proceed; then stop."* Answer it
    in the app within the wait. The agent should receive your answer. Say whether the agent's shell cut the command
    off before you answered (design D7).
@@ -46,5 +51,8 @@ Before starting, update the Hub there to a build carrying slices 1–3.
    read the "Your tools" section. The Hub stores no composed prompt. For the "Tool access" notice, ask the agent in a
    second tiny turn to quote the "Tool access" section it received. Would a colleague understand from them alone how the agent reaches the Hub, and that nothing about it
    needs the credential typed anywhere?
-6. **On this machine, optional.** If you want to see the Claude side, give a Claude agent `hub_client: cli` and ask
+6. **A specification turn** (design D16). Open a specification document with the Copilot agent and ask it, in one
+   tiny turn, to submit the document unchanged. It should write its arguments file and submit with no card, and
+   write nothing else.
+7. **On this machine, optional.** If you want to see the Claude side, give a Claude agent `hub_client: cli` and ask
    it to create a task. It should use `aw-tool` and succeed (group 7).

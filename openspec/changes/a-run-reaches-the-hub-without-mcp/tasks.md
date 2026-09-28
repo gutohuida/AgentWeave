@@ -30,9 +30,13 @@
     - F340 is not closed for Codex `exec`;
     - D12's wording was false for runs told `mcp`;
     - group 6 cut; R2's Codex `*TOKEN*` premise was refuted.
-- [ ] 0.3 Opus adversarial review of the change and of D2 (not a CLI subcommand), D8 (the args-file write under
+- [x] 0.3 Opus adversarial review of the change and of D2 (not a CLI subcommand), D8 (the args-file write under
   "Ask me", open question 7) and D11 (runs no longer told HTTP). Record it in
   `spec-queue/tracks/reviews/`, and apply or answer each finding before any APPROVED row.
+  - **Done 2026-09-28.** Opus review ghcp-s3-2026-09-28: APPROVE WITH FIXES → 12 applied, 1 answered (13
+    findings; both contract conflicts resolved too). Mapping in `design.md`'s Round log, *Review fixes,
+    2026-09-28*. Open question 7 now carries four options for the operator (design, *Opus review … on open
+    question 7*); it is the operator's decision before any APPROVED row.
 
 ## 1. Tests first — each fails on today's code
 
@@ -61,8 +65,10 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - A second run, with `PYTHONPATH` pointing at a `tmp_path` directory whose `fastmcp/__init__.py` raises
     `ImportError`, still exits 0 (call mode does not import fastmcp; design D4). Spawn this one **without** `-I`:
     isolated mode ignores `PYTHONPATH`, so it would pass whether or not call mode imports fastmcp (R3).
-  - A third run through the launcher (`-I`) with `PYTHONPATH` naming a directory whose `json.py` raises still
+  - A third run through the launcher (`-I -S`) with `PYTHONPATH` naming a directory whose `json.py` raises still
     exits 0 (design D5, R3).
+  - (review note 12) `mcp_server._CALLABLE_TOOLS`'s names, imported in-process, equal the listed names, and equal
+    the fastmcp-registered set minus `approve_tool_call` (design D3, *How the set is known in both modes*).
 - [ ] 1.4 Same file: call mode against a stdlib `http.server` stub Hub bound to `127.0.0.1:0` in a thread, with
   `HUB_URL` and `AW_RUN_TOKEN` in the child's env.
   - `create_task` with an args file → the stub saw `POST /api/v1/agent-actions/tasks`, `Authorization: Bearer
@@ -76,6 +82,18 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - A stub answering `200` with a non-JSON body → `kind: internal`, exit 70, and no traceback on stdout or
     stderr.
   - A UTF-16-with-BOM args file and a UTF-8-with-BOM file both work.
+  - (review fix 3) An args file holding an em dash as cp1252 byte `0x97` with no BOM (what a bare 5.1
+    `Set-Content` writes): on Windows it decodes through the ANSI code page and the stub sees the em dash; with
+    `locale.getencoding` patched to a codec that cannot decode it (and on POSIX), `kind: usage` whose detail names
+    `-Encoding utf8`, and the stub saw no request (design D3).
+  - (review fix 8) The shim's calls-root check, each with the stub seeing **no** request and `kind: usage`:
+    - an args file outside `<AW_WORKSPACE_DIR>/.agentweave/calls/` (a `tmp_path` file, and a `..` path);
+    - an args file inside, with `AW_WORKSPACE_DIR` unset;
+    - the child's cwd a subdirectory of the workspace, with a relative `.agentweave/calls/1.json` that therefore
+      resolves under the subdirectory (the drifted-`cd` case);
+    - `.agentweave/calls` a directory junction (Windows, `New-Item -ItemType Junction`, no privilege needed) or a
+      symlink (POSIX) to another workspace directory holding the file.
+    The same file inside a real calls directory works (design D3, *Where the file may be*).
 - [ ] 1.5 Same file, `ask_user` through call mode against the stub (design D7), with `AW_QUESTION_TIMEOUT=10`. It
   takes about 10 s; there is no `slow` marker in this repo, so do not add one:
   - the stub answers on the second poll → the answers come back in order;
@@ -111,6 +129,14 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     - `Aw-tool …` in Bash;
     - a `Write` of `.agentweave/calls/x.py`;
     - a `Write` whose path is a symlink under `calls/` pointing out (skip on Windows without symlink privilege).
+  - Review rows (review fix 1, the calls-root rule), all **fall through**, and **not skipped on Windows**
+    (a directory junction needs no privilege):
+    - `.agentweave/calls` a directory junction to `.claude`, then a `Write` of `.agentweave/calls/settings.json` by
+      `file_path` and by `path`, and `aw-tool create_task .agentweave/calls/settings.json`: under `operator` the card
+      is asked;
+    - `.agentweave` itself a junction to another directory holding `calls/`: the same;
+    - the plain allowed rows with the workspace **itself** reached through a junction (its realpath is the root),
+      which stay **allowed**.
   - R3 rows, all **fall through**:
     - `mcp__other__run` with `{"command": "aw-tool list_tasks"}`, and a tool named `Shell` with the same input
       (case 2 is `Bash`/`PowerShell` only);
@@ -124,8 +150,8 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     compared with `normcase`).
   - Fails today: every "allowed" row under `operator` calls `_ask_operator`.
 - [ ] 1.7 `hub/tests/test_tool_server_pin.py`: `PIN.launcher_dir()` (design D5):
-  - it holds `aw-tool.cmd` (CRLF, naming `sys.executable`, `-I` and the pinned path, `--call %*`) and `aw-tool`
-    (sh, `exec … -I … --call "$@"`);
+  - it holds `aw-tool.cmd` (CRLF, naming `sys.executable`, `-I -S` and the pinned path, `--call %*`) and `aw-tool`
+    (sh, `exec … -I -S … --call "$@"`);
   - both are rewritten when altered or deleted;
   - it sits under `<digest>/bin/<sha256(sys.executable)[:8]>`;
   - `prune_stale` removes it with its digest directory.
@@ -134,6 +160,9 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - the launcher dir is the first `PATH` entry;
   - with a base env whose key is `Path`, the same key is reused and no second `PATH` key appears;
   - `<work_dir>/.agentweave/calls/` exists after the trigger;
+  - (review fix 1, design D14) with `.agentweave/calls` a junction (Windows) or symlink (POSIX) to a directory
+    holding a file, after the trigger `calls` is a real directory and the former target still holds its file; with
+    `.agentweave` itself a link, the trigger proceeds, leaves it in place and logs a warning;
   - with `hub_client: "cli"` (no MCP), the launcher dir is still first on `PATH`;
   - a patched `PIN.path` that raises `OSError` refuses the trigger with 409 *"Could not materialize the tool
     server…"*, also under `hub_client: "cli"`. Today the pin is made only for MCP runs (design D5).
@@ -156,7 +185,12 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - the announce route sets `harness_mcp_status = connected` over NULL and `absent`, and never over `failed`;
   - (R3, design D1 precedence) `record_harness_mcp_status(..., "failed")` after an announce leaves `failed`. An
     announce after a harness `failed` leaves `failed`. An announce after a wait's `absent` gives `connected`. A
-    harness `connected` after a harness `failed` gives `connected`.
+    harness `connected` after a harness `failed` gives `connected`;
+  - (review fix 5) the race: patch the row check so that the announce route commits and notifies **while** the
+    check runs, after it has read the row as unset. `wait` returns True at once, not after the timeout. Against
+    check-then-register it times out, so the test fails on R3's order;
+  - (review fix 5) the stamp written directly to the row with no notify during the wait → `wait` returns True within
+    one poll interval.
 - [ ] 1.11 `RunFacts` carries `plane_surface` and `harness_mcp_status` from the row. Extend the test that asserts
   `outside_workspace_writes` on the agent timeline / chat run facts (`grep -rn outside_workspace_writes
   hub/tests`), using the ordering the route returns.
@@ -181,7 +215,18 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - (R3) the `/mcp list` prompt's content is exactly one text block, `/mcp list`, and the model prompt holds exactly
     one access-path notice (none came from the pre-spawn `notices`);
   - (R3) a Copilot agent with `hub_client: "cli"` does not wait: no `/mcp list`, `shim`, status NULL;
-  - (R3) an interrupt during the wait ends the run within one poll interval, with status NULL.
+  - (R3) an interrupt during the wait ends the run within one poll interval, with status NULL;
+  - (review fix 7) a Copilot agent with `hub_client: "mcp"` whose wait times out is told `shim` (the shim notice and
+    section, `plane_surface = shim`), and the next trigger still injects the server.
+- [ ] 1.15 (review finding 4, design D16) Specification turns told `shim`:
+  - Claude (slice 1's builder): `restrict_spec_writes=True` with `described_access_path="shim"` gives
+    `--disallowedTools Edit,MultiEdit,NotebookEdit`; with `"mcp"` (and by default) today's
+    `Edit,MultiEdit,Write,NotebookEdit`; both under yolo too. The trigger passes the described value (patch
+    `build_command` and read its kwargs, as the existing seams do);
+  - Copilot (slice 2's fake ACP agent): a spec turn's argv excludes `apply_patch,edit,str_replace,str_replace_editor`
+    and not `create`; an `edit` request for `.agentweave/calls/1.json` is allowed by standing and one for `src/x.py`
+    is `reject_once`, under `workspace`, under `manual` (no card asked) and under full access (where `allow_all` is
+    not set on for the spec turn); `session/set_mode` plan is sent after the wait and only for a run told `mcp`.
 
 ## 2. The per-run record (design D1)
 
@@ -211,7 +256,11 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     The callback never raises out of `run_turn` (design D1, R3);
   - the existing `failed` error event is unchanged;
   - no status leaves the run untested;
-  - test: extend `TestRunTurnMcpStartupFailure` (`test_codex_appserver_run_turn.py:555`) with a `ready` case.
+  - test: extend `TestRunTurnMcpStartupFailure` (`test_codex_appserver_run_turn.py:555`) with a `ready` case;
+  - (review fix 6, design D12) `map_mcp_server_failure` takes `told_access_path`. For `"shim"` the own-server
+    message says the run was told to reach the Hub with `aw-tool` and contains no "no AgentWeave tools"; for `"mcp"`
+    it is today's text; the code and once-per-turn rule are unchanged. `run_turn` passes the request's told surface.
+    Test: the same class, a `failed` status with each told surface.
 - [ ] 2.7 `RunFacts` gains the two fields at both construction sites (`agents.py:898`, `agent_chat.py:341` at R2). Test
   1.11 passes.
 
@@ -219,12 +268,16 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 - [ ] 3.1 In `mcp_server.py`, before the fastmcp import:
   - `_CALL_MODE` and the `_CallRegistry` stand-in (import `sys` at the top);
+  - (review note 12) `_CALLABLE_TOOLS` and the `_tool()` decorator that records the function and applies
+    `mcp.tool()`; every `@mcp.tool()` becomes `@_tool()` (design D3);
   - keep the `ImportError` message for server mode;
   - re-read `.claude/rules/mcp-server.md` first, and keep `approve_tool_call` without a return annotation.
 - [ ] 3.2 `call_main(argv) -> int`:
   - `--list` / `--help`;
   - bind with `inspect.signature`;
-  - read the file (UTF-8 / UTF-8-BOM / UTF-16-BOM);
+  - read the file only when the calls-root rule holds (design D3, *Where the file may be*; D8), else `usage`;
+  - decode it in design D3's order: BOM, strict UTF-8, then on Windows the ANSI code page, else `usage` naming
+    `-Encoding utf8`;
   - map `HubAPIError` / `HubUnreachableError` / `UnboundIdentityError` / usage errors to the D3 envelope and exit
     codes, and every other exception to `kind: internal`, exit 70;
   - never call `_announce_adapter_online` (design D4);
@@ -240,11 +293,13 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 ## 4. The launcher, the run's PATH and the calls directory (design D5, D14)
 
-- [ ] 4.1 `ToolServerPin.launcher_dir()` in `tool_server.py`, and prune with the digest directory. Test 1.7 passes.
+- [ ] 4.1 `ToolServerPin.launcher_dir()` in `tool_server.py` (launchers pass `-I -S`), and prune with the digest
+  directory. Test 1.7 passes.
 - [ ] 4.2 `agent_trigger.py`:
   - the `PATH` prepend, with a case-insensitive key, beside `AW_RUN_TOKEN` (`:1246`);
   - `.agentweave/calls/` created beside the context file (`:1160-1169`), with an `OSError` refused as the context
-    write is;
+    write is. A `calls` that is a link or junction is removed (the link, never its target's contents) and recreated
+    as a directory; a `.agentweave` that is a link is left alone with a logged warning (design D14, review fix 1);
   - `PIN.path()` and `PIN.launcher_dir()` for **every** run, before the `mcp_command` branch. An `OSError` is
     refused with the tool-server reason (`:1197-1203`), and the MCP branch then reuses the path (design D5).
   Test 1.8 passes.
@@ -267,6 +322,12 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
       `"shim"`, with their assertions rewritten to the shim text.
   - If `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` has landed, the shim form renders its
     host-`SendMessage` sentence too.
+  - (review fix 6, design D10) for a Codex run, the shim notice carries the sandbox-network sentence (*"… If
+    `aw-tool` reports `unreachable`, say so in your reply rather than retrying."*), keyed on the runner; no other
+    runner's notice carries it.
+  - (review fix 3) the shim notice says to write the args file with the file tool, or from PowerShell only with
+    `Set-Content -Encoding utf8`, and that the JSON envelope is the last line of output (design D3, note 9).
+  - (review finding 4, design D16) a spec turn told `shim` is told to write the args file with the file tool.
   Test 1.9 passes.
 - [ ] 5.3 `_render_hub_agent_context`: no `include_tool_surface` flag (contract reconciliation, 2026-09-28). Slice 2's D5 returns the
   tool section as its own key, carried as `RpcTurnRequest.tool_surface_context`.
@@ -291,12 +352,19 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     replaces with the surface it passed to `render_surface` (contract reconciliation, 2026-09-28);
   - slice 2's `CopilotEventMapper` passes `session.mcp_servers_loaded` / `mcp_server_status_changed` entries for `agentweave` with
     status `connected` or `failed` to 2.2 as `source="harness"`, and stores any other status as a diagnostic;
-  - `copilot.exe`'s env per 5.1.
-  Test 1.14 passes.
+  - `copilot.exe`'s env per 5.1;
+  - (review finding 4, design D16) spec turns: `create` leaves `--excluded-tools`; the handler's spec-turn `edit`
+    rule in every posture; no `allow_all` on a spec turn; Plan mode after the wait, for `mcp` only;
+  - (review fix 7) a run's own wait timeout gives `shim` even under `hub_client: "mcp"` (design D1).
+  Tests 1.14 and 1.15 (Copilot half) pass.
+- [ ] 5.6 (review finding 4, design D16; slice 1's builder) `restrict_spec_writes` with the described surface: the
+  `described_access_path` keyword, and `Write` kept only for Claude spec turns described `shim`. Test 1.15 (Claude
+  half) passes.
 - [ ] 5.5 The `plane_surface` status event, once per run, when a run given MCP is recorded `absent` or `failed`
   (quoting the `/mcp list` line on Copilot, bounded by `_truncate_utf8`). Its wording follows the run's
-  `plane_surface` (design D12, R3). It is not emitted where the runner's own failure event states it: Codex
-  `failed`, and Copilot told `mcp`. Test 1.14 (event half) passes. Add a Claude case beside 1.2's consumer test: a
+  `plane_surface` (design D12, R3), and for `mcp` its second sentence depends on a `hub_client: "mcp"` declaration
+  (review fix 7). It is not emitted where the runner's own failure event states it: Codex `failed` (reworded for
+  `shim` by 2.6), and Copilot told `mcp`. Test 1.14 (event half) passes. Add a Claude case beside 1.2's consumer test: a
   run told `mcp` whose `init` omits the server gets the "although the run was told to use it" wording.
 
 ## 6. The approver recognises the call command (design D8)
@@ -358,7 +426,8 @@ SQLite reads of the trial profile's database.
   (No model call.)
 - [ ] 9.2 **Copilot, MCP permitted** (1 prompt): *"Create an AgentWeave task titled S3-MCP, then stop."* Expect
   `connected` + `mcp`, the task created by an `agentweave-create_task` tool call, and no `plane_surface` status
-  event. Record the time from `session/new` returning to the announce (open question 2).
+  event. Record the time from `session/new` returning to the announce (open question 2), and the literal raw
+  `mcp_servers_loaded` status string for `agentweave` (review note 10).
 - [ ] 9.3 **Copilot, MCP blocked locally** (1 prompt). Add `--disable-mcp-server agentweave` to the Copilot
   runner's flags (VERIFIED today: the server is never started, and `/mcp list` says `agentweave (disabled)`).
   Same prompt with `S3-SHIM`. Expect:
@@ -381,6 +450,8 @@ SQLite reads of the trial profile's database.
   '{"deniedMcpServers":[{"serverName":"agentweave"}]}'`. F340 measured its `init` omitting the server; F299 says
   the run then dies at its first approval-needing call, so the prompt needs none: *"Reply with the word ok."*
   Expect `absent`, and one `plane_surface` status event with the wording for the surface the first turn was told.
+  Record the literal `init` status string for `agentweave`, or its absence (review note 10: a `pending` there is the
+  latch's way back).
   The second turn, *"Reply ok."*, is recorded `plane_surface = shim`, and its `.agentweave/context/<agent>.md`
   holds the `aw-tool` tool section. R3: the Hub stores no composed prompt (`agent_trigger.py:1194` builds it,
   `:1217`/`:1403` pass it, and `Run` has no prompt column), so "read the stored prompt" could not be done.
@@ -389,6 +460,11 @@ SQLite reads of the trial profile's database.
   - If it holds, F301 is closed for Claude.
   - If the harness refuses the command, record the refusal verbatim, F301 stays open for Claude, and group 7 is
     reported rather than reverted.
+- [ ] 9.10 (review finding 4, design D16) **Copilot spec turn told `shim`** (1 prompt), on 9.3's blocked agent, with
+  a specification document open: *"Submit this document unchanged, then stop."* Expect `absent` + `shim`; the model
+  wrote `.agentweave/calls/*.json` with `create` (allowed by standing, no card) and ran `aw-tool
+  submit_spec_document …`; the document's submission recorded; any other write in the turn refused. If Copilot never
+  sends the `create` request, record what it did instead.
 - [ ] 9.9 Append the outcome to `scripts/drive/FINDINGS.md`: the F340 status line (fixed), F301 (fixed for Copilot;
   Claude per 9.8), and F299 (answered for Copilot; open for Claude). File any new defect as a new finding.
 

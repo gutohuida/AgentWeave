@@ -16,7 +16,9 @@ design deliberately has none: an agent that needs an answer asks, and a turn tha
 has ended.
 
 Trusting the workspace folder would load the repository's own hooks and servers into the run,
-including hooks written for a different CLI.
+including hooks written for a different CLI. Not trusting it on Copilot's behalf includes not passing
+on a trust setting the Hub did not choose: one present in the environment the Hub was started from,
+or in the agent's own environment settings, SHALL be removed from the run's environment.
 
 #### Scenario: The agent's Copilot home holds no deciding hook
 
@@ -40,3 +42,10 @@ including hooks written for a different CLI.
 - **WHEN** a Copilot run starts in a repository that carries its own hooks
 - **THEN** the run's environment does not mark the workspace as trusted
 - **AND** the agent's Copilot configuration names no trusted folder
+
+#### Scenario: A trust setting from elsewhere is not passed on
+
+- **WHEN** the environment the Hub was started from, or the agent's own environment settings, mark
+  Copilot's workspace as trusted
+- **AND** a Copilot run starts, under any posture
+- **THEN** the run's environment does not mark the workspace as trusted

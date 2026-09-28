@@ -9,6 +9,15 @@ site this change moves. R2 rebases every `file:line` below onto the tree they le
 **R2 (2026-09-28):** of these, only `the-codex-models-offered-are-the-ones-its-cli-lists` has landed (5 of the ORDER's 28
 on `ef55e6f`). The other six are unbuilt, so design.md marks each site they will edit *(rebase at IMPL)* with what
 their designs say they leave. The line numbers below hold on `ef55e6f`.
+**Review (2026-09-28), two more to rebase at IMPL, outside the night ORDER's list:**
+`worker-spend-counts-against-the-budget` (REVISING, B7) moves the titler to JSON mode (`--output-format json` / `--json`)
+and calls `worker.parse_envelope(cli, stdout)` from `conversation_titles.py` (its D4). This change keeps
+`worker.parse_envelope` as an adapter-backed wrapper (design D8), so that call keeps working; but the title argv then
+lives in `one_shot("title")`, and whichever change lands second rebases onto the other, re-capturing
+`one_shot_golden.json` **before** its own code edit (the goldens are older than the code, test guide item 1).
+`agents-no-longer-register-themselves` (09-27 ORDER, unbuilt) edits `agents.py:567-577`, right after `_display_model`,
+and `launchability.py:455-514`, and re-fixtures 19 test files. It shifts citations in design D5 and D14 and changes no
+logic this change moves.
 **Depended on by:** `a-copilot-agent-runs-over-acp`, `a-run-reaches-the-hub-without-mcp`, `a-copilot-run-shows-its-credits`,
 `a-copilot-agent-uses-hooks-and-its-own-agents`. They name members of the `RunnerAdapter` defined here.
 
@@ -47,8 +56,9 @@ answered"; appendix A §A–B, VERIFIED-LOCAL). So the one value has to be split
 - **One `RunnerAdapter` per runner CLI.** A new package, `hub/hub/runner_adapters/`, holds `ClaudeAdapter`,
   `CodexAdapter` and the table `ADAPTERS`, keyed by runner CLI. Each adapter owns every runner-specific decision
   listed in the table above. The runner-agnostic code (trigger, executors, probe, worker, titler, agents routes)
-  looks up the adapter and calls it. After this change no code outside the adapter package compares a runner name to
-  a literal.
+  looks up the adapter and calls it. After this change no code outside the adapter package compares a **supported** runner's
+  name (`claude`, `codex`) to a literal; the legacy rows for session-configured strings with no adapter (`manual`,
+  `claude_proxy`, `copilot`, …) keep their name matches (design D5).
 - **The adapter members the later slices need are defined here**, with their contracts (design D3). The first twelve
   are the ones the brief names: `build_launch`, `map_events`, `inject_mcp`, `instruction_channel`, `decide_posture`,
   `usage_from`, `context_window`, `stop`, `one_shot`, `write_tool_kinds`, `catalog_provider` and `launchability`.
@@ -78,7 +88,9 @@ answered"; appendix A §A–B, VERIFIED-LOCAL). So the one value has to be split
 - F325: Codex app-server receives no canonical context. The Codex adapter declares its app-server instruction channel
   as `None` (design D11), so the gap becomes a declared value instead of an absent branch. It is not fixed here.
 - The Codex MCP env allow-list omitting `AW_QUESTION_TIMEOUT` and three other variables (appendix B §12). It is kept
-  as is, declared once instead of twice (design D12).
+  as is, declared once instead of twice (design D12). Only `AW_QUESTION_TIMEOUT` matters on Codex: a question wait
+  configured above 240 s ends at 240 s and its wait-ended report is refused, so the task stays waiting until the
+  run-end sweep (design, open question 4). Task 6.2 files it as a finding.
 - `src/agentweave/constants.py` `RUNNER_CONFIGS`, which the CLI's `doctor` reads. F393 annotated it on 2026-09-22.
   The Hub does not import it.
 

@@ -103,6 +103,12 @@ its own tests and its own drive, and no group depends on another.
 - Spawn sets `COPILOT_PROVIDER_*` and `COPILOT_MODEL`. When the runner has no provider, any ambient
   `COPILOT_PROVIDER_*` in the Hub's environment is stripped, just as an ambient
   `ANTHROPIC_BASE_URL` is stripped for Claude (`launchability.py:190`).
+- **Review fixes, 2026-09-28** (Opus review: C was REVISE): every `COPILOT_PROVIDER_*` name is
+  stripped from both the Hub's environment and the agent's `env_vars` before exactly four are set;
+  the checkpoint, handover and title one-shot spawns get the same provider environment and model
+  rule as runs; the key is scrubbed by its exact value from every recorded event, permission card
+  and failure text of its run; the Runners page offers only the provider's model ids. The
+  no-provider strip (and `COPILOT_ALLOW_ALL`'s) is asked of slice 2 and is not cut with C.
 - **API keys only. A Claude Max subscription cannot back this** (DECISIONS `ghcp-d4`): Copilot's BYOK
   takes an API key, and a Max plan signs in by OAuth. Runner management says so.
 - One nullable column on `runners` needs a migration.
@@ -127,7 +133,9 @@ its own tests and its own drive, and no group depends on another.
 - Because that server acts on GitHub **as the operator**, a call to it under the `workspace` posture
   goes to the operator as an ask-me card. R2: `_decide` *would* auto-approve it (a GitHub call names
   no path and no command), so the rule is decided before `_decide` is consulted. A server that
-  fails to start while enabled is reported in the run's stream.
+  fails to start while enabled is reported in the run's stream. (Review fixes, 2026-09-28: while the
+  toggle is on, a call to **any** reported server other than `agentweave` asks, under its own name;
+  a call whose server Copilot did not report is refused by slice 2, DECIDED.)
 - Group D is optional: it is the group the operator should cut first if something must go.
 
 ## Capabilities

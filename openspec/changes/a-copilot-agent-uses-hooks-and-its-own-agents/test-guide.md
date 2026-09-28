@@ -17,18 +17,25 @@ Each group can be cut. Skip the rows of any group the operator rejected.
 3. `grep -rn "summaryContent" hub/hub` finds only the mapper line that drops it.
 4. Drive 7.1: the timeline shows a paired `subagent_started` / `subagent_completed`.
 5. Drive 7.2 (replaying the captured fixture; R2 found no bare `/compact` can reach Copilot): the
-   `compacted` card and the checkpoint-due banner both appear, and no checkpoint row is created
-   under `offered`.
+   script maps the fixture and `POST`s the event to `:8010`'s `/agents/cp5/output`, so the trial
+   Hub's own process considers it (review 2026-09-28). The `compacted` card and the checkpoint-due
+   banner both appear, and no checkpoint row is created under `offered`.
 6. Drive 7.3: exactly one error event, still shown with diagnostics hidden, and no repeated `Error:`
    text.
 7. Drive 7.4: no deciding hook and no trusted folder in the agent's Copilot home.
 
 ### Group C: BYOK
 
-1. Tests 1.7 to 1.10 fail before tasks 3.1 to 3.3 and pass after them. Test 1.8's launchability
+1. Tests 1.7 to 1.10 fail before tasks 3.1 to 3.3 and 3.5 and pass after them. Test 1.8's launchability
    assertions go through `GET /runners/launchability`, `GET /agents/launchability` and
    `POST /agents`, not the adapter alone; its stored-override case and 1.7's `PATCH` pair cases
-   pass (R3).
+   pass (R3). Review fixes 2026-09-28: 1.8 covers the checkpoint, handover and title spawns, the
+   whole-prefix strip and the unset key; 1.9 carries the key through text, thinking and a
+   permission card, and in a format no pattern matches; 1.7 covers the localhost look-alikes, the
+   `api_key` paste (400, no echo) and `--model` in flags.
+1a. (No group, never cut.) The no-provider halves of tests 1.6 and 1.8 pass: no `COPILOT_ALLOW_ALL`
+   and no `COPILOT_PROVIDER_*` from the Hub's environment or `env_vars` reaches any Copilot spawn
+   without a provider, whichever groups were kept (task 2.8).
 2. Drive 7.5: the pasted-key refusal sentence is recorded verbatim, and a read-only grep of the
    trial database finds no key value.
 3. The Runners page shows the API-key and Claude Max sentence (test 1.14).
@@ -42,7 +49,9 @@ Each group can be cut. Skip the rows of any group the operator rejected.
 
 ### Group D: GitHub server toggle
 
-1. Test 1.13 fails before task 5.1 and passes after it.
+1. Test 1.13 fails before task 5.1 and passes after it, including every non-`agentweave` server
+   asking under its own name while the toggle is on, and an unreported server refused (DECIDED
+   2026-09-28).
 2. Drive 7.8: the live process's command line carries the flag when the toggle is off, and a card
    saying the call acts on GitHub as the operator, with no "Workspace only would …" line, appears
    for a GitHub-server call when it is on.
@@ -65,7 +74,10 @@ Each group can be cut. Skip the rows of any group the operator rejected.
    provider runner on Haiku, and run a turn (task 7.6). Does it complete? Is the spend shown in
    tokens, with no misleading "0 credits"? Know that the key is in the run's own environment, so
    the agent's shell commands and the Hub's tool server can read it, as with a proxy runner today;
-   what they print back is redacted. Is that acceptable? OpenAI BYOK is deferred (R2).
+   what they print back is redacted by its exact value. Is that acceptable? OpenAI BYOK is deferred
+   (R2). Recommended by the 2026-09-28 review (your call): only after the scrub, the prefix strip and
+   the URL check are built, with a dedicated Anthropic workspace key with a hard monthly spend limit
+   of a few dollars, set only in the trial Hub's launch environment, and revoked afterwards.
 4. **Runner page copy.** Read the provider section. Is it clear that a Claude Max subscription cannot
    be used and that the key stays in the Hub's environment?
 5. **Review agents.** On a real review, does consulting `code-review` improve the verdict enough to

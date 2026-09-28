@@ -2,17 +2,25 @@
 
 ### Requirement: Copilot's built-in GitHub server is off unless the operator enables it for that agent
 
-A Copilot agent's runs SHALL start with Copilot's built-in GitHub MCP server disabled unless the operator has enabled it for that agent, and under the Workspace only posture a call to that server SHALL be put to the operator and SHALL NOT be allowed by the Hub's own judgement.
+A Copilot agent's runs SHALL start with Copilot's built-in GitHub MCP server disabled unless the operator has enabled it for that agent, and while it is enabled, under the Workspace only posture, a call to any MCP server other than the Hub's own SHALL be put to the operator and SHALL NOT be allowed by the Hub's own judgement.
 
 That server acts on GitHub as the person signed in to Copilot. It opens issues, comments and pull
 requests outside the agent's workspace. The Hub's judgement is about the workspace, and a GitHub
 action names no path in it, so that judgement would find nothing to refuse. It therefore has no
 ground to allow such an action on the operator's behalf, and the call SHALL be decided before that
-judgement is consulted. A call whose server cannot be identified SHALL be treated the same way while
-the server is enabled.
+judgement is consulted. Copilot may bring more than one built-in server, and a GitHub server need not
+carry the name the Hub expects, so the rule SHALL cover every server Copilot reports other than the
+Hub's own, not only one named for GitHub.
 
-The card SHALL say that the call acts on GitHub as the operator, and SHALL NOT say that Workspace only
-would allow it.
+A call whose server Copilot did not report SHALL be refused, as it is with the server disabled. The
+Hub cannot say what such a call acts on, and enabling the GitHub server SHALL NOT change how a call
+the Hub cannot attribute is treated.
+
+The card SHALL name the server Copilot reported. It SHALL say that the call acts on GitHub as the
+operator only for the GitHub server, and SHALL NOT say that Workspace only would allow the call.
+
+A setting stored for the agent SHALL enable the server only when it is the value true; any other
+stored value leaves it disabled.
 
 Under Edit files such a call is refused, as a call to any server other than the Hub's own is. Under
 full access it is allowed, as every call is. Under Ask me it goes to the operator, as every call does.
@@ -39,6 +47,26 @@ value stored for that agent.
 - **WHEN** a Copilot agent under Workspace only calls a tool of the GitHub server
 - **THEN** the call is put to the operator as a card saying it acts on GitHub as them
 - **AND** the Hub does not allow it on its own
+
+#### Scenario: Any other server's call is put to the operator under its own name
+
+- **WHEN** the GitHub server is enabled and a Copilot agent under Workspace only calls a tool of an
+  MCP server Copilot reports under a name other than the GitHub server's or the Hub's own
+- **THEN** the call is put to the operator as a card naming that server
+- **AND** the card does not say the call acts on GitHub
+
+#### Scenario: A call whose server is unknown is refused
+
+- **WHEN** the GitHub server is enabled and Copilot asks to run an MCP tool without reporting its
+  server
+- **THEN** the call is refused, as it is with the server disabled
+- **AND** no card is raised for it
+
+#### Scenario: A stored value that is not true leaves the server off
+
+- **WHEN** a Copilot agent's stored setting for the GitHub server is anything other than the value
+  true, including the text "false"
+- **THEN** its runs start with Copilot's built-in servers disabled
 
 #### Scenario: A failed server is reported
 

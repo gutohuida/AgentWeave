@@ -18,6 +18,11 @@ a group, skip every task tagged with it, and delete its spec delta before archiv
 | B | `agent-flows` |
 | D | `agent-configuration` |
 
+**Not cut with any group (review 2026-09-28, finding 6):** task 2.8 and its test halves (in 1.6 and
+1.8) are tagged with no group. They strip the provider and trust variables from every Copilot spawn
+that names no provider, which must hold whichever groups are kept (design D7, D10; *Required* 2.9,
+2.10).
+
 **Run tests with `py -3.11`, never bare `python`.**
 
 **Do not use `git stash` or `git checkout --`** in a shared tree. For fail-before evidence, mutate a
@@ -66,9 +71,16 @@ scratch copy (DEAD-ENDS 2026-09-27).
   500, 3 of 6 wrong probe sites, stored model overrides and runner PATCH bypassing the BYOK model
   rule, a leaking review checkout on a merge-base timeout; Q9 answered; R2's table rewritten as
   *Required of slices 1–4*. See the Round log.
-- [ ] 0.3 Opus adversarial review of the change and of the three operator questions in design "Open
+- [x] 0.3 Opus adversarial review of the change and of the three operator questions in design "Open
   questions" 8: hooks wanted (D2), Azure deferred (D7), an API key for the BYOK drive (D7). Record
   it in `spec-queue/tracks/reviews/`. Apply the fixes before any APPROVED row.
+
+  **Done 2026-09-28.** Opus review ghcp-s5-2026-09-28: APPROVE WITH FIXES (C: REVISE) → 11 applied
+  (the 3 blocking and 8 should-fix findings: 1-10 and 12; 6 and 8 by reference to slice 2, which owns
+  them), 5 answered (notes 11, 13, 14, 15, 16; 11, 14 and 15 also applied as fixes). Contract
+  conflict decided: slice 2's REJECT for an unidentified server. The three operator questions carry
+  the reviewer's recommended answers in design Open question 8 and remain the operator's. See
+  design's Round log, *Review fixes, 2026-09-28*.
 
 ## 1. Tests first — each fails on today's code
 
@@ -92,7 +104,8 @@ scratch copy (DEAD-ENDS 2026-09-27).
     the scratch home, so the GitHub server should fail; record whether and when a
     `session.mcp_servers_loaded` / `session.mcp_server_status_changed` names `github-mcp-server`,
     and with which status (design D9: if none arrives within the turn, the unavailable-server
-    diagnostic is removed).
+    diagnostic is removed). (Review 2026-09-28, finding 4) Also record the `mcpServerName` that
+    `tool.execution_start` reports for each built-in server's tool, if any tool call reaches one.
   - **Save** each transcript's `github.com/copilot/sessionEvent` notifications and `session/update`
     notifications, **in arrival order**, as `hub/tests/fixtures/copilot/{compaction,subagent,error}.jsonl`.
     Redact `sessionId`, the cwd and any token.
@@ -146,6 +159,10 @@ scratch copy (DEAD-ENDS 2026-09-27).
     recorded the chunk first, stop and revisit design D5 before writing the mapper.
   - With the raw `session.error` removed, the `Error:` text is emitted exactly as slice 2 emits it
     (a `text` event).
+  - (Review 2026-09-28, finding 7) A **subagent's** `session.error` (envelope `agentId`; and a
+    second copy carrying only `data.parentToolCallId`, Copilot's `_d()` test) followed by its
+    `Error:` chunk gives exactly one `error` event with `subagent_id` in its facts and no `Error:`
+    text. This fails on a root-only echo match.
   - An `errorType` outside `^[a-z_]{1,32}$` gives code `copilot.unknown`.
   - An error message containing `sk-ant-test-value` is stored redacted.
   - Recording a `quota` error event through `record_agent_output` leaves the agent's allowance hold
@@ -187,6 +204,10 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - the run environment `resolve_agent_env` returns for a Copilot agent (ending in slice 2's
     `guard_env`) has no `COPILOT_ALLOW_ALL`, under every posture including full access. (R2
     verified in `app.js` that full access's `allow_all` does not trust the folder; design D3.)
+    (Review 2026-09-28, finding 6) With `COPILOT_ALLOW_ALL=true` set **ambient**
+    (`monkeypatch.setenv`) and, separately, in the agent's `config.env_vars`, it is still absent,
+    and absent from the worker and title spawns' `one_shot_env` too. The strip is slice 2's
+    (*Required* 2.9); this half is ungrouped (task 2.8) and not cut with A.
 
   This is a guard: it fails today only because the writer does not exist yet. Say so in the
   docstring.
@@ -212,6 +233,20 @@ scratch copy (DEAD-ENDS 2026-09-27).
     model or `null`. These fail on today's `model == current` exemption (`runners.py:37`);
   - (R3) `api_key_var` of 300 characters starting `sk-ant-` gets the 400 sentence, not a 422, and
     the response body does not contain the submitted value.
+  - (Review 2026-09-28, finding 15) `provider_config: {"type":"anthropic","api_key":"sk-ant-test-value"}`
+    is refused with **400** (not 422), a sentence naming `api_key`, and a response body that does
+    not contain `sk-ant-test-value`; a non-string `api_key_var` is refused the same way.
+    `api_key_var` of `GH_TOKEN`, `GITHUB_TOKEN`, `COPILOT_GITHUB_TOKEN`, `DATABASE_URL` or
+    `AW_ANYTHING` is refused with its sentence.
+  - (Finding 10) `base_url` `http://localhost.evil.com`, `http://localhost@evil.com` and
+    `http://example.com` are refused; `http://localhost:4000`, `http://127.0.0.1:4000`,
+    `http://[::1]:4000` and `https://example.com` are accepted.
+  - (Finding 11) a provider runner with `flags: ["--model", "haiku"]` or `["--model=haiku"]` is
+    refused on create, and a `PATCH` adding `provider_config` to a runner whose flags carry
+    `--model` is refused with the row unchanged.
+  - (Finding 1) `PATCH /projects/{id}` choosing a provider runner as `checkpoint_runner_id` with
+    `checkpoint_model: "auto"` is refused (400) with the provider sentence, and with
+    `checkpoint_model: "claude-haiku-4-5-20251001"` succeeds.
 
   Run `py -3.11 -m pytest hub/tests/test_runner_provider_config.py -v`.
 - [ ] 1.8 (C) `hub/tests/test_copilot_byok_env.py`: with `monkeypatch.setenv("MY_ANTHROPIC_KEY",
@@ -225,7 +260,28 @@ scratch copy (DEAD-ENDS 2026-09-27).
   With `COPILOT_PROVIDER_BASE_URL`, `COPILOT_PROVIDER_TYPE`, `COPILOT_MODEL` and `COPILOT_OFFLINE`
   set in the Hub's own environment, a `copilot` runner **without** `provider_config` gets none of
   them. (R3) The same holds when they are set in the agent's `config.env_vars` instead; this fails
-  on a copy of the Claude guard's `env_vars` exemption (`launchability.py:190`).
+  on a copy of the Claude guard's `env_vars` exemption (`launchability.py:190`). (Review
+  2026-09-28, finding 6) This no-provider half is **ungrouped** (task 2.8): it is kept if C is cut.
+
+  (Review 2026-09-28, finding 3) With `COPILOT_PROVIDER_BEARER_TOKEN`, `COPILOT_PROVIDER_WIRE_MODEL`,
+  `COPILOT_PROVIDER_API_KEY_COMMAND` and `COPILOT_PROVIDER_HEADERS` set ambient, and separately in
+  `config.env_vars`, the **provider** runner's environment contains none of them: its
+  `COPILOT_PROVIDER_*` names are exactly `TYPE`, `BASE_URL` and `API_KEY`, plus `COPILOT_MODEL`.
+  This fails on R3's "overwrite the four".
+
+  (Finding 10) With `MY_ANTHROPIC_KEY` **unset**, building the provider runner's environment does
+  not raise; it sets `TYPE`, `BASE_URL` and `COPILOT_MODEL` with `COPILOT_PROVIDER_API_KEY == ""`.
+  `POST /agent/trigger` for such an agent answers the launchability refusal, never 500.
+
+  (Finding 1) One-shot spawns. With `run_worker`'s and the titler's process spawn patched to
+  capture `env` and `argv`:
+  - a checkpoint generated on a provider checkpoint runner, a handover on it, and a title
+    generated on it (project title runner) and on an agent's own provider runner (no title runner)
+    each get exactly the provider's variables and `COPILOT_MODEL` equal to the runner's model;
+  - with a stored `checkpoint_model` of `auto` (written directly, as one stored before the runner
+    gained a provider), generation uses `runner.model`;
+  - on a plain `copilot` checkpoint runner with ambient `COPILOT_PROVIDER_BASE_URL` set, the worker
+    and titler environments carry no `COPILOT_PROVIDER_*` (ungrouped half, task 2.8).
 
   Launchability, **through the routes**, not only the adapter (design D7, R3 table of sites):
   - with the variable unset, `GET /runners/launchability` for the runner, and
@@ -241,12 +297,22 @@ scratch copy (DEAD-ENDS 2026-09-27).
   "auto"}` written directly on the agent's conversation (as one stored before the runner gained a
   provider would be), a triggered run's request carries `model == "claude-haiku-4-5-20251001"`.
   This fails on today's `agent_trigger.py:802`.
-- [ ] 1.9 (C) Same file: after one fake run records an event whose text contains the key value, the
-  key value (`sk-ant-test-value`) is absent from:
+- [ ] 1.9 (C) Same file (review fixes 2026-09-28, finding 2): a fake run on the provider runner, with
+  the key registered for it as the trigger registers it, records the key value through a **text**
+  event, a **thinking** event, an error event, a diagnostic, a `POST /agents/{name}/output` with its
+  `run_id`, and a permission request whose subject quotes it (`{"command": "echo sk-ant-test-value"}`
+  through `_await_operator_permission`), and ends with a failure text quoting it. The key value is
+  then absent from:
   - the `GET /runners` response;
   - the rendered agent context file;
-  - every `AgentOutput.content`/`payload` row;
+  - every `AgentOutput.content`/`payload` row, and every SSE broadcast of them (captured);
+  - the `PermissionRequest.tool_input` row and its broadcast;
+  - `Run.error`;
   - every error and diagnostic payload.
+
+  Repeat with `MY_ANTHROPIC_KEY=plainproxykey123` (a key no `sk-`/`aw_live_` pattern matches, as on a
+  localhost proxy). A tool result must not be the only carrier: this test fails on today's
+  `text_event` (the F190 pattern). After the run is finalised the registry holds nothing for it.
 - [ ] 1.10 (C) Migration. `hub/tests/test_migrations.py` and `hub/tests/test_project_persistence.py`
   head assertions name the new revision, and `runners.provider_config` exists after upgrade from the
   previous head. These fail until the migration exists.
@@ -268,8 +334,11 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `prepare_review_turn` returns a context with `base_sha is None`, and the patched call happened
     **before** `worktrees.ensure_review_checkout` (assert call order), so a raise there could not
     leave a provisioned checkout unclaimed.
-- [ ] 1.12 (B) Same file: `PATCH /agents/{name}` with `config.copilot_review_agents == ["research"]`
-  or `["x"]` is refused with a 400 sentence, and the stored config is unchanged.
+- [ ] 1.12 (B) Same file: `PATCH /agents/{name}` with `config.copilot_review_agents == ["research"]`,
+  `["x"]` or the string `"code-review"` (review 2026-09-28, finding 14: not iterated as characters)
+  is refused with a 400 sentence, and the stored config is unchanged. A value stored through
+  `POST /agents/register` as `["code-review", "research"]` renders a bullet naming `code-review`
+  only, and one stored as `"code-review"` renders no bullet.
   `["code-review", "security-review"]` is accepted, and `GET /agents` returns it in the agent's
   `config` (it is in `ROSTER_CONFIG_KEYS`; design D8).
 - [ ] 1.13 (D) `hub/tests/test_copilot_github_mcp_toggle.py`:
@@ -282,8 +351,18 @@ scratch copy (DEAD-ENDS 2026-09-27).
     `workspace`, `REJECT` under `acceptEdits`, `ALLOW` under full access, and the operator under
     `manual`. **Fail-before evidence:** today's `_decide("mcp__github-mcp-server__create_issue",
     {...})` returns `allow` ("inside your workspace"); record that in the test's docstring;
-  - with the toggle on, a request whose MCP server cannot be identified is also `ASK_OPERATOR` under
-    `workspace`;
+  - (review 2026-09-28, finding 4) with the toggle on, a request whose reported server is
+    `some-other-server` (identified from `tool.execution_start`'s `mcpServerName`, not only
+    `permission.requested`) is also `ASK_OPERATOR` under `workspace`, its card label is
+    `some-other-server/<tool> — a tool of MCP server some-other-server, not the Hub's` (no GitHub
+    claim), and its `workspace_verdict` is `None`. With the toggle off it is decided by slice 2's
+    foreign row as before;
+  - (DECIDED 2026-09-28, finding 5) with the toggle on **and** off, a request whose MCP server
+    Copilot did not report is `REJECT`ed by slice 2's identify step, under every posture, and never
+    reaches this rule (no card);
+  - (finding 14) `agent_config == {"copilot_github_mcp": "false"}` (a string) gives
+    `--disable-builtin-mcps` in the argv and slice 2's rows unchanged; the trigger fills
+    `agent_config` with the `copilot_github_mcp` key only, never `env_vars`;
   - the card opened for it has `tool_name` `github-mcp-server/create_issue — acts on GitHub as
     you`, and the Copilot `workspace_verdict` for it is `None`, under `workspace` and `manual`
     (R3: the card has no other place for the sentence; a two-valued verdict would say "allow");
@@ -297,6 +376,9 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - `hub/ui/src/__tests__/runnerProviderConfig.test.tsx`: the Runners page shows provider fields only
     when the CLI is `copilot`. It shows the D7 sentence about API keys and Claude Max, and renders a
     refusal's own sentence beside the key field (served in the order `POST /runners` returns it).
+    (Review 2026-09-28, finding 9) With a provider set, the model picker's options are exactly the
+    served `claude` catalog's ids: no "Latest" alias group, no "Provider default", no Copilot model;
+    turning the provider on, then off, clears the chosen model each time.
   - `hub/ui/src/__tests__/copilotAgentSettings.test.tsx`: the review-agents and GitHub-server
     controls appear only for a `copilot`-bound agent, and show the value in the served agent's
     `config` (a fixture with the setting on renders it on).
@@ -322,9 +404,12 @@ scratch copy (DEAD-ENDS 2026-09-27).
     turn's last root `session.compaction_start` (D4);
   - `session.error` becomes an error event (D5);
   - `subagent.*` become statuses (D6);
-  - an `agent_message_chunk` whose text equals `"Error: " + message` of an unmatched root
-    `session.error` already received this turn is dropped on arrival, before accumulation; nothing
-    is held; slice 2's `Error:` → `copilot_session_error` branch is deleted (D5, R3).
+  - an `agent_message_chunk` whose text equals `"Error: " + message` of an unmatched
+    `session.error` already received this turn, **root or subagent** (review 2026-09-28, finding 7),
+    is dropped on arrival, before accumulation; nothing is held; slice 2's `Error:` →
+    `copilot_session_error` branch is deleted (D5, R3);
+  - "is a subagent's" is Copilot's `_d()` test: envelope `agentId`, else `data.agentId`, else
+    `data.parentToolCallId` (D5).
 
   The mapper needs the whole `sessionEvent` params, `agentId` and `dataOmitted` included
   (*Required of slices 1–4*, 2.3).
@@ -346,9 +431,16 @@ scratch copy (DEAD-ENDS 2026-09-27).
   Pass test 1.5.
 - [ ] 2.6 Confirm slice 2's `COPILOT_HOME` writer and run environment
   (`resolve_agent_env`/`guard_env`) meet design D3. Change them only
-  if test 1.6 fails. Pass test 1.6.
+  if test 1.6 fails. Pass test 1.6. (Review 2026-09-28, finding 6: the `COPILOT_ALLOW_ALL` strip is
+  slice 2's, *Required* 2.9. If slice 2 landed without it, task 2.8 adds it.)
 - [ ] 2.7 Run `py -3.11 -m pytest hub/tests/ -q -x` and `ruff check hub/` and
   `black --check --target-version py311 hub/hub/ hub/tests/`.
+- [ ] 2.8 (**no group; never cut**; review 2026-09-28, finding 6) Confirm slice 2's Copilot
+  `guard_env` and `one_shot_env` strip `COPILOT_ALLOW_ALL`, every `COPILOT_PROVIDER_*` name,
+  `COPILOT_MODEL` and `COPILOT_OFFLINE` from both the ambient environment and `env_vars` for a spawn
+  that names no provider (*Required* 2.9, 2.10). Add whatever is missing there: as the no-provider
+  branch of `copilot_provider_env` if group C is kept, or as a plain strip if it is cut. Pass the
+  ungrouped halves of tests 1.6 and 1.8.
 
 ## 3. Group C — BYOK on a Copilot runner
 
@@ -362,7 +454,12 @@ scratch copy (DEAD-ENDS 2026-09-27).
   sentence). `RunnerResponse._flag_unrecognised_model` uses the same provider rule for a provider
   runner. `agent_trigger.py:1618`: a `model` override on a provider runner is refused. (R3) The
   runner `PATCH` validates the resulting `(provider_config, model)` pair whenever
-  `provider_config` is sent; `ProviderConfig`'s fields carry no Pydantic constraint.
+  `provider_config` is sent. (Review 2026-09-28) The create/update schemas type `provider_config`
+  as `Optional[Dict[str, Any]]` and the route refuses unknown keys and non-string values with 400s
+  naming the key only (finding 15); `base_url` by `urlsplit` hostname (finding 10); `api_key_var`
+  not a Hub credential name (finding 15); no `--model` in a provider runner's `flags`, judged on the
+  resulting pair on `PATCH` too (finding 11). `PATCH /projects`: a `checkpoint_model` failing the
+  provider rule for a provider checkpoint runner is refused (finding 1).
   (R3) `agent_trigger.py:802`: a provider runner's model is `runner_row.model` whatever
   `conversation.runtime_overrides` holds. Pass test 1.7 and the per-run half of 1.8.
 - [ ] 3.3 Environment and launchability (design D7):
@@ -375,19 +472,37 @@ scratch copy (DEAD-ENDS 2026-09-27).
   - one helper, `runner_probe_config(runner_row)`, builds `{runner, model, provider_config}`, used
     in `launchability.get_agent_config` (beside `:524-526`; serves `agents.py:234`,
     `inbound_queue.py:223` and the trigger), `agent_trigger.py:764-765`, `agents.py:728` and
-    `runners.py:96-99` (R3: R2's `agents.py:552`/`:2004` are display code, not probes).
+    `runners.py:96-99` (R3: R2's `agents.py:552`/`:2004` are display code, not probes); it treats a
+    non-dict `provider_config` as invalid, never raising (review 2026-09-28);
+  - (review 2026-09-28, finding 3) `copilot_provider_env(env, provider_config)`: strip the whole
+    `COPILOT_PROVIDER_` prefix, `COPILOT_MODEL`, `COPILOT_OFFLINE` from the merged environment, then
+    set exactly `TYPE`, `BASE_URL`, `API_KEY` (`os.environ.get(..., "")`, finding 10) and
+    `COPILOT_MODEL`; the Copilot `guard_env` and `one_shot_env` both call it;
+  - (finding 1) the one-shot spawns: `one_shot_env` receives the runner's `config` (slice 1,
+    *Required* 1.7), read from the row `run_worker(runner_id=…)` and the titler already hold;
+    `one_shot_model(runner, checkpoint_model)` replaces `project.checkpoint_model or runner.model`
+    at `checkpoint_trigger.py:153`, `checkpoint_handover.py:188` and `api/v1/checkpoints.py:183`.
 
-  Pass tests 1.8 and 1.9.
+  Pass test 1.8.
 - [ ] 3.4 The Runners page (`hub/ui/src/components/runners/RunnersPage.tsx`):
   - provider fields for `copilot` (type select, base URL, key variable name);
   - the API-key/Claude Max sentence;
   - the refusal shown beside the field;
   - the composer's model control, hidden for an agent on a provider runner in favour of the runner's
-    model.
+    model;
+  - (review 2026-09-28, finding 9) with a provider set, the model picker lists `claude` catalog ids
+    only (no alias group, no "Provider default"), and toggling the provider resets the model.
 
   Pass the runner half of test 1.14. Then run `cd hub/ui && npm run lint && npx vitest run`, then
   `npm run build` and `py -3.11 scripts/refresh_ui_bundle.py`. Commit `hub/ui/src` and
   `hub/hub/static/ui` together.
+- [ ] 3.5 (C; review 2026-09-28, finding 2) The per-run exact-value scrub: a `run_secrets` registry
+  (in-process, never persisted), registered by the trigger with the resolved
+  `COPILOT_PROVIDER_API_KEY` before the spawn and forgotten when the run is finalised; applied in
+  `record_agent_output` to `content` and every string in `payload` before storing and broadcasting,
+  in `_await_operator_permission` to `tool_input` before storing and broadcasting, and to
+  `Run.error`. The trigger fills `RpcTurnRequest.agent_config` with only `copilot_github_mcp`
+  (finding 14). Pass test 1.9.
 
 ## 4. Group B — Copilot review agents on review turns
 
@@ -398,10 +513,12 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `ensure_review_checkout` (R3, design D8).
 - [ ] 4.2 `hub/hub/api/v1/agents.py`, the review section of `_render_hub_agent_context`: add the D8
   bullet after the verdict line, under the D8 conditions. Validate `copilot_review_agents` in the
-  agent PATCH route before the merge. Add it to `ROSTER_CONFIG_KEYS` (`agents.py:651`) and update
+  agent PATCH route before the merge: a list first, then the vocabulary (review 2026-09-28,
+  finding 14); the renderer filters the stored value to the vocabulary and ignores a non-list. Add it to `ROSTER_CONFIG_KEYS` (`agents.py:651`) and update
   any test that pins that tuple. Pass tests 1.11 and 1.12.
-- [ ] 4.3 Agent Settings UI: add a review-agents control shown only for `copilot` agents. Pass its
-  part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
+- [ ] 4.3 Agent Settings UI: add a review-agents control shown only for `copilot` agents; its help
+  text says that on a provider runner Copilot's review agents may not run (review 2026-09-28,
+  finding 13). Pass its part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
 
 ## 5. Group D — the GitHub MCP server toggle
 
@@ -410,14 +527,19 @@ scratch copy (DEAD-ENDS 2026-09-27).
   `agent_config.get("copilot_github_mcp", False)` as `github_mcp`. Slice 2's
   `copilot_acp.build_acp_argv` gains `github_mcp: bool = False`: omit `--disable-builtin-mcps` when
   it is true. Slice 2's `copilot_acp.decide_permission` gains
-  `github_mcp: bool = False`: `github-mcp-server` (and, with the toggle on, unidentified) requests
-  are decided as design D9 says, before `_decide`. The Copilot `permission_card_label` gives D9's
-  label, and the Copilot `workspace_verdict` returns `None` for such a request (R3).
+  `github_mcp: bool = False`: with the toggle on, every request whose **reported** server is not
+  `agentweave` is decided as design D9 says, before `_decide` (review 2026-09-28, finding 4); a
+  request with no reported server is slice 2's identify-step REJECT and never reaches the rule
+  (DECIDED, finding 5). `run_turn` reads `agent_config.get("copilot_github_mcp") is True`
+  (finding 14). The Copilot `permission_card_label` gives D9's label, built from the reported
+  server name, and the Copilot `workspace_verdict` returns `None` for such a request (R3).
   `CopilotEventMapper`: the unavailable-server diagnostic for `failed`, `needs-auth`, `disabled`,
   `stopped`, `not_configured` only, if task 1.1 showed the event arrives. Add `copilot_github_mcp`
   to `ROSTER_CONFIG_KEYS`. `mcp_server.py` is not touched. Pass test 1.13.
-- [ ] 5.2 Agent Settings UI: add a GitHub-server toggle shown only for `copilot` agents. Pass its
-  part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
+- [ ] 5.2 Agent Settings UI: add a GitHub-server toggle shown only for `copilot` agents; its help
+  text says that while it is on every non-Hub MCP call under Workspace only is asked, and that a
+  runner's pre-approval flags (`--allow-tool`, `--allow-all-tools`) bypass the card (review
+  2026-09-28, finding 11). Pass its part of test 1.14. Run lint, vitest, build and bundle refresh as in 3.4.
 
 ## 6. Full suite
 
@@ -447,14 +569,20 @@ every run id, and paste each surface's text verbatim into the Round log.
   `subagent_started` and a `subagent_completed` sharing the `task` call's id.
 - [ ] 7.2 (A) **The compaction backstop.**
   - R2 answered the condition: slice 2's D5 sends a per-turn context block ahead of every message,
-    so a `/compact` message never reaches Copilot as a bare prompt. So: POST the captured
-    `compaction.jsonl` event through the Copilot mapper into `record_agent_output` for `cp5`'s real
-    conversation on `:8010`, using a one-off script in `testbed/`.
+    so a `/compact` message never reaches Copilot as a bare prompt. So a one-off script in
+    `testbed/` maps the captured `compaction.jsonl` with the Copilot mapper **in the script**, then
+    `POST`s the resulting event to `POST /agents/cp5/output` on `:8010` (`kind: "status"`, the
+    mapped payload, `cp5`'s real `run_id`/`session_id`), with the trial project's operator key.
+    (Review 2026-09-28, finding 12: calling `record_agent_output` in the script's own process would
+    run the consideration there, where it finds no loop or broadcasts to nobody; the POST makes the
+    trial Hub's own process dispatch it.)
   - The timeline shows the `compacted` card with its token counts, and the conversation shows the
     (unchanged) checkpoint-due banner. No checkpoint row is created. Paste both texts verbatim.
-- [ ] 7.3 (A) Error once. Give `cp5` an invalid provider key: through a group C runner whose key
-  variable holds `invalid`, or, if C was cut, through ambient `COPILOT_PROVIDER_*` in the trial Hub's
-  own environment. Run one turn. The timeline shows exactly **one** error event
+- [ ] 7.3 (A) Error once. Give `cp5` an invalid provider key through a group C runner whose key
+  variable holds `invalid`. Run one turn. (Review 2026-09-28, finding 6: the old "if C was cut,
+  ambient `COPILOT_PROVIDER_*`" fallback relied on exactly the hole task 2.8 closes, so it no longer
+  works. If C was cut, replay the captured `error.jsonl` as 7.2 does, mapping in the script and
+  `POST`ing each resulting event, and record that the live echo drop was not driven.) The timeline shows exactly **one** error event
   `copilot.authentication` (or whatever `errorType` 1.1 recorded), still visible with diagnostics
   hidden, and no duplicate `Error:` text. This spends no Copilot allowance.
 - [ ] 7.4 (A) `dir <cp5's COPILOT_HOME>\hooks` holds no deciding hook, and the home's config names
@@ -470,6 +598,11 @@ every run id, and paste each surface's text verbatim into the Round log.
   Hub's environment (design open question 8), run one turn on `claude-haiku-4-5-20251001` through
   the provider runner: `Reply with the single word ok.` It completes, and its usage is in tokens.
   Otherwise record "not driven: no key", and leave this task unchecked for the operator.
+  (Review 2026-09-28, recommended answer, still the operator's: only after tasks 3.3 and 3.5 are
+  built and green, with a dedicated, spend-capped Anthropic workspace key set only in the trial
+  Hub's launch environment, revoked after this task.) Then grep the trial database (`mode=ro`) for
+  the key's value: no match. If group B is kept, add one turn asking `cp5` to use the `explore`
+  agent and record the `model` its `subagent_completed`/`subagent_failed` reports (finding 13).
 - [ ] 7.7 (B) Give a task completed by another agent evidence at a real commit. Set
   `cp5.copilot_review_agents = ["code-review"]` and fire a review turn at `cp5` through a flow.
   - The context file contains the D8 bullet with `<base>..<commit>`.

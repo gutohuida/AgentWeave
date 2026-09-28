@@ -12,8 +12,9 @@ the Hub already reads, and SHALL NOT depend on a hook process.
 An error Copilot reports SHALL be recorded as an error event, not as a diagnostic, so that it stays
 visible when diagnostics are hidden.
 
-An error SHALL be recorded as one fact. Copilot reports an error as a structured event and then as
-message text derived from it. The stream SHALL hold one error event for it and SHALL NOT also hold
+An error SHALL be recorded as one fact, whether the main agent or one of its subagents reported it.
+Copilot reports an error as a structured event and then as message text derived from it, for a
+subagent's error as for the main agent's. The stream SHALL hold one error event for it and SHALL NOT also hold
 that message text, and any other text around it SHALL be recorded as it would be without the error.
 Where the structured event does not arrive, the message text SHALL be recorded as it is without
 this change.
@@ -59,6 +60,13 @@ Recording an error SHALL NOT itself place or lift a hold on the agent's queue.
 - **WHEN** Copilot reports an error as a structured event and then as message text in the same turn
 - **THEN** the stream holds exactly one error event for it, carrying its category, status code and
   remediation where reported
+- **AND** the stream holds no text event repeating it
+
+#### Scenario: A subagent's error is recorded once
+
+- **WHEN** one of Copilot's subagents reports an error as a structured event and Copilot then
+  repeats it as message text
+- **THEN** the stream holds exactly one error event for it, naming the subagent
 - **AND** the stream holds no text event repeating it
 
 #### Scenario: Text around an error is kept

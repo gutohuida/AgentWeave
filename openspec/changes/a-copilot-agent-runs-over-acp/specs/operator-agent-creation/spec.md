@@ -21,6 +21,15 @@ identifier can come from a marker file inside the project's own folder. The file
 them SHALL NOT undo the agent's creation. The same failure before a turn SHALL refuse that turn with
 a reason.
 
+The Hub SHALL own the home's whole configuration surface, not only the files it writes. Before every
+Copilot turn it SHALL remove from the home any hook, plugin, MCP configuration or custom agent it did
+not write, and any setting that trusts a folder or grants a permission, so that nothing left in the
+home can answer a permission request in the Hub's place.
+
+When Copilot does not select the Hub's custom agent for a turn, the Hub SHALL leave no other custom
+agent selected for that turn, and SHALL NOT send the prompt while a custom agent it did not write is
+selected.
+
 #### Scenario: Creating a Copilot agent writes its custom agent
 
 - **WHEN** an operator creates an agent bound to a `copilot` runner
@@ -46,4 +55,11 @@ a reason.
 
 - **WHEN** Copilot does not select the Hub's custom agent for a turn, or selects one that is not the Hub's
 - **THEN** the turn receives its stable context with its prompt instead
+- **AND** no custom agent is selected for the turn
 - **AND** the run's timeline says why
+
+#### Scenario: A hook left in the agent's Copilot home
+
+- **WHEN** a file the Hub did not write has been placed in the hooks directory of a Copilot agent's home, and the agent is triggered
+- **THEN** the file is gone before the Copilot process starts
+- **AND** the turn's permission requests reach the Hub

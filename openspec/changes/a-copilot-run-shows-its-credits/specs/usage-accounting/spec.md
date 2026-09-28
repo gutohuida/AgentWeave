@@ -68,13 +68,20 @@ sum, and its premium requests SHALL be unknown. When Copilot reported neither, t
 SHALL be unknown. The run SHALL record the session total it ended at, so that the next run can take
 its own difference. A run charged its per-call sum from a known starting total, with no session
 total reported, SHALL record the total it thereby reached, so that the next run does not charge the
-same credits again. No run SHALL be charged negative credits, and no credit SHALL be charged to two
-runs.
+same credits again. The previous run SHALL be the one whose record was written last, not the one
+with the latest clock time, so that a clock that steps backwards cannot make an older total the
+baseline. A negative credit or premium-request figure reported by Copilot SHALL be ignored. No run
+SHALL be charged negative credits, and no credit SHALL be charged to two runs.
 
 Credits SHALL be stored in the unit Copilot reports them in, and SHALL be presented as AI credits.
-They SHALL NOT be converted into a monetary figure, SHALL NOT be added to any token total, and SHALL
-NOT count toward a project's token budget or its exhaustion. A surface that shows no credits for a
-project, agent, conversation or turn that reported none SHALL look as it did before credits existed.
+They are the provider's own report of what the run consumed, not a monetary figure, and so are not
+the runner-reported monetary figure that allowance and currency presentation governs. They SHALL NOT
+be converted into a monetary figure, SHALL NOT be added to any token total, and SHALL NOT count
+toward a project's token budget or its exhaustion, including the budget check that gates the
+scheduling of a turn. A screen that shows no credits for a project, agent, conversation or turn that
+reported none SHALL look as it did before credits existed. The accounting responses SHALL carry the
+credit and premium-request fields for every project, empty when none were reported, so a project
+with no Copilot runs gains those empty fields and is otherwise unchanged.
 
 #### Scenario: A Copilot turn shows its credits beside its tokens
 
@@ -119,4 +126,18 @@ project, agent, conversation or turn that reported none SHALL look as it did bef
 #### Scenario: A project with no Copilot runs is unchanged
 
 - **WHEN** a project's runs are all Claude or Codex runs
-- **THEN** no surface shows a credits figure
+- **THEN** no screen shows a credits figure
+- **AND** the accounting responses report the project's credits and premium requests as empty
+
+#### Scenario: A clock that steps backwards does not double-charge
+
+- **WHEN** a Copilot session's runs are recorded in order, and the clock stepped backwards between
+  two of them
+- **THEN** each run's baseline is the total recorded by the run written just before it
+- **AND** no credit is charged to two runs
+
+#### Scenario: Credits do not gate the scheduling of a turn
+
+- **WHEN** a project's token budget is not yet spent by its tokens
+- **AND** its Copilot runs reported credits whose count exceeds that budget
+- **THEN** the project's budget is not exhausted and its turns are still scheduled

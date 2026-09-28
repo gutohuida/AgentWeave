@@ -21,12 +21,31 @@ because a list of refused syntax fails open at the first form it forgot, and one
 requirement was reviewed: a parenthesised path, which PowerShell runs as a command. The calls
 directory is the Hub's own, and the repository ignores it.
 
+The calls directory must be itself. It is the directory of that name inside the run's workspace, taken
+as named and not by following links. When it, or the directory that holds it, is a link or junction to
+somewhere else, no path is inside it, and no call or write gains standing from this rule. Otherwise a
+link made once, under a posture that allowed it, would turn every later write "inside the calls
+directory" into a write to wherever the link points, under every posture, including one that asks
+about every other write. The Hub makes the directory a real directory at the start of each turn,
+removing a link found in its place without touching what the link pointed to. The call command applies
+the same rule to the file it reads, so a harness rule that allows the command by its name alone still
+reads only an arguments file inside the calls directory.
+
 Only the harness's own shell tools are read this way. A request of any other tool is not a shell
 command merely because its input has a field of that name: what a foreign tool does with its other
 fields cannot be seen, so sparing it the operator's question would widen what the run may do
-unasked. The call command itself runs its interpreter isolated from interpreter settings in the
-environment, so that a setting made earlier in the same shell cannot change what the allowed
-invocation runs. Deciding this rule never fails: a request it cannot judge is one it does not match.
+unasked. A shell request whose tool the Hub cannot name is not one of the harness's shell tools
+either, and gets no standing from this rule.
+
+The call command runs its interpreter ignoring the interpreter's own environment variables, user
+site and site customisation, so that an interpreter setting made earlier in the same shell cannot
+change what the allowed invocation runs. That is all it isolates. The shell that resolves the
+command's name is not isolated: in a shell session that persists between a run's commands, an earlier
+command can define a function or alias of the same name, import a module that does, put another
+directory ahead on the search path (as activating a virtual environment does), or change the program
+Windows uses to run command scripts, and the same text then runs something else. This rule cannot see
+that, and it does not claim to; the earlier command was itself decided under the run's posture.
+Deciding this rule never fails: a request it cannot judge is one it does not match.
 
 A Codex run's command approvals are not read this way. Codex hands the Hub the command as its
 harness wrapped it for the shell, not as the model wrote it, and they are decided as they were before
@@ -88,6 +107,20 @@ allow one the workspace decision would refuse for any other reason.
 - **WHEN** a written path resolves, after links are followed, outside the run's calls directory
 - **THEN** the write is decided as it would be without this rule
 
+#### Scenario: A calls directory that is itself a link is not the calls directory
+
+- **WHEN** the run's calls directory, or the directory that holds it, is a link or junction to another
+  directory, and a run under the posture that asks the operator writes a JSON file through it or names
+  one in a call
+- **THEN** the request is decided as it would be without this rule
+- **AND** the call command, given that file, reads nothing and reports a usage error
+
+#### Scenario: A shell request from an unnamed shell tool is not a plain call
+
+- **WHEN** a run under the posture that asks the operator makes a shell request whose tool the Hub
+  cannot name, with the text of a plain call
+- **THEN** the request is decided as it would be without this rule
+
 ### Requirement: A Claude run pre-allows the Hub's call command
 
 Every non-yolo Claude run the Hub spawns SHALL allow the call command by standing in the harness's own tool allowlist, in both its shell tools, whether or not the Hub's tool-protocol server is configured.
@@ -95,7 +128,9 @@ Every non-yolo Claude run the Hub spawns SHALL allow the call command by standin
 A Claude run whose approver is not there cannot be asked about anything, so a request that needs
 approval is denied. On the path without the Hub's server, that is every shell command, and a
 plane reachable only through a shell command is unreachable (F301). Allowing the call command by
-standing makes the plane reachable there without making anything else reachable.
+standing makes the plane reachable there without making anything else reachable. The harness's rule
+names the command, not its arguments, so the command itself reads only an arguments file inside the
+run's calls directory, and a file named anywhere else is a usage error with no request made.
 
 #### Scenario: The allowlist names the call command
 

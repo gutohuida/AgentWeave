@@ -73,8 +73,10 @@ would lose their context without the Hub acting first.
 - **Credits and premium requests are recorded per run.** Four nullable columns on `turn_usage`:
   this run's `ai_nano_aiu` and `premium_requests`, and the session totals the run ended at, which are
   the next run's baseline. A run's credits are the larger of its session-total difference and its
-  own per-call credit sum, so a counter that restarts or resets never under- or double-charges
-  (design D4, D5). Two on `worker_invocations` for Copilot one-shot calls.
+  own per-call credit sum, so a counter that restarts or resets never double-charges and never goes
+  negative. Whether the session total continues after a `session/load` is measured by drive task 7.3,
+  which gates D4: if it restarts, a lost call event could under-charge, and D4 is revised (design
+  D4, D5). Two on `worker_invocations` for Copilot one-shot calls.
   One migration.
 - **They are shown, never budgeted, never converted to money** (D3 of the operator; design D6). The
   Budgets section, the Overview, a conversation's header and each turn's "Worked for" line show
@@ -82,17 +84,25 @@ would lose their context without the Hub acting first.
   stays NULL for a Copilot turn.
 - **A Copilot quota refusal holds the queue like Claude's.** Recognised only from the structured
   `session.error` `errorType: "quota"` with `errorCode: "quota_exceeded"`, never from message text.
-  The reset instant comes from the newest `quotaSnapshots` reading (`resetDate`). The ledger writes
+  The reset instant comes from the run's newest `quotaSnapshots` reading (`resetDate`), or else from
+  the project's newest Copilot reading whose reset is ahead (the quota is per account). Only the
+  reset is borrowed, and only for a refused run. The ledger writes
   the same allowance reading shape the hold already reads, so `provider_allowance.py` is unchanged.
   A refused turn ends `failed` whatever Copilot's stop reason. When the prompt is answered by an
-  error response, which slice 2's client would raise, it returns instead. Either way its input goes
-  back to the queue uncounted, and the RPC executor gains the refusal branch that only the stream executor has today
+  error response, which slice 2's client would raise, it returns instead. When a reset is known its
+  input goes back to the queue uncounted; with none, nothing holds and the input is counted like any
+  failure's. The RPC executor gains the refusal branch that only the stream executor has today
   (design D7, D8).
 - **Checkpoint thresholds follow the runner's compaction point.** The adapter declares
   `compaction_percent` (Claude 95, Codex 95, Copilot 80). The built-in threshold, notes point and
   final warning are derived from it: Claude keeps 80/70/92 exactly; Copilot gets 65/55/77. A
-  configured threshold past the runner's final-warning point is lowered to it, and the policy says
-  so (design D9, D10).
+  configured threshold past the runner's final-warning point is lowered to it (for Claude a configured
+  93–99% becomes 92%, open question Q7 for the operator), and the agent's and the project's checkpoint
+  settings say so (design D9, D10).
+- **API responses of a Claude- or Codex-only project gain empty credit fields** (`ai_nano_aiu`,
+  `premium_requests`), the allowance display's `runner`, the agent summary's
+  `checkpoint_compaction_percent` and the `checkpoint_due` broadcast's `threshold_source`. Its
+  screens are unchanged unless a threshold past 92% is configured (design D6, D10).
 
 ## Out of scope
 

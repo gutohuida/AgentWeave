@@ -13,7 +13,10 @@ from the agent's history, and their own test can then come back negative. The st
 that run was told, not what the next run will be, because a statement that the run was told the call
 command, made about a run told the tool-protocol surface, is the very disagreement between telling
 and fact this requirement exists to expose. Where the runner's own failure message already states
-it, that message is the one statement.
+it, that message is the one statement, and it too names the surface the run was told: a message
+saying the run had no way to reach the Hub, about a run told the call command, is false in the same
+way. Where the operator has declared the surface the agent uses, the statement does not promise that
+the next run is told otherwise.
 
 Where the harness gives its own account of the server, that account SHALL be quoted verbatim beside
 the statement and SHALL NOT be what the system decides from.
@@ -38,6 +41,13 @@ the statement and SHALL NOT be what the system decides from.
 - **THEN** that run's activity holds exactly one statement saying the server did not start although
   the run was told to use it
 - **AND** it does not say the run was told the call command
+
+#### Scenario: A runner's own failure message names the surface the run was told
+
+- **WHEN** a runner reports in its own message that the Hub's tool server failed to start, for a run
+  that was told the call command
+- **THEN** that message states that the run was told to reach the Hub through the call command
+- **AND** it does not state that the run had no way to send messages, update tasks or ask questions
 
 #### Scenario: The harness's own words are quoted, not interpreted
 

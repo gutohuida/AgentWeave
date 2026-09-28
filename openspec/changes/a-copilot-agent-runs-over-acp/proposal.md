@@ -118,9 +118,18 @@ the first runner whose approval axis is independent of its tool surface.
     refused.
   - A run with no posture chosen is judged as `workspace`, and the catalog's Permissions default for
     `copilot` is `workspace` to match (Copilot has no sandbox of its own to fall back on).
-  - A specification turn gets `--excluded-tools` over Copilot's write tools, plus plan mode (the
-    full-URI `session/set_mode`).
-  - The Hub's own `agentweave` tools are always allowed. Every request is answered.
+  - A specification turn gets `--excluded-tools` over Copilot's write tools. Plan mode (the
+    full-URI `session/set_mode`) ships **off** until a drive shows it cannot hang on
+    `exit_plan_mode` (review 2026-09-28).
+  - The Hub's own `agentweave` tools are always allowed, when Copilot reports them from the Hub's
+    own server config (not a workspace or plugin source). Every request is answered.
+  - (Review 2026-09-28.) The Hub judges only what Copilot asks: Copilot runs commands it classes
+    read-only without a request, and the spec says so. A `url` request is allowed only from
+    Copilot's `web_fetch` without a sandbox bypass; a shell's is judged as shell text. The session
+    mode is set on every turn and allow-all is verified off before the prompt under every posture
+    but full access. Runner flags that widen Copilot's own approvals are removed, and the agent's
+    Copilot home is swept of hooks and settings the Hub did not write. The judge runs off the event
+    loop.
 - **An ACP event mapper** into the closed `runner_events` kinds:
   - message and thought chunks are accumulated per block;
   - `tool_call`/`tool_call_update` carry locations and diffs;
@@ -147,7 +156,8 @@ the first runner whose approval axis is independent of its tool surface.
 - **Tool names** in the tool surface are `agentweave-<tool>` for Copilot runs, using the prefix
   mechanism that `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` introduces.
 - **The run environment** never carries `GH_TOKEN`, `GITHUB_TOKEN` or `COPILOT_GITHUB_TOKEN` unless
-  the agent's own `env_vars` name them.
+  the agent's own `env_vars` name them, and never carries `COPILOT_ALLOW_ALL` or Copilot's other
+  allow/trust variables, even when `env_vars` name them (review 2026-09-28; every Copilot spawn).
 - **UI changes:**
   - `RunnerCli` gains `'copilot'`, and so do `CLI_OPTIONS` and `providerForRunner`;
   - the timeline marks Copilot's `edit`/`delete`/`move` rows as writes;
@@ -186,7 +196,7 @@ None. Every behaviour lands in an existing capability.
   - (R3) *A Copilot turn that fails after its prompt ends as a failed turn, not a failed start*;
   - *Copilot launchability is read from Copilot itself*.
 - `agent-run-sandboxing`: ADDED *A Copilot run's posture is decided by the Hub over ACP* and *A
-  Copilot run receives no GitHub token it was not given*.
+  Copilot run receives no GitHub token or permission override it was not given*.
 - `agent-stream-events`: MODIFIED *Supported runner normalization* and *Stream contract conformance
   tests*, which add Copilot ACP. ADDED *A resumed Copilot session's history is not rendered again*.
 - `agent-context-usage`: ADDED *Copilot context mapping*.

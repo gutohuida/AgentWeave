@@ -123,6 +123,16 @@ See *Required of slices 1 and 2*.
   `input` already includes cache (D3 table), so it is normalised with
   `cache_is_separate_input=False`, the flag Codex uses (`runner_parsing.py:72-126`). Reasoning is not
   added.
+- **Key names (review 2026-09-28, finding 7).** The shared normaliser `_accounting_from_dimensions`
+  (`runner_parsing.py:83-95`) knows none of Copilot's cache spellings: per call Copilot sends
+  `cacheReadTokens`/`cacheWriteTokens`, and the prompt result `cachedReadTokens`/`cachedWriteTokens`
+  and `thoughtTokens`. So the ledger maps both to the normaliser's own names before calling it:
+  `inputTokens → input_tokens`, `outputTokens → output_tokens`, `cacheReadTokens` and
+  `cachedReadTokens → cache_read_tokens`, `cacheWriteTokens` and `cachedWriteTokens →
+  cache_write_tokens`, `reasoningTokens` and `thoughtTokens → reasoning_tokens`, `totalTokens →
+  total_tokens`. The shared key lists are not widened, so no other runner's parsing changes. Totals
+  never depended on this (cache is not added again), but without the mapping the breakdown came out
+  None whenever the prompt result won; test 1.3 asserts `cache_read_tokens == 21888` on that path.
 - **Compaction's own call:** a successful `session.compaction_complete` adds
   `compactionTokensUsed` **unless** an `assistant.usage` of this run has `providerCallId ==
   compaction.requestId` (both are the `x-github-request-id`, schema descriptions re-read in R2), or
@@ -168,9 +178,24 @@ The credit ledger that survives resume is `session.usage_checkpoint` (session-cu
 - `per_call` = the sum of this run's `copilotUsage.totalNanoAiu` (plus compaction's, deduped as in
   D3). It is None when no call reported one.
 - `baseline` = 0 if the session was created in this run (`session_was_new`, from the transport,
-  D2). Otherwise the `session_nano_aiu_total` / `session_premium_requests_total` of the newest earlier
-  `turn_usage` row (by `observed_at`, then `id`) for the same project, agent and provider session
-  that has a non-null `session_nano_aiu_total`.
+  D2). Otherwise the `session_nano_aiu_total` / `session_premium_requests_total` of the **last
+  written** earlier `turn_usage` row for the same project, agent and provider session that has a
+  non-null `session_nano_aiu_total`: `ORDER BY turn_usage.rowid DESC`, as `_approval_outcome` orders
+  `spec_document_events` (`api/v1/spec.py:262-281`, `literal_column("….rowid")`).
+  **(Review 2026-09-28, finding 3.)** R1–R3 ordered by `observed_at, id`. `observed_at` is wall-clock
+  time at flush (`db/models.py:1280`, `_now`), and `id` is a random `short_id`, so a clock that steps
+  backwards between two runs of one session makes an older row the "newest". Recomputed (`py -3.11`,
+  a scratch simulation of this rule): four runs spending 275856000, 124144000, 100000000 and 50000000,
+  with the clock stepped back before run 3, charge run 4 150000000 against the older run 2 total, 650000000
+  in all against a real 550000000. Ordered by rowid, the same runs charge exactly 550000000. `turn_usage`
+  has a `String` primary key, so it is a rowid table, and a new rowid is always above every existing one
+  (SQLite takes max + 1 without `AUTOINCREMENT`). A session's runs are serial, and each run's row is
+  written in its finalising commit before the next run of that session can settle, so insertion order
+  is run order. A table rebuild (`batch_alter_table` recreate) copies rows with `INSERT … SELECT` in
+  rowid order; this change's own migration only adds nullable columns, so SQLite adds them in place.
+  The same wall-clock `observed_at` also ties on this machine (15.625 ms resolution, the `spec.py`
+  comment), which `id` could not break deterministically either. `MAX(session_nano_aiu_total)` is not
+  a fix: after a `/clear` reset it double-charges once the new counter passes the old maximum.
   `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)` reads it by joining
   `turn_usage.run_id` to `runs.id` on `Run.session_id == session_id`. `Run.session_id` is set at
   creation from the resume id (`api/v1/agent_trigger.py:1309`) and rebound by `_bind_session_id`
@@ -197,8 +222,22 @@ The credit ledger that survives resume is `session.usage_checkpoint` (session-cu
   and was charged 24144000. One that spent 124144000 was charged nothing (a negative difference gave
   None). Under the larger-of rule both are charged their own calls, 300000000 and 124144000. When
   the counter does continue (the schema's *"for reconstructing aggregate accounting on resume"*),
-  `diff >= per_call` always holds (proof below), so the rule is exactly R2's. D4 is therefore right
-  under either answer to 7.3. That task still measures it, but no longer gates the design.
+  `diff >= per_call` always holds (proof below), so the rule is exactly R2's. Under either answer
+  to 7.3 the rule never charges twice and never charges a negative amount.
+- **But it is not right under both answers, and 7.3 still gates D4 (review 2026-09-28, finding 4;
+  R3 had said it no longer did).** Under restart-per-process semantics, a loaded run's checkpoint
+  `K'` is that run's whole spend, and the baseline `S` is a figure from another process. When a call
+  event is lost, `diff = K' − S` can still be at least the per-call sum `P`, and the run is charged
+  `diff`, short by up to `S`. Recomputed: `S` = 100000000, real spend `K'` = 250000000, one call
+  event dropped so `P` = 140000000; `diff` = 150000000 ≥ `P`, so D4 charges 150000000 against a truth
+  of 250000000. Its premium count, `K'_prem − S_prem`, is meaningless there (0 in this example).
+  With no lost event `P = K'` > `diff`, and the per-call branch charges the truth, so the defect
+  needs a dropped event (appendix A §A allows it: at most 256 raw events in flight). The spend is
+  lost, never doubled. **So:** if 7.3 observes restart semantics, D4 is revised before archive: a
+  run on a loaded session charges `max(K', P)` and takes premium requests from `K'_prem` alone, with
+  no baseline; tests 1.8(a) and (e) and the credits paragraph of the `usage-accounting` delta are
+  rewritten to match, and 1.8(d) becomes the ordinary case. If 7.3 observes a continuing counter, D4
+  stands as written. Either way 7.3's figures go in the round log.
 - **Never twice, never negative (R3 proof, continuing counter).** Invariant: after each run the
   stored total `S` is at most the real counter `K`, and every credit charged so far is at most `S`
   (equal when no call event was lost). A run with a checkpoint is charged `max(K' − S, P)`, where
@@ -220,6 +259,14 @@ never counted twice.
 
 `settle_copilot_credits` never raises. A failed baseline read is "no baseline". Any other exception
 is logged, and the sample is returned with the ledger's provisional per-call credits (D11).
+
+**Negative figures (review 2026-09-28, finding 12).** The ledger ignores a `totalNanoAiu` or
+`totalPremiumRequests` that is negative, non-numeric or a bool, on a call, a compaction or a
+checkpoint, exactly as `_token_int` ignores a bad token count. Test 1.8(g) includes one negative
+per-call value. With every input non-negative, D4's rule yields no negative charge (a negative
+`diff` takes the per-call branch). D5 adds no CHECK constraint for the new columns: that would need
+a table rebuild of `turn_usage`, which this change avoids, so non-negativity is the code's guarantee,
+not the database's.
 
 ## D5 — Schema
 
@@ -268,7 +315,29 @@ capture. If the capture has no `session.shutdown`, the two columns stay NULL and
 ## D6 — Where credits are shown
 
 Credits appear wherever tokens already appear for a turn, a conversation, an agent or the project,
-and **only when non-null**, so a Claude-only or Codex-only project looks exactly as it does today.
+and **only when non-null**, so a Claude-only or Codex-only project's **screens** look exactly as
+they do today.
+
+**Its API responses do not stay byte-identical, and this change says so (review 2026-09-28, Q-b and
+finding 9).** A project with no Copilot row gains, with every new key appended after the existing
+ones so that key order is otherwise unchanged:
+
+- `ai_nano_aiu: null` and `premium_requests: null` in `project`, in every `agents[]` entry, in
+  `GET /accounting/conversations/{id}`, and in every `recent_turns[]` row;
+- `runner` inside a `preferred_display` of kind `allowance` (`"claude"` for a Claude reading). This
+  is the common case: 345 of the 348 Claude rows on `:8000` carry a reading (review, `mode=ro`);
+- `checkpoint_compaction_percent: 95` on every agent bound to a Claude or Codex runner in
+  `GET /agents` (null only for an agent with no bound runner, D10);
+- `threshold_source` on every `checkpoint_due` broadcast (D10).
+
+`budget` and the `api_equivalent` display are unchanged, and so is `PATCH /accounting/budget`'s
+response. Exact-equality assertions that move, found by grep over `hub/tests`: in
+`hub/tests/test_accounting_api.py`, `:89` (`data["project"] ==`), `:98` (`data["agents"] ==`),
+`:136` (`preferred_display ==` for an allowance, which gains `runner`) and `:368` (the conversation
+`response.json() ==`). Task 6.1 **extends** these four with the new keys, never loosens them to
+subset checks; that extension is the byte-identity test. Not moving: `:120` and `:308` (`budget`),
+`:167` and `:217` (`api_equivalent`). No test asserts a whole `GET /agents` item or a whole
+`checkpoint_due` payload (grep; `test_checkpoint_cutover.py:820` reads only `final`).
 
 | Surface | Today | After |
 |---|---|---|
@@ -348,14 +417,51 @@ JSON-RPC error's `data` count too (INFERRED that they may arrive there; nothing 
   reset instant in the schema. None of these holds. Each is still recorded: the run fails as
   today, slice 5 renders the error, and the reading stays `allowed` or absent.
 - **The reset** comes from D7's snapshot, taken from the newest `quotaSnapshots` of this run, or, when
-  the refused call was the run's first, from the agent's newest earlier Copilot reading whose
+  the refused call was the run's first, from the **project's** newest earlier Copilot reading whose
   `resetsAt` is still ahead. The ledger cannot read that (no database, D2), so it emits the rejected
-  reading without `resetsAt`, and `settle_copilot_credits` fills it in at run end from the newest
-  `turn_usage` row for the project and agent with `runner == "copilot"` and a dict allowance. The
-  dict test is done in Python, as `_is_informative` does (`provider_allowance.py:108-119`). With
-  neither, the reading is `rejected` with no `resetsAt`: shown as *allowance exhausted*, and not a
-  hold (the existing rule, `provider_allowance.py:68-75`, unchanged). Such a reading is still
-  informative, so it ends any earlier hold.
+  reading without `resetsAt`, and `settle_copilot_credits` fills it in at run end from the last
+  written (`rowid`, as D4) `turn_usage` row for the project, **any agent**, with `runner ==
+  "copilot"`, a dict allowance and a numeric `resetsAt` ahead of now. The dict test is done in
+  Python, as `_is_informative` does (`provider_allowance.py:108-119`). With neither, the reading is
+  `rejected` with no `resetsAt`: shown as *allowance exhausted*, and not a hold (the existing rule,
+  `provider_allowance.py:68-75`, unchanged). Such a reading is still informative, so it ends any
+  earlier hold.
+  - **Why the project, not the agent (review 2026-09-28, finding 1(b)).** Once a plan is spent, the
+    refusal lands on a run's first call, which has no `assistant.usage` and so no snapshot. Keyed on
+    the agent, a newly bound Copilot agent, one whose last reading is from last month, or one on a
+    plan with no `resetDate` never finds a reset, so its refusal is counted like F355. The Copilot
+    quota is per GitHub account, so another agent's reading states the same reset. The hold itself
+    stays keyed on the refused agent's name (`provider_allowance.py:122-143`): only the date is
+    borrowed. If two Copilot runners of one project ever sign in to different accounts, a borrowed
+    date may be the other account's; individual plans all reset at 00:00 UTC on the 1st
+    (DOCUMENTED), so the error is bounded by the Business/Enterprise case (Q4). Test 1.9 adds agent
+    `b` refused on its first call with agent `a`'s reading ahead: held until `a`'s reset.
+  - **Only `resetsAt`, and only when refused (review 2026-09-28, finding 2).** `quota_reading
+    (snapshots, *, refused, prior_reading)` consults `prior_reading` only when `refused` is True, and
+    copies from it **only `resetsAt`**. `status` is `rejected` because this run was refused, and
+    `quota`/`remainingPercentage` come from this run's snapshot or are absent. A run that was not
+    refused and saw no qualifying snapshot writes **no** reading (D7), whatever the prior reading
+    says. Otherwise an ordinary failure (say a `rate_limit` on the first call) after a month-long
+    hold would re-emit the earlier `rejected` reading and renew the hold on a non-quota error. The
+    settle likewise fills `resetsAt` only into a reading that is already `rejected`. Test 1.9 pins
+    both.
+  - **When nothing holds, the input is counted (review 2026-09-28, finding 1(a)).** With no known
+    reset, `allowance_refusal` returns None (it needs a numeric `resetsAt`), so `_execute_run`'s
+    branch (`agent_trigger.py:2681-2689`), which task 5.3 copies, sets no refusal, and
+    `return_run_entries(db, run_id)` counts the attempt. At `RESUME_RETRY_LIMIT = 2`
+    (`inbound_queue.py:286`) the conversation's provider session is cleared, which discards the
+    Copilot context; at `DELIVERY_ATTEMPT_LIMIT = 3` (`:294`) the input is given up. That is the
+    stated consequence of "no reset known", and the `agent-conversation-workspace` delta now says so
+    instead of claiming an uncounted return "in every case". Widening the lookup to the project makes
+    it rare.
+  - **A reset the server applies late (review 2026-09-28, finding 13).** A refusal just after
+    `resetDate` (for example on the first call at 00:00:30 on the 1st, before Copilot's server has
+    reset) finds only a past `resetsAt`, which is not filled. The reading is `rejected` without
+    `resetsAt`: no hold, and the input is counted as above. (The review said a 60 s floor hold
+    starts. That happens only when the reading carries a past `resetsAt`, which here it does not:
+    only a refusal on a later call of a run whose own earlier snapshot named the past date gets the
+    `HOLD_FLOOR` hold, `provider_allowance.py:100`, and it is still counted, because `resets_at >
+    run.ended_at` fails.) This is Claude's existing behaviour for a past reset; no change.
 - **The run end (re-verified in R2).** `_execute_run` applies the refusal branch today
   (`api/v1/agent_trigger.py:2667-2743`): `record_turn_usage` returns the row, then `hold_for_reading`
   and `allowance_refusal` read `usage.allowance`, `refusal` is set only for `final_status ==
@@ -398,7 +504,11 @@ JSON-RPC error's `data` count too (INFERRED that they may arrive there; nothing 
 **Is a month-long hold wanted?** On an individual plan a refusal holds the queue until the 1st of
 next month, 00:00 UTC. The operator's probe-once rule (`operator_would_probe`,
 `provider_allowance.py:192-201`) still lets their own message through. The operator can end the
-hold sooner by buying credits and messaging the agent, or by rebinding the agent. This matches the
+hold sooner by buying credits and messaging the agent, or by rebinding the agent **and then
+messaging it**. Rebinding alone writes no `turn_usage` row, so the hold, keyed on the agent's name
+(`provider_allowance.py:122-143`), stays, and loops and jobs stay blocked (`scheduler.py:1182`,
+`:1740`); only operator input served by the new runner ends it, as the main spec already says
+(`agent-conversation-workspace/spec.md:2489-2492`; review 2026-09-28, finding 8). This matches the
 Claude weekly hold. It is flagged as an operator decision (Q6) because a month is long.
 
 ## D9 — The runner's compaction point is an adapter member
@@ -438,7 +548,10 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
   new fields: `final_warning_percent` and `compaction_percent`. `needs_final_warning` reads
   `policy.final_warning_percent` instead of the module constant (`checkpoint_policy.py:222-237`).
   `FINAL_WARNING_PERCENT`, `DEFAULT_THRESHOLD_VALUE` and `DEFAULT_NOTES_VALUE` stay exported, equal
-  to the C=95 values, for any other reader.
+  to the C=95 values, for any other reader. The two new fields default to those C=95 values
+  (`final_warning_percent = FINAL_WARNING_PERCENT`, `compaction_percent = 95`), after
+  `threshold_source`, because `hub/tests/test_checkpoint_policy.py:184` and `:214` construct
+  `CheckpointPolicy(...)` directly with the six existing fields.
 - **A configured threshold past the final-warning point is lowered to it.**
   - In percent mode, when the value is above `final_warning_percent`, it becomes `final_warning_percent`,
     and `threshold_source` becomes `"runner_ceiling"`. **For Claude this also lowers a configured
@@ -447,7 +560,9 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
     its reach:** a `mode=ro` read of the operator's `:8000` database and of the trial database found
     no project and no agent with a configured threshold (every `checkpoint_threshold_mode` is NULL).
     All seven projects use the built-in 80/70/92, so none of the three Claude bands changes anything
-    configured on this machine today.
+    configured on this machine today. It can change a PyPI user's configuration, so Q7 is an
+    operator question (review 2026-09-28), and the lowering is stated in the agent's and the
+    project's checkpoint settings (*Where the lowering is stated*, below).
   - In token mode the window is not known to the policy, so the ceiling is applied to the reading's
     percent. **Not in `crosses`** (R2 correction): `crosses(mode, value, *, context_tokens, percent)`
     (`:156-172`) takes no policy and is also used for the notes point. The ceiling goes in
@@ -493,6 +608,29 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
   `CheckpointOverrideSetting` in `AgentSettingsControls.tsx` (`:333-406`) shows one line under the
   threshold for an agent whose runner compacts below 95: *"Copilot compacts at about 80% of its
   window. This agent's checkpoint fires by 77% at the latest."*
+- **Where the lowering is stated (review 2026-09-28, finding 5).** R1–R3's requirement said *"stated
+  wherever the threshold is reported"*, and D10 built only the Copilot line above. Claude's own
+  lowering (a configured 93–99% becoming 92) travelled only on the `checkpoint_due` payload, which no
+  UI reads, and `ProjectSettingsPanel` showed a project threshold of 80 with nothing saying it is 77
+  for the project's Copilot agents. Now, with the requirement narrowed to the two settings surfaces:
+  - **Agent settings.** The line also appears whenever the agent's effective threshold is below its
+    configured one, for **any** runner: its own override, else the project's threshold, in percent
+    mode and above `checkpoint_compaction_percent − 3`. For Claude: *"This agent's threshold of 96%
+    is lowered to 92%: Claude compacts at about 95% of its window."* A token threshold cannot be
+    compared with a percent in the UI, so for one the line reads *"This agent's checkpoint fires at
+    <N> tokens or at <C − 3>% of its window, whichever comes first"*, shown whenever the token-mode
+    ceiling applies to the runner (every runner under Q7's current answer). The comparison is one
+    helper, `runnerCeilingNote(compactionPercent, mode, value)`, beside
+    `describeThreshold` (`components/environment/describeThreshold.ts`), used by both surfaces.
+    `AgentSettingsControls` already has the agent's override; the project threshold comes from
+    `useProjectSettings`.
+  - **Project settings.** `ProjectSettingsPanel.tsx` (the checkpoint threshold row, `:237-259`) reads
+    the project's agents (`useAgents`, `api/agents.ts:180`) and, when the project's percent threshold
+    is above any bound agent's `checkpoint_compaction_percent − 3`, shows one line per compaction
+    point: *"Lowered to 77% for agents on a runner that compacts at about 80% (cop)."*
+  - A Claude or Codex project with no configured threshold shows neither line (80 < 92), so its
+    screens stay identical. Test 1.18 covers the Claude 96 → 92 line, the Copilot line, the project
+    panel line, and the no-line default.
 - **Where the percent comes from.** A live Copilot reading derives `percent` in
   `ContextUsageSample.__post_init__` (`runner_events.py:260-268`) from slice 2's `usage_update
   {used, size}`. D10 assumes Copilot's "about 80%" is a fraction of that same `size` (INFERRED). The
@@ -543,6 +681,15 @@ The formulas are fixed so that Claude's three numbers are byte-identical, and a 
   no reported cost"* label (`accountingDisplay.ts:44-47`) shows only when the headline is
   `api_equivalent`, and a Copilot reading usually makes it `allowance` (D6, Q9). So in practice the
   unpriced count reaches the operator only through the API. That change's text is not edited.
+  **Review 2026-09-28, finding 10, answered and not applied to the string.** The label's *"no
+  reported cost"* is imprecise for a Copilot turn, which did report a cost, in credits. Rewording it
+  to *"no reported API-equivalent cost"* would change a string every Claude and Codex project shows
+  today (pinned at `accountingPresentation.test.tsx:132`, `:261`) to fix a case that is reachable only
+  when a Copilot project's newest 50 rows carry no allowance reading (a plan with no qualifying
+  snapshot, Q4, or BYOK, Q11). It is left to test-guide Human-only item 2, which now names it. The
+  `usage-accounting` ADDED requirement now says explicitly that credits are the provider's report of
+  consumption, not a monetary figure, and so outside *"Allowance and currency presentation cannot
+  imply billing"*, although 1 credit = $0.01 (DOCUMENTED).
 - **`worker-spend-counts-against-the-budget`** (REVISING). It adds `worker_invocations.total_tokens`,
   rebuilds the outcome CHECK (its migration), sums worker tokens into `used_tokens`, and adds
   `workers` lines. Composition:
@@ -863,6 +1010,62 @@ order fails it. API tests assert by position in the order the route returns (`ag
     (no refusal), not a re-raise; the `rate_limit` case asserts a returned outcome with no hold.
   - Q11: slice 5's BYOK-credits request (its 4.3) carried as an open question.
 
+- **Review fixes, 2026-09-28** (task 0.3: Opus adversarial review
+  `spec-queue/tracks/reviews/ghcp-s4-2026-09-28.md`, APPROVE WITH FIXES, against master `450de52`).
+  Each should-fix was re-verified before it was applied.
+  - **1 (should-fix), applied: (a) and (b).** Re-read `agent_trigger.py:2667-2743`,
+    `provider_allowance.py:60-80` and `inbound_queue.py:286`, `:294`: with no `resetsAt` no refusal
+    is set and the input is counted, the session cleared at attempt 2 and the input abandoned at 3.
+    The `agent-conversation-workspace` delta no longer says "in every case"; the uncounted return is
+    conditional on a hold, and the counted consequence is stated, with a scenario. D8's prior-reading
+    lookup is widened to the project's newest Copilot reading with a reset ahead (the quota is per
+    account); a scenario and a 1.9 case (agent `b` held on agent `a`'s reset) are added.
+  - **2 (should-fix), applied.** D8 now says `prior_reading` is consulted only when `refused`, and
+    only for `resetsAt`; a non-refused run with no snapshot writes no reading. Two 1.9 cases and a
+    spec scenario ("an earlier refusal is not renewed by an unrelated failure") are added.
+  - **3 (should-fix), applied with the monotonic order.** Recomputed with a `py -3.11` scratch
+    simulation of D4's rule: `observed_at` order charges 650000000 against a real 550000000; `rowid`
+    order charges 550000000. D4's baseline is now `ORDER BY turn_usage.rowid DESC` (precedent:
+    `api/v1/spec.py:262-281`), the spec states "written last, not latest clock", and test 1.8(h) seeds
+    a stepped-back clock. Not the review's option (b) (assume a monotone clock), which leaves the
+    defect; not its option (a) (a chain column), which a rowid order makes unnecessary.
+  - **4 (should-fix), applied.** Recomputed: 150000000 charged against a real 250000000 under restart
+    semantics with one lost call event. D4 now says the rule never double-charges or goes negative
+    under either answer, but is right under only the continuing one; 7.3 gates D4 again, with the
+    revision stated (`max(K', P)`, premium from `K'`). Task 7.3 and test-guide item 5 corrected.
+  - **5 (should-fix), applied (the review's options (a) and (b) both).** The requirement names the
+    two settings surfaces instead of "wherever the threshold is reported", and states Claude's
+    93–99 → 92. The agent line appears whenever the effective threshold is below the configured one,
+    for any runner; `ProjectSettingsPanel` gains a line when any agent's runner lowers the project
+    threshold. Test 1.18 extended. Because it changes PyPI users' configured behaviour, Q7 is
+    re-opened as an operator question with three answers.
+  - **Q-b (byte identity), applied.** D6 now lists every key a Claude/Codex project's API responses
+    gain and the four exact-dict asserts that move (`test_accounting_api.py:89`, `:98`, `:136`,
+    `:368`); the `usage-accounting` delta separates screens (unchanged) from responses (gain empty
+    fields); test-guide item 3 lists all of them; task 6.1 names the four asserts.
+  - **6 (note), applied.** The denominator risk is in Q7.
+  - **7 (note), applied.** D3 names the Copilot keys and maps them to the normaliser's names in the
+    ledger (`runner_parsing.py:83-95` re-read: no match today); test 1.3 asserts `cache_read_tokens`
+    on the prompt-result path.
+  - **8 (note), applied.** D8 and Q6 say "rebind and then message"; the delta says rebinding alone
+    does not end a hold.
+  - **9 (note), applied.** See Q-b; task 6.1.
+  - **10 (note), answered, string not changed.** Rewording the label would change every Claude/Codex
+    screen that shows it (two pinned UI tests) for a rarely reachable Copilot case; D12 and
+    Human-only item 2 name it, and the ADDED requirement says credits are not a monetary figure.
+  - **11 (note), applied.** Test 1.10 asserts `project_budget_state(...)["exhausted"] is False` at
+    `token_budget = 1801`; a spec scenario covers the scheduling gate.
+  - **12 (note), applied.** The ledger ignores negative credit figures; D5's lack of a CHECK is
+    stated; test 1.8(g).
+  - **13 (note), answered, with one disagreement.** Stated under D8. The review said a 60 s floor
+    hold starts; for a first-call refusal the reading has no `resetsAt`, so `hold_for_reading`
+    returns None and nothing holds. The floor applies only when the run's own earlier snapshot named
+    the past date.
+  - **Also found while applying:** `CheckpointPolicy(...)` is constructed directly at
+    `test_checkpoint_policy.py:184`, `:214`, so D10's new fields get C=95 defaults.
+    `provider_allowance._newest_informative` (the existing Claude hold) also orders by
+    `observed_at` and has the same clock hazard; out of scope here, passed on to be filed as a finding.
+
 ## Open questions for R2/R3
 
 - **Q1 (slice 1). Answered in R2, from slice 1's design (unbuilt).** No. `usage_from` is a
@@ -886,7 +1089,9 @@ order fails it. API tests assert by position in the order the route returns (`ag
   caveat. The Hub stores raw nano-AIU, so only the one display constant would change.
 - **Q6 (operator).** A Copilot quota refusal on an individual plan holds the agent's queue until the
   1st of next month (D8). Is a month-long hold wanted, or should a Copilot refusal be shown without
-  holding? D1–D6 do not answer this.
+  holding? D1–D6 do not answer this. For the answer (review 2026-09-28, finding 8): rebinding the
+  agent to another runner does **not** end the hold by itself; the operator must rebind and then
+  message the agent, and until then its loops and jobs stay blocked too.
 - **Q7.** D10's ceiling changes Claude's behaviour in two bands. First, token thresholds that fall
   between 92% and 100% of a known window. Second (found in R2), configured **percent** thresholds of
   93–99, which are lowered to 92. Keep it uniform (R1's choice: a threshold above 92 leaves at most
@@ -899,6 +1104,18 @@ order fails it. API tests assert by position in the order the route returns (`ag
   unreachable threshold unreachable for Claude alone. The operator can still overrule this at the
   0.3 review or in APPROVALS. If they do, the change is one condition,
   `compaction_percent < 95`, in front of the three ceilings.
+  **Review 2026-09-28 (findings 5, 6): re-opened as an operator question.** The evidence covers this
+  machine only. For a PyPI user it lowers a configured Claude percent threshold of 93–99 (and a notes
+  value of 92 or more, which becomes 82), fires a token threshold set above 92% of the window at 92%
+  (in `automatic` mode that **bills a checkpoint generation** earlier than configured), and asks for
+  token-mode notes from 82%. Those are behaviour changes for existing users, so the operator decides.
+  A further risk for the token band: token mode exists for windows the Hub cannot trust
+  (`checkpoint_policy.py:8-11`, `:163-168`), and the token ceiling trusts the reading's `percent`. If
+  that denominator is wrong, say a catalog limit of 200k on a 1M session, a token threshold of 600k is
+  overridden at 184k. Three answers: (a) uniform, as designed (the default until answered); (b) the
+  percent ceiling for every runner, the token ceilings only for runners that compact below 95, which
+  removes the denominator risk for Claude and keeps Copilot's fix; (c) all three ceilings only below
+  95. Each is one condition. The lowering is stated on screen under any answer (D10, finding 5).
 - **Q8. Answered in R2.** No UI literal assumes 80/92/95. A grep of `components/checkpoints`,
   `AgentSettingsControls.tsx`, `BannerStack.tsx`, `ProjectSettingsPanel.tsx` and
   `components/context` found none. Only `CONTEXT_WARNING_PERCENT = 70`

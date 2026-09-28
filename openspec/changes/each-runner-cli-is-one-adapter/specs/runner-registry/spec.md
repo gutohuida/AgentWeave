@@ -13,7 +13,9 @@ The things that differ between runner CLIs are:
 - its one-shot invocation for workers and titles;
 - which catalog provider it renders.
 
-Code outside the adapters SHALL NOT branch on a runner CLI's name. A runner CLI with no adapter SHALL NOT be accepted
+Code outside the adapters SHALL NOT branch on the name of a supported runner CLI, one that has an adapter. A runner
+string with no adapter, which only a legacy configuration can carry, MAY still be matched by name where its legacy
+handling lives. A runner CLI with no adapter SHALL NOT be accepted
 for a runner record. A runner string with no adapter that arrives from a legacy configuration SHALL be reported
 unlaunchable, or launched by no one. It SHALL never be spawned through another CLI's adapter.
 

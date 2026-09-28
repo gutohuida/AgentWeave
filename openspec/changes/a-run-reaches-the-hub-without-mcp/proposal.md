@@ -78,8 +78,12 @@ harness reports the server's state on every run and the Hub parses none of it (`
    - In call mode the script does not import fastmcp. It uses a stdlib stand-in for the decorator: measured
      1.4 s per call with fastmcp and 0.1 s without.
    - A launcher pair, `aw-tool` (POSIX sh) and `aw-tool.cmd` (Windows), is written beside the pin and put
-     first on each run's `PATH`. Both run Python with `-I` (R3), so an interpreter variable set earlier in a
-     persistent shell cannot change what the auto-approved program runs.
+     first on each run's `PATH`. Both run Python with `-I -S` (R3; `-S` from the Opus review), so an interpreter
+     variable or a site-packages `.pth` file cannot change what the auto-approved program runs. The shell that
+     resolves the name is not isolated: a function, module, `PATH` change or `ComSpec` set earlier in a persistent
+     Copilot session can (design D8's residual, open question 7).
+   - The shim reads its args file only from inside `<workspace>/.agentweave/calls/`, by the same rule as the
+     approver (review fix 8).
    - It is called `aw-tool`, not `aw`, because **`aw` is already the `agentweave` console script**
      (`pyproject.toml:82`; measured today, `Get-Command aw` resolves to `Python311\Scripts\aw.exe`). Arguments
      are passed as a file under `.agentweave/calls/`, never inline, because of the PowerShell facts above.
@@ -97,6 +101,12 @@ harness reports the server's state on every run and the Hub parses none of it (`
      approach let through.
    - A near miss (an operator, a redirection, a variable, a grouping, a second command, a path elsewhere) is not
      denied by this rule. It falls through to today's decision.
+   - **The calls directory must be itself** (Opus review, blocking): when `.agentweave` or `calls` is a link or
+     junction, nothing is inside it. The Hub replaces a `calls` link with a real directory each turn.
+   - A shell request slice 2 cannot name (`"Shell"`) never gets standing (decided 2026-09-28).
+   - **A specification turn told `aw-tool` keeps the one write it needs**, the args file (design D16). This
+     modifies `spec-document-authority`'s write restriction; on Copilot the Hub's handler confines it, on Claude it
+     is a stated weakening.
 4. **The turn notice and `_tool_surface_lines` say which surface THIS run has**: the MCP tools, or `aw-tool`.
    The raw HTTP form is no longer described to runs. It stays the application contract (the equal-capability
    requirement), not an instruction an agent is given, because following it puts the credential into stored
@@ -151,6 +161,9 @@ The shim is Hub-owned run tooling, like the MCP server (design D2).
   - ADDED *The Hub's own call command is decided like the Hub's own tools*.
   - ADDED *A Claude run pre-allows the Hub's call command* (group 7; removed from this delta if group 7 is cut).
 - `runtime-diagnostics`: ADDED *A run states how it reached the Hub*.
+- `spec-document-authority`: MODIFIED *Authoring assistance is scoped away from performing discovered
+  implementation work*: a run told the call command keeps the args-file write (design D16, Opus review
+  finding 4).
 
 ## Impact
 
@@ -164,9 +177,11 @@ The shim is Hub-owned run tooling, like the MCP server (design D2).
   - `hub/hub/api/v1/agent_actions.py`: the announce notifies waiters.
   - `hub/hub/runner_parsing.py`: Claude `system/init`.
   - `hub/hub/repo_hygiene.py`: `.agentweave/calls/` excluded.
-  - `hub/hub/codex_appserver.py`: `startupStatus` recording only (group 6 cut).
+  - `hub/hub/codex_appserver.py`: `startupStatus` recording, and `map_mcp_server_failure`'s own-server text for a
+    run told `shim` (group 6 cut; review fix 6).
+  - Slice 1's Claude builder: `restrict_spec_writes` keeps `Write` for a spec turn described `shim` (D16).
   - Slice 2's Copilot adapter and ACP transport: wait, compose late, the `/mcp list` diagnostic, raw-event
-    corroboration.
+    corroboration, and the spec-turn write rule (D16).
   - A new `hub/hub/mcp_announce.py`: in-process waiters.
 - **One migration:** `runs.harness_mcp_status`, `runs.plane_surface`, with a backfill of `connected` where
   `mcp_adapter_online_at` is set.

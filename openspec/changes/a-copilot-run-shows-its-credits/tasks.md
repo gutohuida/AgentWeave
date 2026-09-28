@@ -31,11 +31,17 @@ root.
     D2's settle was keyed on a checkpoint total, which starved the fallback and the D8 reset fill. The
     D8 JSON-RPC-error route could not fire, because slice 2 raises. The token-mode notes point was
     missing. Plus a "Required of slices 1 and 2" section; details in the round log
-- [ ] 0.3 Opus adversarial review of the change and its decisions (the operator's standing step
+- [x] 0.3 Opus adversarial review of the change and its decisions (the operator's standing step
   before an APPROVED row). It re-derives in particular: whether any path adds a Copilot credit to a
   token total or to the budget; whether a Claude or Codex project's API responses and screens are
   byte-identical when no Copilot row exists; whether D8 can hold a queue on anything but the
   structured quota code
+  - **Done 2026-09-28.** Opus review ghcp-s4-2026-09-28: APPROVE WITH FIXES → 11 applied, 2 answered
+    (`spec-queue/tracks/reviews/ghcp-s4-2026-09-28.md`). Applied: findings 1–9, 11 and 12, with the
+    byte-identity answer (API responses gain empty credit fields; the four moving asserts are named in
+    6.1). Answered: 10 (the "no reported cost" string is kept) and 13 (stated under D8; the review's
+    60 s floor hold does not start for a first-call refusal). Q7 is re-opened as an operator
+    question. Mapping in design.md's round log, *Review fixes, 2026-09-28*
 
 ## 1. Tests first — each fails on today's code
 
@@ -52,8 +58,9 @@ root.
   the prompt result the ledger saw first
 - [ ] 1.3 Same file: dropped events (`session_was_new=True`). Only calls 1 and 3 observed (their sum
   is 22080 + 26 = 22106), plus the full prompt result, gives total 33172 and
-  `source == "copilot_prompt_result"`, and logs one warning naming both figures. All three calls and
-  no prompt result gives 33172 and `source == "copilot_calls"`
+  `source == "copilot_prompt_result"`, `cache_read_tokens == 21888` (the prompt result's
+  `cachedReadTokens`, mapped by the ledger, design D3 *Key names*), and logs one warning naming both
+  figures. All three calls and no prompt result gives 33172 and `source == "copilot_calls"`
 - [ ] 1.4 Same file: one ledger (one process) that observes two prompt results, 33172 and then a
   cumulative 40000, uses 40000, not their sum 73172 (design D3: the process-cumulative figure is the
   run's). Assert with the results in the order they were emitted, so a ledger that kept the earlier
@@ -83,7 +90,14 @@ root.
     fallback stores nothing;
   - (f) a run whose sample has `credit_session_new` set but no checkpoint and no calls is settled
     (a no-op on credits) rather than skipped. A sample without `credit_session_new` is returned
-    unchanged. No events at all gives `total_tokens is None`
+    unchanged. No events at all gives `total_tokens is None`;
+  - (g) (review finding 12) the acp4 calls plus one call whose `totalNanoAiu` is -5000000 give
+    275856000: the negative value is ignored;
+  - (h) (review finding 3) a clock that steps backwards: four runs of one session (the first new,
+    the rest loaded), spending 275856000, 124144000, 100000000 and 50000000 through their checkpoints
+    (each with its own calls), recorded in that order with `observed_at` 10, 20, 10 and 15 seconds
+    past a fixed instant. Run 4 is charged 50000000 and the four sum to 550000000. Ordered by
+    `observed_at`, run 4 would be charged 150000000 against run 2's total, so this fails on the R3 rule
 - [ ] 1.9 Same file, quota (D7, D8): acp4's snapshots give reading `{"status": "allowed", "quota":
   "chat", "rateLimitType": "monthly", "resetsAt": 1790812800, "remainingPercentage": 96.5,
   "provider": "copilot"}`. (1790812800 is 2026-10-01T00:00:00Z; assert it with
@@ -92,8 +106,17 @@ root.
   of it is not None. `errorType "rate_limit"`, `errorCode "session_quota_exceeded"`,
   `"billing_not_configured"`, and `errorType "query"` with message `"quota exceeded"` each leave
   `status "allowed"`. A refused run with no snapshot and a `prior_reading` whose `resetsAt` is ahead
-  uses it (`settle_copilot_credits` supplies it from a seeded `turn_usage` row, design D8). With one
-  whose reset is past, `resetsAt` is absent. A replayed `session.usage_checkpoint` observed before
+  takes **only its `resetsAt`**: the reading is `{"status": "rejected", "resetsAt": <prior>,
+  "rateLimitType": "monthly", "provider": "copilot"}`, with no `quota` or `remainingPercentage`
+  copied (the seeded prior has `quota "chat"`, `remainingPercentage 12.0` and `status "allowed"`, so
+  a whole-reading copy fails). `settle_copilot_credits` supplies the prior from a seeded `turn_usage`
+  row (design D8). With one whose reset is past, `resetsAt` is absent. **Review finding 2:**
+  `quota_reading(None, refused=False, prior_reading=<a rejected reading whose resetsAt is ahead>)`
+  returns None (no reading written), and a settled non-refused sample with no snapshot carries
+  `allowance is None`, so a later `rate_limit` failure cannot renew a hold. **Review finding
+  1(b):** agent `b`'s first-call refusal, with agent `a`'s Copilot reading in the same project ahead
+  and none of `b`'s own, is filled with `a`'s `resetsAt`, and `allowance_refusal` of it is not None;
+  a reading from another project is not used. A replayed `session.usage_checkpoint` observed before
   the ledger is armed is ignored
 - [ ] 1.10 Extend `hub/tests/test_accounting_api.py`: seed a Claude turn (1000 tokens, no credits)
   for agent `a-claude` and two Copilot turns (500 and 300 tokens; 200000000 and 75856000 nano-AIU;
@@ -101,7 +124,9 @@ root.
   `project.ai_nano_aiu == 275856000`, `project.premium_requests == 1.5`, `budget.used_tokens == 1800`.
   `agents[0]` is `a-claude` with `ai_nano_aiu is None`, `agents[1]` is `b-copilot` with 275856000 (by
   position, in the route's name order). `recent_turns` in `observed_at` descending order carry their
-  own `ai_nano_aiu`, asserted by position. Fails today
+  own `ai_nano_aiu`, asserted by position. With `token_budget = 1801` and the same rows,
+  `usage_accounting.project_budget_state(db, project_id)["exhausted"] is False` and its `used_tokens
+  == 1800` (review finding 11: the scheduling hot path, `turn_scheduler.py:363`). Fails today
 - [ ] 1.11 Same file: a project with only Claude rows returns `ai_nano_aiu: null` and
   `premium_requests: null` everywhere. `preferred_display` for a Claude allowance row is unchanged
   except for the new `runner: "claude"` key. For a newer Copilot allowance row it carries
@@ -156,7 +181,11 @@ root.
 - [ ] 1.18 UI: an `AccountingPanel` test renders the credits line only when `project.ai_nano_aiu` is
   not null. Extend `overviewBudgetSummary.test.tsx` to match. Extend `agentCheckpointSettings.test.tsx`:
   an agent with `checkpoint_compaction_percent: 80` shows the "compacts at about 80%" line, and one
-  with 95 or null does not
+  with 95 or null and no configured threshold does not. **Review finding 5:** an agent with
+  `checkpoint_compaction_percent: 95` and a percent override of 96 shows "lowered to 92%", and one
+  with 92 does not. Extend `projectSettingsPanel.test.tsx`: a project threshold of 80 with an agent
+  at `checkpoint_compaction_percent: 80` shows the "Lowered to 77%" line naming that agent; with
+  only agents at 95 it shows nothing
 
 ## 2. Schema and sample
 
@@ -197,15 +226,19 @@ root.
   this slice, and includes none of the three. A test asserts that the `initialize` request carries all
   four. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
 - [ ] 4.2 `hub/hub/copilot_usage.py`: `CopilotUsageLedger` (`observe_event`, `observe_prompt_result`,
-  `observe_prompt_error`, `finish`) per design D2–D4, and `quota_reading(snapshots, *, refused, prior_reading)` per D7–D8.
+  `observe_prompt_error`, `finish`) per design D2–D4, with the Copilot key mapping of D3 and
+  negative credit figures ignored (D4), and `quota_reading(snapshots, *, refused, prior_reading)` per
+  D7–D8: `prior_reading` is read only when `refused`, and only for `resetsAt`.
   `finish(*, session_was_new)` is pure and never raises (D11). Tasks 1.1–1.7 and the ledger half of
   1.9 pass. `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
-- [ ] 4.3 `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the newest
-  `turn_usage` row joined to `runs` on `Run.session_id == session_id`, for that project and agent, with
+- [ ] 4.3 `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the last
+  written `turn_usage` row (`ORDER BY turn_usage.rowid DESC`, not `observed_at`; design D4, review
+  finding 3) joined to `runs` on `Run.session_id == session_id`, for that project and agent, with
   `session_nano_aiu_total` not null. It returns None on any exception, logged. Also
   `usage_accounting.settle_copilot_credits(db, sample, *, project_id, agent, session_id)` (design D2,
   D4, D8): the larger of the baseline difference and the per-call sum, premium requests only when the
-  difference was used, the fallback's stored total, and the prior reading's `resetsAt`. It acts on
+  difference was used, the fallback's stored total, and, for a `rejected` reading only, the
+  `resetsAt` of the project's last written Copilot reading (any agent) whose reset is ahead (D8). It acts on
   every sample whose `credit_session_new` is not None, checkpoint or not, returns any other sample
   unchanged, and never raises.
   Tasks 1.8 and the settle half of 1.9 pass
@@ -253,12 +286,19 @@ root.
 
 - [ ] 6.1 `usage_accounting`: `ai_nano_aiu` and `premium_requests` in `_aggregate_columns`,
   `_summary_from_row`, `recent_turns` and `conversation_usage`; `runner` on the allowance display.
-  Tasks 1.10–1.11 pass. `py -3.11 -m pytest hub/tests/test_accounting_api.py hub/tests/test_accounting_budget.py hub/tests/test_provider_allowance.py -q`
+  Every new key is appended after the existing ones. **Extend, do not loosen,** the four exact-dict
+  assertions in `hub/tests/test_accounting_api.py` that the new keys move (review finding 9; design
+  D6): `:89` (`data["project"] ==`) and `:98` (`data["agents"] ==`) gain `"ai_nano_aiu": None,
+  "premium_requests": None`; `:136` (`preferred_display ==`, an allowance) gains `"runner": "claude"`;
+  `:368` (the conversation `response.json() ==`) gains the two null keys. They stay exact `==`, and
+  are the byte-identity test of test-guide item 3. Tasks 1.10–1.11 pass. `py -3.11 -m pytest hub/tests/test_accounting_api.py hub/tests/test_accounting_budget.py hub/tests/test_provider_allowance.py -q`
 - [ ] 6.2 `api/accounting.ts` types; `accountingDisplay.ts`: `NANO_AIU_PER_AI_CREDIT`,
   `formatAiCredits`, `monthly` period, provider name in the allowance label
 - [ ] 6.3 `AccountingPanel.tsx`, `OverviewBudgetSummary.tsx`, `AgentOutputPanel.tsx` (conversation
   header), `agentTimelineModel.ts` (`usageByRunId`), `AgentTimeline.tsx`, `AgentSettingsControls.tsx`
-  per design D6 and D10. Tasks 1.16–1.18 pass. `cd hub/ui && npm run lint && npx vitest run`
+  and `ProjectSettingsPanel.tsx` (the lowering lines, one `runnerCeilingNote` helper beside
+  `describeThreshold`) per design D6 and D10. Tasks 1.16–1.18 pass.
+  `cd hub/ui && npm run lint && npx vitest run`
 - [ ] 6.4 Only if `worker-spend-counts-against-the-budget` has already landed: each `workers` line
   gains `ai_nano_aiu` and `premium_requests` sums, with a test in its test file. Otherwise record here
   that it has not landed, so that change adds them when it lands (design D12)
@@ -285,10 +325,14 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
   line shows the credits. A Claude agent's turn in the same project shows no credits
 - [ ] 7.3 A second turn in the **same conversation** (a resumed session): its `ai_nano_aiu` equals its
   `session_nano_aiu_total` minus 7.1's. That answers whether the checkpoint total continues across
-  `session/load` (design table, INFERRED until now). If it restarted from zero instead, D4's
-  larger-of rule charges the per-call sum (R3). Record which it was and check that `ai_nano_aiu`
-  equals the run's per-call sum. D4 needs no revision either way. Also record this resumed
-  turn's prompt-result `usage` beside its per-call sum (Q10). If the result includes 7.1's tokens,
+  `session/load` (design table, INFERRED until now). **This gates D4 (review finding 4; R3 had said
+  it did not).** If it continued, D4 stands. If it restarted from zero, D4's larger-of rule charges
+  the per-call sum only while no call event is lost; with one lost it charges `K' − S` and
+  under-charges by up to the previous total. So in that case stop and revise D4 before archive: a
+  run on a loaded session charges `max(K', P)` and takes premium requests from its own checkpoint
+  alone, tests 1.8(a) and (e) and the `usage-accounting` credits paragraph are rewritten, and the
+  run's `ai_nano_aiu` is checked against its own checkpoint. Record which it was. Also record this
+  resumed turn's prompt-result `usage` beside its per-call sum (Q10). If the result includes 7.1's tokens,
   stop and make the per-call sum authoritative on a loaded session (design D3)
 - [ ] 7.4 Record the run's `quotaSnapshots` keys and which one's `usedRequests` rose. Record whether
   the ACP prompt result and the per-call sum agreed (the ledger's warning log line, if any)

@@ -11,6 +11,9 @@ landed. Of the files this change edits, only `model_catalog.py` and `api/v1/mode
 at every cited line (a 4-line docstring swap in `worker.py:164-167` shifts nothing). So the citations
 below hold on `ef55e6f` unless marked. A site that an unbuilt ORDER change will edit is marked
 **(rebase at IMPL: `<change>` unbuilt at R2)**, with what that change's design says it will leave.
+**Review (2026-09-28)** adds two changes to that list: `worker-spend-counts-against-the-budget` (the titler's argv and
+`worker.parse_envelope`, D8) and `agents-no-longer-register-themselves` (`agents.py:567-577` and
+`launchability.py:455-514`, which shift D5's and D14's citations; no moved logic). See the proposal's *Depends on*.
 
 **R3 (2026-09-28) re-derived on master `fc33ff9`.** `git diff --stat ef55e6f fc33ff9 -- hub/` is empty, so every
 `ef55e6f` citation holds. The six unbuilt dependencies are still unbuilt; R3 checked that each one's tasks really
@@ -121,12 +124,13 @@ docstring states its contract.
 | `name` | `ClassVar[str]` | The `Runner.cli` value. It is the `ADAPTERS` key. | `"claude"` | `"codex"` |
 | `binary` | `ClassVar[str]` | The executable looked up on PATH when no `cli` override is configured. | `"claude"` | `"codex"` |
 | `display_name` | `ClassVar[str]` | The model fallback in the agents list when a runner records no model (`agents.py:557-565`). | `"Claude"` | `"Codex"` |
-| **`catalog_provider`** | `ClassVar[str]` | The `CATALOG` key whose models and controls this runner renders. It replaces `catalog_provider_for_runner`. | `"claude"` | `"codex"` |
+| **`catalog_provider`** | `ClassVar[str]` | The `CATALOG` key whose models and controls this runner renders. It replaces `catalog_provider_for_runner`. **Review 10:** it must equal `name` for every adapter, because four sites index the catalog by the CLI name directly and are not routed through this member (`validate_overrides(runner_row.cli, …)`, `agent_trigger.py:1618`; `_reject_undeclared_model(body.cli, …)`, `api/v1/runners.py:54`, `:154`; `get_provider(self.cli)`, `schemas/runners.py:54`; `worker.model_is_declared(cli, …)`, `worker.py:158`). Task 1.5(a) asserts the equality, so an adapter whose provider differed would fail a test instead of silently validating against the wrong catalog entry. | `"claude"` | `"codex"` |
 | **`launchability`** | `(agent: str, config: Mapping) -> LaunchVerdict` | Is the binary present, and is the harness authorised? Same keys as `probe_agent` returns today (`launchability.py:135-142`). It must not raise. | `probe_binary` only (today's non-proxy path, `:91-99`) | same |
-| `collaboration` | `(flags: Sequence[str], *, yolo: bool) -> tuple[bool, Optional[str]]` | Can a triggered run collaborate? It is called only for a bound, runnable agent whose Hub address is known (`agents.py:239-265`). **R2:** `a-runner-that-cannot-collaborate-says-so-where-it-is-bound` (unbuilt at R2) moves only the *display* (UI `RunnerPicker`, `AgentCard` deleted) and edits `get_agents_launchability`'s docstring (its task 2.3); the Hub-side verdict stays in this block, so only a docstring-sized line shift is expected **(rebase at IMPL: that change unbuilt at R2)**. `flags` are the runner's **raw** flags, sentinels included. | `(True, None)` | today's `agents.py:249-261` branch, text unchanged |
+| `collaboration` | `(flags: Optional[Sequence[str]], *, yolo: bool) -> tuple[bool, Optional[str]]` | Can a triggered run collaborate? It is called only for a bound, runnable agent whose Hub address is known (`agents.py:239-265`). **R2:** `a-runner-that-cannot-collaborate-says-so-where-it-is-bound` (unbuilt at R2) moves only the *display* (UI `RunnerPicker`, `AgentCard` deleted) and edits `get_agents_launchability`'s docstring (its task 2.3); the Hub-side verdict stays in this block, so only a docstring-sized line shift is expected **(rebase at IMPL: that change unbuilt at R2)**. `flags` are the runner's **raw** flags, sentinels included; **`None` means no flags** (review 3: `Runner.flags` is nullable and NULL is the usual case). | `(True, None)` | today's `agents.py:249-261` branch, text unchanged |
 | `guard_env` | `(proc_env: Optional[dict], config: Mapping) -> Optional[dict]` | Strips ambient variables that would silently redirect this harness's auth or endpoint. It runs last in `resolve_agent_env`, and receives the same `config` that function did. It must not raise (D15). **R3:** R2 passed `env_vars`. Slice 5 needs the runner's `provider_config` there (its D7: set `COPILOT_PROVIDER_*` or strip them), which it adds to that `config`, so the member takes the whole mapping. Claude's guard reads `config.get("env_vars") or {}` itself, exactly as `launchability.py:157` does. | today's `ANTHROPIC_BASE_URL` guard (`launchability.py:190-194`) | identity |
 | `transport_sentinels` | `ClassVar[tuple[str, ...]]` | Flags that select this runner's transport. The trigger strips the **union over every adapter** from argv, whichever runner is spawned. Today the Codex sentinels are stripped from every runner's flags, a Claude runner's included (`agent_trigger.py:1209-1211`), and a per-adapter strip would stop doing that for Claude. | `()` | `TRANSPORT_SENTINELS` (`codex_appserver.py:76`) |
-| `transport` | `(flags: Sequence[str]) -> StreamTransport \| RpcTransport` | The transport a run with these **raw** flags uses (before the sentinel strip: a stripped list would send every `--no-app-server` runner to app-server; `test_agent_trigger.py:2491`, `test_codex_exec_argv_never_carries_a_transport_sentinel`, fails if the trigger passes stripped flags, because `PipeSession.spawn` is then never called). | `ClaudeStreamTransport` | `CodexAppServerTransport` unless `APP_SERVER_OPT_OUT_FLAG in flags`. **R2:** this is `codex_appserver.uses_app_server`'s body (`:79-89`) minus its `runner_cli != "codex"` guard (`:85`), which the adapter lookup replaces. `uses_app_server` is **deleted**: its two callers (`agent_trigger.py:1210`, `agents.py:253`) read `adapter.transport(flags).kind` / `adapter.collaboration`, no test imports it, and its `!= "codex"` would fail task 4.4 |
+| `transport` | `(flags: Optional[Sequence[str]]) -> StreamTransport \| RpcTransport` | The transport a run with these **raw** flags uses (`None` means no flags: `Runner.flags` is `Mapped[Optional[Any]]`, `nullable=True`, `db/models.py:331`, and `RunnerCreate.flags` defaults to `None`, `schemas/runners.py:17`; every runner in the trial database has none. An adapter that tests `APP_SERVER_OPT_OUT_FLAG in flags` raises `TypeError` on `None`, turning `GET /agents/launchability` into the 500 D15 forbids) (before the sentinel strip: a stripped list would send every `--no-app-server` runner to app-server; `test_agent_trigger.py:2491`, `test_codex_exec_argv_never_carries_a_transport_sentinel`, fails if the trigger passes stripped flags, because `PipeSession.spawn` is then never called). | `ClaudeStreamTransport` | `CodexAppServerTransport` unless `APP_SERVER_OPT_OUT_FLAG in (flags or ())`. **R2:** this is `codex_appserver.uses_app_server`'s body (`:79-89`) minus its `runner_cli != "codex"` guard (`:85`), which the adapter lookup replaces. `uses_app_server` is **deleted**: its two callers (`agent_trigger.py:1210`, `agents.py:253`) read `adapter.transport(flags).kind` / `adapter.collaboration`, no test imports it, and its `!= "codex"` would fail task 4.4 |
+| `stream_transport` | `() -> Optional[StreamTransport]` | **Review 2, added.** The runner's stream transport, whatever its flags select, or `None` if it has none. It exists because `build_command` (D6) must build `exec` argv for a Codex call with no flags, which `transport(flags)` would send to app-server (no `build_launch`): `test_runner_parsing.py:177-200`, `test_agent_tool_surface_phase7.py:81`, `test_codex_posture_ordering.py:167`, `test_runner_command_env.py` and `test_runner_command_overrides.py` call `build_command(runner="codex", …)` with no flags and expect `codex exec`, and the trigger passes flags with the sentinels already stripped (`agent_trigger.py:1211`). Only `build_command` reads it; the trigger's executor choice stays `transport(raw_flags).kind` (task 3.3). | `ClaudeStreamTransport` | `CodexExecTransport` |
 | **`decide_posture`** (at rest) | `posture_at_rest(axes: AccessAxes, *, yolo: bool) -> str` | The posture a run gets when no override states one. It reads `axes.approvals`, not the tool surface (D4). **R2:** `the-permissions-pill-shows-the-posture-the-run-gets` (unbuilt at R2) adds `runner_commands.posture_at_rest(provider: str, access_path: str, yolo: bool) -> str` (its D1), read by `build_command` at `:238-242` and by a new agents-list serializer field pair `permission_mode_at_rest` / `permission_mode_built_in` (its D2/D3, `agents.py:595-615`, via a new `launchability.agent_config(session_data, agent_name, agent_config)` merge helper). This member replaces that function; the list route then computes `get_adapter(bound_runner.cli).posture_at_rest(resolve_access_axes(adapter, hub_client=…, flags=bound_runner.flags), yolo=…)`, and `None` for no adapter where that change says `null` for an unknown cli **(rebase at IMPL: the-permissions-pill-shows-the-posture-the-run-gets unbuilt at R2)**. | `workspace` if `approvals != "none"`, else `acceptEdits`; `bypassPermissions` if `yolo` | `acceptEdits` (that change's D4(c) and task 1.3: *"a Codex-bound one reads `acceptEdits`"*; `_codex_posture(None)` is the default pair, `agent_trigger.py:2926-2952`); `bypassPermissions` if `yolo`. **R3, from code:** that is what a yolo Codex run gets on both transports: app-server starts `danger-full-access`/`never` for `yolo` with no posture (`codex_appserver.py:235-236`), `exec` gets `--dangerously-bypass-approvals-and-sandbox` (`runner_commands.py:343-344`), and `FULL_ACCESS_PERMISSION_MODE` is `"bypassPermissions"` (`model_catalog.py:184`). The permissions-pill change is still unbuilt at R3 and its design states `yolo` for Claude only; at IMPL the adapter reproduces the landed function's Codex value byte for byte, and if that value is not `bypassPermissions` the difference is filed as a finding, not changed here |
 | `mcp_tool_prefix` | `ClassVar[Optional[str]]` | How this harness addresses the Hub's MCP tools, when known. **R2:** `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` (unbuilt at R2) adds `CLAUDE_FAMILY_RUNNERS` in `runner_commands.py` (read by `build_command` at `:179`, its task 2.1), a `runner` parameter on `_render_hub_agent_context` (task 2.3), `tool_prefix` on `_tool_surface_lines`/`_mcp_lines` (task 2.2) and on `access_path_notice(access_path, tool_prefix="")` (task 2.4; on `ef55e6f` the renderer call is `agent_trigger.py:1123`, the notice `:1173`, `_render_hub_agent_context` `agents.py:1609`, `_tool_surface_lines` `:1508`, `_mcp_lines` `:1476`, `access_path_notice` `launchability.py:402`). After this change the trigger passes `tool_prefix = adapter.mcp_tool_prefix or ""` where that change tests `runner in CLAUDE_FAMILY_RUNNERS` and the described path is `"mcp"`. Equivalent, because the trigger's `runner` is `Runner.cli` (`:764`), so the set's `claude_proxy`/`native` members never occur **(rebase at IMPL: a-claude-run-is-told-its-agentweave-tools-by-their-full-names unbuilt at R2)**. | `"mcp__agentweave__"` | `None` |
 | `host_tool_note` | `ClassVar[Optional[str]]` | The sentence about the host's own similar-named tool. **R2:** that change renders it from a `host_tools_note: bool` argument set from `runner in CLAUDE_FAMILY_RUNNERS` (its task 2.2), with the text in `agents.py`. Here the text moves onto the adapter and the renderer takes `Optional[str]`, because slice 2 needs a different sentence for Copilot (its D16: *"Copilot has its own tools with similar purposes (such as its task tool)…"*); a bool cannot carry it **(rebase at IMPL: same change)**. | its `SendMessage` sentence | `None` |
@@ -163,7 +167,7 @@ docstring states its contract.
 | `refusal_label` | `(method: str, subject: Mapping) -> str` | The `tool_name` a `permission_denied` event carries. `subject` for the same reason (`_on_refusal(method, subject)`, `:3179`, reading it at `:3202`, `:3213`). | `codex_appserver.approval_label` (`:194-196`) |
 | `workspace_verdict` | `(method: str, subject: Mapping, workspace: Optional[str]) -> Optional[dict]` | **R2, added.** What "Workspace only" would decide for a request that is being put to the operator, shown on the card. Must not raise (`None` on failure). **(rebase at IMPL: `an-ask-me-card-says-what-workspace-only-would-decide` unbuilt at R2.)** That change adds `codex_appserver.workspace_verdict(subject, workspace)` and has `_await_operator_permission` call it directly with a new `workspace=` argument (its D1, task 2.4). Once `_await_operator_permission` serves every RPC transport (D9), a direct call to a Codex helper there is a runner branch, so the executor asks the transport. | `codex_appserver.workspace_verdict(subject, workspace)` |
 | **`context_window`** | `context_window_source` | As on `StreamTransport`. | `"reported"`: app-server sends `modelContextWindow` itself (`codex_appserver.py:303-311`) |
-| **`inject_mcp`** | `(mcp_command: list[str]) -> dict` | The config entry that starts the Hub's tool server in this peer. | `mcp_server_config(mcp_command, env_vars=list(mcp_env_names))` (`codex_appserver.py:652-662`) |
+| ~~`inject_mcp`~~ | `(mcp_command: list[str]) -> dict` | **Review 9: not built in slice 1.** It would have no caller: `codex_appserver.run_turn` builds the entry itself (`codex_appserver.py:965-983`) and is left unchanged, and it cannot call an adapter (`runner_adapters` imports it, D1). D16's rule is that no member exists without a caller, so slice 2 adds it, with this name and shape, on the ACP transport that reads it (its `agentweave-mcp.json` content). It is **not** abstract on `RpcTransport`. | none (the entry stays inside `codex_appserver.run_turn`, reading `CODEX_MCP_ENV_NAMES`, D12) |
 | `run_turn` | `async (req: RpcTurnRequest, cb: RpcCallbacks) -> TurnOutcome` | Spawn the peer, start or resume, send the prompt, answer every request, and map every notification to `cb.on_event` / `on_usage` / `on_accounting` (**`map_events`**, **`usage_from`**). Call `cb.on_session(id)` before the first `on_event`. **`stop`: honour `cb.should_interrupt()` within one poll interval and leave no process behind.** Raise only `FileNotFoundError`, `OSError`, `asyncio.TimeoutError` or `AppServerError` (the tuple `agent_trigger.py:3244` catches). | wraps `codex_appserver.run_turn` (`:904`) with today's arguments (`agent_trigger.py:3217-3243`) |
 
 `RpcTurnRequest` carries `cli, cwd, env, prompt, model, resume_session_id, yolo, mcp_command, config_overrides,
@@ -200,7 +204,7 @@ class AccessAxes:
     approvals: Literal["mcp_permission_tool", "rpc", "none"]   # axis 2: how the Hub answers tool calls
     plane: Literal["mcp", "cli"]                               # axis 3: what the run is *given* to reach the plane
 
-def resolve_access_axes(adapter, *, hub_client: Optional[str], flags: Sequence[str]) -> AccessAxes:
+def resolve_access_axes(adapter, *, hub_client: Optional[str], flags: Optional[Sequence[str]]) -> AccessAxes:
     tool_surface = "none" if hub_client == "cli" else "mcp"
     transport = adapter.transport(flags)
     return AccessAxes(tool_surface, transport.approval_channel(tool_surface),
@@ -208,7 +212,9 @@ def resolve_access_axes(adapter, *, hub_client: Optional[str], flags: Sequence[s
 ```
 
 `flags` is the runner's raw `Runner.flags`, read before the sentinel strip at `agent_trigger.py:1209-1211` (D3,
-`transport`). The trigger resolves the axes at today's `:1106-1107`, where `runner_row` is already in scope (`:764`).
+`transport`). **`None` means no flags** (review 3): `Runner.flags` is nullable, and the agents list and the
+permissions-pill route pass `runner_row.flags` / `bound_runner.flags` raw (`agents.py:253`). No member that takes `flags`
+may assume a list. The trigger resolves the axes at today's `:1106-1107`, where `runner_row` is already in scope (`:764`).
 
 `plane` keeps today's string values (`"mcp"`/`"cli"`), because `described_access_path`, `access_path_notice` and
 `_render_hub_agent_context(access_path=…)` take them (`launchability.py:283-315`, `:402`; `agent_trigger.py:1131`).
@@ -285,7 +291,7 @@ keeps exactly `"mcp"`/`"cli"`: `"shim"` is a value of the *described* path, not 
 | `GET /model-catalog`'s `p.provider == "codex"` (`api/v1/model_catalog.py:26`, landed with the Codex cache change) | **replaced** (R2) | `model_catalog.catalog_source(provider)` (D2). |
 | `RUNNER_CLI` (`launchability.py:33-43`; also named in comments at `:45-47`, `:481`, `inbound_queue.py:218` and `runner_commands.py:142`, which follow the rename) | **renamed `LEGACY_RUNNER_CLI`, kept whole** | `probe_agent` asks `get_adapter(runner)` first, and falls to this table only for a runner string with no adapter. Only a session-configured agent can carry one (`/session/sync`), and its DEAD block (`:21-30`) says `native` and `manual` are still live there. For `claude`/`codex` the adapter's verdict is byte-identical to today's (the `claude_proxy`/`copilot` auth branches never matched them). |
 | the `copilot` row and its env-token auth branch (`:42`, `:116-126`) | **kept in this slice; slice 2 deletes them** | Deleting them here, with no Copilot adapter, would send a session-configured `runner: copilot` agent to the name fallback. That names a binary after the agent, which is the masking `RUNNER_UNBOUND` was created to end (`:45-51`). Slice 2's adapter shadows the row (the adapter is asked first), and slice 2 deletes it, together with `test_launchability.py:124-140`. Its auth rule is also wrong: appendix A §E (DOCUMENTED) says the env tokens *override* a stored login, and are not required. |
-| `_display_model`'s legacy rows (`agents.py:557-565`) | **kept for non-adapter strings** | For `claude`/`codex` the value comes from `adapter.display_name`. The `claude_proxy`/`kimi`/`manual`/`opencode`/`codex_mcp` rows still render session-configured agents, and removing them would change their text. |
+| `_display_model`'s legacy rows (`agents.py:557-565`) | **kept for non-adapter strings** | For `claude`/`codex` the value comes from `adapter.display_name`, **with `.get` semantics kept exactly** (review 5): `agent_meta.get("model", adapter.display_name)`, which returns a stored `None` or `""` as it is and falls back only when the key is absent. `agent_meta.get("model") or adapter.display_name` is a different function and must not be written. Tasks 1.7 and 5.4 capture `GET …/agents` to pin it. **(rebase at IMPL: `agents-no-longer-register-themselves` edits `:567-577`, right below.)** The `claude_proxy`/`kimi`/`manual`/`opencode`/`codex_mcp` rows still render session-configured agents, and removing them would change their text. |
 | `parse_opencode_line` (`runner_parsing.py:615`) | **kept** | `usage-accounting` requires OpenCode step normalisation (`openspec/specs/usage-accounting/spec.md:31,41`). It is a parser, not a registry. |
 | `RUNNER_CONFIGS` (`src/agentweave/constants.py`) | **kept, untouched** | It is the CLI's table, read by `doctor`. F393 annotated it (`f228962`). The Hub never imports it. |
 
@@ -303,8 +309,15 @@ and stays (D13).
 `build_command(*, runner, cli, prompt, model, context_file, session_id, yolo, mcp_command, extra_flags,
 control_overrides, restrict_spec_writes)` keeps its signature and moves from `runner_commands.py` to
 `runner_adapters/__init__.py`. It does three things: look up the adapter (`UnsupportedRunnerError` if there is none),
-take its **stream** transport for these flags (Codex: `exec`), and call `build_launch` with `axes` derived from
-`mcp_command`. `runner_commands` keeps the two builders, the posture constants and `UnsupportedRunnerError`, so
+take **`adapter.stream_transport()`** (Codex: `exec`; `UnsupportedRunnerError` if it is `None`), and call
+`build_launch` with `axes` derived from `mcp_command`. **Review 2:** it never calls `transport(flags)`. Its callers pass
+flags with the sentinels already stripped (`agent_trigger.py:1211`), or none at all (the tests listed at D3's
+`stream_transport` row), and `transport` would send both to Codex app-server, which has no `build_launch`. The
+trigger calls `build_command` only when `transport(raw_flags).kind == "stream"` (below), so for a real run the two
+selections agree. **Review 8.1: the axes are derived by truthiness**, exactly as every check is today (`if mcp_command`,
+`runner_commands.py:240`, `:250`, `:317`): `tool_surface = "mcp" if mcp_command else "none"`. An `is not None` test
+would give `mcp_command=[]` the approver axis and default `workspace`, so a Claude run would get `--permission-mode
+manual` with no approver and refuse every call. Task 1.1 carries an `mcp_command=[]` case. `runner_commands` keeps the two builders, the posture constants and `UnsupportedRunnerError`, so
 `runner_adapters → runner_commands` is the only direction. R1 counted 11 test files that name both `build_command` and
 `runner_commands`; R2 counts **12** on `ef55e6f` (`grep -l build_command hub/tests/*.py | xargs grep -l runner_commands`). Their import line changes,
 and nothing else in them does.
@@ -313,9 +326,19 @@ and nothing else in them does.
 calls it as today. Five tests patch `hub.api.v1.agent_trigger.build_command` to capture its kwargs
 (`test_agent_trigger.py:463`, `:505`, `:696`, `:830`, `:2960`, all on `claude`). Second, `probe_binary` calls
 `shutil.which` and `os.path.isfile` through the module attribute (`import shutil`, never `from shutil import which`).
-222 test sites (R2 count on `ef55e6f`; R1 said 218) patch `hub.launchability.shutil.which`, and that patches the attribute on the `shutil` module object
-itself, so it keeps working from `runner_adapters/base.py`. A `from`-import would silently fall through to the real
-PATH: green locally, where `claude` is installed, and red on CI.
+222 test sites in 46 files (R2 count on `ef55e6f`, re-counted by the review on `450de52`; R1 said 218) patch
+`hub.launchability.shutil.which`, and that patches the attribute on the `shutil` module object itself, so it keeps
+working from `runner_adapters/base.py`. A `from`-import would silently fall through to the real PATH: green locally,
+where `claude` is installed, and red on CI.
+
+**Review 4: the patch targets move; no lint-suppressed seam.** That argument holds only while `hub.launchability` has a
+`shutil` attribute. `shutil` is used exactly once there (`launchability.py:98`), and D14 moves that line into
+`base.probe_binary`, so the import becomes unused and CI's `ruff check hub/` fails on F401. Deleting the import makes
+all 222 patches raise `AttributeError` (loud, not silent). Keeping `import shutil  # noqa: F401` as a test seam would
+leave a module importing something it does not use for the sake of its tests. So task 3.2 deletes the import and
+rewrites the 222 targets, in 46 files, to `hub.runner_adapters.base.shutil.which` (a mechanical `sed`; the patched
+object is the same, so no test's meaning changes). `grep -rn "hub.launchability.shutil" hub/tests` then finds nothing.
+No test patches `hub.launchability.os` (`grep`: none), so `os` needs nothing.
 
 **The trigger builds argv only for a stream transport.** Today `cmd` is built for every run, and on Codex app-server
 it is passed along unused (`agent_trigger.py:1213-1229`, `:2304-2309`). After the change it is built only when
@@ -344,7 +367,11 @@ Slice 2 adds Copilot's table to `workspace_writes.py` and its adapter together, 
 
 `worker.build_worker_command(cli=…)` and `conversation_titles.build_title_command(cli=…)` keep their names and
 signatures. Tests and `test_worker_at_mention.py` call them. Each becomes `get_adapter(cli)` then `one_shot(purpose,
-…)`, returning `None` when there is no adapter. `worker.parse_envelope` becomes `adapter.parse_one_shot`.
+…)`, returning `None` when there is no adapter. `worker.parse_envelope(cli, stdout)` (`worker.py:323`) **keeps its name and
+signature** as a thin wrapper over `get_adapter(cli).parse_one_shot(stdout)` (review 7): its `cli == "codex"` branches
+(`:324`, `:326`) go, and its callers stay unchanged, among them the one `worker-spend-counts-against-the-budget` adds in
+`conversation_titles.py` (its D4). A `cli` with no adapter gives the same `(None, WorkerUsage(), error)` shape the
+unknown-CLI branch gives today.
 `run_worker`'s schema-file step (`worker.py:450-453`) reads `adapter.one_shot_takes_schema`.
 
 `parse_claude_envelope` and `parse_codex_envelope` move into the adapter modules. `WorkerUsage`, `extract_json_object`
@@ -363,7 +390,14 @@ title-text step are `one_shot_env` and `title_text` (D16), so neither spawn help
 - `_execute_run` (stream): `PipeSession` if `transport.spawn_kind == "pipe"`, else `PtySession`
   (`agent_trigger.py:2345-2359`). `parse = transport.map_events` (`:2451`, `:2468-2470`). After exit, `transport.usage_from(…)`
   when `session_id` is known (`:2574-2587`).
-- `_execute_codex_appserver_run` → `_execute_rpc_run(adapter, transport, …)`. The literal `runner="codex"` (`:3089`,
+- `_execute_codex_appserver_run` → `_execute_rpc_run(adapter, transport, …)`. **Its other keyword parameters are today's
+  unchanged** (`agent_trigger.py:3040-3058`: `project_id, agent, run_id, conversation_id, cli, prompt, model, work_dir,
+  known_session_id, yolo, mcp_command, env, worktree, repo_root, permission_mode, config_overrides`), plus `extra_flags`
+  and `restrict_spec_writes` defaulting to `[]`/`False` (D3). It maps them into `RpcTurnRequest`/`RpcCallbacks`: `cwd`
+  and `workspace` both from `work_dir`, `resume_session_id` from `known_session_id`, `on_session` from
+  `_bind_session_id`. That mapping is the refactor's largest move on the one path no drive covers (Codex is undrivable),
+  so the RPC golden (task 1.4, review 1) calls this executor with the same inputs before and after, and records what
+  reaches `codex_appserver.run_turn`, callables included by what they do. The literal `runner="codex"` (`:3089`,
   `:3261`, `:3350`, `:3445`) becomes `adapter.name`. `_codex_posture` moves to `CodexAppServerTransport.posture_for`.
   `_CODEX_APPROVAL_LABELS` and `codex_approval_label` become `permission_card_label` and `refusal_label`.
   `_codex_decision_timeout` is renamed `_decision_timeout`, because it reads only `AW_DECISION_TIMEOUT` and is not
@@ -443,6 +477,8 @@ Slice 2's ACP transport declares `"reported"` (`usage_update.size`, VERIFIED-LOC
 return shape. It then calls `get_adapter(runner).launchability(name, config)` when there is an adapter, and today's
 legacy path over `LEGACY_RUNNER_CLI` otherwise. The shared binary check (`:91-99`, including the pinned `cli` override)
 becomes `base.probe_binary(binary, cli_override, name)`, and both paths call it, so the two cannot drift.
+`launchability.py`'s `import shutil` (`:13`), whose only use is `:98`, is deleted with the move, and the 222 test patch
+targets move to `hub.runner_adapters.base.shutil.which` (D6, review 4).
 
 ## D15 — What each route returns when the function it calls raises
 
@@ -462,9 +498,14 @@ becomes `base.probe_binary(binary, cli_override, name)`, and both paths call it,
   empty config, with `env_vars` set, and with an ambient `ANTHROPIC_BASE_URL`.
 - (R3) `GET /agents/launchability` calls the collaboration verdict per agent in a loop (`agents.py:241-265`), with no
   `try`. An adapter `collaboration` that raised would make the whole route a 500 instead of one agent's verdict, so it
-  must not raise either; `transport(flags)` and `resolve_access_axes` are pure over strings and lists.
-- The worker and the titler: `one_shot` returns argv and cannot raise on well-typed input, except `FileNotFoundError` when
-  the executable cannot be resolved (slice 2 D14 R3), which `run_worker` and the titler catch without naming a runner. The worker's `OUTCOMES`
+  must not raise either; `transport(flags)` and `resolve_access_axes` are pure over strings and lists, **and over `None`**,
+  which is what `runner_row.flags` usually is (review 3; task 1.5(k) and 1.6 call them with `None`).
+- The worker and the titler: `one_shot` returns argv and cannot raise on well-typed input. The contract allows
+  `FileNotFoundError` when the executable cannot be resolved (slice 2 D14 R3), **but in slice 1 neither the Claude nor the
+  Codex adapter raises it, and today nothing would catch it** (review 6): `run_worker` calls `build_worker_command`
+  outside any `try` (`worker.py:454-459`; its `OSError` catch is inside `_run_worker_process`, `:362`, which runs later),
+  and `generate_conversation_title` calls `build_title_command` unguarded (`conversation_titles.py:268-270`). Slice 2
+  adds both catches, runner-free, with the adapter that can raise (its D14 R3). Nothing differs in slice 1. The worker's `OUTCOMES`
   (`worker.py:76-85`) are unchanged: no adapter is `unsupported_cli`.
 - `GET /model-catalog` (R2): `catalog_source` cannot raise (D2).
 - The agents list (after the permissions-pill change, R2): `posture_at_rest` and `resolve_access_axes` are pure; no
@@ -522,18 +563,19 @@ member is added by that slice with the default stated, and slice 1's conformance
 | `name` | `ClassVar[str]` | built | 1, 2 |
 | `binary` | `ClassVar[str]` | built | 1, 2 |
 | `display_name` | `ClassVar[str]` | built | 1, 2 |
-| `catalog_provider` | `ClassVar[str]` | built | 1, 2, 5 (read only; see above) |
+| `catalog_provider` | `ClassVar[str]`; equals `name` (task 1.5(a), review 10) | built | 1, 2, 5 (read only; see above) |
 | `launchability` | `(agent: str, config: Mapping) -> LaunchVerdict`; must not raise | built | 1, 2 (cached `CopilotProbe`), 5 (`config["provider_config"]`, from slice 5's `runner_probe_config`) |
-| `collaboration` | `(flags: Sequence[str], *, yolo: bool) -> tuple[bool, Optional[str]]`; must not raise | built | 1, 2 (`(True, None)`) |
+| `collaboration` | `(flags: Optional[Sequence[str]], *, yolo: bool) -> tuple[bool, Optional[str]]`, `None` = no flags; must not raise | built | 1, 2 (`(True, None)`) |
 | `guard_env` | `(proc_env: Optional[dict], config: Mapping) -> Optional[dict]`; must not raise | built | 1, 2 (GitHub-token strip), 5 (`COPILOT_PROVIDER_*` set or strip) |
 | `transport_sentinels` | `ClassVar[tuple[str, ...]]` | built | 1, 2 (`()`) |
-| `transport` | `(flags: Sequence[str]) -> StreamTransport \| RpcTransport`, raw flags | built | 1, 2, 3 |
+| `transport` | `(flags: Optional[Sequence[str]]) -> StreamTransport \| RpcTransport`, raw flags, `None` = no flags | built | 1, 2, 3 |
+| `stream_transport` | `() -> Optional[StreamTransport]`; the runner's stream transport whatever the flags, `None` if it has none | built (review 2) | 1 (`build_command`, D6), 2 (`None` for an ACP-only Copilot) |
 | `posture_at_rest` | `(axes: AccessAxes, *, yolo: bool) -> str` | built (rebase at IMPL: the permissions-pill change) | 1, 2 |
 | `mcp_tool_prefix` | `ClassVar[Optional[str]]` | built (rebase at IMPL: the full-names change) | 1, 2 (`"agentweave-"`), 3 |
 | `host_tool_note` | `ClassVar[Optional[str]]` | built (rebase at IMPL: same) | 1, 2, 3 (also in the shim form) |
 | `mcp_env_names` | `ClassVar[Optional[tuple[str, ...]]]` | built | 1, 2 (`None`) |
 | `write_tool_kinds` | `ClassVar[Mapping[str, str]]` | built | 1, 2, 3 (restated in `mcp_server.py`, which cannot import adapters) |
-| `one_shot` | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]`; neutralises `prompt` itself; raises only `FileNotFoundError`, when the executable cannot be resolved (added at contract reconciliation, 2026-09-28, requested by slice 2: its D14 R3 `CopilotExecutableNotFound`) | built | 1, 2 |
+| `one_shot` | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]`; neutralises `prompt` itself; raises only `FileNotFoundError`, when the executable cannot be resolved (added at contract reconciliation, 2026-09-28, requested by slice 2: its D14 R3 `CopilotExecutableNotFound`). Neither slice-1 adapter raises it, and slice 2 adds the two catches (D15, review 6) | built | 1, 2 |
 | `one_shot_takes_schema` | `ClassVar[bool]` | built | 1, 2 |
 | `parse_one_shot` | `(stdout: str) -> tuple[Optional[str], WorkerUsage, Optional[str]]` | built | 1, 2, 4 (fills `WorkerUsage` from the capture) |
 | `one_shot_env` | `(purpose: Literal["worker", "title"]) -> Optional[dict]`; `None` = inherit the Hub's environment | slice 2 adds; base default returns `None` | 2 (its D14: `COPILOT_HOME=<worker home>`, token variables stripped; the new `env` parameter of `_run_worker_process` and `_run_titler`) |
@@ -569,7 +611,7 @@ member is added by that slice with the default stated, and slice 1's conformance
 | `refusal_label` | `(method: str, subject: Mapping) -> str` | built | 1, 2 (same) |
 | `workspace_verdict` | `(method: str, subject: Mapping, workspace: Optional[str]) -> Optional[dict]`; must not raise | built if the ask-me-card change has landed, else that change adds it | 1, 2 |
 | `context_window_source` | `ClassVar[Literal["reported", "catalog"]]` | built | 1, 2 (`"reported"`) |
-| `inject_mcp` | `(mcp_command: list[str]) -> dict` | built | 1, 2 (`agentweave-mcp.json`'s content) |
+| `inject_mcp` | `(mcp_command: list[str]) -> dict` | **slice 2 adds** (review 9: no slice-1 caller; not abstract on the ABC, Codex app-server has none) | 2 (`agentweave-mcp.json`'s content) |
 | `run_turn` | `async (req: RpcTurnRequest, cb: RpcCallbacks) -> TurnOutcome`; raises only the tuple `agent_trigger.py:3244` catches; honours `cb.should_interrupt()` and leaves no process behind | built | 1, 2, 3 (defers the prompt, calls `cb.render_surface`), 4 (owns the ledger, one whole-turn `on_accounting`) |
 | `tests_mcp_before_first_prompt` | `ClassVar[bool] = False` | slice 3 adds (moved here from `RunnerAdapter`, above) | 3 (`True` on the ACP transport) |
 
@@ -578,7 +620,7 @@ member is added by that slice with the default stated, and slice 1's conformance
 | Type | Fields | Status | Used by |
 |---|---|---|---|
 | `AccessAxes` | `tool_surface: "mcp"\|"none"`, `approvals: "mcp_permission_tool"\|"rpc"\|"none"`, `plane: "mcp"\|"cli"` | built, final | 1, 2, 3 |
-| `resolve_access_axes` | `(adapter, *, hub_client: Optional[str], flags: Sequence[str]) -> AccessAxes` | built, final (axis 1 is `hub_client`-only through slice 5) | 1, 3 |
+| `resolve_access_axes` | `(adapter, *, hub_client: Optional[str], flags: Optional[Sequence[str]]) -> AccessAxes`, `None` = no flags | built, final (axis 1 is `hub_client`-only through slice 5) | 1, 3 |
 | `LaunchVerdict` | today's `probe_agent` keys; `verdict_pending: bool` optional (`total=False`) | key added by slice 2 | 1, 2 |
 | `LaunchRequest` | `build_command`'s parameters plus `axes` | built | 1 |
 | `RpcTurnRequest` | `cli, cwd, env, prompt, model, resume_session_id, yolo, mcp_command, config_overrides, permission_mode, workspace, extra_flags, restrict_spec_writes` | built | 1, 2 |
@@ -597,17 +639,35 @@ member is added by that slice with the default stated, and slice 1's conformance
   `permission_mode` ∈ {none, acceptEdits, workspace, manual, bypassPermissions} × `mcp_command` ∈ {None, set} ×
   `yolo` × `restrict_spec_writes`, plus one-axis variations of `model`, `session_id`, `context_file` (present and
   missing), `extra_flags` and `effort`. They are captured from today's code into
-  `hub/tests/fixtures/runner_adapters/argv_golden.json`, with the context path written as `<CTX>`. After the change,
-  `get_adapter(r).transport(flags)` builds each case and it must be byte-equal. This fails today: there is no module.
+  `hub/tests/fixtures/runner_adapters/argv_golden.json`, with the context path written as `<CTX>`. (Review 8) Also
+  `mcp_command=[]` (D6's truthiness), and `effort` crossed with each `permission_mode` (the order `control_args` are
+  spliced). After the change, `get_adapter(r).stream_transport().build_launch(LaunchRequest(...))` builds each case
+  with the golden's own flags, and `runner_adapters.build_command(...)` with the same arguments; both must be
+  byte-equal (review 2: never `transport(flags)`, which is app-server for a Codex case with no flags). This fails
+  today: there is no module.
 - **Golden events** (task 1.3): the JSONL lines already inline in `test_runner_parsing.py` (live-shaped Claude
   `stream-json` and Codex `exec --json`) go into `claude_stream.jsonl` and `codex_exec.jsonl`. Today's selection
   (`parse_claude_line`, and `parse_codex_line(model=…)`) produces `stream_events_golden.json`, the sequence of
   `(kind, content, payload, usage, accounting, session_id)`. `transport.map_events` must reproduce it.
-- **Golden one-shot** (task 1.3): worker and title argv for each CLI × model/no model × schema path.
-- **Golden RPC wiring** (task 1.4): the keyword arguments `_execute_codex_appserver_run` passes to
-  `codex_appserver.run_turn`, for each `permission_mode` and with/without `mcp_command`, with callables recorded by name.
-  They are compared with what `CodexAppServerTransport.run_turn` passes.
-- **Conformance** (task 1.5): D2's four-way set equality and order; D7's write-tool union and disjointness; D11's
+- **Golden one-shot** (task 1.3): worker argv for each CLI × model/no model × schema path; title argv for each CLI ×
+  model/no model only (review 8.3: `build_title_command` takes no schema, `conversation_titles.py:71`).
+- **Golden RPC wiring** (task 1.4, rewritten after review 1): the keyword arguments that reach
+  `codex_appserver.run_turn` when the **executor** runs, captured from today's `_execute_codex_appserver_run` and
+  compared with what `_execute_rpc_run` (D9) passes for the same inputs. So the request-building that moves (D9's
+  parameter → `RpcTurnRequest`/`RpcCallbacks` mapping) is what the golden sees, not a request the test builds itself.
+  The inputs vary `permission_mode` (five values) × `mcp_command` (None, set) × `yolo` (False, True), plus one-axis
+  variations of `known_session_id` (None, `"thread-x"`), `config_overrides` (`{}`, `{"model_reasoning_effort":
+  "high"}`) and `model` (None, `"gpt-5.5"`), with a `work_dir` and an `env` of distinctive values. Callables are recorded
+  by **behaviour**: `request_approval("item/fileChange/requestApproval", subject)` invoked with
+  `_await_operator_permission` patched, recording its kwargs (`method`, `subject`, `timeout_seconds` with
+  `AW_DECISION_TIMEOUT` set and unset in `env`); `on_refusal` invoked, recording the persisted and broadcast
+  `tool_name`; `should_interrupt()` before and after the run id is added to `_stop_requested`; `on_thread_started` /
+  `on_session` invoked, recording the bound session id. A direct `CodexAppServerTransport.run_turn(RpcTurnRequest,
+  RpcCallbacks)` call against the same golden stays as a second assertion.
+- **Agents list** (tasks 1.7, 5.4, review 5): `GET …/agents` per agent (`runner`, `display_model`, and
+  `permission_mode_at_rest`/`permission_mode_built_in` once the permissions-pill change has landed) for a Claude-bound
+  agent, a Codex-bound agent with NULL flags, and one with `hub_client: "cli"`, before and after.
+- **Conformance** (task 1.5): D2's four-way set equality and order, and `catalog_provider == name` (review 10); D7's write-tool union and disjointness; D11's
   instruction channel against argv; D13's window source; `launchability` not raising; `ADAPTERS` instantiating (an
   ABC with a missing member fails here).
 - **Axes** (task 1.6): the five rows of D4's table.
@@ -796,6 +856,53 @@ member is added by that slice with the default stated, and slice 1's conformance
     `tests_mcp_before_first_prompt` on the transports, `AccessAxes.plane` two-valued and axis 1 `hub_client`-only
     (slice 3 agrees), `compaction_percent` (slice 4 agrees).
 
+- **Review fixes, 2026-09-28** (task 0.3: Opus adversarial review `spec-queue/tracks/reviews/ghcp-s1-2026-09-28.md`, on
+  `450de52`, verdict REVISE). Each finding was re-checked against the code before it was applied.
+  - **1 (BLOCKING), applied.** Confirmed: the executor builds the `codex_run_turn` call from its own parameters
+    (`agent_trigger.py:3040-3058`, `:3217-3243`) and the old task 1.4 bypassed that mapping. Task 1.4 now drives
+    today's `_execute_codex_appserver_run` and the new `_execute_rpc_run` with the same inputs (permission mode × MCP ×
+    yolo, plus `known_session_id`, `config_overrides`, `model`), and records callables by behaviour
+    (`request_approval` → `_await_operator_permission`'s kwargs with and without `AW_DECISION_TIMEOUT`; `on_refusal` →
+    the persisted `tool_name`; `should_interrupt` before/after `_stop_requested`; the bound session id). D9 states that
+    `_execute_rpc_run` keeps today's keyword parameters; task 3.4 names the mapping and runs 1.4's test; *Tests that can
+    fail* rewritten. One note: `cwd` and `workspace` both come from `work_dir` today, so a swap between them cannot be
+    observed; the golden records both anyway.
+  - **2, applied.** Confirmed at `codex_appserver.py:79-89` and `test_runner_parsing.py:177-200`. Added
+    `RunnerAdapter.stream_transport() -> Optional[StreamTransport]` (D3, D16); D6's `build_command` uses it; tasks 1.2,
+    2.1-2.3 and *Tests that can fail* changed. The trigger's executor choice stays `transport(raw_flags).kind`.
+  - **3, applied.** Confirmed `Mapped[Optional[Any]]`, `nullable=True` (`db/models.py:331`) and
+    `RunnerCreate.flags = None` (`schemas/runners.py:17`). `flags: Optional[Sequence[str]]`, `None` = no flags, on
+    `transport`, `collaboration` and `resolve_access_axes` (D3, D4, D15, D16); `None` cases added to 1.5(k) and 1.6.
+  - **4, applied (the second option).** Confirmed: `shutil` is used once in `launchability.py` (`:98`), and 222 patches in
+    46 files target `hub.launchability.shutil.which`. The targets move to `hub.runner_adapters.base.shutil.which` and the
+    import is deleted (D6, D14, task 3.2, test guide 9). A `noqa` import kept only as a test seam was rejected as the
+    less clean design.
+  - **5, applied.** Confirmed `agent_meta.get("model", "Claude")` (`agents.py:557-565`). D5 fixes `.get("model",
+    adapter.display_name)` semantics; tasks 1.7, 3.6, 5.4 and test guide 6 capture `GET …/agents` for three agents.
+  - **6, applied.** Confirmed `worker.py:454-459` and `conversation_titles.py:268-270` are unguarded. D15 and D16's
+    `one_shot` row now say neither slice-1 adapter raises and slice 2 adds both catches.
+  - **7, applied.** Both changes exist and edit what the review says (`worker-spend-counts-against-the-budget` D4;
+    `agents-no-longer-register-themselves` tasks 2.2, 2.3). Named in the proposal's *Depends on* and this file's header
+    as *(rebase at IMPL)*; D8 keeps `worker.parse_envelope(cli, stdout)` as an adapter-backed wrapper (task 3.5). The
+    one-line note the review asks for in `worker-spend-counts-against-the-budget` is a sibling edit, not made here.
+  - **8, applied.** Confirmed truthiness at `runner_commands.py:240`, `:250`, `:317` and `build_title_command`'s
+    schema-free signature (`conversation_titles.py:71`). D6 states truthiness; task 1.1 adds `mcp_command=[]` and
+    `effort` × `permission_mode`; task 1.3's title matrix is CLI × model only.
+  - **9, applied (drop).** Confirmed `codex_appserver.run_turn` builds its entry itself (`:965-983`). `RpcTransport.inject_mcp`
+    is not built in slice 1; slice 2 adds it with the same name and shape (D3, D16, task 2.3).
+  - **10, applied.** Confirmed the four catalog-by-CLI-name sites. Task 1.5(a) asserts `catalog_provider == name`; D3,
+    D16 say so.
+  - **11, applied.** The `runner-registry` requirement now forbids branching on a *supported* runner CLI's name and
+    allows the legacy name matches D5 keeps; the proposal's matching sentence narrowed too.
+  - **The Codex `AW_QUESTION_TIMEOUT` finding, sharpened.** Re-verified: a wait configured above 240 s ends at 240 s
+    and `POST /questions/wait-ended` refuses the report (`agent_actions.py:682-710`), so the task waits for the run-end
+    sweep; below 240 s the tool outwaits the Hub. Open question 4, the proposal's *Out of scope* and task 6.2(c) say so.
+    **One citation corrected against the review:** the review's `mcp_server.py:1617`/`:1688` are the *permission*
+    wait's report (`/permission-requests/{id}/expire`, inside `_await_decision`); `ask_user`'s own deadline and report
+    are `mcp_server.py:421` and `:491-497`, which the design now cites. The conclusion is unchanged.
+  - **The review's other two change findings** (6.2(a) F301, 6.2(b) the app-server spec-turn gap) were confirmed by the
+    review and need no edit.
+
 ## Open questions for R2/R3
 
 1. **Rebase onto the night.** Seven changes edit the sites here (proposal, "Depends on"). Re-derive every line marked
@@ -837,11 +944,18 @@ member is added by that slice with the default stated, and slice 1's conformance
    **R3: file it (task 6.2); it is not slice 3's.** Slice 3 says in terms that it keeps the allow-list as this change
    leaves it (its D5, *Codex*). Of the four missing names, only one changes behaviour on Codex:
    - `AW_QUESTION_TIMEOUT`: the trigger sets it from the agent's `question_timeout_seconds` (`agent_trigger.py:1261-1262`),
-     and the Hub records a question's deadline from the same setting (`:617-628`). The tool that waits,
-     `mcp_server.ask_user`, reads it in the MCP child (`mcp_server.py:1005`), which on Codex sees only the five
-     forwarded names (`runner_commands.py:320-328`, `codex_appserver.py:973-979`). So a Codex agent's configured
-     question wait never reaches the wait: it waits the default 240 s while the Hub's record says the configured
-     value. Derived from code, not driven (Codex is undrivable).
+     and the Hub records a question's deadline from the same setting (`effective_question_wait`, `:598-628`). The tool
+     that waits, `mcp_server.ask_user`, reads it in the MCP child (`QUESTION_ANSWER_TIMEOUT =
+     _configured_wait("AW_QUESTION_TIMEOUT", 240)`, `mcp_server.py:1005`), which on Codex sees only the five forwarded
+     names (`runner_commands.py:320-328`, `codex_appserver.py:973-979`). So a Codex agent's configured question wait
+     never reaches the wait: the tool always waits the default 240 s while the Hub's deadline is the configured value.
+     **Sharper, from the review (re-verified):** a wait configured **above 240 s ends at 240 s, and its report is
+     refused**: `ask_user`'s deadline is `QUESTION_ANSWER_TIMEOUT` (`mcp_server.py:421`), after which it calls `POST
+     /questions/wait-ended` (`:491-497`), which silently skips
+     a question that is *"unanswered, with a `wait_expires_at` that has not passed"* (`agent_actions.py:682-710`), because
+     the Hub's deadline is still in the future. The task stays waiting on a question nobody is waiting for until the
+     run-end sweep. A wait configured **below 240 s** makes the tool wait past the Hub's own deadline. Derived from
+     code, not driven (Codex is undrivable).
    - `AW_DECISION_TIMEOUT` does not matter on Codex app-server: the Hub answers its approvals itself and reads the value
      from the run env (`_codex_decision_timeout`, `agent_trigger.py:2955-2974`).
    - `AW_WORKSPACE_DIR` and `AW_PERMISSION_POSTURE` are read only by `approve_tool_call`/`_decide`

@@ -71,7 +71,18 @@ R1's own probes made no model call. Their transcripts are in `evidence/`.
 | `session/prompt` returns `{stopReason, usage}`, and `usage` is cumulative per session | VERIFIED | appendix A §A; `acp4…log` |
 | Raw events: `assistant.usage`, `session.usage_info`, `session.mcp_servers_loaded`, `permission.requested/completed`, `session.idle`, `hook.*`. Events emitted before the session registers are not forwarded | VERIFIED | `acp4…log`; appendix A §A |
 | (R2) The raw-event subscription is `initialize.params.clientCapabilities._meta["github.com/copilot"].events: [<type>…]`; each event arrives as `github.com/copilot/sessionEvent {sessionId, type, timestamp, data}` | VERIFIED | `acp4…log:1`, `:9`, `:25` |
-| (R2) **`acp4…log` holds no `session/request_permission` at all.** Its one MCP permission was `"resolvedByHook": true` (a `permissionRequest` hook in the exploration's probe home answered it, `:23-26`). So the ACP request shapes in the row above are CODE only, and the order of the raw `permission.requested` relative to the ACP request is **unmeasured** | VERIFIED (absence) | `acp4…log:23-26` |
+| (R2) **`acp4…log` holds no `session/request_permission` at all.** Its one MCP permission was `"resolvedByHook": true` (a `permissionRequest` hook in the exploration's probe home answered it, `:23-26`). So the ACP request shapes in the row above are CODE only, and the order of the raw `permission.requested` relative to the ACP request is **unmeasured**. (Review 2026-09-28: R2 read the absence as the hook's doing. That is true of the MCP call only. The `powershell` call `echo hookprobe .` (`:34`) went `preToolUse` → output → `postToolUse` (`:35-39`) with **no** `permissionRequest` hook and **no** `permission.requested`: it never asked. See the next row) | VERIFIED (absence) | `acp4…log:23-26`, `:34-39` |
+| (Review 2026-09-28) **Copilot runs shell commands it classes read-only without raising any permission request.** Under `manual`, *"write and command requests are prompted; read-only requests are auto-approved"*. So the Hub judges only what Copilot asks; which commands Copilot classes read-only is decided in the native runtime and is unmeasured | VERIFIED + DOCUMENTED | `acp4…log:34-39`; `app.js` help text (`defaultPermissionMode`) |
+| (Review) An ACP `url` request (`tNo`) carries the originating call's `toolCallId` (default `"url-permission"`, `XDo`'s `onUrl`), an `intention`, `redirectedFrom`, and `requestSandboxBypass`. `requestSandboxBypass` is an argument of the **shell** tool schema (`NI`: `{command, description, timeout, shellId, async, requestSandboxBypass, requestSandboxPermissive}`), so URL requests can be raised for shell calls. Copilot's own fetch tool is `web_fetch` | CODE | `app.js` `tNo`, `XDo`, `NI` |
+| (Review) `COPILOT_ALLOW_ALL` auto-approves every tool; set to exactly `"true"` it also trusts the working folder, which loads its skills, plugins, MCP servers and hooks. The same test gates workspace MCP sources and repo hooks in the ACP path | DOCUMENTED + CODE | `app.js` help "Environment Variables"; `process.env.COPILOT_ALLOW_ALL==="true"||folderTrustIsTrusted(…)` at each site |
+| (Review) **Mode and allow-all persist.** `loadSession` restores the saved mode and, when it is autopilot, runs `applyAllowAll(_, true)` before answering the load. A change into autopilot syncs allow-all on; a change out of autopilot syncs it off (`s=n===bA&&r!==bA, a=n!==bA&&r===bA`). The mode ids are `…session-modes#agent`, `#plan`, `#autopilot` | CODE | `app.js` `loadSession`, mode transition, `session-modes#…` literals |
+| (Review) A permission a hook resolved never reaches the ACP client (`wirePermissionHandling`: `if(o.data.resolvedByHook)return;`) | CODE + VERIFIED | `app.js` `wirePermissionHandling`; `acp4…log:23-26` |
+| (Review) `mcpServerName` is the server's **config key**, not an identity. `session.mcp_servers_loaded` reports each server's `name`, `status`, `source` (`user`/`workspace`/`plugin`/`builtin`) and `transport` | CODE | SDK `session-events.d.ts` `McpServersLoadedServer`, `McpServerSource` |
+| (Review) `exit_plan_mode.requested` has no ACP method to answer it; only the `-p` path auto-approves it | CODE | `app.js` `surfaceInputRequest`, the mapper's skip list |
+| (Review) `--yolo`, `--allow-all`, `--allow-all-tools|paths|urls` set `approveAllToolPermissionRequests` (`CNo`); `--allow-tool`/`--allow-url` feed the session's permission rules; `--add-dir` widens the trusted directories | CODE | `app.js` `CNo`, `configureSessionPermissions` |
+| (Review) `os.path.realpath(r"\\10.255.255.1\share\x")` blocks **21 s** on this machine | VERIFIED | reviewer's `unc.py` (scratch) |
+| (Review) In `newSession`/`loadSession`, `configureSessionPermissions` registers the listener that sends the ACP request **before** `setupEventForwarding` registers the raw forwarder, so the ACP request precedes the raw `permission.requested` for the same event | CODE | `app.js` `newSession` |
+| (Review) A prompt that is a single text block starting with `/` is run as a Copilot slash command (`/allow-all`, `/permissions`, `/autopilot`, `/add-dir` are listed) | CODE + VERIFIED (list) | `app.js` `xDn`/`kDn`; `acp4…log:6` |
 | (R2) `permission.requested.data.permissionRequest` for MCP is `{kind:"mcp", toolCallId, serverName, toolName:"<server>-<tool>", toolTitle:"<tool>", args, readOnly}`. Because `toolTitle` is set, the ACP request's `title` (CODE: `toolTitle` or `server/tool`) is the bare tool name, not `server/tool` | VERIFIED + CODE | `acp4…log:25` |
 | (R2) A `tool_call` session update for a call arrives **before** its permission (4 messages earlier in the capture), and an MCP call's `title` there is `<server>-<tool>` (`hubprobe-ping`). (R3: only because that call had no `description` argument; see the `VDo` row) | VERIFIED | `acp4…log:20`, `:25` |
 | (R2) The model Auto resolved to is carried by raw `session.tools_updated {model}` (before the first model call) and by every `assistant.usage {model}` | VERIFIED | `acp4…log:10`, `:19` |
@@ -172,8 +183,22 @@ the node parent is killed (appendix A §K).
   [--model <model>]                     # omitted for "auto"/None, Copilot's own default
   [--reasoning-effort <v>]              # from the Effort control
   [--excluded-tools=apply_patch,create,edit,str_replace,str_replace_editor]   # spec turns (D9)
-  [<runner flags>]                      # after transport sentinels are stripped, as for Codex
+  [<runner flags>]                      # after transport sentinels and widening flags are stripped
 ```
+
+**Runner flags that widen approvals (review 2026-09-28, finding 10).** Copilot approves on its own
+account for `--yolo`, `--allow-all`, `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`
+(`CNo` → `approveAllToolPermissionRequests`), `--allow-tool`/`--allow-url` (session permission
+rules) and `--add-dir` (more trusted directories, so fewer `path` requests). None of these shows as
+`allow_all`, so the posture check below cannot see it. `build_acp_argv` therefore removes every
+flag in `COPILOT_WIDENING_FLAGS` (those seven, plus `--autopilot`, `--mode`, `--plan`,
+`--assisted-approval` and `--config-dir`, which moves configuration out of the Hub-owned home), in
+both `--flag value` and `--flag=value` forms, **unless the posture is full access**; `--config-dir`
+is removed under every posture. Each removal emits one `copilot.runner_flag_removed` diagnostic
+naming the flag. Refusing the flags at `PATCH /runners` instead was rejected: a runner is shared by
+agents whose postures differ, and the flag is legitimate under full access. The list is a deny-list,
+so a widening flag a later Copilot adds is not caught; that is stated under Risks, and the posture
+check is the backstop for the ones that do show as `allow_all`.
 
 Why each flag is there:
 
@@ -205,6 +230,28 @@ Two additions to that environment:
   them. An ambient token silently overrides the operator's stored Copilot login (appendix A §E).
   This mirrors the ambient-`ANTHROPIC_BASE_URL` rule for Claude (`launchability.py:190-194`) and
   lives beside it in `resolve_agent_env`.
+- (Review 2026-09-28, finding 3; this slice owns it for **every** Copilot spawn, and slice 5
+  references it.) `COPILOT_TRUST_ENV_NAMES` is removed **unconditionally**, from the inherited
+  environment **and** from the agent's own `env_vars`:
+  - `COPILOT_ALLOW_ALL` (DOCUMENTED: approves every tool; `"true"` also trusts the folder, loading
+    its hooks, plugins and MCP servers);
+  - `COPILOT_ASSISTED_APPROVAL` (an LLM auto-approval, prompt mode) and
+    `COPILOT_PLAN_THEN_AUTOPILOT` (CODE, undocumented);
+  - `GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS`, `GITHUB_COPILOT_PROMPT_MODE_WORKSPACE_MCP` and
+    `GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS` (CODE: prompt-mode opt-ins that load repository hooks,
+    workspace MCP servers and extensions; they matter to D14's one-shot calls, which the titler runs
+    in the project's directory).
+
+  An `env_vars` entry naming one is still removed, and the turn emits one
+  `copilot.permission_override_removed` diagnostic: *"<NAME> was removed from this agent's
+  environment; use the Full access posture to let Copilot approve on its own."* A per-agent variable
+  must not be a hidden fifth posture. `COPILOT_HOME` is always the Hub's (D4): it is set **after**
+  `env_vars` are merged, so an `env_vars` entry cannot move the run out of the Hub-owned home. The
+  strip is one function: the Copilot `guard_env(proc_env, config)` (slice 1's member; without slice
+  1, `resolve_agent_env`'s Copilot branch), which also reports the names it removed from `env_vars`
+  so the turn can emit the diagnostic. It is called by the turn, by `one_shot_env` (D14) and by the
+  probe (D15), so no Copilot spawn escapes it. The posture check (D8, *The posture step*) is the backstop for anything this
+  list misses.
 
 **Inheritance is total (R2, for slice 5).** With no `env` block, the MCP child receives *everything*
 `copilot.exe` holds, exactly as Claude's MCP child does today. That is right for this slice, whose
@@ -288,6 +335,29 @@ file and `os.replace` as `tool_server.py` does. It writes two files:
 
    It is written only when the run's access path is MCP. An existing file is left in place when it
    is not, because the file is harmless unless the flag names it.
+
+**The home's configuration surface is the Hub's (review 2026-09-28, finding 8).** A hook resolves a
+permission before the ACP client is asked (`resolvedByHook`, CODE; VERIFIED at `acp4…log:23-26`), and
+settings can trust folders or grant permissions. Anything that can write into
+`copilot-home/projects/<pid>/<agent>/` (an agent under Full access, for one) could otherwise leave a
+file that decides every later Workspace-only turn instead of the Hub. Claude has the analogue in
+`~/.claude`, but the Hub does not own that directory; it owns this one, so the fix is cheap. Before
+every spawn, (c) below also:
+
+- empties `hooks/` of every file the Hub did not write. The Hub records what it wrote in
+  `.agentweave-owned.json` (path → SHA-256) beside the files; a file whose path or hash is not
+  recorded is removed. This slice writes no hook. Slice 5 writes its hooks through the same
+  recorder, so its files survive and a tampered one is replaced;
+- removes `settings.json` (user settings: the Hub writes none in this slice) and drops the keys
+  `trustedFolders`, `trusted_folders`, `allowedUrls`, `permissions`, `defaultPermissionMode` and
+  `defaultMode` from `config.json`, which Copilot manages itself. A `config.json` the Hub cannot
+  parse (it is JSONC) is removed; Copilot recreates it;
+- removes `mcp-config.json`, `installed-plugins/`, and every `agents/*` file other than the agent's
+  own `<agent>.agent.md` (and slice 5's recorded files).
+
+Each removal is logged, and a turn that removed anything emits one `copilot.home_repaired`
+diagnostic naming the files. `session-state/`, `session-store.db` and `logs/` are Copilot's state
+and are not touched.
 
 **When.**
 
@@ -390,6 +460,17 @@ one of `stable`/`per_turn`/`tool_surface`) rather than re-parsing the markdown.
   `agent_trigger.py:1194`, is unchanged and is the second block). They reach `run_turn` as the two
   `RpcTurnRequest` fields `per_turn_context` and `tool_surface_context` (D18), and `run_turn` joins
   them. Slice 3 replaces the second with its `render_surface(surface)` output after the announce.
+- (Review 2026-09-28, the 0.3 D5 answer.) The first block **always** opens with one fixed line,
+  `COPILOT_TURN_CONTEXT_HEAD`: *"AgentWeave context for this turn. It supersedes the AgentWeave
+  context of every earlier turn in this conversation."* A resumed session holds earlier turns'
+  blocks, which may name a different workspace or access path; the line says which one counts.
+- (Review, finding 15.) **The prompt is never a single text block, and its first block never
+  starts with `/`.** Copilot runs a one-block prompt starting with `/` as a slash command (`xDn`,
+  CODE), and `/allow-all`, `/permissions`, `/autopilot` and `/add-dir` exist. The head line above
+  makes the first block non-empty and non-`/` even when `per_turn_context` and
+  `tool_surface_context` are both empty, and the message is always a block of its own after it. So
+  a message from another agent that reads `/allow-all on` is text, not a command. Task 1.9(r) holds
+  this as an invariant.
 - The canonical context file `.agentweave/context/<agent>.md` is still written with the full
   `context`, so the materialized record of what the agent was told is unchanged.
 
@@ -426,6 +507,18 @@ embedded channel**. The stable context is sent as an ACP `resource` content bloc
 "text": …}}`; `embeddedContext: true` is VERIFIED) ahead of the per-turn block. A `diagnostic` event
 records why: *"Copilot did not select the AgentWeave agent file (<reason>); this turn's context was
 sent with the prompt instead."* The fallback repeats per turn, because each turn is a new process.
+
+**The fallback deselects (review 2026-09-28, finding 6).** Switching the context channel alone would
+leave the **repository's** same-named agent selected: its body would be the agent's instructions,
+and its `tools`, `model` and `mcp-servers` would apply (custom agent frontmatter accepts
+`mcp-servers`, CODE in `runtime.node`), including a server it names `agentweave`. So on any marker
+failure the client sends `session/set_config_option {configId: "agent", value: ""}` (`app.js`:
+`if(s===Tit)await n.session.agent.deselect()`) before the prompt, reads back `currentValue == ""`,
+and the diagnostic says the repository's agent was deselected. If the deselect is refused or the
+value does not read back empty, `run_turn` **raises** before the prompt (a failed start, D12) with
+*"Copilot kept a custom agent named <agent> that AgentWeave did not write selected; this turn was not
+started."* Proceeding would run the turn under instructions and servers the Hub did not choose.
+D8's load-time server condition covers the servers such an agent may already have loaded.
 
 ### D7 — New or load, and replayed history
 
@@ -469,12 +562,21 @@ returns `ALLOW`, `REJECT` or `ASK_OPERATOR`, plus a reason. It maps each request
 
 R3 fixes its internal order, because slices 3 and 5 each insert a step into it:
 
-1. **identify** the request: its kind, and for `other`, the server from `calls`;
+1. **identify** the request: its kind, and for `other`, the server from `calls`. (Review
+   2026-09-28, conflict 2, **decided**.) An MCP request whose server is not identified is
+   **answered here**: REJECT under `workspace`, `acceptEdits` and the full-access fallback, a card
+   under `manual`. Steps 2–4 do not run for it, so no server-specific rule (slice 5's
+   `github-mcp-server` rule included) ever sees an unidentified request;
 2. **normalise** it to `_decide`'s vocabulary (`normalise_request(params, calls) ->
    list[tuple[str, dict]]`): `("PowerShell"|"Bash"|"Shell", {"command": …})`, one `("Write",
    {"path": p})` per edited path, one `("Read", {"path": p})` per read path;
 3. *(slice 3's `_hub_own_call` predicate over those pairs, and slice 5's `github-mcp-server` rule,
-   go here: both are owned by those slices)*;
+   go here: both are owned by those slices)*. (Review, conflict 1, **decided**.) The `"Shell"` key
+   **never** earns slice 3's standing allow: slice 3's case 2 stays `Bash`/`PowerShell` only,
+   because an unnamed shell is exactly the one whose command lookup nobody knows, and `cmd` looks
+   in the current directory first (measured in `ghcp-s3-2026-09-28.md`). A `"Shell"` request goes
+   to step 4: the both-dialects judge under `workspace`, a card under `manual`, a refusal under
+   `acceptEdits`;
 4. **judge** under the posture (the tables below);
 5. **answer** through one function that writes the JSON-RPC response and then calls
    `cb.on_decision` / `cb.on_refusal`. Every decision reaches the recorders, whichever step made
@@ -496,19 +598,35 @@ same. `mcp_server.py`'s stdlib-plus-fastmcp import restriction is untouched.
 `test_permission_approver.py` gains a case asserting that the keyword arguments override the
 environment, including a `$env:HUB_URL`/`http://…` word that only `_is_own_hub` decides.
 
+**The judge runs off the event loop (review 2026-09-28, finding 7).** `_where` calls
+`os.path.realpath` on every path and every path-like shell word (`mcp_server.py:1113-1133`), and
+`realpath` on `\\10.255.255.1\share\x` blocks **21 s** here (VERIFIED). Moving `_decide` from the
+per-run MCP child into the Hub process would otherwise let one model-written UNC word freeze every
+project, run and route of the Hub; ten such words, 3.5 minutes. So the client calls
+`await asyncio.to_thread(decide_permission, …)`, and the `workspace_verdict` transport member does
+the same, never inline as `codex_appserver`'s `decide_approval` is (`codex_appserver.py:1061`). The
+slow request then stalls only its own turn, which is the blast radius Claude's MCP child has today.
+The judge's own network I/O (the Hub process opening an SMB connection to a model-named host) is
+not fixed here: `_decide` should refuse `\\`, `//`, `\\?\` and `\\.\` paths **before** `realpath`
+for every runner, which is a change to `_decide` for Claude as well, filed as a finding (task 10.1)
+rather than made here.
+
 **The mapping.** `decide_permission` matches `toolCall.kind` and `rawInput` (shapes are CODE,
 § VERIFIED). The judged tool name is `_decide`'s dialect key, from `_TOOL_DIALECTS`
 (`mcp_server.py:1072`).
 
 | Copilot request | Judged as | `workspace` | `acceptEdits` (emulated) |
 |---|---|---|---|
-| `kind:"execute"`, `rawInput.command` | `_decide(<dialect key>, {"command": command})`. R3: the key comes from the call's real tool name in `calls`: `powershell` → `"PowerShell"`, `bash` → `"Bash"`, and `local_shell` or no name known → `"Shell"`, a key `_TOOL_DIALECTS` lacks, so `_decide` reads the text in **both** dialects and refuses if either refuses (`mcp_server.py:1584`). R2's platform rule is gone: it decided `local_shell` by the OS, which nothing guarantees | the judge | REJECT (Claude's `acceptEdits` prompts for `Bash`, which headless means refused) |
+| `kind:"execute"`, `rawInput.command` | `_decide(<dialect key>, {"command": command})`. R3: the key comes from the call's real tool name in `calls`: `powershell` → `"PowerShell"`, `bash` → `"Bash"`, and **any other name** (`local_shell`, `write_powershell`, …) or no name known → `"Shell"`, a key `_TOOL_DIALECTS` lacks, so `_decide` reads the text in **both** dialects and refuses if either refuses (`mcp_server.py:1584`). R2's platform rule is gone: it decided `local_shell` by the OS, which nothing guarantees. (Review 2026-09-28.) An `execute` request whose `rawInput.command` is not a non-empty string is **REJECTed**, like an empty `edit`: `write_powershell` is `execute`-kind but its input is `{shellId, input, delay}` (`uFe`), text for a running process that no judge reads. A `"Shell"` request never reaches slice 3's standing allow (step 3) | the judge | REJECT (Claude's `acceptEdits` prompts for `Bash`, which headless means refused) |
 | `kind:"edit"`, `locations[].path` / `rawInput.fileName` | `_decide("Write", {"path": p})` for **each** path; REJECT if any refuses. An `edit` request naming **no** path is REJECTed, never allowed by an empty loop. R3: the reason is totality, not R2's: over ACP a write request always carries `locations:[{path: fileName}]` (`XDo`), and R2's `write_bash`/`write_powershell` note describes `tool_call` kinds (`YDo`, where `write_powershell` is in fact `execute`), not permission requests | the judge | the same judge (edits inside the workspace only) |
-| `kind:"read"`, `rawInput.path` (or `locations[0].path`) split on `", "` | `_decide("Read", {"path": p})` each. R3: a `path` request arrives here whatever its access kind (`eNo`), which is harmless because `_decide` judges a path by where it is, not by the tool. A `read` naming **no** path is REJECTed, like an empty `edit` | the judge | the judge |
-| `kind:"fetch"`, `rawInput.url` | ALLOW, as Claude's `WebFetch` is today: `_decide` reads no fetch URL (`mcp_server.py:1554-1555`) | ALLOW | REJECT |
-| `kind:"other"` whose call Copilot reported as the `agentweave` server's, naming one of the Hub's tools | ALLOW, "the Hub's own tools" (`mcp_server.py:1557`) | ALLOW | ALLOW |
-| `kind:"other"` whose call Copilot reported as another MCP server's | `_decide("mcp__<server>__<tool>", args)`, as Claude's approver judges foreign MCP tools today. R3, for slice 5: `_decide` allows such a call when its arguments name no path and no command (`mcp_server.py:1573-1592`). That is Claude's behaviour today under `workspace`, so it is parity, and changing it is a change to `_decide` for every runner. Slice 5's `github-mcp-server` rule sits before this judge (step 3) | the judge | REJECT |
-| `kind:"other"` with **no** server reported for its call (R3), `memory`, `custom-tool`, `extension-*`, `factory`, anything unrecognised | REJECT, "not a request this Hub decides" | REJECT | REJECT |
+| `kind:"read"`, `rawInput.path` (or `locations[0].path`) split on `", "` | `_decide("Read", {"path": p})` each, **and** once on the whole unsplit string (review, note 17: `eNo` joins with `", "`, so a single path containing `", "` would otherwise be judged only as pieces); REJECT if any refuses. R3: a `path` request arrives here whatever its access kind (`eNo`), which is harmless because `_decide` judges a path by where it is, not by the tool. A `read` naming **no** path is REJECTed, like an empty `edit` | the judge | the judge |
+| `kind:"fetch"`, `rawInput.url`, whose `calls[toolCallId].tool_name` is `web_fetch` **and** which carries no `requestSandboxBypass` | ALLOW, as Claude's `WebFetch` is today: `_decide` reads no fetch URL (`mcp_server.py:1554-1555`) | ALLOW | REJECT |
+| (Review 2026-09-28, finding 2) `kind:"fetch"` whose call is a shell, or is unknown (including the default id `"url-permission"`), or anything but `web_fetch` | `_decide(<dialect key>, {"command": url})`, exactly as the shell text would be judged, so only the run's own Hub passes (`_judge_url`, `mcp_server.py:1208`). Under Claude's Workspace only a network shell word naming a non-Hub address is refused; a Copilot network command Copilot classes read-only raises **only** this `url` request, so without this row the hole would depend on Copilot's classification | the judge | REJECT |
+| (Review) `kind:"fetch"` with `requestSandboxBypass: true` | REJECT, "a request to bypass Copilot's sandbox is not something this Hub grants". It asks to leave Copilot's own sandbox, which is out of scope | REJECT | REJECT |
+| `kind:"other"` whose call Copilot reported as the `agentweave` server's, naming one of the Hub's tools, **and** the load-time condition below holds | ALLOW, "the Hub's own tools" (`mcp_server.py:1557`) | ALLOW | ALLOW |
+| `kind:"other"` whose call Copilot reported as another MCP server's, or as `agentweave`'s when the Hub-own test fails | `_decide(f"copilot-mcp:{server}/{tool}", args)`. (Review, finding 5.) R3 wrote `"mcp__<server>__<tool>"`, but `_decide`'s first statement allows any name starting `mcp__agentweave__` (`mcp_server.py:1557-1558`), so server `agentweave` with a tool the Hub does not serve, or a server named `agentweave__x`, would have been **allowed whatever its arguments**. `_decide` uses the name only for that prefix test and the `_TOOL_DIALECTS` lookup, so the `copilot-mcp:` name keeps today's both-dialect reading of any `command` key. R3, for slice 5: `_decide` allows such a call when its arguments name no path and no command (`mcp_server.py:1573-1592`). That is Claude's behaviour today under `workspace`, so it is parity, and changing it is a change to `_decide` for every runner. Slice 5's `github-mcp-server` rule sits before this judge (step 3) | the judge | REJECT |
+| `kind:"other"` with **no** server reported for its call (R3; answered at step 1) | REJECT, *"Copilot did not report which server this tool belongs to"* | REJECT | REJECT |
+| `memory`, `custom-tool`, `extension-*`, `factory`, anything unrecognised | REJECT, "not a request this Hub decides" | REJECT | REJECT |
 
 **The posture a Copilot run is judged under (R2).** R1's table had no row for a run whose
 `permission_mode` is unset, which is the ordinary case: nothing in `control_overrides` unless the
@@ -557,16 +675,43 @@ The client decides the server from Copilot's own report of the call, in order:
    permission in `acp4…log:20`, `:25`). So in the stream the Hub reads, this event precedes the ACP
    request that it describes;
 2. otherwise the raw `permission.requested` for that `toolCallId` (`permissionRequest.serverName`
-   and `toolName`), if already read;
-3. otherwise **no server is known**, and the request is REJECTed with the reason *"Copilot did not
-   report which server this tool belongs to"*. It is never treated as the Hub's own, and never
-   judged as a foreign server of unknown name. R2 judged it foreign, which under `workspace` means
-   `_decide` and so an allow.
+   and `toolName`), if already read. (Review 2026-09-28, note 13: **in 1.0.88 this source never
+   decides.** `configureSessionPermissions`, whose listener sends the ACP request, is registered
+   before `setupEventForwarding`'s raw forwarder, so the ACP request precedes the raw event for
+   the same permission (CODE). It is kept because it costs nothing and lands on the refuse side
+   whatever the order; task 1.1 records the order);
+3. otherwise **no server is known**, and the request is answered at step 1: REJECTed, with the
+   reason *"Copilot did not report which server this tool belongs to"*, under every posture but
+   `manual` and full access. It is never treated as the Hub's own, and never judged as a foreign
+   server of unknown name. R2 judged it foreign, which under `workspace` means `_decide` and so an
+   allow.
 
-A call counts as the Hub's own only when the reported server is exactly `agentweave` (the name the
-Hub registers, D4) **and** the reported tool is one the Hub's server serves. That set is restated
-beside the mapper and asserted against `mcp_server`'s tools, so a foreign server named
-`agentweave-x` cannot pass.
+`calls` holds **open** calls only (review, note 12). `tool.execution_complete` is subscribed, and
+its `toolCallId` is deleted from `calls` there. A later call reusing an id (some OpenAI-compatible
+servers under slice 5's BYOK send `call_0` every time) whose `tool.execution_start` was dropped or
+blanked therefore finds no entry, and is refused, rather than inheriting a stale `agentweave` one.
+
+**A server name is a config key, not an identity (review, findings 5 and 6).** `mcpServerName` is
+the key the server was configured under (SDK: "Server name (config key)"), and repository content
+can claim `agentweave`: a repository agent's `mcp-servers` frontmatter, or `.mcp.json` /
+`.github/mcp.json` in a trusted folder, or a plugin. So a call counts as the Hub's own only when
+**all** of these hold:
+
+- the reported server is exactly `agentweave` (the name the Hub registers, D4);
+- the reported tool is one the Hub's server serves. That set is restated beside the mapper and
+  asserted against `mcp_server`'s tools, so a foreign server named `agentweave-x` cannot pass;
+- the load-time condition: the turn's raw `session.mcp_servers_loaded` (already subscribed, fed
+  into a per-turn `servers` map from spawn onward, unarmed, like `calls`; updated by
+  `session.mcp_server_status_changed`) reported exactly one server named `agentweave`, its
+  `source` is neither `workspace` nor `plugin`, and its `transport` is `stdio`. Which `source`
+  `--additional-mcp-config` produces is recorded by task 1.1's probe (c), and the accepted value is
+  fixed from it.
+
+Otherwise every `agentweave` call is judged as foreign (the `copilot-mcp:` name above) and one
+`copilot.hub_server_unverified` diagnostic says why (no load report, a workspace or plugin source, a
+non-stdio transport). A missing load report therefore costs the Hub's own tools their automatic
+allow for that turn (under `acceptEdits` they are refused; under `workspace` they are judged by `_decide`, and
+pass unless an argument names a path outside the workspace), which is the safe side.
 
 **When step 3 happens.** Raw events are best-effort (§ VERIFIED): one is dropped when 256 are in
 flight, and one whose data exceeds 32 KB arrives as `{omitted:"too-large"}`. A Hub call with more
@@ -609,7 +754,10 @@ both.
   `subject["toolCall"]["kind"]` (and the server from `calls` for MCP), and the `copilot:*` key
   scheme above is not needed. It exists only if this change lands before slice 1.
 - R3: the MCP label is `<server>/<tool>` from `calls`, never from the request's `title`, for the
-  reason given under *Identifying the MCP server*.
+  reason given under *Identifying the MCP server*. (Review, note 16.) When `calls` has no server
+  for the call, the label is *"an MCP tool Copilot did not identify"*, again never the title; the
+  card's `tool_input` still shows the arguments. A `"Shell"` request's label is "a command in an
+  unknown shell".
 - R2, against `an-ask-me-card-says-what-workspace-only-would-decide` (**unbuilt at R2**; rebase at
   IMPL): that change gives `_await_operator_permission` a `workspace` argument and stores a
   `workspace_verdict` on the card (its design, `:42-66`), computed for Codex by a new
@@ -628,11 +776,56 @@ both.
 - If `allow_all` is absent, or the set fails (managed `permissions.disableBypassPermissionsMode`,
   DOCUMENTED), the run **does not** answer every request with ALLOW. That would grant through the Hub
   what the organisation withheld from Copilot.
-- The run instead proceeds under `workspace` and emits a `diagnostic` event: *"Full access is disabled
-  by this machine's Copilot policy; this run is deciding each action against its workspace
-  instead."*
+- The run instead proceeds under `workspace` and emits a `diagnostic` event. (Review 2026-09-28,
+  note 14.) `applyAllowAll` throws both for managed policy and whenever `setMode` reports
+  `success === false` for any reason, and the probe home's log shows a transient *"policy could not
+  be determined"* failure that cleared moments later. So the sentence quotes Copilot rather than
+  asserting policy: *"Copilot did not grant Full access (<Copilot's error message, or "no allow-all
+  option was offered">); this run is deciding each action against its workspace instead."*
 - Any request that still reaches the client under full access is answered ALLOW (defensive, as
   `decide_approval` does at `codex_appserver.py:289-290`).
+
+**The posture step, every turn (review 2026-09-28, finding 4).** R3 set plan mode on a
+specification turn and never set it back, and set `allow_all` only to turn it on. But Copilot
+persists both: `loadSession` restores the saved mode and, for autopilot, turns allow-all **on at
+load**, before the Hub's first request (CODE). A specification turn's plan mode would therefore
+reach the next build turn of the same conversation, which could not write and would not say why;
+and a session saved in autopilot would run allow-all under Workspace only. So after new/load and
+agent selection (D6), the step is total:
+
+1. **Always** `session/set_mode`: `#plan` on a specification turn when `SPEC_TURN_USES_PLAN_MODE`
+   is on (D9), otherwise `#agent`, whatever the load reported. Leaving autopilot makes Copilot's own
+   transition code sync allow-all off (`a=n!==bA&&r===bA`). A refused `set_mode` to `#agent` when
+   the load reported `#plan` or `#autopilot` raises before the prompt; a refused `#plan` stays D9's
+   diagnostic.
+2. Under full access: `allow_all` → `on`, as above.
+3. Under every other posture: read `allow_all.currentValue` from the returned `configOptions`; if it
+   is `"on"`, set it `"off"` and read it back. If it is still `"on"`, `run_turn` **raises before the
+   prompt** (a failed start, D12): *"Copilot kept allow-all on for this session; AgentWeave did not
+   start the turn, because no action would have been put to it."* Proceeding would promise a judge
+   that is never asked. An absent `allow_all` option under a non-full posture is fine.
+4. `session.mode_changed` is subscribed. An **armed** change into `#autopilot` under a non-full
+   posture (the model or a slash command) cancels the turn (`session/cancel`, D17) and emits an
+   error event `copilot_posture_escalated`; the turn ends `failed`.
+
+**What the Hub can and cannot judge (review, finding 1).** The Hub judges every request Copilot
+raises. It cannot judge what Copilot does not raise:
+
+- shell commands Copilot classes as read-only run with **no** request (VERIFIED: `acp4…log:34-39`;
+  DOCUMENTED: *"read-only requests are auto-approved"*). Which commands those are is decided in the
+  native runtime and is unmeasured. Under Claude, `_decide` reads every Bash command word by word;
+  under Copilot, only the ones Copilot asks about. That is a real difference from Claude's
+  Workspace only, recorded as a finding (task 10.1) rather than claimed away;
+- reads inside the trusted directories (ACP's `approveAllReadPermissionRequests`);
+- anything a hook, a setting or a runner flag answers first. Those are closed by D3 (flags and
+  environment) and D4 (the home's configuration surface), and this step is the backstop for the ones
+  that show as `allow_all`.
+
+A network command Copilot classes as read-only is the case that matters: the `url` request it may
+raise is judged as shell text (finding 2's row), so an address other than the run's Hub is refused
+there even when the command itself was never asked about. Whether such a command raises a `url`
+request at all is measured by task 1.1. Seeing every command would need a deciding
+`preToolUse` hook, which slice 5 declines (its "no deciding hook"); this slice does not reopen that.
 
 **Recording.** Two kinds of decision are recorded:
 
@@ -663,7 +856,8 @@ An unanswered request would hang the turn (`codex_appserver.py:255-258`).
      not excluded, and neither is `write_powershell` or `write_bash`, which write to a running shell,
      not to a file. (R3: `YDo` maps `write_bash` to the `edit` kind and `write_powershell` to
      `execute`. R2 said both were `edit`. Neither is a file writer.)
-  2. **Plan mode**, through `session/set_mode` with the full URI
+  2. **Plan mode, only while `SPEC_TURN_USES_PLAN_MODE` is on (off by default; see below)**,
+     through `session/set_mode` with the full URI
      `https://agentclientprotocol.com/protocol/session-modes#plan` (VERIFIED accepted). Plan mode
      blocks project edits at enforcement level (DOCUMENTED). It is set after agent selection and
      before the prompt. R3: a `set_mode` that fails emits a `diagnostic` and the turn proceeds,
@@ -672,9 +866,21 @@ An unanswered request would hang the turn (`codex_appserver.py:255-258`).
 
   **Drive check.** Plan mode also changes Copilot's own behaviour towards writing a plan, which could
   compete with `spec_turn_notice`'s interview instructions. Task 11.3 drives one specification turn
-  and checks the agent interviews and can call `agentweave-submit_spec_document`. If it cannot, the
-  constant `SPEC_TURN_USES_PLAN_MODE` is set `False` and a finding is filed; `--excluded-tools`
-  alone still meets the requirement.
+  and checks the agent interviews and can call `agentweave-submit_spec_document`.
+
+  **Off by default (review 2026-09-28, finding 9).** In plan mode the model's way out is
+  `exit_plan_mode`, which raises an input request (`exit_plan_mode.requested`). No ACP method
+  answers it, and only the `-p` path auto-approves it (CODE). A specification turn whose model
+  decides it is done planning could wait on it until the Hub's turn timeout. So
+  `SPEC_TURN_USES_PLAN_MODE = False` ships, and `--excluded-tools` alone meets the requirement.
+  Task 11.3 drives the spec turn **with it switched on for that drive** and records whether
+  `exit_plan_mode` was called and whether the turn hung; only if neither the interview nor the
+  ending suffers is it set `True`, by a commit that cites the drive. Whether on or off,
+  `exit_plan_mode.requested` is subscribed, and when it arrives armed the turn is cancelled
+  (`session/cancel`, D17) with a `copilot.plan_mode_exit_unanswerable` diagnostic and ends
+  `failed`, rather than waiting out the timeout. That the raw event reaches a subscriber is
+  INFERRED (it is an ephemeral session event, and ephemeral events are forwarded); 11.3 records it.
+  The per-turn `set_mode` of D8's posture step sets `#agent` on every other turn either way.
 - **Review turn.** Its workspace is a detached read-only checkout (`review_turn.py`). It gets no
   special flag, as for Claude: the posture's judge refuses writes outside the checkout's root. That
   is Claude's parity, not stronger.
@@ -757,9 +963,15 @@ Slice 5 then has nothing to widen. Every Copilot diagnostic of this slice uses `
 | `copilot.plan_mode_unavailable` | `warning` | D9 `set_mode` refused |
 | `copilot.model_substituted` | `info` | D10 model substitution |
 | `copilot.mcp_server_unavailable` | `warning` | the Hub's server not connected, for a run told the HTTP form (below) |
+| `copilot.runner_flag_removed` | `warning` | D3: a widening runner flag removed (review 2026-09-28) |
+| `copilot.permission_override_removed` | `warning` | D3: an allow-all/trust variable removed from `env_vars` (review) |
+| `copilot.home_repaired` | `warning` | D4: files the Hub did not write removed from the home (review) |
+| `copilot.hub_server_unverified` | `warning` | D8: the `agentweave` server failed the load-time condition (review) |
+| `copilot.plan_mode_exit_unanswerable` | `warning` | D9: `exit_plan_mode.requested` arrived; the turn was cancelled (review) |
+| `copilot.subagent_error` | `warning` | D10: a subagent's `session.error`, which does not fail the turn (review, cross-slice) |
 
-`copilot_session_error` and `copilot_mcp_server_failed` are `error` codes and keep the underscore
-form of Codex's `codex_mcp_server_failed`.
+`copilot_session_error`, `copilot_mcp_server_failed` and `copilot_posture_escalated` (D8's posture
+step) are `error` codes and keep the underscore form of Codex's `codex_mcp_server_failed`.
 
 Slice 5 (its D5, as it stands) keeps a raw `session.error` as an **`error`** event, re-coded
 `copilot.<errorType>` with `facts`, and holds an `Error:` block until prompt completion so the echo
@@ -767,7 +979,8 @@ is dropped in either order. That replaces this slice's single `copilot_session_e
 slice 5's to change. R2 wrote that slice 5 re-maps it to a `diagnostic_event(severity="error")`,
 which slice 5 no longer says.
 
-**A session error fails the turn (R3).** A raw `session.error` armed in this turn ends the turn
+**A session error fails the turn (R3).** A raw `session.error` of the **root** agent (review: a
+subagent's does not; see below) armed in this turn ends the turn
 `TurnOutcome(status="failed", error=<its message>)`, whatever stop reason `session/prompt` returns,
 unless the stop reason is `cancelled` (a stop wins, D17). Copilot turns the error into message text
 and may still answer `end_turn` (slice 4 D8: which stop reason follows is unknown). Without this
@@ -778,6 +991,17 @@ owns what it adds to it (the ledger and the hold). That a `session.error` always
 work did not happen is INFERRED from the schema (it is a session-level error, distinct from a
 failed tool's `tool.execution_complete`). Task 1.1's capture and drive 11.2 record any that
 appear.
+
+**Only the root agent's `session.error` fails the turn (review 2026-09-28, cross-slice; slice 5's
+review finding 8).** A subagent's events carry the envelope's `agentId` (SDK: "absent for events
+from the root/main agent"), and Copilot's own subagent test also reads `data.agentId` and
+`data.parentToolCallId`. A `session.error` carrying any of the three is a **subagent's**: it is
+recorded (this slice: a `copilot.subagent_error` diagnostic; slice 5 replaces it with its `error`
+event carrying `subagent_id`, as it owns the error mapping), its `Error:` echo is matched and
+dropped like a root one, and it does **not** fail the turn. Otherwise a failed `explore` or
+`code-review` subagent would fail the reviewer's whole turn, re-queue it through
+`return_run_entries`, and spend the input's delivery attempts, for work the parent may have finished
+anyway. If the parent cannot continue, Copilot raises the root's own error, which fails the turn.
 
 The version gate (D12) guarantees raw events exist.
 
@@ -818,15 +1042,18 @@ behaviour (VERIFIED), and without it an operator would believe the requested mod
 - `session.model_change`, `session.auto_mode_resolved`, `session.tools_updated`;
 - `permission.requested`;
 - (R3) `tool.execution_start`, the source of D8's server and shell identification and of the
-  mapper's MCP labels.
+  mapper's MCP labels;
+- (review 2026-09-28) `tool.execution_complete` (D8: prunes `calls`), `session.mode_changed` (D8's
+  posture step) and `exit_plan_mode.requested` (D9).
 
 The list is the module constant `copilot_acp.COPILOT_RAW_EVENTS: tuple[str, ...]` (R2: named, because
 slices 4 and 5 both write "slice 2's list"). Slices extend it by concatenation and it is sent
 de-duplicated in first-seen order, so slice 4's `assistant.usage`, `session.usage_checkpoint` and
 `session.compaction_complete` and slice 5's overlapping additions cannot double-subscribe.
 
-**Arming and the two event streams (R3).** `tool.execution_start` and `permission.requested` feed
-`calls` from spawn onward, **unarmed**. A permission request can arrive only after the prompt is
+**Arming and the two event streams (R3).** `tool.execution_start`, `tool.execution_complete` and
+`permission.requested` feed `calls`, and `session.mcp_servers_loaded` and
+`session.mcp_server_status_changed` feed `servers` (D8), from spawn onward, **unarmed**. A permission request can arrive only after the prompt is
 written, so nothing replayed can reach a decision. Every other raw event, and every session update,
 reaches the mapper only once armed (D7).
 
@@ -1029,7 +1256,10 @@ branch, and `copilot` joins `worker.SUPPORTED_CLIS` (`worker.py:71`) and `_SUPPO
   checks it: the run must offer the model no tool (read from `session.tools_updated` or the
   envelope), and if a pattern is not honoured the fallback is the explicit list of built-in names
   from the command reference (`ref.md:670-690`), never an empty allow-list.
-- It runs with `COPILOT_HOME=<the worker home>` and without the GitHub-token variables. **R2:
+- It runs with `COPILOT_HOME=<the worker home>`, without the GitHub-token variables, and (review
+  2026-09-28) without D3's `COPILOT_TRUST_ENV_NAMES`, through the same `guard_env`: the titler runs
+  in the project's directory, where `COPILOT_ALLOW_ALL=true` or
+  `GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS=true` would load and run the repository's hooks. **R2:
   neither spawn helper passes an environment today** — `worker._run_worker_process`
   (`worker.py:341-363`) and `conversation_titles._run_titler` (`conversation_titles.py:113-128`)
   call `subprocess.run` with no `env`, so both inherit the Hub's. Each gains an `env` parameter,
@@ -1087,7 +1317,12 @@ Slice 5 may use Copilot's own `session_info_update` title instead (Open question
 
 `probe_agent` (`launchability.py:54`) is synchronous and runs on list routes, so it cannot spawn.
 `copilot_probe.CopilotProbe` therefore keeps a process-wide cached verdict keyed by the resolved
-executable path and its mtime, with a TTL of 10 minutes. It is refreshed asynchronously by two
+executable path and its mtime, with a TTL of 10 minutes **for a positive verdict**. (Review
+2026-09-28, finding 11.) `copilot login` and `copilot update` change neither the path nor the mtime
+the key reads, so a negative verdict ("not signed in", "too old") is **always stale**: every read
+returns it and schedules a refresh (unless one is in flight or one finished in the last 5 s, so a
+polling list route cannot spawn a probe per request), so the attempt after the operator
+signs in or updates succeeds without waiting ten minutes. It is refreshed asynchronously by two
 things:
 
 - `GET /runners/launchability-by-provider` and the agent-launchability route, which schedule a
@@ -1097,7 +1332,9 @@ things:
 A refresh:
 
 1. resolves the executable (D2);
-2. spawns it with `--acp --stdio --no-auto-update` under the worker home;
+2. spawns it with `--acp --stdio --no-auto-update --disable-builtin-mcps` under the worker home,
+   with D3's `guard_env`. (Review: `session/new` awaits `startSessionMcp`, so without the flag every
+   probe would start the built-in GitHub server);
 3. sends `initialize` and reads the version;
 4. sends `session/new` (cwd = the worker home) and reads auth. A JSON-RPC error `-32000`
    ("Authentication required", R3: CODE, `app.js` `newSession` → `ps.authRequired()`) means not
@@ -1431,8 +1668,10 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
    no `include_tool_surface` flag. Rewriting the canonical context file for the decided surface
    stays slice 3's (its D9).
 2. *The pre-prompt step: provided.* `run_turn`'s order is fixed: spawn → `initialize` → new/load →
-   agent selection → posture and mode options → **(slice 3's announce wait and `render_surface`)**
-   → `session/prompt`. Arming happens when the prompt is written (D7), so the wait replays nothing.
+   agent selection (and the deselect on a marker failure, D6) → the posture step (`set_mode` every
+   turn, `allow_all` set and verified, D8; review 2026-09-28) → **(slice 3's announce wait and
+   `render_surface`)** → `session/prompt`. Arming happens when the prompt is written (D7), so the
+   wait replays nothing.
 3. *`copilot_mcp_server_failed` is false for a `shim` run: provided in part, the rest is owned by
    slice 3.* This slice already emits that error only for a run told `mcp`, and a diagnostic
    otherwise (D10, R3). The same sentence was already false for a run told the HTTP form, and R3
@@ -1441,10 +1680,15 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
 4. *Permission handler, predicate call: provided as a slot, owned by slice 3.* `decide_permission`
    runs identify → normalise → **step 3** → judge → answer (D8). Slice 3's `_hub_own_call` takes
    `normalise_request`'s pairs. Those are `("PowerShell"|"Bash"|"Shell", {"command"})`, and
-   `("Write"|"Read", {"path"})` per path. They are the names slice 3's D8 cases 2 and 3 read, with
-   `"Shell"` added for `local_shell` or an unnamed shell: an unknown dialect, which slice 3 already
-   requires to satisfy both readings. The call itself is slice 3's to add, because the predicate
-   does not exist until slice 3.
+   `("Write"|"Read", {"path"})` per path. Slice 3's D8 case 2 reads only `PowerShell` and `Bash`.
+   (Review 2026-09-28, conflict 1, **decided**; R3's "which slice 3 already requires to satisfy both
+   readings" was wrong.) **A `"Shell"` pair never earns slice 3's standing allow**: an unnamed shell
+   is the one whose command lookup nobody knows, and `cmd` resolves a bare name from the current
+   directory first (measured, `ghcp-s3-2026-09-28.md`). It is judged in both dialects under
+   `workspace`, gets a card under `manual` and a refusal under `acceptEdits`. The call itself is
+   slice 3's to add, because the predicate does not exist until slice 3. Task 1.1 records how often
+   a genuine `powershell` request arrives with no tool name known; if that is common, the fix is in
+   this slice's `calls`, not in the predicate.
 5. *Decision reporting: provided.* Every answer goes through one function that calls `on_decision`
    and `on_refusal` (D8 step 5), so a predicate allow is counted with no extra call. Slice 3's line
    *"recognises its Copilot MCP requests … by a `title` of `agentweave/<tool>`"* (its `:278-280`)
@@ -1492,7 +1736,15 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     - the server now comes from `tool.execution_start` as well as `permission.requested`;
     - a call whose server Copilot did not report is **refused**, no longer judged foreign and so
       allowed. Slice 5's "unidentified is treated as `github-mcp-server`" therefore meets a refusal,
-      which is the safer side it wanted.
+      which is the safer side it wanted. (Review 2026-09-28, conflict 2, **decided**: the refusal is
+      made at step 1, *identify*, before slice 5's step-3 rule can run, under `workspace`,
+      `acceptEdits` and the full-access fallback. Slice 5's task 1.13 unidentified case becomes
+      REJECT under `workspace`. Under `manual` both slices already give a card, labelled *"an MCP
+      tool Copilot did not identify"*.)
+    - (Review) the foreign judge's tool name is now `copilot-mcp:<server>/<tool>`, not
+      `mcp__<server>__<tool>`, so no server name can reach `_decide`'s `mcp__agentweave__` allow; and
+      a server counts as the Hub's own only with the load-time condition (D8). Slice 5's
+      `github-mcp-server` rule reads the server from `calls`, unchanged.
 15. *The argv builder needs the agent's config: owned by slice 5.* `build_acp_argv` takes explicit
     keywords. Slice 5 adds a `github_mcp: bool = False` keyword (omitting `--disable-builtin-mcps`
     when true), and the same keyword on `decide_permission`, both fed from slice 1's
@@ -1508,6 +1760,24 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     `_on_armed_raw_event(type, data, params)` also takes the whole `github.com/copilot/sessionEvent`
     params and hands them to `CopilotEventMapper`. Slice 4's `observe_event(type, data)` is
     unchanged.
+18. *`COPILOT_ALLOW_ALL` and the other allow/trust variables: provided, owned here* (review
+    2026-09-28; slice 5's review finding 6). D3's `COPILOT_TRUST_ENV_NAMES` is removed from every
+    Copilot spawn (turn, one-shot, probe), from the inherited environment and from `env_vars`,
+    whatever the posture, by the Copilot `guard_env`. Slice 5's "no trusted folder, so no workspace
+    servers load" premise rests on it; slice 5 references this item and adds only its BYOK names.
+    Whether slice 5's no-provider strip (`COPILOT_PROVIDER_*` when BYOK is off) also moves here is
+    slice 5's call (its review finding 6); the function has room for it.
+19. *Only a root `session.error` fails the turn: provided* (review; slice 5's review finding 8).
+    A subagent's (envelope `agentId`, or `data.agentId`/`data.parentToolCallId`) is recorded and
+    does not fail the turn (D10). Slice 5 replaces this slice's `copilot.subagent_error` diagnostic
+    with its own `error` event carrying `subagent_id`.
+20. *The home's configuration surface: provided; slice 5 writes through it.* D4's before-spawn
+    sweep removes hooks, plugins, MCP configs and agent files the Hub did not record in
+    `.agentweave-owned.json`. Slice 5's hooks and any agent files it writes **must** be written
+    through the same recorder, or the sweep deletes them.
+21. *The posture step and the subscription additions: provided.* `session.mode_changed`,
+    `tool.execution_complete` and `exit_plan_mode.requested` join `COPILOT_RAW_EVENTS` (D10).
+    Slice 4 and 5 additions still concatenate.
 
 ## Risks / Trade-offs
 
@@ -1518,8 +1788,9 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
   allows; report it; slice 5 may move it to a hook.
 - **[The custom agent file is shadowed by a same-named repository agent]** → The D6 marker check and
   the embedded fallback, with a diagnostic.
-- **[Plan mode interferes with specification interviews]** → Task 11.3's drive check, and the
-  `SPEC_TURN_USES_PLAN_MODE` switch.
+- **[Plan mode interferes with specification interviews, or hangs on `exit_plan_mode`]** → The
+  `SPEC_TURN_USES_PLAN_MODE` switch ships **off** (review 2026-09-28); task 11.3's drive decides
+  whether to turn it on, and an `exit_plan_mode.requested` cancels the turn rather than waiting.
 - **[Free-plan allowance is spent by drives and one-shot calls]** → Captures and drive turns are
   counted in `tasks.md` (6 model prompts in total); titles and checkpoints on Copilot are the
   operator's choice of runner.
@@ -1543,6 +1814,21 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
   evaluation happen as for Codex.
 - **[A migration reaches `:8000`]** → It only widens a check constraint. Downgrade refuses rather
   than deletes.
+- **[Copilot auto-approves commands it classes read-only; the Hub judges only what Copilot asks
+  (review 2026-09-28)]** → Stated in the spec and in D8 (*What the Hub can and cannot judge*); a
+  network command's `url` request is judged as shell text; recorded as a finding so the parity
+  claim is measured, not assumed.
+- **[Approvals from state rather than from the Hub (review)]** → Environment (D3's
+  `COPILOT_TRUST_ENV_NAMES`), runner flags (D3's `COPILOT_WIDENING_FLAGS`), the home's files (D4's
+  sweep) and a persisted mode (D8's posture step, which also refuses to prompt while allow-all is
+  on). Both lists are deny-lists over a CLI that ships weekly; a new widening flag or variable is
+  not caught until the list is extended. The posture check catches the ones that show as
+  `allow_all`; rule-based ones would not show.
+- **[A server name is a config key (review)]** → The Hub-own test adds the load-time `source`/
+  `transport` condition, and the foreign judge's name can never match `_decide`'s Hub prefix.
+- **[`realpath` on a network path blocks (review)]** → `decide_permission` runs in a worker
+  thread; the refusal of UNC paths before `realpath` is a finding against `_decide` for every
+  runner.
 
 ## Migration Plan
 
@@ -1612,8 +1898,13 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
 10. ~~**The exact field names of `session.error|warning|info` raw event data**~~ **Answered in R2
     (CODE, SDK `session-events.d.ts`):** `message` on all three, beside `errorType`/`warningType`/
     `infoType`. Task 1.1 still records one captured event.
-11. **Contract conflict (contract reconciliation, 2026-09-28): the `"Shell"` key and slice 3's
-    predicate.** D8 (R3) normalises a shell request from `local_shell`, or with no tool name known,
+11. ~~**Contract conflict (contract reconciliation, 2026-09-28): the `"Shell"` key and slice 3's
+    predicate.**~~ **Decided 2026-09-28 (review ghcp-s2):** the `"Shell"` key **never**
+    auto-approves. Slice 3's case 2 stays `Bash`/`PowerShell` only (`cmd` looks up the current
+    directory first; measured in `ghcp-s3-2026-09-28.md`), and a `"Shell"` call gets the both-dialect
+    judge, a card under Ask me, or the posture's refusal (D8 step 3; § *Provided* item 4 corrected).
+    The review's own recommendation (admit `"Shell"` read both ways) was not taken: reading the text
+    both ways checks characters, not command resolution. The original question, kept for the record: D8 (R3) normalises a shell request from `local_shell`, or with no tool name known,
     to `("Shell", {"command": …})`, and § *Provided to slices 3–5* item 4 says slice 3 "already
     requires [an unknown dialect] to satisfy both readings". Slice 3's R3 no longer does: its D8
     case 2 is limited to `_TOOL_DIALECTS` (`Bash`, `PowerShell`), and its D8 caller text still says
@@ -1623,7 +1914,12 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     here: either slice 3 admits `"Shell"` read both ways in case 2 (its R3 reason for the limit was
     a foreign MCP tool's `command` key, which `"Shell"` is not), or this slice never emits
     `"Shell"` to the predicate. Also carried in slice 3's open questions.
-12. **Contract conflict (contract reconciliation, 2026-09-28): an unidentified MCP server with slice 5's toggle on.** D8's
+12. ~~**Contract conflict (contract reconciliation, 2026-09-28): an unidentified MCP server with
+    slice 5's toggle on.**~~ **Decided 2026-09-28 (review ghcp-s2):** REFUSED, at D8's step 1
+    (*identify*), before any slice-5 GitHub rule, under `workspace`, `acceptEdits` and the
+    full-access fallback; under Ask me, a card labelled *"an MCP tool Copilot did not identify"*.
+    Slice 5's task 1.13 unidentified case becomes REJECT under `workspace`. The original question,
+    kept for the record: D8's
     table REJECTs a `kind:"other"` request with no server reported, in every posture, and item 14 of
     § *Provided to slices 3–5* says slice 5's "unidentified is treated as `github-mcp-server`" meets
     that refusal. Slice 5's D9 and its task 1.13 instead require `ASK_OPERATOR` under `workspace` for
@@ -1925,7 +2221,7 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
   - **Contract resolutions:** § "Provided to slices 3–5", items 1-16.
   - **Validate:** `openspec validate a-copilot-agent-runs-over-acp --strict` passes.
 
-- **Pending:**
+- **Pending (at R3; closed by the review fixes below):**
   - Opus adversarial review (task 0.3). It should also weigh the three R3 decisions that change
     behaviour rather than wording:
     - refusing an MCP call whose server Copilot did not report;
@@ -1944,6 +2240,95 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     environment and the builder branches.
   - Open questions 11 and 12: two **contract conflicts** left open (the `"Shell"` key vs slice 3's predicate; an
     unidentified MCP server with slice 5's toggle on).
+
+- **Review fixes, 2026-09-28** (applying `spec-queue/tracks/reviews/ghcp-s2-2026-09-28.md`, verdict
+  REVISE; files only under this change directory; no git writes, no product code, no `copilot`
+  process). Each BLOCKING and SHOULD-FIX finding was re-checked before it was applied, against
+  `%LOCALAPPDATA%\copilot\pkg\win32-x64\1.0.88\app.js`, its SDK `session-events.d.ts`,
+  `evidence/acp4-turn-mcp-shell-1.0.88.log`, the probe home `%TEMP%\ghcp-probe2-home\` and
+  `hub/hub/mcp_server.py`. **No finding was disputed.** Finding → what was done:
+  1. *(BLOCKING) read-only shell commands never ask.* Confirmed: the capture's `powershell` call
+     (`:34-39`) raised neither hook nor `permission.requested`, and the help text says read-only
+     requests are auto-approved. VERIFIED rows added (and R2's `:74` row corrected); D8 gains *What
+     the Hub can and cannot judge*; the spec's shell bullet says "a shell command Copilot asks
+     about" and states the limit, with a scenario; task 1.1's shell step is now `Set-Content` (it
+     must ask) plus a `Get-ChildItem` whose absence of a request is recorded; a finding is queued
+     (10.1); a Risks entry.
+  2. *(BLOCKING) the fetch row allowed every `url` request.* Confirmed: `tNo`/`XDo`'s `onUrl` carry
+     the call's `toolCallId` (default `"url-permission"`) and `requestSandboxBypass`, a shell-tool
+     argument (`NI`). D8: ALLOW only for a `web_fetch` call with no bypass; any other `url` request
+     is judged as shell text; a bypass is refused. Spec scenarios, 1.6 cases, and 1.1's `curl.exe`
+     and `web_fetch` steps added.
+  3. *(BLOCKING) ambient `COPILOT_ALLOW_ALL`.* Confirmed in the help text and at every trust site.
+     D3's `COPILOT_TRUST_ENV_NAMES` (`COPILOT_ALLOW_ALL`, `COPILOT_ASSISTED_APPROVAL`,
+     `COPILOT_PLAN_THEN_AUTOPILOT`, the three `GITHUB_COPILOT_PROMPT_MODE_*`) is removed from every
+     Copilot spawn, inherited or `env_vars`, with a diagnostic for `env_vars`; `COPILOT_HOME` is set
+     after `env_vars`. Spec requirement renamed *…no GitHub token or permission override…*, two
+     scenarios; 1.16 extended. Owned here for all slices (§ *Provided* item 18).
+  4. *(BLOCKING) mode and allow-all persist across turns.* Confirmed: `loadSession` applies
+     allow-all for a saved autopilot; the transition code syncs it. D8 gains *The posture step, every
+     turn*: `set_mode` always (`#agent` unless a plan-mode spec turn), `allow_all` read back and
+     turned off, a raise before the prompt if it stays on, `session.mode_changed` into autopilot
+     cancels. Spec text and two scenarios; 1.9(s).
+  5. *(SHOULD-FIX) `mcp__<server>__<tool>` passes `_decide`'s Hub prefix.* Confirmed at
+     `mcp_server.py:1557-1558`. The foreign judge's name is `copilot-mcp:<server>/<tool>`; spec
+     scenarios for `agentweave__x` and `agentweave` with an unserved tool; 1.6 cases that fail on R3.
+  6. *(SHOULD-FIX) server name is a config key; D6's fallback keeps the repository's agent.*
+     Confirmed (`McpServersLoadedServer.name` "config key", `source`, `transport`; `agent.deselect`
+     on `""`). D6 deselects and raises if it cannot; D8's Hub-own test adds the load-time
+     `source`/`transport` condition over a `servers` map; spec scenarios; 1.6/1.9(t); new model-free
+     probe 1.20.
+  7. *(BLOCKING) 21 s `realpath` in the Hub process.* `_where` → `realpath` confirmed
+     (`mcp_server.py:1113-1133`); the 21 s is the reviewer's measurement, not re-run. D8: the judge
+     runs in `asyncio.to_thread`; the pre-`realpath` UNC refusal is a finding against `_decide` for
+     all runners (10.1); spec sentence and scenario; 1.9(v).
+  8. *(SHOULD-FIX) hooks/settings in the agent's home answer first.* Confirmed
+     (`if(o.data.resolvedByHook)return;`; `hooks/`, `config.json`, `installed-plugins/` in the probe
+     home). D4 owns the home's configuration surface: a recorder (`.agentweave-owned.json`) and a
+     before-spawn sweep. Spec text and scenario; 1.10 extended; slice 5 writes through the recorder
+     (§ *Provided* item 20).
+  9. *(SHOULD-FIX) `exit_plan_mode` unanswerable.* Confirmed (`surfaceInputRequest` emits it; no
+     ACP method answers). `SPEC_TURN_USES_PLAN_MODE` ships **off**; `exit_plan_mode.requested` is
+     subscribed and cancels the turn; 11.3 drives with it on and records `exit_plan_mode`. Spec
+     text changed; 1.9(w).
+  10. *(SHOULD-FIX) widening runner flags.* Confirmed (`CNo`; `--allow-tool`, `--allow-url`,
+      `--add-dir` in `app.js`). D3's `COPILOT_WIDENING_FLAGS` removed unless full access
+      (`--config-dir` always), with a diagnostic; spec scenario; 1.9(u).
+  11. *(SHOULD-FIX) 10-minute stale "not signed in".* D15: a negative verdict is always stale (a
+      refresh per read, at most one per 5 s); the probe spawns with `--disable-builtin-mcps`. Spec
+      sentence and scenario; 1.15 extended.
+  12. *(NOTE) `calls` never pruned.* Applied: `tool.execution_complete` subscribed; `calls` holds
+      open calls only; 1.6 case.
+  13. *(NOTE) raw `permission.requested` is effectively dead.* Applied: restated in D8 as a source
+      that never decides in 1.0.88 (CODE order), kept because it costs nothing; 1.1 keeps the
+      ordering record.
+  14. *(NOTE) full-access fallback blames policy.* Applied: the diagnostic quotes Copilot's error.
+  15. *(NOTE) a one-block `/` prompt runs a slash command.* Applied: D5's fixed head line makes the
+      prompt always two blocks with a non-`/` first block; 1.9(r).
+  16. *(NOTE) the Ask me label for an unidentified MCP call.* Applied: *"an MCP tool Copilot did
+      not identify"*; 1.6 case.
+  17. *(NOTE) `", "`-joined paths.* Applied: judged whole and in pieces.
+  - **The four 0.3 questions.** D5: split kept; the head line (supersedes earlier turns' context)
+    added, and D6's deselect protects the stable half. D8: `acceptEdits` emulation and the refusal to
+    emulate full access under policy kept; fetch parity narrowed to `web_fetch` (finding 2). D9:
+    `--excluded-tools` unconditional; plan mode off until 11.3. D15: a pending verdict stays
+    permissive; the negative side is fixed (finding 11).
+  - **Cross-slice items owned here.** (a) Only a root `session.error` fails the turn; a subagent's
+    (envelope `agentId`, `data.agentId`, `data.parentToolCallId`) is recorded as
+    `copilot.subagent_error` and does not (slice 5's review finding 8; D10; spec scenario; 1.8).
+    (b) **Conflict 1 closed as decided:** `"Shell"` never auto-approves; slice 3's case 2 stays
+    `Bash`/`PowerShell`; D8 step 3, § *Provided* item 4 and Open question 11 rewritten. The review's
+    own recommendation (admit `"Shell"` read both ways) was **not** taken, per the decision and slice
+    3's measurement (`cmd` resolves from the current directory first; both-ways reading checks text,
+    not resolution). (c) **Conflict 2 closed as decided:** an unidentified MCP request is refused at
+    step 1, before any slice-5 rule; D8 step 1, the table, § *Provided* item 14, Open question 12,
+    spec text, and a 1.6 case with slice 5's rule stubbed. (d) `COPILOT_ALLOW_ALL` stripping owned
+    here (finding 3; item 18).
+  - **Also changed while applying:** an `execute` request with no command is refused, and any shell
+    tool name other than `powershell`/`bash` (incl. `write_powershell`) is keyed `"Shell"` (slice 3's
+    review); the proposal's posture and environment bullets; the Risks list; the diagnostics table
+    (six codes, one error code).
+  - **Validate:** `openspec validate a-copilot-agent-runs-over-acp --strict` passes.
 
 ## Cross-slice consistency (orchestrator, 2026-09-27, after all five R1s; reconciled in R2)
 

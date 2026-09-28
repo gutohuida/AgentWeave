@@ -128,6 +128,11 @@ What is named is a command, never a value. The notice is prepended to the turn p
 durable record of the turn, so a credential written into it is a credential written into stored
 text.
 
+Where a runner's own sandbox may keep its shell from reaching the Hub, and that has not been
+measured, the text says so and tells the run to report an unreachable result rather than retry.
+Stating reachability as a fact the system does not know would be the same kind of unfounded claim the
+next requirement forbids.
+
 The description of operations is the same description the MCP path is given, rendered for this
 access path. It is not a separate list. One source of truth for what the plane offers means an
 operation added to the plane cannot be described to one kind of caller and hidden from the other.
@@ -140,6 +145,13 @@ operation added to the plane cannot be described to one kind of caller and hidde
   operations are described
 - **AND** it does not state that the agent has no way to send messages, create or update tasks, or
   ask the operator
+
+#### Scenario: A run whose shell may not reach the Hub is told so
+
+- **WHEN** a turn is described the call command on a runner whose shell sandbox may not allow network
+  access to the Hub
+- **THEN** the text states that the call command may be unable to reach the Hub from that shell
+- **AND** it tells the run to report an unreachable result in its reply rather than retry
 
 #### Scenario: The credential is named and not disclosed
 
@@ -193,8 +205,14 @@ the same decision about the same access path; a claim of absence removed from on
 other has not been removed. Where the system has no grounds either way, neither text asserts, and
 both describe.
 
-An explicit statement by the operator about a run's access path remains authoritative. This
-requirement governs what the system asserts on its own, not what it is told.
+An explicit statement by the operator about a run's access path remains authoritative, with one
+exception. This requirement governs what the system asserts on its own, not what it is told. The
+exception is a run that tested itself before its first prompt and found the surface absent: that run
+is told the call command, whatever the operator stated, because the statement is about what the agent
+is given and usually has, and the run's own test is a measurement of what its harness did this time.
+Telling a run tools it has just been measured not to hold is the defect this requirement exists to
+prevent. The statement still decides what the run is given, so the next run is given the surface and
+tests it again.
 
 Correcting what a run is told must not quietly change what that run may do. The access path decides
 more than the wording of a notice today: it decides whether the tool-protocol server is provided at
@@ -258,7 +276,16 @@ is told.
 #### Scenario: The operator's own statement is honoured
 
 - **WHEN** the operator has stated which access path a run uses
+- **AND** the run did not test itself before its first prompt and find the surface absent
 - **THEN** that statement decides the access path
+
+#### Scenario: A run's own negative test outweighs the operator's statement for that run
+
+- **WHEN** the operator has stated that an agent uses the tool-protocol surface
+- **AND** a run of that agent tests itself before its first prompt and its adapter does not report
+  online within the wait
+- **THEN** that run's first prompt describes the call command
+- **AND** the next run of that agent is still given the tool-protocol server
 
 ## ADDED Requirements
 

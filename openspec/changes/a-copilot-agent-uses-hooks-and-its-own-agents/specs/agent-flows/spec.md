@@ -18,7 +18,8 @@ the context SHALL name the commit alone and say to review that commit's own chan
 turn SHALL still take place.
 
 The choice SHALL be shown to the operator as it is stored, and SHALL be presented only for an agent
-bound to a `copilot` runner.
+bound to a `copilot` runner. A stored choice SHALL be read as a list of offered agents: anything else
+it holds SHALL NOT be named in the context.
 
 Nothing else in the review context SHALL change. In particular, the verdict instruction SHALL stay as
 it is.
@@ -48,6 +49,12 @@ it is.
 
 - **WHEN** an operator chooses a Copilot agent that is not among those offered
 - **THEN** the choice is refused
+
+#### Scenario: A stored choice outside the offer is not named
+
+- **WHEN** an agent's stored configuration names a review agent that is not offered, or is not a list,
+  because it was written by a route that does not check it
+- **THEN** the review context names only the offered agents it holds, and none when it is not a list
 
 #### Scenario: A review goes ahead without a divergence point
 
