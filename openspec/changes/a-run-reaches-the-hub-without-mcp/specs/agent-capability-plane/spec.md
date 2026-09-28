@@ -265,7 +265,10 @@ is told.
 For every run given the Hub's tool-protocol server, the system SHALL record whether that run's harness started it, as one of started, failed, or left out, from the first source that reports it, and SHALL record for every run which surface the run was told to reach the plane through.
 
 A positive report is final for the run: the adapter reporting online is direct evidence that the
-harness started the program, and a slower source that later says otherwise does not overwrite it. A
+harness started the program, and a slower source that later says otherwise does not overwrite it.
+Because it is final, only the harness starting the program may make it: the call command is the same
+program, started by the run rather than by its harness, and a call through it reports nothing about
+the server. A
 negative record may still become positive if the adapter reports online late. A run that ended before
 any source could report was not tested, and is recorded as untested rather than as a negative.
 
@@ -284,6 +287,12 @@ any source could report was not tested, and is recorded as untested rather than 
 - **WHEN** a run ends before its harness reported its servers and before its adapter reported online
 - **THEN** that run is recorded as untested
 - **AND** it does not count as the latest test of its agent
+
+#### Scenario: A call through the call command is not a positive test
+
+- **WHEN** a run whose harness did not start the tool-protocol server calls an operation through the
+  call command
+- **THEN** that run is not recorded as having started the server
 
 #### Scenario: The surface a run was told is recorded
 

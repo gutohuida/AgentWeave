@@ -6,6 +6,9 @@ in particular `a-claude-run-is-told-its-agentweave-tools-by-their-full-names`,
 `the-codex-models-offered-are-the-ones-its-cli-lists`, `request-agent-models-the-new-agent-on-one-the-operator-made`,
 `an-ask-me-card-says-what-workspace-only-would-decide` and `a-run-records-that-its-calls-were-allowed`. Each of them edits a
 site this change moves. R2 rebases every `file:line` below onto the tree they leave.
+**R2 (2026-09-28):** of these, only `the-codex-models-offered-are-the-ones-its-cli-lists` has landed (5 of the ORDER's 28
+on `ef55e6f`). The other six are unbuilt, so design.md marks each site they will edit *(rebase at IMPL)* with what
+their designs say they leave. The line numbers below hold on `ef55e6f`.
 **Depended on by:** `a-copilot-agent-runs-over-acp`, `a-run-reaches-the-hub-without-mcp`, `a-copilot-run-shows-its-credits`,
 `a-copilot-agent-uses-hooks-and-its-own-agents`. They name members of the `RunnerAdapter` defined here.
 
@@ -21,11 +24,12 @@ Appendix B of the exploration counts about 12 modules. Read today, the places ar
 |---|---|---|
 | `runner_commands.py` | the argv for a turn: `build_command` dispatches on `runner == "codex"` / `runner in ("claude", "claude_proxy", "native")` | `:164`, `:179`; `SUPPORTED_RUNNERS` `:60`; `_CATALOG_PROVIDER_BY_RUNNER` `:110-119` |
 | `api/v1/agent_trigger.py` | which process kind is spawned (PTY or pipe), which parser reads it, the post-run rollout accounting, the 501 gate, and the whole Codex app-server executor | `:2345`, `:2451`, `:2574`, `:773`, `:2926-3040`, `:3040-3460` |
-| `codex_appserver.py` | whether Codex uses app-server | `uses_app_server` `:79-89` |
+| `codex_appserver.py` | whether Codex uses app-server | `uses_app_server` `:79-89` (its `runner_cli != "codex"` is `:85`) |
 | `launchability.py` | which binary is probed, a Claude-only env guard, and whether the Hub's MCP server is injected at all | `RUNNER_CLI` `:33-43`; `:190`; `MCP_INJECTABLE_RUNNERS` `:230`; `resolve_access_path` `:233-249` |
 | `workspace_writes.py` | which tool names are file writes | `CLAUDE_WRITE_TOOLS` `:39-44`, `CODEX_WRITE_TOOL` `:49` |
 | `worker.py`, `conversation_titles.py` | the one-shot argv and the envelope parser | `worker.py:71`, `:142-153`, `:323-328`, `:450`; `conversation_titles.py:68`, `:86-95` |
-| `api/v1/agents.py` | the Codex collaboration verdict, and display names | `:249`, `:558-564` |
+| `api/v1/agents.py` | the Codex collaboration verdict, and display names | `:249`, `:557-565` |
+| `api/v1/model_catalog.py` | which provider's model source is reported (R2: added on 2026-09-28 by the Codex cache change) | `p.provider == "codex"` `:26` |
 
 Three of these are registries that no longer bind anything. Each already carries a `DEAD (2026-09-20)` block
 naming `RUNNER_CLIS` as the only registry that binds (F393): `SUPPORTED_RUNNERS`, `_CATALOG_PROVIDER_BY_RUNNER` and
@@ -57,7 +61,8 @@ answered"; appendix A §A–B, VERIFIED-LOCAL). So the one value has to be split
   do not depend on MCP.
 - **Dead registries are deleted** (design D5): `SUPPORTED_RUNNERS`, `_CATALOG_PROVIDER_BY_RUNNER` with
   `catalog_provider_for_runner`, `MCP_INJECTABLE_RUNNERS`, `worker.SUPPORTED_CLIS`, `conversation_titles._SUPPORTED_CLIS`,
-  and the unreachable `claude_proxy`/`native` arms of command building and parser selection. `RUNNER_CLI` becomes
+  `codex_appserver.uses_app_server` (its body becomes the Codex adapter's transport choice), and the unreachable
+  `claude_proxy`/`native` arms of command building and parser selection. `RUNNER_CLI` becomes
   `LEGACY_RUNNER_CLI`. It is consulted only for a runner string that has no adapter, which only a session-configured
   agent can carry. Its `copilot` row stays until slice 2 gives Copilot an adapter (design D5, reason given there).
 - **No behaviour change.** Command lines, parsed event sequences, one-shot argv, launchability verdicts, collaboration
@@ -92,6 +97,7 @@ answered"; appendix A §A–B, VERIFIED-LOCAL). So the one value has to be split
 
 Backend only: `hub/hub/runner_adapters/` (new), `runner_commands.py`, `api/v1/agent_trigger.py`, `launchability.py`,
 `workspace_writes.py`, `worker.py`, `conversation_titles.py`, `api/v1/agents.py`, `api/v1/runners.py`,
-`codex_appserver.py`. Tests that import `build_command` from `runner_commands` or patch
+`codex_appserver.py`, `model_catalog.py` and `api/v1/model_catalog.py` (R2: a `catalog_source(provider)` helper replaces the
+route's `== "codex"`). Tests that import `build_command` from `runner_commands` or patch
 `hub.api.v1.agent_trigger.codex_run_turn` change import path or patch target (design D6, D9). No migration, no API
 shape change, no UI change, and so no bundle refresh. `mcp_server.py` is not touched.

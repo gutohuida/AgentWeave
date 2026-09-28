@@ -1,14 +1,29 @@
 # Proposal — a Copilot agent runs over ACP
 
-**Depends on:** the `RunnerAdapter` of `each-runner-cli-is-one-adapter` (slice 1, being written in
-parallel). This change implements that adapter for `copilot` and uses these members of it:
-`build_launch`, `transport`, `map_events`, `inject_mcp`, `instruction_channel`, `decide_posture`,
-`usage_from`, `context_window`, `stop`, `one_shot`, `write_tool_kinds`, `catalog_provider`,
-`launchability`, `resume_id`, `tool_prefix`. Slice 1 SHALL define at least those members. It also
-builds on six changes in tonight's (2026-09-27) night queue; they are named in `design.md`
-§ "Sites touched by open changes", and each is marked "re-verify in R2".
+**Depends on:** the `RunnerAdapter` of `each-runner-cli-is-one-adapter` (slice 1, unbuilt at R2).
+This change implements that adapter for `copilot` as an **RPC** transport, so it uses slice 1's
+names (R2, against slice 1's design of 2026-09-28; the full mapping is in `design.md` § "Slice 1
+member names"):
 
-**Round 1, 2026-09-27.** Slice 2 of five from
+- on the adapter: `transport`, `posture_at_rest`, `one_shot`, `parse_one_shot`, `guard_env`,
+  `collaboration`, `launchability`, and the ClassVars `catalog_provider`, `write_tool_kinds`,
+  `mcp_tool_prefix`, `transport_sentinels`, `mcp_env_names`;
+- on the RPC transport: `inject_mcp`, `instruction_channel`, `posture_for`,
+  `permission_card_label`, `refusal_label`, `context_window_source`, and
+  `run_turn(req: RpcTurnRequest, cb: RpcCallbacks)`;
+- slice 1's deferred D16 members, which this slice defines: `write_native_files`, `agent_home`,
+  `version_gate`, `models`.
+
+R1's `build_launch`, `map_events` and `usage_from` are stream-transport members and do not apply;
+`resume_id` is `RpcTurnRequest.resume_session_id`; `stop` is a clause of `run_turn`'s contract.
+This change adds `per_turn_context`, `stable_context` and `restrict_spec_writes` to
+`RpcTurnRequest`, and `on_session_missing` and `on_raw_event` to `RpcCallbacks`.
+
+It also meets eight changes of the 2026-09-27 night queue and three parked ones. At R2 (master
+`ef55e6f`) three of those have landed and the rest are unbuilt; `design.md` § "Sites touched by open
+changes" gives each one's state and marks the unbuilt sites "rebase at IMPL".
+
+**Round 1, 2026-09-27; Round 2, 2026-09-28.** Slice 2 of five from
 `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. Operator decisions `ghcp-d1`–`ghcp-d6`
 (`spec-queue/DECISIONS.md`, `### 2026-09-27`) bind it. **Nothing here is implemented yet.**
 
@@ -40,7 +55,10 @@ the first runner whose approval axis is independent of its tool surface.
 
 - **`copilot` becomes a runner CLI.** `RUNNER_CLIS` gains `copilot`. A migration widens
   `ck_runners_cli`. A project with no runners is seeded with a default `copilot` runner beside the
-  other two.
+  other two. The three gates that do not follow `RUNNER_CLIS` also admit it (R2):
+  `SUPPORTED_RUNNERS` (today a 501 at `agent_trigger.py:773`), the trigger's `build_command` call
+  (a 501 at `:1230`), and `MCP_INJECTABLE_RUNNERS` (`launchability.py:230`), without which the Hub's
+  MCP server would never be injected into a Copilot run.
 - **An ACP client transport** (`hub/hub/copilot_acp.py`), modelled on `codex_appserver.py`. It uses
   one `copilot.exe` process per turn, spawned **directly** and never through the npm shim. The
   process is started with `--acp --stdio --no-auto-update --disable-builtin-mcps --additional-mcp-config
@@ -55,7 +73,9 @@ the first runner whose approval axis is independent of its tool surface.
 
   The turn is stopped with `session/cancel` and then a kill of the process tree.
 - **A Hub-owned `COPILOT_HOME` per agent** (`ghcp-d2`), at
-  `~/.agentweave/hub/copilot-home/<project_id>/<agent>/`. It holds two files:
+  `~/.agentweave/hub/copilot-home/projects/<project_id>/<agent>/`, each component validated (a
+  project id comes from a folder's marker on adoption, so it is not always `proj-<hex>`). It holds
+  two files:
   - `agents/<agent>.agent.md` carries the agent's **stable context** (`ghcp-d1`): identity, project
     instructions, charter and a precedence statement over the repository's `CLAUDE.md`/`.claude/`.
     Its frontmatter carries `tools`, `model` and `reasoningEffort`.
@@ -84,6 +104,8 @@ the first runner whose approval axis is independent of its tool surface.
     option, the run falls back to `workspace` and says why.
   - `acceptEdits` is emulated: an edit inside the workspace is allowed and everything else is
     refused.
+  - A run with no posture chosen is judged as `workspace`, and the catalog's Permissions default for
+    `copilot` is `workspace` to match (Copilot has no sandbox of its own to fall back on).
   - A specification turn gets `--excluded-tools` over Copilot's write tools, plus plan mode (the
     full-URI `session/set_mode`).
   - The Hub's own `agentweave` tools are always allowed. Every request is answered.
@@ -97,7 +119,9 @@ the first runner whose approval axis is independent of its tool surface.
 - **Context meter** from `usage_update {used, size}`. **Accounting** records the turn as unmeasured;
   per-call usage and credits are slice 4.
 - **One-shot calls** (`worker.py`, `conversation_titles.py`) use `copilot -p --output-format json`,
-  with no tools, under a Hub-owned worker home.
+  with every tool excluded (`--excluded-tools=builtin:*,mcp:*,custom:*`; an empty
+  `--available-tools=` would grant them all), under a Hub-owned worker home. Titles parse the JSON
+  envelope before titling.
 - **Model catalog** for `copilot`: `auto` (label "Auto", the default) plus the models listed by
   `copilot help config`, with Effort and Permissions controls. The Hub validates the model, because
   `session/set_model` accepts anything. When Copilot runs a different model than the one requested
@@ -111,6 +135,7 @@ the first runner whose approval axis is independent of its tool surface.
   the agent's own `env_vars` name them.
 - **UI changes:**
   - `RunnerCli` gains `'copilot'`, and so do `CLI_OPTIONS` and `providerForRunner`;
+  - the timeline marks Copilot's `edit`/`delete`/`move` rows as writes;
   - a Copilot provider mark (`simple-icons` `githubcopilot`);
   - the picker offers Auto;
   - the catalog test fixture covers Copilot.
@@ -153,14 +178,16 @@ None. Every behaviour lands in an existing capability.
 - `operator-agent-creation`: ADDED *A Copilot agent's native files are written into a Hub-owned
   home*.
 - `agent-tool-surface`: ADDED *A Copilot run's MCP tool calls outlast the Hub's longest wait*.
+- `conversation-checkpoint` (R2): ADDED *A Copilot worker invocation is offered no tool*.
 
 ## Impact
 
 - **Backend.**
   - New: `hub/hub/copilot_acp.py`, `hub/hub/copilot_home.py`, `hub/hub/copilot_probe.py`.
   - Changed: `db/models.py`, `db/engine.py`, `project_lifecycle.py`, `schemas/runners.py`
-    (derived), `api/v1/runners.py`, `runner_commands.py` (or slice 1's adapter registry),
-    `launchability.py`, `model_catalog.py`, `workspace_writes.py`, `runner_events.py` (a
+    (derived), `api/v1/runners.py`, `runner_commands.py` (`SUPPORTED_RUNNERS`,
+    `_CATALOG_PROVIDER_BY_RUNNER`; or slice 1's adapter registry), `launchability.py`
+    (`MCP_INJECTABLE_RUNNERS`, the probe, the token strip), `model_catalog.py`, `workspace_writes.py`, `runner_events.py` (a
     `diagnostic_event` builder), `worker.py`, `conversation_titles.py`, `api/v1/agent_trigger.py`
     (executor), `api/v1/agents.py` (context split, `_display_model`, file writes on create and on
     PATCH).
@@ -170,7 +197,9 @@ None. Every behaviour lands in an existing capability.
   `ck_runners_cli IN ('claude','codex','copilot')`. The head assertions in `test_migrations.py` and
   `test_project_persistence.py` are bumped. It reaches `:8000` on the operator's next restart; it
   only widens a constraint.
+- **Scripts.** `scripts/check_model_catalog.py` gains a Copilot comparison (drift is checked there,
+  not by a test that can only skip in CI).
 - **UI.** `hub/ui/src` and the committed bundle `hub/hub/static/ui` are committed together. They reach
   `:8000` on the operator's next reload.
-- **Files outside the repo.** `~/.agentweave/hub/copilot-home/…`, Hub-owned, with the same standing as
+- **Files outside the repo.** `~/.agentweave/hub/copilot-home/{projects,worker}/…`, Hub-owned, with the same standing as
   `~/.agentweave/hub/tool-server/`.

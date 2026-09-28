@@ -1,6 +1,6 @@
 ## 0. Rounds
 
-- [ ] 0.1 R2: re-derive independently, on the tree the night ORDER and slices 1–2 leave.
+- [x] 0.1 R2: re-derive independently, on the tree the night ORDER and slices 1–2 leave.
   - Rebase every `file:line` in `design.md`, especially the sites tonight's changes move:
     - the MCP branch of `access_path_notice`, and the `_tool_surface_lines` preamble (full-names change);
     - `_ask_operator` / `approve_tool_call` (ask-me card change);
@@ -10,6 +10,13 @@
     - the normalised Copilot permission tool names (design D8, open question 6);
     - where slice 2 composes the prompt and sets `copilot.exe`'s env (D5, D9).
   - Answer open questions 1–6 in `design.md` or carry them forward. Record the result in the Round log.
+  - **Done 2026-09-28** on master `ef55e6f`. Only 5 of the night ORDER's changes had landed, and neither slice
+    had, so the sites those changes move are marked "rebase at IMPL". Result:
+    - 14 corrections, among them: the D5 pin is only made for MCP runs; the D8 deny-list missed `()`; Codex
+      approvals are wrapped, so group 6 cannot fire (recommended cut); call mode must never announce; D9 is
+      retargeted onto slice 2's `per_turn`;
+    - OQ 1/3/4/6 answered, 2/5/7 carried;
+    - 7 cross-slice gaps listed.
 - [ ] 0.2 R3: a second independent re-derivation.
   - Re-read D8's predicate against `_lex`/`_words` as they are, and try to construct a command that the predicate
     allows and that does more than one plane call. Record the attempt.
@@ -53,6 +60,10 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - No `AW_RUN_TOKEN` → `kind: unbound`, exit 2, and the stub saw **no** request.
   - An unknown key → `kind: usage` naming the accepted parameters, exit 64.
   - `--token x` → usage, exit 64.
+  - Across every case above, the stub saw **no** `POST /api/v1/agent-actions/mcp-adapter-online`. Call mode
+    never announces (design D4).
+  - A stub answering `200` with a non-JSON body → `kind: internal`, exit 70, and no traceback on stdout or
+    stderr.
   - A UTF-16-with-BOM args file and a UTF-8-with-BOM file both work.
 - [ ] 1.5 Same file, `ask_user` through call mode against the stub (design D7), with `AW_QUESTION_TIMEOUT=10`. It
   takes about 10 s; there is no `slow` marker in this repo, so do not add one:
@@ -67,9 +78,17 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     - `AW-TOOL list_tasks` (PowerShell only);
     - `aw-tool list_tasks`;
     - `aw-tool --list`;
-    - a `Write` of `.agentweave/calls/x.json`.
+    - a `Write` of `.agentweave/calls/x.json`, by `file_path` and by `path` (slice 2's shape), and an `Edit` of it;
+    - the same allows with `AW_WORKSPACE_DIR` unset and `workspace=<tmp>` passed (the callers that run in the Hub
+      process).
+  - `_HUB_OWN_WRITE_TOOLS == workspace_writes.CLAUDE_WRITE_TOOLS` (the restated constant).
   - **Fall through** (predicate `None`; under `operator` the card is asked):
     - `aw-tool create_task .agentweave/calls/1.json; rm x`, `… | cat`, `… > out`;
+    - in PowerShell (design D8's character allow-list):
+      - `aw-tool list_tasks (.agentweave/calls/1.json)`, which today lexes to exactly the three accepted words;
+      - `aw-tool create_task {x}`;
+      - `aw-tool create_task .agentweave/calls/1.json,x`;
+      - `aw-tool 'create_task' .agentweave/calls/1.json`;
     - `aw-tool create_task $(echo x)`, `aw-tool create_task $env:X`, `aw-tool create_task %X%`;
     - `./aw-tool …`, `C:\x\aw-tool.cmd …`;
     - `aw-tool approve_tool_call …`, `aw-tool nosuch`;
@@ -88,11 +107,14 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - both are rewritten when altered or deleted;
   - it sits under `<digest>/bin/<sha256(sys.executable)[:8]>`;
   - `prune_stale` removes it with its digest directory.
-- [ ] 1.8 The trigger's env test (find the one asserting `AW_RUN_TOKEN` in the spawned env: `grep -rn
-  "AW_RUN_TOKEN" hub/tests`):
+- [ ] 1.8 The trigger's env test: the one in `hub/tests/test_agent_trigger.py` that reads
+  `spawned_env["AW_RUN_TOKEN"]` (`:713` at R2).
   - the launcher dir is the first `PATH` entry;
   - with a base env whose key is `Path`, the same key is reused and no second `PATH` key appears;
-  - `<work_dir>/.agentweave/calls/` exists after the trigger.
+  - `<work_dir>/.agentweave/calls/` exists after the trigger;
+  - with `hub_client: "cli"` (no MCP), the launcher dir is still first on `PATH`;
+  - a patched `PIN.path` that raises `OSError` refuses the trigger with 409 *"Could not materialize the tool
+    server…"*, also under `hub_client: "cli"`. Today the pin is made only for MCP runs (design D5).
   - `hub/tests/test_repo_hygiene.py`: `.agentweave/calls/` is in `EXCLUDE_PATTERNS`, and in the seeded block.
 - [ ] 1.9 `hub/tests/test_tool_surface_matches_server.py` + `test_launchability.py`:
   - `access_path_notice("shim")` names `aw-tool` and `.agentweave/calls/`, and contains no `AW_RUN_TOKEN`, no
@@ -101,8 +123,10 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     `` `aw-tool <tool>` `` with its `args`, plus the short-name mapping sentence and the question wait in seconds
     (pass `question_timeout=37` and assert `37`);
   - the existing agreement check runs over the shim rendering too;
-  - `_tool_surface_lines(access_path="cli")` no longer exists as a run rendering. Assert that
-    `described_access_path` never returns `"cli"`/`"http"` for a run.
+  - `_tool_surface_lines(access_path="cli")` raises `ValueError`, and `access_path="http"` renders today's HTTP
+    form (design D11);
+  - `described_access_path` never returns `"cli"` or `"http"` for a run. This includes
+    `described_access_path("cli", override="cli") == "shim"`.
 - [ ] 1.10 `hub/tests/test_mcp_announce.py` (new), with an in-process app:
   - `wait(run_id, 1.0)` returns True at once when `mcp_adapter_online_at` is already set;
   - it returns True within ~0.1 s when the announce route is called during the wait;
@@ -111,12 +135,15 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 - [ ] 1.11 `RunFacts` carries `plane_surface` and `harness_mcp_status` from the row. Extend the test that asserts
   `outside_workspace_writes` on the agent timeline / chat run facts (`grep -rn outside_workspace_writes
   hub/tests`), using the ordering the route returns.
-- [ ] 1.12 (group 6) `hub/tests/test_codex_appserver*.py`: `decide_approval` on a command approval whose command is
-  `aw-tool create_task .agentweave/calls/1.json`:
+- [ ] 1.12 (group 6; **R2 recommends cutting group 6**, design D8 and open question 4)
+  `hub/tests/test_codex_appserver*.py`: `decide_approval` on a command approval whose command has the **captured
+  wrapped shape** (`test_codex_appserver.py:73`, `:141`), for example
+  `powershell -Command "aw-tool create_task .agentweave/calls/1.json"`. A bare `aw-tool …` fixture is a shape
+  Codex never sends, so it is not evidence (F190).
   - under `posture=OPERATOR_POSTURE` → accept, not `ASK_OPERATOR`;
   - a near miss → `ASK_OPERATOR` as today.
-  First read `approval_subject` for how the command arrives (a string or an argv list).
-- [ ] 1.13 (group 7) `hub/tests/test_runner_commands*.py` / `test_permission_approver.py`: a non-yolo Claude
+  R2 read it: `params["command"]` is one string (`approval_subject`, `codex_appserver.py:145-151`).
+- [ ] 1.13 (group 7) `hub/tests/test_agent_default_permission_mode.py` (there is no `test_runner_commands*.py`): a non-yolo Claude
   command, with and without `mcp_command`, carries `Bash(aw-tool:*)` and `PowerShell(aw-tool:*)` in
   `--allowedTools`. A yolo command carries neither.
 - [ ] 1.14 (after slice 2) Copilot transport, using slice 2's fake ACP agent (or a stub that answers `initialize`,
@@ -124,7 +151,11 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - no announce within a patched 0.3 s wait → the fake receives the prompt `/mcp list` first, then a prompt whose
     text holds the shim notice and the `aw-tool` tool section; the run records `absent` + `shim`; exactly one
     `plane_surface` status event is stored, quoting the fake's `/mcp list` text;
-  - the announce arrives during the wait → no `/mcp list`, the MCP notice, and `connected` + `mcp`.
+  - the announce arrives during the wait → no `/mcp list`, the MCP notice, and `connected` + `mcp`;
+  - in both cases, the prompt holds exactly one tool section, the one for the decided surface, and
+    `.agentweave/context/<agent>.md` after the run holds that same section (design D9);
+  - a raw `session.mcp_servers_loaded` with `agentweave` not connected, on a run told `shim`, emits **no**
+    `copilot_mcp_server_failed` error event (design D9, superseding slice 2's D10).
 
 ## 2. The per-run record (design D1)
 
@@ -137,7 +168,8 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - Verify: `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py -q`.
 - [ ] 2.2 `record_harness_mcp_status(session, run_id, status)` in `launchability.py` (or a new small module). It
   enforces "`connected` is final" and the unknown→`failed` mapping. The announce route (`agent_actions.py:459-483`)
-  calls it and then `mcp_announce.notify(run_id)`.
+  writes the stamp and the status in one commit, then calls `mcp_announce.notify(run_id)`. If either raises, the
+  route returns 500 and writes nothing (design D1).
 - [ ] 2.3 `hub/hub/mcp_announce.py`: the per-run event registry and `wait(run_id, timeout)`, which checks the row
   first (design D9). Registry entries are removed when the wait returns or the run ends.
 - [ ] 2.4 Replace `harness_has_honoured_mcp` with `latest_mcp_test`, and change `described_access_path` to take
@@ -145,10 +177,13 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 - [ ] 2.5 Claude: `ParsedLine.harness_mcp_status` and the `system`/`init` branch in `parse_claude_line`. The claude
   run loop (`agent_trigger.py` ~`:2451-2560`, `parse_line` consumer) records it through 2.2 when the run was given
   MCP. Test 1.2 passes.
-- [ ] 2.6 Codex: at run end, a run given MCP that ended `completed` with no announce records `absent`. **Gate:** do
-  this only if R2 settled open question 3 in favour; otherwise leave Codex runs untested and delete this row from
-  design D1.
-- [ ] 2.7 `RunFacts` gains the two fields at both construction sites (`agents.py:904`, `agent_chat.py:351`). Test
+- [ ] 2.6 Codex app-server (R2 settled open question 3):
+  - in `run_turn`'s `mcpServer/startupStatus/updated` branch (`codex_appserver.py:1162-1183`), when
+    `name == own_server_name`, map `ready` → `connected` and `failed` → `failed`, through a new callback into 2.2;
+  - the existing `failed` error event is unchanged;
+  - no status leaves the run untested;
+  - test: extend `TestRunTurnMcpStartupFailure` (`test_codex_appserver_run_turn.py:555`) with a `ready` case.
+- [ ] 2.7 `RunFacts` gains the two fields at both construction sites (`agents.py:898`, `agent_chat.py:341` at R2). Test
   1.11 passes.
 
 ## 3. The call mode (design D3, D4, D6, D7)
@@ -162,7 +197,8 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - bind with `inspect.signature`;
   - read the file (UTF-8 / UTF-8-BOM / UTF-16-BOM);
   - map `HubAPIError` / `HubUnreachableError` / `UnboundIdentityError` / usage errors to the D3 envelope and exit
-    codes;
+    codes, and every other exception to `kind: internal`, exit 70;
+  - never call `_announce_adapter_online` (design D4);
   - `json.dumps(result, default=str)`;
   - refuse `approve_tool_call`.
   The entry guard at the end of the file dispatches to `call_main(sys.argv[2:])` in call mode (keep it the last
@@ -180,7 +216,8 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   - the `PATH` prepend, with a case-insensitive key, beside `AW_RUN_TOKEN` (`:1246`);
   - `.agentweave/calls/` created beside the context file (`:1160-1169`), with an `OSError` refused as the context
     write is;
-  - a launcher failure refused with the tool-server reason (`:1197-1203`).
+  - `PIN.path()` and `PIN.launcher_dir()` for **every** run, before the `mcp_command` branch. An `OSError` is
+    refused with the tool-server reason (`:1197-1203`), and the MCP branch then reuses the path (design D5).
   Test 1.8 passes.
 - [ ] 4.3 `repo_hygiene.EXCLUDE_PATTERNS` gains `.agentweave/calls/` with a one-line reason. Test 1.8 (hygiene half)
   passes.
@@ -192,15 +229,33 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
   adds it.
 - [ ] 5.2 `access_path_notice("shim")` (replacing the HTTP branch) and `_shim_lines` / the shim preamble in
   `_tool_surface_lines`. It takes `question_timeout` (the agent's `question_timeout_seconds` or the restated
-  default 240). `_http_lines` stays, reachable only by an explicit `access_path="http"` (design D11, open question
-  1). Test 1.9 passes.
-- [ ] 5.3 `_render_hub_agent_context(include_tool_surface=True)`. The claude/codex paths are unchanged. Record
-  `plane_surface` when the prompt is composed (the Claude/Codex path in `trigger_agent_directly`).
+  default 240).
+  - `_http_lines` stays, reachable only by an explicit `access_path="http"` (design D11, open question 1). Any
+    other value raises `ValueError`.
+  - Move the tests that pass `"cli"`:
+    - `HTTP_PATH` in `test_tool_surface_matches_server.py:36` → `"http"`;
+    - `access_path_notice("cli")` in `test_agent_facing_text.py:162` and `test_launchability.py:588` →
+      `"shim"`, with their assertions rewritten to the shim text.
+  - If `a-claude-run-is-told-its-agentweave-tools-by-their-full-names` has landed, the shim form renders its
+    host-`SendMessage` sentence too.
+  Test 1.9 passes.
+- [ ] 5.3 `_render_hub_agent_context(include_tool_surface=True)`.
+  - `agents.py:2126` is the only `_tool_surface_lines` call. The flag is carried through slice 2's
+    `stable`/`per_turn` split.
+  - The claude/codex paths are unchanged.
+  - Record `plane_surface` when the prompt is composed. On the Claude/Codex path that is the `Run(...)`
+    constructor (`agent_trigger.py:1306`), which comes after the prompt.
 - [ ] 5.4 Copilot, in slice 2's adapter and transport:
   - `tests_mcp_before_first_prompt = True`;
   - the transport waits with `mcp_announce.wait` after `session/new` / `session/load`, sends `/mcp list` on
     timeout, then calls `render_surface(surface)` and sends `session/prompt`;
-  - the context rendered for the custom agent file uses `include_tool_surface=False`;
+  - the pre-spawn `per_turn` block is rendered with `include_tool_surface=False` (slice 2's agent file never
+    carried the section);
+  - `render_surface` returns the notice and the section, and rewrites `.agentweave/context/<agent>.md` with the
+    section for the decided surface (design D9);
+  - `mcp_announce.wait` is total: a failing row check counts as "not yet";
+  - slice 2's `copilot_mcp_server_failed` error event is not emitted. The non-connected status becomes 5.5's
+    event instead;
   - `map_events` passes `session.mcp_servers_loaded` / `mcp_server_status_changed` entries for `agentweave` to 2.2
     (`connected` only upgrades) and stores any other status as a diagnostic;
   - `copilot.exe`'s env per 5.1.
@@ -210,14 +265,29 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
 
 ## 6. The approver recognises the call command (design D8)
 
-- [ ] 6.1 `_hub_own_call` in `mcp_server.py`, using `_lex`, the callable set from 3.1, and `AW_WORKSPACE_DIR`.
+- [ ] 6.1 `_hub_own_call(tool_name, tool_input, *, workspace=None)` in `mcp_server.py`. It uses:
+  - the character allow-list;
+  - `_lex`;
+  - the callable set from 3.1;
+  - `_HUB_OWN_WRITE_TOOLS` (restated);
+  - `workspace`, defaulting to `AW_WORKSPACE_DIR`.
   `_decide` and `approve_tool_call`'s operator branch call it in place of their `mcp__agentweave__` lines. Test 1.6
   passes.
-- [ ] 6.2 Slice 2's ACP permission handler calls `_hub_own_call` before `_decide` or the card, in every posture,
-  on its normalised `(tool_name, tool_input)`.
+- [ ] 6.2 Slice 2's ACP permission handler calls `_hub_own_call(..., workspace=<run work dir>)` before `_decide` or
+  the card, in every posture, on its normalised `(tool_name, tool_input)`. It reports the allow like any other
+  decision (`on_decision`, if `a-run-records-that-its-calls-were-allowed` has landed).
 - [ ] 6.3 (severable) Codex's `decide_approval`: the command-approval branch accepts on `_hub_own_call` before the
   posture branches (imported from `hub.mcp_server`; the Hub side may import it, as `agents.py:1016` already does).
-  Test 1.12 passes. If cut, drop 1.12 and D8's Codex bullet.
+  Test 1.12 passes.
+  - **R2 recommends cutting** (design D8, open question 4). The approval's command is wrapped, and the Codex shell
+    probably has neither the token nor the network.
+  - If kept, first unwrap exactly one wrapper, as D8 specifies.
+  - If cut:
+    - drop 1.12 and D8's Codex caller;
+    - narrow the first line of *"The Hub's own call command is decided like the Hub's own tools"* in
+      `specs/agent-run-sandboxing/spec.md` from "Wherever the Hub answers a run's permission request" to
+      "Wherever the Hub answers a Claude or Copilot run's permission request" (open question 8);
+    - re-run `openspec validate --strict`.
 
 ## 7. Claude parity (severable; design D13)
 

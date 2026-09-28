@@ -13,7 +13,9 @@ of `access_path_notice`), `an-ask-me-card-says-what-workspace-only-would-decide`
 `a-runner-that-cannot-collaborate-says-so-where-it-is-bound`.
 
 Slice 3 of 5 of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. Its primary input is
-appendix C, `c-reaching-the-hub-without-mcp.md`. **R1, 2026-09-27. Nothing here is implemented.**
+appendix C, `c-reaching-the-hub-without-mcp.md`. **R1, 2026-09-27; R2, 2026-09-28. Nothing here is implemented.**
+R2 ran against master `ef55e6f`, where none of the five changes above and neither slice had landed. So every site
+they move carries "rebase at IMPL" in `design.md`.
 
 ## Why
 
@@ -49,7 +51,9 @@ harness reports the server's state on every run and the Hub parses none of it (`
    - Each run given the Hub's MCP server records a status, `connected` / `failed` / `absent`, in a new
      `Run.harness_mcp_status`. `connected` comes from the adapter's existing announce
      (`POST /mcp-adapter-online`). The negatives come from the runner: Claude's `system/init.mcp_servers`
-     line (newly parsed), Copilot's announce timeout, and a completed Codex run with no announce.
+     line (newly parsed), Copilot's announce timeout, and Codex app-server's own
+     `mcpServer/startupStatus/updated` (already read for its `failed` case). A call through the call command is
+     never a positive report.
    - What a run is told about the plane is decided from **the latest tested run** of the agent, not "any run
      ever". A status the Hub does not recognise counts as no grounds.
    - **A runner whose first prompt the Hub sends after the harness has started its MCP servers tests the
@@ -80,10 +84,14 @@ harness reports the server's state on every run and the Hub parses none of it (`
      relative `.json` path inside `<workspace>/.agentweave/calls/`) is allowed in every posture. The same
      holds for a file write of a `.json` file inside that directory. That is the same standing the
      `mcp__agentweave__*` tools already have.
-   - It is one predicate in `mcp_server.py`, used by `_decide`, by `approve_tool_call`'s operator branch, by
-     slice 2's ACP permission handler and by Codex's `decide_approval`.
-   - A near miss (an operator, a redirection, a variable, a second command, a path elsewhere) is not denied by
-     this rule. It falls through to today's decision.
+   - It is one predicate in `mcp_server.py`, used by `_decide`, by `approve_tool_call`'s operator branch and by
+     slice 2's ACP permission handler. Codex's `decide_approval` is severable, and R2 recommends cutting it. Codex
+     sends the command wrapped (`powershell -Command "…"`), and its shell probably has neither the token nor the
+     network (design D8, open question 4).
+   - "Exactly" is a character allow-list, not a list of refused syntax. R2 found a parenthesised path that the list
+     approach let through.
+   - A near miss (an operator, a redirection, a variable, a grouping, a second command, a path elsewhere) is not
+     denied by this rule. It falls through to today's decision.
 4. **The turn notice and `_tool_surface_lines` say which surface THIS run has**: the MCP tools, or `aw-tool`.
    The raw HTTP form is no longer described to runs. It stays the application contract (the equal-capability
    requirement), not an instruction an agent is given, because following it puts the credential into stored
@@ -149,13 +157,13 @@ The shim is Hub-owned run tooling, like the MCP server (design D2).
   - `hub/hub/api/v1/agent_actions.py`: the announce notifies waiters.
   - `hub/hub/runner_parsing.py`: Claude `system/init`.
   - `hub/hub/repo_hygiene.py`: `.agentweave/calls/` excluded.
-  - `hub/hub/codex_appserver.py`: the predicate.
+  - `hub/hub/codex_appserver.py`: `startupStatus` recording (and the predicate, only if group 6 is kept).
   - Slice 2's Copilot adapter and ACP transport: wait, compose late, the `/mcp list` diagnostic, raw-event
     corroboration.
   - A new `hub/hub/mcp_announce.py`: in-process waiters.
 - **One migration:** `runs.harness_mcp_status`, `runs.plane_surface`, with a backfill of `connected` where
   `mcp_adapter_online_at` is set.
-- **API:** `RunFacts` (`hub/hub/schemas/agents.py:140`, served at `agents.py:904` and
-  `agent_chat.py:351`) gains the two fields.
+- **API:** `RunFacts` (`hub/hub/schemas/agents.py:140`, served at `agents.py:898` and
+  `agent_chat.py:341`) gains the two fields.
 - **No UI change and no bundle refresh.** The run's status event renders with the existing `status` kind.
 - **`src/agentweave/` is untouched.**

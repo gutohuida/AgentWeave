@@ -25,7 +25,14 @@
 9. **Drive records.** The records from tasks 11.2–11.4 are pasted verbatim into the Round log. They
    match design D10 (one text row per message; a tool row paired with its result; no replayed first
    turn on the resume).
-10. **The migration works in both directions.**
+10. **A Copilot turn is given the Hub's tools (R2).** During drive prompt 1, the spawned
+    `copilot.exe` command line holds `--additional-mcp-config @…agentweave-mcp.json`, and `/agent/trigger`
+    for a Copilot agent does not answer 501. Before this change it answers 501; with only the
+    runner registry widened, it would spawn with no MCP server at all.
+11. **One-shot calls have no tools (R2).** Any Copilot title or checkpoint spawned during the drive
+    carries `--excluded-tools=builtin:*,mcp:*,custom:*` and no `--available-tools`, and its
+    conversation title is prose, not JSON.
+12. **The migration works in both directions.**
     - Up: on a copy of the trial database, `alembic upgrade head` succeeds, and a `copilot` runner row
       can be inserted.
     - Down: the downgrade refuses while that row exists.

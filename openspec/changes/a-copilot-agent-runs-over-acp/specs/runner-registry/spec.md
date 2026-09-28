@@ -59,6 +59,12 @@ Hub SHALL resolve, in order:
 - **THEN** the Hub spawns `node_modules\@github\copilot\node_modules\@github\copilot-win32-x64\copilot.exe` beside it
 - **AND** the spawned command's first argument is that executable, not the shim
 
+#### Scenario: A Copilot agent is triggered
+
+- **WHEN** an operator triggers an agent bound to a `copilot` runner on a machine where the Copilot CLI is installed and signed in
+- **THEN** the Hub does not refuse the turn as an unsupported runner
+- **AND** the spawned Copilot process is configured with the Hub's `agentweave` MCP server
+
 #### Scenario: A shim whose platform binary is missing
 
 - **WHEN** a `copilot` shim is on `PATH` and its package holds no binary for this platform

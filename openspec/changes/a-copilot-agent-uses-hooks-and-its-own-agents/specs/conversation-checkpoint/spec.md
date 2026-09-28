@@ -24,6 +24,10 @@ A compaction the runner reports as failed SHALL NOT count.
 A checkpoint produced this way SHALL be recorded as produced by context pressure, so that every
 surface that offers a threshold checkpoint offers it too.
 
+A compaction SHALL be acted on even when the conversation is already being considered for a reading
+at the moment it arrives. It SHALL then be considered after that consideration ends, and never at the
+same time as it.
+
 #### Scenario: Acting alone hands over after a compaction
 
 - **WHEN** a conversation configured to act alone is compacted by its runner below its threshold
@@ -32,8 +36,7 @@ surface that offers a threshold checkpoint offers it too.
 #### Scenario: A configuration that involves the operator warns after a compaction
 
 - **WHEN** a conversation configured to involve the operator is compacted by its runner
-- **THEN** the conversation is reported as due for a checkpoint, and the report says the runner
-  compacted it
+- **THEN** the conversation is reported as due for a checkpoint
 - **AND** no checkpoint is generated
 
 #### Scenario: Checkpointing that is off ignores a compaction
@@ -65,3 +68,10 @@ surface that offers a threshold checkpoint offers it too.
 
 - **WHEN** a checkpoint is produced in response to a compaction
 - **THEN** it is recorded as produced by context pressure
+
+#### Scenario: A compaction that arrives mid-consideration is not lost
+
+- **WHEN** a runner reports a compaction while a context reading for the same conversation is still
+  being considered
+- **THEN** the compaction is considered once that consideration has ended
+- **AND** the two are never considered at the same time

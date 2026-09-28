@@ -13,9 +13,13 @@ must be written to a file first, and that write is part of the same call.
 "Exactly one invocation" is read from the command's text in the shell it will run in: the command
 name `aw-tool` by itself (not a path to it), then an operation the command can perform, then at most
 one arguments file given as a plain relative path to a `.json` file inside the run's calls directory
-within its workspace, and nothing else. Any command separator, pipe, redirection, substitution,
-variable reference or pattern character anywhere in the command, or a second command, means it is
-not one invocation. The calls directory is the Hub's own, and the repository ignores it.
+within its workspace, and nothing else. The command's text may hold only the characters such an
+invocation needs: letters, digits, the dot, the underscore, the hyphen, the forward slash, the space,
+and in PowerShell the backslash. Any other character anywhere in the command means it is not one
+invocation, whatever that character would do. The rule does not list the shell syntax it refuses,
+because a list of refused syntax fails open at the first form it forgot, and one was found while this
+requirement was reviewed: a parenthesised path, which PowerShell runs as a command. The calls
+directory is the Hub's own, and the repository ignores it.
 
 A request that is almost an invocation is not refused by this rule. It is decided exactly as it would
 be without it, so this rule can only spare a request from being asked about, never refuse one or
@@ -38,6 +42,12 @@ allow one the workspace decision would refuse for any other reason.
 
 - **WHEN** a run's shell command is `aw-tool create_task .agentweave/calls/1.json; rm x`, or pipes,
   redirects, or substitutes anything
+- **THEN** the request is decided as it would be without this rule
+
+#### Scenario: A grouped or quoted word is not a plain call
+
+- **WHEN** a run's PowerShell command is `aw-tool list_tasks (.agentweave/calls/1.json)`, or wraps
+  any word in braces, quotes, or joins words with a comma
 - **THEN** the request is decided as it would be without this rule
 
 #### Scenario: An arguments file elsewhere is not a plain call

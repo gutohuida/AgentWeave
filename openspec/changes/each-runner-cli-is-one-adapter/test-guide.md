@@ -13,9 +13,9 @@ still the same?
 3. **The whole Hub suite passes, twice.** Run `py -3.11 -m pytest hub/tests/ -q` as usual, then again with `claude`
    removed from `PATH` (CI has no `claude`).
 4. **No runner-name branch is left outside the adapters.** `hub/tests/test_no_runner_literals.py` passes. Also run
-   `grep -rnE '== "(claude|codex)"|in \("claude"' hub/hub --include=*.py | grep -v runner_adapters/`: it finds
-   nothing.
-5. **The dead registries are gone.** `grep -rn "SUPPORTED_RUNNERS\|_CATALOG_PROVIDER_BY_RUNNER\|catalog_provider_for_runner\|MCP_INJECTABLE_RUNNERS\|resolve_access_path\|SUPPORTED_CLIS" hub/hub`
+   `grep -rnE '(==|!=) "(claude|codex)"|in \("claude"' hub/hub --include=*.py | grep -v runner_adapters/`: it finds
+   nothing. On `ef55e6f` it finds 16 lines (design D5 lists them).
+5. **The dead registries are gone.** `grep -rn "SUPPORTED_RUNNERS\|_CATALOG_PROVIDER_BY_RUNNER\|catalog_provider_for_runner\|MCP_INJECTABLE_RUNNERS\|resolve_access_path\|SUPPORTED_CLIS\|uses_app_server" hub/hub`
    finds nothing. `LEGACY_RUNNER_CLI` still has its `copilot` row, which slice 2 deletes.
 6. **The drive responses match.** In task 5.4, `GET …/runners/launchability-by-provider` and `GET …/agents/launchability`
    equal `drive_before.json`, key order included, once ids and timestamps are removed.

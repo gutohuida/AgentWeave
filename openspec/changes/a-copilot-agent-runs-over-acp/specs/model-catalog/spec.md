@@ -8,8 +8,10 @@ Copilot accepts any model name it is sent, and it silently replaces a model the 
 not allow. The Hub's validation is therefore the only check a model name gets. `auto` SHALL be
 labelled "Auto". Each Copilot model SHALL declare its context window as unknown unless the Hub knows
 it, because Copilot reports the window of the model it actually ran. The Copilot entry SHALL declare
-the same four permission postures, with the same labels, as the other providers, and an Effort
-control.
+the same four permission postures, with the same labels, as the other providers, with Workspace
+only as the default, and an Effort control. Workspace only is the default because a Copilot run has
+no sandbox of its own: the Hub decides every permission request, and it decides a run that states
+no posture as Workspace only.
 
 #### Scenario: Auto is the default
 
@@ -26,3 +28,4 @@ control.
 
 - **WHEN** the catalog's `copilot` entry is read
 - **THEN** its Permissions control offers Edit files, Workspace only, Ask me and Full access
+- **AND** its default is Workspace only

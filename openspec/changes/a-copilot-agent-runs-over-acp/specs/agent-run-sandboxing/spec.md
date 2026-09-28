@@ -6,10 +6,13 @@ The Hub SHALL answer every permission request a Copilot run raises over the Agen
 
 The Hub SHALL answer as follows:
 
-- **Workspace only.** A shell command SHALL be judged in the dialect of the shell Copilot runs:
-  PowerShell on Windows. A file change and an out-of-directory read SHALL be judged against the
-  run's workspace, path by path. A call to the Hub's own `agentweave` tools SHALL be allowed. A
-  request kind the Hub does not recognise SHALL be refused.
+- **Workspace only**, which is also how a run that states no posture is decided. A shell command
+  SHALL be judged in the dialect of the shell Copilot runs: PowerShell on Windows. A file change and
+  an out-of-directory read SHALL be judged against the run's workspace, path by path, and a file
+  change that names no path SHALL be refused. A call to the Hub's own `agentweave` tools SHALL be
+  allowed, and a call SHALL count as the Hub's own only when the server it names is the Hub's and
+  the tool is one the Hub's server serves. A request kind the Hub does not recognise SHALL be
+  refused.
 - **Ask me.** Every request except the Hub's own tools SHALL be put to the operator as a card while
   the request is held open. It SHALL be refused when the operator's wait runs out.
 - **Full access.** The run SHALL be put into Copilot's allow-all mode. When the machine's Copilot
@@ -53,6 +56,16 @@ plan mode prevents the turn's specification duties.
 - **WHEN** a Copilot run is started under Full access and Copilot does not offer its allow-all option
 - **THEN** the run decides each request against its workspace
 - **AND** its timeline says that Full access is disabled by the machine's Copilot policy
+
+#### Scenario: A run with no posture chosen
+
+- **WHEN** a Copilot run whose conversation and agent state no permission posture asks to run a command that writes outside its workspace
+- **THEN** the Hub answers the request with a refusal, as under Workspace only
+
+#### Scenario: A foreign server named like the Hub's
+
+- **WHEN** a Copilot run asks to call a tool of an MCP server named `agentweave-x`
+- **THEN** the Hub judges the call as a foreign server's rather than allowing it as its own
 
 #### Scenario: An unknown request kind
 

@@ -1,13 +1,14 @@
-**Depends on:** `each-runner-cli-is-one-adapter` (slice 1: `RunnerAdapter`, `usage_from`,
-`compaction_percent`), `a-copilot-agent-runs-over-acp` (slice 2: ACP client, raw-event subscription,
-Copilot executor, one-shot envelope parser, `copilot` literal and migration) and
+**Depends on:** `each-runner-cli-is-one-adapter` (slice 1: `RunnerAdapter`, `get_adapter`, the
+RPC executor `_execute_rpc_run`; it does **not** define `compaction_percent`, which task 3.1 adds),
+`a-copilot-agent-runs-over-acp` (slice 2: `copilot_acp.run_turn`, its raw-event subscription
+constant, `parse_copilot_envelope`, the `copilot` literal and migration) and
 `a-run-reaches-the-hub-without-mcp` (slice 3). Build after all three are archived and after the
 2026-09-27 night queue. Test commands use `py -3.11`, never bare `python`. Run pytest from the repo
 root.
 
 ## 0. Rounds
 
-- [ ] 0.1 R2: re-derive the design independently against the code **as it stands after slices 1–3
+- [x] 0.1 R2: re-derive the design independently against the code **as it stands after slices 1–3
   and tonight's queue**. In particular: (a) slice 1's `usage_from` contract and whether it defines
   `compaction_percent` (Q1, D9); (b) slice 2's executor, whether it runs one process per run, whether
   it knows `session/new` vs `session/load`, whether its `initialize` subscribes to the four event
@@ -16,6 +17,11 @@ root.
   `an-estimate-that-misses-turns-says-so` lands, and `checkpoint_trigger.py:168-310`; (d) what
   `GET /agents` loads per agent (D11). Also: what does each route return when the function it calls
   raises? Record the result in design.md's round log
+  - **Done 2026-09-28** against master `ef55e6f`. Slices 1–3 are unbuilt and 5 of the 28 night changes
+    have landed, so (a) and (b) were answered from those slices' designs. 12 corrections, among them
+    a credit double count (D4), a refused turn whose input would not have been returned (D8), the
+    ledger's home (D2), where the token ceiling goes (D10), and a drive step that could not raise its
+    banner (7.6). Q1, Q2 and Q8 are answered, and gaps G1–G6 are in the round log
 - [ ] 0.2 R3: a second, fresh re-derivation of D3 (the lower-bound argument), D4 (the baseline
   lookup) and D10 (the formulas and the token-mode ceiling), from the code and the acp4 numbers, not
   from R2's notes. `openspec validate a-copilot-run-shows-its-credits --strict` passes
@@ -36,11 +42,13 @@ root.
   (no module). `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
 - [ ] 1.2 Same file: the sum is not doubled. Total is 33172, not 66344, whichever of the calls or
   the prompt result the ledger saw first
-- [ ] 1.3 Same file: dropped events. Only calls 1 and 3 observed, plus the full prompt result, gives
-  total 33172 and `source == "copilot_prompt_result"`. All three calls and no prompt result gives
-  33172 and `source == "copilot_calls"`
-- [ ] 1.4 Same file: a second prompt in the same process whose cumulative result is 40000 total, with
-  `previous_prompt_usage` = the first result, contributes 6828, not 40000
+- [ ] 1.3 Same file: dropped events (`session_was_new=True`). Only calls 1 and 3 observed, plus the
+  full prompt result, gives total 33172 and `source == "copilot_prompt_result"`. All three calls and
+  no prompt result gives 33172 and `source == "copilot_calls"`
+- [ ] 1.4 Same file: one ledger (one process) that observes two prompt results, 33172 and then a
+  cumulative 40000, uses 40000, not their sum 73172 (design D3: the process-cumulative figure is the
+  run's). Assert with the results in the order they were emitted, so a ledger that kept the earlier
+  one fails
 - [ ] 1.5 Same file: a subagent call (`parentToolCallId` set, `initiator: "sub-agent"`) is counted
   once; a repeated notification with the same `providerCallId` is counted once
 - [ ] 1.6 Same file: a `session.compaction_complete` with `compactionTokensUsed` adds its tokens and
@@ -50,7 +58,12 @@ root.
 - [ ] 1.8 Same file, credits baseline (D4): loaded session with baseline 275856000/1 and a
   checkpoint of 400000000/2 gives 124144000 / 1.0; loaded with no baseline gives the per-call
   `copilotUsage.totalNanoAiu` sum and `premium_requests is None`; checkpoint below baseline gives
-  `ai_nano_aiu is None` and stores the new total; no events at all gives `total_tokens is None`
+  `ai_nano_aiu is None` and stores the new total; no events at all gives `total_tokens is None`.
+  These cases run through `settle_copilot_credits` with a seeded `turn_usage`/`runs` baseline.
+  **The fallback stores what it charged (R2):** a new-session run with calls but no checkpoint records
+  the per-call sum 275856000 and `session_nano_aiu_total == 275856000`. A following loaded run whose
+  checkpoint is 400000000 is then charged 124144000, not 400000000 minus an older baseline. This
+  fails if the fallback stores nothing
 - [ ] 1.9 Same file, quota (D7, D8): acp4's snapshots give reading `{"status": "allowed", "quota":
   "chat", "rateLimitType": "monthly", "resetsAt": 1790812800, "remainingPercentage": 96.5,
   "provider": "copilot"}`. (1790812800 is 2026-10-01T00:00:00Z; assert it with
@@ -59,7 +72,9 @@ root.
   of it is not None. `errorType "rate_limit"`, `errorCode "session_quota_exceeded"`,
   `"billing_not_configured"`, and `errorType "query"` with message `"quota exceeded"` each leave
   `status "allowed"`. A refused run with no snapshot and a `prior_reading` whose `resetsAt` is ahead
-  uses it; with one whose reset is past, `resetsAt` is absent
+  uses it (`settle_copilot_credits` supplies it from a seeded `turn_usage` row, design D8). With one
+  whose reset is past, `resetsAt` is absent. A replayed `session.usage_checkpoint` observed before
+  the ledger is armed is ignored
 - [ ] 1.10 Extend `hub/tests/test_accounting_api.py`: seed a Claude turn (1000 tokens, no credits)
   for agent `a-claude` and two Copilot turns (500 and 300 tokens; 200000000 and 75856000 nano-AIU;
   premium 1.0 and 0.5) for agent `b-copilot`. `GET /accounting` gives `project.total_tokens == 1800`,
@@ -74,8 +89,10 @@ root.
 - [ ] 1.12 Extend `hub/tests/test_checkpoint_policy.py`: `resolve_policy(None, None)` and
   `compaction_percent=95` give threshold 80, notes 70, final 92 (pins Claude). `compaction_percent=80`
   gives 65 / 55 / 77. A project percent threshold 80 with `compaction_percent=80` gives 77 and
-  `threshold_source == "runner_ceiling"`, and a notes value of 78 becomes 67. Token mode: `crosses`
-  with tokens below the threshold and percent 92 is True under C=95 and False at percent 91.
+  `threshold_source == "runner_ceiling"`, and a notes value of 78 becomes 67. A Claude percent
+  threshold 95 with `compaction_percent=95` gives 92 (`runner_ceiling`; Q7). Token mode:
+  `should_checkpoint` with tokens below the threshold is True at percent 92 under C=95 and False at
+  percent 91. `crosses` itself is unchanged, since its signature has no policy.
   `needs_final_warning` at 77 is True under C=80 and False under C=95. Fails today
 - [ ] 1.13 Extend `hub/tests/test_checkpoint_cutover.py` (beside the offered-mode tests): an `offered`
   project, a `copilot` runner bound to agent `cop` and a `claude` runner bound to agent `cla`, both
@@ -86,11 +103,19 @@ root.
 - [ ] 1.14 Extend `hub/tests/test_migrations.py`: upgrade to head adds the four `turn_usage` and two
   `worker_invocations` columns, nullable; downgrade removes them; a pre-existing `turn_usage` row
   survives with NULLs. Fails today
-- [ ] 1.15 The Copilot executor's run end (slice 2's fake ACP transport; file named in R2): a run
-  whose raw events include the quota refusal and a snapshot resetting in the future ends `failed`,
-  persists one `queue_agent_held` event, returns its entries with the refusal counted (not a delivery
-  attempt), and `provider_hold` names the reset. A run with `errorType "rate_limit"` persists no
-  `queue_agent_held`. Fails today
+- [ ] 1.15 The run end, in two files.
+  - (a) `hub/tests/test_copilot_acp_run_turn.py` (slice 2's scripted fake session): a session whose raw
+    events include the quota refusal and whose `session/prompt` returns `stopReason: "end_turn"` yields
+    `TurnOutcome.status == "failed"` and one `on_accounting` call carrying the rejected reading. This
+    is design D8's case. A fixture that ends `failed` by construction could not catch it.
+  - (b) `hub/tests/test_a_refused_turn_holds_the_queue.py` gains an RPC case. It patches the Copilot
+    transport's module-level `run_turn` (slice 1 D9's seam) to deliver that sample and a failed
+    outcome. The run persists one `queue_agent_held` event. Its entries are returned, and the refusal
+    is not counted as a delivery attempt. The job run is not finalised, and `provider_hold` names the
+    reset. A run with `errorType "rate_limit"` persists no `queue_agent_held`, and a Codex RPC run's
+    end is unchanged.
+
+  Both fail today. (Rebase at IMPL: slices 1 and 2 unbuilt at R2)
 - [ ] 1.16 UI, extend `hub/ui/src/__tests__/accountingPresentation.test.tsx`: `formatAiCredits(275856000)`
   is `0.28 AI credits`, `formatAiCredits(4000000)` is `<0.01 AI credits`, and `formatAiCredits(null)` is
   `null`. `accountingDisplayLabel` with a Copilot allowance `{status: 'allowed', rateLimitType:
@@ -117,47 +142,75 @@ root.
 
 ## 3. The compaction point and the thresholds
 
-- [ ] 3.1 If slice 1 did not add it: `RunnerAdapter.compaction_percent` with Claude 95 and Codex 95
-  (design D9). Slice 2's Copilot adapter declares 80. `grep -rn "compaction_percent" hub/hub/runner_adapters`
-  shows all three
+- [ ] 3.1 `RunnerAdapter.compaction_percent` (`ClassVar[Optional[int]]`, no base default) with
+  Claude 95 and Codex 95, and 80 on slice 2's `CopilotAdapter` (design D9). Slice 1 reserves the
+  member for this slice (its D16). Extend slice 1's conformance test so every `ADAPTERS` entry
+  declares it. `grep -rn "compaction_percent" hub/hub/runner_adapters` shows all three. (Rebase at
+  IMPL: `each-runner-cli-is-one-adapter` unbuilt at R2)
 - [ ] 3.2 `checkpoint_policy.py`: D10's formulas, the two new `CheckpointPolicy` fields, the percent
-  clamp, the notes clamp, the token-mode ceiling in `crosses`, and `needs_final_warning` reading the
+  clamp, the notes clamp, the token-mode ceiling in `should_checkpoint` and in the threshold half of
+  `should_request_notes` (not in `crosses`), and `needs_final_warning` reading the
   policy. Keep the three module constants at their C=95 values. Task 1.12 passes
 - [ ] 3.3 `checkpoint_trigger.consider`: resolve the agent's runner (`Agent.runner_id` → `Runner` →
   adapter) and pass `compaction_percent`; the decline message names `policy.final_warning_percent`;
   both `checkpoint_due` payloads carry `threshold_source`. Task 1.13 passes.
   `py -3.11 -m pytest hub/tests/test_checkpoint_policy.py hub/tests/test_checkpoint_cutover.py -q`
 - [ ] 3.4 `AgentSummary.checkpoint_compaction_percent` in `schemas/agents.py`, filled in
-  `api/v1/agents.py` (`:596-620`) from the agent's runner row, null when there is none
+  `list_agents`'s `AgentSummary(...)` (`api/v1/agents.py:581-630`) from `bound_runner` (`:548`, taken
+  from `runners_by_id`, `:405-407`) through `get_adapter`, null when there is none, with no new
+  query
 
 ## 4. The ledger
 
-- [ ] 4.1 Check that slice 2's `initialize` subscribes to `assistant.usage`,
-  `session.usage_checkpoint`, `session.compaction_complete` and `session.error`; add any that are
-  missing, in slice 2's list
+- [ ] 4.1 Add `assistant.usage`, `session.usage_checkpoint` and `session.compaction_complete` to
+  slice 2's subscription constant. Its design already lists `session.error`, leaves the first two to
+  this slice, and includes none of the three. A test asserts that the `initialize` request carries all
+  four. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
 - [ ] 4.2 `hub/hub/copilot_usage.py`: `CopilotUsageLedger` (`observe_event`, `observe_prompt_result`,
   `finish`) per design D2–D4, and `quota_reading(snapshots, *, refused, prior_reading)` per D7–D8.
-  `finish` never raises (D11). Tasks 1.1–1.9 pass. `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
+  `finish(*, session_was_new)` is pure and never raises (D11). Tasks 1.1–1.7 and the ledger half of
+  1.9 pass. `py -3.11 -m pytest hub/tests/test_copilot_usage.py -q`
 - [ ] 4.3 `usage_accounting.copilot_session_baseline(db, project_id, agent, session_id)`: the newest
   `turn_usage` row joined to `runs` on `Run.session_id == session_id`, for that project and agent, with
-  `session_nano_aiu_total` not null. It returns None on any exception, logged
-- [ ] 4.4 Add the Copilot adapter's `usage_from` returning a new ledger (reconciled with slice 1's
-  contract per R2's answer to Q1)
+  `session_nano_aiu_total` not null. It returns None on any exception, logged. Also
+  `usage_accounting.settle_copilot_credits(db, sample, *, project_id, agent, session_id)` (design D2,
+  D4, D8): the baseline difference, the fallback's stored total, the negative case, and the prior
+  reading's `resetsAt`. It is a no-op for a sample without `credit_session_new`, and it never raises.
+  Tasks 1.8 and the settle half of 1.9 pass
+- [ ] 4.4 `copilot_acp.run_turn` (design D2; R2's answer to Q1 is that there is no adapter
+  `usage_from`):
+  - one ledger per call, armed when the `session/prompt` request is written;
+  - every subscribed raw event and the prompt result go to the ledger;
+  - `cb.on_accounting(ledger.finish(session_was_new=…))` is called exactly once on every return path
+    after a session exists;
+  - it returns `TurnOutcome(status="failed", …)` when the ledger recorded the quota refusal (D8).
+
+  Task 1.15(a) passes. (Rebase at IMPL: `a-copilot-agent-runs-over-acp` unbuilt at R2)
 
 ## 5. The run end
 
-- [ ] 5.1 Slice 2's Copilot executor: feed every subscribed raw event and the prompt result to the
-  ledger; at run end call `copilot_session_baseline` (skip it when the session was new) and the
-  agent's newest earlier Copilot reading, then `finish`, and record the sample with
-  `record_turn_usage(..., runner="copilot")`
+- [ ] 5.1 `_execute_rpc_run` (slice 1's generic RPC executor): at run end, in the finalising session
+  and before `record_turn_usage`, pass the merged sample through `settle_copilot_credits`, which acts
+  only on a sample with a session credit total. Then record it with `runner=adapter.name`. The
+  executor has no `"copilot"` literal. (Rebase at IMPL: slice 1 unbuilt at R2)
 - [ ] 5.2 Log every `session.error` payload at warning level with its `errorType`, `errorCode` and
   `statusCode` (design D8, capture)
-- [ ] 5.3 Apply `_execute_run`'s refusal branch (`agent_trigger.py:2679-2745`) to the Copilot
-  executor, unless slice 1 already unified the run end (then nothing to add; say so here). Task 1.15
-  passes
-- [ ] 5.4 Slice 2's Copilot one-shot envelope parser: read `session.shutdown {totalNanoAiu,
-  totalPremiumRequests}` into the invocation's two new columns. Add a parser test with a
-  `-p --output-format json` fixture containing a `session.shutdown` line
+- [ ] 5.3 Apply `_execute_run`'s refusal branch (`api/v1/agent_trigger.py:2667-2743`) to
+  `_execute_rpc_run`. Its Codex ancestor has none of it (`:3345-3362`), and slice 1's design does not
+  unify the run end (R2). The branch is:
+  - `hold_for_reading`, and `allowance_refusal` gated on `final_status == "failed"`, no binding
+    conflict and a reset still ahead;
+  - `finalize_job_run_for_conversation` skipped under a refusal;
+  - `return_run_entries(..., refusal=)`;
+  - after the commit, `arm_allowance_wake` and the `queue_agent_held` event.
+
+  Task 1.15(b) passes. (Rebase at IMPL: slice 1 unbuilt at R2)
+- [ ] 5.4 `WorkerUsage` gains `ai_nano_aiu` and `premium_requests`, and `run_worker` writes them into
+  `WorkerInvocation(...)` (`worker.py:393-412`). Slice 2's `parse_copilot_envelope` reads
+  `session.shutdown {totalNanoAiu, totalPremiumRequests}` into them **if** slice 2's task 1.2 capture
+  of the `-p --output-format json` stream contains that event. The parser test uses that capture, not
+  a hand-written line. If the capture has no `session.shutdown`, record that here and leave the
+  columns NULL. (Rebase at IMPL: slices 1 and 2 unbuilt at R2)
 
 ## 6. API and UI
 
@@ -196,7 +249,9 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
 - [ ] 7.3 A second turn in the **same conversation** (a resumed session): its `ai_nano_aiu` equals its
   `session_nano_aiu_total` minus 7.1's. That answers whether the checkpoint total continues across
   `session/load` (design table, INFERRED until now). If it restarted from zero instead, D4's baseline
-  rule gives a negative or wrong delta: stop, record it, and revise D4
+  rule gives a negative or wrong delta: stop, record it, and revise D4. Also record this resumed
+  turn's prompt-result `usage` beside its per-call sum (Q10). If the result includes 7.1's tokens,
+  stop and make the per-call sum authoritative on a loaded session (design D3)
 - [ ] 7.4 Record the run's `quotaSnapshots` keys and which one's `usedRequests` rose. Record whether
   the ACP prompt result and the per-call sum agreed (the ledger's warning log line, if any)
 - [ ] 7.5 Optional, only if 7.1–7.3 used little allowance: `/compact` in the same conversation (one
@@ -204,8 +259,10 @@ drive to at most **four** model-calling turns. Record each figure verbatim in de
   (same `providerCallId` as its `requestId`) and that the run's credits were counted once
 - [ ] 7.6 Thresholds with no model call: with the project's checkpoint mode `offered`, post a synthetic
   66% reading for the Copilot agent's conversation through `POST /agents/{name}/context-usage`
-  (`api/v1/agents.py:2976`), carrying that conversation's provider `session_id`, `status: "measured"`,
-  `context_tokens` and `limit_tokens` (the route resolves the conversation from the session,
+  (`api/v1/agents.py:2980`), carrying that conversation's provider `session_id`, `status: "measured"`,
+  `source`, `observed_at`, `context_tokens`, `limit_tokens` **and `percent: 66`**. The route does not
+  derive `percent` when `limit_tokens` is present (`output_recording.py:139-140`), and without it no
+  banner can appear (the route resolves the conversation from the session,
   `output_recording.py:173-189`, and hands the reading to `consider_from_reading`, `:233-238`). The conversation shows the checkpoint-due banner. The same
   reading for the Claude agent shows nothing. The Copilot agent's settings show the "compacts at
   about 80%" line

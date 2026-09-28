@@ -2,7 +2,7 @@
 
 ### Requirement: A Copilot agent's native files are written into a Hub-owned home
 
-When a Copilot agent is created, or its runner binding, charter or default model changes, the Hub SHALL write that agent's Copilot files into a Copilot home the Hub owns for that agent, and SHALL NOT write them into the project's repository.
+When a Copilot agent is created, or its runner binding or charter changes, the Hub SHALL write that agent's Copilot files into a Copilot home the Hub owns for that agent, and SHALL NOT write them into the project's repository.
 
 The files SHALL include two things:
 
@@ -14,8 +14,10 @@ The files SHALL include two things:
 Per-turn material SHALL NOT be written there. That means the workspace, the specification in view,
 the team, other agents' history and the turn notices, which reach each turn with its prompt.
 
-The Hub SHALL bring these files up to date before every Copilot turn, so that a charter or
-instructions edit reaches the next turn. The files SHALL carry no credential. A failure to write
+The Hub SHALL bring these files up to date before every Copilot turn, so that a charter,
+instructions or model edit made anywhere reaches the next turn. The home's location SHALL be derived
+only from identifiers the Hub has checked to be single, safe path components, because a project's
+identifier can come from a marker file inside the project's own folder. The files SHALL carry no credential. A failure to write
 them SHALL NOT undo the agent's creation. The same failure before a turn SHALL refuse that turn with
 a reason.
 
@@ -34,6 +36,11 @@ a reason.
 
 - **WHEN** a Copilot agent's home has been written for a run
 - **THEN** none of its files contains the run's token
+
+#### Scenario: A project identifier that is not a safe path component
+
+- **WHEN** a Copilot turn is triggered in a project whose identifier contains a path separator or is `..`
+- **THEN** the Hub writes no file for it and refuses the turn with a reason
 
 #### Scenario: The custom agent is not selected
 

@@ -1,6 +1,6 @@
 ## 0. Rounds
 
-- [ ] 0.1 R2: an independent re-derivation against the code as it stands after tonight's queue and slice 1. Re-read, fresh:
+- [x] 0.1 R2: an independent re-derivation against the code as it stands after tonight's queue and slice 1. Re-read, fresh:
   - `codex_appserver.py`;
   - `agent_trigger.py` (the trigger body, `_execute_run`'s dispatch, the RPC executor, the stop paths);
   - `runner_commands.py`, `launchability.py`, `model_catalog.py`;
@@ -9,6 +9,7 @@
   - `agents.py` (`_render_hub_agent_context`, create, PATCH).
 
   Re-derive D1–D19 from those files, not from this design. Re-check every row of design § "Sites touched by open changes" against what landed, including slice 1's adapter member names, and correct the design where they differ. Answer Open questions 2, 4 and 9 from `app.js` or the command reference. Record the round in `design.md`'s Round log. `openspec validate a-copilot-agent-runs-over-acp --strict` passes
+  - **Done 2026-09-28** against master `ef55e6f` (3 of the queue's sites landed; the rest and slice 1 unbuilt, marked "rebase at IMPL"): 16 corrections, incl. three gates that would 501 or never inject MCP, an empty `--available-tools=` that grants every tool, and JSON-titled conversations; Open questions 2, 4, 9, 10 answered. See the Round log
 - [ ] 0.2 R3: a second independent re-derivation, not a re-read of R2. Ask of each route in design § "What each route returns when what it calls raises" what it actually returns when the Copilot function it calls raises, by reading the route. Re-derive the D8 table from `app.js`'s `XDo`/`nNo` and `mcp_server._decide`. Record the round in the Round log
 - [ ] 0.3 Opus adversarial review of the change and of the decisions it assumes (the operator's standing step before APPROVED). It MUST address:
   - D5: the context split, and whether the tool surface belongs in `per_turn`;
@@ -28,7 +29,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - whether the marker came back (Open question 1);
   - the three `request_permission` shapes (edit, execute, mcp) against design D8;
   - the `session.error|warning|info` field names, if any appeared (Open question 10).
-- [ ] 1.2 **Capture 2 (1 prompt, `-p`).** Run `copilot.exe -p "Reply with the word ok" --output-format json --no-auto-update --disable-builtin-mcps --no-custom-instructions --no-ask-user --available-tools= --allow-all-tools` under a scratch home. Save stdout to `hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`. Record which event carries the answer and whether any tool was offered. If `--available-tools=` did not remove tools, record that; design D14's fallback applies. Also save `evidence/help-config.txt` (the output of `copilot help config`, no model call) for task 2.4
+- [ ] 1.2 **Capture 2 (1 prompt, `-p`).** Run `copilot.exe -p "Reply with the word ok" --output-format json --no-auto-update --disable-builtin-mcps --no-custom-instructions --no-ask-user --excluded-tools=builtin:*,mcp:*,custom:* --allow-all-tools` under a scratch home. **Never `--available-tools=`**: R2 read `app.js`'s `Y0`, and an empty value means *no filter* (design D14). Save stdout to `hub/tests/fixtures/copilot_acp/oneshot_ok.jsonl`. Record which event carries the answer and whether any tool was offered. If the source-qualified patterns did not remove every tool, record that; design D14's fallback (the explicit built-in list) applies. Also save `evidence/help-config.txt` (the output of `copilot help config`, no model call) for task 2.4
 - [ ] 1.3 `hub/tests/test_runners_api.py`: `POST /runners` with `cli: "copilot"` returns 201, and the row reads back. Today it fails with 422, the validator's refusal. Add a model-level test that inserts a `Runner(cli="copilot")` and commits; it fails today on `ck_runners_cli`
   - Verify: `py -3.11 -m pytest hub/tests/test_runners_api.py -q -k copilot`
 - [ ] 1.4 `hub/tests/test_runner_charter_models.py` (or the seeding test beside `db/engine.py`'s seeder): a zero-runner project is seeded with `claude`, `codex` and `copilot`. A project holding one runner gets nothing. Cover both seeders, `engine.py:_seed_default_runners` and `project_lifecycle._seed_new_project`
@@ -44,7 +45,10 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - `agentweave` MCP allowed under `manual`;
   - a foreign MCP server judged;
   - `memory` refused;
-  - the answer never being `allow_always`
+  - the answer never being `allow_always`;
+  - (R2) an `edit` request with no `locations` and no `fileName` refused;
+  - (R2) an unset `permission_mode` judged exactly as `workspace`;
+  - (R2) the Hub's own server identified from a preceding `tool_call` title `agentweave-send_message` when no raw `permission.requested` has been read, and a title `agentweave-x-send_message`, or a tool not in the Hub's tool set, judged as foreign
 - [ ] 1.7 `hub/tests/test_permission_approver.py`: `_decide(..., workspace=W, hub_url=U)` judges against `W` and `U` when `os.environ` names other values. It fails today because the keywords do not exist
 - [ ] 1.8 `hub/tests/test_copilot_acp_mapper.py` (new): replay `evidence/acp4-turn-mcp-shell-1.0.88.log` and the 1.1 fixture, **in their recorded order**, through `CopilotEventMapper`. Assert:
   - one `text` event per contiguous message block;
@@ -67,20 +71,27 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - (g) stop: `session/cancel` is sent, and `stopReason: cancelled` → `interrupted`;
   - (h) every `session/request_permission` is answered exactly once;
   - (i) `usage_update` → `on_usage` with a measured sample and the resolved model;
-  - (j) a spec turn: `set_mode` with the full plan URI before the prompt
-- [ ] 1.10 `hub/tests/test_copilot_home.py` (new): `ensure_copilot_home` writes `agents/<agent>.agent.md` with frontmatter `name`, `description` (the marker), `tools`, `model` (omitted for `auto`) and `reasoningEffort`, and a body that opens with the precedence statement and holds the stable context. It also writes `agentweave-mcp.json` with no `env` and `timeout == (agents.MAX_WAITING_SECONDS + 60) * 1000`. A second call with the same content does not rewrite the file (mtime unchanged). No file contains an `aw_run_` string
+  - (j) a spec turn: `set_mode` with the full plan URI before the prompt, and the spawn argv holds `--excluded-tools=apply_patch,create,edit,str_replace,str_replace_editor`;
+  - (k) (R2) a JSON-RPC `error` response raises `CopilotACPError` carrying `.code`, and it is an `AppServerError`;
+  - (l) (R2) `initialize` sends `clientCapabilities._meta["github.com/copilot"].events` equal to `COPILOT_RAW_EVENTS`, de-duplicated; `on_raw_event` receives each armed raw event; `TurnOutcome.prompt_usage` holds the prompt result's `usage`;
+  - (m) (R2) the process tree is terminated on a failed turn too, not only on a stop
+- [ ] 1.10 `hub/tests/test_copilot_home.py` (new): `copilot_home_path` is `…/copilot-home/projects/<pid>/<agent>` and refuses a project id of `..`, `a/b`, `a\b` or one resolving outside the root (R2); the worker home is `…/copilot-home/worker`. `ensure_copilot_home` writes `agents/<agent>.agent.md` with frontmatter `name`, `description` (the marker), `tools`, `model` (omitted for `auto`) and `reasoningEffort`, and a body that opens with the precedence statement and holds the stable context. It also writes `agentweave-mcp.json` with no `env` and `timeout == (agents.MAX_WAITING_SECONDS + 60) * 1000`. A second call with the same content does not rewrite the file (mtime unchanged). No file contains an `aw_run_` string
 - [ ] 1.11 `hub/tests/test_copilot_context_split.py` (new):
   - `_render_hub_agent_context`'s `stable` and `per_turn` together hold every `##`/`###` section of `context` exactly once;
   - the charter and project instructions are in `stable`;
   - the tool surface and workspace are in `per_turn`;
   - `context` for a Claude run equals a snapshot taken before the change (write the snapshot as the first step of this task, from today's code)
-- [ ] 1.12 `hub/tests/test_model_catalog.py`: `get_provider("copilot")` exists, its default model is `auto` labelled "Auto", every model's `context_window is None`, its Permissions values and labels equal Codex's, and `validate_overrides("copilot", {"model": "bogus-model"})` is refused
+- [ ] 1.12 `hub/tests/test_model_catalog.py`: `get_provider("copilot")` exists, its default model is `auto` labelled "Auto", every model's `context_window is None`, its Permissions values and labels equal Codex's with default `workspace` (R2), and `validate_overrides("copilot", {"model": "bogus-model"})` is refused
 - [ ] 1.13 `hub/tests/test_workspace_writes.py`: `written_paths("edit", {"locations": [{"path": "C:/elsewhere/x.py"}], …})` returns that path, and `delete`/`move` likewise. `"shell"` returns `()`. `OutsideWriteRecorder` records a Copilot edit outside the workspace
 - [ ] 1.14 `hub/tests/test_worker.py` and `test_conversation_titles.py`:
   - `build_worker_command(cli="copilot", …)` returns design D14's argv (the resolved `.exe`, not the npm shim, with `--no-custom-instructions`);
   - `build_title_command` returns it without `--no-custom-instructions`;
   - `parse_copilot_envelope` on the 1.2 fixture returns `"ok"`;
-  - `copilot` is in both supported sets
+  - `copilot` is in both supported sets;
+  - (R2) neither argv contains `--available-tools`, and both contain `--excluded-tools=builtin:*,mcp:*,custom:*`;
+  - (R2) a Copilot conversation titled from the 1.2 fixture gets the answer, not a JSON fragment (`generate_conversation_title` with `_run_titler` patched to return the fixture);
+  - (R2) with `resolve_copilot_executable` raising, `run_worker` returns `spawn_failed` naming the looked-for path and raises nothing, and titling returns `None`;
+  - (R2) the spawn helpers pass the Copilot environment (`COPILOT_HOME` = the worker home, no `GH_TOKEN`) and still pass `env=None` for Claude and Codex
 - [ ] 1.15 `hub/tests/test_launchability.py`:
   - with `GH_TOKEN` unset and a cached probe verdict "signed in, 1.0.88", `probe_agent` for `copilot` is runnable (today it says "No GitHub auth token found");
   - "not signed in" → not authorized, with the `copilot login` sentence;
@@ -94,7 +105,8 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 - [ ] 1.19 UI tests:
   - `hub/ui/src/__tests__/` asserts `providerForRunner('copilot') === 'copilot'`;
   - `ProviderMark` renders an SVG, not initials, for `copilot`;
-  - the Runners page's CLI select offers `copilot`.
+  - the Runners page's CLI select offers `copilot`;
+  - (R2) an `AgentTimeline` tool row with `tool: "edit"` is rendered as a writing block.
 
   Extend `modelCatalogFixture.ts` with the Copilot provider. Verify: `cd hub/ui && npx vitest run`
 
@@ -104,14 +116,14 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 - [ ] 2.2 A new migration, the next free revision after tonight's queue, recreates `runners` with the widened constraint (`batch_alter_table(recreate="always")`) and guards a missing table. Downgrade refuses when a `copilot` row exists. Bump `HEAD_REVISION` in `hub/tests/test_migrations.py` and the head in `hub/tests/test_project_persistence.py` (`.claude/rules/db-migrations.md`)
   - Verify: `py -3.11 -m pytest hub/tests/test_migrations.py hub/tests/test_project_persistence.py hub/tests/test_runners_api.py -q`
 - [ ] 2.3 Confirm both seeders produce `Copilot (default)`. Task 1.4 passes
-- [ ] 2.4 `model_catalog.py`: add `CATALOG["copilot"]` per design D13, taking the model tuple from `evidence/help-config.txt`. Add `"copilot": "copilot"` to `_CATALOG_PROVIDER_BY_RUNNER` (or slice 1's `catalog_provider`). Add a test that is skipped when `copilot.exe` is absent and otherwise compares the tuple with a live `copilot help config`. Tasks 1.12 and 1.3 pass
+- [ ] 2.4 `model_catalog.py`: add `CATALOG["copilot"]` per design D13, taking the model tuple from `evidence/help-config.txt`, with the Permissions default `workspace`. Add `"copilot": "copilot"` to `runner_commands._CATALOG_PROVIDER_BY_RUNNER` (or slice 1's `catalog_provider`) and `copilot` to `SUPPORTED_RUNNERS` (`test_model_catalog.py:16-18` requires it). R2: drift is checked by a `--provider copilot` section in `scripts/check_model_catalog.py` that runs `copilot help config`, **not** by a pytest that skips without the binary (that script's docstring says why). Tasks 1.12 and 1.3 pass
   - Verify: `py -3.11 -m pytest hub/tests/test_model_catalog.py hub/tests/test_model_catalog_api.py -q`
 
 ## 3. Executable, probe, launchability
 
 - [ ] 3.1 `hub/hub/copilot_probe.py`: `resolve_copilot_executable` (design D2). Task 1.5 passes
-- [ ] 3.2 `CopilotProbe`: a cached, TTL'd, async refresh using `initialize` → `session/new` → `session/close` under the `_worker` home, with no model call (design D15). Refresh is scheduled from `GET /runners/launchability-by-provider` and the agent launchability route. Test its refresh against a fake process
-- [ ] 3.3 `launchability.py`: delete the env-token branch (`:116-126`), make `probe_agent` read the Copilot verdict, and extend `resolve_agent_env` with the GitHub-token strip (design D3). Tasks 1.15 and 1.16 pass
+- [ ] 3.2 `CopilotProbe`: a cached, TTL'd, async refresh using `initialize` → `session/new` → `session/close` under the worker home, with no model call (design D15). R2: the refresh is scheduled by `CopilotProbe.verdict()` itself whenever the verdict is stale and a loop is running, so all six `probe_agent` callers keep it fresh; amend `get_agents_launchability`'s "never spawns anything" docstring. Test its refresh against a fake process
+- [ ] 3.3 `launchability.py`: delete the env-token branch (`:116-126`), make `probe_agent` read the Copilot verdict, add `copilot` to `MCP_INJECTABLE_RUNNERS` (`:230`; R2: without it no Copilot run is given the MCP server), and extend `resolve_agent_env` with the GitHub-token strip (design D3). Tasks 1.15 and 1.16 pass
   - Verify: `py -3.11 -m pytest hub/tests/test_launchability.py hub/tests/test_runner_command_env.py hub/tests/test_copilot_probe.py -q`
 
 ## 4. The Hub-owned Copilot home and the context split
@@ -123,7 +135,7 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
 ## 5. Approvals
 
-- [ ] 5.1 `mcp_server.py`: add keyword-only `workspace`/`hub_url` to `_decide`, `_is_own_hub` and `_judge_word`, defaulting to the environment. Add no import (`.claude/rules/mcp-server.md`). Task 1.7 passes, and `test_permission_approver.py` and `test_mcp_server.py` are otherwise unchanged
+- [ ] 5.1 `mcp_server.py`: add keyword-only `workspace`/`hub_url` to `_decide`, and thread `hub_url` through `_read_command`, `_judge_word`, `_judge_url` and `_is_own_hub` (R2: all five; `HUB_URL` is read at `:1191` and `:1241`), defaulting to the environment. Add no import (`.claude/rules/mcp-server.md`). Task 1.7 passes, and `test_permission_approver.py` and `test_mcp_server.py` are otherwise unchanged
 - [ ] 5.2 `copilot_acp.decide_permission` (design D8), with the per-kind operator-card labels beside `_CODEX_APPROVAL_LABELS`. Task 1.6 passes
   - Verify: `py -3.11 -m pytest hub/tests/test_copilot_acp_decide.py hub/tests/test_permission_approver.py hub/tests/test_mcp_server.py -q`
 
@@ -145,14 +157,16 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
   - sends the per-turn block and the prompt;
   - reaches the RPC executor with the Copilot adapter.
 
-  `on_session_missing` rebinds under design D7's exception. Add `_bind_session_id(replace_missing=True)`. Add a trigger-level test with the adapter's `run_turn` patched, asserting `Run.session_id` and `Conversation.provider_session_id` after a rebind
-- [ ] 7.3 Route an operator card for `ASK_OPERATOR` through `_await_operator_permission` with Copilot's labels. Route refusals through `_on_refusal`, and allows through tonight's recorder from `a-run-records-that-its-calls-were-allowed` (re-verify its name in R2)
+  `on_session_missing` rebinds under design D7's exception. Add `_bind_session_id(replace_missing=True)`. Add a trigger-level test with the adapter's `run_turn` patched, asserting `Run.session_id` and `Conversation.provider_session_id` after a rebind.
+
+  R2: first admit `copilot` past the three gates of design D1: `SUPPORTED_RUNNERS` (`agent_trigger.py:773`, 501 today), the `build_command` call (`:1214`, 501 at `:1230`; skipped for an RPC transport) and `MCP_INJECTABLE_RUNNERS` (task 3.3). The trigger-level test enters through `trigger_agent_directly`, not the executor, and asserts the patched `run_turn` received a non-`None` `mcp_command` and the per-turn block. It fails today with 501
+- [ ] 7.3 Route an operator card for `ASK_OPERATOR` through `_await_operator_permission` with Copilot's labels (and its `workspace` verdict once `an-ask-me-card-says-what-workspace-only-would-decide` lands). Route refusals through `_on_refusal`, and allows through the `on_decision` callback whose executor side is `permission_tally.note`/`write_counts` from `a-run-records-that-its-calls-were-allowed` (R2: unbuilt at R2; if still unbuilt at IMPL, record refusals only and say so)
   - Verify: `py -3.11 -m pytest hub/tests -q -k "copilot or appserver or trigger"`
 
 ## 8. Outside writes, one-shot calls, tool names, display
 
 - [ ] 8.1 `workspace_writes.py`: `COPILOT_WRITE_TOOLS = {"edit", "delete", "move"}` reading `locations[].path`, added to `WRITE_TOOLS`. Task 1.13 passes
-- [ ] 8.2 `worker.py`: add the `copilot` branch, `parse_copilot_envelope` and the `_worker` home environment. `conversation_titles.py` gets its `copilot` branch (design D14). Task 1.14 passes
+- [ ] 8.2 `worker.py`: add the `copilot` branch, `parse_copilot_envelope` and the worker-home environment; `_run_worker_process` and `_run_titler` gain an `env` parameter (R2: neither passes one today). `conversation_titles.py` gets its `copilot` branch and parses the envelope before `title_from_output` (design D14). The builders catch a resolution failure rather than raise. Task 1.14 passes
   - Verify: `py -3.11 -m pytest hub/tests/test_worker.py hub/tests/test_conversation_titles.py hub/tests/test_title_generation.py -q`
 - [ ] 8.3 The tool surface uses the `agentweave-` prefix and Copilot preamble for Copilot runs (design D16), through the mechanism of `a-claude-run-is-told-its-agentweave-tools-by-their-full-names`. Task 1.18 passes
 - [ ] 8.4 `api/v1/agents.py` `_display_model` gains `"copilot": agent_meta.get("model", "GitHub Copilot")`
@@ -160,12 +174,12 @@ Copilot Free plan: **two** model-calling prompts in this group, and no more. Eve
 
 ## 9. UI
 
-- [ ] 9.1 `RunnerCli`, `CLI_OPTIONS`, `providerForRunner`, and `PROVIDER_MARKS.copilot` from `siGithubcopilot` in `currentColor` (design D19). Task 1.19 passes
+- [ ] 9.1 `RunnerCli`, `CLI_OPTIONS`, `providerForRunner`, `PROVIDER_MARKS.copilot` from `siGithubcopilot` in `currentColor`, and (R2) `AgentTimeline.tsx`'s `WRITING_TOOLS`/`TOOL_ICON` gain `edit`, `delete`, `move` (design D19). Task 1.19 passes
 - [ ] 9.2 `cd hub/ui && npm run lint && npx vitest run && npm run build`, then `py -3.11 scripts/refresh_ui_bundle.py`. Commit `hub/ui/src` and `hub/hub/static/ui` together (`.claude/rules/hub-ui.md`)
 
 ## 10. Findings and docs
 
-- [ ] 10.1 Record in `spec-queue/` FINDINGS the three appendix corrections from the Round log (`--no-auto-update` version, `~/.agents/skills`, the MCP 30 s timeout), so later slices do not inherit them
+- [ ] 10.1 Record in `spec-queue/` FINDINGS the appendix corrections from the Round log (R1: `--no-auto-update` version, `~/.agents/skills`, the MCP 30 s timeout; R2: an empty `--available-tools=` means no filter, project-level custom agents outrank `$COPILOT_HOME/agents`), so later slices do not inherit them
 
 ## 11. Drive on the trial Hub `:8010`
 
@@ -178,7 +192,7 @@ Copilot **Free plan**, Auto only: this group spends **at most four** model promp
 - [ ] 11.1 No model call. Check the following:
   - the Runners page offers `copilot`;
   - create a Copilot runner, then a Copilot agent `cop-1` on it with a short charter;
-  - `~/.agentweave/hub/copilot-home/proj-d85a82bf4216/cop-1/agents/cop-1.agent.md` exists and holds the charter and the precedence statement, and the repository has no new file;
+  - `~/.agentweave/hub/copilot-home/projects/proj-d85a82bf4216/cop-1/agents/cop-1.agent.md` exists (confirm the trial Hub's project id first) and holds the charter and the precedence statement, and the repository has no new file;
   - launchability for `copilot` reads runnable and names no token.
 - [ ] 11.2 **Prompt 1.** Under Workspace only, send `cop-1`: *"Create hello.txt containing hi in your workspace, then send me a one-line message with agentweave-send_message."* Record the timeline verbatim:
   - one text block per message;

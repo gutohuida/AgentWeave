@@ -2,15 +2,20 @@
 
 ### Requirement: A Copilot runner may reach its model with the operator's own API key
 
-A `copilot` runner MAY name a model provider (`anthropic` or `openai`) and the name of an environment variable of the Hub's own process that holds that provider's API key, and the Hub SHALL then start the runs it backs against that provider with that key, SHALL NOT store the key, and SHALL refuse a runner of any other CLI that names a provider.
+A `copilot` runner MAY name the model provider `anthropic` and the name of an environment variable of the Hub's own process that holds that provider's API key, and the Hub SHALL then start the runs it backs against that provider with that key, SHALL NOT store the key, and SHALL refuse a runner of any other CLI, or any other provider, that names one.
 
 The key stays where the operator keeps credentials today, the Hub's own environment. The runner holds
 only the variable's name, as a proxy runner already does. A value submitted where a variable name
 belongs SHALL be refused before it is stored, with a sentence saying to set the key in the Hub's
 environment and to name the variable.
 
-The runner's model SHALL be one the catalog declares for the provider named, and SHALL be set,
-because the provider cannot choose one.
+The runner's model SHALL be set, because the provider cannot choose one, and SHALL be a model
+identifier the catalog declares for that provider. A shorthand the catalog publishes for a model is
+not an identifier the provider accepts, and SHALL be refused for such a runner.
+
+Everywhere the Hub asks which models a runner may use, it SHALL answer with the provider's for a
+runner that names one: when the runner is created or edited, when the runner is reported, and when a
+single run asks for a different model. A single run of such a runner SHALL NOT change its model.
 
 A `copilot` runner that names no provider SHALL NOT inherit a provider from the Hub's own
 environment. A provider setting present in the environment the Hub was started from SHALL be removed
@@ -19,13 +24,14 @@ another provider.
 
 A runner that names a provider SHALL be reported launchable only when its key variable is set in the
 Hub's environment. When it is not, the report SHALL name the variable and SHALL NOT require a GitHub
-sign-in.
+sign-in. This SHALL hold on every surface that reports whether a runner or an agent can run.
 
 Runner management SHALL state that the provider is reached with an API key, and that a subscription
 sign-in such as a Claude Max plan cannot be used.
 
-The key SHALL NOT appear in any runner response, agent context, recorded run event or diagnostic, and
-SHALL NOT be passed to the Hub's tool server.
+The key SHALL NOT appear in any runner response, agent context, recorded run event, error or
+diagnostic. The key is in the run's own environment, where the CLI needs it, and so is visible to
+what the CLI starts; what those report back is redacted like any other recorded output.
 
 #### Scenario: A provider runner starts against the provider
 
@@ -47,10 +53,25 @@ SHALL NOT be passed to the Hub's tool server.
 - **WHEN** an operator submits a `claude` or `codex` runner naming a provider
 - **THEN** the request is refused
 
+#### Scenario: Only a supported provider is accepted
+
+- **WHEN** an operator submits a `copilot` runner naming a provider other than `anthropic`
+- **THEN** the request is refused with a stated reason
+
 #### Scenario: The model is the provider's
 
 - **WHEN** a provider runner is submitted with a model the catalog does not declare for that
-  provider, or with no model
+  provider, with a shorthand rather than an identifier, or with no model
+- **THEN** the request is refused with a stated reason
+
+#### Scenario: A provider runner's model is recognised
+
+- **WHEN** a provider runner with a declared model is reported
+- **THEN** its model is not flagged as unrecognised
+
+#### Scenario: A single run cannot change a provider runner's model
+
+- **WHEN** a run of an agent bound to a provider runner asks for a different model
 - **THEN** the request is refused with a stated reason
 
 #### Scenario: An ambient provider does not leak into a subscription runner
@@ -62,14 +83,15 @@ SHALL NOT be passed to the Hub's tool server.
 #### Scenario: A missing key is named, not required from GitHub
 
 - **WHEN** a provider runner's key variable is not set in the Hub's environment
-- **THEN** the runner is reported not launchable, naming the variable
+- **THEN** the runner, and every agent bound to it, is reported not launchable, naming the variable
 - **AND** the report does not ask for a GitHub sign-in
 
 #### Scenario: The key is not repeated anywhere
 
-- **WHEN** a provider runner has been created and a run it backs has recorded events
-- **THEN** the key's value appears in no runner response, agent context, recorded event or diagnostic
-- **AND** it is not in the tool server's environment
+- **WHEN** a provider runner has been created and a run it backs has recorded events whose text
+  contains the key
+- **THEN** the key's value appears in no runner response, agent context, recorded event, error or
+  diagnostic
 
 #### Scenario: A subscription cannot back a provider runner
 

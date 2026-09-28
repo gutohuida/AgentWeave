@@ -1,12 +1,14 @@
 # Proposal — a Copilot run shows its credits
 
-**Depends on:** the `RunnerAdapter` of `each-runner-cli-is-one-adapter` (slice 1). This change reads
-the adapter members `usage_from` (here a per-run usage ledger, design D2) and `one_shot`, and it
-needs one more member, **`compaction_percent`**, which slice 1 defines (design D9). It also depends
-on `a-copilot-agent-runs-over-acp` (slice 2): its ACP client, its raw-event subscription in
-`initialize`, its ACP executor's run end, its Copilot one-shot envelope parser and its migration
-widening `ck_runners_cli`. It lands after the 2026-09-27 night queue (DECISIONS `ghcp-d5-order`) and
-after slices 2 and 3.
+**Depends on:** the `RunnerAdapter` of `each-runner-cli-is-one-adapter` (slice 1): `get_adapter`,
+`parse_one_shot`, and the generic RPC executor `_execute_rpc_run`. This change **adds** the adapter
+member **`compaction_percent`**, which slice 1 reserves for this slice without defining it (its D16;
+design D9 here). The per-event `spend_from`/`quota_hold_from` that slice 1 also reserves are
+replaced by a per-run ledger (design D2). It also depends on `a-copilot-agent-runs-over-acp` (slice
+2): `copilot_acp.run_turn`, which owns the ledger, its raw-event subscription constant, its Copilot
+one-shot envelope parser and its migration widening `ck_runners_cli`. It lands after the 2026-09-27
+night queue (DECISIONS `ghcp-d5-order`) and after slices 2 and 3. At R2 (2026-09-28) slices 1–3 were
+designs, not code, and 5 of the night's 28 changes had landed (design, round log).
 
 R1, 2026-09-27. Slice 4 of `openspec/explorations/2026-09-27-copilot-as-a-full-runner.md`. It
 carries out decision **`ghcp-d3-credits`**: *tokens stay the accounting unit; AI credits (`nanoAiu`)
@@ -49,7 +51,7 @@ would lose their context without the Hub acting first.
 - **Each call carries its own credit cost.** `assistant.usage.copilotUsage.totalNanoAiu` was
   222 280 000 + 29 280 000 + 24 296 000 = **275 856 000**, equal to `session.usage_checkpoint.totalNanoAiu`.
 - **Each call carries the plan's quota.** `assistant.usage.quotaSnapshots.chat` read
-  `entitlementRequests 200, usedRequests 7, remainingPercentage 96.6, resetDate "2026-10-01T00:00:00Z"`.
+  `entitlementRequests 200, usedRequests 7, remainingPercentage 96.6 (96.5 on the later two calls), resetDate "2026-10-01T00:00:00Z"`.
 - **A quota refusal has a structured shape.** The 1.0.88 package's own event schema
   (`schemas/session-events.schema.json`, VERIFIED by reading the shipped file; never observed live)
   gives `session.error` an `errorType` (`"quota"`, `"rate_limit"`, …) and an `errorCode` (`"quota_exceeded"`,
@@ -65,9 +67,9 @@ would lose their context without the Hub acting first.
 
 - **One ledger per Copilot run** (`hub/hub/copilot_usage.py`, new) turns the raw events and the
   prompt result into the one `AccountingSample` the run records. Tokens are summed from
-  `assistant.usage`, including subagent calls, once each. The prompt result, differenced within its
-  process, is the cross-check, and the larger of the two lower bounds wins (design D3). Nothing is
-  added twice.
+  `assistant.usage`, including subagent calls, once each. The prompt result is cumulative per process,
+  and slice 2 runs one process per turn, so it is the run's own figure. It is the cross-check, and the
+  larger of the two lower bounds wins (design D3). Nothing is added twice.
 - **Credits and premium requests are recorded per run.** Four nullable columns on `turn_usage`:
   this run's `ai_nano_aiu` and `premium_requests`, and the session totals the run ended at, which are
   the next run's baseline (design D4, D5). Two on `worker_invocations` for Copilot one-shot calls.
@@ -79,7 +81,9 @@ would lose their context without the Hub acting first.
 - **A Copilot quota refusal holds the queue like Claude's.** Recognised only from the structured
   `session.error` `errorType: "quota"` with `errorCode: "quota_exceeded"`, never from message text.
   The reset instant comes from the newest `quotaSnapshots` reading (`resetDate`). The ledger writes
-  the same allowance reading shape the hold already reads, so `provider_allowance.py` is unchanged
+  the same allowance reading shape the hold already reads, so `provider_allowance.py` is unchanged.
+  A refused turn ends `failed` whatever Copilot's stop reason, so its input goes back to the queue
+  uncounted, and the RPC executor gains the refusal branch that only the stream executor has today
   (design D7, D8).
 - **Checkpoint thresholds follow the runner's compaction point.** The adapter declares
   `compaction_percent` (Claude 95, Codex 95, Copilot 80). The built-in threshold, notes point and
@@ -115,10 +119,13 @@ None.
 
 ## Impact
 
-- New `hub/hub/copilot_usage.py`. Edits to `runner_events.py` (`AccountingSample` gains four fields),
-  `usage_accounting.py`, `checkpoint_policy.py`, `checkpoint_trigger.py`, `db/models.py`,
-  `api/v1/agents.py` (the agent summary's compaction point), slice 2's Copilot ACP executor and
-  one-shot envelope parser, and slice 1's adapters (`compaction_percent`).
+- New `hub/hub/copilot_usage.py`. Edits to `runner_events.py` (`AccountingSample` gains four
+  persisted fields and `credit_session_new`), `usage_accounting.py` (`copilot_session_baseline`,
+  `settle_copilot_credits`, the aggregates), `worker.py` (`WorkerUsage` and the invocation write),
+  `checkpoint_policy.py`, `checkpoint_trigger.py`, `db/models.py`, `api/v1/agents.py` (the agent
+  summary's compaction point), slice 1's `_execute_rpc_run` (settle, and the refusal branch it lacks),
+  slice 2's `copilot_acp.run_turn` (the ledger, three more subscribed events, a quota refusal ends
+  `failed`) and one-shot envelope parser, and slice 1's adapters (`compaction_percent`).
 - **Migration** (next free number in build order): four columns on `turn_usage`, two on
   `worker_invocations`, no backfill, no table rebuild. It reaches the operator's `:8000` on their next
   restart. It adds nullable columns only, so their data is unchanged.

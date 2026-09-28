@@ -9,6 +9,9 @@ agent, provided that date is still ahead. When no such date is known, the refusa
 and shown as an exhausted allowance and SHALL NOT hold the queue, because a hold with no stated end
 would be a policy nobody has decided.
 
+A refused turn SHALL end as a failed turn whatever stop reason Copilot reports for it, so that the
+input it was given returns to the queue without being counted as a delivery attempt.
+
 The system SHALL NOT recognise a refusal from the wording of an error message. A session cap, a
 billing configuration error or a rate limit that carries no reset time SHALL NOT hold the queue.
 
@@ -21,6 +24,8 @@ latest reading states the reset date a later refusal needs, and so that a served
 - **AND** Copilot's latest quota reading for the agent resets at the start of next month
 - **THEN** the agent's queue is held until that time
 - **AND** the hold is reported with its end
+- **AND** the refused input is queued again, not counted as a delivery attempt, even when Copilot
+  ended the turn with an ordinary stop reason
 
 #### Scenario: A refusal with no known reset is shown but does not hold
 

@@ -63,8 +63,9 @@ resumed. A run's credits SHALL be that total at the run's end minus the total th
 the same provider session ended at, or minus zero when the run created the session. The run SHALL
 record the total it ended at, so that the next run can take its own difference. When no difference
 can be taken, the run's credits SHALL be the sum of its per-call credit costs where Copilot
-reported them, and SHALL otherwise be unknown. A negative difference SHALL be recorded as unknown,
-never as negative spend.
+reported them, and SHALL otherwise be unknown. A run charged that sum from a known starting total
+SHALL record the total it thereby reached, so that the next run does not charge the same credits
+again. A negative difference SHALL be recorded as unknown, never as negative spend.
 
 Credits SHALL be stored in the unit Copilot reports them in, and SHALL be presented as AI credits.
 They SHALL NOT be converted into a monetary figure, SHALL NOT be added to any token total, and SHALL
@@ -95,6 +96,14 @@ project, agent, conversation or turn that reported none SHALL look as it did bef
 - **WHEN** a Copilot run ends at a session credit total lower than its baseline
 - **THEN** the run's credits are recorded as unknown
 - **AND** the total it ended at becomes the next run's baseline
+
+#### Scenario: Credits charged without a session total are not charged again
+
+- **WHEN** a Copilot run that created its session reports per-call credit costs but no session
+  credit total
+- **AND** the next run of that session ends at a session credit total
+- **THEN** the first run is charged the sum of its per-call costs
+- **AND** the next run is charged only the session total minus that sum
 
 #### Scenario: A project with no Copilot runs is unchanged
 

@@ -2,7 +2,10 @@
 
 **Depends on:** the `RunnerAdapter` of `each-runner-cli-is-one-adapter` (slice 1). The members this
 change needs are `map_events`, `build_launch`, `decide_posture`, `launchability` and
-`catalog_provider`. It also depends on `a-copilot-agent-runs-over-acp` (slice 2): its ACP client and
+`catalog_provider`. (R2: as slice 1 is written, `map_events` and `build_launch` are
+stream-transport members and `catalog_provider` is one value per adapter, so this Copilot work lands
+in slice 2's `copilot_acp` module and in `resolve_agent_env`/`guard_env` instead. See design,
+*Dependencies on slices 1–4, as written at R2*.) It also depends on `a-copilot-agent-runs-over-acp` (slice 2): its ACP client and
 raw-event subscription, the Hub-owned `COPILOT_HOME` per agent written at agent creation, the
 `--disable-builtin-mcps` spawn flag, and its `copilot` runner literal and migration. It uses the
 shim of `a-run-reaches-the-hub-without-mcp` (slice 3) only in a design alternative the operator can
@@ -69,9 +72,12 @@ its own tests and its own drive, and no group depends on another.
   - `off` does nothing beyond recording the compaction.
 
   Every existing gate still applies (handed over, dismissed, nothing new since the last checkpoint).
-  No notes are requested at that point, because it is too late for notes.
-- **Errors become diagnostic events** in the run's stream, keeping their category, status code and
-  remediation. Recording one does not move any quota hold: holds are slice 4's.
+  No notes are requested at that point, because it is too late for notes. A compaction arriving
+  while a reading is being considered is considered afterwards, not dropped (R2).
+- **Errors become error events** in the run's stream, keeping their category, status code and
+  remediation, and recorded once even though Copilot also echoes them as text. (R2: an error, not a
+  diagnostic, because diagnostics can be hidden and errors must stay visible.) A failed compaction
+  is a diagnostic. Recording one does not move any quota hold: holds are slice 4's.
 - **Subagents appear in the run's timeline**: start, end and failure, paired by the parent's tool
   call.
 - **No hook decides anything.** The Hub never installs `permissionRequest`, `preToolUse`, or a
@@ -85,10 +91,13 @@ its own tests and its own drive, and no group depends on another.
 
 ### Group C: BYOK, a Copilot runner on the operator's own API key
 
-- A `copilot` runner can name a provider, `anthropic` or `openai`, plus the **name** of a Hub
-  environment variable that holds the API key. That is the same indirection `ANTHROPIC_API_KEY_VAR`
+- A `copilot` runner can name a provider, `anthropic` (R2: `openai` deferred with Azure, because
+  the Codex catalog is now a per-machine CLI cache, not a list of API ids), plus the **name** of a
+  Hub environment variable that holds the API key. That is the same indirection `ANTHROPIC_API_KEY_VAR`
   already uses (`hub/hub/launchability.py:101-114,162-169`). The key is never stored.
-- The runner's model is checked against that provider's catalog entries.
+- The runner's model is checked against that provider's catalog **ids** (an alias such as `haiku`
+  is refused), at every place the Hub asks which models a runner may use; a single run cannot
+  change it.
 - Spawn sets `COPILOT_PROVIDER_*` and `COPILOT_MODEL`. When the runner has no provider, any ambient
   `COPILOT_PROVIDER_*` in the Hub's environment is stripped, just as an ambient
   `ANTHROPIC_BASE_URL` is stripped for Claude (`launchability.py:190`).
@@ -114,7 +123,9 @@ its own tests and its own drive, and no group depends on another.
 - Off by default: slice 2 already spawns with `--disable-builtin-mcps`.
 - An operator toggle per Copilot agent omits the flag.
 - Because that server acts on GitHub **as the operator**, a call to it under the `workspace` posture
-  goes to the operator as an ask-me card. It is never auto-approved by `_decide`.
+  goes to the operator as an ask-me card. R2: `_decide` *would* auto-approve it (a GitHub call names
+  no path and no command), so the rule is decided before `_decide` is consulted. A server that
+  fails to start while enabled is reported in the run's stream.
 - Group D is optional: it is the group the operator should cut first if something must go.
 
 ## Capabilities
@@ -129,7 +140,8 @@ its own tests and its own drive, and no group depends on another.
 ## Impact
 
 - **Group A:**
-  - Hub backend only. A new `diagnostic_event` builder in `hub/hub/runner_events.py`.
+  - Hub backend only. `status_event` and `error_event` gain facts, and `diagnostic_event` takes the
+    CLI's `{stream, severity, summary}` shape, in `hub/hub/runner_events.py`.
   - Copilot event mapping in the adapter's `map_events` (slice 2's module).
   - A new `consider_from_compaction` in `hub/hub/checkpoint_trigger.py`, reusing `consider`.
   - The checkpoint trigger stays `context_pressure`. `CHECKPOINT_TRIGGERS` is guarded by migration
@@ -137,9 +149,17 @@ its own tests and its own drive, and no group depends on another.
     (`AgentOutputPanel.tsx:619`). So there is **no migration and no UI change**.
 - **Group C:**
   - A migration adding `runners.provider_config`.
-  - Changes to `schemas/runners.py`, `api/v1/runners.py` and the adapter's `build_launch` and `launchability`.
+  - Changes to `schemas/runners.py`, `api/v1/runners.py`, `resolve_agent_env` / the Copilot
+    `guard_env`, the adapter's `launchability`, every launchability call site, and the per-run model
+    override check.
   - The Runners page (UI bundle refresh; it reaches `:8000` on reload).
-- **Group B:** `api/v1/agents.py` (the review section of the context) and the agent Settings page (UI).
-- **Group D:** the adapter's `build_launch` and `decide_posture`, and the agent Settings page (UI).
-- **No change is planned to `hub/hub/mcp_server.py`.** Group D's rule lives wherever slice 2 maps
-  Copilot's `request_permission` onto `_decide`. R2 re-verifies where that is (design D9).
+- **Group B:** `api/v1/agents.py` (the review section of the context, `ROSTER_CONFIG_KEYS`),
+  `review_turn.py` (`ReviewContext.base_sha`), and the agent Settings page (UI).
+- **Group D:** slice 2's `copilot_acp.build_acp_argv` and `decide_permission`, its event mapper,
+  `ROSTER_CONFIG_KEYS`, and the agent Settings page (UI).
+- **No change is planned to `hub/hub/mcp_server.py`.** R2 confirmed slice 2 maps Copilot's
+  `request_permission` onto `_decide` from `copilot_acp.decide_permission`, in the Hub process
+  (design D9).
+- **R2, 2026-09-28:** slices 1–4 are unbuilt at master `ef55e6f`, and only 5 of the night's 28
+  changes have landed. Design's *Dependencies on slices 1–4, as written at R2* lists 16 mismatches
+  to rebase at IMPL.

@@ -13,8 +13,12 @@ security review, and the critic. The choice SHALL be off by default, because eac
 further billed model call.
 
 The changes named SHALL run from where the work under review diverged from the branch approval merges
-into, to the commit under review. Where that point cannot be determined, the context SHALL name the
-commit alone and say to review that commit's own changes.
+into, to the commit under review. Where that point cannot be determined, or is the commit itself,
+the context SHALL name the commit alone and say to review that commit's own changes, and the review
+turn SHALL still take place.
+
+The choice SHALL be shown to the operator as it is stored, and SHALL be presented only for an agent
+bound to a `copilot` runner.
 
 Nothing else in the review context SHALL change. In particular, the verdict instruction SHALL stay as
 it is.
@@ -44,3 +48,15 @@ it is.
 
 - **WHEN** an operator chooses a Copilot agent that is not among those offered
 - **THEN** the choice is refused
+
+#### Scenario: A review goes ahead without a divergence point
+
+- **WHEN** a Copilot reviewer with review agents chosen is given a review turn for a project with no
+  branch that approval merges into
+- **THEN** the review turn takes place
+- **AND** its context names the commit alone
+
+#### Scenario: The choice is shown as stored
+
+- **WHEN** the operator chooses code review for a Copilot agent and reopens its settings
+- **THEN** code review is shown as chosen
