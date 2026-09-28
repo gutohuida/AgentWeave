@@ -33492,3 +33492,35 @@ Task 3.1, `scripts/drive/d0928_firing_counted_once.py`, interactive session, on 
 - **PASS.** One `POST /jobs/{id}/run` started both agents (two `measured` `claude-haiku-4-5-20251001` turns). `GET /jobs/{id}` then read `run_count: 1` with two `completed` history rows sharing `fired_at 2026-09-28T08:05:44.101721Z`; a `mode=ro` read of the drive database tied them to conversations of `one` and `two`. Before this change the same firing read `run_count: 2` (F121's measurement shape).
 - The history payload carries no agent field, so the per-row agent above came from the database, not the API. Not a finding: the design names `conversation_id` as the correlation.
 - Teardown: job disabled and archived (`jobs left enabled []`); Hub pid 22424 stopped, `netstat` shows no listener on :8051. The fixture directory `testbed/scratch/firing-*` is scratch by testbed policy.
+
+## F461 (B) — a Codex agent's configured question wait never reaches `ask_user`; above 240 s the wait ends early and its report is refused
+
+**Status:** open, filed 2026-09-28 from code (not driven: Codex is undrivable here). Found in `each-runner-cli-is-one-adapter`'s R3 (open question 4) and sharpened by its Opus review (`spec-queue/tracks/reviews/ghcp-s1-2026-09-28.md`).
+
+The trigger puts the agent's `question_timeout_seconds` into the run env as `AW_QUESTION_TIMEOUT` (`hub/hub/api/v1/agent_trigger.py:1262`), and the tool server reads it with a 240 s default (`hub/hub/mcp_server.py:1005`). But Codex filters the environment its stdio MCP servers inherit, and both Codex allow-lists forward only `AW_RUN_TOKEN`, `AW_AGENT_IDENTITY`, `AW_RUN_ID`, `AW_TURN_DEPTH` and `HUB_URL` (`runner_commands.py:322-328` for `exec`, `codex_appserver.py:973-979` for app-server). So a Codex agent's `ask_user` always waits 240 s, while the Hub records the configured deadline. Configured above 240 s: the tool stops at 240 s and its `wait-ended` report is refused because the Hub's own deadline has not passed (`agent_actions.py`, `report_wait_ended`), so the question stays waiting until the run-end sweep. Configured below 240 s: the tool waits past the Hub's deadline. Claude is unaffected (its tool server inherits the env).
+
+Fix: add `AW_QUESTION_TIMEOUT` to both lists (slice 1 moves them into one `CODEX_MCP_ENV_NAMES` in `runner_commands.py`). Test: the rendered Codex config forwards it.
+
+## F462 (B) — a specification turn on Codex app-server keeps its write tools
+
+**Status:** open, filed 2026-09-28 from code (not driven). Found in `each-runner-cli-is-one-adapter` R2 (design D11) and confirmed by its Opus review.
+
+F4's rule — a turn triggered with a specification document open loses file-write tools, "regardless of phase, rigor or permission posture" — is applied by passing `restrict_spec_writes=bool(spec_document)` to `build_command` (`agent_trigger.py:1227`). For Codex app-server, the default Codex transport (`uses_app_server`, `agent_trigger.py:1210`), that argv is unused: the turn goes through `codex_appserver.run_turn`, which receives neither `restrict_spec_writes` nor the runner's flags (`codex_appserver.py` has no such parameter). So a Codex agent on a spec turn can write files; only `codex exec` honours the restriction (`runner_commands.py:336`).
+
+Fix: carry `restrict_spec_writes` on the RPC turn request and apply it in the app-server thread's sandbox/tool config (slice 1 adds the field; this finding tracks the behaviour). Test: a spec-turn app-server request carries the restriction.
+
+## F463 (C) — the provider quota hold picks the "newest" usage reading by wall clock, so a clock step back picks an old reading
+
+**Status:** open, filed 2026-09-28 from code. Found while applying the Opus review of `a-copilot-run-shows-its-credits` (review finding 3, `spec-queue/tracks/reviews/ghcp-s4-2026-09-28.md`), which fixed the same pattern in its own credit baseline.
+
+`provider_allowance._newest_informative` orders `TurnUsage` by `observed_at DESC` (`hub/hub/provider_allowance.py:122-131`). `observed_at` is the Hub's wall clock at write time. After the clock steps back (NTP correction, DST misconfiguration, a VM restore), a newer reading sorts below an older one, so the Claude allowance hold and `last_refusal` can read a stale allowance: hold an agent that is no longer refused, or release one that is. The credits change orders its baseline by `rowid DESC`, as `api/v1/spec.py` already does.
+
+Fix: order by insertion (`rowid`/id sequence), with `observed_at` only as display. Test: two readings inserted with the later one carrying an earlier `observed_at`; the hold reads the later-inserted one.
+
+## F464 (C) — `_where` resolves a UNC path over the network before deciding, stalling the deciding process ~21 s per path word
+
+**Status:** open, filed 2026-09-28. Measured by the Opus review of `a-copilot-agent-runs-over-acp` (`spec-queue/tracks/reviews/ghcp-s2-2026-09-28.md`, finding 7): `os.path.realpath(r"\10.255.255.1\share\x")` took 21.06 s on this machine.
+
+`mcp_server._where` calls `os.path.realpath` on every path and path-like shell word before comparing it to the workspace (`hub/hub/mcp_server.py:1113-1133`). A model-written permission request naming an unreachable UNC path (an edit path, a `path` input, or one word of a command) blocks for ~21 s per word and opens an SMB connection to that host. Today this runs in the per-run MCP tool server, so the stall is per run; slice 2 moves `_decide` into the Hub process, where it would freeze every project (slice 2 now runs it via `asyncio.to_thread`). The path is refused in the end anyway, as outside the workspace.
+
+Fix: refuse `\`, `//`, `\?\` and `\.\` paths before `realpath`, so no network I/O happens. Test: a patched `realpath` that fails the test if called for a UNC path.
