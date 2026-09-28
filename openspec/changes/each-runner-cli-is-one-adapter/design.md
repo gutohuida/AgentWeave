@@ -171,7 +171,9 @@ docstring states its contract.
 | `run_turn` | `async (req: RpcTurnRequest, cb: RpcCallbacks) -> TurnOutcome` | Spawn the peer, start or resume, send the prompt, answer every request, and map every notification to `cb.on_event` / `on_usage` / `on_accounting` (**`map_events`**, **`usage_from`**). Call `cb.on_session(id)` before the first `on_event`. **`stop`: honour `cb.should_interrupt()` within one poll interval and leave no process behind.** Raise only `FileNotFoundError`, `OSError`, `asyncio.TimeoutError` or `AppServerError` (the tuple `agent_trigger.py:3244` catches). | wraps `codex_appserver.run_turn` (`:904`) with today's arguments (`agent_trigger.py:3217-3243`) |
 
 `RpcTurnRequest` carries `cli, cwd, env, prompt, model, resume_session_id, yolo, mcp_command, config_overrides,
-permission_mode, workspace`, and (**R2, added**) `extra_flags, restrict_spec_writes`. `RpcCallbacks` carries `on_event,
+permission_mode, workspace`, and (**R2, added**) `extra_flags, restrict_spec_writes`. `env` is declared
+`field(repr=False)`: it holds the run's tokens (and, under slice 5, a BYOK key), and a dataclass `repr` in any log
+line would print them (consistency pass, 2026-09-28; slice 5's *Required* 1.8). `RpcCallbacks` carries `on_event,
 on_usage, on_accounting, on_session, should_interrupt, request_approval, on_refusal`. `on_session` is today's
 `on_thread_started` (`codex_appserver.py:919`); `resume_session_id` is today's `resume_thread_id` (`:911`).
 
@@ -350,6 +352,11 @@ from `RpcTurnRequest`; the trigger builds none for it. That is why the request c
 `restrict_spec_writes` (D3). Slices 2 and 5 name this `build_launch`; on an RPC transport it is `run_turn`'s private
 argv step, not the `StreamTransport.build_launch` member.
 
+**`described_access_path` (consistency pass, 2026-09-28; slice 3's D16).** A Claude specification turn told `shim`
+must keep `Write` to write its args file. That needs the *described* surface at build time, so slice 3 adds a
+`described_access_path: Literal["mcp", "shim"] = "mcp"` keyword to `build_command` and `LaunchRequest` (D16 table).
+The default is today's argv; slice 1 adds nothing for it.
+
 ## D7 — `workspace_writes.py` is not changed
 
 The module is pure and stdlib-only on purpose (`workspace_writes.py:1-26`), and it is on the path of every tool
@@ -384,6 +391,9 @@ The argv stays byte-identical: `worker` spells `"claude"`/`"codex"` literally (`
 (`conversation_titles.py:268-270`), never a resolved path, so `adapter.binary` is the same string. The wrappers pass
 the prompt **raw** and `one_shot` neutralises it, as the builders do today (D3). Slice 2's one-shot environment and
 title-text step are `one_shot_env` and `title_text` (D16), so neither spawn helper grows a runner branch.
+`one_shot_env` takes the runner's `config` beside `purpose` (consistency pass, 2026-09-28, for slice 5's BYOK: a
+one-shot spawn on a provider runner needs that runner's `provider_config`, and `resolve_agent_env` is never reached
+on these paths).
 
 ## D9 — The two executors become runner-generic
 
@@ -578,7 +588,7 @@ member is added by that slice with the default stated, and slice 1's conformance
 | `one_shot` | `(purpose: Literal["worker", "title"], *, model: Optional[str], prompt: str, output_schema_path: Optional[str] = None) -> list[str]`; neutralises `prompt` itself; raises only `FileNotFoundError`, when the executable cannot be resolved (added at contract reconciliation, 2026-09-28, requested by slice 2: its D14 R3 `CopilotExecutableNotFound`). Neither slice-1 adapter raises it, and slice 2 adds the two catches (D15, review 6) | built | 1, 2 |
 | `one_shot_takes_schema` | `ClassVar[bool]` | built | 1, 2 |
 | `parse_one_shot` | `(stdout: str) -> tuple[Optional[str], WorkerUsage, Optional[str]]` | built | 1, 2, 4 (fills `WorkerUsage` from the capture) |
-| `one_shot_env` | `(purpose: Literal["worker", "title"]) -> Optional[dict]`; `None` = inherit the Hub's environment | slice 2 adds; base default returns `None` | 2 (its D14: `COPILOT_HOME=<worker home>`, token variables stripped; the new `env` parameter of `_run_worker_process` and `_run_titler`) |
+| `one_shot_env` | `(purpose: Literal["worker", "title"], config: Optional[Mapping] = None) -> Optional[dict]`; `None` = inherit the Hub's environment; must not raise. `config` is the runner's, as `guard_env` receives one: the mapping for the runner row the one-shot spawns on (the worker holds `runner_id`, the titler the row), carrying `provider_config` once slice 5 adds it; `None` when the caller has none (consistency pass, 2026-09-28, requested by slice 5: its *Required of slices 1–4* 1.7) | slice 2 adds; base default returns `None` | 2 (its D14: `COPILOT_HOME=<worker home>`, token and trust variables stripped; the new `env` parameter of `_run_worker_process` and `_run_titler`), 5 (the Copilot body calls the same `copilot_provider_env` as the Copilot `guard_env`, so a checkpoint, handover or title spawn on a provider runner gets its provider variables) |
 | `title_text` | `(stdout: str) -> str`, the text `title_from_output` reads | slice 2 adds; base default is the identity | 2 (its D14 R2: the title comes from the envelope's answer, not its last JSON line) |
 | `write_native_files` | `(project_id: str, agent: str, *, stable_context: Optional[str], model: Optional[str], effort: Optional[str], mcp_command: Optional[list[str]]) -> Optional[Path]`; raises only `OSError` or `ValueError` (an unsafe project id or agent name; added at contract reconciliation, 2026-09-28, requested by slice 2: its D4 R3) | slice 2 adds; base default returns `None` and writes nothing | 2 (its D4 `ensure_copilot_home`, at agent create, PATCH and before every spawn, **not** `POST /agents/request` (its D4 R3): any exception is logged at the first two, the post-commit step being wrapped in `except Exception`, and a 409 `agent_wide` at the spawn) |
 | `agent_home` | `(project_id: str, agent: str) -> Optional[Path]` | slice 2 adds **only if** runner-agnostic code needs the path; otherwise it stays `copilot_home_path`, private | 2 |
@@ -623,7 +633,8 @@ member is added by that slice with the default stated, and slice 1's conformance
 | `resolve_access_axes` | `(adapter, *, hub_client: Optional[str], flags: Optional[Sequence[str]]) -> AccessAxes`, `None` = no flags | built, final (axis 1 is `hub_client`-only through slice 5) | 1, 3 |
 | `LaunchVerdict` | today's `probe_agent` keys; `verdict_pending: bool` optional (`total=False`) | key added by slice 2 | 1, 2 |
 | `LaunchRequest` | `build_command`'s parameters plus `axes` | built | 1 |
-| `RpcTurnRequest` | `cli, cwd, env, prompt, model, resume_session_id, yolo, mcp_command, config_overrides, permission_mode, workspace, extra_flags, restrict_spec_writes` | built | 1, 2 |
+| ″ | `described_access_path: Literal["mcp", "shim"] = "mcp"`, also a keyword of `build_command` with the same default, passed from the trigger's `described_access_path(axes.plane, …)` result. Claude: `restrict_spec_writes and described_access_path == "shim"` → `--disallowedTools Edit,MultiEdit,NotebookEdit` (**`Write` kept**, so a spec turn told `shim` can write its args file); every other combination → today's `Edit,MultiEdit,Write,NotebookEdit`, still unconditional on yolo. Codex `exec` ignores it. The default reproduces today's argv, so slice 1's goldens are unchanged | slice 3 adds (its D16 and *Required of slice 1*; consistency pass, 2026-09-28): no slice-1 caller passes anything but `"mcp"`, so by D16's rule the first reader adds it, and extends task 1.1/1.2's golden matrix with the `described_access_path` axis for Claude | 3 |
+| `RpcTurnRequest` | `cli, cwd, env, prompt, model, resume_session_id, yolo, mcp_command, config_overrides, permission_mode, workspace, extra_flags, restrict_spec_writes`; `env` is `field(repr=False)` (consistency pass, 2026-09-28, requested by slice 5: its *Required* 1.8; it carries the run's tokens and, under slice 5, the BYOK key, so no `repr` in a log line may print it) | built | 1, 2 |
 | ″ | `per_turn_context: Optional[str] = None`, `stable_context: Optional[str] = None` | slice 2 adds (its D18); Codex ignores both | 2, 3 |
 | ″ | `tool_surface_context: Optional[str] = None` (the tool section, kept apart from `per_turn_context`), `control_overrides: Mapping[str, str] = {}` (the raw catalog controls; Copilot's Effort is a flag control `render_control_config` skips), `told_access_path: Optional[str] = None` (the described path the run was told) | slice 2 adds (its D5, D10, D18 R3; added at contract reconciliation, 2026-09-28, requested by slice 2); Codex ignores all three | 2, 3 (`render_surface`'s output replaces `tool_surface_context`, and the surface it is called with replaces `told_access_path`) |
 | ″ | `agent_config: Mapping = {}` (as `field(default_factory=dict)`) | slice 5 adds; Codex ignores it | 5 (its D9: `agent_config["copilot_github_mcp"]` reaches `build_acp_argv` and `decide_permission` as their `github_mcp: bool` keyword; slice 5's R3 `RpcTurnRequest.github_mcp` is this field, reconciled 2026-09-28) |
@@ -902,6 +913,15 @@ member is added by that slice with the default stated, and slice 1's conformance
     are `mcp_server.py:421` and `:491-497`, which the design now cites. The conclusion is unchanged.
   - **The review's other two change findings** (6.2(a) F301, 6.2(b) the app-server spec-turn gap) were confirmed by the
     review and need no edit.
+
+- **Consistency pass after review fixes, 2026-09-28** (applying sibling requests; no redesign).
+  - D16 `one_shot_env` row: signature now `(purpose, config: Optional[Mapping] = None)`, `config` the runner's, for
+    slice 5's BYOK one-shot spawns (slice 5 *Required* 1.7); D8 says so.
+  - `RpcTurnRequest.env` is `field(repr=False)` (D3 text, D16 value-type row; slice 5 *Required* 1.8); task 2.1 gains
+    a repr assertion.
+  - D6 and the D16 value-type table: `described_access_path: Literal["mcp", "shim"] = "mcp"` on `build_command` and
+    `LaunchRequest`, **added by slice 3** (no slice-1 caller); Claude spec turn told `shim` keeps `Write`. Slice 1's
+    goldens are unchanged by the default (slice 3's D16).
 
 ## Open questions for R2/R3
 

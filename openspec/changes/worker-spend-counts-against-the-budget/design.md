@@ -178,6 +178,10 @@ and `--sandbox read-only` (F195), and adds `--output-format json` for Claude and
    (`"conversation-title/1"`): none exists today, and `worker_invocations.prompt_version` is
    NOT NULL (`db/models.py`).
 
+After `each-runner-cli-is-one-adapter` lands, the title argv lives in the adapter's `one_shot("title")` (so the
+`--output-format json`/`--json` flags go there), and `worker.parse_envelope` is kept as a wrapper over
+`parse_one_shot` with the same signature (its D8) — rebase at IMPL.
+
 **Adjacent, not changed here (R2).** `generate_conversation_title` has no "already generated"
 guard: it re-runs after every completed turn (`agent_trigger.py:2630`, `:3219`) on the same
 excerpt (the first message and first reply, `_excerpt`), so it pays for the same title each turn.

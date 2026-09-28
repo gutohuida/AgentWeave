@@ -141,7 +141,12 @@ exists**, so this alternative also needs a new tool and route. R3: slice 3's cal
 closed over the MCP tools and **refuses stdin** (its open item 5), while a command hook receives its
 payload on stdin. So the overrule path needs its own mode as well; slice 3 provides none, and this
 change asks it for none. It reads `AW_RUN_TOKEN` and `HUB_URL`
-from the environment it inherits from `copilot.exe`. **(rebase at IMPL:
+from the environment it inherits from `copilot.exe`. (Consistency pass, 2026-09-28.) Two more
+constraints on that path: the new tool is registered with slice 3's `@_tool()` decorator, as every
+tool is once slice 3 lands (its D3, review note 12), so it joins the callable-set parity test; and
+the hook file is written **through slice 2's `.agentweave-owned.json` recorder** (slice 2's
+§ *Provided to slices 3–5* item 20), because slice 2's before-spawn sweep removes every hook,
+setting, MCP config and agent file in the home that the Hub did not record there. **(rebase at IMPL:
 `a-run-reaches-the-hub-without-mcp` unbuilt at R2.)** **Not `type:"http"`**, for four reasons:
 
 1. `http://localhost` needs `COPILOT_HOOK_ALLOW_LOCALHOST=1` in the CLI's environment.
@@ -191,14 +196,21 @@ item is a trap a later change could walk into.
     config's trusted folders). So the two things this requirement forbids are exactly the two ways
     an ACP run's folder becomes trusted, and full access stays safe.
   - Slice 2's D4 writes no config file with trusted folders into the home, so test 1.6 is a guard
-    against a later writer, not a fix.
+    against a later writer, not a fix. (Consistency pass, 2026-09-28.) Slice 2's D4 also sweeps the
+    home before every spawn: hooks, `settings.json`, MCP configs, plugins and agent files it did not
+    record in `.agentweave-owned.json` are removed, and `trustedFolders` is dropped from
+    `config.json` (its § *Provided* item 20). **This change writes nothing into the home** (D2: no
+    hook; D8: the review agents are Copilot's built-ins; D9: the GitHub server is a spawn flag; D7:
+    BYOK is environment only), so nothing of this change's is swept. Any later write there,
+    including D2's overrule path, goes through that recorder.
   - **Review fixes, 2026-09-28 (finding 6): "the Hub must not set" is not enough.** Nothing strips a
     `COPILOT_ALLOW_ALL` the Hub did not set. `resolve_agent_env` copies `os.environ` and merges the
     agent's `env_vars` (`launchability.py:157-179`), so an operator's shell or an agent's `env_vars`
     carrying `COPILOT_ALLOW_ALL=true` would trust the folder and load this repository's
     `.claude/settings.json` hooks and `.mcp.json` servers into the run. **Decided: slice 2 owns the
     strip**, for every Copilot spawn (its Copilot `guard_env` and `one_shot_env`), from both the
-    ambient environment and `env_vars`, under every posture (*Required of slices 1–4*, 2.9). It is not
+    ambient environment and `env_vars`, under every posture (*Required of slices 1–4*, 2.9; provided
+    as slice 2's § *Provided to slices 3–5* item 18). It is not
     this change's code, so it cannot be cut with any group here. Test 1.6 sets it ambient and in
     `env_vars` and asserts it is absent; task 2.6 adds the strip only if slice 2 landed without it.
 
@@ -460,7 +472,9 @@ exactly `` `Error: ${message}` `` (VERIFIED-CODE, R3). **One fact, one record.**
 - **A subagent's error does not fail the reviewer's turn (finding 8, decided: slice 2's).** Slice 2
   R3 ends the turn `failed` on any armed `session.error`, with no subagent distinction. With group B
   a failed `code-review` subagent would fail, re-queue and re-bill the reviewer's whole turn. Only a
-  root `session.error` may fail the turn; that rule is slice 2's (*Required of slices 1–4*, 2.11).
+  root `session.error` may fail the turn; that rule is slice 2's (*Required of slices 1–4*, 2.11;
+  provided as slice 2's § *Provided to slices 3–5* item 19, which also says this change replaces its
+  `copilot.subagent_error` diagnostic with the error event below).
   This change records a subagent's error as an error event with `subagent_id`, and the turn goes on.
 
 **The test follows the code's order** (CLAUDE.md: the ordering the source actually emits, and some
@@ -682,7 +696,8 @@ Copilot `one_shot_env` (checkpoints, handovers, titles; finding 1), does two ste
 it, an operator's shell `COPILOT_PROVIDER_BASE_URL` silently turns every subscription Copilot run
 into BYOK, and that hole would reopen if the operator REJECTED group C. So step 1, for a runner
 without a provider, is asked of **slice 2** for every Copilot spawn, beside its `COPILOT_ALLOW_ALL`
-strip (*Required of slices 1–4*, 2.10). This change's step 1 then only has to keep doing it for a
+strip (*Required of slices 1–4*, 2.10; provided in slice 2's D3 and § *Provided* item 18,
+consistency pass 2026-09-28). This change's step 1 then only has to keep doing it for a
 provider runner. If slice 2 lands without it, task 2.8 here adds it; that task is tagged with no
 group and is not cut with C. It mirrors the ambient `ANTHROPIC_BASE_URL` strip
 (`launchability.py:190-194`): an operator's shell must not silently turn a subscription runner into a
@@ -699,7 +714,8 @@ guard strips those names from both sources when the runner has no provider, and 
 R2: **where** this happens is not "the adapter's `build_launch`". Slice 1's `build_launch` is a
 `StreamTransport` member returning argv only; an RPC transport (ACP) has none, and its environment
 arrives as `RpcTurnRequest.env`. The environment is built by `resolve_agent_env` and ends in the
-adapter's `guard_env(proc_env, env_vars)` (slice 1 D10), and slice 2 D3 puts its `GH_TOKEN` strip
+adapter's `guard_env(proc_env, config)` (slice 1 D10; R2 read `env_vars` there, consistency pass
+2026-09-28), and slice 2 D3 puts its `GH_TOKEN` strip
 there. `guard_env` receives no runner row. **R3: no new parameter on `resolve_agent_env` is
 needed.** The trigger already builds `config` from `get_agent_config` and overwrites `runner`/`model`
 from `runner_row` (`agent_trigger.py:764-765`), then calls `resolve_agent_env(runner, config)`
@@ -1106,8 +1122,8 @@ has not), **correction** (sibling text that is wrong about this change), or **no
 | 1.4 | ~~`RpcTurnRequest.github_mcp: bool = False`~~ → **slice 1's `RpcTurnRequest.agent_config: Mapping = {}`** (its D16 R3), filled by the trigger from the agent's config; `run_turn` passes `agent_config.get("copilot_github_mcp", False)` as the `github_mcp` keyword of slice 2's `build_acp_argv` and `decide_permission` (D9). An empty default keeps slices 1–2 unchanged. | owned here; name adopted from slice 1 (contract reconciliation, 2026-09-28) |
 | 1.5 | `catalog_provider` stays a `ClassVar`. This change does not ask for a per-runner provider: it checks a provider runner's model itself at the four sites in D7. If slice 1 ever makes it per-runner, those sites collapse onto it. | nothing required |
 | 1.6 | The Copilot `permission_card_label(method, subject)` returns `github-mcp-server/<tool> — acts on GitHub as you` for a request D9 routes to the operator (review 2026-09-28: `<server>/<tool> — a tool of MCP server <server>, not the Hub's` for any other reported server), and `workspace_verdict(method, subject, workspace)` returns `None` for it. Both members are slice 1's; their Copilot bodies are slice 2's, with this change's case. | owned here |
-| 1.7 | (review 2026-09-28, finding 1) **`one_shot_env(purpose)` needs the runner's `config`** (as `guard_env(proc_env, config)` has it), carrying `provider_config`, so a checkpoint, handover or title spawn on a provider runner gets the provider's variables and one on a plain runner gets them stripped. Claude and Codex ignore it. If slice 1 lands without it, this change adds `config: Optional[Mapping] = None` as a keyword with that default. | needed |
-| 1.8 | (review 2026-09-28, finding 14) **`RpcTurnRequest.env` is `field(repr=False)`**: it carries the BYOK key (and today's tokens) for the run, and a dataclass `repr` in any log line would print it. | needed |
+| 1.7 | (review 2026-09-28, finding 1) **`one_shot_env(purpose)` needs the runner's `config`** (as `guard_env(proc_env, config)` has it), carrying `provider_config`, so a checkpoint, handover or title spawn on a provider runner gets the provider's variables and one on a plain runner gets them stripped. Claude and Codex ignore it. If slice 1 lands without it, this change adds `config: Optional[Mapping] = None` as a keyword with that default. | **provided** in slice 1's D16 as `one_shot_env(purpose, config: Optional[Mapping] = None)` (consistency pass, 2026-09-28) |
+| 1.8 | (review 2026-09-28, finding 14) **`RpcTurnRequest.env` is `field(repr=False)`**: it carries the BYOK key (and today's tokens) for the run, and a dataclass `repr` in any log line would print it. | **provided** in slice 1's D3 and D16 (consistency pass, 2026-09-28) |
 
 ### Slice 2 — `a-copilot-agent-runs-over-acp`
 
@@ -1122,10 +1138,10 @@ has not), **correction** (sibling text that is wrong about this change), or **no
 | 2.7 | **D3's hand-off of an MCP `env` filter** ("whichever lands the BYOK variables adds that filter") is declined here, with reasons (D7): the key is in every shell command's environment anyway, and a blanking `env` map breaks the tool server if Copilot's `env` replaces rather than merges (Open question 10). Slice 2 should reword the sentence as an open question, not an obligation. | correction; **recorded** in slice 2's D3 and item 16 (contract reconciliation, 2026-09-28) |
 | 2.8 | Slice 2's non-`connected` `agentweave` status report has the same `pending` hazard D9 found (the schema's `McpServerStatus` has `pending`). Slice 3 now owns that report (its D9). | observation |
 | 2.9 | (review 2026-09-28, finding 6; **decided: slice 2 owns it**) **Strip `COPILOT_ALLOW_ALL`** from every Copilot spawn's environment (the Copilot `guard_env` and `one_shot_env`), from both the ambient environment and the agent's `env_vars`, under every posture. Otherwise an operator's shell or an agent's `env_vars` trusts the folder and loads the repository's hooks and `.mcp.json` servers into the run (D3). Test 1.6 here asserts it. | needed (slice 2's) |
-| 2.10 | (review 2026-09-28, finding 6) **Strip every `COPILOT_PROVIDER_*` name, `COPILOT_MODEL` and `COPILOT_OFFLINE`** from every Copilot spawn's environment, both sources, beside 2.9. It must not depend on this change's group C surviving: without it an ambient `COPILOT_PROVIDER_BASE_URL` turns every subscription run into BYOK. This change's `copilot_provider_env` then only sets the four for a provider runner (D7). If slice 2 lands without it, this change's ungrouped task 2.8 adds it. | needed (slice 2's) |
+| 2.10 | (review 2026-09-28, finding 6) **Strip every `COPILOT_PROVIDER_*` name, `COPILOT_MODEL` and `COPILOT_OFFLINE`** from every Copilot spawn's environment, both sources, beside 2.9. It must not depend on this change's group C surviving: without it an ambient `COPILOT_PROVIDER_BASE_URL` turns every subscription run into BYOK. This change's `copilot_provider_env` then only sets the four for a provider runner (D7). If slice 2 lands without it, this change's ungrouped task 2.8 adds it. | **provided** in slice 2's D3 and § *Provided* item 18 (consistency pass, 2026-09-28) |
 | 2.11 | (review 2026-09-28, finding 8; **decided: slice 2 owns it**) **Only a root `session.error` fails the turn.** Slice 2 R3 (`design.md:770-780`) ends the turn `failed` on any armed `session.error`. A subagent's error (envelope `agentId`, else `data.agentId`/`data.parentToolCallId`, Copilot's `_d()`) must not: with group B a failed `code-review` subagent would fail, re-queue and re-bill the reviewer's turn and, under slice 4, possibly hold the queue. Test with a captured or synthetic subagent error. | needed (slice 2's) |
-| 2.12 | (review 2026-09-28, finding 16) **Stale sentence:** slice 2 `design.md:763-768` still says slice 5 "holds an `Error:` block until prompt completion so the echo is dropped in either order". That is R2's design, replaced in R3 by a chunk match at arrival (D5); 2.2 above is marked done while this sentence remains. Reword at slice 2's next touch. | correction |
-| 2.13 | (DECIDED 2026-09-28) Slice 2's identify step REJECTs a request whose server Copilot did not report **before** D8's step 3, so this change's rule never sees one. Slice 2's text already says so (its D8, *Identifying the MCP server*, item 3); its open question 12 can be closed. | nothing required (close its Q12) |
+| 2.12 | (review 2026-09-28, finding 16) **Stale sentence:** slice 2 `design.md:763-768` still says slice 5 "holds an `Error:` block until prompt completion so the echo is dropped in either order". That is R2's design, replaced in R3 by a chunk match at arrival (D5); 2.2 above is marked done while this sentence remains. Reword at slice 2's next touch. | correction; **done** in slice 2's D10 (consistency pass, 2026-09-28) |
+| 2.13 | (DECIDED 2026-09-28) Slice 2's identify step REJECTs a request whose server Copilot did not report **before** D8's step 3, so this change's rule never sees one. Slice 2's text already says so (its D8, *Identifying the MCP server*, item 3); its open question 12 can be closed. | nothing required; **already closed** in slice 2's open question 12 (review ghcp-s2) |
 
 ### Slice 3 — `a-run-reaches-the-hub-without-mcp`
 
@@ -1465,6 +1481,14 @@ has not), **correction** (sibling text that is wrong about this change), or **no
     question 8; they stay operator questions.
   - Sibling changes needed (not edited here): slice 1 — *Required* 1.7, 1.8; slice 2 — 2.9, 2.10,
     2.11, 2.12, and closing its Q12 (2.13).
+
+- **Consistency pass after review fixes, 2026-09-28** (no redesign).
+  - D3: slice 2's before-spawn sweep of the home (its § *Provided* item 20) stated; checked every write of this change
+    into `COPILOT_HOME`: there is none (D2, D7, D8, D9), so nothing is swept; D2's overrule path must write through
+    `.agentweave-owned.json` and register its new tool with slice 3's `@_tool()`.
+  - D3, D5, D7 reference slice 2's § *Provided* items 18 (trust and, now, provider strip) and 19 (root-only
+    `session.error`). D7's `guard_env(proc_env, env_vars)` corrected to `guard_env(proc_env, config)`.
+  - *Required of slices 1–4*: 1.7, 1.8, 2.10 marked provided; 2.12 done; 2.13 already closed.
 
 ## Open questions for R2/R3
 

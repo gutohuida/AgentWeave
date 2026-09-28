@@ -354,7 +354,10 @@ Every command runs from the repo root: `py -3.11 -m pytest <file> -q`.
     status `connected` or `failed` to 2.2 as `source="harness"`, and stores any other status as a diagnostic;
   - `copilot.exe`'s env per 5.1;
   - (review finding 4, design D16) spec turns: `create` leaves `--excluded-tools`; the handler's spec-turn `edit`
-    rule in every posture; no `allow_all` on a spec turn; Plan mode after the wait, for `mcp` only;
+    rule in every posture; no `allow_all` on a spec turn; Plan mode after the wait, for `mcp` only (consistency pass
+    2026-09-28: slice 2's D9 item 1a now ships the first three with every spec-turn `edit` refused, so here only the
+    step-3 args-file allow and the plan-mode move remain, unless slice 2 landed without them; the full-access non-`edit`
+    answer waits on design open question 11);
   - (review fix 7) a run's own wait timeout gives `shim` even under `hub_client: "mcp"` (design D1).
   Tests 1.14 and 1.15 (Copilot half) pass.
 - [ ] 5.6 (review finding 4, design D16; slice 1's builder) `restrict_spec_writes` with the described surface: the

@@ -47,10 +47,13 @@ session in place of the request in front of it. A refusal the Hub decided withou
 SHALL be recorded as other runtime refusals are. Deciding one request SHALL NOT stall the Hub's
 handling of other runs, however long resolving a path takes.
 
-A turn triggered with a specification document open SHALL have Copilot's file-writing tools
-removed, whatever the posture. It SHALL NOT run in Copilot's plan mode until a drive has shown that
-plan mode leaves the turn's specification duties intact and cannot leave the turn waiting on a
-request nobody can answer.
+A turn triggered with a specification document open SHALL have Copilot's file-editing tools
+removed, except its file-creation tool, whatever the posture. The Hub SHALL refuse every file
+change such a turn asks for, in every posture, except a write the Hub itself recognises as the
+run's own call to the Hub, and SHALL NOT put such a turn into Copilot's allow-all mode, so that
+every file change reaches the Hub. It SHALL NOT run in Copilot's plan mode until a drive has shown
+that plan mode leaves the turn's specification duties intact and cannot leave the turn waiting on
+a request nobody can answer.
 
 #### Scenario: A command outside the workspace is refused under Workspace only
 
@@ -167,7 +170,9 @@ request nobody can answer.
 #### Scenario: A specification turn has no write tools
 
 - **WHEN** a Copilot turn is triggered with a specification document open under Full access
-- **THEN** the spawned command removes Copilot's file-writing tools
+- **THEN** the spawned command removes Copilot's file-editing tools other than its file-creation tool
+- **AND** the session's allow-all mode is off before the prompt is sent
+- **AND** a request to create a file in the workspace is refused and recorded as a runtime refusal
 - **AND** the session is not put into plan mode while no drive has shown plan mode to be safe for specification turns
 
 #### Scenario: Approvals do not depend on MCP
@@ -191,6 +196,13 @@ agent's configuration names one, the run's timeline SHALL say it was removed and
 access posture is the way to grant it. The Copilot home a run uses SHALL be the one the Hub chose
 for it, whatever the environment names.
 
+Copilot also reads its model provider, its model and an offline switch from the environment. A
+provider variable the Hub happened to inherit would silently send a subscription run to another
+provider. The Hub SHALL remove every provider variable, the model variable and the offline variable
+from every Copilot process it starts for a runner that has no provider configured, whether the Hub
+inherited them or the agent's configuration names them, and when the agent's configuration names
+one, the run's timeline SHALL say it was removed.
+
 #### Scenario: An ambient token is not passed on
 
 - **WHEN** the Hub process has `GH_TOKEN` set and a Copilot agent's configuration does not name it
@@ -206,6 +218,11 @@ for it, whatever the environment names.
 - **WHEN** the Hub process has `COPILOT_ALLOW_ALL=true` set and a Copilot run is started under Workspace only
 - **THEN** the spawned Copilot process's environment has no `COPILOT_ALLOW_ALL`
 - **AND** the run's permission requests are still decided by the Hub
+
+#### Scenario: An ambient provider variable is not passed on
+
+- **WHEN** the Hub process has `COPILOT_PROVIDER_BASE_URL` and `COPILOT_MODEL` set and a Copilot run is started on a runner with no provider configured
+- **THEN** the spawned Copilot process's environment has neither variable, nor any other variable whose name begins `COPILOT_PROVIDER_`
 
 #### Scenario: An agent that names the allow-all variable
 

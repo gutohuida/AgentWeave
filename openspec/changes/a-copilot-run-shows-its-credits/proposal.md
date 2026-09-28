@@ -3,7 +3,7 @@
 **Depends on:** the `RunnerAdapter` of `each-runner-cli-is-one-adapter` (slice 1): `get_adapter`,
 `parse_one_shot`, and the generic RPC executor `_execute_rpc_run`. This change **adds** the adapter
 member **`compaction_percent`**, which slice 1 reserves for this slice without defining it (its D16;
-design D9 here). The per-event `spend_from`/`quota_hold_from` that slice 1 also reserves are
+design D9 here). The per-event `spend_from`/`quota_hold_from` that slice 1's R2 reserved (its R3 dropped them) are
 replaced by a per-run ledger (design D2). It also depends on `a-copilot-agent-runs-over-acp` (slice
 2): `copilot_acp.run_turn`, which owns the ledger, its raw-event subscription constant, its Copilot
 one-shot envelope parser and its migration widening `ck_runners_cli`. It lands after the 2026-09-27

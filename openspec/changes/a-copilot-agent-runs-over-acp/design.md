@@ -136,7 +136,7 @@ trigger fails:
 
 `SUPPORTED_RUNNERS` and `MCP_INJECTABLE_RUNNERS` gain `copilot`, and the trigger skips
 `build_command` for it (task 7.2). If slice 1 lands first, all three become adapter-driven
-(`ADAPTERS`, `transport(flags).kind == "rpc"`, `inject_mcp`) and the Copilot adapter's rows cover
+(`ADAPTERS`, `transport(flags).kind == "rpc"`, and the `inject_mcp` this slice adds to its ACP transport) and the Copilot adapter's rows cover
 them; either way a trigger-level test (task 7.2) asserts that a Copilot turn reaches `run_turn`
 with a non-`None` `mcp_command`. `hub/tests/test_model_catalog.py:16-18` asserts every `CATALOG`
 provider is in `SUPPORTED_RUNNERS`, so D13's catalog entry fails that test until this lands.
@@ -182,7 +182,7 @@ the node parent is killed (appendix A §K).
   --additional-mcp-config @<COPILOT_HOME>/agentweave-mcp.json      # only when access path is MCP
   [--model <model>]                     # omitted for "auto"/None, Copilot's own default
   [--reasoning-effort <v>]              # from the Effort control
-  [--excluded-tools=apply_patch,create,edit,str_replace,str_replace_editor]   # spec turns (D9)
+  [--excluded-tools=apply_patch,edit,str_replace,str_replace_editor]   # spec turns (D9; `create` kept)
   [<runner flags>]                      # after transport sentinels and widening flags are stripped
 ```
 
@@ -210,10 +210,12 @@ Why each flag is there:
   (appendix A §A).
 - `--excluded-tools` is a spawn flag for the same reason. Its value is one comma-joined word:
   `app.js`'s `Y0` splits a filter value on commas (respecting parentheses) and matches each entry
-  by exact tool name across every source (CODE; SDK `types.d.ts:2002`). The five names are
+  by exact tool name across every source (CODE; SDK `types.d.ts:2002`). The names come from
   `app.js`'s ACP edit set `UDo = {apply_patch, create, edit, str_replace}` plus the legacy
   `str_replace_editor`, which its kind mapper also treats as an edit (CODE, R2). Only the first
   three are documented user-facing names (command reference `:683-686`); the other two cost nothing.
+  (Consistency pass, 2026-09-28, slice 3's D16.) `create` is **not** excluded: a spec turn told
+  `shim` must write its args file, and the handler refuses every other `edit` on a spec turn (D9).
 - `--agent` is **not** passed, because it does not reach ACP (VERIFIED, `r1-probe-flag.log`).
 - `--model`, `--reasoning-effort` and every runner flag are rendered by the Copilot `run_turn` from
   the request it is handed; nothing in the trigger builds Copilot argv (D1, R2).
@@ -252,6 +254,19 @@ Two additions to that environment:
   so the turn can emit the diagnostic. It is called by the turn, by `one_shot_env` (D14) and by the
   probe (D15), so no Copilot spawn escapes it. The posture check (D8, *The posture step*) is the backstop for anything this
   list misses.
+- (Consistency pass, 2026-09-28; slice 5's *Required of slices 1–4* 2.10, its review finding 6.) The
+  same function removes, from both sources and for **every** spawn of a runner without a provider
+  (which, until slice 5's BYOK lands, is every Copilot spawn): every name with the prefix
+  `COPILOT_PROVIDER_` (a prefix, not a list: the 1.0.88 bundle reads 15 such names, among them
+  `BASE_URL`, `BEARER_TOKEN`, `WIRE_MODEL`, `API_KEY_COMMAND` and `HEADERS`), plus `COPILOT_MODEL`
+  and `COPILOT_OFFLINE`. Without it an ambient `COPILOT_PROVIDER_BASE_URL` silently turns a
+  subscription run into a BYOK one, and an ambient `COPILOT_MODEL` overrides the runner's model;
+  it mirrors the ambient-`ANTHROPIC_BASE_URL` strip (`launchability.py:190-194`). It does not
+  depend on slice 5: slice 5's `copilot_provider_env` strips the same set and then, for a provider
+  runner only, sets its four. An `env_vars` entry naming one is removed too, and reported through
+  the same removed-names list, so the turn's `copilot.permission_override_removed` diagnostic
+  names it, with the sentence *"<NAME> was removed from this agent's environment; Copilot's model
+  and provider come from its runner."*
 
 **Inheritance is total (R2, for slice 5).** With no `env` block, the MCP child receives *everything*
 `copilot.exe` holds, exactly as Claude's MCP child does today. That is right for this slice, whose
@@ -554,7 +569,8 @@ the first prompt, or after the agent's home was removed.
 
 ### D8 — Approvals: `session/request_permission` → the Hub's judge (axis 2, no MCP dependency)
 
-A pure `copilot_acp.decide_permission(params, *, posture, workspace, hub_url, calls) -> Decision`
+A pure `copilot_acp.decide_permission(params, *, posture, workspace, hub_url, calls, spec_turn=False) -> Decision`
+(`spec_turn`: consistency pass, 2026-09-28, D9 item 1a)
 returns `ALLOW`, `REJECT` or `ASK_OPERATOR`, plus a reason. It maps each request onto
 `mcp_server._decide`. R3: `calls` replaces R2's `mcp_server_names`. It is the per-turn map
 `toolCallId → CallFacts(tool_name, mcp_server, mcp_tool)`, filled from the raw
@@ -783,7 +799,8 @@ both.
   asserting policy: *"Copilot did not grant Full access (<Copilot's error message, or "no allow-all
   option was offered">); this run is deciding each action against its workspace instead."*
 - Any request that still reaches the client under full access is answered ALLOW (defensive, as
-  `decide_approval` does at `codex_appserver.py:289-290`).
+  `decide_approval` does at `codex_appserver.py:289-290`), except an `edit` on a specification
+  turn, which D9 item 1a answers (consistency pass, 2026-09-28).
 
 **The posture step, every turn (review 2026-09-28, finding 4).** R3 set plan mode on a
 specification turn and never set it back, and set `allow_all` only to turn it on. But Copilot
@@ -794,11 +811,15 @@ and a session saved in autopilot would run allow-all under Workspace only. So af
 agent selection (D6), the step is total:
 
 1. **Always** `session/set_mode`: `#plan` on a specification turn when `SPEC_TURN_USES_PLAN_MODE`
-   is on (D9), otherwise `#agent`, whatever the load reported. Leaving autopilot makes Copilot's own
+   is on (D9), otherwise `#agent`, whatever the load reported. (Consistency pass, 2026-09-28, slice
+   3's D16.) With slice 3, a transport that tests before its first prompt sends `#agent` here and
+   the spec turn's `#plan` only **after** slice 3's wait, and only for a run told `mcp` (D9). Leaving autopilot makes Copilot's own
    transition code sync allow-all off (`a=n!==bA&&r===bA`). A refused `set_mode` to `#agent` when
    the load reported `#plan` or `#autopilot` raises before the prompt; a refused `#plan` stays D9's
    diagnostic.
-2. Under full access: `allow_all` → `on`, as above.
+2. Under full access: `allow_all` → `on`, as above, **except on a specification turn** (D9;
+   consistency pass, 2026-09-28, slice 3's D16), where step 3 applies so that every `edit` request
+   reaches the handler. What such a turn answers its non-`edit` requests is open question 13.
 3. Under every other posture: read `allow_all.currentValue` from the returned `configOptions`; if it
    is `"on"`, set it `"off"` and read it back. If it is still `"on"`, `run_turn` **raises before the
    prompt** (a failed start, D12): *"Copilot kept allow-all on for this session; AgentWeave did not
@@ -848,20 +869,35 @@ An unanswered request would hang the turn (`codex_appserver.py:255-258`).
 ### D9 — Specification and review turns
 
 - **Specification turn** (`restrict_spec_writes=True`, `agent_trigger.py:1227`). It gets two things:
-  1. **`--excluded-tools` over Copilot's write tools**:
-     `apply_patch,create,edit,str_replace,str_replace_editor` (R2, Open question 4: `app.js`'s ACP
+  1. **`--excluded-tools` over Copilot's write tools except `create`**:
+     `apply_patch,edit,str_replace,str_replace_editor` (R2, Open question 4: `app.js`'s ACP
      edit set plus the legacy combined editor, CODE; see D3). It applies unconditionally, including
      under full access, which is the rule `_build_claude_command` states for `--disallowedTools`
      (`runner_commands.py:218-229`). Like Claude's, it is a nudge and not a sandbox: `powershell` is
      not excluded, and neither is `write_powershell` or `write_bash`, which write to a running shell,
      not to a file. (R3: `YDo` maps `write_bash` to the `edit` kind and `write_powershell` to
-     `execute`. R2 said both were `edit`. Neither is a file writer.)
+     `execute`. R2 said both were `edit`. Neither is a file writer.) (Consistency pass, 2026-09-28,
+     slice 3's D16 and its *Required of slice 2* item 8.) `create` is **never** excluded, on any
+     spec turn: the argv is built at spawn, before the surface is decided, and a spec turn told
+     `shim` must write `.agentweave/calls/*.json` to call `submit_spec_document`.
+  1a. **The handler answers every `edit`-kind request itself** (consistency pass, 2026-09-28, slice
+     3's D16). `decide_permission` gains `spec_turn: bool = False`. On a spec turn, after step 3
+     (where slice 3's `_hub_own_call("Write", {"path": p}, …)` allows an `edit` that names at least
+     one path and whose every path is an args file), every other `edit` request is REJECTed, **in
+     every posture**, and recorded through `_on_refusal`. Until slice 3 lands there is no step-3
+     allow, so every `edit` on a spec turn is refused: with `create` offered but refused, a spec
+     turn writes no file, as before. A spec turn never sets `allow_all` on, even under full access
+     (D8 posture step 2), because a request answered by allow-all never reaches the handler.
   2. **Plan mode, only while `SPEC_TURN_USES_PLAN_MODE` is on (off by default; see below)**,
      through `session/set_mode` with the full URI
      `https://agentclientprotocol.com/protocol/session-modes#plan` (VERIFIED accepted). Plan mode
      blocks project edits at enforcement level (DOCUMENTED). It is set after agent selection and
-     before the prompt. R3: a `set_mode` that fails emits a `diagnostic` and the turn proceeds,
-     because `--excluded-tools` alone meets the requirement. It never raises, since a raise there
+     before the prompt. (Consistency pass, 2026-09-28, slice 3's D16.) With slice 3 it is set
+     **after** slice 3's wait, and **only** for a run told `mcp`; a spec turn told `shim` never
+     enters plan mode, and item 1a replaces it. This agrees with the switch shipping off: slice 3's
+     condition narrows when the switch, once turned on, applies, and the `exit_plan_mode`
+     cancellation below is unchanged. R3: a `set_mode` that fails emits a `diagnostic` and the turn proceeds,
+     because `--excluded-tools` and item 1a meet the requirement. It never raises, since a raise there
      would fail the turn for a measure that is only reinforcement.
 
   **Drive check.** Plan mode also changes Copilot's own behaviour towards writing a plan, which could
@@ -872,7 +908,7 @@ An unanswered request would hang the turn (`codex_appserver.py:255-258`).
   `exit_plan_mode`, which raises an input request (`exit_plan_mode.requested`). No ACP method
   answers it, and only the `-p` path auto-approves it (CODE). A specification turn whose model
   decides it is done planning could wait on it until the Hub's turn timeout. So
-  `SPEC_TURN_USES_PLAN_MODE = False` ships, and `--excluded-tools` alone meets the requirement.
+  `SPEC_TURN_USES_PLAN_MODE = False` ships, and `--excluded-tools` with item 1a meets the requirement.
   Task 11.3 drives the spec turn **with it switched on for that drive** and records whether
   `exit_plan_mode` was called and whether the turn hung; only if neither the interview nor the
   ending suffers is it set `True`, by a commit that cites the drive. Whether on or off,
@@ -974,9 +1010,13 @@ Slice 5 then has nothing to widen. Every Copilot diagnostic of this slice uses `
 step) are `error` codes and keep the underscore form of Codex's `codex_mcp_server_failed`.
 
 Slice 5 (its D5, as it stands) keeps a raw `session.error` as an **`error`** event, re-coded
-`copilot.<errorType>` with `facts`, and holds an `Error:` block until prompt completion so the echo
-is dropped in either order. That replaces this slice's single `copilot_session_error` code, and is
-slice 5's to change. R2 wrote that slice 5 re-maps it to a `diagnostic_event(severity="error")`,
+`copilot.<errorType>` with `facts`, and drops the echo at the **chunk**, on arrival and before
+accumulation: an `agent_message_chunk` whose text equals `"Error: " + message` of a `session.error`
+(root or subagent) already received in the turn and not yet matched is dropped, at most one chunk
+per raw error, relying on the raw-first order (VERIFIED-CODE). Nothing is held. It then deletes this
+slice's `Error:` → `copilot_session_error` branch, which can no longer match; the `Warning:`/`Info:`
+branches stay this slice's. (Consistency pass, 2026-09-28: this sentence described slice 5's R2
+block hold, which its R3 replaced.) That is slice 5's to change. R2 wrote that slice 5 re-maps it to a `diagnostic_event(severity="error")`,
 which slice 5 no longer says.
 
 **A session error fails the turn (R3).** A raw `session.error` of the **root** agent (review: a
@@ -1296,7 +1336,8 @@ non-empty line* (`:99-110`). With `--output-format json` that line is the envelo
 record, so every Copilot conversation would be titled with a fragment of JSON. The title path for
 `copilot` therefore passes stdout through `parse_copilot_envelope` first and titles from the answer
 it returns (contract reconciliation, 2026-09-28: in slice 1's names this step is `CopilotAdapter.title_text(stdout)`, the one-shot
-environment is `one_shot_env(purpose)`, and the `copilot` builder branches are
+environment is `one_shot_env(purpose, config)` (consistency pass, 2026-09-28: slice 1's D16 now passes the runner's
+`config`, `None` when the caller has none, for slice 5's BYOK), and the `copilot` builder branches are
 `CopilotAdapter.one_shot`, slice 1 D16) (an unparseable envelope titles nothing, the titler's existing "" floor). Task 1.14
 asserts it on the 1.2 fixture.
 
@@ -1631,7 +1672,7 @@ and slice 1 differ, slice 1 wins and this table is wrong.
 |---|---|---|
 | `build_launch`, `map_events`, `usage_from` | `StreamTransport` only | Copilot is an `RpcTransport`: argv, mapping and usage live inside its `run_turn` (slice 1 D6: argv only for stream). Not members here |
 | `transport` | `RunnerAdapter.transport(flags)` | same |
-| `inject_mcp` | `RpcTransport.inject_mcp(mcp_command) -> dict` | Copilot's is the `agentweave-mcp.json` content (D4) |
+| `inject_mcp` | `RpcTransport.inject_mcp(mcp_command) -> dict` | **this slice adds it** (consistency pass, 2026-09-28): slice 1 dropped it from its own `RpcTransport` (its review 9: no slice-1 caller, since `codex_appserver.run_turn` builds its entry itself), fixed its name and shape in D16, and left it non-abstract on the ABC. Copilot's is the `agentweave-mcp.json` content (D4) |
 | `instruction_channel` | `RpcTransport.instruction_channel` ClassVar | Copilot's value is the agent file (D6); slice 1 D11 asks slice 2 to define it |
 | `decide_posture` | `RunnerAdapter.posture_at_rest(axes, *, yolo)` + `RpcTransport.posture_for(permission_mode)` | split in two; D8's posture table is `posture_for` |
 | `context_window` | `context_window_source` | Copilot's is `"reported"` (slice 1 D13) |
@@ -1649,7 +1690,7 @@ and slice 1 differ, slice 1 wins and this table is wrong.
 | | `host_tool_note` | R3: **D16's Copilot sentence**, not `None`. R2's table said `None`, but slice 1 moved this text onto the adapter precisely because Copilot needs its own (slice 1 D3 row) |
 | | `binary`, `display_name`, `one_shot_takes_schema` (R3: not listed by R2) | `"copilot"`, `"GitHub Copilot"` (D19's `_display_model`), `False` |
 | | `approval_channel(tool_surface)`, `posture_for(permission_mode)` | `"rpc"` whatever the surface; D8's posture table |
-| (slice 1 D16, deferred to this slice) | `write_native_files`, `agent_home`, `version_gate`, `models(live)`, `LaunchVerdict.verdict_pending`, `RpcCallbacks.on_session_missing` | `write_native_files` is `ensure_copilot_home` (D4, and the three call sites reach it through the adapter); `agent_home` is `copilot_home_path` **plus the env it sets** (`COPILOT_HOME`), R3: including a one-shot variant for the worker home, since slice 1 asks this slice to add the one-shot env to the contract. That is `one_shot_env(purpose) -> Optional[dict]`, `None` for Claude and Codex, which `run_worker`/the titler pass to their spawn helpers' new `env` parameter (D14). `version_gate` stays private to `copilot_acp`/`CopilotProbe` (slice 1 agrees). `models(live)` is **not added**: the list is a static tuple (D13), and slice 1's rule is no member without a caller. `verdict_pending` and `on_session_missing` as slice 1 states |
+| (slice 1 D16, deferred to this slice) | `write_native_files`, `agent_home`, `version_gate`, `models(live)`, `LaunchVerdict.verdict_pending`, `RpcCallbacks.on_session_missing` | `write_native_files` is `ensure_copilot_home` (D4, and the three call sites reach it through the adapter); `agent_home` is `copilot_home_path` **plus the env it sets** (`COPILOT_HOME`), R3: including a one-shot variant for the worker home, since slice 1 asks this slice to add the one-shot env to the contract. That is `one_shot_env(purpose, config=None) -> Optional[dict]` (consistency pass, 2026-09-28: `config` is the runner's, per slice 1's D16), `None` for Claude and Codex, which `run_worker`/the titler pass to their spawn helpers' new `env` parameter (D14). `version_gate` stays private to `copilot_acp`/`CopilotProbe` (slice 1 agrees). `models(live)` is **not added**: the list is a static tuple (D13), and slice 1's rule is no member without a caller. `verdict_pending` and `on_session_missing` as slice 1 states |
 | `on_thread_started` (D18) | `RpcCallbacks.on_session` | renamed (R3: D18's callback list now says so); this change adds `on_session_missing`. R2's `on_raw_event` is removed (D10) |
 | (D18) | `RpcTurnRequest` lacks the per-turn block, stable context, raw controls and told path | this change adds `per_turn_context`, `tool_surface_context`, `stable_context`, `control_overrides`, `told_access_path` (D18). `restrict_spec_writes` and `extra_flags` are slice 1's own (its R2) |
 | (D15) | `LEGACY_RUNNER_CLI` (today `RUNNER_CLI`), whose `copilot` row and env-token branch slice 1 D5 hands to this slice | deleted (D15) |
@@ -1765,8 +1806,10 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     Copilot spawn (turn, one-shot, probe), from the inherited environment and from `env_vars`,
     whatever the posture, by the Copilot `guard_env`. Slice 5's "no trusted folder, so no workspace
     servers load" premise rests on it; slice 5 references this item and adds only its BYOK names.
-    Whether slice 5's no-provider strip (`COPILOT_PROVIDER_*` when BYOK is off) also moves here is
-    slice 5's call (its review finding 6); the function has room for it.
+    (Consistency pass, 2026-09-28.) Slice 5 decided the no-provider strip moves here (its
+    *Required of slices 1–4* 2.10): the same function also removes every `COPILOT_PROVIDER_*` name,
+    `COPILOT_MODEL` and `COPILOT_OFFLINE` from every spawn of a runner without a provider (D3), so
+    slice 5's `copilot_provider_env` only has to set its four for a provider runner.
 19. *Only a root `session.error` fails the turn: provided* (review; slice 5's review finding 8).
     A subagent's (envelope `agentId`, or `data.agentId`/`data.parentToolCallId`) is recorded and
     does not fail the turn (D10). Slice 5 replaces this slice's `copilot.subagent_error` diagnostic
@@ -1778,6 +1821,13 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
 21. *The posture step and the subscription additions: provided.* `session.mode_changed`,
     `tool.execution_complete` and `exit_plan_mode.requested` join `COPILOT_RAW_EVENTS` (D10).
     Slice 4 and 5 additions still concatenate.
+22. *(Slice 3) Specification turns: provided* (consistency pass, 2026-09-28; slice 3's D16 and
+    its *Required of slice 2* item 8). `create` is never in a spec turn's `--excluded-tools`; the
+    handler, told `spec_turn=True`, REJECTs every `edit` step 3 did not allow, in every posture;
+    no spec turn sets `allow_all` on; plan mode (still behind `SPEC_TURN_USES_PLAN_MODE`, which
+    ships off) is set after slice 3's wait and only for a run told `mcp` (D8 posture step, D9).
+    What a full-access spec turn answers non-`edit` requests is open question 13 (contract
+    conflict).
 
 ## Risks / Trade-offs
 
@@ -1927,6 +1977,22 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     `agentweave` row and before the foreign-MCP row. Both are the safe side, but a card and a refusal
     are different answers. Not resolved here: whether slice 5's step 3 runs before the no-server row.
     Also carried in slice 5's open questions (its 11).
+13. **Contract conflict (consistency pass, 2026-09-28): a specification turn under Full access.**
+    Slice 3's D16 (its *Required of slice 2* item 8) has a spec turn under full access leave
+    `allow_all` off, so that every `edit` reaches the handler (adopted: D8 posture step 2, D9 item
+    1a), and has the handler answer **every non-`edit` request ALLOW** itself, "which is what full
+    access means for them". This slice's D8 says the opposite of the Hub granting on its own
+    account: when Copilot will not turn allow-all on (managed
+    `permissions.disableBypassPermissionsMode`), the run "does not answer every request with ALLOW.
+    That would grant through the Hub what the organisation withheld", and falls back to
+    `workspace`. A spec turn that never asks for allow-all cannot learn whether the organisation
+    withheld it, so slice 3's ALLOW would grant exactly what D8 forbids on a managed machine. Not
+    resolved here. Options: (a) slice 3's rule as written, accepting the difference on managed
+    machines; (b) set `allow_all` on, read back whether Copilot granted it, set it off again, and
+    answer non-`edit` requests ALLOW only if it was granted, else judge them as `workspace`;
+    (c) judge a full-access spec turn's non-`edit` requests as `workspace` always. Until decided,
+    task 1.6 carries no case for a full-access spec turn's non-`edit` answer. Also carried in slice
+    3's open questions.
 
 ## Round log
 
@@ -2329,6 +2395,26 @@ is **provided here**, **owned by the consumer**, or **not a gap**.
     review); the proposal's posture and environment bullets; the Risks list; the diagnostics table
     (six codes, one error code).
   - **Validate:** `openspec validate a-copilot-agent-runs-over-acp --strict` passes.
+
+- **Consistency pass after review fixes, 2026-09-28** (applying sibling requests; no redesign).
+  - D3 and § *Provided* item 18: the Copilot `guard_env` also strips every `COPILOT_PROVIDER_*` name, `COPILOT_MODEL`
+    and `COPILOT_OFFLINE` for every spawn of a runner without a provider (slice 5 *Required* 2.10); sandboxing spec
+    paragraph and scenario *"An ambient provider variable is not passed on"*; tasks 1.16, 3.3.
+  - Slice 1 member table and proposal: `RpcTransport.inject_mcp` is a member this slice **adds** (slice 1 dropped it,
+    its review 9); the proposal's deferred-member list now matches slice 1's D16 (`version_gate`, `models(live)` not
+    members; `one_shot_env`, `title_text`, `verdict_pending`, `on_session_missing` added). D1 wording likewise.
+  - D14 and the member table: `one_shot_env(purpose, config)` per slice 1's D16.
+  - D10: the stale sentence on slice 5's `Error:` block hold replaced by its R3 chunk match (slice 5 *Required* 2.12).
+    Open question 12 was already closed (slice 5 2.13); nothing to do.
+  - § *Provided* item 4 already said `"Shell"` gets no standing allow; unchanged.
+  - D9 (slice 3's D16): `create` never excluded on a spec turn (D3 argv and flag text); new D9 item 1a,
+    `decide_permission(…, spec_turn=False)`, REJECTs every spec-turn `edit` step 3 did not allow, in every posture;
+    no `allow_all` on a spec turn (D8 posture step 2, full-access bullet); plan mode, still behind
+    `SPEC_TURN_USES_PLAN_MODE` (ships off, `exit_plan_mode` still cancels), is set after slice 3's wait and only for
+    a run told `mcp` (posture step 1, D9 item 2). No conflict with the plan-mode fix. § *Provided* item 22; spec
+    requirement paragraph and scenario *"A specification turn has no write tools"*; tasks 1.6, 1.9(j), 11.3; proposal.
+  - **Contract conflict left open:** open question 13, the non-`edit` answer of a full-access spec turn (slice 3:
+    ALLOW; D8: never grant through the Hub what Copilot may have withheld). Also slice 3's open question 11.
 
 ## Cross-slice consistency (orchestrator, 2026-09-27, after all five R1s; reconciled in R2)
 

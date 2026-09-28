@@ -1014,7 +1014,8 @@ trap. R1–R3 never mentioned spec turns. The spec flow would be unusable exactl
     least one path and every path passes D8 case 3, and `reject_once` otherwise, **in every posture**. That is
     stronger than today's nudge, because it is the Hub's own answer, not a tool list;
   - so that such requests reach the handler at all, a spec turn does not set `allow_all` on under full access; the
-    handler answers every non-`edit` request ALLOW itself, which is what full access means for them;
+    handler answers every non-`edit` request ALLOW itself, which is what full access means for them (contract
+    conflict with slice 2's D8 fallback rule, open question 11; consistency pass, 2026-09-28);
   - **Plan mode** (`session/set_mode`) is sent **after** the wait, and only when the run is told `mcp`. Whether Plan
     mode blocks the args-file write is unmeasured, and for a `shim` spec turn the handler's rule above replaces it.
     Slice 2's `SPEC_TURN_USES_PLAN_MODE` switch stays for the `mcp` case.
@@ -1282,6 +1283,11 @@ Copilot spec turn told `shim` submit a document. Test 1.15 covers both runners' 
     residual to the operator with open question 7; D11 sound, with finding 6's Codex correction.
   - `openspec validate a-run-reaches-the-hub-without-mcp --strict` re-run after these edits.
 
+- **Consistency pass after review fixes, 2026-09-28** (no redesign). *Required of slice 1*'s `restrict_spec_writes`
+  item and *Required of slice 2* item 8 marked as now in those designs (slice 1: a keyword this change adds; slice 2:
+  its D9 item 1a). D16's full-access non-`edit` ALLOW annotated; new open question 11 records it as a **contract
+  conflict** with slice 2's D8 (also slice 2's open question 13). Task 5.4 notes what slice 2 now ships.
+
 ## Required of slices 1, 2; not provided to 5 (R3)
 
 Each slice owns its own file. This section states, in the owning slice's names, what this change needs from each, and
@@ -1308,7 +1314,9 @@ another change.
 - `shim_allowed`: slice 1 has already struck it (`:430`). **Agreed.**
 - Slice 1's open question 4 (the Codex MCP env allow-list): not this change's. The shim runs in the harness's shell,
   whose environment is the run's, not the MCP server's env block. This change changes neither.
-- **`restrict_spec_writes` (review finding 4, 2026-09-28; D16). NEW, not yet in slice 1's text.** Precisely:
+- **`restrict_spec_writes` (review finding 4, 2026-09-28; D16).** (Consistency pass, 2026-09-28: now in slice 1's D6
+  and D16 table as a `LaunchRequest`/`build_command` keyword **this change adds**, since no slice-1 caller passes
+  anything but the default; this change's task 1.15 therefore also extends slice 1's golden matrix.) Precisely:
   1. The builder needs the **described** surface. `build_command`/`StreamTransport.build_launch` gain a keyword,
      `described_access_path: Literal["mcp", "shim"]` (slice 1 names it; default `"mcp"`, which reproduces today's
      argv), passed from the trigger's `described_access_path(axes.plane, …)` result (D1).
@@ -1349,7 +1357,9 @@ them:
    `write_powershell` (input `{shellId, input, delay}`) never reaches case 2. Slice 2's task 1.1 capture should
    count how often a genuine `powershell` request arrives with no known name; if that is common, the fix is in its
    `calls` map.
-8. **Spec turns (review finding 4, 2026-09-28; D16). NEW, not yet in slice 2's text.** Slice 2's D9 changes:
+8. **Spec turns (review finding 4, 2026-09-28; D16).** (Consistency pass, 2026-09-28: now in slice 2's text, its D9
+   items 1–2 and 1a, D8 posture step 2, § *Provided* item 22, except the non-`edit` answer under full access, which is
+   open question 11 here and 13 there, a contract conflict.) Slice 2's D9 changes:
    - `--excluded-tools` on a spec turn drops `create`: `apply_patch,edit,str_replace,str_replace_editor`;
    - on a spec turn, `decide_permission` answers every `edit`-kind request itself, in every posture: allowed by
      standing when it names at least one path and `_hub_own_call("Write", {"path": p}, workspace=…)` holds for every
@@ -1444,6 +1454,16 @@ R3 on the carried ones:
    nobody knows, and `cmd` searches the current directory before `PATH`, so a bare `aw-tool` there can run an
    agent-written `aw-tool.bat`. D8's caller text and *Required of slice 2* item 7 say so. Slice 2 fixes its § *Provided
    to slices 3–5* item 4.
+11. **Contract conflict (consistency pass, 2026-09-28): a specification turn under Full access.** D16 (and
+   *Required of slice 2* item 8) has a full-access spec turn leave `allow_all` off and the ACP handler answer every
+   non-`edit` request ALLOW itself. Slice 2's D8 refuses exactly that shape elsewhere: when Copilot will not grant
+   allow-all (managed `permissions.disableBypassPermissionsMode`) the run "does not answer every request with ALLOW.
+   That would grant through the Hub what the organisation withheld", and falls back to `workspace`. A spec turn that
+   never asks for allow-all cannot learn whether it was withheld. Not resolved here. Options: (a) this change's rule as
+   written; (b) set `allow_all` on, read back the grant, set it off, and answer non-`edit` ALLOW only if it was
+   granted, else judge as `workspace`; (c) always judge a full-access spec turn's non-`edit` requests as
+   `workspace`. Every other part of item 8 is adopted in slice 2's text (its D9 item 1a, D8 posture step 2, § *Provided*
+   item 22). Also carried in slice 2's open questions (its 13).
 
 **Opus review, 2026-09-28, on open question 7 (the review's answer; the operator decides).** Case 3 under "Ask me" is
 acceptable **once the calls-root rule holds** (review fix 1, applied): the file is then inert data in a Hub-owned,

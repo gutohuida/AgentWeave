@@ -51,8 +51,8 @@ stream executor; `:3174-3177`, `_on_accounting`, for the Codex RPC executor that
 Slice 1's design defines no adapter-level `usage_from`. `usage_from` is a `StreamTransport` member,
 `(*, session_id, env, model) -> Optional[AccountingSample]`, read once after the process exits (its
 D3). For an `RpcTransport` the name only labels the notification-to-`cb.on_accounting` mapping
-inside `run_turn`. Slice 1's D16 reserves `spend_from(event)` and `quota_hold_from(event)` for this
-slice as **per-event** functions. A per-event function cannot sum with dedup, cannot take a
+inside `run_turn`. Slice 1's R2 D16 reserved `spend_from(event)` and `quota_hold_from(event)` for this
+slice as **per-event** functions (its R3 D16 dropped both, agreeing with this section; consistency pass, 2026-09-28). A per-event function cannot sum with dedup, cannot take a
 process-cumulative figure, and cannot let the later checkpoint win. So this change does not add
 them: the ledger below replaces both (cross-slice gap G1). Slice 2 runs **one `copilot.exe` per
 turn** and one `run_turn` call per run (its D3, D18), so a per-call object is a per-run object.
@@ -1065,6 +1065,10 @@ order fails it. API tests assert by position in the order the route returns (`ag
     `test_checkpoint_policy.py:184`, `:214`, so D10's new fields get C=95 defaults.
     `provider_allowance._newest_informative` (the existing Claude hold) also orders by
     `observed_at` and has the same clock hazard; out of scope here, passed on to be filed as a finding.
+
+- **Consistency pass after review fixes, 2026-09-28.** Name scan against slice 1's D16: the "slice 1 reserves
+  `spend_from`/`quota_hold_from`" sentence (design, *Where the ledger lives*; proposal header) now says slice 1's R2
+  reserved them and its R3 dropped them. Nothing else changed.
 
 ## Open questions for R2/R3
 

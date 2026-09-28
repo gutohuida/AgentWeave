@@ -8,11 +8,15 @@ member names"):
 - on the adapter: `transport`, `posture_at_rest`, `one_shot`, `parse_one_shot`, `guard_env`,
   `collaboration`, `launchability`, and the ClassVars `catalog_provider`, `write_tool_kinds`,
   `mcp_tool_prefix`, `transport_sentinels`, `mcp_env_names`;
-- on the RPC transport: `inject_mcp`, `instruction_channel`, `posture_for`,
+- on the RPC transport: `instruction_channel`, `posture_for`,
   `permission_card_label`, `refusal_label`, `context_window_source`, and
   `run_turn(req: RpcTurnRequest, cb: RpcCallbacks)`;
-- slice 1's deferred D16 members, which this slice defines: `write_native_files`, `agent_home`,
-  `version_gate`, `models`.
+- slice 1's deferred D16 members, which this slice **adds** with slice 1's names and shapes:
+  `RpcTransport.inject_mcp(mcp_command) -> dict` (slice 1 does not build it: no slice-1 caller;
+  not abstract on the ABC), `write_native_files`, `agent_home` (only if runner-agnostic code needs
+  the path), `one_shot_env`, `title_text`, `LaunchVerdict.verdict_pending` and
+  `RpcCallbacks.on_session_missing`. `version_gate` stays private to `copilot_acp`, and no
+  `models(live)` member is added (the catalog is a static tuple).
 
 R1's `build_launch`, `map_events` and `usage_from` are stream-transport members and do not apply;
 `resume_id` is `RpcTurnRequest.resume_session_id`; `stop` is a clause of `run_turn`'s contract.
@@ -118,7 +122,9 @@ the first runner whose approval axis is independent of its tool surface.
     refused.
   - A run with no posture chosen is judged as `workspace`, and the catalog's Permissions default for
     `copilot` is `workspace` to match (Copilot has no sandbox of its own to fall back on).
-  - A specification turn gets `--excluded-tools` over Copilot's write tools. Plan mode (the
+  - A specification turn gets `--excluded-tools` over Copilot's write tools except `create`, and
+    the Hub refuses every file change it asks for in every posture (slice 3 later allows its args
+    file), with allow-all never set on (consistency pass 2026-09-28). Plan mode (the
     full-URI `session/set_mode`) ships **off** until a drive shows it cannot hang on
     `exit_plan_mode` (review 2026-09-28).
   - The Hub's own `agentweave` tools are always allowed, when Copilot reports them from the Hub's
