@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 8,
+    "iteration": 9,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-model-alias-is-a-model-choice-impl",
-    "next_action": "Do queue item 'a-model-alias-is-a-model-choice-impl': openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files).",
+    "current": "a-model-alias-is-a-model-choice-drive",
+    "next_action": "Do queue item 'a-model-alias-is-a-model-choice-drive': drive against a fresh drive Hub per night-window.md 'Driving' section (tasks.md 3.1: trial Hub :8010, create a runner on haiku through the form, bind an agent, run one real turn on claude-haiku-4-5; record turn_usage.model vs runners.model). Record result in scripts/drive/FINDINGS.md.",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -53,9 +53,9 @@
         },
         {
             "id": "a-model-alias-is-a-model-choice-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-model-alias-is-a-model-choice",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
+            "detail": "Done commit 63d9f34: verified an inherited uncommitted diff already covered tasks.md sections 0-2 (ProviderDescriptor.model resolves aliases, worker/runner-registry gates agree, UI alias resolution/Latest group), completed the pending full-suite run task 2.5 was waiting on. Caught and fixed a real regression: hub/tests/test_worker.py still asserted the pre-D1 behaviour (haiku not declared); fixed to match D1. tests/ 553 passed/3 skipped; hub/tests/ 5094 passed/86 skipped (claude stripped from PATH); vitest 168 files/1731 tests; lint clean; UI bundle already matched current source."
         },
         {
             "id": "a-model-alias-is-a-model-choice-drive",
