@@ -40,7 +40,12 @@ export function accountingDisplayLabel(display: AccountingDisplay): string {
     return `${period} ${state}${reset ? ` · ${reset}` : ''}`
   }
   if (display.kind === 'api_equivalent') {
-    return `$${(display.usd_micros / 1_000_000).toFixed(4)} API-equivalent estimate`
+    const base = `$${(display.usd_micros / 1_000_000).toFixed(4)} API-equivalent estimate`
+    if (display.unpriced_turns > 0) {
+      const noun = display.unpriced_turns === 1 ? 'turn' : 'turns'
+      return `${base} — excludes ${display.unpriced_turns} ${noun} with no reported cost`
+    }
+    return base
   }
   return display.label
 }

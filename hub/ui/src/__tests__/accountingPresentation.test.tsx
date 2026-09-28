@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AccountingSnapshot } from '@/api/accounting'
 import { AccountingPanel } from '@/components/accounting/AccountingPanel'
 import { BudgetExhaustionNotice } from '@/components/accounting/BudgetExhaustionNotice'
+import { accountingDisplayLabel } from '@/components/accounting/accountingDisplay'
 
 let snapshot: AccountingSnapshot
 const mutate = vi.fn()
@@ -34,6 +35,7 @@ function baseSnapshot(): AccountingSnapshot {
       measured_turns: 2,
       unavailable_turns: 1,
       api_equivalent_usd_micros: 12_500,
+      unpriced_turns: 1,
     },
     agents: [
       {
@@ -44,6 +46,7 @@ function baseSnapshot(): AccountingSnapshot {
         measured_turns: 2,
         unavailable_turns: 0,
         api_equivalent_usd_micros: 12_500,
+        unpriced_turns: 0,
       },
       {
         agent: 'codex',
@@ -53,6 +56,7 @@ function baseSnapshot(): AccountingSnapshot {
         measured_turns: 0,
         unavailable_turns: 1,
         api_equivalent_usd_micros: null,
+        unpriced_turns: 1,
       },
     ],
     budget: {
@@ -104,11 +108,29 @@ describe('accounting presentation', () => {
         kind: 'api_equivalent',
         label: 'API-equivalent estimate',
         usd_micros: 12_500,
+        unpriced_turns: 0,
       },
     }
     render(<AccountingPanel />)
     expect(screen.getByText('$0.0125 API-equivalent estimate')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('says an API-equivalent estimate excludes the turns it could not price', () => {
+    snapshot = {
+      ...baseSnapshot(),
+      budget: { limit_tokens: null, used_tokens: 1234, remaining_tokens: null, exhausted: false },
+      preferred_display: {
+        kind: 'api_equivalent',
+        label: 'API-equivalent estimate',
+        usd_micros: 12_500,
+        unpriced_turns: 10,
+      },
+    }
+    render(<AccountingPanel />)
+    expect(
+      screen.getByText('$0.0125 API-equivalent estimate — excludes 10 turns with no reported cost'),
+    ).toBeInTheDocument()
   })
 
   it('turns a runner allowance payload into readable operator language instead of raw JSON', () => {
@@ -210,6 +232,33 @@ describe('accounting presentation', () => {
       expect(screen.getByRole('button', { name: 'Disable' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled()
     })
+  })
+
+  it('accountingDisplayLabel notes unpriced turns only when there are any', () => {
+    expect(
+      accountingDisplayLabel({
+        kind: 'api_equivalent',
+        label: 'API-equivalent estimate',
+        usd_micros: 42_157,
+        unpriced_turns: 10,
+      }),
+    ).toContain('excludes 10 turns')
+    expect(
+      accountingDisplayLabel({
+        kind: 'api_equivalent',
+        label: 'API-equivalent estimate',
+        usd_micros: 42_157,
+        unpriced_turns: 0,
+      }),
+    ).toBe('$0.0422 API-equivalent estimate')
+    expect(
+      accountingDisplayLabel({
+        kind: 'api_equivalent',
+        label: 'API-equivalent estimate',
+        usd_micros: 42_157,
+        unpriced_turns: 1,
+      }),
+    ).toBe('$0.0422 API-equivalent estimate — excludes 1 turn with no reported cost')
   })
 
   it('renders the compact exhausted warning used by the conversation shell', () => {

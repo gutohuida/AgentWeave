@@ -77,6 +77,7 @@ def _summary_from_row(row: Any, *, agent: Optional[str] = None) -> Dict[str, Any
             if row.api_equivalent_usd_micros is not None
             else None
         ),
+        "unpriced_turns": int(row.unpriced_turns or 0),
     }
     if agent is not None:
         summary = {"agent": agent, **summary}
@@ -93,6 +94,9 @@ def _aggregate_columns() -> tuple[Any, ...]:
         func.sum(case((measured, 1), else_=0)).label("measured_turns"),
         func.sum(case((unavailable, 1), else_=0)).label("unavailable_turns"),
         func.sum(TurnUsage.api_equivalent_usd_micros).label("api_equivalent_usd_micros"),
+        func.sum(case((TurnUsage.api_equivalent_usd_micros.is_(None), 1), else_=0)).label(
+            "unpriced_turns"
+        ),
     )
 
 
@@ -172,6 +176,7 @@ async def accounting_snapshot(
             "kind": "api_equivalent",
             "label": "API-equivalent estimate",
             "usd_micros": cost,
+            "unpriced_turns": project_summary["unpriced_turns"],
         }
     elif total is not None:
         preferred_display = {"kind": "tokens", "label": "Tokens", "total_tokens": total}

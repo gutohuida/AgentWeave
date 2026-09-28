@@ -225,7 +225,7 @@ export function PermissionDefaultSetting({ agent }: { agent: AgentSummary }) {
  *  from `GET /agents/launchability`, so a missing CLI or credential reads here too. */
 export function RunnerPicker({ agent }: { agent: AgentSummary }) {
   const { data: runners = [], isLoading } = useRunners()
-  const { data: catalog } = useModelCatalog()
+  const { data: catalog, error: catalogError } = useModelCatalog()
   const bindRunner = useBindAgentRunner()
   const { data: launchability, error: launchabilityError } = useAgentLaunchability()
   const verdict = launchability?.agents[agent.name]
@@ -265,6 +265,11 @@ export function RunnerPicker({ agent }: { agent: AgentSummary }) {
       {!verdict && launchabilityError && (
         <p role="status" className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
           Could not check whether this agent can run.
+        </p>
+      )}
+      {catalogError && (
+        <p role="status" className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
+          Could not load the model catalog; runner options above show plain model IDs.
         </p>
       )}
       {bindRunner.isError && (

@@ -93,6 +93,7 @@ async def test_accounting_aggregates_by_agent_and_project_without_cross_project_
         "measured_turns": 2,
         "unavailable_turns": 1,
         "api_equivalent_usd_micros": 30_000,
+        "unpriced_turns": 1,
     }
     assert data["agents"] == [
         {
@@ -103,6 +104,7 @@ async def test_accounting_aggregates_by_agent_and_project_without_cross_project_
             "measured_turns": 2,
             "unavailable_turns": 0,
             "api_equivalent_usd_micros": 30_000,
+            "unpriced_turns": 0,
         },
         {
             "agent": "codex",
@@ -112,6 +114,7 @@ async def test_accounting_aggregates_by_agent_and_project_without_cross_project_
             "measured_turns": 0,
             "unavailable_turns": 1,
             "api_equivalent_usd_micros": None,
+            "unpriced_turns": 1,
         },
     ]
     assert data["budget"] == {
@@ -165,7 +168,115 @@ async def test_api_equivalent_label_is_explicit_when_no_allowance(app, auth_head
         "kind": "api_equivalent",
         "label": "API-equivalent estimate",
         "usd_micros": 12_500,
+        "unpriced_turns": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_unpriced_turns_counts_every_turn_with_no_reported_cost(app, auth_headers) -> None:
+    async with async_session_factory() as session:
+        session.add(Run(id="run-priced", project_id="proj-test", agent="claude"))
+        session.add(
+            TurnUsage(
+                id="usage-priced",
+                run_id="run-priced",
+                project_id="proj-test",
+                agent="claude",
+                status="measured",
+                total_tokens=10,
+                api_equivalent_usd_micros=1000,
+            )
+        )
+        # A Codex-shaped turn: tokens reported, no cost — neither Codex path passes one.
+        session.add(Run(id="run-codex", project_id="proj-test", agent="codex"))
+        session.add(
+            TurnUsage(
+                id="usage-codex",
+                run_id="run-codex",
+                project_id="proj-test",
+                agent="codex",
+                status="measured",
+                total_tokens=20,
+            )
+        )
+        session.add(Run(id="run-unavailable", project_id="proj-test", agent="codex"))
+        session.add(
+            TurnUsage(
+                id="usage-unavailable",
+                run_id="run-unavailable",
+                project_id="proj-test",
+                agent="codex",
+                status="unavailable",
+            )
+        )
+        await session.commit()
+
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+    assert data["project"]["api_equivalent_usd_micros"] == 1000
+    assert data["project"]["unpriced_turns"] == 2
+    assert data["preferred_display"] == {
+        "kind": "api_equivalent",
+        "label": "API-equivalent estimate",
+        "usd_micros": 1000,
+        "unpriced_turns": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_unpriced_turns_is_per_agent_in_the_routes_own_order(app, auth_headers) -> None:
+    async with async_session_factory() as session:
+        session.add(Run(id="run-alpha", project_id="proj-test", agent="alpha"))
+        session.add(
+            TurnUsage(
+                id="usage-alpha",
+                run_id="run-alpha",
+                project_id="proj-test",
+                agent="alpha",
+                status="measured",
+                total_tokens=5,
+            )
+        )
+        session.add(Run(id="run-zulu", project_id="proj-test", agent="zulu"))
+        session.add(
+            TurnUsage(
+                id="usage-zulu",
+                run_id="run-zulu",
+                project_id="proj-test",
+                agent="zulu",
+                status="measured",
+                total_tokens=5,
+                api_equivalent_usd_micros=500,
+            )
+        )
+        await session.commit()
+
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+    assert [(agent["agent"], agent["unpriced_turns"]) for agent in data["agents"]] == [
+        ("alpha", 1),
+        ("zulu", 0),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_unpriced_turns_is_zero_when_every_turn_is_priced(app, auth_headers) -> None:
+    async with async_session_factory() as session:
+        session.add(Run(id="run-only", project_id="proj-test", agent="claude"))
+        session.add(
+            TurnUsage(
+                id="usage-only",
+                run_id="run-only",
+                project_id="proj-test",
+                agent="claude",
+                status="measured",
+                total_tokens=5,
+                api_equivalent_usd_micros=2500,
+            )
+        )
+        await session.commit()
+
+    data = (await app.get("/api/v1/projects/proj-test/accounting", headers=auth_headers)).json()
+    assert data["project"]["unpriced_turns"] == 0
+    assert data["preferred_display"]["unpriced_turns"] == 0
 
 
 @pytest.mark.asyncio
@@ -261,6 +372,7 @@ async def test_conversation_accounting_sums_that_conversation_and_ignores_the_pr
         "measured_turns": 60,
         "unavailable_turns": 0,
         "api_equivalent_usd_micros": None,
+        "unpriced_turns": 60,
     }
 
 

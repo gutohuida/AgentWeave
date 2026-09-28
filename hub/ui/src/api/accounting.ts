@@ -9,6 +9,7 @@ export interface UsageSummary {
   measured_turns: number
   unavailable_turns: number
   api_equivalent_usd_micros: number | null
+  unpriced_turns: number
 }
 
 export interface AgentUsageSummary extends UsageSummary {
@@ -24,7 +25,12 @@ export interface TokenBudgetState {
 
 export type AccountingDisplay =
   | { kind: 'allowance'; label: 'Rate-limit allowance'; allowance: Record<string, unknown> }
-  | { kind: 'api_equivalent'; label: 'API-equivalent estimate'; usd_micros: number }
+  | {
+      kind: 'api_equivalent'
+      label: 'API-equivalent estimate'
+      usd_micros: number
+      unpriced_turns: number
+    }
   | { kind: 'tokens'; label: 'Tokens'; total_tokens: number }
   | { kind: 'unavailable'; label: 'Usage unavailable' }
 
