@@ -12,8 +12,8 @@
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-firing-is-counted-once-however-many-agents-it-starts-impl",
-    "next_action": "Do queue item 'a-firing-is-counted-once-however-many-agents-it-starts-impl': openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files).",
+    "current": null,
+    "next_action": null,
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -89,21 +89,21 @@
         },
         {
             "id": "a-firing-is-counted-once-however-many-agents-it-starts-impl",
-            "status": "open",
+            "status": "done",
             "title": "Implement a-firing-is-counted-once-however-many-agents-it-starts",
-            "detail": "openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files)."
+            "detail": "Done 5983d3f (interactive session 2026-09-28, finishing the night's uncommitted diff): hub/tests 5110 passed/86 skipped (claude off PATH); tests/ 553; vitest 1735; lint clean."
         },
         {
             "id": "a-firing-is-counted-once-however-many-agents-it-starts-drive",
-            "status": "open",
+            "status": "done",
             "title": "Drive a-firing-is-counted-once-however-many-agents-it-starts",
-            "detail": "Drive against a fresh drive Hub per night-window.md 'Driving' section before closing. Record result in scripts/drive/FINDINGS.md."
+            "detail": "Done 5983d3f: fresh Hub :8051 (profile drive0928firing), two Haiku agents, one press -> run_count 1, two rows sharing fired_at. No new finding."
         },
         {
             "id": "a-firing-is-counted-once-however-many-agents-it-starts-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive a-firing-is-counted-once-however-many-agents-it-starts",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "detail": "Done (interactive session): archived to openspec/changes/archive/2026-09-28-a-firing-is-counted-once-however-many-agents-it-starts, ADDED requirement appended to loop-firing-accountability (43/43 specs strict), F121 marked fixed 5983d3f (severity C, not on the A index)."
         },
         {
             "id": "an-undelivered-message-says-how-its-last-attempt-ended-impl",

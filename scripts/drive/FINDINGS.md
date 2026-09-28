@@ -8829,8 +8829,10 @@ a drive fix.
 
 ## F121 (C) — one firing of a flow, two `JobRun` rows, and the badge says "2 runs"
 
-**Status:** open, filed not fixed. Possibly working as designed; recorded because the *word* is
-overloaded, not because the rows are wrong.
+**Status:** fixed 5983d3f (2026-09-28) — `a-firing-is-counted-once-however-many-agents-it-starts`:
+a wide firing adds one to `run_count` (rows stay one per agent, as dispatches), and the card reads
+"N fired". Driven live on a fresh Hub: one press, two Haiku agents, `run_count: 1`, two rows sharing
+`fired_at`. (Was: open, filed not fixed — the *word* was overloaded, not the rows wrong.)
 
 A flow that dispatches two turns in one firing writes two `JobRun` rows with an identical
 `fired_at`, and increments `job.run_count` once per row:
