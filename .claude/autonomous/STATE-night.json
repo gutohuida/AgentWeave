@@ -8,12 +8,12 @@
     "parent_branch": "master",
     "parent_sha": "0c5f58e",
     "stop_at": "2026-09-28T07:00:00+01:00",
-    "iteration": 7,
+    "iteration": 8,
     "log_file": ".claude/autonomous/2026-09-27-night-log.md",
     "findings_file": "scripts/drive/FINDINGS.md",
     "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "an-estimate-that-misses-turns-says-so-archive",
-    "next_action": "Do queue item 'an-estimate-that-misses-turns-says-so-archive': openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list.",
+    "current": "a-model-alias-is-a-model-choice-impl",
+    "next_action": "Do queue item 'a-model-alias-is-a-model-choice-impl': openspec-apply-change. APPROVED, spec-queue/APPROVALS.md 2026-09-27 row (restates 09-24). Follow F392 rules 1-2 (inline full-suite counts; union of open changes' guard files).",
     "queue": [
         {
             "id": "a-runner-choice-names-its-model-impl",
@@ -47,9 +47,9 @@
         },
         {
             "id": "an-estimate-that-misses-turns-says-so-archive",
-            "status": "open",
+            "status": "done",
             "title": "Archive an-estimate-that-misses-turns-says-so",
-            "detail": "openspec-archive-change. Set FINDINGS.md Status lines for the F<n> this change's proposal.md names to 'fixed <sha>' and correct the index's open severity-A list."
+            "detail": "Done commit 9ccdba5: archived to openspec/changes/archive/2026-09-28-an-estimate-that-misses-turns-says-so, its MODIFIED requirement synced into openspec/specs/usage-accounting/spec.md (43/43 specs pass strict), and F62 marked 'fixed 45e01b2' in FINDINGS.md. F62 is severity C, never on the severity-A index, so no index correction was owed."
         },
         {
             "id": "a-model-alias-is-a-model-choice-impl",
