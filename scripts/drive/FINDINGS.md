@@ -4042,7 +4042,13 @@ tasks. Judge against the live rows, not the runbook's snapshot of them.
 
 ## F62 (C) — a mixed-CLI flow reports its tokens in full and its money in part
 
-**Status:** open (no fix commit references it); recorded rather than blocked on
+**Status:** fixed 45e01b2 (2026-09-27) — `an-estimate-that-misses-turns-says-so` marks the
+API-equivalent figure partial (`unpriced_turns`) whenever any contributing turn had no reported
+cost, instead of pricing Codex from tokens against a model price table (the rejected second shape).
+Driven 2026-09-28 against the trial Hub: a real `unavailable` turn and a mixed-cost project both
+read `unpriced_turns` correctly at the project and per-agent level (`scripts/drive/FINDINGS.md`,
+"an-estimate-that-misses-turns-says-so drive, 2026-09-28"). Was: open (no fix commit referenced it);
+recorded rather than blocked on.
 
 Found 2026-08-26 by the **operator**, judging group 11's check 11.6 ("the spend is visible"), and
 recorded rather than blocked on — the check passes, this is the caveat attached to the pass.
