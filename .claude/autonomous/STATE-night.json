@@ -1,152 +1,40 @@
 {
-    "purpose": "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
-    "playbook": ".claude/loops/night-window.md",
-    "runner": "claude",
-    "model": "opus",
-    "permission_mode": "unattended-full-access",
-    "branch": "autonomous/2026-09-28-daily",
-    "parent_branch": "master",
-    "parent_sha": "688751f",
-    "stop_at": "2026-09-29T07:00:00+01:00",
-    "iteration": 14,
-    "log_file": ".claude/autonomous/2026-09-28-night-log.md",
-    "findings_file": "scripts/drive/FINDINGS.md",
-    "approvals_file": "spec-queue/APPROVALS.md",
-    "current": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl",
-    "next_action": "Begin ORDER item 8 (a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl) via the openspec-apply-change skill. ORDER 7 was finished in an interactive session on 2026-09-29 (the machine was off from ~05:45 to 18:28, killing the firing that held it): verified, driven live, archived to openspec/changes/archive/2026-09-29-request-agent-models-the-new-agent-on-one-the-operator-made. Check `git status` first; a clean tree is expected. Change folders under openspec/changes/ carry no -impl suffix -- check the directory listing. If this change's folder is already gone, skip to ORDER 9 and log it. Drive before closing any task; never check off verification or archive boxes that were not run. LESSONS (carried forward): do not hand-sync a delta before `openspec archive --yes`. Strip `claude` from PATH by removing every directory that contains claude/claude.exe/claude.cmd and confirm with `which claude` -- a substring grep of PATH misses AppData/Roaming/npm. NEW LESSON (ORDER 7): a test that calls a route which schedules a turn for an agent with a bound claude runner starts a REAL claude process wherever claude is on PATH -- and then passes locally for that reason alone. Make `hub.turn_scheduler.schedule_agent` inert (AsyncMock returning ScheduleResult(waiting_reason=None, terminal_failure=False)) around such calls. Also: `_trigger_and_capture_build_command` keeps the LAST build_command call, and a turn ending re-drains every agent with queued input (F90), so pick the call by its context file when another agent has input queued.",
-    "queue": [
-        {
-            "id": "tree-gate",
-            "status": "done",
-            "title": "Read back the background pytest results from compose and gate on them"
-        },
-        {
-            "id": "an-undelivered-message-says-how-its-last-attempt-ended-impl",
-            "status": "done",
-            "title": "ORDER 1/23: implement via openspec-apply-change; drive before closing; archive if its last group finishes"
-        },
-        {
-            "id": "the-checkpoint-grant-says-it-reaches-every-checkpoint-impl",
-            "status": "done",
-            "title": "ORDER 2/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "the-operator-can-rename-a-task-impl",
-            "status": "done",
-            "title": "ORDER 3/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-message-to-the-operator-is-told-where-the-operator-reads-impl",
-            "status": "done",
-            "title": "ORDER 4/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "an-agent-updates-a-task-with-what-its-tool-carries-impl",
-            "status": "done",
-            "title": "ORDER 5/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-claude-run-is-told-its-agentweave-tools-by-their-full-names-impl",
-            "status": "done",
-            "title": "ORDER 6/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "request-agent-models-the-new-agent-on-one-the-operator-made-impl",
-            "status": "done",
-            "title": "ORDER 7/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-runner-that-cannot-collaborate-says-so-where-it-is-bound-impl",
-            "status": "open",
-            "title": "ORDER 8/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "agents-no-longer-register-themselves-impl",
-            "status": "open",
-            "title": "ORDER 9/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-loops-outstanding-mail-is-mail-not-yet-delivered-impl",
-            "status": "open",
-            "title": "ORDER 10/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "the-permissions-pill-shows-the-posture-the-run-gets-impl",
-            "status": "open",
-            "title": "ORDER 11/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "an-ask-me-card-says-what-workspace-only-would-decide-impl",
-            "status": "open",
-            "title": "ORDER 12/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "the-approval-preview-asks-the-gates-merge-question-impl",
-            "status": "open",
-            "title": "ORDER 13/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "isolation-does-not-change-under-held-work-impl",
-            "status": "open",
-            "title": "ORDER 14/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-documents-rigor-history-and-retired-requirements-are-on-screen-impl",
-            "status": "open",
-            "title": "ORDER 15/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-pending-proposal-can-be-withdrawn-impl",
-            "status": "open",
-            "title": "ORDER 16/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "the-corpus-is-indexed-arranged-and-adopted-from-the-app-impl",
-            "status": "open",
-            "title": "ORDER 17/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-specification-is-read-in-results-that-fit-impl",
-            "status": "open",
-            "title": "ORDER 18/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "input-the-hub-accepted-is-answered-as-accepted-impl",
-            "status": "open",
-            "title": "ORDER 19/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "charters-are-named-once-and-an-empty-one-says-so-impl",
-            "status": "open",
-            "title": "ORDER 20/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-dialog-takes-the-keyboard-when-it-opens-impl",
-            "status": "open",
-            "title": "ORDER 21/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "the-app-window-keeps-the-operators-preferences-impl",
-            "status": "open",
-            "title": "ORDER 22/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        },
-        {
-            "id": "a-run-records-that-its-calls-were-allowed-impl",
-            "status": "open",
-            "title": "ORDER 23/23: implement via openspec-apply-change; drive before closing; archive if last group finishes"
-        }
-    ],
-    "decisions_for_user": [],
-    "limits": [
-        "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window's merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with 'git merge --ff-only' when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
-        "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
-        "Nothing destructive: no deleting projects, databases, or kept reproductions.",
-        "Do not browse the open web. Research is AgentWeaveResearch's job, in a process that keeps the permission classifier.",
-        "Every claim is measured or labelled unverified.",
-        "Decisions that are genuinely the operator's get an OPEN row in spec-queue/DECISIONS.md, with only that row's id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
-        "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
-        "Tests under py -3.11, never bare python. black needs --target-version py311.",
-        "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator's real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today's DIRECTION.md section asks for (day-window.md, 'O - a read-only review of the operator's real use'): its database opened only through a mode=ro SQLite URI, and the project's files and transcripts read, never written.",
-        "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
-    ]
+    "purpose":  "FIX. Read spec-queue/APPROVALS.md, then build: backlog first (unarchived changes, then open findings by severity), then APPROVED rows. Drive every change before closing its queue item. This window does NOT write new proposals.",
+    "playbook":  ".claude/loops/night-window.md",
+    "runner":  "claude",
+    "model":  "opus",
+    "permission_mode":  "unattended-full-access",
+    "branch":  "autonomous/2026-09-29-daily",
+    "parent_branch":  "master",
+    "parent_sha":  "40c8e1a",
+    "stop_at":  "2026-09-30T07:00:00+01:00",
+    "iteration":  0,
+    "log_file":  ".claude/autonomous/2026-09-29-night-log.md",
+    "findings_file":  "scripts/drive/FINDINGS.md",
+    "approvals_file":  "spec-queue/APPROVALS.md",
+    "current":  "compose",
+    "next_action":  "Read .claude/loops/night-window.md in full, then do its \u0027Iteration 1 - compose the queue\u0027 section: settle the branch, read what the other window did, and write a full queue into .claude/autonomous/STATE-night.json. Do no other work this iteration.",
+    "queue":  [
+                  {
+                      "id":  "compose",
+                      "status":  "open",
+                      "title":  "Compose this window\u0027s queue from the playbook",
+                      "detail":  "The playbook at .claude/loops/night-window.md is the authority. Do not improvise a queue from memory; a fresh process has none."
+                  }
+              ],
+    "decisions_for_user":  [
+
+                           ],
+    "limits":  [
+                   "Stay on the cycle branch. No commits or rebases onto master, ever, by any window. The day window\u0027s merge gate (day-window.md, Iteration 1 step 1) may fast-forward master to this branch with \u0027git merge --ff-only\u0027 when all four gate conditions hold -- relaxed by the operator 2026-09-06. No other step, and no other window, may merge, rebase, or commit onto master.",
+                   "Nothing outward-facing: no publish, no release, no PR or issue creation, no force-push, no history rewriting. Push, do not open PRs.",
+                   "Nothing destructive: no deleting projects, databases, or kept reproductions.",
+                   "Do not browse the open web. Research is AgentWeaveResearch\u0027s job, in a process that keeps the permission classifier.",
+                   "Every claim is measured or labelled unverified.",
+                   "Decisions that are genuinely the operator\u0027s get an OPEN row in spec-queue/DECISIONS.md, with only that row\u0027s id in decisions_for_user -- never guessed, never free text. At compose, drop and log any inherited id whose DECISIONS.md row is not OPEN (F305).",
+                   "Stage explicit paths, never git add -A. Never commit kimichanges.md or kimiwork.md.",
+                   "Tests under py -3.11, never bare python. black needs --target-version py311.",
+                   "Never drive against proj-5e960453 or proj-18e5d4e0. Port 8000 is the operator\u0027s real usage: never start, stop, restart, probe, migrate, call or write to it or its database. The one exception is a read-only review that today\u0027s DIRECTION.md section asks for (day-window.md, \u0027O - a read-only review of the operator\u0027s real use\u0027): its database opened only through a mode=ro SQLite URI, and the project\u0027s files and transcripts read, never written.",
+                   "Every real agent turn in a drive binds claude-haiku-4-5. Never leave a job enabled."
+               ]
 }
